@@ -9,9 +9,13 @@
 
 Waka is a ubiquitous capture and synthesis engine. It ingests inspirations from any surface (terminal CLI, mobile PWA, URL import, voice, photo, AI conversations), semantically clusters them over time, and resurfaces surprising connections between thoughts — transforming fleeting ideas into a persistent, evolving personal knowledge graph.
 
-### Core UX Principle: Capture-First
+### Primary JTBD: Capture-First
 
 Waka is **capture-first, not feed-first.** The app opens to a prominent capture bar ready for input. Clusters are the primary value of the feed, not individual inspirations. The entire UX is designed around one goal: **saving an inspiration must feel as reliable and instant as Apple Notes.** Nothing typed into Waka should ever be lost.
+
+### Secondary JTBD: Inspiring Discovery
+
+Clusters shouldn't feel like a utilitarian filing system — they should spark curiosity. Browsing clusters must be **effortless and engaging**, inviting users to explore unexpected connections. The feed surfaces surprising links between ideas, turning passive review into active discovery. Each visit should feel like uncovering something new about your own thinking.
 
 Key capture behaviors:
 - **Minimum viable inspiration**: A single word, a bare URL, or a one-line thought are all valid. Low-signal inputs get fewer AI-generated metadata fields, but they are always accepted and saved.
