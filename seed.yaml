@@ -1,0 +1,202 @@
+# Waka — Inspiration & Context Engine
+# Seed Specification v1.0
+# Generated from interview session: interview_20260407_162612
+# Date: 2026-04-08
+
+goal: >
+  Build Waka, a ubiquitous capture and synthesis engine deployed as a multi-user SaaS.
+  It ingests inspirations from any surface (web PWA, CLI, URL import, voice, photo, AI conversations),
+  semantically clusters them via pgvector + DBSCAN, and resurfaces surprising connections.
+  Implement all 9 execution loops as defined in spec.md — from foundation through shareable cards.
+  Capture must feel as reliable and instant as Apple Notes; nothing typed should ever be lost.
+
+constraints:
+  - "Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4"
+  - "Prisma ORM with Neon Serverless Postgres + pgvector extension"
+  - "Auth.js v5 with Google OAuth provider (extensible for future providers)"
+  - "SST Ion on AWS: Lambda + CloudFront + S3 Bucket + SQS Queue"
+  - "Embeddings locked to OpenAI text-embedding-3-small (1536-dim) regardless of LLM_PROVIDER"
+  - "Non-embedding LLM tasks (summarize, classify, title) switchable via LLM_PROVIDER env var (openai | gemini)"
+  - "SQS consumers run as Lambda subscribers (SST Queue → Lambda trigger pattern)"
+  - "AI field updates on frontend via polling at 3-second intervals (not SSE — Lambda incompatible)"
+  - "CLI OAuth uses localhost callback pattern (like gh auth login)"
+  - "Offline queue uses last-write-wins strategy (no deduplication in V1)"
+  - "Cluster reassignment changes surfaced in Discoveries feed"
+  - "Domain/URL derived from APP_URL environment variable (not hardcoded)"
+  - "API key management (create/list/revoke) included in Loop 1 Foundation"
+  - "All inspirations private by default — no data shared without explicit user action"
+  - "Eventual consistency on refresh — no real-time sync required"
+  - "Minimum valid rawContent: 1 character"
+  - "Monorepo structure with pnpm workspaces + Turborepo"
+  - "No budget constraints on infrastructure/API costs"
+
+acceptance_criteria:
+  # Loop 1: Foundation & Auth
+  - "AC1.1: npm run dev starts without errors"
+  - "AC1.2: Google OAuth sign-in creates User record in Neon"
+  - "AC1.3: Unauthenticated /dashboard requests redirect to /auth/signin"
+  - "AC1.4: Prisma schema migrates successfully (all models including ApiKey)"
+  - "AC1.5: pgvector extension enabled (vector type works)"
+  - "AC1.6: SST dev mode boots and serves the app"
+  - "AC1.7: S3 bucket provisioned and accessible"
+  - "AC1.8: SQS queue provisioned with Lambda subscriber"
+  - "AC1.9: Settings page allows creating/revoking API keys"
+  - "AC1.10: API key Bearer auth works for API routes"
+
+  # Loop 2: LLM Adapter & Embeddings
+  - "AC2.1: LLMProvider interface implemented for OpenAI and Gemini"
+  - "AC2.2: Embedding generated (1536-dim) and stored in DB"
+  - "AC2.3: Cosine similarity search returns top-K nearest vectors"
+  - "AC2.4: LLM_PROVIDER env var switches non-embedding tasks"
+  - "AC2.5: Embeddings always use OpenAI regardless of LLM_PROVIDER"
+  - "AC2.6: Summarize returns < 280 char summary"
+  - "AC2.7: Title generation returns < 80 char title"
+  - "AC2.8: Metadata classification returns valid domain/mood/actionability"
+  - "AC2.9: 3x retry with exponential backoff on API failure"
+  - "AC2.10: SQS Lambda consumer processes jobs from queue"
+
+  # Loop 3: Core Capture API
+  - "AC3.1: POST /api/inspirations returns 201 immediately (< 500ms)"
+  - "AC3.2: Async pipeline populates all AI fields within 30s"
+  - "AC3.3: Single-word inputs accepted and processed"
+  - "AC3.4: GET list paginated (default 20, max 100), excludes soft-deleted"
+  - "AC3.5: Semantic search returns relevant results"
+  - "AC3.6: Users can only access their own inspirations"
+  - "AC3.7: Deepen creates linked child and re-processes parent embedding"
+
+  # Loop 4: Web App
+  - "AC4.1: App opens to capture bar + cluster feed"
+  - "AC4.2: Text capture with optimistic UI (skeleton → AI fields fade in via 3s polling)"
+  - "AC4.3: URL auto-detection splits commentary + sourceUrl"
+  - "AC4.4: Voice capture via MediaRecorder → S3 → transcription"
+  - "AC4.5: Photo capture → S3 → LLM description/OCR"
+  - "AC4.6: AI conversation import with focused summary for embedding"
+  - "AC4.7: Capture bar persistent on all authenticated views"
+  - "AC4.8: Cluster feed groups inspirations by AI-generated clusters"
+  - "AC4.9: Offline capture queue via IndexedDB with queued indicator"
+  - "AC4.10: PWA installable on mobile Chrome/Safari"
+  - "AC4.11: Responsive: 375px through 1440px"
+  - "AC4.12: Reflection prompt inline on detail page (never blocking modal)"
+
+  # Loop 5: CLI Tool
+  - "AC5.1: waka-cli auth opens browser with localhost callback, stores token"
+  - "AC5.2: WAKA_API_KEY env var works as auth fallback"
+  - "AC5.3: Pipe text via stdin creates inspiration"
+  - "AC5.4: Interactive prompt when no stdin detected"
+  - "AC5.5: --file and --url flags work"
+  - "AC5.6: Post-save reflection prompt with 60s timeout"
+  - "AC5.7: Save feedback shows APP_URL-based link"
+
+  # Loop 6: URL + AI Conversation Import
+  - "AC6.1: URL fetch with @mozilla/readability + cheerio extraction"
+  - "AC6.2: PDF text extraction via pdf-parse"
+  - "AC6.3: OG metadata stored in sourceMeta"
+  - "AC6.4: AI conversation summary used for embedding (not full transcript)"
+  - "AC6.5: URL import timeout after 10s"
+
+  # Loop 7: Synthesis Engine
+  - "AC7.1: Connection search triggered after embedding generation"
+  - "AC7.2: Max 5 connections per new inspiration (similarity > 0.78)"
+  - "AC7.3: DBSCAN clustering runs after every 5th inspiration (eps=0.25, min_samples=3)"
+  - "AC7.4: Cluster reassignment changes shown in Discoveries feed"
+  - "AC7.5: Empty clusters deleted after re-clustering"
+
+  # Loop 8: Adaptive Reflection
+  - "AC8.1: Save always completes before reflection is shown"
+  - "AC8.2: URL/link saves classified as NOT_NEEDED"
+  - "AC8.3: Complex text classified as PROMPTED with contextual question"
+  - "AC8.4: Reflection answer triggers re-embedding"
+
+  # Loop 9: Shareable Cards
+  - "AC9.1: Toggle isPublic generates unique shareSlug"
+  - "AC9.2: Public page at /s/:slug renders without auth"
+  - "AC9.3: Dynamic OG image generation via @vercel/og or Satori"
+  - "AC9.4: Cluster sharing with private item exclusion"
+
+ontology_schema:
+  name: WakaInspirationEngine
+  description: >
+    Domain model for a personal knowledge graph that captures inspirations from multiple surfaces,
+    enriches them with AI-generated metadata and embeddings, clusters them semantically,
+    and surfaces surprising connections between ideas.
+  fields:
+    - name: User
+      type: object
+      description: "Authenticated user with Google OAuth. Has inspirations, clusters, connections, and API keys."
+    - name: Inspiration
+      type: object
+      description: "Core entity — captured thought, URL, voice note, photo, or AI conversation. Contains rawContent, AI-generated fields (title, summary, tags, domain, mood, actionability, embedding), reflection state, and sharing state."
+    - name: Cluster
+      type: object
+      description: "AI-generated grouping of semantically related inspirations. Has label and description, re-generated on membership changes."
+    - name: Connection
+      type: object
+      description: "AI-discovered link between two inspirations with similarity score (> 0.78) and natural-language explanation."
+    - name: ApiKey
+      type: object
+      description: "Hashed API key for CLI authentication. Created via settings page, validated via Bearer token."
+    - name: SourceType
+      type: string
+      description: "Enum: CLI_CONVERSATION, VOICE_NOTE, TEXT_NOTE, URL_IMPORT, PHOTO, AI_CONVERSATION"
+    - name: ReflectionStatus
+      type: string
+      description: "Enum: PENDING, PROMPTED, ANSWERED, SKIPPED, NOT_NEEDED"
+
+evaluation_principles:
+  - name: capture_reliability
+    description: "Inspirations must never be silently lost. Offline queue, optimistic UI, and retry logic must guarantee persistence."
+    weight: 1.0
+  - name: capture_speed
+    description: "POST /api/inspirations must return 201 within 500ms. AI processing is always async via SQS."
+    weight: 0.9
+  - name: semantic_quality
+    description: "Embeddings, summaries, and classifications must be accurate and useful for clustering and connection surfacing."
+    weight: 0.8
+  - name: ux_capture_first
+    description: "Capture bar must be always visible, prominent, and functional across all views. Never require navigation to capture."
+    weight: 0.9
+  - name: spec_fidelity
+    description: "Implementation must match spec.md exactly — no creative deviations, no missing features, no scope creep."
+    weight: 1.0
+  - name: security
+    description: "Users can only access their own data. API keys are hashed. Auth middleware protects all routes."
+    weight: 0.9
+  - name: offline_resilience
+    description: "PWA must work offline for capture. IndexedDB queue syncs on reconnection with last-write-wins."
+    weight: 0.7
+
+exit_conditions:
+  - name: all_loops_complete
+    description: "All 9 execution loops pass their acceptance criteria"
+    criteria: "Every AC item verified via its specified test method"
+  - name: deployment_working
+    description: "SST deployment to AWS is functional"
+    criteria: "sst deploy completes and app is accessible via CloudFront URL"
+  - name: pwa_installable
+    description: "Web app is installable as PWA on mobile"
+    criteria: "Service worker registered, manifest present, Add to Home Screen prompt works"
+  - name: cli_published
+    description: "CLI tool is published and functional"
+    criteria: "npx waka-cli auth + save + list works end-to-end"
+
+metadata:
+  version: "1.0.0"
+  generated_at: "2026-04-08T00:00:00Z"
+  interview_id: "interview_20260407_162612"
+  ambiguity_score: 0.15
+  project_type: greenfield
+  context_references:
+    - path: "spec.md"
+      role: primary
+      summary: "Authoritative technical specification with 9 execution loops, data models, acceptance criteria, and test plans"
+    - path: "prd-initial-draft.md"
+      role: reference
+      summary: "Initial product requirements draft"
+  resolved_ambiguities:
+    - "SQS Consumer → Lambda trigger (SST Queue subscriber)"
+    - "AI field updates → Polling at 3-second intervals"
+    - "CLI OAuth → Localhost callback pattern"
+    - "Offline queue conflicts → Last-write-wins (no dedup in V1)"
+    - "Cluster reassignment → Surfaced in Discoveries feed"
+    - "Domain → APP_URL environment variable"
+    - "API Key management → Loop 1 Foundation (ApiKey model + settings page)"

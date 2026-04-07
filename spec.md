@@ -66,7 +66,7 @@ Key capture behaviors:
 | Embeddings | OpenAI `text-embedding-3-small` (1536-dim, locked for V1) |
 | Vector Search | pgvector extension on Neon |
 | File Storage | AWS S3 (voice recordings, photos) via SST Bucket |
-| Job Queue | SQS via SST Queue (async embedding, summarization, reflection) |
+| Job Queue | SQS via SST Queue → Lambda subscriber (async embedding, summarization, reflection) |
 | Deployment | SST (Ion) on AWS (Lambda + CloudFront) |
 | CLI | Node.js CLI package (npm-installable) |
 
@@ -117,6 +117,7 @@ model User {
   inspirations  Inspiration[]
   clusters      Cluster[]
   connections   Connection[]
+  apiKeys       ApiKey[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -205,6 +206,18 @@ model Connection {
 
   @@unique([sourceId, targetId])
   @@index([userId, surfacedAt(sort: Desc)])
+}
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  name          String    // User-defined label (e.g., "MacBook CLI", "Work laptop")
+  hashedKey     String    @unique // SHA-256 hash of the API key (plain key shown only once on creation)
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
 }
 
 enum SourceType {
@@ -306,7 +319,7 @@ Each loop is designed to be independently executable and verifiable. Loops are o
 
 ### Loop 1: Project Foundation & Auth
 
-**Goal**: Bootable Next.js app with Google OAuth, Neon database, basic Prisma schema, S3 bucket, and SQS queue deployed via SST.
+**Goal**: Bootable Next.js app with Google OAuth, Neon database, basic Prisma schema, S3 bucket, SQS queue deployed via SST, and API key management for CLI auth.
 
 #### Scope
 
@@ -315,8 +328,10 @@ Each loop is designed to be independently executable and verifiable. Loops are o
 - Set up Auth.js v5 with Google OAuth provider
 - Implement sign-in / sign-out flow with protected route middleware
 - Configure SST Ion for AWS deployment (Lambda + CloudFront + S3 Bucket + SQS Queue)
-- Create all Prisma models from Section 2
+- Create all Prisma models from Section 2 (including `ApiKey` model)
 - Enable pgvector extension on Neon
+- Settings page (`/settings`) with API key management: create (show plain key once), list, revoke
+- API key authentication middleware: validate `Authorization: Bearer <key>` header by hashing and comparing against `ApiKey.hashedKey`, update `lastUsedAt` on use
 
 #### Acceptance Criteria
 
@@ -330,6 +345,8 @@ Each loop is designed to be independently executable and verifiable. Loops are o
 | 1.6 | SST dev mode (`sst dev`) runs without errors | Manual: `sst dev` boots and serves the app |
 | 1.7 | S3 bucket is provisioned and accessible | Test: upload/download a test file via SST bucket binding |
 | 1.8 | SQS queue is provisioned | Test: send/receive a test message via SST queue binding |
+| 1.9 | Settings page allows creating and revoking API keys | Test: create key → plain key shown once → listed in settings → revoke → key no longer works |
+| 1.10 | API key auth works for API routes | Test: `Authorization: Bearer <key>` header → authenticated request succeeds |
 
 #### Tests
 
@@ -338,11 +355,14 @@ Unit:
 - [ ] Auth middleware redirects unauthenticated users
 - [ ] Auth middleware allows authenticated users through
 - [ ] Prisma client connects to Neon and runs a basic query
+- [ ] API key hashing and validation logic
+- [ ] API key auth middleware accepts valid key, rejects invalid/revoked key
 
 Integration:
 - [ ] Google OAuth flow completes end-to-end (mock OAuth in test)
 - [ ] User record created on first sign-in, reused on subsequent sign-ins
 - [ ] All Prisma models can be created/read (seed test)
+- [ ] API key lifecycle: create → use → revoke → rejected
 
 E2E:
 - [ ] Visit / → see landing page
@@ -366,7 +386,7 @@ E2E:
 - Metadata classification function (tags, domain, mood, actionability)
 - Environment-based provider selection for non-embedding LLM tasks
 - Rate limiting and error handling with retries (3x retry with exponential backoff)
-- SQS consumer for async processing jobs
+- SQS consumer as Lambda subscriber (SST Queue → Lambda trigger pattern) for async processing jobs
 
 #### Acceptance Criteria
 
@@ -488,7 +508,7 @@ E2E:
 ##### Optimistic UI & Save Feedback
 - On submit, inspiration immediately appears at the top of the feed as a card with skeleton placeholders for title, summary, tags
 - Skeleton placeholders pulse/animate to indicate "loading" state (not "missing" state)
-- As AI fields resolve (via polling or server-sent events), they fade into the card
+- As AI fields resolve (via polling at 3-second intervals), they fade into the card
 - After save, the view scrolls to the new inspiration to confirm it was captured
 - If the server is unreachable: the card appears with a "queued" indicator, text is persisted to IndexedDB, and the app retries when connectivity returns
 
@@ -510,7 +530,7 @@ E2E:
 ##### Offline Capture Queue
 - Service worker caches app shell for offline loading
 - When offline, the capture bar still works: submitted inspirations are saved to IndexedDB with a `queued` status
-- When connectivity returns, queued inspirations are synced to the server automatically
+- When connectivity returns, queued inspirations are synced to the server automatically (last-write-wins; no deduplication in V1 — duplicates can be manually deleted by user)
 - Visual indicator on queued items: subtle "waiting to sync" badge
 
 ##### Other
@@ -580,7 +600,7 @@ E2E (Playwright):
 - `npx waka-cli save --file <path>` — captures content from a file
 - `echo "thought" | npx waka-cli save` — pipe any text directly
 - `npx waka-cli save --url <url>` — triggers URL import via the same API as the web app
-- `npx waka-cli auth` — opens browser for Google OAuth, stores API token locally
+- `npx waka-cli auth` — starts a temporary local server (localhost callback), opens browser for Google OAuth, receives token via callback, stores API token in `~/.waka/config.json`
 - `npx waka-cli auth --token <WAKA_API_KEY>` — manual token entry for remote/headless environments
 - `npx waka-cli list` — shows recent inspirations in terminal with auto-generated titles
 - `npx waka-cli deepen <id>` — opens interactive prompt to add context to an existing inspiration
@@ -604,7 +624,7 @@ For `quick_save` inspirations, just print confirmation + auto-title and exit.
 After saving, the CLI always prints:
 - Confirmation with a preview of the saved content
 - Auto-generated title (once resolved)
-- A web app link to view/deepen the inspiration: `  View: https://waka.app/inspiration/abc123`
+- A web app link to view/deepen the inspiration: `  View: ${APP_URL}/inspiration/abc123` (APP_URL from environment variable)
 
 #### Acceptance Criteria
 
@@ -725,7 +745,7 @@ E2E (Playwright):
 - **Connection creation**: If similarity > threshold, create a `Connection` with AI-generated explanation. Max 5 connections per new inspiration to cap LLM costs.
 - **Similarity threshold**: Configurable per embedding model. V1 default: 0.78 for OpenAI `text-embedding-3-small`. This value was chosen conservatively — it's better to surface more connections (with dismissal) than miss them. Threshold is stored as a server config constant, not a user setting.
 - **Clustering**: DBSCAN algorithm on user's embeddings, triggered after every 5th new inspiration (not on every save, to limit compute). DBSCAN is preferred over k-means because it doesn't require a predefined cluster count — it discovers natural groupings. Parameters: `eps=0.25` (distance threshold), `min_samples=3` (minimum inspirations to form a cluster).
-- **Cluster lifecycle**: When re-clustering occurs, existing cluster assignments may change. If a cluster gains or loses inspirations, its label and description are re-generated. Empty clusters are deleted.
+- **Cluster lifecycle**: When re-clustering occurs, existing cluster assignments may change. If a cluster gains or loses inspirations, its label and description are re-generated. Empty clusters are deleted. Cluster reassignment changes are surfaced in the Discoveries feed (e.g., "Your 'AI Research' cluster has been updated with new inspirations").
 - **Surprise resurfacing**: When a connection is found, generate a natural-language explanation (e.g., "This ties into your note from October about AI interpretability")
 - **Dashboard integration**: Connections shown on inspiration detail page. "Discoveries" section on dashboard shows recent unseen connections.
 
@@ -928,8 +948,11 @@ GEMINI_API_KEY=...    # Required only if LLM_PROVIDER=gemini
 # Deployment
 AWS_REGION=us-east-1
 
+# App URL (used by CLI for inspiration links, dynamic OG images, etc.)
+APP_URL=http://localhost:3000  # In production: https://your-domain.com
+
 # CLI Auth (alternative to OAuth flow for headless environments)
-# Users can generate this from the web app settings page
+# Users can generate this from the web app settings page (Loop 1)
 WAKA_API_KEY=...
 ```
 
