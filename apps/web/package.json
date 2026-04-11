@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@prisma/client": "^6.19.3",
     "cheerio": "^1.1.2",
     "jsdom": "^27.0.1",
     "next": "15.5.14",
@@ -22,6 +23,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "postcss": "^8.5.9",
+    "prisma": "6.19.3",
     "tailwindcss": "^4.2.2",
     "typescript": "5.9.3"
   }

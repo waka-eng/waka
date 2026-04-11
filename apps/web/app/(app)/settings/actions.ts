@@ -20,6 +20,10 @@ import type {
   JsonValue,
 } from "../../../src/auth/api-key-persistence.ts";
 import type { CreateApiKeyActionResult as SettingsCreateApiKeyActionResult } from "../../../src/auth/api-key-issuance.ts";
+import {
+  createCreateApiKeyRouteDependenciesFromCookies,
+  createRevokeApiKeyRouteDependenciesFromCookies,
+} from "../../../src/auth/runtime.ts";
 
 import { SETTINGS_API_KEYS_CREATE_FORM_ACTION } from "./settings-page-model.ts";
 
@@ -35,6 +39,34 @@ function resolveSettingsApiKeyRequestUrl(): string {
     SETTINGS_API_KEYS_CREATE_FORM_ACTION,
     configuredAppUrl,
   ).toString();
+}
+
+async function resolveCreateApiKeyActionDependencies(
+  options: HandleCreateApiKeyRouteRequestOptions,
+): Promise<HandleCreateApiKeyRouteRequestOptions["dependencies"]> {
+  if (options.dependencies) {
+    return options.dependencies;
+  }
+
+  try {
+    return await createCreateApiKeyRouteDependenciesFromCookies();
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveRevokeApiKeyActionDependencies(
+  options: HandleRevokeApiKeyRouteRequestOptions,
+): Promise<HandleRevokeApiKeyRouteRequestOptions["dependencies"]> {
+  if (options.dependencies) {
+    return options.dependencies;
+  }
+
+  try {
+    return await createRevokeApiKeyRouteDependenciesFromCookies();
+  } catch {
+    return undefined;
+  }
 }
 
 async function readCreateApiKeyActionError(
@@ -118,12 +150,16 @@ export async function submitSettingsApiKeyCreateFormToBackend(
   formData: FormData,
   options: HandleCreateApiKeyRouteRequestOptions = {},
 ): Promise<SettingsCreateApiKeyActionResult> {
+  const request = new Request(resolveSettingsApiKeyRequestUrl(), {
+    method: "POST",
+    body: formData,
+  });
   const response = await handleCreateApiKeyRouteRequest(
-    new Request(resolveSettingsApiKeyRequestUrl(), {
-      method: "POST",
-      body: formData,
-    }),
-    options,
+    request,
+    {
+      ...options,
+      dependencies: await resolveCreateApiKeyActionDependencies(options),
+    },
   );
 
   if (response.status === CREATE_API_KEY_ROUTE_CREATED_STATUS) {
@@ -149,17 +185,21 @@ export async function submitSettingsApiKeyRevokeToBackend(
     throw new Error(API_KEY_REVOKE_ID_REQUIRED_ERROR);
   }
 
-  const response = await handleRevokeApiKeyRouteRequest(
-    new Request(resolveSettingsApiKeyRequestUrl(), {
-      method: "DELETE",
-      body: JSON.stringify({
-        apiKeyId: normalizedApiKeyId,
-      }),
-      headers: {
-        "content-type": "application/json",
-      },
+  const request = new Request(resolveSettingsApiKeyRequestUrl(), {
+    method: "DELETE",
+    body: JSON.stringify({
+      apiKeyId: normalizedApiKeyId,
     }),
-    options,
+    headers: {
+      "content-type": "application/json",
+    },
+  });
+  const response = await handleRevokeApiKeyRouteRequest(
+    request,
+    {
+      ...options,
+      dependencies: await resolveRevokeApiKeyActionDependencies(options),
+    },
   );
 
   if (response.status === REVOKE_API_KEY_ROUTE_OK_STATUS) {

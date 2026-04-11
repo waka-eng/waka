@@ -26,6 +26,10 @@
     "validate:google-oauth-env": "node scripts/validate-google-oauth-env.ts"
   },
   "devDependencies": {
+    "prisma": "^6.19.3",
     "sst": "3.14.11"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
   }
 }

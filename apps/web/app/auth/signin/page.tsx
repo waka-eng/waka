@@ -1,8 +1,7 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { hasAuthSessionCookie } from "../../../src/auth/dashboard-redirect.ts";
 import { PublicAuthShell } from "../../../src/auth/public-auth-shell.tsx";
+import { resolveRuntimeAuthenticatedSessionFromCookies } from "../../../src/auth/runtime.ts";
 
 interface SignInPageProps {
   searchParams?: Promise<{
@@ -30,9 +29,7 @@ function readSearchParamValue(
 }
 
 async function requestHasAuthSession(): Promise<boolean> {
-  const cookieStore = await cookies();
-
-  return hasAuthSessionCookie(cookieStore.getAll().map(({ name }) => name));
+  return (await resolveRuntimeAuthenticatedSessionFromCookies()) !== null;
 }
 
 export default async function SignInPage({

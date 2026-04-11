@@ -408,7 +408,7 @@ test("authenticated routes keep the capture bar in the shared app layout only", 
 
     assert.match(
       source,
-      /AuthenticatedAppPageOutlet|<SettingsPage \/>/u,
+      /AuthenticatedAppPageOutlet|SettingsPage/u,
       `${relativeViewPath} should resolve into the shared authenticated page outlet.`,
     );
     assert.doesNotMatch(
