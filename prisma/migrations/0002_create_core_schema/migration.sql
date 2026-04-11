@@ -17,6 +17,11 @@ CREATE TYPE "ReflectionStatus" AS ENUM (
   'NOT_NEEDED'
 );
 
+-- CreateEnum
+CREATE TYPE "DiscoveryEventType" AS ENUM (
+  'CLUSTER_REASSIGNED'
+);
+
 -- CreateTable
 CREATE TABLE "Tenant" (
   "id" TEXT NOT NULL,
@@ -163,6 +168,19 @@ CREATE TABLE "Connection" (
 );
 
 -- CreateTable
+CREATE TABLE "DiscoveryEvent" (
+  "id" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  "inspirationId" TEXT NOT NULL,
+  "eventType" "DiscoveryEventType" NOT NULL,
+  "previousClusterId" TEXT NOT NULL,
+  "newClusterId" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "DiscoveryEvent_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "ApiKey" (
   "id" TEXT NOT NULL,
   "userId" TEXT NOT NULL,
@@ -284,6 +302,21 @@ CREATE INDEX "Connection_userId_sourceId_surfacedAt_idx" ON "Connection"("userId
 CREATE INDEX "Connection_userId_targetId_surfacedAt_idx" ON "Connection"("userId", "targetId", "surfacedAt" DESC);
 
 -- CreateIndex
+CREATE INDEX "DiscoveryEvent_userId_createdAt_idx" ON "DiscoveryEvent"("userId", "createdAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "DiscoveryEvent_userId_eventType_createdAt_idx" ON "DiscoveryEvent"("userId", "eventType", "createdAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "DiscoveryEvent_userId_inspirationId_createdAt_idx" ON "DiscoveryEvent"("userId", "inspirationId", "createdAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "DiscoveryEvent_userId_previousClusterId_createdAt_idx" ON "DiscoveryEvent"("userId", "previousClusterId", "createdAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "DiscoveryEvent_userId_newClusterId_createdAt_idx" ON "DiscoveryEvent"("userId", "newClusterId", "createdAt" DESC);
+
+-- CreateIndex
 CREATE UNIQUE INDEX "ApiKey_hashedKey_key" ON "ApiKey"("hashedKey");
 
 -- CreateIndex
@@ -383,6 +416,20 @@ ON UPDATE CASCADE;
 ALTER TABLE "Connection"
 ADD CONSTRAINT "Connection_targetId_fkey"
 FOREIGN KEY ("targetId") REFERENCES "Inspiration"("id")
+ON DELETE CASCADE
+ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DiscoveryEvent"
+ADD CONSTRAINT "DiscoveryEvent_userId_fkey"
+FOREIGN KEY ("userId") REFERENCES "User"("id")
+ON DELETE CASCADE
+ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "DiscoveryEvent"
+ADD CONSTRAINT "DiscoveryEvent_userId_inspirationId_fkey"
+FOREIGN KEY ("userId", "inspirationId") REFERENCES "Inspiration"("userId", "id")
 ON DELETE CASCADE
 ON UPDATE CASCADE;
 

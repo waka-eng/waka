@@ -11,6 +11,13 @@ test("inspiration model preserves user-scoped integrity and card/share feed inde
   );
 });
 
+test("cluster model preserves public-share state and user-scoped share indexes", () => {
+  assert.match(
+    schema,
+    /model Cluster \{[\s\S]*isPublic\s+Boolean\s+@default\(false\)[\s\S]*shareSlug\s+String\?\s+@unique[\s\S]*@@unique\(\[userId, id\]\)[\s\S]*@@index\(\[userId, isPublic, updatedAt\(sort: Desc\)\]\)[\s\S]*@@index\(\[userId, updatedAt\(sort: Desc\)\]\)[\s\S]*\}/,
+  );
+});
+
 test("connection model indexes discoveries and inspiration detail resurfacing lookups", () => {
   assert.match(
     schema,

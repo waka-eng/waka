@@ -1,0 +1,31 @@
+{
+  "name": "waka",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.30.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/sst-dev.mjs",
+    "dev:sst": "node scripts/sst-dev.mjs",
+    "dev:web": "pnpm --filter @waka/web run dev",
+    "build": "pnpm run build:web",
+    "build:web": "pnpm --filter @waka/web run build",
+    "test": "node scripts/run-standard-verification.ts --skip-typecheck",
+    "test:node": "node --test \"tests/*.test.ts\"",
+    "test:expected-load": "node scripts/verify-end-to-end-enrichment-load.ts --output reports/end-to-end-enrichment-load-verification.json",
+    "typecheck": "pnpm run typecheck:web",
+    "typecheck:web": "pnpm --filter @waka/web exec tsc --noEmit",
+    "verify": "node scripts/run-standard-verification.ts",
+    "verify:end-to-end-enrichment-load": "node scripts/verify-end-to-end-enrichment-load.ts",
+    "test:google-oauth-callback-route": "node --test tests/google-oauth-callback-route.test.ts",
+    "test:google-oauth-env": "node --test tests/google-oauth-env.test.ts",
+    "test:workspace-scripts": "node --test tests/workspace-scripts.test.ts tests/sst-dev-bootstrap.test.ts",
+    "validate:google-oauth-env": "node scripts/validate-google-oauth-env.ts"
+  },
+  "devDependencies": {
+    "sst": "3.14.11"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@waka/web",
+  "private": true,
+  "scripts": {
+    "dev": "node ../../scripts/web-dev.mjs",
+    "build": "node ../../scripts/prepare-web-icons.ts && node ../../scripts/prepare-web-manifest.ts && node ../../scripts/prepare-web-service-worker.ts && next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "cheerio": "^1.1.2",
+    "jsdom": "^27.0.1",
+    "next": "15.5.14",
+    "pdf-parse": "^1.1.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sst": "3.14.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "24.12.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "postcss": "^8.5.9",
+    "tailwindcss": "^4.2.2",
+    "typescript": "5.9.3"
+  }
+}

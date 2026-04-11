@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+reports
+*.tsbuildinfo
+pnpm-lock.yaml
+.env
+.env.local
+.env.*.local
+apps/web/public/sw.js

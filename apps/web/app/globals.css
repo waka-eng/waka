@@ -1,0 +1,274 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --waka-breakpoint-tablet: 56rem;
+  --waka-shell-max-width: 90rem;
+  --waka-shell-inline-padding: 1rem;
+  --waka-authenticated-shell-body-gap: 1.5rem;
+  --waka-authenticated-shell-navigation-width: 100%;
+  --waka-authenticated-shell-navigation-panel-padding: 0.75rem;
+  --waka-authenticated-shell-navigation-list-gap: 0.5rem;
+  --waka-authenticated-shell-navigation-link-min-height: auto;
+  --waka-authenticated-shell-navigation-link-padding-inline: 1rem;
+  --waka-authenticated-shell-navigation-link-padding-block: 0.75rem;
+  --waka-page-stack-gap: 2rem;
+  --waka-page-header-gap: 1rem;
+  --waka-page-header-action-gap: 0.75rem;
+  --waka-page-header-copy-max-width: 48rem;
+  --waka-primary-section-gap: 1.5rem;
+  --waka-primary-section-padding: 1.5rem;
+  --waka-shell-layer-page-header: 10;
+  --waka-shell-layer-navigation: 15;
+}
+
+html {
+  min-height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  background: #0c0a09;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.waka-shell-container {
+  display: flex;
+  min-height: 100vh;
+  width: min(100%, var(--waka-shell-max-width));
+  min-width: 0;
+  max-width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--waka-shell-inline-padding);
+}
+
+.waka-authenticated-shell-container {
+  padding-top: 1rem;
+  padding-bottom: 2.5rem;
+}
+
+.waka-authenticated-shell-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: var(--waka-authenticated-shell-body-gap);
+  margin-top: 0;
+  position: relative;
+  isolation: isolate;
+}
+
+.waka-authenticated-shell-navigation {
+  position: relative;
+  z-index: var(--waka-shell-layer-navigation);
+  width: var(--waka-authenticated-shell-navigation-width);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.waka-authenticated-shell-navigation-panel {
+  position: relative;
+  padding: var(--waka-authenticated-shell-navigation-panel-padding);
+  border: 1px solid rgba(214, 211, 209, 0.9);
+  border-radius: 1.5rem;
+  background: rgba(255, 253, 249, 0.82);
+  box-shadow: 0 18px 50px rgba(41, 37, 36, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.waka-authenticated-shell-navigation-overlay {
+  display: none;
+}
+
+.waka-authenticated-shell-navigation-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--waka-authenticated-shell-navigation-list-gap);
+  align-items: stretch;
+}
+
+.waka-authenticated-shell-navigation-link {
+  min-height: var(--waka-authenticated-shell-navigation-link-min-height);
+  min-width: min(100%, 13rem);
+  padding-inline: var(--waka-authenticated-shell-navigation-link-padding-inline);
+  padding-block: var(--waka-authenticated-shell-navigation-link-padding-block);
+}
+
+.waka-authenticated-shell-navigation-description {
+  display: block;
+}
+
+.waka-public-shell-container {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2.5rem;
+  padding-block: 3rem;
+}
+
+.waka-page-stack {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  gap: var(--waka-page-stack-gap);
+}
+
+.waka-primary-section {
+  padding: var(--waka-primary-section-padding);
+}
+
+.waka-primary-section-stack {
+  gap: var(--waka-primary-section-gap);
+}
+
+.waka-page-header {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--waka-page-header-gap);
+  position: relative;
+  z-index: var(--waka-shell-layer-page-header);
+}
+
+.waka-page-header-copy {
+  width: 100%;
+  min-width: 0;
+  max-width: min(100%, var(--waka-page-header-copy-max-width));
+  flex: 1 1 auto;
+}
+
+.waka-page-header-action {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--waka-page-header-action-gap);
+}
+
+.waka-page-header-action > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 40rem) {
+  :root {
+    --waka-shell-inline-padding: 1.5rem;
+  }
+
+  .waka-public-shell-container {
+    gap: 3rem;
+    padding-block: 4rem;
+  }
+}
+
+@media (min-width: 56rem) {
+  :root {
+    --waka-shell-inline-padding: 1.5rem;
+    --waka-authenticated-shell-body-gap: 1.5rem;
+    --waka-authenticated-shell-navigation-width: 100%;
+    --waka-authenticated-shell-navigation-panel-padding: 1rem;
+    --waka-authenticated-shell-navigation-list-gap: 0.75rem;
+    --waka-authenticated-shell-navigation-link-min-height: 6.5rem;
+    --waka-authenticated-shell-navigation-link-padding-block: 0.875rem;
+    --waka-page-stack-gap: 2rem;
+    --waka-page-header-gap: 1.25rem;
+    --waka-page-header-action-gap: 1rem;
+    --waka-page-header-copy-max-width: 40rem;
+    --waka-primary-section-gap: 1.25rem;
+    --waka-primary-section-padding: 1.25rem;
+  }
+
+  .waka-authenticated-shell-body {
+    align-items: stretch;
+  }
+
+  .waka-public-shell-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3.5rem;
+  }
+
+  .waka-page-header {
+    align-items: stretch;
+  }
+}
+
+@media (min-width: 80rem) {
+  :root {
+    --waka-shell-max-width: 80rem;
+    --waka-shell-inline-padding: 2.5rem;
+    --waka-authenticated-shell-body-gap: 1.5rem;
+    --waka-authenticated-shell-navigation-width: 100%;
+    --waka-authenticated-shell-navigation-panel-padding: 1rem;
+    --waka-authenticated-shell-navigation-list-gap: 0.875rem;
+    --waka-authenticated-shell-navigation-link-min-height: auto;
+    --waka-authenticated-shell-navigation-link-padding-block: 0.875rem;
+    --waka-page-stack-gap: 2rem;
+    --waka-page-header-gap: 1.25rem;
+    --waka-page-header-action-gap: 0.875rem;
+    --waka-page-header-copy-max-width: 54rem;
+    --waka-primary-section-gap: 1.25rem;
+    --waka-primary-section-padding: 1.25rem;
+  }
+
+  .waka-authenticated-shell-body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .waka-authenticated-shell-navigation {
+    display: block;
+  }
+
+  .waka-authenticated-shell-navigation-list {
+    flex-wrap: nowrap;
+  }
+
+  .waka-page-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--waka-page-header-gap);
+  }
+
+  .waka-page-header-action {
+    width: auto;
+    justify-content: flex-end;
+  }
+
+  .waka-public-shell-container {
+    gap: 4rem;
+  }
+}
+
+@keyframes waka-ai-field-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

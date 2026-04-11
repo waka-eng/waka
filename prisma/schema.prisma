@@ -29,6 +29,7 @@ model User {
   inspirations  Inspiration[]
   clusters      Cluster[]
   connections   Connection[]
+  discoveryEvents DiscoveryEvent[]
   apiKeys       ApiKey[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -41,6 +42,7 @@ model Workspace {
   name        String
   tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   memberships Membership[]
+  apiKeys     ApiKey[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -107,25 +109,65 @@ model VerificationToken {
 }
 
 model Inspiration {
-  id                String             @id @default(cuid())
-  userId            String
-  title             String?
-  rawContent        String
-  summary           String?
-  sourceType        SourceType
-  sourceUrl         String?
-  sourceMeta        Json?
-  mediaUrl          String?
-  transcript        String?
-  embedding         Unsupported("vector(1536)")?
-  tags              String[]
-  domain            String?
-  mood              String?
-  actionability     String?
+  id                 String             @id @default(cuid())
+  userId             String
+  title              String?
+  rawContent         String
+  summary            String?
+  // Immutable snapshot of the initial capture payload.
+  originalTitle      String?
+  originalRawContent String
+  sourceType         SourceType
+  sourceUrl          String?
+  sourceMeta         Json?
+  // Immutable provider-scoped AI conversation provenance for summary/embedding traceability.
+  sourceConversationRef String?
+  originalSourceUrl  String?
+  originalSourceMeta Json?
+  mediaUrl           String?
+  // Dedicated voice-note upload reference and metadata.
+  audioStorageKey    String?
+  audioStorageUrl    String?
+  audioMimeType      String?
+  audioSizeBytes     Int?
+  audioDurationSeconds Float?
+  audioTranscriptionStatus String?
+  // Dedicated photo upload reference and pending-upload metadata.
+  photoStorageKey    String?
+  photoStorageUrl    String?
+  photoFileName      String?
+  photoMimeType      String?
+  photoSizeBytes     Int?
+  photoUploadStatus  String?
+  transcript         String?
+  // Dedicated capture-enrichment outputs for OCR/photo analysis persistence.
+  ocrText              String?         @map("ocr_text")
+  generatedDescription String?         @map("generated_description")
+  processingState      Json?           @map("processing_state")
+  originalMediaUrl   String?
+  originalTranscript String?
+  embedding          Unsupported("vector(1536)")?
+  tags               String[]
+  domain             String?
+  mood               String?
+  actionability      String?
+  enrichmentStatus       String           @default("PENDING")
+  enrichmentEnqueuedAt   DateTime?
+  enrichmentStartedAt    DateTime?
+  enrichmentCompletedAt  DateTime?
+  enrichmentFailedAt     DateTime?
+  enrichmentAttemptCount Int              @default(0)
+  enrichmentMaxAttemptCount Int           @default(3)
+  enrichmentLastFailureReason String?
+  enrichmentLastFailureRetryability String?
+  enrichmentLastError    Json?
+  enrichmentFields   Json?
+  enrichmentResumeState Json?
   reflectionPrompt  String?
   reflectionAnswer  String?
   reflectionStatus  ReflectionStatus   @default(PENDING)
   parentId          String?
+  sourceParentId    String?
   clusterId         String?
   isPublic          Boolean            @default(false)
   shareSlug         String?            @unique
@@ -135,9 +177,12 @@ model Inspiration {
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   parent            Inspiration?       @relation("InspirationDepth", fields: [parentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   expansions        Inspiration[]      @relation("InspirationDepth")
+  sourceParent      Inspiration?       @relation("InspirationSourceDepth", fields: [sourceParentId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sourceExpansions  Inspiration[]      @relation("InspirationSourceDepth")
   cluster           Cluster?           @relation(fields: [userId, clusterId], references: [userId, id], onDelete: SetNull, onUpdate: Cascade)
   connectionsAsSource Connection[]     @relation("ConnectionSource")
   connectionsAsTarget Connection[]     @relation("ConnectionTarget")
+  discoveryEvents   DiscoveryEvent[]
 
   @@unique([userId, id])
   @@unique([userId, sourceType, sourceUrl])
@@ -147,9 +192,13 @@ model Inspiration {
   @@index([userId, deletedAt, createdAt(sort: Desc)])
   @@index([userId, sourceType, createdAt(sort: Desc)])
   @@index([userId, sourceUrl])
+  @@index([userId, sourceConversationRef])
   @@index([userId, mediaUrl])
+  @@index([userId, sourceParentId, createdAt(sort: Desc)])
+  @@index([userId, enrichmentStatus, enrichmentEnqueuedAt(sort: Desc)])
   @@index([userId, isPublic, deletedAt, createdAt(sort: Desc)])
   @@index([userId, clusterId, createdAt(sort: Desc)])
+  @@index([enrichmentStatus, enrichmentEnqueuedAt(sort: Desc)])
   @@index([clusterId, createdAt(sort: Desc)])
   @@index([clusterId, isPublic, deletedAt, createdAt(sort: Desc)])
 }
@@ -159,6 +208,8 @@ model Cluster {
   userId       String
   label        String
   description  String?
+  isPublic     Boolean       @default(false)
+  shareSlug    String?       @unique
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -166,6 +217,7 @@ model Cluster {
 
   @@unique([userId, id])
   @@index([userId])
+  @@index([userId, isPublic, updatedAt(sort: Desc)])
   @@index([userId, updatedAt(sort: Desc)])
 }
 
@@ -189,19 +241,48 @@ model Connection {
   @@index([userId, targetId, surfacedAt(sort: Desc)])
 }
 
+model DiscoveryEvent {
+  id                String             @id @default(cuid())
+  userId            String
+  inspirationId     String
+  eventType         DiscoveryEventType
+  previousClusterId String
+  newClusterId      String
+  createdAt         DateTime           @default(now())
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  inspiration       Inspiration        @relation(fields: [userId, inspirationId], references: [userId, id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, eventType, createdAt(sort: Desc)])
+  @@index([userId, inspirationId, createdAt(sort: Desc)])
+  @@index([userId, previousClusterId, createdAt(sort: Desc)])
+  @@index([userId, newClusterId, createdAt(sort: Desc)])
+}
+
 model ApiKey {
-  id         String    @id @default(cuid())
-  userId     String
-  name       String
-  hashedKey  String    @unique
-  lastUsedAt DateTime?
-  revokedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id          String    @id @default(cuid())
+  userId      String
+  tenantId    String
+  workspaceId String
+  name        String
+  description String?
+  keyPrefix   String
+  metadata    Json?
+  hashedKey   String    @unique
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  workspace   Workspace @relation(fields: [tenantId, workspaceId], references: [tenantId, id], onDelete: Cascade, onUpdate: Cascade)
 
   @@index([userId])
+  @@index([tenantId, workspaceId])
   @@index([userId, createdAt(sort: Desc)])
+  @@index([workspaceId, createdAt(sort: Desc)])
   @@index([userId, revokedAt, createdAt(sort: Desc)])
+  @@index([userId, workspaceId, revokedAt, createdAt(sort: Desc)])
+  @@index([userId, workspaceId, lastUsedAt(sort: Desc)])
 }
 
 enum SourceType {
@@ -219,4 +300,8 @@ enum ReflectionStatus {
   ANSWERED
   SKIPPED
   NOT_NEEDED
+}
+
+enum DiscoveryEventType {
+  CLUSTER_REASSIGNED
 }
