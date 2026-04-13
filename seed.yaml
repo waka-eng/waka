@@ -1,14 +1,18 @@
 # Waka — Inspiration & Context Engine
-# Seed Specification v1.0
-# Generated from interview session: interview_20260407_162612
-# Date: 2026-04-08
+# Seed Specification v2.0
+# Updated: 2026-04-12
+# Architecture: LLM Wiki-style threads + bridges (replaces static clusters)
 
 goal: >
-  Build Waka, a ubiquitous capture and synthesis engine deployed as a multi-user SaaS.
-  It ingests inspirations from any surface (web PWA, CLI, URL import, voice, photo, AI conversations),
-  semantically clusters them via pgvector + DBSCAN, and resurfaces surprising connections.
-  Implement all 9 execution loops as defined in spec.md — from foundation through shareable cards.
+  Build Waka, a personal knowledge engine inspired by the LLM Wiki pattern, deployed as a multi-user SaaS.
+  Users throw things in (web PWA, CLI, URL import, voice, photo, AI conversations) and Waka's backend
+  carefully places each capture into an evolving knowledge graph with three layers: raw inspirations,
+  LLM-synthesized threads (living documents that get rewritten on each placement), and bridges
+  (cross-thread connections). The frontend never exposes the graph — users see a clean feed of
+  capture cards (inputs) and discovery cards (outputs), with threads as the deep-read surface.
   Capture must feel as reliable and instant as Apple Notes; nothing typed should ever be lost.
+  The floating capture island is always visible and supports conversational post-save reflection.
+  Implement all 9 execution loops as defined in spec.md.
 
 constraints:
   - "Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS v4"
@@ -16,26 +20,33 @@ constraints:
   - "Auth.js v5 with Google OAuth provider (extensible for future providers)"
   - "SST Ion on AWS: Lambda + CloudFront + S3 Bucket + SQS Queue"
   - "Embeddings locked to OpenAI text-embedding-3-small (1536-dim) regardless of LLM_PROVIDER"
-  - "Non-embedding LLM tasks (summarize, classify, title) switchable via LLM_PROVIDER env var (openai | gemini)"
-  - "SQS consumers run as Lambda subscribers (SST Queue → Lambda trigger pattern)"
-  - "AI field updates on frontend via polling at 3-second intervals (not SSE — Lambda incompatible)"
+  - "Non-embedding LLM tasks (summarize, classify, title, thread synthesis, bridge detection) switchable via LLM_PROVIDER env var (openai | gemini)"
+  - "SQS consumers run as Lambda subscribers (SST Queue -> Lambda trigger pattern)"
+  - "AI field updates on frontend via polling at 3-second intervals (not SSE -- Lambda incompatible)"
   - "CLI OAuth uses localhost callback pattern (like gh auth login)"
   - "Offline queue uses last-write-wins strategy (no deduplication in V1)"
-  - "Cluster reassignment changes surfaced in Discoveries feed"
   - "Domain/URL derived from APP_URL environment variable (not hardcoded)"
   - "API key management (create/list/revoke) included in Loop 1 Foundation"
-  - "All inspirations private by default — no data shared without explicit user action"
-  - "Eventual consistency on refresh — no real-time sync required"
+  - "All inspirations private by default -- no data shared without explicit user action"
+  - "Eventual consistency on refresh -- no real-time sync required"
   - "Minimum valid rawContent: 1 character"
   - "Monorepo structure with pnpm workspaces + Turborepo"
   - "No budget constraints on infrastructure/API costs"
+  - "Design must follow vendor-skills/taste-skill/SKILL.md -- intent-driven, anti-slop, premium craft"
+  - "Dark mode first, warm neutrals (Stone), single desaturated warm accent, Geist typography"
+  - "Two emotional modes coexist: capture mode (zero friction) and discovery mode (earned revelation)"
+  - "Floating capture island anchored to bottom of viewport, never scrolls away"
+  - "Thread synthesis is a living document rewritten by LLM on each placement, not a static label"
+  - "An inspiration belongs to one thread in V1 (single threadId)"
+  - "Max 3 new bridges per thread placement to cap LLM costs"
+  - "Bridge detection uses cosine similarity > 0.72 between thread centroids as pre-filter before LLM evaluation"
 
 acceptance_criteria:
   # Loop 1: Foundation & Auth
   - "AC1.1: npm run dev starts without errors"
   - "AC1.2: Google OAuth sign-in creates User record in Neon"
   - "AC1.3: Unauthenticated /dashboard requests redirect to /auth/signin"
-  - "AC1.4: Prisma schema migrates successfully (all models including ApiKey)"
+  - "AC1.4: Prisma schema migrates successfully (all models including Thread, Bridge, ApiKey)"
   - "AC1.5: pgvector extension enabled (vector type works)"
   - "AC1.6: SST dev mode boots and serves the app"
   - "AC1.7: S3 bucket provisioned and accessible"
@@ -64,19 +75,26 @@ acceptance_criteria:
   - "AC3.6: Users can only access their own inspirations"
   - "AC3.7: Deepen creates linked child and re-processes parent embedding"
 
-  # Loop 4: Web App
-  - "AC4.1: App opens to capture bar + cluster feed"
-  - "AC4.2: Text capture with optimistic UI (skeleton → AI fields fade in via 3s polling)"
-  - "AC4.3: URL auto-detection splits commentary + sourceUrl"
-  - "AC4.4: Voice capture via MediaRecorder → S3 → transcription"
-  - "AC4.5: Photo capture → S3 → LLM description/OCR"
-  - "AC4.6: AI conversation import with focused summary for embedding"
-  - "AC4.7: Capture bar persistent on all authenticated views"
-  - "AC4.8: Cluster feed groups inspirations by AI-generated clusters"
-  - "AC4.9: Offline capture queue via IndexedDB with queued indicator"
-  - "AC4.10: PWA installable on mobile Chrome/Safari"
-  - "AC4.11: Responsive: 375px through 1440px"
-  - "AC4.12: Reflection prompt inline on detail page (never blocking modal)"
+  # Loop 4: Web App -- Capture-First Feed with Threads
+  - "AC4.1: App opens to feed with floating capture island at bottom of viewport"
+  - "AC4.2: Floating island stays visible during scroll on all views (home, thread detail, inspiration detail)"
+  - "AC4.3: Text capture with optimistic UI (skeleton -> AI fields fade in via 3s polling)"
+  - "AC4.4: URL auto-detection splits commentary + sourceUrl"
+  - "AC4.5: Voice capture via MediaRecorder -> S3 -> transcription"
+  - "AC4.6: Photo capture -> S3 -> LLM description/OCR"
+  - "AC4.7: AI conversation import with focused summary for embedding"
+  - "AC4.8: Feed shows two card types: capture cards (lightweight inputs) and discovery cards (richer outputs)"
+  - "AC4.9: Discovery card appears when thread is updated by new placement"
+  - "AC4.10: Discovery card appears when new bridge forms between threads"
+  - "AC4.11: Discovery card appears when new thread is created"
+  - "AC4.12: Visual distinction between capture cards (compact/muted) and discovery cards (richer/bolder)"
+  - "AC4.13: Thread detail shows full synthesized document + composing inspirations"
+  - "AC4.14: Conversational post-save reflection appears in capture island, auto-fades ~5s if ignored"
+  - "AC4.15: Reflection answer saved as linked inspiration (parentId)"
+  - "AC4.16: Offline capture queue via IndexedDB with queued indicator"
+  - "AC4.17: PWA installable on mobile Chrome/Safari"
+  - "AC4.18: Responsive: 375px through 1440px"
+  - "AC4.19: Design follows taste-skill: dark mode, warm neutrals, Geist typography, no AI slop patterns"
 
   # Loop 5: CLI Tool
   - "AC5.1: waka-cli auth opens browser with localhost callback, stores token"
@@ -94,44 +112,55 @@ acceptance_criteria:
   - "AC6.4: AI conversation summary used for embedding (not full transcript)"
   - "AC6.5: URL import timeout after 10s"
 
-  # Loop 7: Synthesis Engine
-  - "AC7.1: Connection search triggered after embedding generation"
-  - "AC7.2: Max 5 connections per new inspiration (similarity > 0.78)"
-  - "AC7.3: DBSCAN clustering runs after every 5th inspiration (eps=0.25, min_samples=3)"
-  - "AC7.4: Cluster reassignment changes shown in Discoveries feed"
-  - "AC7.5: Empty clusters deleted after re-clustering"
+  # Loop 7: Synthesis Engine -- Thread Placement & Bridge Detection
+  - "AC7.1: New inspiration triggers LLM-driven thread placement (threadId set)"
+  - "AC7.2: Placement into existing thread rewrites synthesis document (not append)"
+  - "AC7.3: New thread created when inspiration doesn't fit existing threads"
+  - "AC7.4: Thread synthesis reads as coherent narrative, references older inspirations"
+  - "AC7.5: Bridge detected between threads when new connection forms (max 3 per placement)"
+  - "AC7.6: Bridge has meaningful AI-generated explanation referencing both threads"
+  - "AC7.7: Empty threads soft-deleted when all inspirations removed"
+  - "AC7.8: Thread title re-generated when synthesis changes significantly"
+  - "AC7.9: Thread updatedAt touched on every re-synthesis (re-surfaces in feed)"
 
   # Loop 8: Adaptive Reflection
   - "AC8.1: Save always completes before reflection is shown"
   - "AC8.2: URL/link saves classified as NOT_NEEDED"
   - "AC8.3: Complex text classified as PROMPTED with contextual question"
-  - "AC8.4: Reflection answer triggers re-embedding"
+  - "AC8.4: Reflection appears in floating capture island as conversational follow-up"
+  - "AC8.5: Reflection auto-fades after ~5s if ignored"
+  - "AC8.6: Reflection answer saved as linked inspiration and triggers re-embedding"
+  - "AC8.7: Cold start phase (0-20 captures): reflection is primary post-capture response"
 
-  # Loop 9: Shareable Cards
+  # Loop 9: Shareable Cards & Threads
   - "AC9.1: Toggle isPublic generates unique shareSlug"
   - "AC9.2: Public page at /s/:slug renders without auth"
   - "AC9.3: Dynamic OG image generation via @vercel/og or Satori"
-  - "AC9.4: Cluster sharing with private item exclusion"
+  - "AC9.4: Thread sharing shows synthesis + only public inspirations"
 
 ontology_schema:
-  name: WakaInspirationEngine
+  name: WakaKnowledgeEngine
   description: >
-    Domain model for a personal knowledge graph that captures inspirations from multiple surfaces,
-    enriches them with AI-generated metadata and embeddings, clusters them semantically,
-    and surfaces surprising connections between ideas.
+    Domain model for a personal knowledge engine with three layers:
+    raw inspirations (immutable captures), threads (LLM-synthesized living documents),
+    and bridges (cross-thread connections). The frontend surfaces capture cards and
+    discovery cards without exposing the underlying graph.
   fields:
     - name: User
       type: object
-      description: "Authenticated user with Google OAuth. Has inspirations, clusters, connections, and API keys."
+      description: "Authenticated user with Google OAuth. Has inspirations, threads, bridges, connections, and API keys."
     - name: Inspiration
       type: object
-      description: "Core entity — captured thought, URL, voice note, photo, or AI conversation. Contains rawContent, AI-generated fields (title, summary, tags, domain, mood, actionability, embedding), reflection state, and sharing state."
-    - name: Cluster
+      description: "Core entity -- captured thought, URL, voice note, photo, or AI conversation. Contains rawContent, AI-generated fields (title, summary, tags, domain, mood, actionability, embedding), reflection state, sharing state, and threadId for placement."
+    - name: Thread
       type: object
-      description: "AI-generated grouping of semantically related inspirations. Has label and description, re-generated on membership changes."
+      description: "LLM-maintained living document. Has title and synthesis (rewritten on every new inspiration placement). Replaces the old static Cluster model."
+    - name: Bridge
+      type: object
+      description: "Cross-thread connection with AI-generated explanation. Created when a new inspiration links two previously unrelated threads. Can be dismissed."
     - name: Connection
       type: object
-      description: "AI-discovered link between two inspirations with similarity score (> 0.78) and natural-language explanation."
+      description: "AI-discovered link between two inspirations with similarity score and natural-language explanation."
     - name: ApiKey
       type: object
       description: "Hashed API key for CLI authentication. Created via settings page, validated via Bearer token."
@@ -149,14 +178,20 @@ evaluation_principles:
   - name: capture_speed
     description: "POST /api/inspirations must return 201 within 500ms. AI processing is always async via SQS."
     weight: 0.9
-  - name: semantic_quality
-    description: "Embeddings, summaries, and classifications must be accurate and useful for clustering and connection surfacing."
-    weight: 0.8
+  - name: thread_synthesis_quality
+    description: "Thread synthesis must read as coherent narrative prose, not bullet lists. Must reference older inspirations contextually and evolve meaningfully on each placement."
+    weight: 0.9
+  - name: discovery_surprise
+    description: "Discovery cards and thread syntheses must surface unexpected connections -- the 'oh, I didn't know these were related' moment is the core product value."
+    weight: 0.9
+  - name: design_craft
+    description: "UI must follow taste-skill principles: intent-driven design, anti-slop, premium craft. Dark mode first, warm neutrals, no generic AI patterns."
+    weight: 0.85
   - name: ux_capture_first
-    description: "Capture bar must be always visible, prominent, and functional across all views. Never require navigation to capture."
+    description: "Floating capture island must be always visible, anchored to bottom viewport. Conversational post-save reflection must feel natural, not form-like."
     weight: 0.9
   - name: spec_fidelity
-    description: "Implementation must match spec.md exactly — no creative deviations, no missing features, no scope creep."
+    description: "Implementation must match spec.md exactly -- no creative deviations, no missing features, no scope creep."
     weight: 1.0
   - name: security
     description: "Users can only access their own data. API keys are hashed. Auth middleware protects all routes."
@@ -178,25 +213,38 @@ exit_conditions:
   - name: cli_published
     description: "CLI tool is published and functional"
     criteria: "npx waka-cli auth + save + list works end-to-end"
+  - name: thread_synthesis_working
+    description: "Thread placement and synthesis rewriting produce coherent living documents"
+    criteria: "Save 5 related inspirations -> thread forms -> synthesis weaves all 5 into narrative prose"
+  - name: bridge_detection_working
+    description: "Cross-thread bridges are detected and surfaced as discovery cards"
+    criteria: "Save inspiration bridging two threads -> bridge created with explanation -> discovery card appears"
 
 metadata:
-  version: "1.0.0"
-  generated_at: "2026-04-08T00:00:00Z"
-  interview_id: "interview_20260407_162612"
-  ambiguity_score: 0.15
+  version: "2.0.0"
+  updated_at: "2026-04-12T00:00:00Z"
+  architecture: "LLM Wiki-style (raw inspirations -> threads -> bridges)"
+  previous_version: "1.0.0 (static clusters + DBSCAN)"
   project_type: greenfield
   context_references:
     - path: "spec.md"
       role: primary
-      summary: "Authoritative technical specification with 9 execution loops, data models, acceptance criteria, and test plans"
+      summary: "Authoritative technical specification with 9 execution loops, three-layer architecture (inspirations/threads/bridges), data models, acceptance criteria, and test plans"
+    - path: "vendor-skills/taste-skill/SKILL.md"
+      role: design
+      summary: "Intent-driven design engineering framework with anti-slop rules, typography standards, motion philosophy, and post-build evaluation"
     - path: "prd-initial-draft.md"
       role: reference
       summary: "Initial product requirements draft"
   resolved_ambiguities:
-    - "SQS Consumer → Lambda trigger (SST Queue subscriber)"
-    - "AI field updates → Polling at 3-second intervals"
-    - "CLI OAuth → Localhost callback pattern"
-    - "Offline queue conflicts → Last-write-wins (no dedup in V1)"
-    - "Cluster reassignment → Surfaced in Discoveries feed"
-    - "Domain → APP_URL environment variable"
-    - "API Key management → Loop 1 Foundation (ApiKey model + settings page)"
+    - "SQS Consumer -> Lambda trigger (SST Queue subscriber)"
+    - "AI field updates -> Polling at 3-second intervals"
+    - "CLI OAuth -> Localhost callback pattern"
+    - "Offline queue conflicts -> Last-write-wins (no dedup in V1)"
+    - "Thread placement -> LLM-driven (not DBSCAN), synthesis rewritten on each placement"
+    - "Bridge detection -> Cosine similarity > 0.72 pre-filter + LLM evaluation, max 3 per placement"
+    - "Feed design -> Two card types (capture cards + discovery cards), no graph visualization"
+    - "Capture bar -> Floating island at bottom viewport, conversational post-save reflection"
+    - "Cold start -> Reflection as capture multiplier (0-20 captures), then threads/bridges take over"
+    - "Domain -> APP_URL environment variable"
+    - "API Key management -> Loop 1 Foundation (ApiKey model + settings page)"

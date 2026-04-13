@@ -34,13 +34,12 @@ Key capture behaviors:
 
 ### Information Architecture
 
-Three levels, simple and clean:
+Two levels. Extremely minimal.
 
-1. **Home** — Floating capture island + scrollable feed. The feed has two card types: **capture cards** (lightweight, muted — your raw inputs) and **discovery cards** (richer, bolder — things the system found in your thinking). The user doesn't need to distinguish between thread updates, bridge formations, or new thread creations — they're all discovery cards. Capture cards sit at the top until the backend processes them; discovery cards surface whenever the knowledge graph evolves.
-2. **Thread Detail** — Tap a discovery card to open the relevant thread. Read the full synthesized document — the living narrative that weaves your inspirations together, surfacing connections and forgotten references. Individual inspirations that compose the thread are listed below. "Deepen" action available to add more context.
-3. **Inspiration Detail** — Tap an individual inspiration to see the raw capture, AI-generated metadata, and which thread(s) it belongs to.
+1. **The Surface** — When you open WAKA, you see a living, breathing canvas of your thinking. Threads appear as soft, organic regions — not cards, not tiles, not a list. Each region is sized and colored by how active it is: threads with recent activity are **larger, warmer, and more visually present** (closer to center, gently pulsing). Dormant threads are **smaller, cooler, and pushed to the edges**. Each region shows the thread title and a line or two of the synthesis — enough to read the insight without tapping. Bridges between threads are expressed spatially: connected threads drift closer together, their edges overlapping. Unplaced captures appear as small, cool dots floating on the surface, waiting to be absorbed. A minimal "+" button sits at the bottom right corner for capture. The user's avatar sits in the top corner for settings (opens as a bottom sheet on mobile, modal on desktop). Search is a pull-down gesture from the top of the surface — pull down, type to filter threads semantically, release to dismiss.
+2. **Thread Detail** — Tap a region to expand it. The region smoothly fills the screen, revealing the full synthesized document. Individual inspirations that compose the thread are listed below the synthesis. "Deepen" action available. Tap back or swipe to return to the surface. The other regions fade to background during the transition.
 
-The frontend never shows a graph, nodes, or edges. The complexity lives in the backend. The user just sees: a place to throw things in (capture cards), and things the system found (discovery cards).
+The frontend never shows a graph, nodes, or edges. This is not a node-and-line visualization — it's an ambient, organic representation of where your thinking is alive. No labels saying "Thread" or "Bridge." No section headers. No categories. The surface IS the product. The wow is visible the moment you open it — you see your own thinking breathing.
 
 ### Cold Start: Reflection as the Bridge
 
@@ -75,42 +74,40 @@ Before the graph is dense enough for connections (roughly 0–20 captures), the 
 
 This section is the bridge between the spec and the `vendor-skills/taste-skill/SKILL.md`. It translates WAKA's product intent into design constraints that the taste skill can derive from. Every UI story must trace its design decisions back to these principles.
 
+#### The Core Feeling
+
+When you open WAKA, it should feel like looking at a living painting of your mind. Not a dashboard. Not a feed. Not a tool. A **surface that breathes** — warm where your thinking is active, cool where it's dormant, with regions that grow and drift and overlap as your ideas evolve.
+
+The design is extremely minimal. Visually simple but interactionally rich. Every element earns its presence. No section headers, no labels, no badges, no categories. The content communicates what it is. Whitespace does the work.
+
 #### The Two Modes
 
-WAKA has exactly two emotional modes, and the design must serve both without compromise:
+1. **Capture mode** — The user taps "+", a clean input sheet rises from the bottom. Type, submit, done. The sheet closes. On the surface, you watch the thought get absorbed — the region it's placed into grows slightly, warms, pulses. The conversational reflection ("What sparked this?") appears in the same input sheet. Ignore it and it fades. Answer it and it deepens the capture. The entire flow happens in one gesture without leaving the surface.
 
-1. **Capture mode** — The user has a thought and needs to get it out *now*. They might be walking, in the middle of a conversation, or half-asleep. The design constraint: **zero friction, zero cognitive load.** The floating island should feel like muscle memory — tap, type, done. No chrome, no decoration, no clever interactions that slow the save. Motion should be fast and efficient (spring with high stiffness, low damping). The island should feel like it *wants* your thought.
-
-2. **Discovery mode** — The user is browsing their feed, opens a thread, and encounters a connection they didn't expect. The design constraint: **earned revelation.** This is where the product delivers its core value — the "oh, I didn't know these were connected" moment. Discovery cards and thread syntheses should feel like unwrapping something. Motion should be slower, weightier — the design should build anticipation before the reveal. Typography should invite reading, not scanning.
-
-These two modes coexist on the same screen. The floating island is always in capture mode. The feed behind it transitions between the two based on what the user is doing.
+2. **Discovery mode** — The user is looking at the surface. The wow is already visible — synthesis text on each region, threads overlapping where bridges formed. Tap a region and it expands smoothly to fill the screen with the full synthesis. Tap back and you're at the surface again. No navigation hierarchy. Just zoom in, zoom out.
 
 #### Screen-Specific Emotional Context
 
-**Home Feed**
-- *Arriving state*: The user just opened the app. They might have something to capture, or they might be checking in to see what WAKA found.
-- *Target feeling*: Calm competence. The feed should feel alive but not anxious — things are happening in the background (threads updating, bridges forming), but the pace is unhurried. Like opening a notebook that has been organizing itself while you were away.
-- *Design constraint*: Visual density should be low (VISUAL_DENSITY ~3-4). The feed should breathe. Capture cards are ephemeral and lightweight. Discovery cards carry more weight but don't shout.
+**The Surface**
+- *Arriving state*: The user just opened WAKA. They might have something to capture, or they might be checking in.
+- *Target feeling*: "My thinking is alive." The surface should feel like it's been breathing while you were away — regions have shifted, some grew, some new ones appeared. Calm but alive. Not demanding attention, just present.
+- *Design constraint*: Organic shapes, not rectangles. Warm color temperature for active regions, cool for dormant. Gentle ambient motion (regions slowly drifting, pulsing). Extremely low visual density — the surface should feel spacious, not crowded. On mobile (375px), show 2-3 active regions. On desktop (1440px), show 5-8. The regions must render via canvas/WebGL/SVG for smooth organic shapes and animation — standard CSS boxes will not achieve this.
 
-**Floating Capture Island**
-- *Arriving state*: The user has a thought. Urgency varies — sometimes it's a quick URL paste, sometimes it's a half-formed idea they're afraid of losing.
-- *Target feeling*: Instant trust. "I typed it, it's saved, I can relax." The conversational follow-up ("What sparked this?") should feel like a friend leaning in, not a form field appearing.
-- *Design constraint*: The island must feel physically present — elevated, tactile, with subtle shadow that responds to interaction. The post-save conversational state should animate in with breathing motion (slow spring), not a hard state swap. The auto-fade (~5s) should feel like the question gently receding, not disappearing.
+**The "+" Capture Button**
+- *Arriving state*: The user has a thought.
+- *Target feeling*: Instant trust. Tap "+", type, it's saved. Nothing else.
+- *Design constraint*: The "+" button is the most minimal element on the screen — small, circular, bottom right. Tapping it opens a clean, full-width input sheet from the bottom. The sheet has: text input, voice icon, photo icon. Nothing else. No title, no labels, no workspace name. Submit closes the sheet. The reflection question slides in gently as placeholder text in the same input. Auto-fades after ~5s.
 
-**Discovery Card**
-- *Arriving state*: The user is scrolling and encounters something the system found.
-- *Target feeling*: Surprise, then curiosity. "Wait, what?" followed by "Tell me more." The card should earn its presence in the feed — it's not a notification, it's a moment.
-- *Design constraint*: Progressive disclosure. The card should reveal its content in layers — headline first, then the connection explanation, then the link to the full thread. Staggered animation, not instant render. The visual weight should be noticeably different from capture cards — this is output, not input.
+**Thread Detail (Expanded Region)**
+- *Arriving state*: The user tapped a region. They're leaning in.
+- *Target feeling*: Deep resonance. "This is my thinking, but organized in a way I couldn't have done myself."
+- *Design constraint*: The region expands to fill the screen with a fluid spring animation. Other regions fade to background. The synthesis document dominates — generous typography (max-w-[65ch], relaxed leading). Individual inspirations listed below as supporting evidence. "Deepen" action available. Tap back or swipe to return to the surface. VISUAL_DENSITY ~2-3.
 
-**Thread Detail**
-- *Arriving state*: The user tapped a discovery card or navigated to a thread. They're leaning in, curious.
-- *Target feeling*: Deep resonance. "This is my thinking, but organized in a way I couldn't have done myself." The synthesis document should feel like reading something written by someone who knows you — referencing things you forgot, weaving connections you missed.
-- *Design constraint*: Reading mode. Generous typography (max-w-[65ch], relaxed leading). The synthesis is the hero — it should dominate the viewport. Individual inspirations listed below are supporting evidence, not the main content. Motion should be minimal here — the content does the work. VISUAL_DENSITY should drop to ~2-3 (art gallery mode).
+**Search (Pull-Down)**
+- Pull the surface down slightly from the top. A search field appears. Type to semantically filter — the surface transforms, showing only matching threads and their regions. Clear the search or release to return to the full surface. On mobile, search can also be triggered by a small search icon near the avatar.
 
-**Reflection (Conversational Post-Save)**
-- *Arriving state*: The user just saved something meaningful. They're still in the emotional moment of the thought.
-- *Target feeling*: "The app is thinking with me." Not interrogation, not a form. A gentle, curious follow-up that respects the moment.
-- *Design constraint*: The reflection question should appear with warm, breathing motion — not a hard pop-in. Typography should be slightly different from the capture input (perhaps lighter weight, slightly smaller) to signal "this is the app talking, not you." The auto-fade should use opacity + subtle downward translate, like the question is settling back into the island.
+**Settings (Avatar)**
+- The user's avatar in the top corner. Tap → bottom sheet (mobile) or modal (desktop) with: API keys, sign out, account info. Never a full page.
 
 #### Palette & Typography Direction
 
@@ -579,92 +576,95 @@ E2E:
 
 ---
 
-### Loop 4: Web App — Capture-First Feed with Threads
+### Loop 4: Web App — The Living Surface
 
-**Goal**: Responsive PWA with a capture-first layout. Floating capture island with conversational post-save flow, optimistic UI, thread-oriented feed, and offline capture queue. The frontend is clean and simple — the LLM Wiki complexity lives entirely in the backend.
+**Goal**: Responsive PWA with an organic, breathing canvas that visualizes the user's thinking as warm/cool regions. Extremely minimal design. A "+" button for capture, pull-down for search, avatar for settings. The LLM Wiki complexity lives entirely in the backend — the frontend shows a living painting of the mind.
 
 #### Scope
 
-##### Floating Capture Island
-- **Floating position**: The capture bar is a floating island anchored to the bottom of the viewport, hovering above the feed content. It stays visible on all authenticated views (home, thread detail, inspiration detail) regardless of scroll position. Visually: rounded, elevated with a subtle shadow, feels like a floating pill — similar to the iOS dynamic island or a chat composer.
-- iMessage-style multi-modal input: text field with attachment icons for voice and photo
-- **Text**: Type and press Enter to save. Single word, bare URL, or paragraph — all accepted
-- **URL detection**: If pasted text is a URL (or contains a URL alongside commentary), auto-detect and split into `rawContent` (commentary) + `sourceUrl` (URL) with `URL_IMPORT` source type. Pure URLs save with the URL as `rawContent`
-- **Voice**: Tap mic icon → browser MediaRecorder API → stop recording → upload audio to S3 → transcribe via LLM → save with `VOICE_NOTE` type, both audio URL and transcript stored
-- **Photo**: Tap camera icon → file picker or camera capture → upload to S3 → LLM describes/OCRs image → save with `PHOTO` type
-- **AI conversation**: Tap brain/chat icon → paste transcript or share link → save with `AI_CONVERSATION` type. If a share link is pasted (e.g., ChatGPT share URL), fetch and extract the conversation. If raw transcript text is pasted, save directly. The full transcript is stored as `rawContent`; the LLM generates a focused summary for the embedding (so the embedding isn't diluted across 50 conversation turns)
-- On mobile (< 768px), when the keyboard opens, the floating island expands to full-width above the keyboard
+##### The Surface (Home View)
+- **Organic regions**: Each thread is rendered as a soft, organic shape (blob/region) on a canvas — not a card, not a rectangle. Rendered via canvas, WebGL, or SVG for smooth organic shapes and fluid animation. Standard CSS boxes will not achieve this.
+- **Warmth = activity**: Regions are sized and colored by recency and activity. Recently updated threads are larger, warmer in color (warm amber/terracotta tones), positioned closer to center, and gently pulsing with breathing animation. Dormant threads are smaller, cooler (muted stone/gray tones), and pushed to edges.
+- **Text on regions**: Each region displays the thread title and 1-2 lines of synthesis excerpt directly on its surface. The insight is readable without tapping. The wow is visible at scroll level.
+- **Bridges as proximity**: Connected threads (bridges) drift closer together, their edges overlapping. The connection is spatial, not drawn with lines or labels. Two overlapping regions = two threads that share a conceptual link.
+- **Unplaced captures**: New captures that haven't been placed into threads appear as small, cool dots floating on the surface. When the backend places a capture, the dot animates toward its thread region and gets absorbed — the region grows slightly, warms, pulses.
+- **Layout**: On mobile (375px) show 2-3 active regions filling the viewport. On desktop (1440px) show 5-8. The surface is pannable if more regions exist than fit in the viewport. Regions reflow organically — no grid, no fixed positions.
+- **No headers, no labels, no sections, no categories.** The surface is the entire experience.
 
-##### Conversational Post-Save Flow
-- On submit, the capture is saved and a capture card appears in the feed behind the floating island
-- **The bar doesn't just reset — it responds.** If the system generates a reflection question (see Loop 8), the question appears right in the capture bar as a conversational follow-up: e.g., "What sparked this?" The bar's placeholder text becomes the question.
-- The user can reply directly in the same bar — the answer is saved as a new linked inspiration (with `parentId` pointing to the original). This makes deepening feel like a natural back-and-forth conversation, not a separate action.
-- **Instant escape**: If the user ignores the reflection prompt, it fades after ~5 seconds and the bar resets to its default empty state. No tap to dismiss required. If you're in a rush, save and go — the bar gets out of your way.
-- **Thread placement feedback**: Once the backend places the inspiration into a thread, a discovery card surfaces in the feed. The floating island itself stays clean and focused on the next capture.
-- If the server is unreachable: the capture card appears with a "queued" indicator, text is persisted to IndexedDB, and the app retries when connectivity returns
+##### Capture ("+" Button)
+- **Minimal trigger**: Small circular "+" button, bottom right corner. The most minimal element on the screen.
+- **Input sheet**: Tapping "+" opens a clean, full-width sheet from the bottom. Contains: text input, voice icon, photo icon. Nothing else — no title, no workspace name, no labels.
+- **Text**: Type and press Enter to save. Single word, bare URL, or paragraph — all accepted.
+- **URL detection**: If pasted text is a URL (or contains a URL alongside commentary), auto-detect and split into `rawContent` (commentary) + `sourceUrl` (URL) with `URL_IMPORT` source type.
+- **Voice**: Tap mic icon → browser MediaRecorder API → stop recording → upload audio to S3 → transcribe via LLM → save with `VOICE_NOTE` type.
+- **Photo**: Tap camera icon → file picker or camera capture → upload to S3 → LLM describes/OCRs image → save with `PHOTO` type.
+- **AI conversation**: Tap brain/chat icon → paste transcript or share link → save with `AI_CONVERSATION` type. Full transcript stored as `rawContent`; LLM generates focused summary for embedding.
+- **Submit closes the sheet.** The user returns to the surface and watches their capture appear as a dot, then get absorbed into a region.
 
-##### Feed & Layout
-- **Capture-first layout**: App opens to a scrollable feed with the floating capture island anchored at the bottom of the viewport
-- **Two card types in the feed**: capture cards and discovery cards. No tabs, no sidebar, no separate sections. Sorted by last updated.
-- **Capture cards** (lightweight, muted): Raw inputs — showing content, source type icon, timestamp. Visually compact. These are stream-of-consciousness entries that sit at the top of the feed until the backend processes them.
-- **Discovery cards** (richer, bolder): A single card type that surfaces any meaningful event from the knowledge graph. The user doesn't need to know whether the backend triggered a thread synthesis update or a bridge formation — they just see "something interesting happened to your thinking." Discovery cards may include:
-  - A thread's synthesis was updated by a new placement: "Your thinking about *Emergence & Complex Systems* just got deeper" — with an excerpt from the updated synthesis and a link to the full thread.
-  - A new bridge formed between threads: "Your thinking about *AI Safety* now connects to *Design Systems* — both explore transparency in complex systems."
-  - A new thread was created from recent captures: "*Swarm Intelligence* — a new thread just formed from 3 of your recent saves."
-  - All rendered as the same card type with the same visual weight. The content varies, but the form is consistent.
-- **Visual distinction**: Capture cards feel like inputs. Discovery cards feel like outputs — things the system generated from your inputs. The difference is communicated through visual weight (size, typography, chrome), not labels or categories.
-- Semantic search bar (above the feed)
+##### Conversational Post-Save Reflection
+- After submit, the input sheet doesn't immediately close if the system has a reflection question (see Loop 8). Instead, the placeholder text becomes the question: "What sparked this?"
+- The user can reply directly — the answer is saved as a linked inspiration (`parentId` pointing to the original).
+- **Instant escape**: If ignored, the question fades after ~5 seconds and the sheet closes. No tap to dismiss required.
+- If the server is unreachable: capture is persisted to IndexedDB, a "queued" indicator appears on the dot, and the app retries when connectivity returns.
 
-##### Thread Detail View
-- Full synthesized document — the living narrative that weaves together related inspirations
-- This is where discovery happens: the document references forgotten inspirations, surfaces unexpected connections, and evolves every time new inspirations are placed into it
-- List of individual inspirations that compose this thread
-- Bridges to other threads shown as contextual links within the synthesis
-- "Deepen" action to add more context to this thread
-- Thread's `updatedAt` and inspiration count visible
+##### Thread Detail (Expanded Region)
+- Tap a region → it expands smoothly (fluid spring animation) to fill the screen. Other regions fade to background.
+- Full synthesized document displayed — generous typography (max-w-[65ch], relaxed leading). The synthesis is the hero.
+- Individual inspirations that compose the thread listed below as supporting evidence.
+- Bridges to other threads shown as contextual links within the synthesis text.
+- "Deepen" action to add more context to this thread.
+- Thread's `updatedAt` and inspiration count visible.
+- Tap back or swipe → region contracts, other regions fade back in. Return to the surface.
 
-##### Inspiration Detail View
-- Full raw content, AI-generated title, summary, tags, domain, mood, actionability
-- Which thread(s) this inspiration belongs to (linked)
-- Expansions (deepened inspirations) shown below the original
-- "Deepen" button to add more context to this inspiration
-- Reflection prompt (if classified as `reflect`) shown as a non-intrusive inline section — never a blocking modal
+##### Search (Pull-Down)
+- Pull the surface down from the top → a search field appears.
+- Type to semantically filter threads — the surface transforms, showing only matching regions (non-matching regions fade/shrink).
+- Clear or release → full surface returns.
+- On mobile, also accessible via a small search icon near the avatar.
+
+##### Settings (Avatar)
+- User's avatar in the top corner.
+- Tap → bottom sheet (mobile) or modal (desktop) with: API keys, sign out, account info.
+- Never a full page.
 
 ##### Offline Capture Queue
-- Service worker caches app shell for offline loading
-- When offline, the capture bar still works: submitted inspirations are saved to IndexedDB with a `queued` status
-- When connectivity returns, queued inspirations are synced to the server automatically (last-write-wins; no deduplication in V1 — duplicates can be manually deleted by user)
-- Visual indicator on queued items: subtle "waiting to sync" badge
+- Service worker caches app shell for offline loading.
+- When offline, the "+" capture sheet still works: submitted captures are saved to IndexedDB with a `queued` status.
+- When connectivity returns, queued captures are synced automatically (last-write-wins).
+- Queued dots on the surface show a subtle "waiting to sync" indicator.
 
 ##### Other
 - PWA manifest and service worker
 - Responsive design: mobile-first, works on all screen sizes (375px — 1440px)
-- Empty states and loading skeletons
+- Empty state: when no threads exist yet, the surface is a calm, empty canvas with the "+" button and a gentle prompt: "Save your first thought"
 
 #### Acceptance Criteria
 
 | # | Criteria | Verification |
 |---|----------|-------------|
-| 4.1 | App opens to feed with floating capture island at bottom | E2E: login → floating island visible at bottom, feed scrollable behind it |
-| 4.2 | Text capture: type → submit → capture card appears immediately with skeletons | E2E: type text → submit → lightweight card at top with loading placeholders |
-| 4.3 | AI fields fade in as they resolve | E2E: wait after capture → title, tags animate in |
-| 4.4 | Discovery card appears when thread is updated by new placement | E2E: save related text → discovery card appears: "Your thinking about X just got deeper" |
-| 4.5 | Discovery card appears when new bridge forms between threads | E2E: save inspiration bridging threads → discovery card shows the connection |
-| 4.6 | Discovery card appears when new thread is created | E2E: save several related notes → discovery card: "New thread formed" |
-| 4.7 | URL detection: paste URL → auto-detected → saved as URL_IMPORT | E2E: paste URL → card shows domain + thumbnail after processing |
-| 4.8 | URL with commentary: "Great article: https://..." splits correctly | E2E: paste text+URL → rawContent has commentary, sourceUrl has URL |
-| 4.9 | Voice capture: tap mic → record → stop → transcribed and saved | E2E: record audio → card appears with transcript |
-| 4.10 | Photo capture: select image → uploaded → described and saved | E2E: pick photo → card appears with AI description |
-| 4.11 | AI conversation import: paste transcript → saved with summary | E2E: paste conversation → card shows conversation summary |
-| 4.12 | Floating capture island visible on all views, stays fixed during scroll | E2E: scroll down feed → island stays at bottom; navigate to thread detail → island still there |
-| 4.13 | Thread detail shows full synthesized document + composing inspirations | E2E: open thread via discovery card → synthesized narrative + list of inspirations |
-| 4.14 | Visual distinction between capture cards and discovery cards | Visual: capture cards are compact/muted (inputs), discovery cards are richer/bolder (outputs) |
-| 4.15 | Deepen button creates linked expansion | E2E: click "Deepen" → type expansion → saved as child of original |
-| 4.16 | Search returns semantically relevant results | E2E: search "AI" → results include "machine learning" note |
-| 4.17 | Offline capture: go offline → capture → queued → go online → synced | E2E: disconnect → capture → reconnect → item synced to server |
-| 4.18 | PWA installable on mobile Chrome/Safari | Manual: "Add to Home Screen" prompt appears |
-| 4.19 | Responsive: usable on 375px through 1440px | Visual regression: screenshots at 375, 768, 1440 |
-| 4.20 | Reflection prompt appears inline on inspiration detail (not as a blocking modal) | E2E: save deep thought → open detail → reflection section visible, non-blocking |
+| 4.1 | App opens to the living surface with organic thread regions | E2E: login → canvas renders with thread regions sized by activity |
+| 4.2 | Thread regions show title + synthesis excerpt readable without tapping | E2E: thread region displays title and 1-2 lines of synthesis on its surface |
+| 4.3 | Active threads are larger, warmer, closer to center | Visual: recently updated thread is visibly larger and warmer than dormant thread |
+| 4.4 | Dormant threads are smaller, cooler, at edges | Visual: thread with no recent activity is small, muted, at periphery |
+| 4.5 | Bridged threads overlap spatially | Visual: two threads with a bridge have overlapping region edges |
+| 4.6 | "+" button opens clean capture sheet from bottom | E2E: tap "+" → sheet rises with text input + voice/photo icons, nothing else |
+| 4.7 | Text capture: type → submit → sheet closes → dot appears on surface | E2E: type text → submit → dot animates onto surface |
+| 4.8 | Dot gets absorbed into thread region when placed | E2E: save text → dot appears → backend places → dot animates into region → region grows/warms |
+| 4.9 | URL auto-detection splits commentary + sourceUrl | E2E: paste text+URL → rawContent has commentary, sourceUrl has URL |
+| 4.10 | Voice capture via MediaRecorder → S3 → transcription | E2E: record audio → dot appears with transcript |
+| 4.11 | Photo capture → S3 → LLM description/OCR | E2E: pick photo → dot appears with AI description |
+| 4.12 | AI conversation import with focused summary for embedding | E2E: paste conversation → dot appears with summary |
+| 4.13 | Conversational reflection appears in capture sheet after save, auto-fades ~5s | E2E: save complex text → reflection question appears → ignore → fades → sheet closes |
+| 4.14 | Reflection answer saved as linked inspiration | E2E: answer reflection → new inspiration with parentId created |
+| 4.15 | Thread detail: tap region → expands to full synthesis + composing inspirations | E2E: tap region → smooth expand → synthesis readable → inspirations listed below |
+| 4.16 | Thread detail: tap back → region contracts, surface returns | E2E: tap back → fluid contraction → all regions visible again |
+| 4.17 | Search: pull down → type → surface filters semantically | E2E: pull down → type "AI" → only matching regions remain visible |
+| 4.18 | Settings: avatar → bottom sheet with API keys, sign out | E2E: tap avatar → sheet with account info |
+| 4.19 | Offline capture: go offline → capture → queued dot → go online → synced | E2E: disconnect → capture → dot shows queued → reconnect → synced |
+| 4.20 | PWA installable on mobile Chrome/Safari | Manual: "Add to Home Screen" prompt appears |
+| 4.21 | Responsive: surface works on 375px through 1440px | Visual: 2-3 regions on mobile, 5-8 on desktop |
+| 4.22 | Empty state: no threads → calm canvas with "+" and gentle prompt | E2E: new user → empty surface → "Save your first thought" |
+| 4.23 | No section headers, no labels, no categories anywhere on the surface | Visual: zero UI chrome beyond avatar, search, and "+" |
 
 #### Tests
 
@@ -672,28 +672,30 @@ E2E:
 Unit:
 - [ ] URL detection regex: pure URL, URL with commentary, non-URL text
 - [ ] Offline queue: add to IndexedDB, retrieve, mark as synced
-- [ ] Skeleton placeholder renders for each AI field independently
-- [ ] Capture bar state management across routes
-- [ ] Feed sorting: capture cards and discovery cards sorted by updatedAt
+- [ ] Region sizing algorithm: activity score → size/warmth/position
+- [ ] Bridge proximity: bridged threads have overlapping region bounds
+- [ ] Capture sheet state management (open/close/reflection/fade)
 
 Integration:
-- [ ] Text capture → capture card → API called → AI fields resolve → discovery card appears
-- [ ] Voice capture → S3 upload → transcription → card updated
-- [ ] Photo capture → S3 upload → description → card updated
-- [ ] AI conversation paste → summary generated → card updated
-- [ ] Offline capture → queue → reconnect → sync → card updated
-- [ ] Deepen → child created → parent re-processed
-- [ ] Discovery card surfaces when thread is updated by new placement
+- [ ] Text capture → dot on surface → backend places → dot absorbed into region
+- [ ] Voice capture → S3 upload → transcription → dot on surface
+- [ ] Photo capture → S3 upload → description → dot on surface
+- [ ] AI conversation paste → summary generated → dot on surface
+- [ ] Offline capture → queue → reconnect → sync → dot absorbed
+- [ ] Deepen → child created → parent re-processed → region updates
+- [ ] Region grows/warms when new inspiration placed into thread
 
 E2E (Playwright):
-- [ ] Full capture flow: login → capture text → capture card appears → discovery card appears → open thread
-- [ ] Multi-modal: capture voice → capture photo → capture URL → all in feed
-- [ ] Thread formation: save 5 related notes → discovery card: "new thread formed" → open thread → coherent synthesis
-- [ ] Bridge formation: save inspiration bridging threads → discovery card shows connection
-- [ ] Offline flow: go offline → capture → go online → item appears
-- [ ] Mobile viewport: all interactions work at 375px width
+- [ ] Full capture flow: login → "+" → type → submit → dot → absorbed into region → region grows
+- [ ] Multi-modal: capture voice → capture photo → capture URL → all appear as dots
+- [ ] Thread formation: save 5 related notes → new region appears on surface
+- [ ] Bridge formation: save inspiration bridging threads → regions drift together, overlap
+- [ ] Thread detail: tap region → expand → read synthesis → tap back → contract
+- [ ] Search: pull down → type → surface filters → clear → full surface returns
+- [ ] Offline flow: go offline → capture → go online → dot synced
+- [ ] Mobile viewport: surface works at 375px with 2-3 regions
 - [ ] PWA: manifest present, service worker registered
-- [ ] Search flow: capture item → search → find it
+- [ ] Empty state: new user sees calm canvas with prompt
 ```
 
 ---
