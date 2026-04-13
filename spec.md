@@ -7,36 +7,59 @@
 
 ## 1. Product Summary
 
-Waka is a ubiquitous capture and synthesis engine. It ingests inspirations from any surface (terminal CLI, mobile PWA, URL import, voice, photo, AI conversations), semantically clusters them over time, and resurfaces surprising connections between thoughts — transforming fleeting ideas into a persistent, evolving personal knowledge graph.
+Waka is a personal knowledge engine inspired by the [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern. You throw things in — thoughts, URLs, voice notes, photos, AI conversations — and Waka's backend carefully places each one into an evolving knowledge graph, maintaining living documents called **threads** that synthesize your thinking over time. The frontend never exposes the graph. Instead, you see your threads: documents that know more about your thinking than you do, surfacing forgotten connections and unexpected relationships between ideas you didn't know were related.
+
+### Architecture: Three Layers
+
+Waka operates on three distinct layers, mirroring the LLM Wiki architecture:
+
+1. **Raw Layer — Inspirations**: Immutable captures from any surface (CLI, web, voice, photo, URL, AI conversations). These are your raw inputs. They are never modified after save.
+2. **Synthesis Layer — Threads**: Living, LLM-maintained documents that evolve every time a new inspiration is placed into them. A thread isn't a folder or a tag — it's a synthesized narrative of related thinking that gets rewritten as new inspirations arrive. When you open a thread, you read your own thinking back, woven together with connections you missed, referencing things you forgot you ever saved.
+3. **Bridge Layer — Cross-references**: LLM-maintained relationships between threads. When a new inspiration creates a link between two previously unrelated threads, a bridge is formed. Bridges surface the "oh, I didn't realize these were connected" moments.
 
 ### Primary JTBD: Capture-First
 
-Waka is **capture-first, not feed-first.** The app opens to a prominent capture bar ready for input. Clusters are the primary value of the feed, not individual inspirations. The entire UX is designed around one goal: **saving an inspiration must feel as reliable and instant as Apple Notes.** Nothing typed into Waka should ever be lost.
+Waka is **capture-first**. The app opens to a prominent capture bar ready for input. The entire UX is designed around one goal: **saving an inspiration must feel as reliable and instant as Apple Notes.** Nothing typed into Waka should ever be lost.
 
-### Secondary JTBD: Inspiring Discovery
+### Secondary JTBD: Surprising Discovery
 
-Clusters shouldn't feel like a utilitarian filing system — they should spark curiosity. Browsing clusters must be **effortless and engaging**, inviting users to explore unexpected connections. The feed surfaces surprising links between ideas, turning passive review into active discovery. Each visit should feel like uncovering something new about your own thinking.
+The value of Waka is not organization — it's **unexpected resonance**. The moment when something you saved today surfaces a forgotten thought from six months ago. The moment when two ideas you thought were unrelated turn out to share a deep connection. Discovery happens inside threads: you open one and find a paragraph that weaves together things you didn't know were related, written in a way that makes you think differently.
 
 Key capture behaviors:
 - **Minimum viable inspiration**: A single word, a bare URL, or a one-line thought are all valid. Low-signal inputs get fewer AI-generated metadata fields, but they are always accepted and saved.
 - **Optimistic save**: Inspirations appear in the feed immediately on submit. AI-generated fields (title, summary, tags, embedding) render as skeleton placeholders that animate in as they resolve — the card should feel *loading*, never *incomplete*.
-- **Persistent capture bar**: The capture bar is always visible across all views (dashboard, cluster detail, inspiration detail). Even while browsing, a new thought can be captured without navigating away.
+- **Persistent capture bar**: The capture bar is always visible across all views (home, thread detail, inspiration detail). Even while browsing, a new thought can be captured without navigating away.
 - **Explicit submit, zero-failure guarantee**: Pressing enter/submit saves instantly. This is not auto-save-on-keystroke (which would persist half-formed sentences), but the submit action itself must never fail silently. If the server is unreachable, the capture bar retains the text, queues it locally, and retries on reconnection — the user's input is never cleared without confirmation of persistence.
-- **Post-save navigation**: After saving, the user is navigated to the newly created inspiration card in context, confirming visually that it was saved.
+- **Post-save feedback**: After saving, the user sees confirmation inline. If the inspiration was placed into an existing thread, the placement is shown: "Placed in *Emergence & Complex Systems*". If it created a new thread or bridge, that's surfaced too. The feed remains the primary view — no navigation away.
+
+### Information Architecture
+
+Three levels, simple and clean:
+
+1. **Home** — Capture bar + scrollable feed. The feed has two card types: **capture cards** (lightweight, muted — your raw inputs) and **discovery cards** (richer, bolder — things the system found in your thinking). The user doesn't need to distinguish between thread updates, bridge formations, or new thread creations — they're all discovery cards. Capture cards sit at the top until the backend processes them; discovery cards surface whenever the knowledge graph evolves.
+2. **Thread Detail** — Tap a discovery card to open the relevant thread. Read the full synthesized document — the living narrative that weaves your inspirations together, surfacing connections and forgotten references. Individual inspirations that compose the thread are listed below. "Deepen" action available to add more context.
+3. **Inspiration Detail** — Tap an individual inspiration to see the raw capture, AI-generated metadata, and which thread(s) it belongs to.
+
+The frontend never shows a graph, nodes, or edges. The complexity lives in the backend. The user just sees: a place to throw things in (capture cards), and things the system found (discovery cards).
+
+### Cold Start: Reflection as the Bridge
+
+Before the graph is dense enough for connections (roughly 0–20 captures), the system uses **adaptive reflection** as the primary post-capture response. After saving, Waka asks a reflective question: "What sparked this?" — and the answer becomes a new inspiration. Reflection is a capture multiplier that fills the graph faster than the user realizes. As the graph densifies (20+ captures), reflections fade and thread placements + bridge discoveries take over. The user never sees a phase transition — there's always something responding to their input.
 
 ### V1 Scope (This Spec)
 
 | In Scope | Out of Scope (Future) |
 |---|---|
-| Web app (Next.js PWA, responsive) | Social matching / 잡소리 sessions |
-| CLI capture tool (terminal conversations) | OS-level cursor integration |
-| URL import (fetch & save from any URL) | Environments of Ambition |
-| Voice note capture (record + transcribe) | Multi-provider auth (only Google for v1) |
-| Photo capture (image + OCR/description) | Native mobile apps |
-| AI conversation import (Claude, GPT, Gemini) | Browser extension |
-| Semantic clustering & resurfacing | Real-time sync |
-| Adaptive reflection (post-save, non-blocking) | |
-| Shareable inspiration cards | |
+| Web app (Next.js PWA, responsive) | Social graph agents (잡소리 — followers' AI agents commenting on your threads with resonant thinking from their graph) |
+| CLI capture tool (terminal conversations) | Active suggestion engine (system proposes new inspirations to deepen the graph) |
+| URL import (fetch & save from any URL) | OS-level cursor integration |
+| Voice note capture (record + transcribe) | Environments of Ambition |
+| Photo capture (image + OCR/description) | Multi-provider auth (only Google for v1) |
+| AI conversation import (Claude, GPT, Gemini) | Native mobile apps |
+| LLM Wiki-style thread synthesis & placement | Browser extension |
+| Bridge detection (cross-thread connections) | Real-time sync |
+| Adaptive reflection (post-save, non-blocking) | Contradiction detection & maintenance linting |
+| Shareable inspiration cards & threads | |
 | Google OAuth login | |
 | Offline capture queue (local persistence) | |
 | "Deepen" flow (expand existing inspirations) | |
@@ -115,7 +138,8 @@ model User {
   accounts      Account[] // NextAuth
   sessions      Session[] // NextAuth
   inspirations  Inspiration[]
-  clusters      Cluster[]
+  threads       Thread[]
+  bridges       Bridge[]
   connections   Connection[]
   apiKeys       ApiKey[]
   createdAt     DateTime  @default(now())
@@ -156,9 +180,9 @@ model Inspiration {
   parent        Inspiration? @relation("InspirationDepth", fields: [parentId], references: [id])
   expansions    Inspiration[] @relation("InspirationDepth")
 
-  // Clustering
-  clusterId     String?
-  cluster       Cluster?  @relation(fields: [clusterId], references: [id])
+  // Thread placement
+  threadId      String?
+  thread        Thread?   @relation(fields: [threadId], references: [id])
 
   // Sharing
   isPublic      Boolean   @default(false)
@@ -178,17 +202,35 @@ model Inspiration {
   @@index([userId, deletedAt])
 }
 
-model Cluster {
+model Thread {
   id            String    @id @default(cuid())
   userId        String
   user          User      @relation(fields: [userId], references: [id])
-  label         String    // AI-generated cluster name
-  description   String?   // AI-generated cluster summary
+  title         String    // AI-generated thread title (e.g., "Emergence & Complex Systems")
+  synthesis     String    // AI-generated living document — rewritten when inspirations are added/removed
   inspirations  Inspiration[]
+  bridgesAsSource Bridge[] @relation("BridgeSource")
+  bridgesAsTarget Bridge[] @relation("BridgeTarget")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   @@index([userId])
+}
+
+model Bridge {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  sourceThreadId  String
+  sourceThread    Thread    @relation("BridgeSource", fields: [sourceThreadId], references: [id])
+  targetThreadId  String
+  targetThread    Thread    @relation("BridgeTarget", fields: [targetThreadId], references: [id])
+  explanation     String    // AI-generated explanation of how the threads connect
+  surfacedAt      DateTime  @default(now())
+  dismissed       Boolean   @default(false)
+
+  @@unique([sourceThreadId, targetThreadId])
+  @@index([userId, surfacedAt(sort: Desc)])
 }
 
 model Connection {
@@ -442,11 +484,11 @@ Integration:
 
 #### API: Deepen Flow
 
-`POST /api/inspirations/:id/deepen` creates a new Inspiration with `parentId` set to the original. The expansion inherits the parent's `clusterId` initially but may be re-assigned during clustering. When the user deepens an inspiration:
+`POST /api/inspirations/:id/deepen` creates a new Inspiration with `parentId` set to the original. The expansion inherits the parent's `threadId` initially but may be re-assigned during thread placement. When the user deepens an inspiration:
 
 1. A new Inspiration is created with `parentId = original.id`
 2. The original's embedding is re-generated from the combined content of itself + all expansions
-3. Tags, summary, and cluster assignment on the parent are re-evaluated
+3. Tags, summary, and thread assignment on the parent are re-evaluated
 4. The parent's `updatedAt` is touched so it surfaces in recent feeds
 
 This means deepening enriches the *original* inspiration's signal rather than creating disconnected fragments.
@@ -489,9 +531,9 @@ E2E:
 
 ---
 
-### Loop 4: Web App — Capture-First Dashboard
+### Loop 4: Web App — Capture-First Feed with Threads
 
-**Goal**: Responsive PWA with a capture-first layout. Persistent multi-modal capture bar, optimistic UI, cluster-oriented feed, and offline capture queue.
+**Goal**: Responsive PWA with a capture-first layout. Persistent multi-modal capture bar, optimistic UI, thread-oriented feed, and offline capture queue. The frontend is clean and simple — the LLM Wiki complexity lives entirely in the backend.
 
 #### Scope
 
@@ -506,24 +548,36 @@ E2E:
 - On mobile (< 768px), when the keyboard opens, the capture bar transforms into a full-width input above the keyboard (the persistent bar itself hides since the keyboard input *is* the capture surface)
 
 ##### Optimistic UI & Save Feedback
-- On submit, inspiration immediately appears at the top of the feed as a card with skeleton placeholders for title, summary, tags
+- On submit, inspiration immediately appears at the top of the feed as a lightweight card with skeleton placeholders
 - Skeleton placeholders pulse/animate to indicate "loading" state (not "missing" state)
 - As AI fields resolve (via polling at 3-second intervals), they fade into the card
-- After save, the view scrolls to the new inspiration to confirm it was captured
+- **Thread placement feedback**: Once the backend places the inspiration into a thread, the card shows inline: "Placed in *Emergence & Complex Systems*" — linking to the thread. If a new thread was created, or a new bridge between threads was formed, that's surfaced too.
 - If the server is unreachable: the card appears with a "queued" indicator, text is persisted to IndexedDB, and the app retries when connectivity returns
 
 ##### Feed & Layout
-- **Capture-first layout**: App opens to the capture bar prominently at top, with cluster view below
-- **Cluster view** is the primary feed — inspirations grouped by AI-generated clusters, not a flat chronological list
-- Each cluster is a collapsible section showing its label, description, and inspiration count
-- Individual inspirations are accessible within their cluster or via search
-- "Unclustered" section for new inspirations not yet assigned to a cluster
-- **Discoveries** section showing recent connections between inspirations
+- **Capture-first layout**: App opens to the capture bar prominently at top, scrollable feed below
+- **Two card types in the feed**: capture cards and discovery cards. No tabs, no sidebar, no separate sections. Sorted by last updated.
+- **Capture cards** (lightweight, muted): Raw inputs — showing content, source type icon, timestamp. Visually compact. These are stream-of-consciousness entries that sit at the top of the feed until the backend processes them.
+- **Discovery cards** (richer, bolder): A single card type that surfaces any meaningful event from the knowledge graph. The user doesn't need to know whether the backend triggered a thread synthesis update or a bridge formation — they just see "something interesting happened to your thinking." Discovery cards may include:
+  - A thread's synthesis was updated by a new placement: "Your thinking about *Emergence & Complex Systems* just got deeper" — with an excerpt from the updated synthesis and a link to the full thread.
+  - A new bridge formed between threads: "Your thinking about *AI Safety* now connects to *Design Systems* — both explore transparency in complex systems."
+  - A new thread was created from recent captures: "*Swarm Intelligence* — a new thread just formed from 3 of your recent saves."
+  - All rendered as the same card type with the same visual weight. The content varies, but the form is consistent.
+- **Visual distinction**: Capture cards feel like inputs. Discovery cards feel like outputs — things the system generated from your inputs. The difference is communicated through visual weight (size, typography, chrome), not labels or categories.
+- Semantic search bar (above the feed)
+
+##### Thread Detail View
+- Full synthesized document — the living narrative that weaves together related inspirations
+- This is where discovery happens: the document references forgotten inspirations, surfaces unexpected connections, and evolves every time new inspirations are placed into it
+- List of individual inspirations that compose this thread
+- Bridges to other threads shown as contextual links within the synthesis
+- "Deepen" action to add more context to this thread
+- Thread's `updatedAt` and inspiration count visible
 
 ##### Inspiration Detail View
-- Full content, AI-generated title, summary, tags, domain, mood, actionability
-- Connections to other inspirations with AI-generated explanations
-- Expansions (deepened inspirations) shown as a thread below the original
+- Full raw content, AI-generated title, summary, tags, domain, mood, actionability
+- Which thread(s) this inspiration belongs to (linked)
+- Expansions (deepened inspirations) shown below the original
 - "Deepen" button to add more context to this inspiration
 - Reflection prompt (if classified as `reflect`) shown as a non-intrusive inline section — never a blocking modal
 
@@ -534,7 +588,6 @@ E2E:
 - Visual indicator on queued items: subtle "waiting to sync" badge
 
 ##### Other
-- Semantic search bar (above the cluster feed)
 - PWA manifest and service worker
 - Responsive design: mobile-first, works on all screen sizes (375px — 1440px)
 - Empty states and loading skeletons
@@ -543,23 +596,26 @@ E2E:
 
 | # | Criteria | Verification |
 |---|----------|-------------|
-| 4.1 | App opens to capture bar + cluster feed | E2E: login → capture bar is focused/prominent, clusters below |
-| 4.2 | Text capture: type → submit → card appears immediately with skeletons | E2E: type text → submit → card at top with loading placeholders |
-| 4.3 | AI fields fade in as they resolve | E2E: wait after capture → title, summary, tags animate in |
-| 4.4 | URL detection: paste URL → auto-detected → saved as URL_IMPORT | E2E: paste URL → card shows domain + thumbnail after processing |
-| 4.5 | URL with commentary: "Great article: https://..." splits correctly | E2E: paste text+URL → rawContent has commentary, sourceUrl has URL |
-| 4.6 | Voice capture: tap mic → record → stop → transcribed and saved | E2E: record audio → card appears with transcript |
-| 4.7 | Photo capture: select image → uploaded → described and saved | E2E: pick photo → card appears with AI description |
-| 4.8 | AI conversation import: paste transcript → saved with summary | E2E: paste conversation → card shows conversation summary |
-| 4.9 | Capture bar visible on all views (dashboard, cluster, detail) | E2E: navigate to different pages → capture bar always present |
-| 4.10 | Cluster feed groups inspirations by cluster | E2E: save related items → they appear under same cluster heading |
-| 4.11 | Inspiration detail shows all AI metadata + connections + expansions | E2E: click item → detail view has title, summary, tags, domain, mood |
-| 4.12 | Deepen button creates linked expansion | E2E: click "Deepen" → type expansion → saved as child of original |
-| 4.13 | Search returns semantically relevant results | E2E: search "AI" → results include "machine learning" note |
-| 4.14 | Offline capture: go offline → capture → queued → go online → synced | E2E: disconnect → capture → reconnect → item synced to server |
-| 4.15 | PWA installable on mobile Chrome/Safari | Manual: "Add to Home Screen" prompt appears |
-| 4.16 | Responsive: usable on 375px through 1440px | Visual regression: screenshots at 375, 768, 1440 |
-| 4.17 | Reflection prompt appears inline on detail page (not as a blocking modal) | E2E: save deep thought → open detail → reflection section visible, non-blocking |
+| 4.1 | App opens to capture bar + feed (capture cards + discovery cards) | E2E: login → capture bar is focused/prominent, feed below |
+| 4.2 | Text capture: type → submit → capture card appears immediately with skeletons | E2E: type text → submit → lightweight card at top with loading placeholders |
+| 4.3 | AI fields fade in as they resolve | E2E: wait after capture → title, tags animate in |
+| 4.4 | Discovery card appears when thread is updated by new placement | E2E: save related text → discovery card appears: "Your thinking about X just got deeper" |
+| 4.5 | Discovery card appears when new bridge forms between threads | E2E: save inspiration bridging threads → discovery card shows the connection |
+| 4.6 | Discovery card appears when new thread is created | E2E: save several related notes → discovery card: "New thread formed" |
+| 4.7 | URL detection: paste URL → auto-detected → saved as URL_IMPORT | E2E: paste URL → card shows domain + thumbnail after processing |
+| 4.8 | URL with commentary: "Great article: https://..." splits correctly | E2E: paste text+URL → rawContent has commentary, sourceUrl has URL |
+| 4.9 | Voice capture: tap mic → record → stop → transcribed and saved | E2E: record audio → card appears with transcript |
+| 4.10 | Photo capture: select image → uploaded → described and saved | E2E: pick photo → card appears with AI description |
+| 4.11 | AI conversation import: paste transcript → saved with summary | E2E: paste conversation → card shows conversation summary |
+| 4.12 | Capture bar visible on all views (home, thread detail, inspiration detail) | E2E: navigate to different pages → capture bar always present |
+| 4.13 | Thread detail shows full synthesized document + composing inspirations | E2E: open thread via discovery card → synthesized narrative + list of inspirations |
+| 4.14 | Visual distinction between capture cards and discovery cards | Visual: capture cards are compact/muted (inputs), discovery cards are richer/bolder (outputs) |
+| 4.15 | Deepen button creates linked expansion | E2E: click "Deepen" → type expansion → saved as child of original |
+| 4.16 | Search returns semantically relevant results | E2E: search "AI" → results include "machine learning" note |
+| 4.17 | Offline capture: go offline → capture → queued → go online → synced | E2E: disconnect → capture → reconnect → item synced to server |
+| 4.18 | PWA installable on mobile Chrome/Safari | Manual: "Add to Home Screen" prompt appears |
+| 4.19 | Responsive: usable on 375px through 1440px | Visual regression: screenshots at 375, 768, 1440 |
+| 4.20 | Reflection prompt appears inline on inspiration detail (not as a blocking modal) | E2E: save deep thought → open detail → reflection section visible, non-blocking |
 
 #### Tests
 
@@ -569,19 +625,22 @@ Unit:
 - [ ] Offline queue: add to IndexedDB, retrieve, mark as synced
 - [ ] Skeleton placeholder renders for each AI field independently
 - [ ] Capture bar state management across routes
+- [ ] Feed sorting: capture cards and discovery cards sorted by updatedAt
 
 Integration:
-- [ ] Text capture → optimistic card → API called → AI fields resolve
+- [ ] Text capture → capture card → API called → AI fields resolve → discovery card appears
 - [ ] Voice capture → S3 upload → transcription → card updated
 - [ ] Photo capture → S3 upload → description → card updated
 - [ ] AI conversation paste → summary generated → card updated
 - [ ] Offline capture → queue → reconnect → sync → card updated
 - [ ] Deepen → child created → parent re-processed
+- [ ] Discovery card surfaces when thread is updated by new placement
 
 E2E (Playwright):
-- [ ] Full capture flow: login → capture text → card appears → detail view
+- [ ] Full capture flow: login → capture text → capture card appears → discovery card appears → open thread
 - [ ] Multi-modal: capture voice → capture photo → capture URL → all in feed
-- [ ] Cluster view: save 5 related notes → cluster forms → visible in feed
+- [ ] Thread formation: save 5 related notes → discovery card: "new thread formed" → open thread → coherent synthesis
+- [ ] Bridge formation: save inspiration bridging threads → discovery card shows connection
 - [ ] Offline flow: go offline → capture → go online → item appears
 - [ ] Mobile viewport: all interactions work at 375px width
 - [ ] PWA: manifest present, service worker registered
@@ -735,55 +794,84 @@ E2E (Playwright):
 
 ---
 
-### Loop 7: Synthesis Engine — Clustering & Connection Surfacing
+### Loop 7: Synthesis Engine — Thread Placement & Bridge Detection
 
-**Goal**: When a new inspiration is saved, automatically find connections to past inspirations, cluster related ones, and surface surprising links.
+**Goal**: When a new inspiration is saved, the LLM carefully places it into the knowledge graph — deciding which thread it belongs to, rewriting the thread's synthesis, and detecting new bridges between threads. This is the LLM Wiki engine: the backend that makes threads come alive.
 
 #### Scope
 
-- **On new inspiration**: After embedding is generated (via SQS consumer), run cosine similarity search against all user's inspirations
-- **Connection creation**: If similarity > threshold, create a `Connection` with AI-generated explanation. Max 5 connections per new inspiration to cap LLM costs.
-- **Similarity threshold**: Configurable per embedding model. V1 default: 0.78 for OpenAI `text-embedding-3-small`. This value was chosen conservatively — it's better to surface more connections (with dismissal) than miss them. Threshold is stored as a server config constant, not a user setting.
-- **Clustering**: DBSCAN algorithm on user's embeddings, triggered after every 5th new inspiration (not on every save, to limit compute). DBSCAN is preferred over k-means because it doesn't require a predefined cluster count — it discovers natural groupings. Parameters: `eps=0.25` (distance threshold), `min_samples=3` (minimum inspirations to form a cluster).
-- **Cluster lifecycle**: When re-clustering occurs, existing cluster assignments may change. If a cluster gains or loses inspirations, its label and description are re-generated. Empty clusters are deleted. Cluster reassignment changes are surfaced in the Discoveries feed (e.g., "Your 'AI Research' cluster has been updated with new inspirations").
-- **Surprise resurfacing**: When a connection is found, generate a natural-language explanation (e.g., "This ties into your note from October about AI interpretability")
-- **Dashboard integration**: Connections shown on inspiration detail page. "Discoveries" section on dashboard shows recent unseen connections.
+##### Placement (Inspired by LLM Wiki Ingestion)
+
+When a new inspiration arrives (after embedding is generated via SQS consumer), the LLM performs **careful placement** — not just cosine similarity matching, but a deliberate decision about where this inspiration belongs in the user's knowledge graph:
+
+1. **Thread matching**: Run embedding similarity against existing thread centroids + LLM evaluation. The LLM reads the inspiration, reads candidate thread syntheses, and decides: does this belong in an existing thread, or does it warrant a new one?
+2. **Thread placement**: If placed in an existing thread, the thread's `synthesis` document is **rewritten** by the LLM to incorporate the new inspiration. This isn't appending — it's re-synthesis. The document may reorganize, surface new connections between inspirations within the thread, and reference the new addition in context of older ones.
+3. **New thread creation**: If the inspiration doesn't fit existing threads (or the user has < 3 inspirations total), create a new thread. The initial synthesis is generated from the placed inspiration(s). Minimum 1 inspiration to form a thread (unlike DBSCAN's min_samples=3), because even a single deep thought deserves a home.
+4. **Multi-thread placement**: An inspiration can belong to one thread in V1 (single `threadId`). Future versions may support multi-thread membership.
+
+##### Thread Synthesis
+
+Each thread's `synthesis` field is a living document maintained entirely by the LLM. It should:
+- Read as a coherent narrative, not a list of bullet points
+- Weave together the inspirations in the thread, highlighting how they relate
+- Surface surprising connections between inspirations the user may not have noticed
+- Reference specific inspirations by content (e.g., "your October note about interpretability")
+- Evolve meaningfully each time a new inspiration is placed — not just append a sentence, but potentially restructure the whole narrative
+
+##### Bridge Detection
+
+After placement, the LLM checks whether the updated thread now has meaningful connections to other threads:
+
+- **Bridge creation**: If a new inspiration creates a conceptual link between two threads that weren't previously connected, create a `Bridge` with an AI-generated explanation. E.g., "Your 'Emergence & Complex Systems' thread now connects to 'AI Safety' through the shared concept of controllability in emergent behavior."
+- **Bridge updates**: Existing bridges may have their explanations updated if new inspirations strengthen or change the connection.
+- **Max 3 new bridges per placement** to cap LLM costs.
+- **Similarity threshold**: V1 default cosine similarity > 0.72 between thread centroids as a pre-filter before LLM evaluation. Threshold is a server config constant.
+
+##### Thread Lifecycle
+- Threads with all inspirations removed (via soft delete) are themselves soft-deleted
+- Thread title is re-generated when the synthesis changes significantly (LLM decides)
+- Thread `updatedAt` is touched on every re-synthesis, causing it to re-surface in the feed
 
 #### Acceptance Criteria
 
 | # | Criteria | Verification |
 |---|----------|-------------|
-| 7.1 | New inspiration triggers connection search | Test: add inspiration → connections table has new rows (if similar ones exist) |
-| 7.2 | Max 5 connections created per new inspiration | Test: add inspiration similar to 10 others → only top 5 connections created |
-| 7.3 | Connections have AI-generated explanations | Test: connection.explanation is non-empty, coherent |
-| 7.4 | Clustering runs after every 5th inspiration | Test: add 5 inspirations → DBSCAN runs → clusters assigned |
-| 7.5 | Similar inspirations are grouped into clusters | Test: add 5 related notes → they share a clusterId |
-| 7.6 | Cluster labels are descriptive | Test: cluster.label is a human-readable topic phrase |
-| 7.7 | Empty clusters are deleted after re-clustering | Test: move all items out of cluster → cluster deleted |
-| 7.8 | Dashboard shows "Discoveries" feed | E2E: save related items → discoveries section shows connection |
-| 7.9 | Connections below threshold are not created | Test: add unrelated inspiration → no spurious connections |
-| 7.10 | User can dismiss a connection | Test: dismiss → connection.dismissed = true → hidden from feed |
+| 7.1 | New inspiration triggers thread placement | Test: add inspiration → threadId is set (existing or new thread) |
+| 7.2 | Placement into existing thread rewrites synthesis | Test: add inspiration to thread → synthesis changes, incorporates new content |
+| 7.3 | New thread created when inspiration doesn't fit existing threads | Test: add unrelated inspiration → new thread created with initial synthesis |
+| 7.4 | Thread synthesis reads as coherent narrative, not bullet list | Test: thread.synthesis is prose, references multiple inspirations contextually |
+| 7.5 | Thread synthesis references older inspirations when relevant | Test: add 3rd inspiration to thread → synthesis mentions all 3, not just the new one |
+| 7.6 | Bridge detected between threads when new connection forms | Test: add inspiration that conceptually links two threads → bridge created |
+| 7.7 | Bridge has meaningful AI-generated explanation | Test: bridge.explanation is non-empty, references both threads specifically |
+| 7.8 | Max 3 bridges per placement | Test: add inspiration relevant to 5 threads → only top 3 bridges created |
+| 7.9 | Empty threads are soft-deleted | Test: remove all inspirations from thread → thread deleted |
+| 7.10 | Thread title re-generated when synthesis changes significantly | Test: add inspiration that shifts thread topic → title updated |
+| 7.11 | Thread re-surfaces in feed after update | Test: add inspiration to thread → thread.updatedAt touched → appears higher in feed |
+| 7.12 | User can dismiss a bridge | Test: dismiss → bridge.dismissed = true → hidden from feed |
 
 #### Tests
 
 ```
 Unit:
-- [ ] Similarity threshold correctly filters connections (0.78 cutoff)
-- [ ] Max 5 connections cap enforced
-- [ ] DBSCAN algorithm groups similar embeddings with eps=0.25, min_samples=3
-- [ ] Cluster labeling produces coherent names
-- [ ] Connection explanation generation (mock LLM)
-- [ ] Empty cluster cleanup
+- [ ] Thread matching: embedding similarity pre-filter + LLM placement decision
+- [ ] Synthesis generation produces coherent narrative from multiple inspirations
+- [ ] Synthesis re-writing incorporates new inspiration without losing existing content
+- [ ] Bridge detection between thread centroids (0.72 threshold pre-filter)
+- [ ] Bridge explanation generation (mock LLM)
+- [ ] Max 3 bridges cap enforced
+- [ ] Empty thread cleanup
 
 Integration:
-- [ ] Full pipeline: save inspiration → embedding → similarity search → connection created → explanation generated
-- [ ] Clustering runs on 50+ inspirations without timeout
-- [ ] Re-clustering after new additions updates cluster assignments
-- [ ] Cluster label re-generated when membership changes
+- [ ] Full pipeline: save inspiration → embedding → thread placement → synthesis rewritten → bridge check
+- [ ] New thread: save unrelated inspiration → new thread created with synthesis
+- [ ] Re-synthesis: add 5th inspiration to thread → synthesis weaves all 5 together
+- [ ] Bridge: save inspiration that conceptually links two threads → bridge created with explanation
+- [ ] Thread title update when topic shifts
 
 E2E:
-- [ ] Save "quantum computing" note → save "quantum entanglement" note → connection surfaces in Discoveries
-- [ ] Dismiss connection → no longer shown
+- [ ] Save "quantum computing" note → save "quantum entanglement" note → both placed in same thread → synthesis connects them
+- [ ] Save inspiration bridging two threads → bridge notification appears in feed
+- [ ] Dismiss bridge → no longer shown in feed
 ```
 
 ---
@@ -844,7 +932,7 @@ E2E:
 
 ### Loop 9: Shareable Inspiration Cards
 
-**Goal**: Users can make individual inspirations or clusters public via a shareable link with an attractive card preview.
+**Goal**: Users can make individual inspirations or threads public via a shareable link with an attractive card preview.
 
 #### Scope
 
@@ -853,7 +941,7 @@ E2E:
 - Open Graph meta tags for social sharing previews
 - OG image: dynamically generated card image (using `@vercel/og` or Satori) showing title, summary snippet, and Waka branding. Falls back to the source's OG image for URL imports.
 - Card shows: title, summary, tags, source type icon, domain (if URL), and creation date
-- Cluster sharing: shareable link for an entire cluster showing all public inspirations within it. Inspirations set to private within a shared cluster are excluded from the shared view.
+- Thread sharing: shareable link for an entire thread showing the synthesized document and all public inspirations within it. Inspirations set to private within a shared thread are excluded from the shared view.
 
 #### Acceptance Criteria
 
@@ -864,7 +952,7 @@ E2E:
 | 9.3 | OG meta tags present for social previews | Test: parse HTML → og:title, og:description, og:image present |
 | 9.4 | OG image is dynamically generated card | Test: GET og:image URL → returns rendered card image with title |
 | 9.5 | Private inspirations return 404 on public URL | Test: isPublic=false → GET `/s/:slug` → 404 |
-| 9.6 | Cluster share page shows only public inspirations | Test: share cluster → 1 private item → page lists all except private item |
+| 9.6 | Thread share page shows synthesis + only public inspirations | Test: share thread → 1 private item → page shows synthesis + all except private item |
 | 9.7 | Unsharing removes access | Test: toggle isPublic=false → GET `/s/:slug` → 404 |
 
 #### Tests
@@ -878,12 +966,12 @@ Unit:
 Integration:
 - [ ] Make public → fetch public URL → content matches
 - [ ] Make private again → public URL returns 404
-- [ ] Cluster share → private items excluded, public items shown
+- [ ] Thread share → private items excluded, public items shown
 
 E2E:
 - [ ] Share inspiration → copy link → open in incognito → card renders correctly
 - [ ] Share link preview renders correctly (OG tag validator)
-- [ ] Cluster share with mixed public/private items → only public shown
+- [ ] Thread share with mixed public/private items → only public shown
 ```
 
 ---
@@ -905,21 +993,25 @@ Loop 4:        Loop 5:       Loop 6:
 Web App        CLI Tool      URL + AI Conv
 (capture-      (reflection   Import
  first,        in terminal,
- offline       env var auth)
+ threads,      env var auth)
+ offline
  queue)
   │              │              │
   └──────────────┴──────────────┘
                  │
                  ▼
            Loop 7: Synthesis Engine
-                 │ (DBSCAN clustering,
-                 │  connection cap)
+                 │ (LLM Wiki-style thread
+                 │  placement, synthesis
+                 │  rewriting, bridge
+                 │  detection)
                  ▼
            Loop 8: Adaptive Reflection
                  │ (post-save only,
-                 │  never blocking)
+                 │  never blocking,
+                 │  cold start bridge)
                  ▼
-           Loop 9: Shareable Cards
+           Loop 9: Shareable Cards & Threads
                    (dynamic OG images)
 ```
 
@@ -990,15 +1082,16 @@ waka/
 │   │   │           └── route.tsx       # Dynamic OG image generation
 │   │   ├── components/
 │   │   │   ├── capture-bar/   # Multi-modal capture bar
-│   │   │   ├── feed/          # Cluster-oriented feed
-│   │   │   ├── inspiration/   # Card, detail view, skeleton
+│   │   │   ├── feed/          # Mixed feed (captures + threads + bridges)
+│   │   │   ├── thread/        # Thread card, thread detail view
+│   │   │   ├── inspiration/   # Capture card, detail view, skeleton
 │   │   │   └── reflection/    # Inline reflection UI
 │   │   ├── lib/
 │   │   │   ├── llm/          # LLM adapter
 │   │   │   ├── auth/         # Auth utilities
 │   │   │   ├── db/           # Prisma client
 │   │   │   ├── import/       # URL + AI conversation extractors
-│   │   │   ├── clustering/   # DBSCAN implementation
+│   │   │   ├── synthesis/    # Thread placement, synthesis rewriting, bridge detection
 │   │   │   ├── offline/      # IndexedDB queue for offline capture
 │   │   │   └── media/        # S3 upload, voice recording, photo capture
 │   │   └── public/
