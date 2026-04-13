@@ -19,7 +19,7 @@ Waka operates on three distinct layers, mirroring the LLM Wiki architecture:
 
 ### Primary JTBD: Capture-First
 
-Waka is **capture-first**. The app opens to a prominent capture bar ready for input. The entire UX is designed around one goal: **saving an inspiration must feel as reliable and instant as Apple Notes.** Nothing typed into Waka should ever be lost.
+Waka is **capture-first**. The app opens to a floating capture island — always visible, always ready for input. The entire UX is designed around one goal: **saving an inspiration must feel as reliable and instant as Apple Notes.** Nothing typed into Waka should ever be lost.
 
 ### Secondary JTBD: Surprising Discovery
 
@@ -28,15 +28,15 @@ The value of Waka is not organization — it's **unexpected resonance**. The mom
 Key capture behaviors:
 - **Minimum viable inspiration**: A single word, a bare URL, or a one-line thought are all valid. Low-signal inputs get fewer AI-generated metadata fields, but they are always accepted and saved.
 - **Optimistic save**: Inspirations appear in the feed immediately on submit. AI-generated fields (title, summary, tags, embedding) render as skeleton placeholders that animate in as they resolve — the card should feel *loading*, never *incomplete*.
-- **Persistent capture bar**: The capture bar is always visible across all views (home, thread detail, inspiration detail). Even while browsing, a new thought can be captured without navigating away.
+- **Floating capture island**: The capture bar is a floating element anchored to the bottom of the viewport — always visible as you scroll, on every view (home, thread detail, inspiration detail). It never scrolls away. Even while deep in a thread, a new thought can be captured without navigating or scrolling back up.
 - **Explicit submit, zero-failure guarantee**: Pressing enter/submit saves instantly. This is not auto-save-on-keystroke (which would persist half-formed sentences), but the submit action itself must never fail silently. If the server is unreachable, the capture bar retains the text, queues it locally, and retries on reconnection — the user's input is never cleared without confirmation of persistence.
-- **Post-save feedback**: After saving, the user sees confirmation inline. If the inspiration was placed into an existing thread, the placement is shown: "Placed in *Emergence & Complex Systems*". If it created a new thread or bridge, that's surfaced too. The feed remains the primary view — no navigation away.
+- **Conversational post-save**: After saving, the capture bar doesn't just reset — it responds. If the system has a reflection question, it appears right in the bar as a follow-up: "What sparked this?" The user can reply in the same bar (the answer becomes a new linked inspiration), or simply ignore it — the prompt fades after a few seconds and the bar resets, ready for the next capture. This makes the transition from capture to reflection feel like a natural conversation, not a separate feature. If you're in a rush, save and go. If you're in the mood to explore, keep talking to the bar.
 
 ### Information Architecture
 
 Three levels, simple and clean:
 
-1. **Home** — Capture bar + scrollable feed. The feed has two card types: **capture cards** (lightweight, muted — your raw inputs) and **discovery cards** (richer, bolder — things the system found in your thinking). The user doesn't need to distinguish between thread updates, bridge formations, or new thread creations — they're all discovery cards. Capture cards sit at the top until the backend processes them; discovery cards surface whenever the knowledge graph evolves.
+1. **Home** — Floating capture island + scrollable feed. The feed has two card types: **capture cards** (lightweight, muted — your raw inputs) and **discovery cards** (richer, bolder — things the system found in your thinking). The user doesn't need to distinguish between thread updates, bridge formations, or new thread creations — they're all discovery cards. Capture cards sit at the top until the backend processes them; discovery cards surface whenever the knowledge graph evolves.
 2. **Thread Detail** — Tap a discovery card to open the relevant thread. Read the full synthesized document — the living narrative that weaves your inspirations together, surfacing connections and forgotten references. Individual inspirations that compose the thread are listed below. "Deepen" action available to add more context.
 3. **Inspiration Detail** — Tap an individual inspiration to see the raw capture, AI-generated metadata, and which thread(s) it belongs to.
 
@@ -70,6 +70,54 @@ Before the graph is dense enough for connections (roughly 0–20 captures), the 
 - **Consistency**: Eventual consistency on refresh (no real-time sync required).
 - **Auth extensibility**: Google OAuth v1, but auth layer must support adding providers without schema changes.
 - **Capture reliability**: Inspirations must never be silently lost. The system must persist input locally before attempting server save, and retry on failure.
+
+### Design Principles & Emotional Architecture
+
+This section is the bridge between the spec and the `vendor-skills/taste-skill/SKILL.md`. It translates WAKA's product intent into design constraints that the taste skill can derive from. Every UI story must trace its design decisions back to these principles.
+
+#### The Two Modes
+
+WAKA has exactly two emotional modes, and the design must serve both without compromise:
+
+1. **Capture mode** — The user has a thought and needs to get it out *now*. They might be walking, in the middle of a conversation, or half-asleep. The design constraint: **zero friction, zero cognitive load.** The floating island should feel like muscle memory — tap, type, done. No chrome, no decoration, no clever interactions that slow the save. Motion should be fast and efficient (spring with high stiffness, low damping). The island should feel like it *wants* your thought.
+
+2. **Discovery mode** — The user is browsing their feed, opens a thread, and encounters a connection they didn't expect. The design constraint: **earned revelation.** This is where the product delivers its core value — the "oh, I didn't know these were connected" moment. Discovery cards and thread syntheses should feel like unwrapping something. Motion should be slower, weightier — the design should build anticipation before the reveal. Typography should invite reading, not scanning.
+
+These two modes coexist on the same screen. The floating island is always in capture mode. The feed behind it transitions between the two based on what the user is doing.
+
+#### Screen-Specific Emotional Context
+
+**Home Feed**
+- *Arriving state*: The user just opened the app. They might have something to capture, or they might be checking in to see what WAKA found.
+- *Target feeling*: Calm competence. The feed should feel alive but not anxious — things are happening in the background (threads updating, bridges forming), but the pace is unhurried. Like opening a notebook that has been organizing itself while you were away.
+- *Design constraint*: Visual density should be low (VISUAL_DENSITY ~3-4). The feed should breathe. Capture cards are ephemeral and lightweight. Discovery cards carry more weight but don't shout.
+
+**Floating Capture Island**
+- *Arriving state*: The user has a thought. Urgency varies — sometimes it's a quick URL paste, sometimes it's a half-formed idea they're afraid of losing.
+- *Target feeling*: Instant trust. "I typed it, it's saved, I can relax." The conversational follow-up ("What sparked this?") should feel like a friend leaning in, not a form field appearing.
+- *Design constraint*: The island must feel physically present — elevated, tactile, with subtle shadow that responds to interaction. The post-save conversational state should animate in with breathing motion (slow spring), not a hard state swap. The auto-fade (~5s) should feel like the question gently receding, not disappearing.
+
+**Discovery Card**
+- *Arriving state*: The user is scrolling and encounters something the system found.
+- *Target feeling*: Surprise, then curiosity. "Wait, what?" followed by "Tell me more." The card should earn its presence in the feed — it's not a notification, it's a moment.
+- *Design constraint*: Progressive disclosure. The card should reveal its content in layers — headline first, then the connection explanation, then the link to the full thread. Staggered animation, not instant render. The visual weight should be noticeably different from capture cards — this is output, not input.
+
+**Thread Detail**
+- *Arriving state*: The user tapped a discovery card or navigated to a thread. They're leaning in, curious.
+- *Target feeling*: Deep resonance. "This is my thinking, but organized in a way I couldn't have done myself." The synthesis document should feel like reading something written by someone who knows you — referencing things you forgot, weaving connections you missed.
+- *Design constraint*: Reading mode. Generous typography (max-w-[65ch], relaxed leading). The synthesis is the hero — it should dominate the viewport. Individual inspirations listed below are supporting evidence, not the main content. Motion should be minimal here — the content does the work. VISUAL_DENSITY should drop to ~2-3 (art gallery mode).
+
+**Reflection (Conversational Post-Save)**
+- *Arriving state*: The user just saved something meaningful. They're still in the emotional moment of the thought.
+- *Target feeling*: "The app is thinking with me." Not interrogation, not a form. A gentle, curious follow-up that respects the moment.
+- *Design constraint*: The reflection question should appear with warm, breathing motion — not a hard pop-in. Typography should be slightly different from the capture input (perhaps lighter weight, slightly smaller) to signal "this is the app talking, not you." The auto-fade should use opacity + subtle downward translate, like the question is settling back into the island.
+
+#### Palette & Typography Direction
+
+- **Base**: Warm neutrals (Stone/Warm Gray), not cool (Slate/Zinc). WAKA is personal and reflective, not corporate or technical.
+- **Accent**: A single, desaturated warm accent. Not purple (banned per taste skill), not blue (too generic). Consider: warm amber, muted terracotta, or deep sage — colors that feel like thought, not action.
+- **Typography**: `Geist` for UI, `Geist Mono` for metadata (timestamps, counts). Thread synthesis should use a slightly more expressive weight to differentiate it from standard UI text.
+- **Dark mode first**: WAKA is a reflective, personal space. Dark backgrounds with warm text feel more intimate than bright white screens.
 
 ---
 
@@ -533,29 +581,30 @@ E2E:
 
 ### Loop 4: Web App — Capture-First Feed with Threads
 
-**Goal**: Responsive PWA with a capture-first layout. Persistent multi-modal capture bar, optimistic UI, thread-oriented feed, and offline capture queue. The frontend is clean and simple — the LLM Wiki complexity lives entirely in the backend.
+**Goal**: Responsive PWA with a capture-first layout. Floating capture island with conversational post-save flow, optimistic UI, thread-oriented feed, and offline capture queue. The frontend is clean and simple — the LLM Wiki complexity lives entirely in the backend.
 
 #### Scope
 
-##### Capture Bar (Always Visible)
-- Persistent capture bar visible on all authenticated views — pinned to top of the screen
+##### Floating Capture Island
+- **Floating position**: The capture bar is a floating island anchored to the bottom of the viewport, hovering above the feed content. It stays visible on all authenticated views (home, thread detail, inspiration detail) regardless of scroll position. Visually: rounded, elevated with a subtle shadow, feels like a floating pill — similar to the iOS dynamic island or a chat composer.
 - iMessage-style multi-modal input: text field with attachment icons for voice and photo
 - **Text**: Type and press Enter to save. Single word, bare URL, or paragraph — all accepted
 - **URL detection**: If pasted text is a URL (or contains a URL alongside commentary), auto-detect and split into `rawContent` (commentary) + `sourceUrl` (URL) with `URL_IMPORT` source type. Pure URLs save with the URL as `rawContent`
 - **Voice**: Tap mic icon → browser MediaRecorder API → stop recording → upload audio to S3 → transcribe via LLM → save with `VOICE_NOTE` type, both audio URL and transcript stored
 - **Photo**: Tap camera icon → file picker or camera capture → upload to S3 → LLM describes/OCRs image → save with `PHOTO` type
 - **AI conversation**: Tap brain/chat icon → paste transcript or share link → save with `AI_CONVERSATION` type. If a share link is pasted (e.g., ChatGPT share URL), fetch and extract the conversation. If raw transcript text is pasted, save directly. The full transcript is stored as `rawContent`; the LLM generates a focused summary for the embedding (so the embedding isn't diluted across 50 conversation turns)
-- On mobile (< 768px), when the keyboard opens, the capture bar transforms into a full-width input above the keyboard (the persistent bar itself hides since the keyboard input *is* the capture surface)
+- On mobile (< 768px), when the keyboard opens, the floating island expands to full-width above the keyboard
 
-##### Optimistic UI & Save Feedback
-- On submit, inspiration immediately appears at the top of the feed as a lightweight card with skeleton placeholders
-- Skeleton placeholders pulse/animate to indicate "loading" state (not "missing" state)
-- As AI fields resolve (via polling at 3-second intervals), they fade into the card
-- **Thread placement feedback**: Once the backend places the inspiration into a thread, the card shows inline: "Placed in *Emergence & Complex Systems*" — linking to the thread. If a new thread was created, or a new bridge between threads was formed, that's surfaced too.
-- If the server is unreachable: the card appears with a "queued" indicator, text is persisted to IndexedDB, and the app retries when connectivity returns
+##### Conversational Post-Save Flow
+- On submit, the capture is saved and a capture card appears in the feed behind the floating island
+- **The bar doesn't just reset — it responds.** If the system generates a reflection question (see Loop 8), the question appears right in the capture bar as a conversational follow-up: e.g., "What sparked this?" The bar's placeholder text becomes the question.
+- The user can reply directly in the same bar — the answer is saved as a new linked inspiration (with `parentId` pointing to the original). This makes deepening feel like a natural back-and-forth conversation, not a separate action.
+- **Instant escape**: If the user ignores the reflection prompt, it fades after ~5 seconds and the bar resets to its default empty state. No tap to dismiss required. If you're in a rush, save and go — the bar gets out of your way.
+- **Thread placement feedback**: Once the backend places the inspiration into a thread, a discovery card surfaces in the feed. The floating island itself stays clean and focused on the next capture.
+- If the server is unreachable: the capture card appears with a "queued" indicator, text is persisted to IndexedDB, and the app retries when connectivity returns
 
 ##### Feed & Layout
-- **Capture-first layout**: App opens to the capture bar prominently at top, scrollable feed below
+- **Capture-first layout**: App opens to a scrollable feed with the floating capture island anchored at the bottom of the viewport
 - **Two card types in the feed**: capture cards and discovery cards. No tabs, no sidebar, no separate sections. Sorted by last updated.
 - **Capture cards** (lightweight, muted): Raw inputs — showing content, source type icon, timestamp. Visually compact. These are stream-of-consciousness entries that sit at the top of the feed until the backend processes them.
 - **Discovery cards** (richer, bolder): A single card type that surfaces any meaningful event from the knowledge graph. The user doesn't need to know whether the backend triggered a thread synthesis update or a bridge formation — they just see "something interesting happened to your thinking." Discovery cards may include:
@@ -596,7 +645,7 @@ E2E:
 
 | # | Criteria | Verification |
 |---|----------|-------------|
-| 4.1 | App opens to capture bar + feed (capture cards + discovery cards) | E2E: login → capture bar is focused/prominent, feed below |
+| 4.1 | App opens to feed with floating capture island at bottom | E2E: login → floating island visible at bottom, feed scrollable behind it |
 | 4.2 | Text capture: type → submit → capture card appears immediately with skeletons | E2E: type text → submit → lightweight card at top with loading placeholders |
 | 4.3 | AI fields fade in as they resolve | E2E: wait after capture → title, tags animate in |
 | 4.4 | Discovery card appears when thread is updated by new placement | E2E: save related text → discovery card appears: "Your thinking about X just got deeper" |
@@ -607,7 +656,7 @@ E2E:
 | 4.9 | Voice capture: tap mic → record → stop → transcribed and saved | E2E: record audio → card appears with transcript |
 | 4.10 | Photo capture: select image → uploaded → described and saved | E2E: pick photo → card appears with AI description |
 | 4.11 | AI conversation import: paste transcript → saved with summary | E2E: paste conversation → card shows conversation summary |
-| 4.12 | Capture bar visible on all views (home, thread detail, inspiration detail) | E2E: navigate to different pages → capture bar always present |
+| 4.12 | Floating capture island visible on all views, stays fixed during scroll | E2E: scroll down feed → island stays at bottom; navigate to thread detail → island still there |
 | 4.13 | Thread detail shows full synthesized document + composing inspirations | E2E: open thread via discovery card → synthesized narrative + list of inspirations |
 | 4.14 | Visual distinction between capture cards and discovery cards | Visual: capture cards are compact/muted (inputs), discovery cards are richer/bolder (outputs) |
 | 4.15 | Deepen button creates linked expansion | E2E: click "Deepen" → type expansion → saved as child of original |
@@ -890,7 +939,7 @@ Reflection is always **post-save**. The inspiration is saved and confirmed befor
   - `NOT_NEEDED` — simple saves (URLs, single words, quick references)
   - `PROMPTED` — complex/nuanced content that would benefit from deeper thinking
 - Classification based on: content complexity, novelty relative to existing inspirations, emotional indicators
-- **Web reflection UI**: On the inspiration detail page, a non-intrusive inline section shows the reflection question below the content. Not a modal. Not a popup. Just a gentle "💭 Something to think about..." section with a text input. User can answer or dismiss.
+- **Web reflection UI**: The primary reflection surface is the **floating capture island** itself. After saving, if the inspiration is classified as `PROMPTED`, the bar's placeholder text becomes the reflection question (e.g., "What sparked this?"). The user can reply right there — the answer is saved as a linked inspiration. If ignored, the prompt fades after ~5 seconds and the bar resets. Reflection is also accessible later on the inspiration detail page as a non-intrusive inline section. The key principle: reflection should feel like a conversational follow-up in the moment of capture, not a task to complete later.
 - **CLI reflection**: After save confirmation, the CLI prints the reflection question and waits for input (60s timeout). User can answer inline or skip with Enter.
 - Reflection answer stored on the inspiration and triggers re-embedding (the answer enriches the semantic signal)
 
@@ -901,11 +950,12 @@ Reflection is always **post-save**. The inspiration is saved and confirmed befor
 | 8.1 | Save always completes before reflection is shown | Test: POST → 201 returned → reflection classification happens async |
 | 8.2 | URL/link saves are classified as `NOT_NEEDED` | Test: save a URL → reflectionStatus = NOT_NEEDED |
 | 8.3 | Complex/nuanced text classified as `PROMPTED` | Test: save breakthrough idea → reflectionStatus = PROMPTED |
-| 8.4 | Web: reflection shown as inline section on detail page | E2E: save complex text → open detail → reflection section visible (not a modal) |
+| 8.4 | Web: reflection appears in floating capture island after save | E2E: save complex text → bar shows reflection question → reply saves linked inspiration |
+| 8.4b | Web: reflection also accessible on inspiration detail page | E2E: save complex text → open detail → reflection section visible (not a modal) |
 | 8.5 | CLI: reflection question printed after save confirmation | Test: save via CLI → confirmation printed first → then reflection question |
 | 8.6 | Reflection question references specific content | Test: question is contextual, not generic |
 | 8.7 | User can answer the reflection (web + CLI) | Test: type answer → saved to inspiration.reflectionAnswer, status = ANSWERED |
-| 8.8 | User can skip reflection (web + CLI) | Test: skip/dismiss → reflectionStatus = SKIPPED |
+| 8.8 | User can skip reflection: web (ignore for ~5s, auto-fades) + CLI (Enter) | Test: skip/dismiss → reflectionStatus = SKIPPED |
 | 8.9 | Reflection answer triggers re-embedding | Test: answer reflection → embedding re-generated → differs from pre-answer |
 | 8.10 | Classification latency < 3 seconds | Test: time from SQS job start to classification < 3s |
 
