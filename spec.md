@@ -71,6 +71,54 @@ Before the graph is dense enough for connections (roughly 0–20 captures), the 
 - **Auth extensibility**: Google OAuth v1, but auth layer must support adding providers without schema changes.
 - **Capture reliability**: Inspirations must never be silently lost. The system must persist input locally before attempting server save, and retry on failure.
 
+### Design Principles & Emotional Architecture
+
+This section is the bridge between the spec and the `vendor-skills/taste-skill/SKILL.md`. It translates WAKA's product intent into design constraints that the taste skill can derive from. Every UI story must trace its design decisions back to these principles.
+
+#### The Two Modes
+
+WAKA has exactly two emotional modes, and the design must serve both without compromise:
+
+1. **Capture mode** — The user has a thought and needs to get it out *now*. They might be walking, in the middle of a conversation, or half-asleep. The design constraint: **zero friction, zero cognitive load.** The floating island should feel like muscle memory — tap, type, done. No chrome, no decoration, no clever interactions that slow the save. Motion should be fast and efficient (spring with high stiffness, low damping). The island should feel like it *wants* your thought.
+
+2. **Discovery mode** — The user is browsing their feed, opens a thread, and encounters a connection they didn't expect. The design constraint: **earned revelation.** This is where the product delivers its core value — the "oh, I didn't know these were connected" moment. Discovery cards and thread syntheses should feel like unwrapping something. Motion should be slower, weightier — the design should build anticipation before the reveal. Typography should invite reading, not scanning.
+
+These two modes coexist on the same screen. The floating island is always in capture mode. The feed behind it transitions between the two based on what the user is doing.
+
+#### Screen-Specific Emotional Context
+
+**Home Feed**
+- *Arriving state*: The user just opened the app. They might have something to capture, or they might be checking in to see what WAKA found.
+- *Target feeling*: Calm competence. The feed should feel alive but not anxious — things are happening in the background (threads updating, bridges forming), but the pace is unhurried. Like opening a notebook that has been organizing itself while you were away.
+- *Design constraint*: Visual density should be low (VISUAL_DENSITY ~3-4). The feed should breathe. Capture cards are ephemeral and lightweight. Discovery cards carry more weight but don't shout.
+
+**Floating Capture Island**
+- *Arriving state*: The user has a thought. Urgency varies — sometimes it's a quick URL paste, sometimes it's a half-formed idea they're afraid of losing.
+- *Target feeling*: Instant trust. "I typed it, it's saved, I can relax." The conversational follow-up ("What sparked this?") should feel like a friend leaning in, not a form field appearing.
+- *Design constraint*: The island must feel physically present — elevated, tactile, with subtle shadow that responds to interaction. The post-save conversational state should animate in with breathing motion (slow spring), not a hard state swap. The auto-fade (~5s) should feel like the question gently receding, not disappearing.
+
+**Discovery Card**
+- *Arriving state*: The user is scrolling and encounters something the system found.
+- *Target feeling*: Surprise, then curiosity. "Wait, what?" followed by "Tell me more." The card should earn its presence in the feed — it's not a notification, it's a moment.
+- *Design constraint*: Progressive disclosure. The card should reveal its content in layers — headline first, then the connection explanation, then the link to the full thread. Staggered animation, not instant render. The visual weight should be noticeably different from capture cards — this is output, not input.
+
+**Thread Detail**
+- *Arriving state*: The user tapped a discovery card or navigated to a thread. They're leaning in, curious.
+- *Target feeling*: Deep resonance. "This is my thinking, but organized in a way I couldn't have done myself." The synthesis document should feel like reading something written by someone who knows you — referencing things you forgot, weaving connections you missed.
+- *Design constraint*: Reading mode. Generous typography (max-w-[65ch], relaxed leading). The synthesis is the hero — it should dominate the viewport. Individual inspirations listed below are supporting evidence, not the main content. Motion should be minimal here — the content does the work. VISUAL_DENSITY should drop to ~2-3 (art gallery mode).
+
+**Reflection (Conversational Post-Save)**
+- *Arriving state*: The user just saved something meaningful. They're still in the emotional moment of the thought.
+- *Target feeling*: "The app is thinking with me." Not interrogation, not a form. A gentle, curious follow-up that respects the moment.
+- *Design constraint*: The reflection question should appear with warm, breathing motion — not a hard pop-in. Typography should be slightly different from the capture input (perhaps lighter weight, slightly smaller) to signal "this is the app talking, not you." The auto-fade should use opacity + subtle downward translate, like the question is settling back into the island.
+
+#### Palette & Typography Direction
+
+- **Base**: Warm neutrals (Stone/Warm Gray), not cool (Slate/Zinc). WAKA is personal and reflective, not corporate or technical.
+- **Accent**: A single, desaturated warm accent. Not purple (banned per taste skill), not blue (too generic). Consider: warm amber, muted terracotta, or deep sage — colors that feel like thought, not action.
+- **Typography**: `Geist` for UI, `Geist Mono` for metadata (timestamps, counts). Thread synthesis should use a slightly more expressive weight to differentiate it from standard UI text.
+- **Dark mode first**: WAKA is a reflective, personal space. Dark backgrounds with warm text feel more intimate than bright white screens.
+
 ---
 
 ## 2. Technical Architecture
