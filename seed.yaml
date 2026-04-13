@@ -8,8 +8,9 @@ goal: >
   Users throw things in (web PWA, CLI, URL import, voice, photo, AI conversations) and Waka's backend
   carefully places each capture into an evolving knowledge graph with three layers: raw inspirations,
   LLM-synthesized threads (living documents that get rewritten on each placement), and bridges
-  (cross-thread connections). The frontend never exposes the graph — users see a clean feed of
-  capture cards (inputs) and discovery cards (outputs), with threads as the deep-read surface.
+  (cross-thread connections). The frontend is a living, breathing canvas — threads appear as soft
+  organic regions sized and colored by activity, bridges are expressed as spatial proximity,
+  and unplaced captures float as dots that get absorbed into regions.
   Capture must feel as reliable and instant as Apple Notes; nothing typed should ever be lost.
   The floating capture island is always visible and supports conversational post-save reflection.
   Implement all 9 execution loops as defined in spec.md.
@@ -35,7 +36,12 @@ constraints:
   - "Design must follow vendor-skills/taste-skill/SKILL.md -- intent-driven, anti-slop, premium craft"
   - "Dark mode first, warm neutrals (Stone), single desaturated warm accent, Geist typography"
   - "Two emotional modes coexist: capture mode (zero friction) and discovery mode (earned revelation)"
-  - "Floating capture island anchored to bottom of viewport, never scrolls away"
+  - "Home view is a living breathing canvas -- threads are organic regions, not cards or a feed"
+  - "Minimal '+' button bottom right for capture, opens clean bottom sheet"
+  - "Search via pull-down gesture from top of surface, filters semantically"
+  - "Settings via avatar -> bottom sheet/modal, never a full page"
+  - "Zero UI chrome: no section headers, no labels, no categories"
+  - "Regions rendered via canvas/WebGL/SVG for organic shapes and fluid animation"
   - "Thread synthesis is a living document rewritten by LLM on each placement, not a static label"
   - "An inspiration belongs to one thread in V1 (single threadId)"
   - "Max 3 new bridges per thread placement to cap LLM costs"
@@ -75,26 +81,32 @@ acceptance_criteria:
   - "AC3.6: Users can only access their own inspirations"
   - "AC3.7: Deepen creates linked child and re-processes parent embedding"
 
-  # Loop 4: Web App -- Capture-First Feed with Threads
-  - "AC4.1: App opens to feed with floating capture island at bottom of viewport"
-  - "AC4.2: Floating island stays visible during scroll on all views (home, thread detail, inspiration detail)"
-  - "AC4.3: Text capture with optimistic UI (skeleton -> AI fields fade in via 3s polling)"
-  - "AC4.4: URL auto-detection splits commentary + sourceUrl"
-  - "AC4.5: Voice capture via MediaRecorder -> S3 -> transcription"
-  - "AC4.6: Photo capture -> S3 -> LLM description/OCR"
-  - "AC4.7: AI conversation import with focused summary for embedding"
-  - "AC4.8: Feed shows two card types: capture cards (lightweight inputs) and discovery cards (richer outputs)"
-  - "AC4.9: Discovery card appears when thread is updated by new placement"
-  - "AC4.10: Discovery card appears when new bridge forms between threads"
-  - "AC4.11: Discovery card appears when new thread is created"
-  - "AC4.12: Visual distinction between capture cards (compact/muted) and discovery cards (richer/bolder)"
-  - "AC4.13: Thread detail shows full synthesized document + composing inspirations"
-  - "AC4.14: Conversational post-save reflection appears in capture island, auto-fades ~5s if ignored"
+  # Loop 4: Web App -- The Living Surface
+  - "AC4.1: App opens to living surface with organic thread regions rendered via canvas/WebGL/SVG"
+  - "AC4.2: Thread regions show title + synthesis excerpt readable without tapping"
+  - "AC4.3: Active threads are larger, warmer in color, closer to center, gently pulsing"
+  - "AC4.4: Dormant threads are smaller, cooler, pushed to edges"
+  - "AC4.5: Bridged threads overlap spatially (no lines or labels -- proximity = connection)"
+  - "AC4.6: Minimal '+' button bottom right opens clean capture sheet from bottom"
+  - "AC4.7: Capture sheet contains only: text input, voice icon, photo icon -- nothing else"
+  - "AC4.8: Text capture: type -> submit -> sheet closes -> dot appears on surface"
+  - "AC4.9: Dot gets absorbed into thread region when backend places it (region grows, warms, pulses)"
+  - "AC4.10: URL auto-detection splits commentary + sourceUrl"
+  - "AC4.11: Voice capture via MediaRecorder -> S3 -> transcription -> dot on surface"
+  - "AC4.12: Photo capture -> S3 -> LLM description/OCR -> dot on surface"
+  - "AC4.13: AI conversation import with focused summary for embedding -> dot on surface"
+  - "AC4.14: Conversational post-save reflection appears in capture sheet as placeholder text, auto-fades ~5s"
   - "AC4.15: Reflection answer saved as linked inspiration (parentId)"
-  - "AC4.16: Offline capture queue via IndexedDB with queued indicator"
-  - "AC4.17: PWA installable on mobile Chrome/Safari"
-  - "AC4.18: Responsive: 375px through 1440px"
-  - "AC4.19: Design follows taste-skill: dark mode, warm neutrals, Geist typography, no AI slop patterns"
+  - "AC4.16: Thread detail: tap region -> smooth expand to full synthesis + composing inspirations"
+  - "AC4.17: Thread detail: tap back -> region contracts, surface returns"
+  - "AC4.18: Search: pull down from top -> type -> surface filters semantically -> release to restore"
+  - "AC4.19: Settings: avatar top corner -> bottom sheet (mobile) or modal (desktop) with API keys, sign out"
+  - "AC4.20: Offline capture: queued dots with sync indicator, auto-sync on reconnect"
+  - "AC4.21: PWA installable on mobile Chrome/Safari"
+  - "AC4.22: Responsive: 2-3 regions on mobile (375px), 5-8 on desktop (1440px)"
+  - "AC4.23: Empty state: calm canvas with '+' and 'Save your first thought' prompt"
+  - "AC4.24: Zero UI chrome: no section headers, no labels, no categories on the surface"
+  - "AC4.25: Design follows taste-skill: dark mode, warm neutrals, Geist typography, no AI slop patterns"
 
   # Loop 5: CLI Tool
   - "AC5.1: waka-cli auth opens browser with localhost callback, stores token"
