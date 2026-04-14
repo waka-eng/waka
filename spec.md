@@ -42,9 +42,10 @@ Three levels. Two views that serve completely different emotional needs.
    - **Thread cards**: When a new inspiration is placed into a thread and the synthesis is rewritten, a wow card appears showing the thread title and the updated synthesis excerpt. The synthesis text is set large, almost like a pull quote — you read the insight before you read the title. Tapping opens thread detail.
    - **Bridge cards**: When a cross-thread bridge is detected, a wow card appears showing the AI-generated explanation of the connection plus the two thread titles. The "oh, I didn't know these were related" moment lives here.
 
-   **Capture receipts (secondary)** — Small, compact, inline between wow cards. These are breadcrumbs, not content:
+   **Capture receipts (secondary, toggleable)** — Small, compact, inline between wow cards. These are breadcrumbs, not content:
    - Raw captures appear as minimal one-line entries: the raw text (or title once it resolves) + timestamp. They give confidence that your thought landed, but they don't demand attention. They're receipts, not revelations.
    - As AI fields resolve, receipts warm slightly — a title appears, a summary line fades in. But they never grow to wow-card prominence.
+   - **Show/hide toggle**: A small, minimal toggle near the top of the feed lets the user hide capture receipts entirely — showing only wow cards. Default is visible (show all). When hidden, the feed is pure wow moments. This lets power users with dense graphs focus on discoveries, while new users see their captures landing.
 
    **Feed dynamics**: As your graph densifies, the ratio shifts heavily toward wow cards. Early on (cold start), the feed is mostly capture receipts — humble, honest. As threads form and bridges appear, wow cards start dominating and pushing receipts into the margins. The feed literally transforms from a note log into a discovery engine as you use it. One inspiration can appear in **multiple** wow cards if it was placed into multiple threads — the same thought producing different insights in different contexts.
 
@@ -52,15 +53,20 @@ Three levels. Two views that serve completely different emotional needs.
 
 2. **The Weave (Ambient View)** — Accessible via a tab from the feed. This is the **soul** of WAKA — a generative textile visualization of the user's thinking. Not blobs, not circles, not a heatmap.
 
-   **The metaphor**: Each thread is a strand being woven across a canvas. The product literally calls them *threads* — the visualization makes this literal. Strands have variable thickness based on inspiration count. When two threads share a bridge, their strands cross — the intersection is a warm knot where two ideas met. Active strands are thicker, warmer (amber/terracotta). Dormant strands are thin, pale, barely visible. As the user captures more and connections form, the sparse threads become a woven textile — a tapestry of their thinking.
+   **The metaphor**: Each thread is a strand being woven across a canvas. The product literally calls them *threads* — the visualization makes this literal. Strands have variable thickness based on inspiration count. When two threads share a bridge, their strands cross — the intersection is a warm knot where two ideas met. Active strands are thicker, warmer (amber/terracotta). Dormant strands are thin, pale, barely visible.
 
    **No text anywhere.** You can't "read" the weave. You *sense* it. "I'm thinking about a lot of things right now" vs. "I've been deep in one area." The weave tells you this at a glance. Tapping a strand navigates to thread detail.
 
-   **Rendering**: Canvas/WebGL with noise-based shaders for organic textile-like grain and irregularity. Strands follow gentle flow fields (not straight lines). Crossings animate organically when bridges form. The visual should aspire to generative textile art — think Nervous System, Refik Anadol. Not SVG paths with stroke-width.
+   **The loom (permanent structure)**: Like GitHub's 365-square grid, the weave has a visible skeleton that's always present — a subtle, beautiful structural pattern rendered on the canvas. The loom is delicate: faint guide lines, a soft radial or organic grid, warm off-white on white. It gives the empty canvas shape and says "this space is waiting for your thinking." The loom is beautiful on its own — you never stare at a blank page.
 
-   **Empty state**: A few delicate threads on warm off-white canvas, like the first strands on a loom. Beautiful in its sparseness. Makes you want to add more — to fill the weave.
+   **Three layers of progressive revelation**:
+   1. **Raw fibers (0+ captures)**: Every saved inspiration appears immediately on the weave as a tiny, loose fiber — a short, faint warm stroke scattered on the loom. You see your raw material accumulating from the very first capture. These are unconnected, floating, individual. But they're *there*.
+   2. **Strands (first threads form)**: When the system places inspirations into threads, the loose fibers get pulled together into strands — you watch scattered fibers coalesce into a continuous line. The strand thickens as more inspirations join the thread. This is the first "aha" — your scattered thoughts have a shape.
+   3. **Crossings (bridges form)**: When two threads connect via a bridge, their strands visibly cross on the loom. The intersection is a warm knot — a concentrated glow where two ideas met. The more bridges, the denser the weave. This is the full tapestry — rich, interconnected, warm.
 
-   **The "GitHub grass" feeling**: GitHub grass rewards showing up every day. The WAKA weave rewards *depth AND connection*. You don't just want more strands — you want them crossing. The densest, warmest part of your tapestry is where your thinking is most interconnected.
+   **Rendering**: Canvas/WebGL with noise-based shaders for organic textile-like grain and irregularity. Strands follow gentle flow fields (not straight lines). Crossings animate organically when bridges form. Gentle breathing animation — the whole weave subtly pulses. The visual should aspire to generative textile art — think Nervous System, Refik Anadol. Not SVG paths with stroke-width.
+
+   **The "GitHub grass" feeling**: GitHub grass rewards showing up every day. The WAKA weave rewards *depth AND connection*. You don't just want more strands — you want them crossing. The densest, warmest part of your tapestry is where your thinking is most interconnected. Even one fiber on the loom feels like the start of something.
 
 3. **Thread Detail** — Tap a wow card in the feed or a strand on the weave. Full synthesized document displayed with generous typography. Individual inspirations listed below. "Deepen" action available. Back returns to whichever view you came from.
 
@@ -124,8 +130,12 @@ The design across both views is extremely minimal. Every element earns its prese
 
 **The Weave (Ambient Tab)**
 - *Arriving state*: The user wants to *feel* their thinking, not read it.
-- *Target feeling*: "I can see my mind being woven." Like looking at a loom where your thinking is the thread. Sparse early on — a few delicate strands. Rich over time — a dense, warm tapestry where ideas cross and connect.
-- *Design constraint*: Canvas/WebGL rendering (not SVG/CSS). Threads are curved strands with variable thickness (inspiration count = thickness). Active strands are warm amber/terracotta, thick, saturated. Dormant strands are pale gray, thin, barely visible. Bridge crossings are visible as warm knots where strands intersect. Strands follow gentle flow fields with Perlin/simplex noise for organic irregularity — not straight lines. The texture should feel textile-like: fiber grain, slight irregularity, the way light catches woven fabric. **No text anywhere** — purely visual. Tapping a strand navigates to thread detail. The capture bar is also visible on the weave. On mobile (375px), show 3-5 strands. On desktop (1440px), show 8-15. Empty state: a few delicate threads on warm off-white, like the first strands on a loom — beautiful in its sparseness. The visual should aspire to generative textile art quality — think Nervous System, Refik Anadol.
+- *Target feeling*: "I can see my mind being woven." Even with one capture, there's something on the loom. The loom itself is beautiful — you never stare at nothing. As more captures land, you watch fibers accumulate, then coalesce into strands, then cross into a tapestry.
+- *Design constraint*: Canvas/WebGL rendering (not SVG/CSS). Three visual layers:
+  1. **The loom** — always present. A subtle, beautiful structural pattern (faint guide curves, soft organic grid, warm off-white on white). Gives shape to the empty canvas. Beautiful on its own.
+  2. **Raw fibers** — every unplaced inspiration is a short, faint warm stroke scattered on the loom. Visible from the very first capture. Unconnected but present.
+  3. **Strands + crossings** — threads are curved strands with variable thickness. Active = warm amber/terracotta. Dormant = pale gray. Bridge crossings = warm knots.
+  Strands follow gentle flow fields with Perlin/simplex noise for organic irregularity. **No text anywhere** — purely visual. Tapping a strand navigates to thread detail. The capture bar is also visible on the weave. Gentle breathing animation. On mobile (375px), show 3-5 strands. On desktop (1440px), show 8-15. The visual should aspire to generative textile art quality — think Nervous System, Refik Anadol.
 
 **The Capture Bar**
 - *Arriving state*: The user has a thought.
