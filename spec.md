@@ -34,12 +34,37 @@ Key capture behaviors:
 
 ### Information Architecture
 
-Two levels. Extremely minimal.
+Three levels. Two views that serve completely different emotional needs.
 
-1. **The Surface** — When you open WAKA, you see a living, breathing canvas of your thinking. Threads appear as soft, organic regions — not cards, not tiles, not a list. Each region is sized and colored by how active it is: threads with recent activity are **larger, warmer, and more visually present** (closer to center, gently pulsing). Dormant threads are **smaller, cooler, and pushed to the edges**. Each region shows the thread title and a line or two of the synthesis — enough to read the insight without tapping. Bridges between threads are expressed spatially: connected threads drift closer together, their edges overlapping. Unplaced captures appear as small, cool dots floating on the surface, waiting to be absorbed. A minimal "+" button sits at the bottom right corner for capture. The user's avatar sits in the top corner for settings (opens as a bottom sheet on mobile, modal on desktop). Search is a pull-down gesture from the top of the surface — pull down, type to filter threads semantically, release to dismiss.
-2. **Thread Detail** — Tap a region to expand it. The region smoothly fills the screen, revealing the full synthesized document. Individual inspirations that compose the thread are listed below the synthesis. "Deepen" action available. Tap back or swipe to return to the surface. The other regions fade to background during the transition.
+1. **The Feed (Home View)** — When you open WAKA, you land on a feed with two tiers of content:
 
-The frontend never shows a graph, nodes, or edges. This is not a node-and-line visualization — it's an ambient, organic representation of where your thinking is alive. No labels saying "Thread" or "Bridge." No section headers. No categories. The surface IS the product. The wow is visible the moment you open it — you see your own thinking breathing.
+   **Wow cards (primary)** — Full-width, generous, prominent. These are the reason you open WAKA:
+   - **Thread cards**: When a new inspiration is placed into a thread and the synthesis is rewritten, a wow card appears showing the thread title and the updated synthesis excerpt. The synthesis text is set large, almost like a pull quote — you read the insight before you read the title. Tapping opens thread detail.
+   - **Bridge cards**: When a cross-thread bridge is detected, a wow card appears showing the AI-generated explanation of the connection plus the two thread titles. The "oh, I didn't know these were related" moment lives here.
+
+   **Capture receipts (secondary)** — Small, compact, inline between wow cards. These are breadcrumbs, not content:
+   - Raw captures appear as minimal one-line entries: the raw text (or title once it resolves) + timestamp. They give confidence that your thought landed, but they don't demand attention. They're receipts, not revelations.
+   - As AI fields resolve, receipts warm slightly — a title appears, a summary line fades in. But they never grow to wow-card prominence.
+
+   **Feed dynamics**: As your graph densifies, the ratio shifts heavily toward wow cards. Early on (cold start), the feed is mostly capture receipts — humble, honest. As threads form and bridges appear, wow cards start dominating and pushing receipts into the margins. The feed literally transforms from a note log into a discovery engine as you use it. One inspiration can appear in **multiple** wow cards if it was placed into multiple threads — the same thought producing different insights in different contexts.
+
+   The capture bar floats at the bottom — always visible, always ready. The user's avatar sits in the top corner for settings. Search is inline at the top of the feed.
+
+2. **The Weave (Ambient View)** — Accessible via a tab from the feed. This is the **soul** of WAKA — a generative textile visualization of the user's thinking. Not blobs, not circles, not a heatmap.
+
+   **The metaphor**: Each thread is a strand being woven across a canvas. The product literally calls them *threads* — the visualization makes this literal. Strands have variable thickness based on inspiration count. When two threads share a bridge, their strands cross — the intersection is a warm knot where two ideas met. Active strands are thicker, warmer (amber/terracotta). Dormant strands are thin, pale, barely visible. As the user captures more and connections form, the sparse threads become a woven textile — a tapestry of their thinking.
+
+   **No text anywhere.** You can't "read" the weave. You *sense* it. "I'm thinking about a lot of things right now" vs. "I've been deep in one area." The weave tells you this at a glance. Tapping a strand navigates to thread detail.
+
+   **Rendering**: Canvas/WebGL with noise-based shaders for organic textile-like grain and irregularity. Strands follow gentle flow fields (not straight lines). Crossings animate organically when bridges form. The visual should aspire to generative textile art — think Nervous System, Refik Anadol. Not SVG paths with stroke-width.
+
+   **Empty state**: A few delicate threads on warm off-white canvas, like the first strands on a loom. Beautiful in its sparseness. Makes you want to add more — to fill the weave.
+
+   **The "GitHub grass" feeling**: GitHub grass rewards showing up every day. The WAKA weave rewards *depth AND connection*. You don't just want more strands — you want them crossing. The densest, warmest part of your tapestry is where your thinking is most interconnected.
+
+3. **Thread Detail** — Tap a wow card in the feed or a strand on the weave. Full synthesized document displayed with generous typography. Individual inspirations listed below. "Deepen" action available. Back returns to whichever view you came from.
+
+**Why two views**: The feed is where the *value* lands — you read the wow, you see the connections, you interact with your knowledge. The weave is where the *feeling* lives — you see the shape of your thinking being woven over time. The feed is the product. The weave is the soul. The transition between them should feel like a focus shift — like adjusting your eyes from reading a book to looking out a window. A dissolve, not a slide.
 
 ### Cold Start: Reflection as the Bridge
 
@@ -55,7 +80,7 @@ Before the graph is dense enough for connections (roughly 0–20 captures), the 
 | Voice note capture (record + transcribe) | Environments of Ambition |
 | Photo capture (image + OCR/description) | Multi-provider auth (only Google for v1) |
 | AI conversation import (Claude, GPT, Gemini) | Native mobile apps |
-| LLM Wiki-style thread synthesis & placement | Browser extension |
+| LLM Wiki-style thread synthesis & placement (many-to-many: one inspiration → multiple threads) | Browser extension |
 | Bridge detection (cross-thread connections) | Real-time sync |
 | Adaptive reflection (post-save, non-blocking) | Contradiction detection & maintenance linting |
 | Shareable inspiration cards & threads | |
@@ -76,45 +101,56 @@ This section is the bridge between the spec and the `vendor-skills/taste-skill/S
 
 #### The Core Feeling
 
-When you open WAKA, it should feel like looking at a living painting of your mind. Not a dashboard. Not a feed. Not a tool. A **surface that breathes** — warm where your thinking is active, cool where it's dormant, with regions that grow and drift and overlap as your ideas evolve.
+WAKA has two emotional registers, served by two views:
 
-The design is extremely minimal. Visually simple but interactionally rich. Every element earns its presence. No section headers, no labels, no badges, no categories. The content communicates what it is. Whitespace does the work.
+**The Feed** feels like opening a journal that writes itself. You see your thinking reflected back — organized, connected, surprising. The wow moments are front and center. It's information-dense but never cluttered. Every card earns its space.
+
+**The Surface** feels like looking at a living painting of your mind. Not a dashboard, not a tool — ambient art. Warm where your thinking is active, cool where it's dormant. You don't *use* the surface — you *feel* it. It should be genuinely beautiful, the kind of thing you'd leave open on a second monitor.
+
+The design across both views is extremely minimal. Every element earns its presence. Content communicates what it is. Whitespace does the work.
 
 #### The Two Modes
 
-1. **Capture mode** — The user taps "+", a clean input sheet rises from the bottom. Type, submit, done. The sheet closes. On the surface, you watch the thought get absorbed — the region it's placed into grows slightly, warms, pulses. The conversational reflection ("What sparked this?") appears in the same input sheet. Ignore it and it fades. Answer it and it deepens the capture. The entire flow happens in one gesture without leaving the surface.
+1. **Capture mode** — The user taps the capture bar at the bottom of the feed. Type, submit, done. The inspiration appears in the feed as a card with skeleton placeholders that resolve into title/summary. The conversational reflection ("What sparked this?") appears inline. Ignore it and it fades. Answer it and it deepens the capture. Capture never requires leaving the feed.
 
-2. **Discovery mode** — The user is looking at the surface. The wow is already visible — synthesis text on each region, threads overlapping where bridges formed. Tap a region and it expands smoothly to fill the screen with the full synthesis. Tap back and you're at the surface again. No navigation hierarchy. Just zoom in, zoom out.
+2. **Discovery mode** — The user scrolls the feed and encounters a wow card — a thread synthesis that weaves together ideas they didn't know were connected, or a bridge that links two unrelated threads. Tap to go deeper. Or switch to the surface to see the *shape* of their thinking — are they exploring one theme deeply or scattering across many?
 
 #### Screen-Specific Emotional Context
 
-**The Surface**
-- *Arriving state*: The user just opened WAKA. They might have something to capture, or they might be checking in.
-- *Target feeling*: "My thinking is alive." The surface should feel like it's been breathing while you were away — regions have shifted, some grew, some new ones appeared. Calm but alive. Not demanding attention, just present.
-- *Design constraint*: Organic shapes, not rectangles. Warm color temperature for active regions, cool for dormant. Gentle ambient motion (regions slowly drifting, pulsing). Extremely low visual density — the surface should feel spacious, not crowded. On mobile (375px), show 2-3 active regions. On desktop (1440px), show 5-8. The regions must render via canvas/WebGL/SVG for smooth organic shapes and animation — standard CSS boxes will not achieve this.
+**The Feed (Home)**
+- *Arriving state*: The user just opened WAKA. They might have something to capture, or they might be checking in on their thinking.
+- *Target feeling*: "Things are happening here." The feed should feel alive — wow moments appearing, syntheses updating, connections forming. But never noisy. Each wow card is a quiet revelation, not a notification.
+- *Design constraint*: Two-tier visual hierarchy. **Wow cards** are full-width, generous padding, prominent — warm off-white card on light background with subtle warm border/shadow. Thread cards show synthesis text large (almost pull-quote sized) with title secondary. Bridge cards show the connection explanation with both thread titles. **Capture receipts** are small, compact, inline between wow cards — one line, muted text, timestamp. They're breadcrumbs: "you saved this 2 min ago." They don't demand attention. As the graph densifies, the ratio shifts heavily toward wow cards — the feed transforms from a note log into a discovery engine. Capture bar fixed at bottom. Search at top. Avatar top corner. No section headers, no "Threads" / "Bridges" / "Recent" labels.
 
-**The "+" Capture Button**
+**The Weave (Ambient Tab)**
+- *Arriving state*: The user wants to *feel* their thinking, not read it.
+- *Target feeling*: "I can see my mind being woven." Like looking at a loom where your thinking is the thread. Sparse early on — a few delicate strands. Rich over time — a dense, warm tapestry where ideas cross and connect.
+- *Design constraint*: Canvas/WebGL rendering (not SVG/CSS). Threads are curved strands with variable thickness (inspiration count = thickness). Active strands are warm amber/terracotta, thick, saturated. Dormant strands are pale gray, thin, barely visible. Bridge crossings are visible as warm knots where strands intersect. Strands follow gentle flow fields with Perlin/simplex noise for organic irregularity — not straight lines. The texture should feel textile-like: fiber grain, slight irregularity, the way light catches woven fabric. **No text anywhere** — purely visual. Tapping a strand navigates to thread detail. The capture bar is also visible on the weave. On mobile (375px), show 3-5 strands. On desktop (1440px), show 8-15. Empty state: a few delicate threads on warm off-white, like the first strands on a loom — beautiful in its sparseness. The visual should aspire to generative textile art quality — think Nervous System, Refik Anadol.
+
+**The Capture Bar**
 - *Arriving state*: The user has a thought.
-- *Target feeling*: Instant trust. Tap "+", type, it's saved. Nothing else.
-- *Design constraint*: The "+" button is the most minimal element on the screen — small, circular, bottom right. Tapping it opens a clean, full-width input sheet from the bottom. The sheet has: text input, voice icon, photo icon. Nothing else. No title, no labels, no workspace name. Submit closes the sheet. The reflection question slides in gently as placeholder text in the same input. Auto-fades after ~5s.
+- *Target feeling*: Instant trust. Tap, type, it's saved. Nothing else.
+- *Design constraint*: Fixed at bottom of viewport on both feed and surface views. Compact single-line input with mic and camera icons. Tapping expands to a clean input sheet. Submit collapses back. The reflection question slides in gently as placeholder text. Auto-fades after ~5s.
 
-**Thread Detail (Expanded Region)**
-- *Arriving state*: The user tapped a region. They're leaning in.
+**Thread Detail**
+- *Arriving state*: The user tapped a card or a region. They're leaning in.
 - *Target feeling*: Deep resonance. "This is my thinking, but organized in a way I couldn't have done myself."
-- *Design constraint*: The region expands to fill the screen with a fluid spring animation. Other regions fade to background. The synthesis document dominates — generous typography (max-w-[65ch], relaxed leading). Individual inspirations listed below as supporting evidence. "Deepen" action available. Tap back or swipe to return to the surface. VISUAL_DENSITY ~2-3.
+- *Design constraint*: Full-screen view. Synthesis document dominates — generous typography (max-w-[65ch], relaxed leading). Individual inspirations listed below as supporting evidence. "Deepen" action available. Back returns to feed or surface (whichever the user came from). VISUAL_DENSITY ~2-3.
 
-**Search (Pull-Down)**
-- Pull the surface down slightly from the top. A search field appears. Type to semantically filter — the surface transforms, showing only matching threads and their regions. Clear the search or release to return to the full surface. On mobile, search can also be triggered by a small search icon near the avatar.
+**Search**
+- Inline at the top of the feed. Type to semantically filter — feed shows only matching cards. On the surface, search filters which regions are visible. Clear to restore.
 
 **Settings (Avatar)**
 - The user's avatar in the top corner. Tap → bottom sheet (mobile) or modal (desktop) with: API keys, sign out, account info. Never a full page.
 
 #### Palette & Typography Direction
 
-- **Base**: Warm neutrals (Stone/Warm Gray), not cool (Slate/Zinc). WAKA is personal and reflective, not corporate or technical.
-- **Accent**: A single, desaturated warm accent. Not purple (banned per taste skill), not blue (too generic). Consider: warm amber, muted terracotta, or deep sage — colors that feel like thought, not action.
+- **Base**: Light mode. Warm off-white background (stone-50/warm white), not cool white. WAKA is personal and reflective, not corporate or technical.
+- **Cards**: Clean, minimal — subtle warm borders or soft shadows on white. Not dark elevation. Cards feel like paper, not glass.
+- **Accent**: A single, desaturated warm accent. Not purple (banned per taste skill), not blue (too generic). Warm amber, muted terracotta, or deep sage — colors that feel like thought, not action.
+- **Surface regions**: Watercolor-like washes of color on warm off-white. Active regions are warm amber/terracotta washes. Dormant regions are pale cool gray, barely visible. Like ink diffusing in water — soft, organic, luminous.
 - **Typography**: `Geist` for UI, `Geist Mono` for metadata (timestamps, counts). Thread synthesis should use a slightly more expressive weight to differentiate it from standard UI text.
-- **Dark mode first**: WAKA is a reflective, personal space. Dark backgrounds with warm text feel more intimate than bright white screens.
+- **Light mode first**: WAKA is warm and open. Light backgrounds with dark text feel like a journal, a sketchbook — personal but inviting. Dark mode can be added later as an option.
 
 ---
 
@@ -225,9 +261,8 @@ model Inspiration {
   parent        Inspiration? @relation("InspirationDepth", fields: [parentId], references: [id])
   expansions    Inspiration[] @relation("InspirationDepth")
 
-  // Thread placement
-  threadId      String?
-  thread        Thread?   @relation(fields: [threadId], references: [id])
+  // Thread placement (many-to-many: one inspiration can belong to multiple threads)
+  threads       ThreadInspiration[]
 
   // Sharing
   isPublic      Boolean   @default(false)
@@ -253,13 +288,28 @@ model Thread {
   user          User      @relation(fields: [userId], references: [id])
   title         String    // AI-generated thread title (e.g., "Emergence & Complex Systems")
   synthesis     String    // AI-generated living document — rewritten when inspirations are added/removed
-  inspirations  Inspiration[]
+  inspirations  ThreadInspiration[]
   bridgesAsSource Bridge[] @relation("BridgeSource")
   bridgesAsTarget Bridge[] @relation("BridgeTarget")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   @@index([userId])
+}
+
+// Many-to-many: one inspiration can belong to multiple threads.
+// The same thought resonates differently in different contexts.
+model ThreadInspiration {
+  id              String      @id @default(cuid())
+  threadId        String
+  thread          Thread      @relation(fields: [threadId], references: [id])
+  inspirationId   String
+  inspiration     Inspiration @relation(fields: [inspirationId], references: [id])
+  placedAt        DateTime    @default(now())
+
+  @@unique([threadId, inspirationId])
+  @@index([inspirationId])
+  @@index([threadId])
 }
 
 model Bridge {
@@ -576,51 +626,64 @@ E2E:
 
 ---
 
-### Loop 4: Web App — The Living Surface
+### Loop 4: Web App — Feed + The Weave
 
-**Goal**: Responsive PWA with an organic, breathing canvas that visualizes the user's thinking as warm/cool regions. Extremely minimal design. A "+" button for capture, pull-down for search, avatar for settings. The LLM Wiki complexity lives entirely in the backend — the frontend shows a living painting of the mind.
+**Goal**: Responsive PWA with two views: a **feed** (home, where the value lands) and **the weave** (ambient, where the feeling lives). The feed shows wow cards and capture receipts. The weave shows the user's thinking as a generative textile visualization — strands crossing and thickening as connections form. Both share a persistent capture bar. Light mode, extremely minimal design throughout.
 
 #### Scope
 
-##### The Surface (Home View)
-- **Organic regions**: Each thread is rendered as a soft, organic shape (blob/region) on a canvas — not a card, not a rectangle. Rendered via canvas, WebGL, or SVG for smooth organic shapes and fluid animation. Standard CSS boxes will not achieve this.
-- **Warmth = activity**: Regions are sized and colored by recency and activity. Recently updated threads are larger, warmer in color (warm amber/terracotta tones), positioned closer to center, and gently pulsing with breathing animation. Dormant threads are smaller, cooler (muted stone/gray tones), and pushed to edges.
-- **Text on regions**: Each region displays the thread title and 1-2 lines of synthesis excerpt directly on its surface. The insight is readable without tapping. The wow is visible at scroll level.
-- **Bridges as proximity**: Connected threads (bridges) drift closer together, their edges overlapping. The connection is spatial, not drawn with lines or labels. Two overlapping regions = two threads that share a conceptual link.
-- **Unplaced captures**: New captures that haven't been placed into threads appear as small, cool dots floating on the surface. When the backend places a capture, the dot animates toward its thread region and gets absorbed — the region grows slightly, warms, pulses.
-- **Layout**: On mobile (375px) show 2-3 active regions filling the viewport. On desktop (1440px) show 5-8. The surface is pannable if more regions exist than fit in the viewport. Regions reflow organically — no grid, no fixed positions.
-- **No headers, no labels, no sections, no categories.** The surface is the entire experience.
+##### The Feed (Home View)
+- **Two-tier hierarchy**:
+  - **Wow cards (primary)**: Full-width, generous, prominent. Thread cards show synthesis text large (almost pull-quote sized) with title secondary. Bridge cards show connection explanation + both thread titles. One inspiration can produce multiple wow cards if placed in multiple threads — the same thought resonating differently in different contexts.
+  - **Capture receipts (secondary)**: Small, compact, inline between wow cards. One-line raw text or resolved title + timestamp. Breadcrumbs, not content. They give confidence your thought landed but don't demand attention.
+- **Feed dynamics**: As the graph densifies, wow cards dominate and push capture receipts into the margins. The feed transforms from a note log into a discovery engine.
+- **No section headers, no "Threads" / "Bridges" / "Recent" labels.** Cards speak for themselves.
+- **Pull-to-refresh**: Standard pull-to-refresh reloads the feed.
+- **Pagination**: Default 20 items, infinite scroll loads more.
 
-##### Capture ("+" Button)
-- **Minimal trigger**: Small circular "+" button, bottom right corner. The most minimal element on the screen.
-- **Input sheet**: Tapping "+" opens a clean, full-width sheet from the bottom. Contains: text input, voice icon, photo icon. Nothing else — no title, no workspace name, no labels.
+##### The Weave (Ambient View)
+- **Tab** to switch between feed and weave. Bottom tab bar with two icons: feed (home) and weave (textile). No labels on tabs.
+- **Generative textile visualization**: Each thread is a curved strand woven across a warm off-white canvas. Not blobs, not circles — actual strand-like forms with organic curvature.
+  - **Strand thickness** = inspiration count. More inspirations → thicker, more prominent strand.
+  - **Strand color**: Active strands are warm amber/terracotta, saturated. Dormant strands are pale cool gray, barely visible — like faded thread.
+  - **Bridge crossings**: When two threads share a bridge, their strands visibly cross. The intersection point is a warm knot — a small concentrated glow where two ideas met.
+  - **Flow fields**: Strands follow gentle Perlin/simplex noise fields for organic irregularity — not straight lines. The texture should feel textile-like: fiber grain, slight irregularity.
+- **No text anywhere**: No titles, no excerpts, no labels. The weave is purely visual — you *sense* it, you don't *read* it.
+- **Rendering**: Canvas/WebGL with noise-based shaders. Standard CSS/SVG will not achieve the required quality. The visual must aspire to generative textile art — think Nervous System, Refik Anadol.
+- **Layout**: On mobile (375px) show 3-5 strands. On desktop (1440px) show 8-15. Deterministic strand paths (hash-based, not random) so the weave doesn't jump on re-render.
+- **Empty state**: A few delicate strands on warm off-white, like the first threads on a loom. Beautiful in its sparseness — makes you want to add more.
+- **The "GitHub grass" feeling**: The weave rewards depth AND connection. You don't just want more strands — you want them crossing. The densest, warmest part is where your thinking is most interconnected.
+- **Tap a strand** → navigates to thread detail.
+
+##### Capture Bar (Shared)
+- **Persistent**: Fixed at bottom of viewport on **both** feed and weave views. Always visible, always ready.
+- **Compact state**: Single-line text input with mic and camera icons. Tapping expands to full input sheet.
+- **Expanded state**: Clean, full-width input sheet from the bottom. Contains: text input, voice icon, photo icon. Nothing else — no title, no workspace name, no labels.
 - **Text**: Type and press Enter to save. Single word, bare URL, or paragraph — all accepted.
 - **URL detection**: If pasted text is a URL (or contains a URL alongside commentary), auto-detect and split into `rawContent` (commentary) + `sourceUrl` (URL) with `URL_IMPORT` source type.
 - **Voice**: Tap mic icon → browser MediaRecorder API → stop recording → upload audio to S3 → transcribe via LLM → save with `VOICE_NOTE` type.
 - **Photo**: Tap camera icon → file picker or camera capture → upload to S3 → LLM describes/OCRs image → save with `PHOTO` type.
-- **AI conversation**: Tap brain/chat icon → paste transcript or share link → save with `AI_CONVERSATION` type. Full transcript stored as `rawContent`; LLM generates focused summary for embedding.
-- **Submit closes the sheet.** The user returns to the surface and watches their capture appear as a dot, then get absorbed into a region.
+- **AI conversation**: Paste transcript or share link → save with `AI_CONVERSATION` type. Full transcript stored as `rawContent`; LLM generates focused summary for embedding.
+- **Submit collapses the sheet.** On the feed, the new capture appears as a receipt at the top. On the weave, the strand it's placed into thickens and warms.
 
 ##### Conversational Post-Save Reflection
-- After submit, the input sheet doesn't immediately close if the system has a reflection question (see Loop 8). Instead, the placeholder text becomes the question: "What sparked this?"
+- After submit, the capture sheet doesn't immediately collapse if the system has a reflection question (see Loop 8). Instead, the placeholder text becomes the question: "What sparked this?"
 - The user can reply directly — the answer is saved as a linked inspiration (`parentId` pointing to the original).
-- **Instant escape**: If ignored, the question fades after ~5 seconds and the sheet closes. No tap to dismiss required.
-- If the server is unreachable: capture is persisted to IndexedDB, a "queued" indicator appears on the dot, and the app retries when connectivity returns.
+- **Instant escape**: If ignored, the question fades after ~5 seconds and the sheet collapses. No tap to dismiss required.
+- If the server is unreachable: capture is persisted to IndexedDB, and the app retries when connectivity returns.
 
-##### Thread Detail (Expanded Region)
-- Tap a region → it expands smoothly (fluid spring animation) to fill the screen. Other regions fade to background.
+##### Thread Detail
+- Accessible from feed (tap wow card) or weave (tap strand).
 - Full synthesized document displayed — generous typography (max-w-[65ch], relaxed leading). The synthesis is the hero.
 - Individual inspirations that compose the thread listed below as supporting evidence.
 - Bridges to other threads shown as contextual links within the synthesis text.
 - "Deepen" action to add more context to this thread.
 - Thread's `updatedAt` and inspiration count visible.
-- Tap back or swipe → region contracts, other regions fade back in. Return to the surface.
+- Back returns to whichever view the user came from.
 
-##### Search (Pull-Down)
-- Pull the surface down from the top → a search field appears.
-- Type to semantically filter threads — the surface transforms, showing only matching regions (non-matching regions fade/shrink).
-- Clear or release → full surface returns.
-- On mobile, also accessible via a small search icon near the avatar.
+##### Search
+- **Feed**: Inline search field at top of feed. Type to semantically filter — feed shows only matching cards. Clear to restore.
+- **Surface**: Search filters which regions are visible (non-matching regions fade out).
 
 ##### Settings (Avatar)
 - User's avatar in the top corner.
@@ -629,42 +692,51 @@ E2E:
 
 ##### Offline Capture Queue
 - Service worker caches app shell for offline loading.
-- When offline, the "+" capture sheet still works: submitted captures are saved to IndexedDB with a `queued` status.
+- When offline, the capture bar still works: submitted captures are saved to IndexedDB with a `queued` status.
 - When connectivity returns, queued captures are synced automatically (last-write-wins).
-- Queued dots on the surface show a subtle "waiting to sync" indicator.
+- Queued captures show a subtle "waiting to sync" indicator in the feed.
 
 ##### Other
 - PWA manifest and service worker
 - Responsive design: mobile-first, works on all screen sizes (375px — 1440px)
-- Empty state: when no threads exist yet, the surface is a calm, empty canvas with the "+" button and a gentle prompt: "Save your first thought"
+- Empty state: new user → feed shows gentle prompt: "Save your first thought" with capture bar ready
+- View switcher: bottom tab bar with feed and surface icons. Feed is default.
 
 #### Acceptance Criteria
 
 | # | Criteria | Verification |
 |---|----------|-------------|
-| 4.1 | App opens to the living surface with organic thread regions | E2E: login → canvas renders with thread regions sized by activity |
-| 4.2 | Thread regions show title + synthesis excerpt readable without tapping | E2E: thread region displays title and 1-2 lines of synthesis on its surface |
-| 4.3 | Active threads are larger, warmer, closer to center | Visual: recently updated thread is visibly larger and warmer than dormant thread |
-| 4.4 | Dormant threads are smaller, cooler, at edges | Visual: thread with no recent activity is small, muted, at periphery |
-| 4.5 | Bridged threads overlap spatially | Visual: two threads with a bridge have overlapping region edges |
-| 4.6 | "+" button opens clean capture sheet from bottom | E2E: tap "+" → sheet rises with text input + voice/photo icons, nothing else |
-| 4.7 | Text capture: type → submit → sheet closes → dot appears on surface | E2E: type text → submit → dot animates onto surface |
-| 4.8 | Dot gets absorbed into thread region when placed | E2E: save text → dot appears → backend places → dot animates into region → region grows/warms |
+| 4.1 | App opens to the feed view with wow cards | E2E: login → feed renders with thread/bridge/capture cards |
+| 4.2 | Thread cards show title + synthesis excerpt (2-3 lines) | E2E: thread card displays title and excerpt, tap opens thread detail |
+| 4.3 | Bridge cards show connection explanation + both thread titles | E2E: bridge card displays explanation, tap opens thread detail |
+| 4.4 | Recent captures appear as cards with skeleton → resolved states | E2E: save text → card appears with skeleton → title/summary populate via polling |
+| 4.5 | Feed is reverse-chronological, paginated (default 20) | E2E: cards ordered by recency, scroll loads more |
+| 4.6 | Capture bar fixed at bottom on both feed and surface | E2E: capture bar visible on feed, switch to surface → still visible |
+| 4.7 | Capture bar expands to input sheet with text + voice + photo | E2E: tap bar → sheet rises with input + icons, nothing else |
+| 4.8 | Text capture: type → submit → card appears in feed | E2E: type text → submit → card at top of feed |
 | 4.9 | URL auto-detection splits commentary + sourceUrl | E2E: paste text+URL → rawContent has commentary, sourceUrl has URL |
-| 4.10 | Voice capture via MediaRecorder → S3 → transcription | E2E: record audio → dot appears with transcript |
-| 4.11 | Photo capture → S3 → LLM description/OCR | E2E: pick photo → dot appears with AI description |
-| 4.12 | AI conversation import with focused summary for embedding | E2E: paste conversation → dot appears with summary |
-| 4.13 | Conversational reflection appears in capture sheet after save, auto-fades ~5s | E2E: save complex text → reflection question appears → ignore → fades → sheet closes |
+| 4.10 | Voice capture via MediaRecorder → S3 → transcription | E2E: record audio → card appears with transcript |
+| 4.11 | Photo capture → S3 → LLM description/OCR | E2E: pick photo → card appears with AI description |
+| 4.12 | AI conversation import with focused summary | E2E: paste conversation → card appears with summary |
+| 4.13 | Reflection appears in capture bar after save, auto-fades ~5s | E2E: save complex text → reflection question appears → ignore → fades |
 | 4.14 | Reflection answer saved as linked inspiration | E2E: answer reflection → new inspiration with parentId created |
-| 4.15 | Thread detail: tap region → expands to full synthesis + composing inspirations | E2E: tap region → smooth expand → synthesis readable → inspirations listed below |
-| 4.16 | Thread detail: tap back → region contracts, surface returns | E2E: tap back → fluid contraction → all regions visible again |
-| 4.17 | Search: pull down → type → surface filters semantically | E2E: pull down → type "AI" → only matching regions remain visible |
-| 4.18 | Settings: avatar → bottom sheet with API keys, sign out | E2E: tap avatar → sheet with account info |
-| 4.19 | Offline capture: go offline → capture → queued dot → go online → synced | E2E: disconnect → capture → dot shows queued → reconnect → synced |
-| 4.20 | PWA installable on mobile Chrome/Safari | Manual: "Add to Home Screen" prompt appears |
-| 4.21 | Responsive: surface works on 375px through 1440px | Visual: 2-3 regions on mobile, 5-8 on desktop |
-| 4.22 | Empty state: no threads → calm canvas with "+" and gentle prompt | E2E: new user → empty surface → "Save your first thought" |
-| 4.23 | No section headers, no labels, no categories anywhere on the surface | Visual: zero UI chrome beyond avatar, search, and "+" |
+| 4.15 | Surface view: organic thread regions via canvas/WebGL/SVG | E2E: switch to surface → regions render with organic shapes |
+| 4.16 | Surface: no text on regions — purely visual | Visual: surface has no titles, labels, or text overlay |
+| 4.17 | Surface: active regions warmer/larger/center, dormant cooler/smaller/edges | Visual: recent thread region is warm, old thread is cool |
+| 4.18 | Surface: bridged threads overlap spatially | Visual: two bridged threads have overlapping regions |
+| 4.19 | Surface: tap region → thread detail | E2E: tap region → navigates to thread detail page |
+| 4.20 | Surface: generative art quality — beautiful, ambient | Visual: surface looks like art, not utility UI |
+| 4.21 | Thread detail: full synthesis + composing inspirations | E2E: open thread → synthesis readable → inspirations listed |
+| 4.22 | Thread detail: back returns to previous view | E2E: from feed → detail → back → feed. From surface → detail → back → surface |
+| 4.23 | Search: inline on feed, filters cards semantically | E2E: type in search → only matching cards shown |
+| 4.24 | Settings: avatar → bottom sheet with API keys, sign out | E2E: tap avatar → sheet with account info |
+| 4.25 | Offline capture: queued → auto-sync on reconnect | E2E: offline → capture → online → synced |
+| 4.26 | PWA installable on mobile Chrome/Safari | Manual: "Add to Home Screen" prompt appears |
+| 4.27 | Responsive: feed and surface work on 375px through 1440px | Visual: proper layout at all sizes |
+| 4.28 | Empty state: gentle prompt + capture bar | E2E: new user → "Save your first thought" |
+| 4.29 | View switcher: bottom tab bar for feed ↔ surface | E2E: tab icons switch between views |
+| 4.30 | Zero UI chrome: no section headers, no labels | Visual: no "Threads", "Bridges", "Recent" headers |
+| 4.31 | Design follows taste-skill: dark mode, warm neutrals, Geist typography | Visual: matches taste-skill spec |
 
 #### Tests
 
@@ -672,30 +744,34 @@ E2E:
 Unit:
 - [ ] URL detection regex: pure URL, URL with commentary, non-URL text
 - [ ] Offline queue: add to IndexedDB, retrieve, mark as synced
-- [ ] Region sizing algorithm: activity score → size/warmth/position
+- [ ] Region sizing algorithm: activity score → size/warmth/position (deterministic)
 - [ ] Bridge proximity: bridged threads have overlapping region bounds
-- [ ] Capture sheet state management (open/close/reflection/fade)
+- [ ] Capture bar state management (compact/expanded/reflection/fade)
+- [ ] Feed card ordering: reverse-chronological with pagination
 
 Integration:
-- [ ] Text capture → dot on surface → backend places → dot absorbed into region
-- [ ] Voice capture → S3 upload → transcription → dot on surface
-- [ ] Photo capture → S3 upload → description → dot on surface
-- [ ] AI conversation paste → summary generated → dot on surface
-- [ ] Offline capture → queue → reconnect → sync → dot absorbed
-- [ ] Deepen → child created → parent re-processed → region updates
-- [ ] Region grows/warms when new inspiration placed into thread
+- [ ] Text capture → card in feed → backend enriches → card updates with title/summary
+- [ ] Voice capture → S3 upload → transcription → card in feed
+- [ ] Photo capture → S3 upload → description → card in feed
+- [ ] AI conversation paste → summary generated → card in feed
+- [ ] Offline capture → queue → reconnect → sync → card appears
+- [ ] Thread placement → thread card appears in feed, region appears on surface
+- [ ] Bridge detection → bridge card appears in feed, regions overlap on surface
+- [ ] Deepen → child created → parent re-processed → thread card updates
 
 E2E (Playwright):
-- [ ] Full capture flow: login → "+" → type → submit → dot → absorbed into region → region grows
-- [ ] Multi-modal: capture voice → capture photo → capture URL → all appear as dots
-- [ ] Thread formation: save 5 related notes → new region appears on surface
-- [ ] Bridge formation: save inspiration bridging threads → regions drift together, overlap
-- [ ] Thread detail: tap region → expand → read synthesis → tap back → contract
-- [ ] Search: pull down → type → surface filters → clear → full surface returns
-- [ ] Offline flow: go offline → capture → go online → dot synced
-- [ ] Mobile viewport: surface works at 375px with 2-3 regions
+- [ ] Full capture flow: login → capture bar → type → submit → card in feed → enriched
+- [ ] Multi-modal: capture voice → capture photo → capture URL → all appear as cards
+- [ ] Thread formation: save 5 related notes → thread card appears in feed
+- [ ] Bridge formation: save inspiration bridging threads → bridge card in feed
+- [ ] View switching: feed → surface → feed via tab bar
+- [ ] Thread detail from feed: tap card → detail → back → feed
+- [ ] Thread detail from surface: tap region → detail → back → surface
+- [ ] Search on feed: type → filtered cards → clear → full feed
+- [ ] Offline flow: go offline → capture → go online → card synced
+- [ ] Mobile viewport: feed scrolls, surface shows 2-3 regions
 - [ ] PWA: manifest present, service worker registered
-- [ ] Empty state: new user sees calm canvas with prompt
+- [ ] Empty state: new user sees prompt with capture bar
 ```
 
 ---
@@ -855,10 +931,10 @@ E2E (Playwright):
 
 When a new inspiration arrives (after embedding is generated via SQS consumer), the LLM performs **careful placement** — not just cosine similarity matching, but a deliberate decision about where this inspiration belongs in the user's knowledge graph:
 
-1. **Thread matching**: Run embedding similarity against existing thread centroids + LLM evaluation. The LLM reads the inspiration, reads candidate thread syntheses, and decides: does this belong in an existing thread, or does it warrant a new one?
-2. **Thread placement**: If placed in an existing thread, the thread's `synthesis` document is **rewritten** by the LLM to incorporate the new inspiration. This isn't appending — it's re-synthesis. The document may reorganize, surface new connections between inspirations within the thread, and reference the new addition in context of older ones.
-3. **New thread creation**: If the inspiration doesn't fit existing threads (or the user has < 3 inspirations total), create a new thread. The initial synthesis is generated from the placed inspiration(s). Minimum 1 inspiration to form a thread (unlike DBSCAN's min_samples=3), because even a single deep thought deserves a home.
-4. **Multi-thread placement**: An inspiration can belong to one thread in V1 (single `threadId`). Future versions may support multi-thread membership.
+1. **Thread matching**: Run embedding similarity against existing thread centroids + LLM evaluation. The LLM reads the inspiration, reads candidate thread syntheses, and decides: which threads does this belong in? Does it warrant a new one?
+2. **Multi-thread placement**: An inspiration can belong to **multiple threads** (many-to-many via `ThreadInspiration` join table). The same thought resonates differently in different contexts — "trees communicate underground" is a biology insight in one thread and a decentralized systems insight in another. The LLM decides all relevant threads, not just the best fit.
+3. **Thread synthesis rewrite**: For each thread an inspiration is placed into, the thread's `synthesis` document is **rewritten** by the LLM to incorporate the new inspiration. This isn't appending — it's re-synthesis. Each thread weaves the same inspiration into its narrative differently.
+4. **New thread creation**: If the inspiration doesn't fit existing threads (or the user has < 3 inspirations total), create a new thread. The initial synthesis is generated from the placed inspiration(s). Minimum 1 inspiration to form a thread.
 
 ##### Thread Synthesis
 

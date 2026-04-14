@@ -8,8 +8,9 @@ goal: >
   Users throw things in (web PWA, CLI, URL import, voice, photo, AI conversations) and Waka's backend
   carefully places each capture into an evolving knowledge graph with three layers: raw inspirations,
   LLM-synthesized threads (living documents that get rewritten on each placement), and bridges
-  (cross-thread connections). The frontend never exposes the graph — users see a clean feed of
-  capture cards (inputs) and discovery cards (outputs), with threads as the deep-read surface.
+  (cross-thread connections). The frontend is a living, breathing canvas — threads appear as soft
+  organic regions sized and colored by activity, bridges are expressed as spatial proximity,
+  and unplaced captures float as dots that get absorbed into regions.
   Capture must feel as reliable and instant as Apple Notes; nothing typed should ever be lost.
   The floating capture island is always visible and supports conversational post-save reflection.
   Implement all 9 execution loops as defined in spec.md.
@@ -33,11 +34,18 @@ constraints:
   - "Monorepo structure with pnpm workspaces + Turborepo"
   - "No budget constraints on infrastructure/API costs"
   - "Design must follow vendor-skills/taste-skill/SKILL.md -- intent-driven, anti-slop, premium craft"
-  - "Dark mode first, warm neutrals (Stone), single desaturated warm accent, Geist typography"
+  - "Light mode first, warm off-white background (stone-50), single desaturated warm accent, Geist typography"
   - "Two emotional modes coexist: capture mode (zero friction) and discovery mode (earned revelation)"
-  - "Floating capture island anchored to bottom of viewport, never scrolls away"
+  - "Two views: Feed (home, wow cards + capture receipts) and Weave (ambient generative textile visualization)"
+  - "Feed: two-tier hierarchy -- wow cards (prominent, full-width) + capture receipts (compact, one-line)"
+  - "Weave: threads as strands, bridges as crossings, Canvas/WebGL with noise shaders -- no text, purely visual"
+  - "Capture bar fixed at bottom of both views, expands to input sheet"
+  - "Search inline at top of feed, filters semantically"
+  - "Settings via avatar -> bottom sheet/modal, never a full page"
+  - "Zero UI chrome: no section headers, no labels, no categories"
+  - "Weave rendered via Canvas/WebGL with noise-based shaders for textile-like quality"
   - "Thread synthesis is a living document rewritten by LLM on each placement, not a static label"
-  - "An inspiration belongs to one thread in V1 (single threadId)"
+  - "An inspiration can belong to multiple threads (many-to-many via ThreadInspiration join table)"
   - "Max 3 new bridges per thread placement to cap LLM costs"
   - "Bridge detection uses cosine similarity > 0.72 between thread centroids as pre-filter before LLM evaluation"
 
@@ -75,26 +83,40 @@ acceptance_criteria:
   - "AC3.6: Users can only access their own inspirations"
   - "AC3.7: Deepen creates linked child and re-processes parent embedding"
 
-  # Loop 4: Web App -- Capture-First Feed with Threads
-  - "AC4.1: App opens to feed with floating capture island at bottom of viewport"
-  - "AC4.2: Floating island stays visible during scroll on all views (home, thread detail, inspiration detail)"
-  - "AC4.3: Text capture with optimistic UI (skeleton -> AI fields fade in via 3s polling)"
-  - "AC4.4: URL auto-detection splits commentary + sourceUrl"
-  - "AC4.5: Voice capture via MediaRecorder -> S3 -> transcription"
-  - "AC4.6: Photo capture -> S3 -> LLM description/OCR"
-  - "AC4.7: AI conversation import with focused summary for embedding"
-  - "AC4.8: Feed shows two card types: capture cards (lightweight inputs) and discovery cards (richer outputs)"
-  - "AC4.9: Discovery card appears when thread is updated by new placement"
-  - "AC4.10: Discovery card appears when new bridge forms between threads"
-  - "AC4.11: Discovery card appears when new thread is created"
-  - "AC4.12: Visual distinction between capture cards (compact/muted) and discovery cards (richer/bolder)"
-  - "AC4.13: Thread detail shows full synthesized document + composing inspirations"
-  - "AC4.14: Conversational post-save reflection appears in capture island, auto-fades ~5s if ignored"
+  # Loop 4: Web App -- Feed + The Weave (Dual View)
+  - "AC4.1: App opens to feed view with two-tier hierarchy: wow cards (prominent) + capture receipts (compact)"
+  - "AC4.2: Thread wow cards show synthesis text large (pull-quote sized) + title, tap opens thread detail"
+  - "AC4.3: Bridge wow cards show connection explanation + both thread titles"
+  - "AC4.4: Capture receipts are compact one-liners between wow cards (raw text + timestamp)"
+  - "AC4.5: One inspiration can produce multiple wow cards when placed in multiple threads"
+  - "AC4.6: Feed is reverse-chronological, paginated (default 20, infinite scroll)"
+  - "AC4.7: Capture bar fixed at bottom on both feed and weave views"
+  - "AC4.8: Capture bar expands to input sheet with text + voice + photo icons only"
+  - "AC4.9: Text capture: type -> submit -> receipt appears at top of feed"
+  - "AC4.10: URL auto-detection splits commentary + sourceUrl"
+  - "AC4.11: Voice capture via MediaRecorder -> S3 -> transcription -> receipt in feed"
+  - "AC4.12: Photo capture -> S3 -> LLM description/OCR -> receipt in feed"
+  - "AC4.13: AI conversation import with focused summary -> receipt in feed"
+  - "AC4.14: Post-save reflection appears in capture bar, auto-fades ~5s"
   - "AC4.15: Reflection answer saved as linked inspiration (parentId)"
-  - "AC4.16: Offline capture queue via IndexedDB with queued indicator"
-  - "AC4.17: PWA installable on mobile Chrome/Safari"
-  - "AC4.18: Responsive: 375px through 1440px"
-  - "AC4.19: Design follows taste-skill: dark mode, warm neutrals, Geist typography, no AI slop patterns"
+  - "AC4.16: Weave view: generative textile visualization via Canvas/WebGL -- strands, not blobs"
+  - "AC4.17: Weave: strand thickness = inspiration count, color warmth = recency"
+  - "AC4.18: Weave: bridge crossings visible as warm knots where strands intersect"
+  - "AC4.19: Weave: strands follow noise-based flow fields for organic irregularity"
+  - "AC4.20: Weave: no text anywhere -- purely visual, ambient art quality"
+  - "AC4.21: Weave: deterministic strand paths (no jumping on re-render)"
+  - "AC4.22: Weave: tap strand -> thread detail page"
+  - "AC4.23: Weave: empty state is beautiful -- few delicate strands on warm off-white"
+  - "AC4.24: Thread detail: full synthesis + composing inspirations, back returns to previous view"
+  - "AC4.25: Search: inline on feed filters cards, on weave filters strands"
+  - "AC4.26: Settings: avatar -> bottom sheet (mobile) or modal (desktop) with API keys, sign out"
+  - "AC4.27: Offline capture: queued with sync indicator, auto-sync on reconnect"
+  - "AC4.28: PWA installable on mobile Chrome/Safari"
+  - "AC4.29: Responsive: feed and weave work on 375px through 1440px"
+  - "AC4.30: Empty feed state: gentle prompt + capture bar ready"
+  - "AC4.31: View switcher: bottom tab bar for feed <-> weave (no labels on tabs)"
+  - "AC4.32: Zero UI chrome: no section headers, no labels, no categories"
+  - "AC4.33: Light mode first: warm off-white background, Geist typography, no AI slop patterns"
 
   # Loop 5: CLI Tool
   - "AC5.1: waka-cli auth opens browser with localhost callback, stores token"
@@ -113,7 +135,7 @@ acceptance_criteria:
   - "AC6.5: URL import timeout after 10s"
 
   # Loop 7: Synthesis Engine -- Thread Placement & Bridge Detection
-  - "AC7.1: New inspiration triggers LLM-driven thread placement (threadId set)"
+  - "AC7.1: New inspiration triggers LLM-driven thread placement (many-to-many via ThreadInspiration)"
   - "AC7.2: Placement into existing thread rewrites synthesis document (not append)"
   - "AC7.3: New thread created when inspiration doesn't fit existing threads"
   - "AC7.4: Thread synthesis reads as coherent narrative, references older inspirations"
