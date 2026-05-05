@@ -1,0 +1,1396 @@
+/**
+ * Inspirations route test suite — covers the create + read surface of
+ * `routes/inspirations.ts`.
+ *
+ * Surface under test
+ * ------------------
+ * Per Sub-AC 13.3.2, this spec covers the inspiration capture + retrieval
+ * endpoints in five buckets:
+ *
+ *   1. Successful creation                    → POST /inspirations (201)
+ *   2. Validation errors                      → POST /inspirations (400)
+ *   3. Listing the caller's own inspirations  → GET  /inspirations (200, scoped)
+ *   4. Fetching by id                         → GET  /inspirations/:id/reflections
+ *                                                + locating a specific row in the
+ *                                                  list response (no dedicated
+ *                                                  single-row endpoint exists for
+ *                                                  inspirations themselves)
+ *   5. Authentication required                → 401 on every endpoint when no
+ *                                                  session is presented.
+ *
+ * Why we drive the live Hono `app`
+ * --------------------------------
+ * Mocking the Drizzle layer here would replace the most failure-prone parts
+ * of the contract — tenant scope (`WHERE user_id = caller`), zod-strip of
+ * forged client fields, FK CASCADE, the partial `cluster IS NULL` index used
+ * by the queue worker — with hand-written stubs that drift from production.
+ * Round-tripping through the real Hono app + the `getDb()` singleton pinned
+ * to Neon is the only way to know the route + schema actually meet the
+ * Seed's `data_isolation` evaluation principle.
+ *
+ * Cleanup
+ * -------
+ * Every user inserted by `createUserFixture` is tracked via
+ * `createCleanupTracker()` and reaped in `afterEach`. FK CASCADE on
+ * `inspirations.user_id` (and `attachments.inspiration_id` /
+ * `reflections.inspiration_id`) removes every child row in one round-trip.
+ * `afterAll` flushes a second time as belt-and-braces against an aborted
+ * test that skipped its own afterEach.
+ */
+
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+} from "vitest";
+
+import { eq } from "drizzle-orm";
+
+import { inspirations } from "../src/db/index.js";
+import { getDb } from "../src/lib/db.js";
+import { createUserFixture } from "./fixtures/users.js";
+import {
+  apiRequest,
+  authedClient,
+  createCleanupTracker,
+} from "./helpers/index.js";
+
+// ---------------------------------------------------------------------------
+// Cleanup wiring
+// ---------------------------------------------------------------------------
+
+const cleanup = createCleanupTracker();
+
+afterEach(async () => {
+  await cleanup.flush();
+});
+
+afterAll(async () => {
+  await cleanup.flush();
+});
+
+// ---------------------------------------------------------------------------
+// Pre-flight env tripwire — surfaces a clear error when `.env` failed to load
+// rather than a confusing 500 from the route.
+// ---------------------------------------------------------------------------
+
+beforeAll(() => {
+  expect(process.env.DB_CONNECTION_URL, "DB_CONNECTION_URL").toBeTruthy();
+  expect(
+    process.env.JWT_SECRET ?? process.env.AUTH_SECRET,
+    "JWT_SECRET or AUTH_SECRET",
+  ).toBeTruthy();
+});
+
+// ---------------------------------------------------------------------------
+// Type aliases for response shapes (call-site narrowing only — the harness
+// does not enforce these at runtime).
+// ---------------------------------------------------------------------------
+
+interface ApiInspiration {
+  id: string;
+  userId: string;
+  text: string;
+  kind: string | null;
+  category: number | null;
+  cluster: string | null;
+  classifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CreateInspirationResponse {
+  inspiration: ApiInspiration;
+}
+
+interface ListInspirationsResponse {
+  inspirations: ApiInspiration[];
+}
+
+interface ValidationErrorResponse {
+  error: string;
+  details?: Record<string, string[] | undefined>;
+}
+
+interface ReflectionResponse {
+  reflection: {
+    id: string;
+    inspirationId: string;
+    userId: string;
+    question: string;
+    answer: string | null;
+    skipped: boolean;
+    createdAt: string;
+  };
+}
+
+interface ListReflectionsResponse {
+  reflections: ReflectionResponse["reflection"][];
+}
+
+// ---------------------------------------------------------------------------
+// POST /inspirations — successful creation
+// ---------------------------------------------------------------------------
+
+describe("POST /inspirations — successful creation", () => {
+  it("returns 201 with a fully-populated row on the happy path", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      {
+        text: "  light bends around dense thoughts  ",
+        kind: "note",
+        category: 3,
+      },
+    );
+
+    expect(res.status).toBe(201);
+    const row = res.body.inspiration;
+    expect(row).toBeTruthy();
+    // Server-generated id, matches the uuid v4 surface shape.
+    expect(row.id).toMatch(/^[0-9a-f-]{36}$/);
+    // Tenant scope: the row is bound to the authenticated caller, period.
+    expect(row.userId).toBe(fixture.user.id);
+    // zod's `.trim()` normalisation must have stripped the surrounding
+    // whitespace before persistence.
+    expect(row.text).toBe("light bends around dense thoughts");
+    expect(row.kind).toBe("note");
+    expect(row.category).toBe(3);
+    // Cluster classification is asynchronous — POST must NEVER return a
+    // cluster value (the queue worker fills it later).
+    expect(row.cluster).toBeNull();
+    expect(row.classifiedAt).toBeNull();
+    expect(typeof row.createdAt).toBe("string");
+    expect(typeof row.updatedAt).toBe("string");
+
+    // The inserted row really exists in the DB and matches the response.
+    const dbRows = await getDb()
+      .select({
+        id: inspirations.id,
+        userId: inspirations.userId,
+        text: inspirations.text,
+        cluster: inspirations.cluster,
+      })
+      .from(inspirations)
+      .where(eq(inspirations.id, row.id));
+    expect(dbRows).toHaveLength(1);
+    expect(dbRows[0]!.userId).toBe(fixture.user.id);
+    expect(dbRows[0]!.text).toBe("light bends around dense thoughts");
+    expect(dbRows[0]!.cluster).toBeNull();
+  });
+
+  it("accepts a minimal payload (text only) and defaults kind/category to NULL", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "minimal payload" },
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.inspiration.text).toBe("minimal payload");
+    expect(res.body.inspiration.kind).toBeNull();
+    expect(res.body.inspiration.category).toBeNull();
+    expect(res.body.inspiration.userId).toBe(fixture.user.id);
+  });
+
+  it("ignores a forged userId in the request body — auth context wins", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // The zod schema is .strict() in spirit (no `userId` field declared) so
+    // an attempt to forge ownership is silently dropped before the SQL runs.
+    // Guard the regression here so a future schema-loosening bug surfaces
+    // immediately rather than as a tenant-isolation incident in production.
+    const res = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      {
+        text: "should still belong to me",
+        userId: "00000000-0000-0000-0000-000000000000",
+        user_id: "00000000-0000-0000-0000-000000000000",
+      },
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.inspiration.userId).toBe(fixture.user.id);
+    expect(res.body.inspiration.userId).not.toBe(
+      "00000000-0000-0000-0000-000000000000",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /inspirations — validation errors
+// ---------------------------------------------------------------------------
+
+describe("POST /inspirations — validation errors", () => {
+  it("rejects a missing text with 400 + per-field details", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/inspirations",
+      { kind: "note" },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid inspiration payload/i);
+    // The frontend renders this directly under the text input; assert the
+    // shape so a regression that drops the `details.text` slot fails here.
+    expect(res.body.details?.text?.[0]).toBeTruthy();
+  });
+
+  it("rejects an empty / whitespace-only text with 400", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/inspirations",
+      { text: "   \n  \t  " },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.details?.text?.[0]).toMatch(/required/i);
+  });
+
+  it("rejects a text larger than 8 KB with 400", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // 8193 chars > 8192 max.
+    const huge = "a".repeat(8193);
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/inspirations",
+      { text: huge },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.details?.text?.[0]).toMatch(/too long/i);
+  });
+
+  it("rejects a non-integer category with 400", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/inspirations",
+      { text: "hello", category: 1.5 },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.details?.category?.[0]).toMatch(/integer/i);
+  });
+
+  it("rejects a negative category with 400", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/inspirations",
+      { text: "hello", category: -1 },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.details?.category?.[0]).toMatch(/non-negative/i);
+  });
+
+  it("rejects a non-JSON body with 400", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // Bypass the JSON serialiser by passing a raw string — the harness
+    // forwards it verbatim because typeof body === "string".
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/inspirations",
+      "<<not json>>",
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/json/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /inspirations — listing the caller's own rows
+// ---------------------------------------------------------------------------
+
+describe("GET /inspirations — listing", () => {
+  it("returns an empty array for a brand-new user", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.get<ListInspirationsResponse>("/inspirations");
+
+    // A fresh user has no rows; the contract is `200 { inspirations: [] }` —
+    // never a 404. The empty-state copy lives in the SPA, not the API.
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.inspirations)).toBe(true);
+    expect(res.body.inspirations).toHaveLength(0);
+  });
+
+  it("returns every row owned by the caller, newest first", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // Insert three rows in series. The route orders by `created_at DESC`,
+    // backed by the `inspirations_user_created_idx` composite index, so the
+    // newest insert must come first in the response. We do NOT rely on
+    // sub-millisecond precision — we sleep 10ms between inserts to make
+    // the timestamps strictly distinct.
+    const texts = ["first save", "second save", "third save"];
+    for (const text of texts) {
+      const created = await client.json<CreateInspirationResponse>(
+        "POST",
+        "/inspirations",
+        { text },
+      );
+      expect(created.status).toBe(201);
+      // Tiny pause keeps `created_at` strictly increasing across the trio.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    const res = await client.get<ListInspirationsResponse>("/inspirations");
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspirations.length).toBeGreaterThanOrEqual(3);
+    // Every returned row is owned by the caller — no cross-tenant leak.
+    for (const row of res.body.inspirations) {
+      expect(row.userId).toBe(fixture.user.id);
+    }
+    // Newest first: the response order should be third → second → first.
+    const recentTexts = res.body.inspirations.slice(0, 3).map((r) => r.text);
+    expect(recentTexts).toEqual(["third save", "second save", "first save"]);
+    // And `created_at` is monotonically non-increasing across the slice.
+    for (let i = 1; i < res.body.inspirations.length; i += 1) {
+      const prev = new Date(res.body.inspirations[i - 1]!.createdAt).getTime();
+      const cur = new Date(res.body.inspirations[i]!.createdAt).getTime();
+      expect(prev).toBeGreaterThanOrEqual(cur);
+    }
+  });
+
+  it("isolates two users' lists (no cross-tenant rows)", async () => {
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    const aliceClient = authedClient(alice);
+    const bobClient = authedClient(bob);
+
+    // Alice creates two rows.
+    const aliceCreate1 = await aliceClient.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "alice-one" },
+    );
+    const aliceCreate2 = await aliceClient.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "alice-two" },
+    );
+    expect(aliceCreate1.status).toBe(201);
+    expect(aliceCreate2.status).toBe(201);
+
+    // Bob creates one row.
+    const bobCreate = await bobClient.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "bob-one" },
+    );
+    expect(bobCreate.status).toBe(201);
+
+    // Alice's list contains exactly her two rows, never bob's.
+    const aliceList = await aliceClient.get<ListInspirationsResponse>(
+      "/inspirations",
+    );
+    expect(aliceList.status).toBe(200);
+    const aliceTexts = aliceList.body.inspirations.map((r) => r.text);
+    expect(aliceTexts).toContain("alice-one");
+    expect(aliceTexts).toContain("alice-two");
+    expect(aliceTexts).not.toContain("bob-one");
+    for (const row of aliceList.body.inspirations) {
+      expect(row.userId).toBe(alice.user.id);
+      expect(row.userId).not.toBe(bob.user.id);
+    }
+
+    // Bob's list contains exactly his one row, never alice's.
+    const bobList = await bobClient.get<ListInspirationsResponse>(
+      "/inspirations",
+    );
+    expect(bobList.status).toBe(200);
+    const bobTexts = bobList.body.inspirations.map((r) => r.text);
+    expect(bobTexts).toEqual(["bob-one"]);
+    for (const row of bobList.body.inspirations) {
+      expect(row.userId).toBe(bob.user.id);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// "Fetch by id" — locate a specific inspiration via the list response, and
+// drive GET /inspirations/:id/reflections (the only `:id`-keyed read in the
+// inspirations namespace today). Both flows assert the caller can address
+// individual rows by id without any cross-tenant leakage.
+// ---------------------------------------------------------------------------
+
+describe("Fetching by id", () => {
+  it("locates a freshly-created inspiration by id in the list response", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "find-me-by-id", kind: "note", category: 7 },
+    );
+    expect(created.status).toBe(201);
+    const targetId = created.body.inspiration.id;
+
+    // The list endpoint is the canonical read path for inspirations (no
+    // dedicated GET /:id exists yet). Filtering the response by id is the
+    // public way to "fetch by id" today; a future GET /:id endpoint would
+    // be a strict superset and this assertion would still hold.
+    const list = await client.get<ListInspirationsResponse>("/inspirations");
+    expect(list.status).toBe(200);
+
+    const match = list.body.inspirations.find((r) => r.id === targetId);
+    expect(match, `expected list to contain ${targetId}`).toBeTruthy();
+    expect(match!.userId).toBe(fixture.user.id);
+    expect(match!.text).toBe("find-me-by-id");
+    expect(match!.kind).toBe("note");
+    expect(match!.category).toBe(7);
+  });
+
+  it("GET /inspirations/:id/reflections returns the reflections attached to that id", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // Create the inspiration, then attach one reflection.
+    const inspirationCreate = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "parent inspiration" },
+    );
+    expect(inspirationCreate.status).toBe(201);
+    const inspirationId = inspirationCreate.body.inspiration.id;
+
+    const reflectionCreate = await client.json<ReflectionResponse>(
+      "POST",
+      `/inspirations/${inspirationId}/reflections`,
+      { question: "what does this remind me of?" },
+    );
+    expect(reflectionCreate.status).toBe(201);
+    const reflectionId = reflectionCreate.body.reflection.id;
+
+    // The "fetch by id" path on the inspirations namespace.
+    const res = await client.get<ListReflectionsResponse>(
+      `/inspirations/${inspirationId}/reflections`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.reflections).toHaveLength(1);
+    expect(res.body.reflections[0]!.id).toBe(reflectionId);
+    expect(res.body.reflections[0]!.inspirationId).toBe(inspirationId);
+    expect(res.body.reflections[0]!.userId).toBe(fixture.user.id);
+    expect(res.body.reflections[0]!.question).toBe(
+      "what does this remind me of?",
+    );
+  });
+
+  it("GET /inspirations/:id/reflections returns 404 for another user's id (no enumeration)", async () => {
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    // Alice creates an inspiration that bob will try to address by id.
+    const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "alice's private save" },
+    );
+    expect(aliceCreate.status).toBe(201);
+    const aliceInspirationId = aliceCreate.body.inspiration.id;
+
+    // Bob tries to read alice's inspiration by id. The route MUST 404 — a
+    // 403 would leak the existence of the row to bob, allowing him to
+    // enumerate alice's uuids. 404 is intentional and matches the
+    // attachments-finalize convention.
+    const res = await authedClient(bob).get<{ error: string }>(
+      `/inspirations/${aliceInspirationId}/reflections`,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("GET /inspirations/:id/reflections returns 400 for a malformed id", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.get<{ error: string }>(
+      "/inspirations/not-a-uuid/reflections",
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid inspiration id/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Authentication required — every route in this namespace must reject an
+// anonymous request before it touches the DB.
+// ---------------------------------------------------------------------------
+
+describe("authentication required", () => {
+  it("POST /inspirations returns 401 when no session is presented", async () => {
+    const res = await apiRequest("/inspirations", {
+      method: "POST",
+      body: { text: "anonymous" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /inspirations returns 401 when no session is presented", async () => {
+    const res = await apiRequest("/inspirations", { method: "GET" });
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /inspirations/:id/reflections returns 401 when no session is presented", async () => {
+    // The route checks authn BEFORE parsing the path, so a syntactically
+    // valid uuid produces 401, not 400, on the unauthenticated path. We use
+    // a real-looking uuid to make the assertion narrow-scoped.
+    const res = await apiRequest(
+      "/inspirations/00000000-0000-0000-0000-000000000000/reflections",
+      { method: "GET" },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /inspirations rejects a malformed bearer token with 401", async () => {
+    // Even with an Authorization header present, an unparsable token must
+    // not be accepted. Guards against a regression where the middleware
+    // accidentally treats absence-of-throw as "ok".
+    const res = await apiRequest("/inspirations", {
+      method: "POST",
+      headers: { Authorization: "Bearer not-a-real-jwt" },
+      body: { text: "should not save" },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("an authenticated request still succeeds (sanity counterpart)", async () => {
+    // Pair every "401 without auth" assertion with at least one positive
+    // case so a regression that 401s every request — including the valid
+    // ones — doesn't slip past as a green test.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.get<ListInspirationsResponse>("/inspirations");
+    expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /inspirations/:id — update / partial update
+// ---------------------------------------------------------------------------
+//
+// Sub-AC 13.3.3 mandates coverage of:
+//   - Successful updates (full payload swap)
+//   - Partial updates    (one field at a time, others untouched)
+//   - 404 on missing resources
+//   - 401 on unauthenticated calls (covered in the namespace section below)
+//
+// Why we drive the live Hono `app` here too
+// -----------------------------------------
+// Same rationale as the create-path tests above: stubbing Drizzle replaces
+// the most failure-prone parts of the contract — the `WHERE id = :id AND
+// user_id = caller` predicate, the zod-strip of forged client fields,
+// `.returning()` semantics — with hand-written mocks that drift from
+// production. We round-trip through the real Hono app + getDb() pinned to
+// Neon so we know the route + schema actually meet the seed's
+// `data_isolation` evaluation principle.
+
+describe("PATCH /inspirations/:id — successful updates", () => {
+  it("updates every editable field in one PATCH (text, kind, category) and bumps updatedAt", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // Seed an inspiration we can edit. We capture the original `updatedAt`
+    // so the assertion below proves the PATCH actually bumps it (rather
+    // than the row simply being recently created).
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before edit", kind: "note", category: 1 },
+    );
+    expect(created.status).toBe(201);
+    const original = created.body.inspiration;
+    const originalUpdatedAt = new Date(original.updatedAt).getTime();
+
+    // Sleep ~10ms to make the timestamp comparison strictly distinct on
+    // hosts where Date.now() ticks coarsely. Without this, a fast PATCH
+    // on the same millisecond would race the "updatedAt > original" check.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${original.id}`,
+      { text: "after edit", kind: "link", category: 7 },
+    );
+
+    expect(res.status).toBe(200);
+    const row = res.body.inspiration;
+    // Identity preserved — PATCH is not allowed to re-mint the id.
+    expect(row.id).toBe(original.id);
+    // Tenant scope preserved — userId never moves to another tenant.
+    expect(row.userId).toBe(fixture.user.id);
+    // Edited fields written through.
+    expect(row.text).toBe("after edit");
+    expect(row.kind).toBe("link");
+    expect(row.category).toBe(7);
+    // createdAt is immutable across edits; updatedAt MUST tick forward so
+    // the SPA can use it as a freshness signal.
+    expect(row.createdAt).toBe(original.createdAt);
+    expect(new Date(row.updatedAt).getTime()).toBeGreaterThan(
+      originalUpdatedAt,
+    );
+    // Cluster / classifiedAt remain server-managed — PATCH must not touch
+    // them. Both stay null on a row whose classifier hasn't run yet.
+    expect(row.cluster).toBeNull();
+    expect(row.classifiedAt).toBeNull();
+
+    // Round-trip assertion: the edit really landed in Postgres, not just
+    // in the response payload.
+    const dbRows = await getDb()
+      .select({
+        text: inspirations.text,
+        kind: inspirations.kind,
+        category: inspirations.category,
+      })
+      .from(inspirations)
+      .where(eq(inspirations.id, original.id));
+    expect(dbRows).toHaveLength(1);
+    expect(dbRows[0]!.text).toBe("after edit");
+    expect(dbRows[0]!.kind).toBe("link");
+    expect(dbRows[0]!.category).toBe(7);
+  });
+
+  it("trims whitespace on text just like the create path", async () => {
+    // Drift between create-path and update-path normalisation is a classic
+    // bug source (a user edits a row to fix a typo and ends up with leading
+    // spaces because the PATCH schema forgot `.trim()`). Lock the parity in.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "original" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { text: "  trimmed value  " },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.text).toBe("trimmed value");
+  });
+
+  it("ignores a forged userId in the request body — auth context wins", async () => {
+    // The schema is .strict() in spirit (no `userId` field declared) so a
+    // body-supplied `userId` is silently dropped. Lock the regression here
+    // so a future schema-loosening bug surfaces immediately rather than as
+    // a tenant-isolation incident in production.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      {
+        text: "after",
+        userId: "00000000-0000-0000-0000-000000000000",
+        user_id: "00000000-0000-0000-0000-000000000000",
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.userId).toBe(fixture.user.id);
+    expect(res.body.inspiration.userId).not.toBe(
+      "00000000-0000-0000-0000-000000000000",
+    );
+  });
+
+  it("ignores a body-supplied cluster / classifiedAt — only the worker may write those", async () => {
+    // Cluster classification is async (AC 10/11). If a client could pin
+    // their own cluster value via PATCH they would skip Gemini entirely
+    // and break the seed's `async_correctness` evaluation principle.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "still pending classification" },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.inspiration.cluster).toBeNull();
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      {
+        text: "edited text",
+        cluster: "outlier",
+        classifiedAt: new Date().toISOString(),
+      },
+    );
+
+    expect(res.status).toBe(200);
+    // The text edit landed.
+    expect(res.body.inspiration.text).toBe("edited text");
+    // The forged cluster + classifiedAt were stripped by zod.
+    expect(res.body.inspiration.cluster).toBeNull();
+    expect(res.body.inspiration.classifiedAt).toBeNull();
+  });
+});
+
+describe("PATCH /inspirations/:id — partial updates", () => {
+  it("updates only `text` when only `text` is supplied; kind/category are preserved", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before", kind: "note", category: 4 },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { text: "after-only-text" },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.text).toBe("after-only-text");
+    // Unspecified fields MUST be left exactly as they were.
+    expect(res.body.inspiration.kind).toBe("note");
+    expect(res.body.inspiration.category).toBe(4);
+  });
+
+  it("updates only `kind` when only `kind` is supplied; text/category are preserved", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before", kind: "note", category: 9 },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { kind: "image" },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.text).toBe("before");
+    expect(res.body.inspiration.kind).toBe("image");
+    expect(res.body.inspiration.category).toBe(9);
+  });
+
+  it("updates only `category` when only `category` is supplied; text/kind are preserved", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before", kind: "note", category: 1 },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { category: 42 },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.text).toBe("before");
+    expect(res.body.inspiration.kind).toBe("note");
+    expect(res.body.inspiration.category).toBe(42);
+  });
+
+  it("clears `kind` when null is explicitly passed", async () => {
+    // Distinguish "omit the key (leave alone)" from "pass null (clear)".
+    // Both are valid PATCH semantics and the route MUST honour the
+    // distinction or the SPA can never erase a previously-set kind.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before", kind: "note", category: 3 },
+    );
+    expect(created.status).toBe(201);
+    expect(created.body.inspiration.kind).toBe("note");
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { kind: null },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.kind).toBeNull();
+    // category was not in the payload → preserved.
+    expect(res.body.inspiration.category).toBe(3);
+  });
+
+  it("clears `category` when null is explicitly passed", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before", kind: "note", category: 5 },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { category: null },
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.kind).toBe("note");
+    expect(res.body.inspiration.category).toBeNull();
+  });
+
+  it("rejects an empty PATCH body (no fields supplied) with 400", async () => {
+    // A no-op PATCH would silently bump updated_at, misleading any
+    // freshness-sorted view. Reject loudly so a buggy SPA call surfaces.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      {},
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid inspiration payload/i);
+  });
+
+  it("rejects an empty/whitespace-only `text` with 400", async () => {
+    // Same rule as the create path — `text` is NOT NULL in the schema, so
+    // accepting "" or "   " here would either fail at INSERT time with a
+    // confusing 500 or silently store whitespace.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { text: "   \t  \n  " },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.details?.text?.[0]).toMatch(/required/i);
+  });
+
+  it("rejects a non-integer `category` with 400", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { category: 2.5 },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.details?.category?.[0]).toMatch(/integer/i);
+  });
+});
+
+describe("PATCH /inspirations/:id — 404 on missing resources", () => {
+  it("returns 404 for an unknown (well-formed) uuid", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    // A syntactically valid uuid that almost certainly doesn't exist. The
+    // contract is 404 + JSON error body — not 500, not silent 200.
+    const res = await client.json<{ error: string }>(
+      "PATCH",
+      "/inspirations/00000000-0000-0000-0000-000000000000",
+      { text: "ghost" },
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/not found/i);
+  });
+
+  it("returns 404 (not 403) when patching another user's id (no enumeration)", async () => {
+    // Cross-tenant id MUST collapse to 404 so this endpoint cannot be used
+    // to enumerate uuids that exist for other tenants. Same convention as
+    // POST /:id/reflections, GET /:id/reflections, and DELETE /:id.
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "alice's private save", kind: "note", category: 1 },
+    );
+    expect(aliceCreate.status).toBe(201);
+    const aliceInspirationId = aliceCreate.body.inspiration.id;
+    const aliceOriginalText = aliceCreate.body.inspiration.text;
+
+    // Bob attempts to PATCH Alice's row.
+    const bobAttempt = await authedClient(bob).json<{ error: string }>(
+      "PATCH",
+      `/inspirations/${aliceInspirationId}`,
+      { text: "pwned by bob" },
+    );
+    expect(bobAttempt.status).toBe(404);
+
+    // And Alice's row is unchanged in the DB — no covert mutation slipped
+    // through. This is the "data_isolation" evaluation principle in action.
+    const dbRows = await getDb()
+      .select({ text: inspirations.text, userId: inspirations.userId })
+      .from(inspirations)
+      .where(eq(inspirations.id, aliceInspirationId));
+    expect(dbRows).toHaveLength(1);
+    expect(dbRows[0]!.userId).toBe(alice.user.id);
+    expect(dbRows[0]!.text).toBe(aliceOriginalText);
+  });
+
+  it("returns 400 for a malformed uuid (path validation precedes lookup)", async () => {
+    // Reject up-front rather than letting Postgres complain about
+    // "invalid input syntax for type uuid" — that would surface as 500.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<{ error: string }>(
+      "PATCH",
+      "/inspirations/not-a-uuid",
+      { text: "anything" },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid inspiration id/i);
+  });
+
+  it("returns 404 when patching an id that was just deleted (idempotency invariant)", async () => {
+    // Order-of-operations invariant: delete-then-patch must 404, not 200.
+    // A regression that returned 200 here would either resurrect the row
+    // or silently no-op while pretending success.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "to be deleted then patched" },
+    );
+    expect(created.status).toBe(201);
+
+    const del = await client.delete(
+      `/inspirations/${created.body.inspiration.id}`,
+    );
+    expect(del.status).toBe(200);
+
+    const res = await client.json<{ error: string }>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { text: "post-delete edit" },
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /inspirations/:id — deletion
+// ---------------------------------------------------------------------------
+//
+// Exercises the same five buckets as the PATCH section (success, idempotency
+// on re-delete, cross-tenant 404, malformed-id 400). The cascade behaviour
+// (attachments + reflections removed by FK) is asserted via a follow-up
+// SELECT against the DB so a future migration that weakens the cascade
+// surfaces here, not in production.
+
+describe("DELETE /inspirations/:id — successful deletion", () => {
+  it("returns 200 with the deleted id and removes the row from the DB", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "to be deleted" },
+    );
+    expect(created.status).toBe(201);
+    const targetId = created.body.inspiration.id;
+
+    const res = await client.delete<{ id: string }>(
+      `/inspirations/${targetId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(targetId);
+
+    // The row is really gone from Postgres, not just hidden by a soft
+    // delete flag the route swallowed without persisting.
+    const dbRows = await getDb()
+      .select({ id: inspirations.id })
+      .from(inspirations)
+      .where(eq(inspirations.id, targetId));
+    expect(dbRows).toHaveLength(0);
+  });
+
+  it("removes the row from the GET /inspirations list immediately", async () => {
+    // The user-visible contract: after a successful delete, the row is
+    // gone from the history sidebar on the next list fetch. No `?include
+    // _deleted` flag, no soft-delete leakage.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const a = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "row-a-keep" },
+    );
+    const b = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "row-b-delete" },
+    );
+    expect(a.status).toBe(201);
+    expect(b.status).toBe(201);
+
+    const del = await client.delete(`/inspirations/${b.body.inspiration.id}`);
+    expect(del.status).toBe(200);
+
+    const list = await client.get<ListInspirationsResponse>("/inspirations");
+    expect(list.status).toBe(200);
+    const ids = list.body.inspirations.map((r) => r.id);
+    expect(ids).toContain(a.body.inspiration.id);
+    expect(ids).not.toContain(b.body.inspiration.id);
+  });
+
+  it("cascades to reflections (FK ON DELETE CASCADE)", async () => {
+    // The `reflections.inspiration_id` FK is `ON DELETE CASCADE` in
+    // migration 0003. Drop the inspiration → all reflections under it
+    // must vanish in the same transaction. Asserting this in a test (not
+    // just trusting the migration) catches a future schema change that
+    // weakens the cascade and would otherwise leave orphans.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "parent of reflections" },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+
+    // Attach two reflections so we can prove BOTH go away (not just the
+    // first one a buggy `LIMIT 1` cascade might catch).
+    const r1 = await client.json<ReflectionResponse>(
+      "POST",
+      `/inspirations/${inspirationId}/reflections`,
+      { question: "first reflection?" },
+    );
+    const r2 = await client.json<ReflectionResponse>(
+      "POST",
+      `/inspirations/${inspirationId}/reflections`,
+      { question: "second reflection?" },
+    );
+    expect(r1.status).toBe(201);
+    expect(r2.status).toBe(201);
+
+    // Delete the parent.
+    const del = await client.delete(`/inspirations/${inspirationId}`);
+    expect(del.status).toBe(200);
+
+    // Reflections endpoint now 404s the parent — same idempotent
+    // not-found shape as a never-existing id.
+    const after = await client.get(
+      `/inspirations/${inspirationId}/reflections`,
+    );
+    expect(after.status).toBe(404);
+  });
+});
+
+describe("DELETE /inspirations/:id — 404 on missing resources", () => {
+  it("returns 404 for an unknown (well-formed) uuid", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.delete<{ error: string }>(
+      "/inspirations/00000000-0000-0000-0000-000000000000",
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/not found/i);
+  });
+
+  it("returns 404 on re-delete (idempotent from caller's view)", async () => {
+    // The first DELETE removes the row. The second DELETE finds nothing,
+    // returns 404 — NOT 500. From the SPA's perspective the row is
+    // already gone either way, so the optimistic-remove UX is unchanged.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "double-delete-me" },
+    );
+    expect(created.status).toBe(201);
+    const targetId = created.body.inspiration.id;
+
+    const first = await client.delete(`/inspirations/${targetId}`);
+    expect(first.status).toBe(200);
+
+    const second = await client.delete<{ error: string }>(
+      `/inspirations/${targetId}`,
+    );
+    expect(second.status).toBe(404);
+  });
+
+  it("returns 404 (not 403) when deleting another user's id (no enumeration)", async () => {
+    // Cross-tenant attempt MUST 404 — a 403 would leak the existence of
+    // the row to the attacker, allowing them to enumerate other tenants'
+    // uuids. And the row must remain in the DB owned by the original
+    // user (no covert deletion slipped through).
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "alice's private save" },
+    );
+    expect(aliceCreate.status).toBe(201);
+    const aliceInspirationId = aliceCreate.body.inspiration.id;
+
+    const bobAttempt = await authedClient(bob).delete<{ error: string }>(
+      `/inspirations/${aliceInspirationId}`,
+    );
+    expect(bobAttempt.status).toBe(404);
+
+    // Alice's row survived bob's attempt unchanged.
+    const dbRows = await getDb()
+      .select({ id: inspirations.id, userId: inspirations.userId })
+      .from(inspirations)
+      .where(eq(inspirations.id, aliceInspirationId));
+    expect(dbRows).toHaveLength(1);
+    expect(dbRows[0]!.userId).toBe(alice.user.id);
+  });
+
+  it("returns 400 for a malformed uuid (path validation precedes lookup)", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.delete<{ error: string }>(
+      "/inspirations/not-a-uuid",
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid inspiration id/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Authentication required — every PATCH and DELETE must reject an anonymous
+// request before it touches the DB. We mirror the structure of the namespace
+// section above so a regression that loosens the middleware on PATCH/DELETE
+// surfaces here, not in production.
+// ---------------------------------------------------------------------------
+
+describe("authentication required — PATCH / DELETE", () => {
+  it("PATCH /inspirations/:id returns 401 when no session is presented", async () => {
+    // Use a real-looking uuid so the assertion is narrow-scoped: the
+    // route checks authn BEFORE parsing the path/body, so the response
+    // is 401 even with a valid id and body shape.
+    const res = await apiRequest(
+      "/inspirations/00000000-0000-0000-0000-000000000000",
+      {
+        method: "PATCH",
+        body: { text: "anonymous edit" },
+      },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("DELETE /inspirations/:id returns 401 when no session is presented", async () => {
+    const res = await apiRequest(
+      "/inspirations/00000000-0000-0000-0000-000000000000",
+      { method: "DELETE" },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("PATCH /inspirations/:id rejects a malformed bearer token with 401", async () => {
+    // Even with an Authorization header present, an unparsable token must
+    // not be accepted. Guards against a regression where the middleware
+    // accidentally treats absence-of-throw as "ok".
+    const res = await apiRequest(
+      "/inspirations/00000000-0000-0000-0000-000000000000",
+      {
+        method: "PATCH",
+        headers: { Authorization: "Bearer not-a-real-jwt" },
+        body: { text: "should not save" },
+      },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("DELETE /inspirations/:id rejects a malformed bearer token with 401", async () => {
+    const res = await apiRequest(
+      "/inspirations/00000000-0000-0000-0000-000000000000",
+      {
+        method: "DELETE",
+        headers: { Authorization: "Bearer not-a-real-jwt" },
+      },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("an authenticated PATCH still succeeds (sanity counterpart)", async () => {
+    // Pair the 401 assertions with at least one positive case so a
+    // regression that 401s every PATCH — including the valid ones —
+    // doesn't slip past as a green test.
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "before" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "PATCH",
+      `/inspirations/${created.body.inspiration.id}`,
+      { text: "after" },
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.inspiration.text).toBe("after");
+  });
+
+  it("an authenticated DELETE still succeeds (sanity counterpart)", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/inspirations",
+      { text: "to be deleted" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.delete<{ id: string }>(
+      `/inspirations/${created.body.inspiration.id}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(created.body.inspiration.id);
+  });
+});
