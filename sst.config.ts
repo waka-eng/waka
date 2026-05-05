@@ -1,0 +1,337 @@
+/// <reference path="./.sst/platform/config.d.ts" />
+
+/**
+ * SST v3 (Ion) application config.
+ *
+ * Responsibilities of this file (and only this file):
+ *   - Declare SST Secrets for every credential the API needs at runtime.
+ *     These are `sst secret set` -driven values, never committed, and only
+ *     ever materialised inside the Lambda execution environment via the
+ *     `link` mechanism below.
+ *   - Stand up the runtime resources: a Bucket for attachment uploads, a
+ *     Queue for the async classifier worker, a Hono Function for the API,
+ *     and a StaticSite for the Vite/React frontend.
+ *   - Wire the Function's environment via `link` so the Hono handler can
+ *     read each secret through `Resource.<name>.value` (or the matching
+ *     uppercase env var SST injects automatically).
+ *
+ * Secrets bound to the Hono API Lambda
+ * ------------------------------------
+ *   GoogleClientId     → Google OAuth client id        (was AUTH_GOOGLE_ID)
+ *   GoogleClientSecret → Google OAuth client secret    (was AUTH_GOOGLE_SECRET)
+ *   SessionSecret      → cookie/session signing key    (was AUTH_SECRET)
+ *   JwtSecret          → JWT signing key               (was JWT_SECRET)
+ *   DbConnectionUrl    → Neon Postgres URL             (was DB_CONNECTION_URL)
+ *   GeminiApiKey       → Gemini classifier key         (was GEMINI_API_KEY)
+ *
+ * Local dev workflow
+ * ------------------
+ *   1. One-time, per-stage:
+ *        pnpm sst secret set GoogleClientId      "$AUTH_GOOGLE_ID"
+ *        pnpm sst secret set GoogleClientSecret  "$AUTH_GOOGLE_SECRET"
+ *        pnpm sst secret set SessionSecret       "$AUTH_SECRET"
+ *        pnpm sst secret set JwtSecret           "$JWT_SECRET"
+ *        pnpm sst secret set DbConnectionUrl     "$DB_CONNECTION_URL"
+ *        pnpm sst secret set GeminiApiKey        "$GEMINI_API_KEY"
+ *      (See docs/google-oauth-setup.md for how to provision the Google
+ *      client id / secret in Google Cloud Console with the correct
+ *      authorized redirect URIs for `sst dev`.)
+ *
+ *   2. `pnpm dev` (alias for `sst dev`) starts the StaticSite, the API
+ *      Function URL, the Bucket, and the Queue. The Function picks up each
+ *      linked secret through `Resource.<name>.value` at request time.
+ *
+ * Why SST Secrets and not plain `environment: { ... }`?
+ *   - Secrets are encrypted at rest in SSM Parameter Store, never end up in
+ *     the CloudFormation template, and can be rotated without redeploying
+ *     code. Plain `environment` values are visible to anyone with read
+ *     access to the Lambda config.
+ *   - `link` produces a typed `Resource` import the handler can rely on, so
+ *     "did I spell the env var right?" becomes a compile error rather than
+ *     a runtime 500.
+ */
+
+/**
+ * AWS region the stack runs in. Pulled out as a module-scope constant so
+ * the `app.providers.aws.region` declaration and the Lambda's
+ * `ATTACHMENTS_REGION` env var (Sub-AC 3.4) can never drift apart — the
+ * region the bucket is created in MUST match the region the SDK signs
+ * presigned URLs against, otherwise SigV4 fails with a redirect / 301
+ * "PermanentRedirect" at PUT time.
+ */
+const AWS_REGION = "us-west-2";
+
+export default $config({
+  app(input) {
+    return {
+      name: "waka",
+      // `removal: "remove"` for non-production stages so torn-down sandboxes
+      // don't leave orphan AWS resources behind. Production (when it lands)
+      // should be flipped to "retain".
+      removal: input?.stage === "production" ? "retain" : "remove",
+      home: "aws",
+      providers: {
+        aws: {
+          // us-west-2 matches AWS_REGION_APP in .env so the dev S3 bucket
+          // lives next to any future production bucket. Override per-stage
+          // by editing AWS_REGION above and re-running `sst deploy`.
+          region: AWS_REGION,
+        },
+      },
+    };
+  },
+
+  async run() {
+    // -----------------------------------------------------------------------
+    // Secrets
+    //
+    // Each secret is created once at deploy time and managed via the
+    // `sst secret set` CLI. The values committed to .env are NOT used at
+    // runtime — they are only there to seed local CLI commands and the
+    // drizzle-kit migration runner (which reads DB_CONNECTION_URL directly
+    // from .env to keep migrations decoupled from the SST stack).
+    // -----------------------------------------------------------------------
+
+    /** Google OAuth 2.0 client id from Google Cloud Console. */
+    const googleClientId = new sst.Secret("GoogleClientId");
+
+    /** Google OAuth 2.0 client secret. NEVER returned to the browser. */
+    const googleClientSecret = new sst.Secret("GoogleClientSecret");
+
+    /**
+     * Session signing/encryption secret. Used to sign the OpenAuth session
+     * cookie. Distinct from JwtSecret so we can rotate one without nuking
+     * already-issued JWT bearer tokens (or vice versa).
+     */
+    const sessionSecret = new sst.Secret("SessionSecret");
+
+    /** JWT signing key used by `lib/auth.ts:signSessionToken`. */
+    const jwtSecret = new sst.Secret("JwtSecret");
+
+    /** Neon Postgres connection URL (pooled, sslmode=require). */
+    const dbConnectionUrl = new sst.Secret("DbConnectionUrl");
+
+    /** Gemini API key for the classifier queue worker. */
+    const geminiApiKey = new sst.Secret("GeminiApiKey");
+
+    // -----------------------------------------------------------------------
+    // Storage
+    // -----------------------------------------------------------------------
+
+    /**
+     * Attachment bucket. Frontend uploads via presigned PUT; the API never
+     * proxies bytes. Public read is *not* enabled — downloads will use
+     * presigned GET URLs scoped to the authenticated user.
+     *
+     * CORS wiring (Sub-AC 3.4)
+     * ------------------------
+     * The browser PUTs directly to the bucket's regional virtual-hosted URL
+     * (`https://<bucket>.s3.<region>.amazonaws.com/<key>`) using the URL
+     * minted by `POST /attachments/presign`. That counts as a cross-origin
+     * request from the StaticSite origin (`http://localhost:5173` in dev,
+     * the CloudFront distribution in any future prod), so we need explicit
+     * S3 CORS rules — without them every preflight OPTIONS fails and the
+     * upload never leaves the browser.
+     *
+     * We allow `*` for origins because:
+     *   - The bucket has no public read; the only writable surface is a
+     *     short-lived (5 min), narrowly-scoped SigV4 PUT URL whose signature
+     *     pins Content-Type, Content-Length, key, and method.
+     *   - A relaxed CORS policy on a private, signature-gated bucket cannot
+     *     be abused: a different origin can only succeed at PUTting if it
+     *     was already handed a valid presigned URL by our Lambda, which
+     *     requires a valid session.
+     *   - Pinning to a specific origin would mean re-deploying SST every
+     *     time the dev StaticSite URL changes (and every `sst dev` run can
+     *     mint a fresh one).
+     *
+     * `exposeHeaders: ["ETag"]` lets the SPA read the upload's ETag back
+     * from the PUT response, which is useful if we ever want to fingerprint
+     * the object client-side before calling `POST /attachments`.
+     */
+    const attachmentsBucket = new sst.aws.Bucket("Attachments", {
+      cors: {
+        allowOrigins: ["*"],
+        allowHeaders: ["*"],
+        allowMethods: ["GET", "HEAD", "PUT", "POST", "DELETE"],
+        exposeHeaders: ["ETag"],
+        maxAge: "1 hour",
+      },
+    });
+
+    // -----------------------------------------------------------------------
+    // Queue (classifier worker)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Dead-letter queue for the classifier (Sub-AC 10.4).
+     *
+     * Why a DLQ at all?
+     * -----------------
+     * The worker (`packages/api/src/queue/classifier.ts`) classifies failures
+     * into two buckets:
+     *
+     *   - Permanent skips (malformed body, missing row, already-classified
+     *     row, Gemini safety block, out-of-set label) → ack the message,
+     *     never reach this queue. Retrying these would just burn budget.
+     *
+     *   - Transient failures (Gemini 5xx / 429, network / DNS, Postgres
+     *     hiccups) → push onto `batchItemFailures` so SQS redelivers after
+     *     the visibility timeout. After `dlq.retry` attempts exceed without
+     *     a clean ack, SQS moves the message HERE.
+     *
+     * Without this resource, an inspiration that hits a *durable* outage
+     * (e.g. a malformed payload that the parser somehow accepts but the
+     * downstream rejects, or a Gemini outage that outlasts the redrive
+     * budget) would loop until SQS gives up and silently drops it. Routing
+     * those to a DLQ instead lets us inspect them in CloudWatch / the SQS
+     * console and replay once the underlying issue is fixed.
+     *
+     * No subscriber is attached to the DLQ on purpose — it's an inspection
+     * surface, not a retry surface. Any future "drain DLQ → re-enqueue"
+     * tooling can read from `Resource.ClassifierDLQ.url` directly.
+     */
+    const classifierDLQ = new sst.aws.Queue("ClassifierDLQ");
+
+    /**
+     * Classifier queue. POST /inspirations enqueues here; the consumer in
+     * packages/api/src/queue/classifier.ts calls Gemini and updates the
+     * inspirations row. Async by design so the save endpoint stays sub-200ms.
+     *
+     * `dlq.retry: 3` means: SQS delivers the message, the consumer marks it
+     * as `batchItemFailure`, the message becomes visible again after the
+     * visibility timeout, and this happens at most 3 times before the
+     * message is moved to `classifierDLQ`. Three is the SST default and
+     * tracks AWS's recommended baseline — high enough to ride out a brief
+     * Gemini 5xx / Neon hiccup, low enough that a permanently-broken
+     * payload doesn't dominate the budget for healthy traffic.
+     */
+    const classifierQueue = new sst.aws.Queue("ClassifierQueue", {
+      dlq: {
+        queue: classifierDLQ.arn,
+        retry: 3,
+      },
+    });
+    classifierQueue.subscribe({
+      handler: "packages/api/src/queue/classifier.handler",
+      link: [dbConnectionUrl, geminiApiKey],
+    });
+
+    // -----------------------------------------------------------------------
+    // Hono API Function
+    //
+    // The `link` array is the security boundary. Anything in here is
+    // available to the handler via `Resource.<Name>.value`; anything not in
+    // here is unreachable. That means a future engineer cannot accidentally
+    // leak GeminiApiKey to the public StaticSite — they would have to add
+    // it to a `link` here first, which shows up in code review.
+    // -----------------------------------------------------------------------
+
+    /**
+     * IAM wiring for S3 presigned PUT (Sub-AC 3.4)
+     * --------------------------------------------
+     * Linking `attachmentsBucket` here does two things:
+     *   1. Generates the typed `Resource.Attachments.{name,arn}` binding
+     *      so handler code can resolve the bucket without hard-coding it.
+     *   2. Attaches an IAM policy to the Lambda's execution role granting
+     *      `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, and
+     *      `s3:ListBucket` scoped to this bucket only.
+     *
+     * That last point is what lets `getSignedUrl` actually mint a working
+     * URL: SigV4 signing is local, but the *signing identity* is the
+     * Lambda role, and S3 will reject the upload at PUT time if the role
+     * is not authorized to PutObject on the bucket. A common failure mode
+     * before this link existed was "presign returns 200, browser PUT
+     * returns 403 SignatureDoesNotMatch / AccessDenied" — the signature
+     * was fine, the role just had no permission.
+     *
+     * Linking `classifierQueue` similarly grants `sqs:SendMessage` so
+     * `POST /inspirations` can enqueue a classification job. SST's link
+     * mechanism handles two things in one call:
+     *   1. Attaches an IAM policy granting `sqs:SendMessage` (and the related
+     *      attribute reads) on the queue's ARN to the Lambda's role. This is
+     *      the enqueue permission half of Sub-AC 10.1.
+     *   2. Generates the typed `Resource.ClassifierQueue.{url,arn}` binding
+     *      so the enqueue code path (Sub-AC 10.3) can resolve the queue URL
+     *      without hard-coding it.
+     *
+     * `CLASSIFIER_QUEUE_URL` / `CLASSIFIER_QUEUE_REGION` are also exposed as
+     * plain env vars below for the same reason `ATTACHMENTS_BUCKET` /
+     * `ATTACHMENTS_REGION` are: it lets the enqueue helper run in vitest /
+     * smoke contexts where the SST `Resource.*` shim is not initialised.
+     */
+    const api = new sst.aws.Function("Api", {
+      handler: "packages/api/src/index.handler",
+      url: true,
+      link: [
+        googleClientId,
+        googleClientSecret,
+        sessionSecret,
+        jwtSecret,
+        dbConnectionUrl,
+        geminiApiKey,
+        attachmentsBucket,
+        classifierQueue,
+      ],
+      // Fallback environment names so the existing Hono code that reads
+      // `process.env.JWT_SECRET` / `process.env.DB_CONNECTION_URL` keeps
+      // working without a refactor. SST also exposes the same values as
+      // `Resource.<Name>.value` for new code paths.
+      //
+      // ATTACHMENTS_BUCKET / ATTACHMENTS_REGION are exposed explicitly
+      // (Sub-AC 3.4) so the presign route in `packages/api/src/routes/
+      // attachments.ts` can resolve the bucket name and region without
+      // depending on SST's auto-injected `SST_RESOURCE_Attachments` JSON
+      // env var. That keeps the handler unit-testable outside Lambda
+      // (vitest / smoke runs) where the SST env is not present.
+      environment: {
+        AUTH_GOOGLE_ID: googleClientId.value,
+        AUTH_GOOGLE_SECRET: googleClientSecret.value,
+        AUTH_SECRET: sessionSecret.value,
+        JWT_SECRET: jwtSecret.value,
+        DB_CONNECTION_URL: dbConnectionUrl.value,
+        GEMINI_API_KEY: geminiApiKey.value,
+        ATTACHMENTS_BUCKET: attachmentsBucket.name,
+        ATTACHMENTS_REGION: AWS_REGION,
+        // Exposed for the enqueue helper (Sub-AC 10.3). The IAM permission
+        // to call `sqs:SendMessage` against this URL comes from including
+        // `classifierQueue` in `link` above; this env var is just so the
+        // SDK knows where to send the message.
+        CLASSIFIER_QUEUE_URL: classifierQueue.url,
+        CLASSIFIER_QUEUE_REGION: AWS_REGION,
+      },
+    });
+
+    // -----------------------------------------------------------------------
+    // Frontend (Vite + React)
+    // -----------------------------------------------------------------------
+
+    const web = new sst.aws.StaticSite("Web", {
+      path: "packages/web",
+      build: {
+        command: "pnpm build",
+        output: "dist",
+      },
+      environment: {
+        // Vite inlines anything prefixed VITE_ at build time. We expose only
+        // the API URL — never any secret — so the SPA can talk to the
+        // Function URL without hard-coding a value.
+        VITE_API_URL: api.url,
+      },
+      dev: {
+        command: "pnpm --filter @waka/web dev",
+      },
+    });
+
+    return {
+      apiUrl: api.url,
+      webUrl: web.url,
+      attachmentsBucket: attachmentsBucket.name,
+      classifierQueueUrl: classifierQueue.url,
+      // Surfaced so operators can inspect poison messages in the SQS console
+      // (Sub-AC 10.4). Not bound to any consumer — drain tooling reads it
+      // directly via the SST output JSON.
+      classifierDLQUrl: classifierDLQ.url,
+    };
+  },
+});

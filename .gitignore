@@ -1,0 +1,22 @@
+node_modules
+.sst
+.env
+.env.*
+!.env.example
+.vercel
+dist
+.DS_Store
+
+# Build / cache
+*.tsbuildinfo
+coverage
+.cache
+
+# Logs
+*.log
+
+# Generated Ouroboros artifacts (kept locally during execution; not part of repo)
+.ouroboros/
+
+# Visual-diff output is generated; commit only the tool, not its artifacts.
+tools/visual-diff/output/
