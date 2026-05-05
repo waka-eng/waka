@@ -1,0 +1,697 @@
+/**
+ * Typed API client.
+ *
+ * One thin wrapper over `fetch` so every page in the app talks to the Hono
+ * Lambda the same way:
+ *   - JSON in / JSON out,
+ *   - `credentials: "include"` so the httpOnly session cookie set by the
+ *     server is sent on subsequent requests,
+ *   - shape-stable error objects { error: string; details?: ... } the UI
+ *     can render directly without each caller reinventing the parse.
+ *
+ * The `signup` helper is the first endpoint we wire up because the /login
+ * page needs it. As more endpoints come online (login, inspirations, ...),
+ * each gets its own typed function here so callers stay decoupled from the
+ * URL surface.
+ */
+
+// ---------------------------------------------------------------------------
+// Shared types
+// ---------------------------------------------------------------------------
+
+export interface ApiUser {
+  id: string;
+  email: string;
+  name: string;
+}
+
+/**
+ * Field-level validation errors as emitted by Hono handlers via zod's
+ * `flatten().fieldErrors`. Keys map 1:1 to form field names; an unknown
+ * key is acceptable so the UI can degrade to a banner-level error rather
+ * than crashing on an unexpected field.
+ */
+export type ApiFieldErrors = Record<string, string[] | undefined>;
+
+/**
+ * Field-level validation errors as emitted by the Hono signup handler.
+ */
+export interface SignupFieldErrors extends ApiFieldErrors {
+  email?: string[];
+  password?: string[];
+  name?: string[];
+}
+
+/**
+ * Field-level validation errors as emitted by the Hono login handler.
+ * Distinct alias so call-sites can be specific even though the runtime
+ * shape is a strict subset of `SignupFieldErrors`.
+ */
+export interface LoginFieldErrors extends ApiFieldErrors {
+  email?: string[];
+  password?: string[];
+}
+
+/**
+ * Normalised error thrown by every API helper on non-2xx responses. The UI
+ * catches this, branches on `status`, and surfaces `fieldErrors` next to the
+ * relevant input when present.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly fieldErrors?: ApiFieldErrors;
+
+  constructor(input: {
+    status: number;
+    message: string;
+    fieldErrors?: ApiFieldErrors;
+  }) {
+    super(input.message);
+    this.name = "ApiError";
+    this.status = input.status;
+    this.fieldErrors = input.fieldErrors;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Signup
+// ---------------------------------------------------------------------------
+
+export interface SignupRequest {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+export interface SignupResponse {
+  user: ApiUser;
+  /**
+   * Session JWT. Mirrored in the httpOnly cookie; included in the body so
+   * non-browser clients (CLI, e2e tests) can authenticate too. The web app
+   * deliberately does NOT persist this in localStorage — the cookie is the
+   * source of truth — but having it here keeps the contract symmetric.
+   */
+  token: string;
+}
+
+/**
+ * POST /auth/signup
+ *
+ * Creates an email+password account and establishes a session. On success
+ * the server has already set the `waka_session` cookie; the returned object
+ * is mostly useful for displaying "Welcome, <name>" and routing the user to
+ * the home page.
+ *
+ * Throws `ApiError` on any non-2xx response so callers get a single,
+ * predictable failure path (try/catch instead of a discriminated union).
+ */
+export async function signup(input: SignupRequest): Promise<SignupResponse> {
+  return postJson<SignupResponse>("/auth/signup", input, "Signup failed");
+}
+
+// ---------------------------------------------------------------------------
+// Login
+// ---------------------------------------------------------------------------
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResponse {
+  user: ApiUser;
+  token: string;
+}
+
+/**
+ * POST /auth/login
+ *
+ * Authenticate an existing email+password account. Server sets the
+ * `waka_session` cookie; the user object is returned for UI rendering.
+ *
+ * The endpoint may not yet be implemented on the backend in earlier
+ * sub-ACs — in that case the call returns an `ApiError` with a 404 status
+ * which the auth context surfaces to the caller without crashing.
+ */
+export async function login(input: LoginRequest): Promise<LoginResponse> {
+  return postJson<LoginResponse>("/auth/login", input, "Login failed");
+}
+
+// ---------------------------------------------------------------------------
+// Logout
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /auth/logout
+ *
+ * Asks the server to clear the session cookie. We swallow non-2xx responses
+ * here because client-side state (the in-memory user, localStorage cache)
+ * MUST be cleared regardless of whether the network round-trip succeeds —
+ * otherwise a flaky network leaves the UI showing a "logged in" state that
+ * the server has already invalidated. The auth context handles that policy.
+ */
+export async function logout(): Promise<void> {
+  await fetch("/auth/logout", {
+    method: "POST",
+    credentials: "include",
+  }).catch(() => {
+    // Network failure: still proceed; the caller wipes local state anyway.
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Current user
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /auth/me
+ *
+ * Returns the authenticated user implied by the session cookie, or `null`
+ * if the cookie is missing/invalid/expired. Used by `<AuthProvider>` on
+ * mount to hydrate state from the server (the cookie is httpOnly so JS
+ * cannot read it directly — the server must tell us who it sees).
+ *
+ * A 401 response is treated as "no session" rather than an error: it's the
+ * expected outcome for an anonymous visitor. Genuine network failures throw
+ * `ApiError` so the caller can decide whether to retry.
+ */
+export async function fetchCurrentUser(): Promise<ApiUser | null> {
+  let res: Response;
+  try {
+    res = await fetch("/auth/me", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while loading session",
+    });
+  }
+
+  if (res.status === 401 || res.status === 404) {
+    // 401 = no/expired cookie. 404 = endpoint not yet wired up server-side
+    // (earlier sub-ACs). Both translate to "no authenticated user" so the
+    // UI can render the /login route without exploding.
+    return null;
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // fall through
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as { error?: string };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ?? `Failed to load session (HTTP ${res.status}).`,
+    });
+  }
+
+  // Tolerate either { user: {...} } or the user object directly so the
+  // server contract has room to evolve without breaking the client.
+  const payload = body as { user?: ApiUser } | ApiUser | null;
+  if (!payload) return null;
+  if ("user" in payload && payload.user) return payload.user;
+  if ("id" in payload && "email" in payload) return payload as ApiUser;
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Inspirations
+// ---------------------------------------------------------------------------
+
+/**
+ * Cluster taxonomy. Mirrors the `cluster` Postgres enum exposed by the API
+ * (see `packages/api/src/db/schema.ts`). The classifier worker fills this in
+ * asynchronously; until then the column is `null` and the UI renders an
+ * "uncategorised" state.
+ */
+export type ClusterKind =
+  | "outlier"
+  | "bridge"
+  | "morph"
+  | "convergence"
+  | "tension"
+  | "loop";
+
+/**
+ * Canonical inspiration row as the API returns it from POST /inspirations
+ * (and, eventually, GET /inspirations).
+ *
+ * Field shape mirrors the Drizzle insert `.returning(...)` clause exactly so
+ * the UI can render the just-saved row without a follow-up GET, satisfying
+ * the seed's optimistic-save contract.
+ */
+export interface ApiInspiration {
+  id: string;
+  userId: string;
+  text: string;
+  kind: string | null;
+  category: number | null;
+  cluster: ClusterKind | null;
+  classifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInspirationRequest {
+  text: string;
+  kind?: string;
+  category?: number;
+}
+
+export interface CreateInspirationResponse {
+  inspiration: ApiInspiration;
+}
+
+/**
+ * POST /inspirations
+ *
+ * Persists a new inspiration owned by the authenticated user. The server
+ * returns 201 with the canonical row and `cluster = null`; the SST queue
+ * worker fills the cluster later. Throws `ApiError` on non-2xx.
+ */
+export async function createInspiration(
+  input: CreateInspirationRequest,
+): Promise<ApiInspiration> {
+  const body = await postJson<CreateInspirationResponse>(
+    "/inspirations",
+    input,
+    "Failed to save inspiration",
+  );
+  return body.inspiration;
+}
+
+/** Response shape for GET /inspirations. */
+export interface ListInspirationsResponse {
+  inspirations: ApiInspiration[];
+}
+
+/**
+ * GET /inspirations
+ *
+ * Returns the authenticated user's inspirations, newest first. The server
+ * unconditionally scopes by `user_id`, so the caller never has to (and
+ * cannot) filter by user — this client function is intentionally
+ * argument-less for that reason.
+ *
+ * On a 401 (e.g. the cookie expired between mount and fetch) we surface an
+ * `ApiError` so the caller can route the user back to /login. The
+ * `<RequireAuth>` boundary normally prevents this code path from running
+ * without a session, but the network can still race a server-side
+ * invalidation, so callers should still handle the error.
+ */
+export async function fetchInspirations(): Promise<ApiInspiration[]> {
+  let res: Response;
+  try {
+    res = await fetch("/inspirations", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while loading inspirations",
+    });
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as { error?: string };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ??
+        `Failed to load inspirations (HTTP ${res.status}). Please try again.`,
+    });
+  }
+
+  const payload = (body ?? {}) as Partial<ListInspirationsResponse>;
+  return Array.isArray(payload.inspirations) ? payload.inspirations : [];
+}
+
+/**
+ * DELETE /inspirations/:id
+ *
+ * Permanently removes one of the caller's inspirations along with every
+ * attachment row, reflection row, and S3 object the server can identify.
+ * Server enforces tenant ownership; on a 404 (parent missing or owned by
+ * someone else) we surface an `ApiError` so the caller can roll back any
+ * optimistic UI state. Throws `ApiError` on non-2xx so the caller has a
+ * single failure path (try/catch instead of a discriminated union).
+ *
+ * The inspiration delete is *not* idempotent in HTTP terms — calling it
+ * twice surfaces a 404 the second time — but is idempotent from the
+ * data-store perspective: after the first 200, the row and all of its
+ * children are gone. Callers that want HTTP-level idempotency can swallow
+ * the 404 themselves.
+ */
+export async function deleteInspiration(id: string): Promise<void> {
+  const path = `/inspirations/${encodeURIComponent(id)}`;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while deleting inspiration",
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+  const errorBody = (body ?? {}) as { error?: string };
+  throw new ApiError({
+    status: res.status,
+    message:
+      errorBody.error ??
+      `Failed to delete inspiration (HTTP ${res.status}). Please try again.`,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
+
+/** Attachment kinds — mirrors the Postgres `attachment_type` enum. */
+export type AttachmentType = "link" | "image" | "file";
+
+/**
+ * Canonical attachment row as the API returns it from POST /attachments.
+ * Includes the `s3Key` so the SPA can later mint presigned GET URLs without
+ * having to rebuild the key locally.
+ */
+export interface ApiAttachment {
+  id: string;
+  inspirationId: string;
+  type: AttachmentType;
+  url: string;
+  name: string | null;
+  s3Key: string | null;
+  contentType: string | null;
+  size: number | null;
+  createdAt: string;
+}
+
+/**
+ * Response from POST /attachments/presign.
+ *
+ * `headers` MUST be forwarded verbatim with the browser PUT — the signature
+ * is bound to Content-Type and Content-Length, so deviating from these
+ * causes S3 to 403 the upload.
+ */
+export interface PresignResponse {
+  uploadUrl: string;
+  key: string;
+  expiresAt: string;
+  headers: {
+    "Content-Type": string;
+    "Content-Length": string;
+  };
+}
+
+export interface PresignRequest {
+  filename: string;
+  contentType: string;
+  size: number;
+}
+
+/**
+ * POST /attachments/presign
+ *
+ * Mints a single-use presigned PUT URL the browser uses to upload an
+ * attachment payload directly to S3. Returns the canonical key the caller
+ * MUST echo back in the subsequent finalize call.
+ */
+export async function presignAttachment(
+  input: PresignRequest,
+): Promise<PresignResponse> {
+  return postJson<PresignResponse>(
+    "/attachments/presign",
+    input,
+    "Failed to mint upload URL",
+  );
+}
+
+/**
+ * Browser-side PUT to S3. Surfaces a stable error so the caller's catch
+ * branch can render a banner without parsing the SDK's network errors.
+ *
+ * We intentionally do NOT include credentials — the URL is presigned, the
+ * cookie is irrelevant, and sending it to a non-same-origin host would just
+ * be ignored by S3.
+ */
+export async function uploadToPresignedUrl(
+  url: string,
+  file: File | Blob,
+  headers: Record<string, string>,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "PUT",
+      headers,
+      body: file,
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while uploading attachment",
+    });
+  }
+  if (!res.ok) {
+    // S3 returns plain XML on failures; we don't try to parse it because the
+    // useful detail (the AWS-side reason) is in `res.statusText`.
+    throw new ApiError({
+      status: res.status,
+      message: `Upload failed (HTTP ${res.status}). Please try again.`,
+    });
+  }
+}
+
+/**
+ * Discriminated union for POST /attachments. Mirrors the server zod schema
+ * so a misuse here trips a typecheck error rather than a 400 at runtime.
+ */
+export type FinalizeAttachmentRequest =
+  | {
+      type: "link";
+      inspirationId: string;
+      url: string;
+      name?: string;
+    }
+  | {
+      type: "image" | "file";
+      inspirationId: string;
+      key: string;
+      name?: string;
+      contentType?: string;
+      size?: number;
+    };
+
+export interface FinalizeAttachmentResponse {
+  attachment: ApiAttachment;
+}
+
+/**
+ * POST /attachments
+ *
+ * Finalize an attachment after the S3 PUT has succeeded (image / file) or
+ * record a pasted link directly (link). The server enforces inspiration
+ * ownership; on success it returns the canonical row.
+ */
+export async function finalizeAttachment(
+  input: FinalizeAttachmentRequest,
+): Promise<ApiAttachment> {
+  const body = await postJson<FinalizeAttachmentResponse>(
+    "/attachments",
+    input,
+    "Failed to record attachment",
+  );
+  return body.attachment;
+}
+
+// ---------------------------------------------------------------------------
+// Reflections
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical reflection row as returned by POST /inspirations/:id/reflections
+ * and GET /inspirations/:id/reflections. Field shape mirrors the Drizzle
+ * insert `.returning(...)` clause exactly so the SPA can render the just-
+ * persisted row without a follow-up GET, satisfying the optimistic-update
+ * contract for the inspiration detail view.
+ */
+export interface ApiReflection {
+  id: string;
+  inspirationId: string;
+  userId: string;
+  question: string;
+  answer: string | null;
+  skipped: boolean;
+  createdAt: string;
+}
+
+/**
+ * Field-level validation errors as emitted by the Hono reflections handler.
+ */
+export interface ReflectionFieldErrors extends ApiFieldErrors {
+  question?: string[];
+  answer?: string[];
+  skipped?: string[];
+}
+
+export interface CreateReflectionRequest {
+  /** Required, trimmed, max 4 KB. */
+  question: string;
+  /** Optional. Empty / whitespace becomes `null` server-side. */
+  answer?: string;
+  /** Optional. When `true` the row is recorded as a deliberate "no answer". */
+  skipped?: boolean;
+}
+
+export interface CreateReflectionResponse {
+  reflection: ApiReflection;
+}
+
+/**
+ * POST /inspirations/:id/reflections
+ *
+ * Attach a reflection (a question + optional answer / skipped flag) to one of
+ * the caller's inspirations. Server enforces ownership of the parent
+ * inspiration via the path id; we never send `userId` from the client. Throws
+ * `ApiError` on non-2xx so the form can surface a single failure path.
+ */
+export async function createReflection(
+  inspirationId: string,
+  input: CreateReflectionRequest,
+): Promise<ApiReflection> {
+  // Encode the path component so a malformed id doesn't smuggle a `?` /
+  // `#` into the URL. The server validates as a uuid and 400s on a miss.
+  const path = `/inspirations/${encodeURIComponent(inspirationId)}/reflections`;
+  const body = await postJson<CreateReflectionResponse>(
+    path,
+    input,
+    "Failed to save reflection",
+  );
+  return body.reflection;
+}
+
+/** Response shape for GET /inspirations/:id/reflections. */
+export interface ListReflectionsResponse {
+  reflections: ApiReflection[];
+}
+
+/**
+ * GET /inspirations/:id/reflections
+ *
+ * Returns the caller's reflections for the given inspiration, ordered by
+ * `created_at` ascending. The server enforces ownership; on a 404 (parent
+ * missing or owned by someone else) we surface an `ApiError` so the caller
+ * can route the user back to the list.
+ */
+export async function fetchReflections(
+  inspirationId: string,
+): Promise<ApiReflection[]> {
+  const path = `/inspirations/${encodeURIComponent(inspirationId)}/reflections`;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while loading reflections",
+    });
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as { error?: string };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ??
+        `Failed to load reflections (HTTP ${res.status}). Please try again.`,
+    });
+  }
+
+  const payload = (body ?? {}) as Partial<ListReflectionsResponse>;
+  return Array.isArray(payload.reflections) ? payload.reflections : [];
+}
+
+// ---------------------------------------------------------------------------
+// Internals
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared POST-JSON helper. Centralises the credential-include / JSON-parse /
+ * ApiError-translation dance so each endpoint helper above stays a one-liner.
+ */
+async function postJson<T>(
+  path: string,
+  payload: unknown,
+  fallbackMessage: string,
+): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as {
+      error?: string;
+      details?: ApiFieldErrors;
+    };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ??
+        `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
+      fieldErrors: errorBody.details,
+    });
+  }
+
+  return body as T;
+}
