@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777961725567,
+      "tag": "0000_cuddly_malice",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777973212707,
+      "tag": "0001_add_sessions_and_oauth_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777977762241,
+      "tag": "0002_add_attachment_content_type_and_size",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777979150251,
+      "tag": "0003_rainy_blockbuster",
+      "breakpoints": true
+    }
+  ]
+}
