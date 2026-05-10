@@ -3,8 +3,9 @@
  *
  * Responsibilities (in order):
  *
- *   1. Load `.env` from the repo root so DB_CONNECTION_URL, AUTH_SECRET,
- *      JWT_SECRET, AUTH_GOOGLE_*, GEMINI_API_KEY (etc.) are available to any
+ *   1. Load local env from the repo root (`.env`, then `.env.development` as
+ *      fallback) so DB_CONNECTION_URL, AUTH_SECRET, JWT_SECRET,
+ *      AUTH_GOOGLE_*, GEMINI_API_KEY (etc.) are available to any
  *      module that reads `process.env` at import time. We deliberately do
  *      this BEFORE any other test file imports anything from `src/` — a
  *      module-eval-time read of `JWT_SECRET` (e.g. by a future helper that
@@ -23,8 +24,8 @@
  * ---------------------------------------------------------
  * `vitest.config.ts` lists this file under `setupFiles`, which Vitest runs
  * once per worker BEFORE collecting/executing any test file. That gives
- * us the strongest possible "load .env before SUT imports" guarantee
- * without sprinkling `dotenv/config` into every spec.
+ * us the strongest possible "load local dotenv before SUT imports" guarantee
+ * without sprinkling env-loading imports into every spec.
  *
  * No DB schema isolation here
  * ---------------------------
@@ -37,42 +38,15 @@
  * `sessions.user_id` reaps any session rows along with the user.
  */
 
-import { existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { config as loadDotenv } from "dotenv";
+import { loadLocalEnv } from "../../../tools/local-env/load.js";
 
 // ---------------------------------------------------------------------------
-// 1. Load .env from the repo root.
+// 1. Load local env from the repo root.
 // ---------------------------------------------------------------------------
 
-/**
- * Walk up from this file looking for the repo-root `.env`. Doing it
- * dynamically — rather than hard-coding a `../../../.env` relative path —
- * keeps the helper resilient to future moves of the api package within the
- * monorepo.
- */
-function findRepoEnvFile(): string | null {
-  const here = dirname(fileURLToPath(import.meta.url));
-  let cursor = here;
-  for (let i = 0; i < 8; i++) {
-    const candidate = resolve(cursor, ".env");
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(cursor);
-    if (parent === cursor) break;
-    cursor = parent;
-  }
-  return null;
-}
-
-const envFile = findRepoEnvFile();
-if (envFile) {
-  // `override: false` (default) is correct: if a developer has exported
-  // a value into their shell (e.g. `JWT_SECRET=...vitest --filter=...`),
-  // we honour the explicit override rather than clobbering it from .env.
-  loadDotenv({ path: envFile });
-}
+// Precedence is .env first, then .env.development as fallback. `override:
+// false` is applied by the helper so explicit shell exports still win.
+loadLocalEnv();
 
 // ---------------------------------------------------------------------------
 // 2. Tripwire — fail loudly when required secrets are missing.
@@ -90,7 +64,7 @@ for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(
       `[test/setup] Required env var ${key} is not set. ` +
-        `Configure it in .env at the repo root before running the test suite.`,
+        `Configure it in .env or .env.development at the repo root before running the test suite.`,
     );
   }
 }

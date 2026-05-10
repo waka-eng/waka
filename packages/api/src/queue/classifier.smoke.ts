@@ -32,7 +32,9 @@
  *      worker's UPDATE no-ops (the `WHERE cluster IS NULL` predicate).
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { eq } from "drizzle-orm";
 

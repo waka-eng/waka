@@ -12,7 +12,9 @@
  * suite (Sub-AC for tests) will replace this with proper isolated specs.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { eq } from "drizzle-orm";
 

@@ -43,7 +43,14 @@ shipped UI is the React decomposition under `packages/web/src/`.
 
 ### 2. Environment variables
 
-Copy the template and fill it in:
+Copy the template and fill it in. The convention is:
+
+- `.env` is the first-choice machine-local file.
+- `.env.development` is accepted as the fallback when `.env` is absent.
+
+Both are ignored by git. WAKA loads them with `dotenv` instead of shell
+sourcing, because values such as Neon Postgres URLs often contain shell
+metacharacters like `&`.
 
 ```bash
 cp .env.example .env
@@ -60,9 +67,12 @@ The required variables and where each one is consumed:
 | `GEMINI_API_KEY`                                            | Classifier queue worker                         | Never reaches the browser.                                                             |
 | `AWS_REGION_APP` / `AWS_ACCESS_KEY_ID_APP` / `AWS_SECRET_ACCESS_KEY_APP` | `sst dev` and smoke tests          | Or use a named profile with `AWS_PROFILE=...`. Region pinned to `us-west-2`.           |
 
-> `.env` is read by `drizzle-kit` and the `*.smoke.ts` harnesses. **At Lambda
-> runtime, secrets come from SST**, not from `.env`. That's why step 4 below
-> mirrors each secret into SST.
+> Local env is read by `drizzle-kit`, the API dev server, API tests, and the
+> `*.smoke.ts` harnesses. `.env` wins over `.env.development`. WAKA helpers also
+> mirror `AWS_*_APP` values into the standard AWS SDK variable names when those
+> standard variables are not already exported. **At Lambda runtime, secrets come
+> from SST**, not from local env files. That's why step 4 below mirrors each
+> secret into SST.
 
 ### 3. Install + apply database migrations
 
@@ -95,8 +105,22 @@ pnpm sst secret set DbConnectionUrl     "$DB_CONNECTION_URL"
 pnpm sst secret set GeminiApiKey        "$GEMINI_API_KEY"
 ```
 
-(Convenience: `set -a; source .env; set +a` first so the variables are exported
-into your shell.)
+Do not `source` local env files; shell parsing can corrupt URLs that contain
+metacharacters. To copy values from local dotenv into SST without printing secret
+values, use the dotenv-aware helper:
+
+```bash
+pnpm sst:secret:set:all
+```
+
+For a single secret, pass the SST secret name and local env var name:
+
+```bash
+pnpm sst:secret:set -- DbConnectionUrl DB_CONNECTION_URL
+```
+
+You can also paste values directly from your password manager/secret store with
+`pnpm sst secret set ...` if preferred.
 
 ### 5. Run the dev stack
 
@@ -153,9 +177,24 @@ pnpm --filter @waka/web typecheck
 pnpm --filter @waka/web build
 ```
 
-All four should exit `0`. Smoke tests stub AWS + Gemini by default; setting
-real `AWS_*` / `GEMINI_API_KEY` in `.env` will exercise the live paths where
-the harnesses opt in.
+`pnpm --filter @waka/api test` loads `.env` first, then `.env.development` when
+`.env` is absent. For an explicit dotenv-aware wrapper, use:
+
+```bash
+pnpm test:api:dev-env
+```
+
+Full-stack smoke boots `sst dev`, waits for the API and Vite app, then runs the
+browser smoke script. It requires live AWS/SST credentials and can take several
+minutes on a cold stack:
+
+```bash
+pnpm smoke:full-stack:dev-env
+```
+
+All typecheck/build/API test commands should exit `0`. Smoke tests stub AWS +
+Gemini by default; setting real `AWS_*` / `GEMINI_API_KEY` in local env will
+exercise the live paths where the harnesses opt in.
 
 ---
 
@@ -163,7 +202,7 @@ the harnesses opt in.
 
 | Symptom                                                     | Fix                                                                                                  |
 | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `DB_CONNECTION_URL is not set` from drizzle-kit             | `.env` not at repo root, or `set -a; source .env; set +a` before running.                            |
+| `DB_CONNECTION_URL is not set` from drizzle-kit/tests       | Add it to repo-root `.env`, or to `.env.development` when no `.env` exists. Do not shell-source env files. |
 | Browser PUT returns 301 PermanentRedirect                   | `AWS_REGION` mismatch. The bucket lives in `us-west-2`; presign with the same region.                |
 | Browser PUT returns 403 SignatureDoesNotMatch / AccessDenied | Lambda role is missing `s3:PutObject` on the bucket. Check `link: [attachmentsBucket]` in `sst.config.ts`. |
 | Cluster chip never appears                                  | Inspect `ClassifierDLQ` in the AWS SQS console — Gemini key invalid or out-of-quota messages land there. |

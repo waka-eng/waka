@@ -1,8 +1,8 @@
 import { serve } from "@hono/node-server";
-import dotenv from "dotenv";
-import { resolve } from "node:path";
 
-dotenv.config({ path: resolve(process.cwd(), "../../.env") });
+import { loadLocalEnv } from "../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 if (process.env.AWS_ACCESS_KEY_ID_APP && !process.env.AWS_ACCESS_KEY_ID) {
   process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID_APP;

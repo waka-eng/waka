@@ -32,7 +32,9 @@
  *      offline dev runs never fail on transient network or rate-limit issues.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { clusterEnumValues } from "../db/index.js";
 import {

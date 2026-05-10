@@ -22,7 +22,9 @@
  * Exits 0 on full pass, 1 on any failure.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { app } from "../index.js";
 

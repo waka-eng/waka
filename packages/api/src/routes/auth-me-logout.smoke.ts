@@ -19,7 +19,9 @@
  *   7. /auth/logout always emits a Max-Age=0 clear-cookie header.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { eq } from "drizzle-orm";
 

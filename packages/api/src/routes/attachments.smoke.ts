@@ -23,7 +23,9 @@
  * is exercised by the frontend integration step.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { eq } from "drizzle-orm";
 

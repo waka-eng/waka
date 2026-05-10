@@ -59,14 +59,13 @@ app as runtime secrets bound to the Hono API Lambda.
 Set them once per stage. From the repo root:
 
 ```bash
-# load .env into your shell first if you want to copy current values
-set -a; source .env; set +a
+# dotenv-aware helper, preferred when copying all local env values into SST:
+pnpm sst:secret:set:all
 
+# or set individual SST secrets directly:
 pnpm sst secret set GoogleClientId      "$AUTH_GOOGLE_ID"
 pnpm sst secret set GoogleClientSecret  "$AUTH_GOOGLE_SECRET"
 pnpm sst secret set SessionSecret       "$AUTH_SECRET"
-
-# while you're here, set the rest of the runtime secrets too:
 pnpm sst secret set JwtSecret           "$JWT_SECRET"
 pnpm sst secret set DbConnectionUrl     "$DB_CONNECTION_URL"
 pnpm sst secret set GeminiApiKey        "$GEMINI_API_KEY"

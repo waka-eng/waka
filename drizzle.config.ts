@@ -23,15 +23,17 @@
  *     connection URL; we don't need to override SSL options here.
  */
 
-import "dotenv/config";
-
 import { defineConfig } from "drizzle-kit";
+
+import { loadLocalEnv } from "./tools/local-env/load.js";
+
+loadLocalEnv();
 
 const connectionString = process.env.DB_CONNECTION_URL;
 
 if (!connectionString) {
   throw new Error(
-    "DB_CONNECTION_URL is not set. Add it to .env at the repo root before running drizzle-kit.",
+    "DB_CONNECTION_URL is not set. Add it to .env or .env.development at the repo root before running drizzle-kit.",
   );
 }
 

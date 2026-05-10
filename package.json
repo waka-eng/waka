@@ -15,10 +15,14 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check",
+    "sst:secret:set": "tsx tools/local-env/sst-secret.ts",
+    "sst:secret:set:all": "tsx tools/local-env/sst-secret.ts --all",
+    "test:api:dev-env": "tsx tools/local-env/run.ts pnpm --filter @waka/api test",
     "visual-diff": "tsx tools/visual-diff/capture.ts",
     "visual-diff:install": "playwright install chromium",
     "e2e:smoke": "tsx tools/e2e/smoke.ts",
-    "e2e:smoke:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/smoke.ts"
+    "e2e:smoke:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/smoke.ts",
+    "smoke:full-stack:dev-env": "tsx tools/local-env/run.ts pnpm e2e:smoke:boot"
   },
   "devDependencies": {
     "dotenv": "^16.4.5",

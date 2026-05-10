@@ -30,7 +30,9 @@
  *       reflections yet.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../../../../tools/local-env/load.js";
+
+loadLocalEnv();
 
 import { eq } from "drizzle-orm";
 

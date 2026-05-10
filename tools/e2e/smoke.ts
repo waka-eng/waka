@@ -57,7 +57,9 @@
  *       returned a non-success status. The error is printed to stderr.
  */
 
-import "dotenv/config";
+import { loadLocalEnv } from "../local-env/load.js";
+
+loadLocalEnv();
 
 import { chromium } from "playwright";
 import type { Browser, BrowserContext, Page, Response } from "playwright";
