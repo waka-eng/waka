@@ -127,6 +127,35 @@ export function calculateImportanceScore(inputs: ImportanceInputs): ImportanceSc
   );
 }
 
+export function cosineSimilarity(a: readonly number[], b: readonly number[]): NormalizedScore {
+  if (a.length === 0 || a.length !== b.length) {
+    return 0;
+  }
+
+  let dot = 0;
+  let aMagnitudeSquared = 0;
+  let bMagnitudeSquared = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    const aValue = a[i] ?? 0;
+    const bValue = b[i] ?? 0;
+
+    if (!Number.isFinite(aValue) || !Number.isFinite(bValue)) {
+      return 0;
+    }
+
+    dot += aValue * bValue;
+    aMagnitudeSquared += aValue * aValue;
+    bMagnitudeSquared += bValue * bValue;
+  }
+
+  if (aMagnitudeSquared <= 0 || bMagnitudeSquared <= 0) {
+    return 0;
+  }
+
+  return clamp01(dot / Math.sqrt(aMagnitudeSquared * bMagnitudeSquared));
+}
+
 export function calculateSimilarityScore(value: number): SimilarityScore {
   return clamp01(value);
 }
