@@ -1,0 +1,667 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WAKA Wow Moment Engine — Visual Brief</title>
+  <style>
+    :root {
+      --bg: #f4f2ee;
+      --ink: #0f0f0e;
+      --muted: #817d74;
+      --line: #dedad0;
+      --cell: #fbfaf7;
+      --paper: #fffdf8;
+      --warm: #d8d3c7;
+      --warm-2: #e8e3d4;
+      --gold: #b99352;
+      --red: #9c3d32;
+      --blue: #516b82;
+      --green: #5e7652;
+      --violet: #6d5d7b;
+      --shadow: 0 30px 90px rgba(15, 15, 14, .10);
+      --font-sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --ease: cubic-bezier(.2,.7,.2,1);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 16%, rgba(216, 211, 199, .9), transparent 26rem),
+        radial-gradient(circle at 86% 12%, rgba(232, 227, 212, .85), transparent 24rem),
+        linear-gradient(135deg, #f7f5ef, var(--bg));
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .22;
+      background-image:
+        linear-gradient(rgba(15, 15, 14, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15, 15, 14, .03) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, #000, transparent 85%);
+    }
+
+    .deck-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 18px;
+      padding: 22px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .topbar, .bottombar {
+      max-width: 1540px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .brand { color: var(--ink); display: flex; align-items: center; gap: 10px; }
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--ink);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-serif);
+      font-size: 20px;
+      line-height: 1;
+      background: var(--cell);
+    }
+
+    .controls { display: flex; align-items: center; gap: 8px; }
+    button {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      background: rgba(251, 250, 247, .75);
+      color: var(--ink);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 0 12px;
+      cursor: pointer;
+      transition: transform 160ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
+    }
+    button:hover { transform: translateY(-1px); border-color: var(--ink); background: var(--cell); }
+    button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      min-height: 0;
+    }
+    .slide {
+      width: min(1540px, calc(100vw - 44px));
+      aspect-ratio: 16 / 9;
+      max-height: calc(100vh - 132px);
+      background: rgba(255, 253, 248, .84);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      padding: clamp(28px, 3vw, 58px);
+      display: none;
+      position: relative;
+      overflow: hidden;
+    }
+    .slide.active { display: block; animation: wake 540ms var(--ease); }
+    @keyframes wake {
+      from { opacity: 0; transform: translateY(8px) scale(.992); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .slide::after {
+      content: attr(data-kicker);
+      position: absolute;
+      right: 34px;
+      bottom: 28px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      color: var(--muted);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-size: clamp(10px, .8vw, 13px);
+      margin: 0 0 14px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      letter-spacing: -.05em;
+      font-size: clamp(64px, 7vw, 132px);
+      line-height: .86;
+      max-width: 1080px;
+      text-wrap: balance;
+    }
+    h2 {
+      font-family: var(--font-serif);
+      font-weight: 400;
+      letter-spacing: -.045em;
+      font-size: clamp(48px, 5vw, 88px);
+      line-height: .91;
+      max-width: 1080px;
+      text-wrap: balance;
+    }
+    h3 {
+      font-size: clamp(18px, 1.45vw, 27px);
+      line-height: 1.05;
+      letter-spacing: -.025em;
+    }
+    .lead {
+      color: #34322e;
+      font-size: clamp(20px, 1.75vw, 32px);
+      line-height: 1.22;
+      letter-spacing: -.025em;
+      max-width: 980px;
+      text-wrap: pretty;
+    }
+    .serif { font-family: var(--font-serif); font-weight: 400; letter-spacing: -.03em; }
+    .muted { color: var(--muted); }
+    .mono { font-family: var(--font-mono); letter-spacing: .02em; }
+    .accent { color: var(--red); }
+
+    .grid { display: grid; gap: 16px; }
+    .two { grid-template-columns: 1fr 1fr; }
+    .three { grid-template-columns: repeat(3, 1fr); }
+    .four { grid-template-columns: repeat(4, 1fr); }
+    .five { grid-template-columns: repeat(5, 1fr); }
+    .card {
+      border: 1px solid var(--line);
+      background: rgba(251, 250, 247, .75);
+      padding: 18px;
+      min-height: 126px;
+      position: relative;
+    }
+    .card.dark {
+      background: var(--ink);
+      color: var(--cell);
+      border-color: var(--ink);
+    }
+    .card .tag, .pill {
+      display: inline-flex;
+      min-height: 24px;
+      align-items: center;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      padding: 0 9px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: inherit;
+      margin-bottom: 12px;
+    }
+    .card p {
+      color: inherit;
+      opacity: .78;
+      line-height: 1.35;
+      font-size: clamp(13px, .95vw, 17px);
+    }
+
+    .hero-layout {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.16fr .84fr;
+      gap: 34px;
+      align-items: center;
+    }
+    .quote-card {
+      border: 1px solid var(--ink);
+      background: var(--cell);
+      padding: 26px;
+      transform: rotate(-1.2deg);
+    }
+    .quote-card .big {
+      font-family: var(--font-serif);
+      font-size: clamp(34px, 3vw, 58px);
+      line-height: .96;
+      letter-spacing: -.045em;
+      margin-bottom: 18px;
+    }
+    .mini-stack { display: grid; gap: 10px; margin-top: 26px; }
+    .mini-row {
+      display: grid;
+      grid-template-columns: 118px 1fr;
+      align-items: start;
+      gap: 16px;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+      font-size: 15px;
+      line-height: 1.3;
+    }
+    .mini-row strong { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 10px;
+      margin-top: 34px;
+      align-items: stretch;
+    }
+    .step {
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.72);
+      min-height: 150px;
+      padding: 14px;
+      position: relative;
+    }
+    .step::before {
+      content: attr(data-num);
+      font-family: var(--font-serif);
+      font-size: 42px;
+      line-height: .8;
+      color: rgba(15,15,14,.18);
+      position: absolute;
+      right: 12px;
+      top: 10px;
+    }
+    .step h3 { font-size: clamp(15px, 1.1vw, 22px); max-width: 150px; }
+    .step p { margin-top: 42px; color: var(--muted); line-height: 1.35; font-size: clamp(12px, .82vw, 15px); }
+    .step.llm { border-color: var(--red); background: rgba(156, 61, 50, .06); }
+
+    .formula {
+      font-family: var(--font-mono);
+      font-size: clamp(12px, .9vw, 17px);
+      line-height: 1.55;
+      color: #33302b;
+      white-space: pre-wrap;
+    }
+    .formula b { color: var(--red); font-weight: 700; }
+
+    .axis-wrap {
+      min-height: 430px;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.64);
+      position: relative;
+      overflow: hidden;
+    }
+    .axis-wrap::before, .axis-wrap::after {
+      content: "";
+      position: absolute;
+      background: rgba(15,15,14,.16);
+    }
+    .axis-wrap::before { left: 9%; right: 7%; top: 50%; height: 1px; }
+    .axis-wrap::after { top: 8%; bottom: 10%; left: 50%; width: 1px; }
+    .axis-label {
+      position: absolute;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .node {
+      position: absolute;
+      width: 96px;
+      min-height: 52px;
+      border: 1px solid var(--ink);
+      background: var(--cell);
+      padding: 9px;
+      font-size: 12px;
+      line-height: 1.1;
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+    .node.new { width: 132px; min-height: 70px; background: var(--ink); color: var(--cell); left: 44%; top: 37%; box-shadow: 0 0 0 10px rgba(216,206,180,.35); }
+    .node.n1 { left: 32%; top: 30%; }
+    .node.n2 { left: 59%; top: 28%; }
+    .node.n3 { left: 61%; top: 59%; }
+    .node.n4 { left: 18%; top: 68%; }
+    .node.n5 { left: 76%; top: 15%; }
+    .thread {
+      position: absolute;
+      height: 1px;
+      background: rgba(156,61,50,.65);
+      transform-origin: left center;
+    }
+    .thread.t1 { width: 162px; left: 43%; top: 42%; transform: rotate(198deg); }
+    .thread.t2 { width: 150px; left: 52%; top: 42%; transform: rotate(-21deg); }
+    .thread.t3 { width: 162px; left: 53%; top: 48%; transform: rotate(43deg); }
+
+    .kind-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 28px; }
+    .kind-card {
+      min-height: 330px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.72);
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 12px;
+    }
+    .kind-card h3 { font-family: var(--font-serif); font-size: clamp(28px, 2.5vw, 44px); font-weight: 400; }
+    .kind-card p { color: var(--muted); line-height: 1.36; font-size: clamp(12px, .9vw, 16px); }
+    .kind-card .signal { font-family: var(--font-mono); font-size: 10px; letter-spacing: .04em; line-height: 1.45; color: #4a4740; border-top: 1px solid var(--line); padding-top: 12px; }
+    .kind-card.surprise { border-color: var(--red); box-shadow: inset 0 0 0 3px rgba(156,61,50,.05); }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: 1.08fr .92fr;
+      gap: 18px;
+      align-items: start;
+      margin-top: 26px;
+    }
+    .score-list { display: grid; gap: 10px; }
+    .score-row {
+      display: grid;
+      grid-template-columns: 145px 1fr 58px;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.7);
+      padding: 10px 12px;
+    }
+    .bar { height: 9px; background: #e5e0d5; position: relative; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--ink); }
+    .bar.red i { background: var(--red); }
+    .score-row b { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+    .score-row span { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-align: right; }
+
+    .retrieval {
+      display: grid;
+      grid-template-columns: .9fr 1.1fr;
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 26px;
+    }
+    .pool-card {
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.72);
+      padding: 20px;
+      display: grid;
+      gap: 12px;
+    }
+    .pool-card h3 { font-family: var(--font-serif); font-weight: 400; font-size: clamp(30px, 2.8vw, 50px); }
+    .pool-card p { color: var(--muted); line-height: 1.38; }
+    .pool-card strong { color: var(--ink); }
+    .distance-band {
+      height: 84px;
+      border: 1px solid var(--line);
+      position: relative;
+      background: linear-gradient(90deg, rgba(156,61,50,.05), rgba(185,147,82,.26), rgba(15,15,14,.08));
+      margin-top: 10px;
+    }
+    .distance-band::before, .distance-band::after { position: absolute; top: calc(100% + 8px); font-family: var(--font-mono); font-size: 10px; color: var(--muted); }
+    .distance-band::before { content: "0.45 distant"; left: 0; }
+    .distance-band::after { content: "0.90 obvious"; right: 0; }
+    .sweet {
+      position: absolute;
+      left: 31%; top: -1px; bottom: -1px; width: 27%;
+      border: 1px solid var(--red);
+      display: grid;
+      place-items: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      background: rgba(156,61,50,.06);
+      color: var(--red);
+    }
+
+    .decision-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-top: 30px;
+    }
+    .gate {
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.76);
+      padding: 20px;
+      min-height: 285px;
+    }
+    .gate h3 { font-family: var(--font-serif); font-size: clamp(34px, 3vw, 56px); font-weight: 400; }
+    .gate ul { margin: 18px 0 0; padding-left: 20px; color: var(--muted); line-height: 1.5; font-size: clamp(13px, .95vw, 17px); }
+    .gate.final { background: var(--ink); color: var(--cell); border-color: var(--ink); }
+    .gate.final ul { color: rgba(251,250,247,.72); }
+
+    .callout {
+      border-left: 2px solid var(--red);
+      padding-left: 18px;
+      color: #37342f;
+      font-size: clamp(17px, 1.35vw, 24px);
+      line-height: 1.25;
+      margin-top: 22px;
+      max-width: 1050px;
+    }
+
+    .footer-note { display: flex; gap: 12px; align-items: center; }
+    .dots { display: flex; gap: 5px; }
+    .dot { width: 7px; height: 7px; border: 1px solid var(--muted); border-radius: 50%; }
+    .dot.active { background: var(--ink); border-color: var(--ink); }
+
+    @media (max-width: 980px) {
+      .deck-shell { padding: 12px; }
+      .slide { width: calc(100vw - 24px); aspect-ratio: auto; min-height: 760px; max-height: none; overflow: auto; }
+      .hero-layout, .two, .three, .four, .five, .matrix, .retrieval, .decision-layout { grid-template-columns: 1fr; }
+      .pipeline, .kind-grid { grid-template-columns: 1fr; }
+      .axis-wrap { min-height: 360px; }
+      .topbar, .bottombar { flex-wrap: wrap; }
+    }
+
+    @media print {
+      body { background: white; }
+      body::before, .topbar, .bottombar { display: none; }
+      .deck-shell { padding: 0; display: block; }
+      .slide, .slide.active {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        max-height: none;
+        aspect-ratio: 16 / 9;
+        box-shadow: none;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">W</span><span>WAKA · Wow Moment Engine</span></div>
+      <div class="controls" aria-label="Slide controls">
+        <button id="prev" type="button">Prev</button>
+        <button id="next" type="button">Next</button>
+      </div>
+    </header>
+
+    <section class="stage" aria-live="polite">
+      <article class="slide active" data-kicker="01 / thesis">
+        <div class="hero-layout">
+          <div>
+            <p class="eyebrow">Product thesis</p>
+            <h1>The wow is the relationship, not the classification.</h1>
+            <p class="lead" style="margin-top: 28px;">Every new inspiration should trigger discovery. But the system should use embeddings and heuristics to search cheaply, then ask the LLM only to judge a small candidate set.</p>
+            <div class="callout">Goal: make WAKA feel like it found meaning in the user's archive — recurring motifs, hidden bridges, real tensions, and surprising outliers.</div>
+          </div>
+          <aside class="quote-card" aria-label="Example wow moment">
+            <p class="eyebrow">Example reveal</p>
+            <p class="big">“This unexpectedly rhymes with your earlier notes on ritual spaces.”</p>
+            <div class="mini-stack">
+              <div class="mini-row"><strong>Input</strong><span>User saves a messy thought, link, or image.</span></div>
+              <div class="mini-row"><strong>Search</strong><span>Embedding retrieval finds nearby, distant-salient, and centroid candidates.</span></div>
+              <div class="mini-row"><strong>Judge</strong><span>LLM confirms whether the connection is defensible, not forced.</span></div>
+            </div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="slide" data-kicker="02 / factors">
+        <p class="eyebrow">What contributes to a wow moment?</p>
+        <h2>Measure the shape around the new inspiration.</h2>
+        <div class="grid four" style="margin-top: 32px;">
+          <div class="card"><span class="tag">Semantic resonance</span><h3>How close is it to prior ideas?</h3><p>Use cosine similarity against stored inspiration embeddings. Strong neighbors become motif or recurrence candidates.</p></div>
+          <div class="card"><span class="tag">Time spread</span><h3>Did the idea come back after time?</h3><p>A pattern spanning weeks or months feels more revealing than several saves from the same afternoon.</p></div>
+          <div class="card"><span class="tag">Cluster diversity</span><h3>Does it connect different zones?</h3><p>If related inspirations come from multiple clusters, the new item may be a bridge or convergence point.</p></div>
+          <div class="card"><span class="tag">Richness</span><h3>Is the input substantial enough?</h3><p>Length, links, attachments, questions, and reflection depth prevent thin notes from generating noisy wow moments.</p></div>
+          <div class="card"><span class="tag">Salience</span><h3>Is the older item important?</h3><p>Reflections, revisits, prior wow involvement, age, and content richness make a distant candidate worth comparing.</p></div>
+          <div class="card"><span class="tag">Contrast</span><h3>Is there a meaningful opposition?</h3><p>Tension often appears when two related ideas pull in different directions: freedom vs control, simple vs dense.</p></div>
+          <div class="card"><span class="tag">Archive distance</span><h3>Is this outside the user's usual map?</h3><p>Low max similarity plus low centroid similarity suggests a possible outlier or new frontier.</p></div>
+          <div class="card dark"><span class="tag">Guardrail</span><h3>Run discovery every time. Show wow only when earned.</h3><p>Not every save deserves a reveal. Detection should be constant; visible moments should be selective.</p></div>
+        </div>
+      </article>
+
+      <article class="slide" data-kicker="03 / pipeline">
+        <p class="eyebrow">Incremental algorithm</p>
+        <h2>No all-history LLM scan on insertion.</h2>
+        <p class="lead" style="margin-top: 18px;">Use cheap vector retrieval and scoring first. Spend LLM tokens only after candidates pass thresholds.</p>
+        <div class="pipeline">
+          <div class="step" data-num="1"><h3>Save inspiration</h3><p>Persist immediately. UX stays instant.</p></div>
+          <div class="step" data-num="2"><h3>Classify cluster</h3><p>Existing async Gemini worker writes outlier / bridge / morph / convergence / tension / loop.</p></div>
+          <div class="step" data-num="3"><h3>Generate embedding</h3><p>Store one vector for the new inspiration.</p></div>
+          <div class="step" data-num="4"><h3>Retrieve candidates</h3><p>Nearest neighbors, cluster centroids, and distant-salient items.</p></div>
+          <div class="step" data-num="5"><h3>Score heuristics</h3><p>Compute motif, bridge, surprise, tension, and outlier scores.</p></div>
+          <div class="step llm" data-num="6"><h3>LLM judge</h3><p>Send only top candidates and signals. Ask: is this defensible?</p></div>
+          <div class="step" data-num="7"><h3>Save wow moment</h3><p>Persist title, explanation, kind, score, and related inspiration IDs.</p></div>
+        </div>
+        <div class="callout">Embedding search finds “what might matter.” Heuristics rank “what is probably interesting.” The LLM decides “is this actually a wow moment, and how should we say it?”</div>
+      </article>
+
+      <article class="slide" data-kicker="04 / taxonomy">
+        <p class="eyebrow">Kind taxonomy</p>
+        <h2>Five MVP wow kinds, including surprise and tension.</h2>
+        <div class="kind-grid">
+          <div class="kind-card"><span class="pill">Recurring</span><h3>Motif</h3><p>The user keeps returning to the same idea, aesthetic, question, or desire.</p><div class="signal">Signals: high avgTop5 similarity · related count ≥ 3 · time spread</div></div>
+          <div class="kind-card"><span class="pill">Connected</span><h3>Bridge</h3><p>The new item connects multiple known clusters or themes in the archive.</p><div class="signal">Signals: cluster diversity · multi-cluster similarity · related density</div></div>
+          <div class="kind-card surprise"><span class="pill">Surprise</span><h3>Surprise bridge</h3><p>Surface domains are different, but the deeper structure, pattern, or question rhymes.</p><div class="signal">Signals: mid-distance similarity · high salience · different clusters · LLM-confirmed analogy</div></div>
+          <div class="kind-card"><span class="pill">Friction</span><h3>Tension</h3><p>Two related inspirations pull in opposite directions: values, stance, assumptions, or desires conflict.</p><div class="signal">Signals: medium-high similarity · contrast hints · tension cluster · LLM-confirmed opposition</div></div>
+          <div class="kind-card"><span class="pill">Frontier</span><h3>Outlier</h3><p>A rich new inspiration sits outside the user's current archive and may start a new thread.</p><div class="signal">Signals: low max similarity · low centroid similarity · high richness · enough archive history</div></div>
+        </div>
+      </article>
+
+      <article class="slide" data-kicker="05 / retrieval">
+        <p class="eyebrow">Candidate pools</p>
+        <h2>Retrieve both obvious resonance and surprising resonance.</h2>
+        <div class="retrieval">
+          <div class="axis-wrap" aria-label="Embedding neighborhood diagram">
+            <span class="axis-label" style="left: 10%; top: 46%;">distant</span>
+            <span class="axis-label" style="right: 8%; top: 46%;">near</span>
+            <span class="axis-label" style="left: 52%; top: 8%;">salient</span>
+            <span class="axis-label" style="left: 52%; bottom: 9%;">ordinary</span>
+            <div class="thread t1"></div><div class="thread t2"></div><div class="thread t3"></div>
+            <div class="node new">New inspiration</div>
+            <div class="node n1">Nearest neighbor</div>
+            <div class="node n2">Theme centroid</div>
+            <div class="node n3">Tension candidate</div>
+            <div class="node n4">Distant salient item</div>
+            <div class="node n5">Prior wow moment</div>
+          </div>
+          <div class="grid" style="gap: 12px;">
+            <div class="pool-card"><h3>Pool A · nearest</h3><p><strong>Top 20 by similarity.</strong> Best for motif, recurrence, normal bridge, and tension prefilter.</p></div>
+            <div class="pool-card"><h3>Pool B · centroids</h3><p><strong>Theme / cluster averages.</strong> Best for outlier distance and convergence without scanning every item.</p></div>
+            <div class="pool-card"><h3>Pool C · mid-distance salient</h3><p><strong>Not too close, not random.</strong> Best for surprise bridge: seemingly unrelated things with a defensible hidden structure.</p><div class="distance-band"><div class="sweet">sweet spot<br/>≈ 0.58</div></div></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-kicker="06 / scoring">
+        <p class="eyebrow">Heuristic scoring</p>
+        <h2>Kind scores are interpretations of measured features.</h2>
+        <div class="matrix">
+          <div class="card" style="min-height: 520px;">
+            <span class="tag">Score formulas</span>
+            <div class="formula">motif = .40·avgTop5 + .30·relatedCount + .20·timeSpread + .10·richness
+
+bridge = .35·clusterDiversity + .30·avgTop5 + .20·relatedCount + .15·richness
+
+tension = .35·topicalRelatedness + .20·tensionHint + .20·contrast + .15·question + .10·richness
+
+outlier = .65·archiveDistance + .35·richness
+
+surpriseBridge = .30·midDistance + .25·salience + .20·clusterDistance + .15·richness + .10·timeDistance</div>
+          </div>
+          <div>
+            <div class="score-list" aria-label="Example scores">
+              <div class="score-row"><b>Surprise</b><div class="bar red"><i style="width: 84%"></i></div><span>.84</span></div>
+              <div class="score-row"><b>Tension</b><div class="bar"><i style="width: 77%"></i></div><span>.77</span></div>
+              <div class="score-row"><b>Motif</b><div class="bar"><i style="width: 69%"></i></div><span>.69</span></div>
+              <div class="score-row"><b>Bridge</b><div class="bar"><i style="width: 64%"></i></div><span>.64</span></div>
+              <div class="score-row"><b>Outlier</b><div class="bar"><i style="width: 42%"></i></div><span>.42</span></div>
+            </div>
+            <div class="card dark" style="margin-top: 14px; min-height: 236px;">
+              <span class="tag">Important</span>
+              <h3>Embeddings do not output kind.</h3>
+              <p style="margin-top: 14px;">Embedding = coordinates. Heuristics = measurements over those coordinates. Kind = interpretation of the pattern. LLM = final semantic judge for hard cases.</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-kicker="07 / gates">
+        <p class="eyebrow">Decision gates</p>
+        <h2>Discovery always runs. Visible wow moments must earn trust.</h2>
+        <div class="decision-layout">
+          <div class="gate"><h3>Cheap gates</h3><ul><li>Archive has enough history</li><li>Input passes richness minimum</li><li>Candidate score clears threshold</li><li>Limit to top one or two candidate kinds</li></ul></div>
+          <div class="gate"><h3>LLM gates</h3><ul><li>Reject generic or forced connections</li><li>Require one-sentence defensible explanation</li><li>For tension: same topic, opposing values</li><li>For surprise: different domains, shared structure</li></ul></div>
+          <div class="gate final"><h3>Saved record</h3><ul><li>kind</li><li>score</li><li>title</li><li>short explanation</li><li>related inspiration IDs</li><li>reflection question</li></ul></div>
+        </div>
+        <div class="callout">Recommended MVP: motif, bridge, surprise_bridge, tension, and outlier. Require LLM confirmation for tension and surprise_bridge; use careful language for outliers.</div>
+      </article>
+    </section>
+
+    <footer class="bottombar">
+      <div class="footer-note"><span id="slide-count">01 / 07</span><div class="dots" id="dots" aria-hidden="true"></div></div>
+      <div>Use ← / → keys · Print to PDF for handoff</div>
+    </footer>
+  </main>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const count = document.getElementById('slide-count');
+    const dots = document.getElementById('dots');
+    let current = Number(localStorage.getItem('waka-wow-slide') || 0);
+    if (!Number.isFinite(current) || current < 0 || current >= slides.length) current = 0;
+
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function renderDots() {
+      dots.innerHTML = '';
+      slides.forEach((_, i) => {
+        const dot = document.createElement('span');
+        dot.className = 'dot' + (i === current ? ' active' : '');
+        dots.appendChild(dot);
+      });
+    }
+    function show(index) {
+      current = (index + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === current));
+      count.textContent = `${pad(current + 1)} / ${pad(slides.length)}`;
+      localStorage.setItem('waka-wow-slide', String(current));
+      renderDots();
+    }
+
+    document.getElementById('prev').addEventListener('click', () => show(current - 1));
+    document.getElementById('next').addEventListener('click', () => show(current + 1));
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') show(current + 1);
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') show(current - 1);
+      if (event.key === 'Home') show(0);
+      if (event.key === 'End') show(slides.length - 1);
+    });
+    show(current);
+  </script>
+</body>
+</html>
