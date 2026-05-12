@@ -96,6 +96,8 @@ interface ApiInspiration {
   text: string;
   kind: string | null;
   category: number | null;
+  importanceScore: number;
+  wowScore: number;
   cluster: string | null;
   classifiedAt: string | null;
   createdAt: string;
@@ -176,6 +178,8 @@ describe("POST /inspirations — successful creation", () => {
         id: inspirations.id,
         userId: inspirations.userId,
         text: inspirations.text,
+        importanceScore: inspirations.importanceScore,
+        wowScore: inspirations.wowScore,
         cluster: inspirations.cluster,
       })
       .from(inspirations)
@@ -183,6 +187,10 @@ describe("POST /inspirations — successful creation", () => {
     expect(dbRows).toHaveLength(1);
     expect(dbRows[0]!.userId).toBe(fixture.user.id);
     expect(dbRows[0]!.text).toBe("light bends around dense thoughts");
+    expect(row.importanceScore).toEqual(expect.any(Number));
+    expect(row.wowScore).toEqual(expect.any(Number));
+    expect(dbRows[0]!.importanceScore).toBe(row.importanceScore);
+    expect(dbRows[0]!.wowScore).toBe(row.wowScore);
     expect(dbRows[0]!.cluster).toBeNull();
   });
 
