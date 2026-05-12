@@ -91,7 +91,14 @@
  * delegates to the primitives that already preserve the contract.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   CaptureForm,
@@ -217,6 +224,9 @@ export interface InspirationsBoardProps {
    * data. Reserved for the wow-moment overlay wiring in a later sub-AC.
    */
   onSelectCluster?: (card: HomeCardData, index: number) => void;
+
+  /** Optional content rendered inside the page well after the home grid. */
+  afterGridContent?: ReactNode;
 }
 
 export function InspirationsBoard({
@@ -230,6 +240,7 @@ export function InspirationsBoard({
   onPersistError,
   onSelectInspiration,
   onSelectCluster,
+  afterGridContent,
 }: InspirationsBoardProps): JSX.Element {
   // ---------------------------------------------------------------
   // Capture-cell local state
@@ -517,6 +528,8 @@ export function InspirationsBoard({
         />
         {clusterNodes.slice(CAPTURE_INSERTION_INDEX)}
       </ClusterGrid>
+
+      {afterGridContent}
 
       {/*
         `<CloseConfirmModal>` is rendered as a sibling of the grid

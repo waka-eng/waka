@@ -22,11 +22,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import {
-  InspirationsBoard,
-  type HomeCardData,
-} from "../components/InspirationsBoard";
+import { InspirationsBoard } from "../components/InspirationsBoard";
+import type { HomeCardData } from "../components/InspirationsBoard";
 import type { InspirationCardData } from "../components/InspirationCard";
+import { WowMomentsSection } from "../components/WowMomentsSection";
 import type {
   PendingInspiration,
   PersistedResult,
@@ -39,8 +38,10 @@ import {
   type ApiAttachment,
   type ApiError,
   type ApiInspiration,
+  type ApiWowMoment,
   type ClusterKind,
   fetchInspirations,
+  fetchWowMoments,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
@@ -238,6 +239,9 @@ export function HomePage(): JSX.Element {
   // seed's `data_isolation` evaluation rule calls for.
   const [entries, setEntries] = useState<InspirationListEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [wowMoments, setWowMoments] = useState<ApiWowMoment[]>([]);
+  const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
+  const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -263,13 +267,18 @@ export function HomePage(): JSX.Element {
    * before the next fetch resolves.
    */
   const loadedForUserIdRef = useRef<string | null>(null);
+  const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!user) {
       // Guard regression — the route should have already redirected to
       // /login. Wipe local state defensively just in case.
       loadedForUserIdRef.current = null;
+      wowMomentsLoadedForUserIdRef.current = null;
       setEntries([]);
+      setWowMoments([]);
+      setWowMomentsLoading(false);
+      setWowMomentsError(null);
       return;
     }
 
@@ -333,6 +342,44 @@ export function HomePage(): JSX.Element {
         // capture into the empty state — the load-error banner below
         // surfaces the actual problem.
         setInitialLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (wowMomentsLoadedForUserIdRef.current === user.id) return;
+
+    let cancelled = false;
+    if (
+      wowMomentsLoadedForUserIdRef.current &&
+      wowMomentsLoadedForUserIdRef.current !== user.id
+    ) {
+      setWowMoments([]);
+    }
+    setWowMomentsLoading(true);
+    setWowMomentsError(null);
+
+    void (async () => {
+      try {
+        const rows = await fetchWowMoments();
+        if (cancelled) return;
+        // Match the inspirations load's defence-in-depth tenant guard: the
+        // route is scoped by session, but the page still refuses to render any
+        // row whose user id does not match the current auth context.
+        setWowMoments(rows.filter((row) => row.userId === user.id));
+        wowMomentsLoadedForUserIdRef.current = user.id;
+        setWowMomentsLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : "Failed to load WOW moments";
+        setWowMomentsError(message);
+        setWowMomentsLoading(false);
       }
     })();
 
@@ -599,6 +646,13 @@ export function HomePage(): JSX.Element {
         onPersistError={handlePersistError}
         onSelectInspiration={handleSelectInspiration}
         onSelectCluster={handleSelectCluster}
+        afterGridContent={
+          <WowMomentsSection
+            moments={wowMoments}
+            loading={wowMomentsLoading}
+            error={wowMomentsError}
+          />
+        }
         historyDetail={
           detailData ? (
             <InspirationDetail

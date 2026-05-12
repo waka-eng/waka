@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { wowMomentsRoutes } from "./routes/wow-moments.js";
 
 export const app = new Hono();
 
@@ -33,5 +34,10 @@ app.route("/inspirations", inspirationsRoutes);
 // The router applies `requireAuth` at the mount point, so no anonymous
 // caller can mint an S3 upload URL.
 app.route("/attachments", attachmentsRoutes);
+
+// WOW moment routes list persisted generated moments for the signed-in user.
+// Generation/scoring pipelines land later; this mount only exposes rows that
+// already exist in the database.
+app.route("/wow-moments", wowMomentsRoutes);
 
 export default app;

@@ -254,6 +254,8 @@ export interface ApiInspiration {
   text: string;
   kind: string | null;
   category: number | null;
+  importanceScore: number;
+  wowScore: number;
   cluster: ClusterKind | null;
   classifiedAt: string | null;
   createdAt: string;
@@ -390,6 +392,75 @@ export async function deleteInspiration(id: string): Promise<void> {
       errorBody.error ??
       `Failed to delete inspiration (HTTP ${res.status}). Please try again.`,
   });
+}
+
+export type WowKind =
+  | "recurrence"
+  | "bridge"
+  | "surprise_bridge"
+  | "tension"
+  | "outlier";
+
+export interface ApiWowMomentRelatedInspiration {
+  inspirationId: string;
+  role: string;
+  reason: string;
+  text: string;
+  kind: string | null;
+  createdAt: string;
+}
+
+export interface ApiWowMoment {
+  id: string;
+  userId: string;
+  title: string;
+  kind: WowKind;
+  why: string;
+  reflectionQuestion: string | null;
+  wowScore: number;
+  createdAt: string;
+  updatedAt: string;
+  relatedInspirations: ApiWowMomentRelatedInspiration[];
+}
+
+export interface ListWowMomentsResponse {
+  wowMoments: ApiWowMoment[];
+}
+
+export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
+  let res: Response;
+  try {
+    res = await fetch("/wow-moments", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while loading WOW moments",
+    });
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as { error?: string };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ??
+        `Failed to load WOW moments (HTTP ${res.status}). Please try again.`,
+    });
+  }
+
+  const payload = (body ?? {}) as Partial<ListWowMomentsResponse>;
+  return Array.isArray(payload.wowMoments) ? payload.wowMoments : [];
 }
 
 // ---------------------------------------------------------------------------
