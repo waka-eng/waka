@@ -95,6 +95,7 @@ describe("GET /wow-moments — ownership", () => {
         why: "Connects Alice-owned signals only.",
         reflectionQuestion: "What does Alice want to do next?",
         wowScore: 88,
+        idempotencyKey: `test:wow-moments:ownership:${alice.user.id}`,
       } as typeof wowMoments.$inferInsert)
       .returning({ id: wowMoments.id });
     expect(moment).toBeTruthy();

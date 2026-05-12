@@ -1,11 +1,16 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { inspirationEmbeddings, type Inspiration } from "../src/db/index.js";
+import {
+  inspirationEmbeddings,
+  wowMoments,
+  type Inspiration,
+} from "../src/db/index.js";
 import {
   GeminiWowJudgeClient,
   GeminiWowJudgeValidationError,
   buildWowJudgmentRequest,
   judgeWowMomentForInspiration,
+  persistWowMomentForInspirationJudgment,
   type WowJudgeClient,
 } from "../src/lib/wow-judge.js";
 
@@ -31,6 +36,22 @@ async function createEmbedding(
 async function countWowMoments(testDb: TestDatabase): Promise<number> {
   const result = await testDb.sql<{ count: string }[]>`SELECT count(*) FROM wow_moments`;
   return Number(result[0]?.count ?? 0);
+}
+
+async function countWowMomentLinks(testDb: TestDatabase): Promise<number> {
+  const result = await testDb.sql<{ count: string }[]>`SELECT count(*) FROM wow_moment_inspirations`;
+  return Number(result[0]?.count ?? 0);
+}
+
+async function listWowMomentLinks(testDb: TestDatabase, wowMomentId: string) {
+  return testDb.sql<
+    Array<{ inspiration_id: string; role: string; reason: string; sort_order: number }>
+  >`
+    SELECT inspiration_id, role, reason, sort_order
+    FROM wow_moment_inspirations
+    WHERE wow_moment_id = ${wowMomentId}
+    ORDER BY sort_order ASC
+  `;
 }
 
 function geminiJsonResponse(value: unknown): Response {
@@ -288,6 +309,274 @@ describe("judgeWowMomentForInspiration", () => {
       }),
     ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
     expect(await countWowMoments(testDb)).toBe(0);
+  });
+
+
+  it("persists a true bounded judgment with trigger defaults and deduped related rows", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: public libraries as neighborhood memory systems.",
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate: seed banks as community memory infrastructure.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidate, [1, 0]);
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      judgment: {
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Community Memory Infrastructure",
+        why: "The trigger and candidate connect civic and ecological memory systems.",
+        relatedInspirationIds: [candidate.id, candidate.id],
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.persisted && result.status).toBe("created");
+    expect(await countWowMoments(testDb)).toBe(1);
+    expect(await countWowMomentLinks(testDb)).toBe(2);
+    const links = await listWowMomentLinks(
+      testDb,
+      result.persisted ? result.wowMoment.id : "",
+    );
+    expect(links).toEqual([
+      { inspiration_id: trigger.id, role: "trigger", reason: "", sort_order: 0 },
+      { inspiration_id: candidate.id, role: "related", reason: "", sort_order: 1 },
+    ]);
+  });
+
+  it("does not persist anything for a false judgment and returns a clear no-op", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: no WOW here.",
+    });
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      judgment: { isWowMoment: false },
+    });
+
+    expect(result).toEqual({
+      persisted: false,
+      reason: "not_wow_moment",
+      judgment: { isWowMoment: false },
+    });
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
+  });
+
+  it("does not persist anything for a missing trigger and returns a clear no-op", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const missingTriggerId = "00000000-0000-4000-8000-00000000f00d";
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: missingTriggerId,
+      judgment: {
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Missing trigger",
+        why: "This should not be persisted because the trigger is absent.",
+        relatedInspirationIds: [missingTriggerId],
+      },
+    });
+
+    expect(result).toEqual({
+      persisted: false,
+      reason: "trigger_not_found",
+      judgment: {
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Missing trigger",
+        why: "This should not be persisted because the trigger is absent.",
+        relatedInspirationIds: [missingTriggerId],
+      },
+    });
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
+  });
+
+  it("rejects unsafe related ids during persistence and writes nothing", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const bob = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: bounded tenant safety.",
+    });
+    const aliceCandidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate: safe same tenant note.",
+    });
+    const bobInspiration = await createInspirationFixture(testDb.db, bob.user.id, {
+      text: "Wrong tenant note.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, aliceCandidate, [1, 0]);
+    await createEmbedding(testDb, bobInspiration, [1, 0]);
+
+    await expect(
+      persistWowMomentForInspirationJudgment({
+        db: testDb.db,
+        userId: alice.user.id,
+        triggerInspirationId: trigger.id,
+        limit: 5,
+        judgment: {
+          isWowMoment: true,
+          kind: "bridge",
+          title: "Unsafe relation",
+          why: "The model included an id outside the safe set.",
+          relatedInspirationIds: [trigger.id, aliceCandidate.id, bobInspiration.id],
+        },
+      }),
+    ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
+  });
+
+  it("returns an existing same-user same title/kind moment linked to the trigger on retry", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: idempotent WOW moment.",
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate: retry should not duplicate this relation.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidate, [1, 0]);
+    const judgment = {
+      isWowMoment: true as const,
+      kind: "recurrence" as const,
+      title: "Retryable Pattern",
+      why: "A retry should return the existing moment.",
+      relatedInspirationIds: [trigger.id, candidate.id],
+    };
+
+    const first = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      judgment,
+    });
+    const second = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      judgment,
+    });
+
+    expect(first.persisted && first.status).toBe("created");
+    expect(second.persisted && second.status).toBe("existing");
+    expect(second.persisted && first.persisted && second.wowMoment.id).toBe(
+      first.persisted ? first.wowMoment.id : undefined,
+    );
+    expect(await countWowMoments(testDb)).toBe(1);
+    expect(await countWowMomentLinks(testDb)).toBe(2);
+  });
+
+  it("concurrently persists identical judgments as exactly one moment and one link set", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: concurrent idempotent WOW moment.",
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate: concurrent retry should not duplicate this relation.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidate, [1, 0]);
+    const judgment = {
+      isWowMoment: true as const,
+      kind: "recurrence" as const,
+      title: "Concurrent Retryable Pattern",
+      why: "Concurrent retries should resolve to a single durable idempotent moment.",
+      relatedInspirationIds: [trigger.id, candidate.id],
+    };
+
+    const [first, second] = await Promise.all([
+      persistWowMomentForInspirationJudgment({
+        db: testDb.db,
+        userId: alice.user.id,
+        triggerInspirationId: trigger.id,
+        limit: 5,
+        judgment,
+      }),
+      persistWowMomentForInspirationJudgment({
+        db: testDb.db,
+        userId: alice.user.id,
+        triggerInspirationId: trigger.id,
+        limit: 5,
+        judgment,
+      }),
+    ]);
+
+    expect(first.persisted && second.persisted).toBe(true);
+    if (!first.persisted || !second.persisted) return;
+    expect([first.status, second.status].sort()).toEqual(["created", "existing"]);
+    expect(second.wowMoment.id).toBe(first.wowMoment.id);
+    expect(first.wowMoment.idempotencyKey).toBe(second.wowMoment.idempotencyKey);
+    expect(first.wowMoment.idempotencyKey).toContain(trigger.id);
+    expect(await countWowMoments(testDb)).toBe(1);
+    expect(await countWowMomentLinks(testDb)).toBe(2);
+    const persistedMoments = await testDb.db.select().from(wowMoments);
+    expect(persistedMoments).toHaveLength(1);
+    expect(persistedMoments[0]?.idempotencyKey).toBe(first.wowMoment.idempotencyKey);
+    const links = await listWowMomentLinks(testDb, first.wowMoment.id);
+    expect(links).toEqual([
+      { inspiration_id: trigger.id, role: "trigger", reason: "", sort_order: 0 },
+      { inspiration_id: candidate.id, role: "related", reason: "", sort_order: 1 },
+    ]);
+  });
+
+  it("rejects links outside the bounded retrieved candidates", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: bounded candidate list.",
+    });
+    const topCandidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "TOP_CANDIDATE_TEXT.",
+    });
+    const extraCandidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "FULL_ARCHIVE_SHOULD_NOT_BE_LINKED.",
+    });
+    await testDb.sql`
+      UPDATE inspirations
+      SET wow_score = 100
+      WHERE id = ${topCandidate.id}
+    `;
+    await testDb.sql`
+      UPDATE inspirations
+      SET wow_score = 0
+      WHERE id = ${extraCandidate.id}
+    `;
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, topCandidate, [1, 0]);
+    await createEmbedding(testDb, extraCandidate, [0, 1]);
+
+    await expect(
+      persistWowMomentForInspirationJudgment({
+        db: testDb.db,
+        userId: alice.user.id,
+        triggerInspirationId: trigger.id,
+        limit: 1,
+        judgment: {
+          isWowMoment: true,
+          kind: "bridge",
+          title: "Bounded Only",
+          why: "Only retrieved bounded candidates may be linked.",
+          relatedInspirationIds: [trigger.id, topCandidate.id, extraCandidate.id],
+        },
+      }),
+    ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
   });
 
   it("sends only retrieved top candidates to the judge client", async () => {
