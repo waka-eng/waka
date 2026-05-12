@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WAKA Wow Moment Engine — Clear Team Brief</title>
+  <style>
+    :root {
+      --bg: #f4f2ee;
+      --ink: #11110f;
+      --muted: #6f6a61;
+      --line: #ddd7ca;
+      --paper: #fffdf8;
+      --cell: #fbfaf7;
+      --red: #9c3d32;
+      --gold: #b99352;
+      --blue: #516b82;
+      --green: #5f7657;
+      --shadow: 0 28px 80px rgba(15, 15, 14, .10);
+      --font-sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+      --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+      --ease: cubic-bezier(.2,.7,.2,1);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(216,211,199,.95), transparent 25rem),
+        radial-gradient(circle at 90% 6%, rgba(232,227,212,.9), transparent 25rem),
+        var(--bg);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .18;
+      background-image:
+        linear-gradient(rgba(15,15,14,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(15,15,14,.035) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(to bottom, #000, transparent 88%);
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 18px;
+      padding: 22px;
+      position: relative;
+      z-index: 1;
+    }
+    .bar {
+      width: min(1500px, 100%);
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--ink); }
+    .brand-mark {
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--ink);
+      display: grid;
+      place-items: center;
+      background: var(--cell);
+      font-family: var(--font-serif);
+      font-size: 22px;
+      line-height: 1;
+    }
+    .controls { display: flex; gap: 8px; }
+    button {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.84);
+      color: var(--ink);
+      padding: 0 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--ink); }
+    button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+    .stage { display: grid; place-items: center; min-height: 0; }
+    .slide {
+      width: min(1500px, calc(100vw - 44px));
+      aspect-ratio: 16 / 9;
+      max-height: calc(100vh - 136px);
+      display: none;
+      overflow: hidden;
+      position: relative;
+      padding: clamp(26px, 3.2vw, 52px);
+      background: rgba(255,253,248,.9);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .slide.active { display: block; animation: appear 420ms var(--ease); }
+    @keyframes appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .slide::after {
+      content: attr(data-short);
+      position: absolute;
+      right: 32px;
+      bottom: 26px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: clamp(12px, .9vw, 15px);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      max-width: 1120px;
+      font-family: var(--font-serif);
+      font-size: clamp(58px, 6vw, 98px);
+      font-weight: 400;
+      line-height: .9;
+      letter-spacing: -.055em;
+      text-wrap: balance;
+    }
+    h2 {
+      max-width: 1120px;
+      font-family: var(--font-serif);
+      font-size: clamp(46px, 4.8vw, 78px);
+      font-weight: 400;
+      line-height: .94;
+      letter-spacing: -.05em;
+      text-wrap: balance;
+    }
+    h3 {
+      font-size: clamp(24px, 2vw, 36px);
+      line-height: 1.04;
+      letter-spacing: -.035em;
+      text-wrap: balance;
+    }
+    .lead {
+      max-width: 980px;
+      margin-top: 22px;
+      color: #34312c;
+      font-size: clamp(21px, 1.65vw, 30px);
+      line-height: 1.2;
+      letter-spacing: -.03em;
+      text-wrap: pretty;
+    }
+    .plain {
+      color: var(--muted);
+      font-size: clamp(18px, 1.35vw, 25px);
+      line-height: 1.32;
+      text-wrap: pretty;
+    }
+    .mono { font-family: var(--font-mono); }
+    .red { color: var(--red); }
+
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: stretch; }
+    .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .stack { display: grid; gap: 16px; }
+
+    .card {
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.78);
+      padding: 24px;
+    }
+    .card.dark { background: var(--ink); color: var(--cell); border-color: var(--ink); }
+    .card.dark .plain, .card.dark p, .card.dark li { color: rgba(251,250,247,.74); }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border: 1px solid currentColor;
+      border-radius: 99px;
+      padding: 0 10px;
+      margin-bottom: 16px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: inherit;
+    }
+    .card p { margin-top: 12px; color: var(--muted); font-size: clamp(17px, 1.2vw, 22px); line-height: 1.28; }
+    .card ul { margin: 16px 0 0; padding-left: 22px; color: var(--muted); font-size: clamp(17px, 1.2vw, 22px); line-height: 1.42; }
+
+    .hero {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap: 36px;
+      align-items: center;
+    }
+    .example {
+      border: 1px solid var(--ink);
+      background: var(--cell);
+      padding: 34px;
+      transform: rotate(-.9deg);
+    }
+    .example .quote {
+      font-family: var(--font-serif);
+      font-size: clamp(34px, 2.8vw, 52px);
+      line-height: .96;
+      letter-spacing: -.05em;
+    }
+    .rows { margin-top: 24px; display: grid; gap: 12px; }
+    .row {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      gap: 14px;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+      font-size: clamp(15px, 1.05vw, 20px);
+      line-height: 1.3;
+      color: var(--muted);
+    }
+    .row b { color: var(--ink); font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+
+    .principle {
+      margin-top: 28px;
+      border-left: 3px solid var(--red);
+      padding-left: 20px;
+      max-width: 1100px;
+      color: #2e2b27;
+      font-size: clamp(25px, 2vw, 36px);
+      line-height: 1.16;
+      letter-spacing: -.025em;
+    }
+
+    .pipeline {
+      margin-top: 34px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+    }
+    .step {
+      min-height: 210px;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.8);
+      padding: 20px;
+      position: relative;
+    }
+    .step::before {
+      content: attr(data-n);
+      position: absolute;
+      right: 16px;
+      top: 14px;
+      font-family: var(--font-serif);
+      font-size: 58px;
+      line-height: .8;
+      color: rgba(15,15,14,.16);
+    }
+    .step h3 { max-width: 180px; font-size: clamp(23px, 1.65vw, 32px); }
+    .step p { margin-top: 56px; color: var(--muted); font-size: clamp(16px, 1.05vw, 20px); line-height: 1.3; }
+    .step.hot { border-color: var(--red); background: rgba(156,61,50,.07); }
+
+    .kind-card { min-height: 320px; display: grid; grid-template-rows: auto auto 1fr auto; }
+    .kind-card h3 { font-family: var(--font-serif); font-size: clamp(42px, 3.4vw, 62px); font-weight: 400; }
+    .signal {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      color: #4a453e;
+      font-family: var(--font-mono);
+      font-size: clamp(12px, .82vw, 15px);
+      line-height: 1.45;
+    }
+    .kind-card.focus { border-color: var(--red); box-shadow: inset 0 0 0 4px rgba(156,61,50,.06); }
+
+    .diagram {
+      min-height: 500px;
+      position: relative;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.72);
+      overflow: hidden;
+    }
+    .diagram::before, .diagram::after { content: ""; position: absolute; background: rgba(15,15,14,.16); }
+    .diagram::before { left: 8%; right: 8%; top: 50%; height: 1px; }
+    .diagram::after { top: 10%; bottom: 12%; left: 50%; width: 1px; }
+    .axis { position: absolute; color: var(--muted); font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+    .node {
+      position: absolute;
+      width: 150px;
+      min-height: 70px;
+      border: 1px solid var(--ink);
+      background: var(--cell);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 12px;
+      font-size: 16px;
+      line-height: 1.1;
+    }
+    .node.new { left: 41%; top: 38%; width: 180px; min-height: 86px; background: var(--ink); color: var(--cell); box-shadow: 0 0 0 12px rgba(216,206,180,.36); }
+    .node.a { left: 64%; top: 30%; }
+    .node.b { left: 63%; top: 62%; }
+    .node.c { left: 18%; top: 62%; }
+    .node.d { left: 72%; top: 12%; }
+    .line { position: absolute; height: 2px; background: rgba(156,61,50,.65); transform-origin: left center; }
+    .line.l1 { width: 154px; left: 53%; top: 45%; transform: rotate(-22deg); }
+    .line.l2 { width: 168px; left: 53%; top: 50%; transform: rotate(48deg); }
+    .line.l3 { width: 250px; left: 41%; top: 51%; transform: rotate(154deg); background: rgba(185,147,82,.75); }
+
+    .formula {
+      font-family: var(--font-mono);
+      font-size: clamp(17px, 1.18vw, 22px);
+      line-height: 1.55;
+      color: #332f2a;
+      white-space: pre-wrap;
+    }
+    .formula b { color: var(--red); }
+    .score-row {
+      display: grid;
+      grid-template-columns: 155px 1fr 58px;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      background: rgba(251,250,247,.8);
+    }
+    .score-row b { font-family: var(--font-mono); font-size: 13px; letter-spacing: .05em; text-transform: uppercase; }
+    .meter { height: 12px; background: #e4ded1; overflow: hidden; }
+    .meter i { display: block; height: 100%; background: var(--ink); }
+    .meter.red i { background: var(--red); }
+    .score-row span { color: var(--muted); font-family: var(--font-mono); font-size: 13px; text-align: right; }
+
+    .decision { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+    .decision .card { min-height: 340px; }
+    .decision h3 { font-family: var(--font-serif); font-size: clamp(44px, 3.5vw, 68px); font-weight: 400; }
+
+    .footer-left { display: flex; align-items: center; gap: 12px; }
+    .dots { display: flex; gap: 5px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--muted); }
+    .dot.active { background: var(--ink); border-color: var(--ink); }
+
+    @media (max-width: 1000px) {
+      .shell { padding: 12px; }
+      .slide { width: calc(100vw - 24px); max-height: none; min-height: 760px; aspect-ratio: auto; overflow: auto; }
+      .hero, .two, .three, .four, .pipeline, .decision { grid-template-columns: 1fr; }
+      .bar { flex-wrap: wrap; }
+      .diagram { min-height: 420px; }
+    }
+
+    @media print {
+      body { background: white; }
+      body::before, .bar { display: none; }
+      .shell { display: block; padding: 0; }
+      .slide, .slide.active { display: block; width: 100vw; height: 100vh; max-height: none; box-shadow: none; page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="bar">
+      <div class="brand"><span class="brand-mark">W</span><span>WAKA · Wow Moment Engine</span></div>
+      <div class="controls"><button id="prev" type="button">Prev</button><button id="next" type="button">Next</button></div>
+    </header>
+
+    <section class="stage" aria-live="polite">
+      <article class="slide active" data-short="01 / idea">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">Core idea</p>
+            <h1>The wow is not the label. The wow is the connection.</h1>
+            <p class="lead">When someone adds an inspiration, WAKA should look for a pattern that makes the user think: “I didn’t realize I kept circling this.”</p>
+          </div>
+          <aside class="example">
+            <p class="eyebrow">Example reveal</p>
+            <p class="quote">“This unexpectedly rhymes with your older notes on ritual spaces.”</p>
+            <div class="rows">
+              <div class="row"><b>New</b><span>A messy note, link, or image.</span></div>
+              <div class="row"><b>Found</b><span>Related, distant, or opposing prior ideas.</span></div>
+              <div class="row"><b>Wow</b><span>A short explanation the user can believe.</span></div>
+            </div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="slide" data-short="02 / constraint">
+        <p class="eyebrow">Constraint</p>
+        <h2>Run discovery every time. Do not run the LLM over everything.</h2>
+        <div class="two" style="margin-top: 42px;">
+          <div class="card dark">
+            <span class="tag">Avoid</span>
+            <h3>Full archive LLM scan</h3>
+            <ul><li>Expensive as the archive grows</li><li>Slow after every save</li><li>Hard to make deterministic</li><li>Tempts the model to invent connections</li></ul>
+          </div>
+          <div class="card">
+            <span class="tag">Use instead</span>
+            <h3>Embedding search → heuristic scoring → small LLM judgment</h3>
+            <ul><li>One embedding for the new inspiration</li><li>Cheap vector search for candidates</li><li>Scores decide which kind may apply</li><li>LLM only judges the strongest small set</li></ul>
+          </div>
+        </div>
+        <p class="principle">Detection happens on every insert. A visible wow moment appears only when the evidence is strong.</p>
+      </article>
+
+      <article class="slide" data-short="03 / pipeline">
+        <p class="eyebrow">Simple pipeline</p>
+        <h2>Five steps from new inspiration to possible wow moment.</h2>
+        <div class="pipeline">
+          <div class="step" data-n="1"><h3>Save</h3><p>Persist the inspiration immediately so the product feels instant.</p></div>
+          <div class="step" data-n="2"><h3>Embed</h3><p>Turn the new inspiration into a vector: coordinates in meaning-space.</p></div>
+          <div class="step" data-n="3"><h3>Retrieve</h3><p>Find nearby, distant-salient, and centroid candidates from the user's archive.</p></div>
+          <div class="step" data-n="4"><h3>Score</h3><p>Calculate motif, bridge, tension, outlier, and surprise scores.</p></div>
+          <div class="step hot" data-n="5"><h3>Judge</h3><p>Ask the LLM only about top candidates: “Is this defensible or forced?”</p></div>
+        </div>
+        <p class="principle">Embedding finds candidates. Heuristics rank them. The LLM confirms and phrases the moment.</p>
+      </article>
+
+      <article class="slide" data-short="04 / kinds">
+        <p class="eyebrow">MVP wow kinds</p>
+        <h2>Start with five understandable moments.</h2>
+        <div class="three" style="margin-top: 34px;">
+          <div class="card kind-card"><span class="tag">Recurring</span><h3>Motif</h3><p>You keep returning to the same idea.</p><div class="signal">High similarity + several related items + time spread.</div></div>
+          <div class="card kind-card"><span class="tag">Connected</span><h3>Bridge</h3><p>This connects two or more known themes.</p><div class="signal">Related items come from different clusters.</div></div>
+          <div class="card kind-card focus"><span class="tag">Surprise</span><h3>Surprise bridge</h3><p>Seemingly unrelated things share a deeper structure.</p><div class="signal">Mid-distance + high salience + LLM-confirmed analogy.</div></div>
+        </div>
+      </article>
+
+      <article class="slide" data-short="05 / tension-outlier">
+        <p class="eyebrow">The surprise element</p>
+        <h2>Tension and outlier make WAKA feel less like search.</h2>
+        <div class="two" style="margin-top: 44px;">
+          <div class="card kind-card">
+            <span class="tag">Friction</span>
+            <h3>Tension</h3>
+            <p>Two ideas are related, but they pull in opposite directions.</p>
+            <ul><li>Same underlying topic</li><li>Opposing values or assumptions</li><li>Requires LLM confirmation</li></ul>
+            <div class="signal">Example: “I want calming minimal tools” vs “dense dashboards make me feel powerful.”</div>
+          </div>
+          <div class="card kind-card">
+            <span class="tag">Frontier</span>
+            <h3>Outlier</h3>
+            <p>A rich new item sits outside the user's usual archive.</p>
+            <ul><li>Low similarity to nearest items</li><li>Low similarity to theme centroids</li><li>Enough substance to be worth noticing</li></ul>
+            <div class="signal">Careful copy: “This may be the start of a new thread.”</div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-short="06 / retrieval">
+        <p class="eyebrow">Retrieval strategy</p>
+        <h2>Use three candidate pools, not one giant prompt.</h2>
+        <div class="two" style="margin-top: 34px; grid-template-columns: 1.05fr .95fr;">
+          <div class="diagram">
+            <span class="axis" style="left: 9%; top: 47%;">distant</span>
+            <span class="axis" style="right: 9%; top: 47%;">near</span>
+            <span class="axis" style="left: 52%; top: 9%;">salient</span>
+            <span class="axis" style="left: 52%; bottom: 10%;">ordinary</span>
+            <div class="line l1"></div><div class="line l2"></div><div class="line l3"></div>
+            <div class="node new">New inspiration</div>
+            <div class="node a">Nearest neighbors</div>
+            <div class="node b">Tension candidates</div>
+            <div class="node c">Distant salient item</div>
+            <div class="node d">Theme centroid</div>
+          </div>
+          <div class="stack">
+            <div class="card"><span class="tag">Pool A</span><h3>Nearest neighbors</h3><p>Best for motif, recurrence, normal bridge, and tension prefilter.</p></div>
+            <div class="card"><span class="tag">Pool B</span><h3>Theme centroids</h3><p>Best for outlier distance and “is this near an existing area?”</p></div>
+            <div class="card"><span class="tag">Pool C</span><h3>Mid-distance salient items</h3><p>Best for surprise bridge: distant enough to surprise, important enough to compare.</p></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-short="07 / scoring">
+        <p class="eyebrow">Heuristic scoring</p>
+        <h2>Kind values come from patterns around the embedding.</h2>
+        <div class="two" style="margin-top: 36px; grid-template-columns: 1.08fr .92fr;">
+          <div class="card">
+            <span class="tag">Mental model</span>
+            <div class="formula">embedding = coordinates
+heuristics = measurements over those coordinates
+kind = interpretation of the pattern
+LLM = final semantic judge</div>
+            <p class="plain" style="margin-top: 26px;">The embedding does not say “this is tension.” It lets us measure similarity, distance, density, diversity, and time spread.</p>
+          </div>
+          <div class="stack">
+            <div class="score-row"><b>Surprise</b><div class="meter red"><i style="width: 84%"></i></div><span>.84</span></div>
+            <div class="score-row"><b>Tension</b><div class="meter"><i style="width: 77%"></i></div><span>.77</span></div>
+            <div class="score-row"><b>Motif</b><div class="meter"><i style="width: 69%"></i></div><span>.69</span></div>
+            <div class="score-row"><b>Bridge</b><div class="meter"><i style="width: 64%"></i></div><span>.64</span></div>
+            <div class="score-row"><b>Outlier</b><div class="meter"><i style="width: 42%"></i></div><span>.42</span></div>
+            <div class="card dark"><span class="tag">Decision</span><h3>Send only the top one or two candidates to the LLM.</h3></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-short="08 / formulas">
+        <p class="eyebrow">Readable formulas</p>
+        <h2>The math is intentionally simple.</h2>
+        <div class="two" style="margin-top: 36px;">
+          <div class="card">
+            <span class="tag">Obvious resonance</span>
+            <div class="formula"><b>motif</b> = similarity + related count + time spread + richness
+
+<b>bridge</b> = cluster diversity + multi-cluster similarity + richness
+
+<b>tension</b> = topic relatedness + contrast hints + question/stance language</div>
+          </div>
+          <div class="card">
+            <span class="tag">Surprise</span>
+            <div class="formula"><b>outlier</b> = archive distance + richness
+
+<b>surprise bridge</b> = mid-distance sweet spot + candidate salience + different cluster + time distance</div>
+            <p class="plain" style="margin-top: 24px;">For surprise bridge, do not look for maximum distance. Look for the sweet spot: not obvious, not random.</p>
+          </div>
+        </div>
+      </article>
+
+      <article class="slide" data-short="09 / gates">
+        <p class="eyebrow">Trust gates</p>
+        <h2>Protect the magic by rejecting weak moments.</h2>
+        <div class="decision">
+          <div class="card"><h3>Cheap gates</h3><ul><li>Archive has enough history</li><li>Input has enough richness</li><li>Candidate score clears threshold</li><li>Only top candidate kinds proceed</li></ul></div>
+          <div class="card"><h3>LLM gates</h3><ul><li>Reject vague or forced links</li><li>Require a defensible explanation</li><li>Tension needs opposing values</li><li>Surprise needs shared structure</li></ul></div>
+          <div class="card dark"><h3>Saved wow</h3><ul><li>kind</li><li>score</li><li>title</li><li>short explanation</li><li>related inspiration IDs</li><li>reflection question</li></ul></div>
+        </div>
+        <p class="principle">The product promise: WAKA searches every time, but only speaks when the connection is worth trusting.</p>
+      </article>
+    </section>
+
+    <footer class="bar">
+      <div class="footer-left"><span id="count">01 / 09</span><div class="dots" id="dots" aria-hidden="true"></div></div>
+      <div>Use ← / → keys · Print to PDF for handoff</div>
+    </footer>
+  </main>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    const count = document.getElementById('count');
+    const dots = document.getElementById('dots');
+    let current = Number(localStorage.getItem('waka-wow-readable-slide') || 0);
+    if (!Number.isFinite(current) || current < 0 || current >= slides.length) current = 0;
+    const pad = (n) => String(n).padStart(2, '0');
+    function renderDots() {
+      dots.innerHTML = '';
+      slides.forEach((_, i) => {
+        const dot = document.createElement('span');
+        dot.className = 'dot' + (i === current ? ' active' : '');
+        dots.appendChild(dot);
+      });
+    }
+    function show(index) {
+      current = (index + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === current));
+      count.textContent = `${pad(current + 1)} / ${pad(slides.length)}`;
+      localStorage.setItem('waka-wow-readable-slide', String(current));
+      renderDots();
+    }
+    document.getElementById('prev').addEventListener('click', () => show(current - 1));
+    document.getElementById('next').addEventListener('click', () => show(current + 1));
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') show(current + 1);
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') show(current - 1);
+      if (event.key === 'Home') show(0);
+      if (event.key === 'End') show(slides.length - 1);
+    });
+    show(current);
+  </script>
+</body>
+</html>
