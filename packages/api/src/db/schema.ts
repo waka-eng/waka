@@ -172,6 +172,12 @@ export const inspirations = pgTable(
     clusterNullIdx: index("inspirations_cluster_null_idx")
       .on(table.id)
       .where(sql`${table.cluster} IS NULL`),
+    // Supports composite tenant-bound foreign keys from child tables that
+    // carry both user_id and inspiration_id (e.g. stored embeddings).
+    userIdIdUnique: uniqueIndex("inspirations_user_id_id_unique_idx").on(
+      table.userId,
+      table.id,
+    ),
   }),
 );
 
