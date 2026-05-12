@@ -11,6 +11,7 @@ import {
   calculateWowScore,
   clamp,
   clamp01,
+  cosineSimilarity,
   fromPersistedScore,
   log1p,
   logNormalize,
@@ -75,6 +76,15 @@ describe("WOW scoring calculators", () => {
     expect(calculateSimilarityScore(0.73)).toBe(0.73);
     expect(calculateSimilarityScore(3)).toBe(1);
     expect(calculateSurpriseSimilarityScore(-2)).toBe(0);
+  });
+
+  it("calculates cosine similarity edge cases", () => {
+    expect(cosineSimilarity([1, 2, 3], [1, 2, 3])).toBeCloseTo(1);
+    expect(cosineSimilarity([1, 0], [0, 1])).toBe(0);
+    expect(cosineSimilarity([1, 0], [1, 0, 0])).toBe(0);
+    expect(cosineSimilarity([0, 0], [1, 0])).toBe(0);
+    expect(cosineSimilarity([Number.NaN, 1], [1, 0])).toBe(0);
+    expect(cosineSimilarity([Number.POSITIVE_INFINITY, 1], [1, 0])).toBe(0);
   });
 
   it("calculates persisted WOW score from weighted constituent signals", () => {
