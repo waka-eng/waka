@@ -114,7 +114,36 @@ SST prints two URLs:
 > `apiUrl` into your Google Cloud Console "Authorized redirect URIs" as
 > `<apiUrl>/auth/google/callback` and try again.
 
-### 6. End-to-end browser flow (manual smoke)
+### 6. Optional local demo seed
+
+For quick UI review with a realistic 10-inspiration board plus persisted WOW
+moments, seed a local/dev database for a specific demo user:
+
+```bash
+# Recommended: sign up locally first, then seed that email.
+pnpm demo:seed -- --email=demo@example.test
+
+# Or create a login-capable local demo user when the email does not exist yet.
+pnpm demo:seed -- --email=demo@example.test --create-user --password='local-only-demo-password'
+
+# Or seed an existing user id directly.
+pnpm demo:seed -- --user-id=<uuid>
+```
+
+The command reads `DB_CONNECTION_URL` or `DATABASE_URL` from the current
+working directory's environment, `.env`, or `.env.development`, refuses non-local
+database hosts by default, and requires the explicit CLI flag `--allow-remote`
+as a deliberate override only for an explicitly disposable dev database. It does
+not log secrets, does not mock production code, and only writes real
+tenant-scoped rows for the selected user. By default each run replaces this
+script's prior demo rows for the user so the account keeps exactly one
+10-inspiration demo dataset plus its persisted WOW moments; pass
+`--append-demo-data` only when you intentionally want duplicate demo datasets for
+stress testing. If the `--email` user does not exist, the command fails unless
+you pass `--create-user --password=...`; the password is stored as a bcrypt hash
+via the existing API auth helper so the demo account can log in.
+
+### 7. End-to-end browser flow (manual smoke)
 
 Open <http://localhost:5173>. The app should redirect you to `/login`. Then:
 
@@ -144,7 +173,7 @@ Open <http://localhost:5173>. The app should redirect you to `/login`. Then:
 8. **Tenant isolation check** — sign up as a *second* user in an incognito
    window. The first user's inspirations must NOT appear.
 
-### 7. Run the test suite
+### 8. Run the test suite
 
 ```bash
 pnpm --filter @waka/api test         # vitest in-process Hono smoke + queue tests
