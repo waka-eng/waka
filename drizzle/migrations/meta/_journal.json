@@ -36,6 +36,13 @@
       "when": 1778583469059,
       "tag": "0004_wow_moments_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778587200000,
+      "tag": "0005_gemini_embedding_foundation",
+      "breakpoints": true
     }
   ]
 }

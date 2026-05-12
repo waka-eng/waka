@@ -160,6 +160,17 @@ function resolveConnectionString(): string {
   return url;
 }
 
+function isLocalPostgresUrl(connectionString: string): boolean {
+  const { hostname } = new URL(connectionString);
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  );
+}
+
+function resolveSslMode(connectionString: string): false | "require" {
+  return isLocalPostgresUrl(connectionString) ? false : "require";
+}
+
 // ---------------------------------------------------------------------------
 // Migration discovery + application
 // ---------------------------------------------------------------------------
@@ -312,7 +323,7 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     max: 1,
     prepare: false,
     idle_timeout: 10,
-    ssl: "require",
+    ssl: resolveSslMode(connectionString),
     // Don't emit the verbose pgbouncer/Neon notices in test output.
     onnotice: () => {},
   });
@@ -351,6 +362,9 @@ export async function createTestDatabase(): Promise<TestDatabase> {
    * a future test mutates `search_path` mid-run.
    */
   const truncatableTables = [
+    "inspiration_embeddings",
+    "wow_moment_inspirations",
+    "wow_moments",
     "reflections",
     "attachments",
     "inspirations",
