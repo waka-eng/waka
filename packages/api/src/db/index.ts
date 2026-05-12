@@ -19,3 +19,4 @@ export * from "./schema";
 export * from "./schema-attachments";
 export * from "./schema-reflections";
 export * from "./schema-sessions";
+export * from "./schema-wow-moments";

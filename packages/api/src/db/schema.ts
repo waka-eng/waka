@@ -143,6 +143,13 @@ export const inspirations = pgTable(
 
     kind: text("kind"),
     category: integer("category"),
+    /**
+     * Persistent signal snapshots used by the WOW-moment pipeline. Later
+     * workers update these only when constituent signals change; list/create
+     * paths do not calculate them synchronously.
+     */
+    importanceScore: integer("importance_score").notNull().default(0),
+    wowScore: integer("wow_score").notNull().default(0),
 
     cluster: clusterEnum("cluster"),
     classifiedAt: timestamp("classified_at", { withTimezone: true }),
