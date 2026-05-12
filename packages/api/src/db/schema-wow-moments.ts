@@ -15,6 +15,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -45,6 +46,7 @@ export const wowMoments = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     kind: wowKindEnum("kind").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
     why: text("why").notNull(),
     reflectionQuestion: text("reflection_question"),
     wowScore: integer("wow_score").notNull().default(0),
@@ -56,6 +58,9 @@ export const wowMoments = pgTable(
       .defaultNow(),
   },
   (table) => ({
+    idempotencyKeyIdx: uniqueIndex("wow_moments_idempotency_key_unique_idx").on(
+      table.idempotencyKey,
+    ),
     userCreatedIdx: index("wow_moments_user_created_idx").on(
       table.userId,
       table.createdAt.desc(),
@@ -93,6 +98,9 @@ export const wowMomentInspirations = pgTable(
     inspirationIdx: index("wow_moment_inspirations_inspiration_idx").on(
       table.inspirationId,
     ),
+    momentInspirationUniqueIdx: uniqueIndex(
+      "wow_moment_inspirations_moment_inspiration_unique_idx",
+    ).on(table.wowMomentId, table.inspirationId),
   }),
 );
 

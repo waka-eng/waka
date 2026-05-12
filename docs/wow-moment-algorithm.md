@@ -64,10 +64,14 @@ The user-facing explanation should answer both: why is this a WOW moment, and ho
 
 ## AI generation scope
 
-This foundation slice does not generate WOW moments. Later slices will add:
+The current bounded judge slice retrieves a trigger plus top candidate inspirations with `findWowMomentCandidates`, sends only that trigger + retrieved-candidates block to `judgeWowMomentForInspiration`, and can explicitly persist an accepted existing judgment via `persistWowMomentForInspirationJudgment`. Candidate retrieval itself may still select and score candidates from the user's tenant-scoped candidate pool before producing that bounded block for LLM judging/persistence.
+
+Persistence remains caller-controlled: `POST /inspirations` and background workers still do not automatically generate or persist WOW moments. The helper no-ops for `{ isWowMoment: false }`, validates tenant ownership, re-checks related ids against the trigger plus retrieved candidates, derives a durable `idempotency_key` from user id + trigger inspiration id + normalized title + WOW kind, conflict-safely inserts/reselects one `wow_moments` row, and inserts deduped `wow_moment_inspirations` rows with the trigger at role `trigger`/sort `0` and other bounded related inspirations at role `related`/sort `>0`.
+
+Later slices will add:
 
 - Gemini embeddings for inspiration similarity and bridge detection,
 - signal updaters for `importance_score` / `wow_score`,
-- an LLM generation step whose output includes title, kind, why/explanation, reflection question, and multiple related inspirations with roles/reasons.
+- an explicit route or background worker trigger for generation/persistence when product behavior is approved.
 
 The current API and UI only list/display persisted database rows when they already exist.

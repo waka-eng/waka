@@ -1,6 +1,13 @@
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { wowKindEnumValues, type WowKind } from "../db/index.js";
+import {
+  inspirations,
+  wowKindEnumValues,
+  wowMomentInspirations,
+  wowMoments,
+  type WowKind,
+} from "../db/index.js";
 import { findWowMomentCandidates } from "./wow-candidates.js";
 import { getDb } from "./db.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
@@ -310,6 +317,28 @@ export interface JudgeWowMomentForInspirationParams {
   client?: WowJudgeClient;
 }
 
+export type PersistWowMomentForInspirationResult =
+  | {
+      persisted: false;
+      reason: "not_wow_moment" | "trigger_not_found";
+      judgment: WowMomentJudgment;
+    }
+  | {
+      persisted: true;
+      status: "created" | "existing";
+      judgment: Extract<WowMomentJudgment, { isWowMoment: true }>;
+      wowMoment: typeof wowMoments.$inferSelect;
+      inspirationLinks: Array<typeof wowMomentInspirations.$inferSelect>;
+    };
+
+export interface PersistWowMomentForInspirationParams {
+  db?: WakaDb;
+  userId: string;
+  triggerInspirationId: string;
+  judgment: WowMomentJudgment;
+  limit?: number;
+}
+
 function toPromptInput(
   result: Awaited<ReturnType<typeof findWowMomentCandidates>>,
 ): WowJudgeInput | null {
@@ -349,6 +378,170 @@ function assertRelatedIdsAreSafe(judgment: WowMomentJudgment, input: WowJudgeInp
       `Gemini WOW judgment referenced inspiration ids outside retrieved same-tenant candidates: ${unsafeIds.join(", ")}`,
     );
   }
+}
+
+async function loadTenantTrigger(
+  db: WakaDb,
+  userId: string,
+  triggerInspirationId: string,
+) {
+  const rows = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(
+      and(eq(inspirations.userId, userId), eq(inspirations.id, triggerInspirationId)),
+    )
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+function uniqueRelatedIdsWithTriggerFirst(
+  triggerInspirationId: string,
+  relatedInspirationIds: string[],
+): string[] {
+  return Array.from(new Set([triggerInspirationId, ...relatedInspirationIds]));
+}
+
+function normalizeWowTitleForIdempotency(title: string): string {
+  return title.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+}
+
+function buildWowMomentIdempotencyKey(params: {
+  userId: string;
+  triggerInspirationId: string;
+  title: string;
+  kind: WowKind;
+}): string {
+  const normalizedTitle = normalizeWowTitleForIdempotency(params.title);
+  return [
+    "wow-moment-v1",
+    params.userId,
+    params.triggerInspirationId,
+    params.kind,
+    normalizedTitle,
+  ].join(":");
+}
+
+async function findExistingWowMomentByIdempotencyKey(db: WakaDb, idempotencyKey: string) {
+  const rows = await db
+    .select()
+    .from(wowMoments)
+    .where(eq(wowMoments.idempotencyKey, idempotencyKey))
+    .limit(1);
+
+  return rows[0] ?? null;
+}
+
+async function loadWowMomentLinks(db: WakaDb, wowMomentId: string) {
+  return db
+    .select()
+    .from(wowMomentInspirations)
+    .where(eq(wowMomentInspirations.wowMomentId, wowMomentId))
+    .orderBy(wowMomentInspirations.sortOrder);
+}
+
+export async function persistWowMomentForInspirationJudgment(
+  params: PersistWowMomentForInspirationParams,
+): Promise<PersistWowMomentForInspirationResult> {
+  const db = params.db ?? getDb();
+  const judgment = params.judgment;
+  if (!judgment.isWowMoment) {
+    return {
+      persisted: false,
+      reason: "not_wow_moment",
+      judgment,
+    };
+  }
+
+  const trigger = await loadTenantTrigger(db, params.userId, params.triggerInspirationId);
+  if (!trigger) {
+    return {
+      persisted: false,
+      reason: "trigger_not_found",
+      judgment,
+    };
+  }
+
+  const retrieved = await findWowMomentCandidates({
+    db,
+    userId: params.userId,
+    triggerInspirationId: params.triggerInspirationId,
+    limit: params.limit,
+  });
+  const input = toPromptInput(retrieved) ?? {
+    trigger: {
+      id: params.triggerInspirationId,
+      text: "",
+      kind: null,
+      category: null,
+      cluster: null,
+      createdAt: new Date(0),
+    },
+    candidates: [],
+  };
+  assertRelatedIdsAreSafe(params.judgment, input);
+
+  const relatedIds = uniqueRelatedIdsWithTriggerFirst(
+    params.triggerInspirationId,
+    judgment.relatedInspirationIds,
+  );
+
+  const idempotencyKey = buildWowMomentIdempotencyKey({
+    userId: params.userId,
+    triggerInspirationId: params.triggerInspirationId,
+    title: judgment.title,
+    kind: judgment.kind,
+  });
+
+  return db.transaction(async (tx) => {
+    const [createdMoment] = await tx
+      .insert(wowMoments)
+      .values({
+        userId: params.userId,
+        title: judgment.title,
+        kind: judgment.kind,
+        idempotencyKey,
+        why: judgment.why,
+        reflectionQuestion: judgment.reflectionQuestion ?? null,
+      } as typeof wowMoments.$inferInsert)
+      .onConflictDoNothing({ target: wowMoments.idempotencyKey })
+      .returning();
+
+    const wowMoment =
+      createdMoment ?? (await findExistingWowMomentByIdempotencyKey(tx, idempotencyKey));
+    if (!wowMoment) {
+      throw new Error("Failed to persist or reselect WOW moment judgment.");
+    }
+
+    if (createdMoment) {
+      await tx
+        .insert(wowMomentInspirations)
+        .values(
+          relatedIds.map((inspirationId, index) => ({
+            wowMomentId: wowMoment.id,
+            inspirationId,
+            role: inspirationId === params.triggerInspirationId ? "trigger" : "related",
+            reason: "",
+            sortOrder: index,
+          })),
+        )
+        .onConflictDoNothing({
+          target: [
+            wowMomentInspirations.wowMomentId,
+            wowMomentInspirations.inspirationId,
+          ],
+        });
+    }
+
+    return {
+      persisted: true,
+      status: createdMoment ? "created" : "existing",
+      judgment,
+      wowMoment,
+      inspirationLinks: await loadWowMomentLinks(tx, wowMoment.id),
+    };
+  });
 }
 
 export async function judgeWowMomentForInspiration(

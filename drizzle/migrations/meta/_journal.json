@@ -43,6 +43,13 @@
       "when": 1778587200000,
       "tag": "0005_gemini_embedding_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778628680976,
+      "tag": "0006_wow_moment_idempotency",
+      "breakpoints": true
     }
   ]
 }
