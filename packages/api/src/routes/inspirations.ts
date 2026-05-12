@@ -41,6 +41,7 @@ import { z } from "zod";
 
 import { attachments, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { persistLocalInspirationScores } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
 
@@ -172,6 +173,9 @@ inspirationsRoutes.post("/", async (c) => {
     return c.json({ error: "Failed to create inspiration" }, 500);
   }
 
+  const createdScores = await persistLocalInspirationScores(db, inserted);
+  const scoredInserted = { ...inserted, ...createdScores };
+
   // 3. Enqueue a classification job (Sub-AC 10.2). The SQS Queue worker in
   //    `queue/classifier.ts` consumes `{ inspirationId }`, calls Gemini, and
   //    UPDATEs `cluster` / `classified_at` on the row.
@@ -187,10 +191,10 @@ inspirationsRoutes.post("/", async (c) => {
   //    `cluster = null`, and stays "uncategorised" until either the worker
   //    catches up or the backfill scan re-enqueues.
   try {
-    await enqueueClassification(inserted.id);
+    await enqueueClassification(scoredInserted.id);
   } catch (err) {
     console.error("[inspirations] failed to enqueue classification job:", {
-      inspirationId: inserted.id,
+      inspirationId: scoredInserted.id,
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -198,7 +202,7 @@ inspirationsRoutes.post("/", async (c) => {
   // 4. 201 Created with the canonical row payload. Cluster will be `null`
   //    until the classifier worker updates it; the SPA renders an
   //    "uncategorised" state in that window.
-  return c.json({ inspiration: inserted }, 201);
+  return c.json({ inspiration: scoredInserted }, 201);
 });
 
 /**
@@ -449,7 +453,10 @@ inspirationsRoutes.patch("/:id", async (c) => {
     return c.json({ error: "Inspiration not found" }, 404);
   }
 
-  return c.json({ inspiration: updated }, 200);
+  const updatedScores = await persistLocalInspirationScores(db, updated);
+  const scoredUpdated = { ...updated, ...updatedScores };
+
+  return c.json({ inspiration: scoredUpdated }, 200);
 });
 
 // ---------------------------------------------------------------------------
@@ -557,7 +564,14 @@ inspirationsRoutes.post("/:id/reflections", async (c) => {
   //    cheap. We deliberately 404 (not 403) when the row is owned by
   //    another user so the endpoint cannot be used to enumerate ids.
   const [parent] = await db
-    .select({ id: inspirations.id })
+    .select({
+      id: inspirations.id,
+      userId: inspirations.userId,
+      text: inspirations.text,
+      kind: inspirations.kind,
+      category: inspirations.category,
+      createdAt: inspirations.createdAt,
+    })
     .from(inspirations)
     .where(
       and(
@@ -598,6 +612,8 @@ inspirationsRoutes.post("/:id/reflections", async (c) => {
   if (!inserted) {
     return c.json({ error: "Failed to create reflection" }, 500);
   }
+
+  await persistLocalInspirationScores(db, parent);
 
   return c.json({ reflection: inserted }, 201);
 });
