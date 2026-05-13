@@ -44,6 +44,8 @@ import { HistoryPanel } from "./HistoryPanel";
 export interface AppShellProps {
   /** Inspirations count to surface in the header meta counter. */
   count: number;
+  /** Optional header title suffix; defaults to the inspiration-grid copy. */
+  headerTagline?: string;
   /**
    * `true` while the parent is still hydrating the inspirations list.
    * The header swaps the meta counter to a placeholder so the page
@@ -70,6 +72,7 @@ export interface AppShellProps {
 
 export function AppShell({
   count,
+  headerTagline,
   loading = false,
   onCaptureClick,
   historyContent,
@@ -110,6 +113,7 @@ export function AppShell({
       <main className="wrap">
         <AppHeader
           count={count}
+          tagline={headerTagline}
           loading={loading}
           onCaptureClick={onCaptureClick}
           onMetaClick={() => setHistoryOpen(true)}

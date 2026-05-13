@@ -225,8 +225,17 @@ export interface InspirationsBoardProps {
    */
   onSelectCluster?: (card: HomeCardData, index: number) => void;
 
+  /** Optional content rendered inside the page well before the home grid. */
+  beforeGridContent?: ReactNode;
+
   /** Optional content rendered inside the page well after the home grid. */
   afterGridContent?: ReactNode;
+
+  /**
+   * Monotonic request token from a parent that wants the capture surface
+   * opened/focused immediately after the board mounts or re-renders.
+   */
+  autoFocusCaptureRequest?: number;
 }
 
 export function InspirationsBoard({
@@ -240,7 +249,9 @@ export function InspirationsBoard({
   onPersistError,
   onSelectInspiration,
   onSelectCluster,
+  beforeGridContent,
   afterGridContent,
+  autoFocusCaptureRequest,
 }: InspirationsBoardProps): JSX.Element {
   // ---------------------------------------------------------------
   // Capture-cell local state
@@ -448,6 +459,16 @@ export function InspirationsBoard({
     });
   }, []);
 
+  const lastAutoFocusCaptureRequestRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (autoFocusCaptureRequest === undefined) return;
+    if (lastAutoFocusCaptureRequestRef.current === autoFocusCaptureRequest) {
+      return;
+    }
+    lastAutoFocusCaptureRequestRef.current = autoFocusCaptureRequest;
+    handleHeaderCapture();
+  }, [autoFocusCaptureRequest, handleHeaderCapture]);
+
   const handleToggleFocus = useCallback((next: boolean) => {
     // The CaptureForm owns the unsaved-content state, so the
     // close-confirm policy lives there in a future iteration. For now,
@@ -500,6 +521,8 @@ export function InspirationsBoard({
       historyContent={historyContent}
       historyDetail={historyDetail}
     >
+      {beforeGridContent}
+
       <ClusterGrid
         empty={!loading && clusterNodes.length === 0}
         loading={loading}
