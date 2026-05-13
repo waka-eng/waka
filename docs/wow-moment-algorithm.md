@@ -64,14 +64,36 @@ The user-facing explanation should answer both: why is this a WOW moment, and ho
 
 ## AI generation scope
 
-The current bounded judge slice retrieves a trigger plus top candidate inspirations with `findWowMomentCandidates`, sends only that trigger + retrieved-candidates block to `judgeWowMomentForInspiration`, and can explicitly persist an accepted existing judgment via `persistWowMomentForInspirationJudgment`. Candidate retrieval itself may still select and score candidates from the user's tenant-scoped candidate pool before producing that bounded block for LLM judging/persistence.
+The current bounded judge slice retrieves a trigger plus top candidate inspirations with `findWowMomentCandidates`, sends only that trigger + retrieved-candidates block to `judgeWowMomentForInspiration`, and can explicitly persist an accepted existing judgment via `persistWowMomentForInspirationJudgment`. Candidate retrieval itself may still select and score candidates from the user's tenant-scoped candidate pool before producing that bounded block for LLM judging/persistence. There is no full-archive LLM scan.
 
 Persistence remains caller-controlled: `POST /inspirations` and background workers still do not automatically generate or persist WOW moments. The helper no-ops for `{ isWowMoment: false }`, validates tenant ownership, re-checks related ids against the trigger plus retrieved candidates, derives a durable `idempotency_key` from version + user id + trigger inspiration id + WOW kind + sorted unique related inspiration ids, conflict-safely inserts/reselects one `wow_moments` row, and inserts deduped `wow_moment_inspirations` rows with the trigger at role `trigger`/sort `0` and other bounded related inspirations at role `related`/sort `>0`.
 
+## Manual generation API
+
+Authenticated clients can explicitly attempt generation for one existing inspiration:
+
+```http
+POST /api/wow-moments/generate
+Content-Type: application/json
+
+{
+  "inspirationId": "00000000-0000-4000-8000-000000000001",
+  "limit": 10
+}
+```
+
+- `inspirationId` is required and must be a UUID.
+- `limit` is optional, defaults to `10`, and is bounded to `1..50`.
+- The route is tenant-safe: the trigger inspiration must belong to the signed-in user. Unknown and cross-tenant ids both return `404`.
+- The route first ensures a Gemini embedding for the trigger inspiration, then calls the bounded candidate/judge pipeline with only the trigger and retrieved candidates.
+- If the trigger changes while embedding generation is in flight, the route returns `409` with `code: "stale_source"` and `retryable: true`; it does not judge or persist stale output.
+- If the judge returns `{ "isWowMoment": false }`, the route returns a structured no-op JSON response with `generated: false`; it does not create a database row.
+- If the judge accepts the moment, the route persists through the existing idempotent helper and returns `generated: true`, the persisted WOW moment, and its inspiration links. Repeating the same accepted request returns the existing persisted row.
+- If Gemini is not configured or the provider call fails, the route returns stable `503` JSON with `code: "wow_generation_unavailable"` and does not expose secrets or provider response bodies.
+
+Automatic generation on inspiration create/update and background workers are still future work. The current API and UI only list/display persisted database rows when they already exist or when this manual route explicitly creates one.
+
 Later slices will add:
 
-- Gemini embeddings for inspiration similarity and bridge detection,
 - signal updaters for `importance_score` / `wow_score`,
-- an explicit route or background worker trigger for generation/persistence when product behavior is approved.
-
-The current API and UI only list/display persisted database rows when they already exist.
+- product-approved automatic create/update triggers or background worker generation.
