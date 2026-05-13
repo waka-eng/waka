@@ -3,7 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../src/db/index.js";
-import { findWowMomentCandidates } from "../src/lib/wow-candidates.js";
+import { findWowMomentCandidates, MAX_DB_CANDIDATE_POOL } from "../src/lib/wow-candidates.js";
 
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -261,4 +261,41 @@ describe("findWowMomentCandidates", () => {
     expect(persistedById.get(trigger.id)).toBe(12);
     expect(persistedById.get(candidate.id)).toBe(34);
   });
+
+  it("uses a bounded explainable DB preselection before app-side cosine ranking", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger for bounded candidate preselection.",
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    const perfectButLowPreselection = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Perfect cosine candidate with low durable preselection signals.",
+      createdAt: new Date("2025-01-01T00:00:00.000Z"),
+    });
+
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await setWowScore(testDb, perfectButLowPreselection, 0);
+    await createEmbedding(testDb, perfectButLowPreselection, [1, 0]);
+
+    for (let index = 0; index < MAX_DB_CANDIDATE_POOL; index += 1) {
+      const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+        text: `High durable preselection candidate ${index}`,
+        createdAt: new Date(Date.UTC(2026, 0, 2, 0, 0, index)),
+      });
+      await setWowScore(testDb, candidate, 100);
+      await createEmbedding(testDb, candidate, [0, 1]);
+    }
+
+    const result = await findWowMomentCandidates({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 1,
+    });
+
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]!.inspiration.id).not.toBe(perfectButLowPreselection.id);
+    expect(result.candidates[0]!.scores.persistedWowScore).toBe(1);
+  });
+
 });

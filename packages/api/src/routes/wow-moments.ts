@@ -68,6 +68,7 @@ wowMomentsRoutes.get("/", async (c) => {
     .where(
       and(
         inArray(wowMomentInspirations.wowMomentId, momentIds),
+        eq(wowMomentInspirations.userId, user.id),
         eq(inspirations.userId, user.id),
       ),
     )

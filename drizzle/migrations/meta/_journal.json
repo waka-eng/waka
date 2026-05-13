@@ -50,6 +50,20 @@
       "when": 1778628680976,
       "tag": "0006_wow_moment_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778635006333,
+      "tag": "0007_numerous_doctor_faustus",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778637011577,
+      "tag": "0008_embedding_candidate_preselection",
+      "breakpoints": true
     }
   ]
 }

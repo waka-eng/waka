@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -21,8 +21,16 @@ import {
   type InspirationEmbedding,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import {
+  buildGeminiJsonHeaders,
+  buildGeminiModelEndpoint,
+  formatSafeGeminiError,
+  safeGeminiErrorDetails,
+} from "./gemini-http.js";
 
 export const GEMINI_EMBEDDING_MODEL = "text-embedding-004";
+export const GEMINI_EMBEDDING_DIMENSIONS = 768;
+export const MAX_GEMINI_EMBEDDING_VALUES = 4096;
 export type WakaDb = PostgresJsDatabase<typeof dbSchema>;
 
 export interface CanonicalInspirationEmbeddingInput {
@@ -88,17 +96,35 @@ function getGeminiApiKey(): string {
 }
 
 export function buildEmbedContentUrl(
-  apiKey: string,
   model = GEMINI_EMBEDDING_MODEL,
 ): string {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${encodeURIComponent(apiKey)}`;
+  return buildGeminiModelEndpoint(model, "embedContent");
 }
 
 const embedContentResponseSchema = z.object({
   embedding: z.object({
-    values: z.array(z.number()),
+    values: z
+      .array(z.number().finite())
+      .min(GEMINI_EMBEDDING_DIMENSIONS)
+      .max(MAX_GEMINI_EMBEDDING_VALUES),
   }),
 });
+
+export function validateEmbeddingVector(
+  embedding: number[],
+  expectedDimensions = GEMINI_EMBEDDING_DIMENSIONS,
+): number[] {
+  if (embedding.length !== expectedDimensions) {
+    throw new Error(
+      `Gemini embedding dimension mismatch: expected ${expectedDimensions}, received ${embedding.length}`,
+    );
+  }
+  const invalidIndex = embedding.findIndex((value) => !Number.isFinite(value));
+  if (invalidIndex !== -1) {
+    throw new Error(`Gemini embedding contained a non-finite value at index ${invalidIndex}`);
+  }
+  return embedding;
+}
 
 export interface GeminiEmbeddingClient {
   readonly model: string;
@@ -114,9 +140,9 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
 
   async embed(input: string): Promise<number[]> {
     const apiKey = getGeminiApiKey();
-    const response = await fetch(buildEmbedContentUrl(apiKey, this.model), {
+    const response = await fetch(buildEmbedContentUrl(this.model), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: buildGeminiJsonHeaders(apiKey),
       body: JSON.stringify({
         model: `models/${this.model}`,
         content: { parts: [{ text: input }] },
@@ -125,9 +151,11 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
     });
 
     if (!response.ok) {
-      const errBody = await response.text().catch(() => "<unreadable>");
       throw new Error(
-        `Gemini embedding failed: HTTP ${response.status} ${response.statusText} — ${errBody.slice(0, 500)}`,
+        formatSafeGeminiError(
+          "Gemini embedding failed",
+          await safeGeminiErrorDetails(response),
+        ),
       );
     }
 
@@ -147,7 +175,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
       );
     }
 
-    return parsed.data.embedding.values;
+    return validateEmbeddingVector(parsed.data.embedding.values);
   }
 }
 
@@ -164,6 +192,12 @@ export type EnsureInspirationEmbeddingResult =
       embedding: null;
       generated: false;
       inputHash: null;
+    }
+  | {
+      status: "stale_source";
+      embedding: null;
+      generated: true;
+      inputHash: string;
     }
   | {
       status: "unchanged" | "created" | "updated";
@@ -213,11 +247,42 @@ async function loadExistingEmbedding(
   return rows[0] ?? null;
 }
 
+async function acquireEmbeddingAdvisoryLock(
+  db: WakaDb,
+  params: Pick<EnsureInspirationEmbeddingParams, "userId" | "inspirationId"> & {
+    model: string;
+  },
+): Promise<void> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${[
+      "waka.inspiration_embedding",
+      params.userId,
+      params.inspirationId,
+      params.model,
+    ].join(":")}, 0))`,
+  );
+}
+
+function sourceMatchesSnapshot(
+  source: Inspiration | null,
+  snapshot: { updatedAt: Date; inputHash: string },
+): boolean {
+  if (!source) return false;
+  const currentInput = buildCanonicalInspirationEmbeddingInput(source);
+  return (
+    source.updatedAt.getTime() === snapshot.updatedAt.getTime() &&
+    hashEmbeddingInput(currentInput) === snapshot.inputHash
+  );
+}
+
 /**
  * Ensure one stored Gemini embedding exists for a tenant-scoped inspiration.
  *
  * Idempotency: if the stored row already has the current canonical input hash
- * for the same model, this returns without calling Gemini.
+ * for the same model, this returns without calling Gemini. A transaction-scoped
+ * advisory lock serializes concurrent generation for the same tenant/source/model;
+ * the source row is re-read after the lock, and re-read again after Gemini so a
+ * stale embedding is never persisted over edited content.
  */
 export async function ensureInspirationEmbedding(
   params: EnsureInspirationEmbeddingParams,
@@ -225,35 +290,58 @@ export async function ensureInspirationEmbedding(
   const db: WakaDb = params.db ?? getDb();
   const client = params.client ?? new GeminiEmbeddingHttpClient();
 
-  const inspiration = await loadTenantScopedInspiration(
-    db,
-    params.userId,
-    params.inspirationId,
-  );
-  if (!inspiration) {
-    return {
-      status: "missing_inspiration",
-      embedding: null,
-      generated: false,
-      inputHash: null,
-    };
-  }
+  return db.transaction(async (tx) => {
+    await acquireEmbeddingAdvisoryLock(tx, {
+      userId: params.userId,
+      inspirationId: params.inspirationId,
+      model: client.model,
+    });
 
-  const canonicalInput = buildCanonicalInspirationEmbeddingInput(inspiration);
-  const inputHash = hashEmbeddingInput(canonicalInput);
-  const existing = await loadExistingEmbedding(db, params.userId, params.inspirationId);
+    const inspiration = await loadTenantScopedInspiration(
+      tx,
+      params.userId,
+      params.inspirationId,
+    );
+    if (!inspiration) {
+      return {
+        status: "missing_inspiration",
+        embedding: null,
+        generated: false,
+        inputHash: null,
+      };
+    }
 
-  if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)) {
-    return { status: "unchanged", embedding: existing, generated: false, inputHash };
-  }
+    const canonicalInput = buildCanonicalInspirationEmbeddingInput(inspiration);
+    const inputHash = hashEmbeddingInput(canonicalInput);
+    const existing = await loadExistingEmbedding(tx, params.userId, params.inspirationId);
 
-  const embedding = await client.embed(canonicalInput);
-  const now = new Date();
-  const status = existing ? "updated" : "created";
+    if (existing && !needsEmbeddingRegeneration(existing, inputHash, client.model)) {
+      return { status: "unchanged", embedding: existing, generated: false, inputHash };
+    }
 
-  const [stored] = await db
-    .insert(inspirationEmbeddings)
-    .values({
+    const embedding = validateEmbeddingVector(await client.embed(canonicalInput));
+    const freshSource = await loadTenantScopedInspiration(
+      tx,
+      params.userId,
+      params.inspirationId,
+    );
+    if (
+      !sourceMatchesSnapshot(freshSource, {
+        updatedAt: inspiration.updatedAt,
+        inputHash,
+      })
+    ) {
+      return {
+        status: "stale_source",
+        embedding: null,
+        generated: true,
+        inputHash,
+      };
+    }
+
+    const now = new Date();
+    const status = existing ? "updated" : "created";
+    const values = {
       userId: inspiration.userId,
       inspirationId: inspiration.id,
       model: client.model,
@@ -261,23 +349,28 @@ export async function ensureInspirationEmbedding(
       inputHash,
       embedding,
       updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: inspirationEmbeddings.inspirationId,
-      set: {
-        userId: inspiration.userId,
-        model: client.model,
-        dimensions: embedding.length,
-        inputHash,
-        embedding,
-        updatedAt: now,
-      },
-    })
-    .returning();
+    } as typeof inspirationEmbeddings.$inferInsert;
 
-  if (!stored) {
-    throw new Error("Failed to persist inspiration embedding");
-  }
+    const [stored] = await tx
+      .insert(inspirationEmbeddings)
+      .values(values)
+      .onConflictDoUpdate({
+        target: inspirationEmbeddings.inspirationId,
+        set: {
+          userId: inspiration.userId,
+          model: client.model,
+          dimensions: embedding.length,
+          inputHash,
+          embedding,
+          updatedAt: now,
+        } as Partial<typeof inspirationEmbeddings.$inferInsert>,
+      })
+      .returning();
 
-  return { status, embedding: stored, generated: true, inputHash };
+    if (!stored) {
+      throw new Error("Failed to persist inspiration embedding");
+    }
+
+    return { status, embedding: stored, generated: true, inputHash };
+  });
 }

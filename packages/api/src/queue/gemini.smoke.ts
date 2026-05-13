@@ -24,8 +24,8 @@
  *   5. `parseClusterFromResponse` handles the documented JSON-encoded shape,
  *      the un-quoted fallback shape, missing candidates, empty parts, and
  *      out-of-set strings — without ever throwing.
- *   6. URL builder pins the `gemini-2.0-flash` model id and URL-encodes the
- *      API key (so a key with `=` or `&` cannot break the query string).
+ *   6. URL/header builders pin the `gemini-2.0-flash` model id, keep secrets
+ *      out of the URL, and send the key via `x-goog-api-key`.
  *   7. (Live, optional) If `GEMINI_API_KEY` is set, classify a hand-picked
  *      inspiration end-to-end and assert the returned cluster is one of the
  *      six valid labels. Skipped silently if no key is configured so CI /
@@ -35,6 +35,7 @@
 import "dotenv/config";
 
 import { clusterEnumValues } from "../db/index.js";
+import { buildGeminiJsonHeaders } from "../lib/gemini-http.js";
 import {
   CLASSIFIER_SYSTEM_INSTRUCTION,
   buildClassificationRequest,
@@ -292,20 +293,19 @@ async function main() {
   console.log("[5/7] parseClusterFromResponse covers degenerate shapes ✅");
 
   // -------------------------------------------------------------------------
-  // 6. URL builder
+  // 6. URL/header builders
   // -------------------------------------------------------------------------
-  const url = buildGenerateContentUrl("ABC=DEF&xyz");
+  const url = buildGenerateContentUrl();
   assert(
-    url.startsWith(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=",
-    ),
-    `URL must hit the v1beta gemini-2.0-flash generateContent endpoint, got: ${url}`,
+    url ===
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+    `URL must hit the v1beta gemini-2.0-flash generateContent endpoint without query secrets, got: ${url}`,
   );
-  assert(
-    url.includes("ABC%3DDEF%26xyz"),
-    "API key MUST be URL-encoded so '=' and '&' cannot break the query string",
-  );
-  console.log("[6/7] URL builder pins model + encodes key ✅");
+  assert(!url.includes("?key="), "API key must not be placed in the query string");
+  const headers = buildGeminiJsonHeaders("ABC=DEF&xyz");
+  assert(headers["x-goog-api-key"] === "ABC=DEF&xyz", "API key must be sent via x-goog-api-key header");
+  assert(headers["Content-Type"] === "application/json", "Gemini request Content-Type must be JSON");
+  console.log("[6/7] URL builder pins model and sends key via header ✅");
 
   // -------------------------------------------------------------------------
   // 7. Live integration — only when GEMINI_API_KEY is configured

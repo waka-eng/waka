@@ -133,7 +133,7 @@ export type GeminiMockResponse =
  * stay one-liners.
  */
 export interface GeminiMockCall {
-  /** Fully resolved request URL, including the `?key=...` query param. */
+  /** Fully resolved request URL. Gemini credentials must not appear here. */
   url: string;
   /** HTTP method as observed on the wire (always "POST" in production today). */
   method: string;
@@ -353,6 +353,14 @@ function bodyToString(body: unknown): string | null {
   return "<non-string body>";
 }
 
+function hasApiKeyQueryParam(url: string): boolean {
+  try {
+    return new URL(url).searchParams.has("key");
+  } catch {
+    return /[?&]key=/.test(url);
+  }
+}
+
 /**
  * Install the Gemini fetch interceptor and return a handle for scripting +
  * assertions. Safe to call once per test file — re-installing in a process
@@ -394,6 +402,12 @@ export function installGeminiMock(): GeminiMockHandle {
       timestamp: Date.now(),
     };
     callLog.push(captured);
+
+    if (hasApiKeyQueryParam(url)) {
+      throw new Error(
+        "[gemini-mock] Gemini API key must be sent via x-goog-api-key header, not URL query.",
+      );
+    }
 
     const next = responseQueue.shift();
     if (!next) {

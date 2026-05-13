@@ -55,6 +55,9 @@ export const inspirationEmbeddings = pgTable(
       table.userId,
       table.model,
     ),
+    userModelDimensionsIdx: index(
+      "inspiration_embeddings_user_model_dimensions_idx",
+    ).on(table.userId, table.model, table.dimensions),
     tenantInspirationFk: foreignKey({
       name: "inspiration_embeddings_user_inspiration_fk",
       columns: [table.userId, table.inspirationId],

@@ -268,6 +268,7 @@ export function HomePage(): JSX.Element {
    */
   const loadedForUserIdRef = useRef<string | null>(null);
   const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
+  const wowMomentsRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (!user) {
@@ -275,6 +276,7 @@ export function HomePage(): JSX.Element {
       // /login. Wipe local state defensively just in case.
       loadedForUserIdRef.current = null;
       wowMomentsLoadedForUserIdRef.current = null;
+      wowMomentsRequestIdRef.current += 1;
       setEntries([]);
       setWowMoments([]);
       setWowMomentsLoading(false);
@@ -350,43 +352,62 @@ export function HomePage(): JSX.Element {
     };
   }, [user]);
 
+  const refreshWowMoments = useCallback(
+    async (options?: {
+      showLoading?: boolean;
+      surfaceErrors?: boolean;
+    }): Promise<boolean> => {
+      if (!user) return false;
+
+      const requestUserId = user.id;
+      const requestId = wowMomentsRequestIdRef.current + 1;
+      wowMomentsRequestIdRef.current = requestId;
+
+      if (options?.showLoading) setWowMomentsLoading(true);
+      if (options?.surfaceErrors ?? true) setWowMomentsError(null);
+
+      try {
+        const rows = await fetchWowMoments();
+        if (wowMomentsRequestIdRef.current !== requestId) return false;
+        // Match the inspirations load's defence-in-depth tenant guard: the
+        // route is scoped by session, but the page still refuses to render any
+        // row whose user id does not match the current auth context.
+        setWowMoments(rows.filter((row) => row.userId === requestUserId));
+        wowMomentsLoadedForUserIdRef.current = requestUserId;
+        setWowMomentsLoading(false);
+        setWowMomentsError(null);
+        return true;
+      } catch (err) {
+        if (wowMomentsRequestIdRef.current !== requestId) return false;
+        if (options?.surfaceErrors ?? true) {
+          const message =
+            err instanceof Error ? err.message : "Failed to load WOW moments";
+          setWowMomentsError(message);
+        }
+        setWowMomentsLoading(false);
+        return false;
+      }
+    },
+    [user],
+  );
+
   useEffect(() => {
     if (!user) return;
     if (wowMomentsLoadedForUserIdRef.current === user.id) return;
 
-    let cancelled = false;
     if (
       wowMomentsLoadedForUserIdRef.current &&
       wowMomentsLoadedForUserIdRef.current !== user.id
     ) {
       setWowMoments([]);
     }
-    setWowMomentsLoading(true);
-    setWowMomentsError(null);
 
-    void (async () => {
-      try {
-        const rows = await fetchWowMoments();
-        if (cancelled) return;
-        // Match the inspirations load's defence-in-depth tenant guard: the
-        // route is scoped by session, but the page still refuses to render any
-        // row whose user id does not match the current auth context.
-        setWowMoments(rows.filter((row) => row.userId === user.id));
-        wowMomentsLoadedForUserIdRef.current = user.id;
-        setWowMomentsLoading(false);
-      } catch (err) {
-        if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "Failed to load WOW moments";
-        setWowMomentsError(message);
-        setWowMomentsLoading(false);
-      }
-    })();
+    void refreshWowMoments({ showLoading: true, surfaceErrors: true });
 
     return () => {
-      cancelled = true;
+      wowMomentsRequestIdRef.current += 1;
     };
-  }, [user]);
+  }, [refreshWowMoments, user]);
 
   const handleOptimisticAdd = useCallback((pending: PendingInspiration) => {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
@@ -407,6 +428,8 @@ export function HomePage(): JSX.Element {
         ),
       );
 
+      void refreshWowMoments({ showLoading: false, surfaceErrors: true });
+
       // The classifier worker (or the dev-mode inline fallback) writes
       // `cluster` asynchronously after the row is persisted. Without a
       // refetch the optimistic row stays at `cluster: null` forever in
@@ -416,6 +439,7 @@ export function HomePage(): JSX.Element {
       // user gives up.
       const targetId = result.inspiration.id;
       const delays = [1500, 2500, 3500, 5000];
+      let classifiedRefreshRequested = false;
       for (const delay of delays) {
         window.setTimeout(() => {
           void (async () => {
@@ -437,6 +461,10 @@ export function HomePage(): JSX.Element {
                     : e,
                 );
               });
+              if (!classifiedRefreshRequested) {
+                classifiedRefreshRequested = true;
+                void refreshWowMoments({ showLoading: false, surfaceErrors: false });
+              }
             } catch {
               // Silent — the user will pick up the classification on
               // the next mount or refresh. No banner here because the
@@ -447,7 +475,7 @@ export function HomePage(): JSX.Element {
         }, delay);
       }
     },
-    [],
+    [refreshWowMoments],
   );
 
   const handlePersistError = useCallback(

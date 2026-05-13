@@ -53,6 +53,12 @@
 import { z } from "zod";
 
 import { type Cluster, clusterEnumValues } from "../db/index.js";
+import {
+  buildGeminiJsonHeaders,
+  buildGeminiModelEndpoint,
+  formatSafeGeminiError,
+  safeGeminiErrorDetails,
+} from "../lib/gemini-http.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -446,8 +452,8 @@ export function buildClassificationRequest(
  * model. Pulled out of `classifyInspirationText` so a smoke test can hit the
  * same URL without re-implementing the path construction.
  */
-export function buildGenerateContentUrl(apiKey: string): string {
-  return `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+export function buildGenerateContentUrl(): string {
+  return buildGeminiModelEndpoint(GEMINI_MODEL, "generateContent");
 }
 
 /**
@@ -510,22 +516,21 @@ export async function classifyInspirationText(
       : trimmed;
 
   const apiKey = getGeminiApiKey();
-  const url = buildGenerateContentUrl(apiKey);
+  const url = buildGenerateContentUrl();
   const requestBody = buildClassificationRequest(text);
 
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildGeminiJsonHeaders(apiKey),
     body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
-    // Read the body for log context but don't try to parse it — Google
-    // returns text/plain or JSON depending on the failure mode, and the
-    // exact shape doesn't change the retry decision.
-    const errBody = await response.text().catch(() => "<unreadable>");
     throw new Error(
-      `Gemini classify failed: HTTP ${response.status} ${response.statusText} — ${errBody.slice(0, 500)}`,
+      formatSafeGeminiError(
+        "Gemini classify failed",
+        await safeGeminiErrorDetails(response),
+      ),
     );
   }
 
