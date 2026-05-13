@@ -24,8 +24,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InspirationsBoard } from "../components/InspirationsBoard";
 import type { HomeCardData } from "../components/InspirationsBoard";
-import type { InspirationCardData } from "../components/InspirationCard";
+import {
+  InspirationCard,
+  type InspirationCardData,
+} from "../components/InspirationCard";
 import { WowMomentsSection } from "../components/WowMomentsSection";
+import { AppShell } from "../components/layout";
 import type {
   PendingInspiration,
   PersistedResult,
@@ -222,6 +226,57 @@ function applyPersisted(
   };
 }
 
+type HomeView = "wow" | "inspiration";
+
+export interface HomeCaptureHandoffState {
+  activeView: HomeView;
+  autoFocusCaptureRequest: number;
+}
+
+export function nextHomeCaptureHandoffState(
+  previousAutoFocusCaptureRequest: number,
+): HomeCaptureHandoffState {
+  return {
+    activeView: "inspiration",
+    autoFocusCaptureRequest: previousAutoFocusCaptureRequest + 1,
+  };
+}
+
+interface HomeViewToggleProps {
+  activeView: HomeView;
+  onChange: (view: HomeView) => void;
+}
+
+export function HomeViewToggle({
+  activeView,
+  onChange,
+}: HomeViewToggleProps): JSX.Element {
+  return (
+    <nav
+      className="home-view-switcher"
+      aria-label="Home view"
+      data-active-view={activeView}
+    >
+      <button
+        type="button"
+        className={activeView === "wow" ? "active" : undefined}
+        aria-pressed={activeView === "wow"}
+        onClick={() => onChange("wow")}
+      >
+        Wow Moment First
+      </button>
+      <button
+        type="button"
+        className={activeView === "inspiration" ? "active" : undefined}
+        aria-pressed={activeView === "inspiration"}
+        onClick={() => onChange("inspiration")}
+      >
+        Inspiration First
+      </button>
+    </nav>
+  );
+}
+
 export function HomePage(): JSX.Element {
   const { user, logout } = useAuth();
 
@@ -242,6 +297,8 @@ export function HomePage(): JSX.Element {
   const [wowMoments, setWowMoments] = useState<ApiWowMoment[]>([]);
   const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
   const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<HomeView>("wow");
+  const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -577,6 +634,17 @@ export function HomePage(): JSX.Element {
     return [...entries].reverse().map(entryToCardData);
   }, [entries]);
 
+  const historyContent = useMemo(() => {
+    if (cardItems.length === 0) return undefined;
+    return [...cardItems].reverse().map((item) => (
+      <InspirationCard
+        key={item.id}
+        item={item}
+        onSelect={handleSelectInspiration}
+      />
+    ));
+  }, [cardItems, handleSelectInspiration]);
+
   /**
    * Cluster grid derived from the user's own saves. Entries that haven't
    * been classified yet (`cluster === null`) don't get a tile — the
@@ -620,6 +688,12 @@ export function HomePage(): JSX.Element {
     });
   }, [entries]);
 
+  const handleWowHeaderCapture = useCallback(() => {
+    const next = nextHomeCaptureHandoffState(autoFocusCaptureRequest);
+    setActiveView(next.activeView);
+    setAutoFocusCaptureRequest(next.autoFocusCaptureRequest);
+  }, [autoFocusCaptureRequest]);
+
   // The guard guarantees `user` is non-null at this point. The defensive
   // check below converts a guard regression from "blank screen + console
   // TypeError" into a single visible diagnostic line.
@@ -662,8 +736,50 @@ export function HomePage(): JSX.Element {
     );
   }
 
-  return (
-    <>
+  const viewSwitcher = (
+    <HomeViewToggle activeView={activeView} onChange={setActiveView} />
+  );
+
+  const historyDetail = detailData ? (
+    <InspirationDetail
+      // Re-key on id so navigating between inspirations remounts the
+      // component, resetting the loading state and re-running the
+      // reflections fetch for the new row.
+      key={detailData.id}
+      inspiration={detailData}
+      onBack={handleBackFromDetail}
+      onDeleted={handleDeletedInspiration}
+    />
+  ) : undefined;
+
+  const primaryContent =
+    activeView === "wow" ? (
+      <AppShell
+        count={entries.length}
+        headerTagline="wow moments"
+        loading={initialLoading}
+        onCaptureClick={handleWowHeaderCapture}
+        historyContent={historyContent}
+        historyDetail={historyDetail}
+      >
+        {viewSwitcher}
+        <section className="wow-first-home" aria-labelledby="wow-first-title">
+          <div className="wow-first-intro">
+            <span>Default home</span>
+            <h2 id="wow-first-title">Wow Moment First</h2>
+            <p>
+              Start with the durable patterns WAKA has found across your saves,
+              then switch to Inspiration First when you want the raw save history.
+            </p>
+          </div>
+          <WowMomentsSection
+            moments={wowMoments}
+            loading={wowMomentsLoading}
+            error={wowMomentsError}
+          />
+        </section>
+      </AppShell>
+    ) : (
       <InspirationsBoard
         inspirations={cardItems}
         homeCards={homeCards}
@@ -674,27 +790,17 @@ export function HomePage(): JSX.Element {
         onPersistError={handlePersistError}
         onSelectInspiration={handleSelectInspiration}
         onSelectCluster={handleSelectCluster}
-        afterGridContent={
-          <WowMomentsSection
-            moments={wowMoments}
-            loading={wowMomentsLoading}
-            error={wowMomentsError}
-          />
-        }
-        historyDetail={
-          detailData ? (
-            <InspirationDetail
-              // Re-key on id so navigating between inspirations
-              // remounts the component, resetting the loading state and
-              // re-running the reflections fetch for the new row.
-              key={detailData.id}
-              inspiration={detailData}
-              onBack={handleBackFromDetail}
-              onDeleted={handleDeletedInspiration}
-            />
-          ) : undefined
+        beforeGridContent={viewSwitcher}
+        historyDetail={historyDetail}
+        autoFocusCaptureRequest={
+          autoFocusCaptureRequest > 0 ? autoFocusCaptureRequest : undefined
         }
       />
+    );
+
+  return (
+    <>
+      {primaryContent}
       {/*
         Temporary sign-out affordance. The prototype has no auth concept,
         so there's no in-design slot for this control yet. We render it

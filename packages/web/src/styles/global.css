@@ -2884,6 +2884,88 @@ body.reflect-bg {
   margin-bottom: var(--space-4);
 }
 
+.home-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: var(--space-4) 0 var(--space-2);
+  padding: 4px;
+  border: var(--border-hairline);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.48);
+  box-shadow: 0 16px 40px rgba(15, 15, 14, 0.04);
+}
+
+.home-view-switcher button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard);
+}
+
+.home-view-switcher button:hover,
+.home-view-switcher button.active {
+  background: rgba(15, 15, 14, 0.08);
+  color: var(--ink);
+}
+
+.home-view-switcher button.active {
+  box-shadow: inset 0 0 0 1px rgba(15, 15, 14, 0.08);
+}
+
+.wow-first-home {
+  width: min(100%, 1120px);
+  margin: var(--space-4) auto var(--space-8);
+}
+
+.wow-first-intro {
+  width: min(100%, 760px);
+  margin: var(--space-6) auto var(--space-2);
+  text-align: center;
+}
+
+.wow-first-intro span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wow-first-intro h2 {
+  margin: var(--space-2) 0;
+  font-family: var(--font-serif);
+  font-size: clamp(36px, 6vw, 72px);
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+}
+
+.wow-first-intro p {
+  margin: 0 auto;
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.wow-first-home .wow-moments-section {
+  width: 100%;
+  margin-top: var(--space-6);
+}
+
 .wow-moments-section {
   width: min(100%, 1040px);
   margin: var(--space-8) auto var(--space-8);

@@ -32,6 +32,8 @@
 export interface AppHeaderProps {
   /** Total saved inspirations to surface in the meta counter. */
   count: number;
+  /** Italicized title suffix after "WAKA". */
+  tagline?: string;
   /**
    * `true` while the inspirations list is still being hydrated. Hides
    * the "0 INSPIRATIONS SAVED" copy that would otherwise lie to the
@@ -47,6 +49,7 @@ export interface AppHeaderProps {
 
 export function AppHeader({
   count,
+  tagline = "your inspirations",
   loading = false,
   onCaptureClick,
   onMetaClick,
@@ -62,7 +65,7 @@ export function AppHeader({
   return (
     <header>
       <h1>
-        WAKA <em>— your inspirations</em>
+        WAKA <em>— {tagline}</em>
       </h1>
       <div className="header-right">
         <button
