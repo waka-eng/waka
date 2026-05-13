@@ -20,7 +20,14 @@
  * is not clobbered by the response.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 
 import { InspirationsBoard } from "../components/InspirationsBoard";
 import type { HomeCardData } from "../components/InspirationsBoard";
@@ -277,6 +284,260 @@ export function HomeViewToggle({
   );
 }
 
+type InspirationDateFilter = "all" | "today" | "week" | "month";
+type InspirationSort = "newest" | "oldest" | "wow";
+
+interface InspirationDiscoveryFilters {
+  search: string;
+  cluster: ClusterKind | "all" | "unclassified";
+  kind: string;
+  status: InspirationStatus | "all";
+  date: InspirationDateFilter;
+  sort: InspirationSort;
+}
+
+const DEFAULT_INSPIRATION_FILTERS: InspirationDiscoveryFilters = {
+  search: "",
+  cluster: "all",
+  kind: "all",
+  status: "all",
+  date: "all",
+  sort: "newest",
+};
+
+function entryMatchesDateFilter(
+  entry: InspirationListEntry,
+  filter: InspirationDateFilter,
+): boolean {
+  if (filter === "all") return true;
+  const created = new Date(entry.createdAt).getTime();
+  if (Number.isNaN(created)) return true;
+  const now = Date.now();
+  const age = now - created;
+  if (filter === "today") return age >= 0 && age <= 24 * 60 * 60 * 1000;
+  if (filter === "week") return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000;
+  return age >= 0 && age <= 30 * 24 * 60 * 60 * 1000;
+}
+
+function filterAndSortInspirationEntries(
+  entries: InspirationListEntry[],
+  filters: InspirationDiscoveryFilters,
+): InspirationListEntry[] {
+  const query = filters.search.trim().toLowerCase();
+  const filtered = entries.filter((entry) => {
+    const clusterTopic = entry.cluster ? CLUSTER_TOPICS[entry.cluster] : "";
+    const haystack = [entry.text, entry.serverKind ?? "", clusterTopic]
+      .join(" ")
+      .toLowerCase();
+    if (query && !haystack.includes(query)) return false;
+    if (filters.cluster !== "all") {
+      if (filters.cluster === "unclassified") {
+        if (entry.cluster !== null) return false;
+      } else if (entry.cluster !== filters.cluster) {
+        return false;
+      }
+    }
+    if (filters.kind !== "all" && (entry.serverKind ?? "unknown") !== filters.kind) {
+      return false;
+    }
+    if (filters.status !== "all" && entry.status !== filters.status) return false;
+    return entryMatchesDateFilter(entry, filters.date);
+  });
+
+  return [...filtered].sort((a, b) => {
+    if (filters.sort === "oldest") {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    }
+    if (filters.sort === "wow") {
+      // The current GET /inspirations response does not expose a dedicated
+      // client-side sort key beyond timestamps for every saved row. Keep the
+      // affordance frontend-only by ranking classified/saved rows first, then
+      // newest within that group.
+      const aRank = (a.cluster ? 1 : 0) + (a.status === "saved" ? 1 : 0);
+      const bRank = (b.cluster ? 1 : 0) + (b.status === "saved" ? 1 : 0);
+      if (aRank !== bRank) return bRank - aRank;
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+}
+
+interface InspirationDiscoveryPanelProps {
+  entries: InspirationListEntry[];
+  filteredEntries: InspirationListEntry[];
+  filters: InspirationDiscoveryFilters;
+  kindOptions: string[];
+  onFiltersChange: (filters: InspirationDiscoveryFilters) => void;
+  onSelectInspiration: (id: string) => void;
+}
+
+function InspirationDiscoveryPanel({
+  entries,
+  filteredEntries,
+  filters,
+  kindOptions,
+  onFiltersChange,
+  onSelectInspiration,
+}: InspirationDiscoveryPanelProps): JSX.Element {
+  const updateFilter = <K extends keyof InspirationDiscoveryFilters>(
+    key: K,
+    value: InspirationDiscoveryFilters[K],
+  ) => {
+    onFiltersChange({ ...filters, [key]: value });
+  };
+
+  const resultLabel = `${filteredEntries.length} of ${entries.length} inspiration${
+    entries.length === 1 ? "" : "s"
+  }`;
+
+  return (
+    <section className="inspiration-discovery-panel" aria-labelledby="inspiration-discovery-title">
+      <div className="inspiration-discovery-heading">
+        <div>
+          <span>Find inspirations</span>
+          <h2 id="inspiration-discovery-title">Search the raw material</h2>
+        </div>
+        <strong aria-live="polite">{resultLabel}</strong>
+      </div>
+
+      <div className="inspiration-filter-bar" role="search" aria-label="Inspiration filters">
+        <label className="inspiration-search-field">
+          <span>Search</span>
+          <input
+            aria-label="Search inspirations"
+            type="search"
+            value={filters.search}
+            placeholder="Search text, kind, or cluster…"
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              updateFilter("search", event.target.value)
+            }
+          />
+        </label>
+        <label>
+          <span>Cluster</span>
+          <select
+            aria-label="Filter by cluster"
+            value={filters.cluster}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+              updateFilter(
+                "cluster",
+                event.target.value as InspirationDiscoveryFilters["cluster"],
+              )
+            }
+          >
+            <option value="all">All clusters</option>
+            {CLUSTER_ORDER.map((cluster) => (
+              <option value={cluster} key={cluster}>
+                {cluster}
+              </option>
+            ))}
+            <option value="unclassified">Unclassified</option>
+          </select>
+        </label>
+        <label>
+          <span>Kind</span>
+          <select
+            aria-label="Filter by kind"
+            value={filters.kind}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+              updateFilter("kind", event.target.value)
+            }
+          >
+            <option value="all">All kinds</option>
+            {kindOptions.map((kind) => (
+              <option value={kind} key={kind}>
+                {kind}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Status</span>
+          <select
+            aria-label="Filter by status"
+            value={filters.status}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+              updateFilter(
+                "status",
+                event.target.value as InspirationDiscoveryFilters["status"],
+              )
+            }
+          >
+            <option value="all">All statuses</option>
+            <option value="saved">Saved</option>
+            <option value="saving">Saving</option>
+            <option value="error">Needs retry</option>
+          </select>
+        </label>
+        <label>
+          <span>Date</span>
+          <select
+            aria-label="Filter by date"
+            value={filters.date}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+              updateFilter(
+                "date",
+                event.target.value as InspirationDiscoveryFilters["date"],
+              )
+            }
+          >
+            <option value="all">Any date</option>
+            <option value="today">Last day</option>
+            <option value="week">Last 7 days</option>
+            <option value="month">Last 30 days</option>
+          </select>
+        </label>
+        <label>
+          <span>Sort</span>
+          <select
+            aria-label="Sort inspirations"
+            value={filters.sort}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+              updateFilter(
+                "sort",
+                event.target.value as InspirationDiscoveryFilters["sort"],
+              )
+            }
+          >
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="wow">Most signal</option>
+          </select>
+        </label>
+      </div>
+
+      {filteredEntries.length === 0 ? (
+        <div className="inspiration-results-empty" role="status">
+          <strong>No inspirations match those filters.</strong>
+          <span>Try a broader search, a different cluster, or clear the filters.</span>
+        </div>
+      ) : (
+        <div className="inspiration-results-grid" aria-label={resultLabel}>
+          {filteredEntries.map((entry) => (
+            <button
+              type="button"
+              className="inspiration-result-card"
+              key={entry.id}
+              onClick={() => onSelectInspiration(entry.id)}
+            >
+              <span className="inspiration-result-meta">
+                {entry.serverKind ?? entry.status}
+                {entry.cluster ? ` · ${entry.cluster}` : " · unclassified"}
+                {` · ${entry.timestamp}`}
+              </span>
+              <span className="inspiration-result-text">{entry.text}</span>
+              {entry.cluster ? (
+                <span className="inspiration-result-topic">
+                  {CLUSTER_TOPICS[entry.cluster]}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function HomePage(): JSX.Element {
   const { user, logout } = useAuth();
 
@@ -298,6 +559,8 @@ export function HomePage(): JSX.Element {
   const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
   const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("wow");
+  const [inspirationFilters, setInspirationFilters] =
+    useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
@@ -634,6 +897,24 @@ export function HomePage(): JSX.Element {
     return [...entries].reverse().map(entryToCardData);
   }, [entries]);
 
+  const filteredEntries = useMemo(() => {
+    return filterAndSortInspirationEntries(entries, inspirationFilters);
+  }, [entries, inspirationFilters]);
+
+  const filteredCardItems = useMemo<InspirationCardData[]>(() => {
+    return [...filteredEntries].reverse().map(entryToCardData);
+  }, [filteredEntries]);
+
+  const kindOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        entries
+          .map((entry) => entry.serverKind)
+          .filter((kind): kind is string => Boolean(kind)),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+  }, [entries]);
+
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
     return [...cardItems].reverse().map((item) => (
@@ -781,7 +1062,7 @@ export function HomePage(): JSX.Element {
       </AppShell>
     ) : (
       <InspirationsBoard
-        inspirations={cardItems}
+        inspirations={filteredCardItems}
         homeCards={homeCards}
         totalInspirations={entries.length}
         loading={initialLoading}
@@ -790,7 +1071,19 @@ export function HomePage(): JSX.Element {
         onPersistError={handlePersistError}
         onSelectInspiration={handleSelectInspiration}
         onSelectCluster={handleSelectCluster}
-        beforeGridContent={viewSwitcher}
+        beforeGridContent={
+          <>
+            {viewSwitcher}
+            <InspirationDiscoveryPanel
+              entries={entries}
+              filteredEntries={filteredEntries}
+              filters={inspirationFilters}
+              kindOptions={kindOptions}
+              onFiltersChange={setInspirationFilters}
+              onSelectInspiration={handleSelectInspiration}
+            />
+          </>
+        }
         historyDetail={historyDetail}
         autoFocusCaptureRequest={
           autoFocusCaptureRequest > 0 ? autoFocusCaptureRequest : undefined
