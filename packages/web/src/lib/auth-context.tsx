@@ -10,9 +10,8 @@
  * The httpOnly `waka_session` cookie set by the API is the SECURITY source
  * of truth — JS cannot read it, and only the server can validate it. We
  * mirror a small slice of the user object (id / email / name) into
- * `localStorage` so the UI can paint a personalised first frame instead of
- * flashing the login screen on every reload. On mount we always re-validate
- * with the server via `GET /auth/me`; if the server says "no session", the
+ * `localStorage` only as a reload hint. On mount we always re-validate with
+ * the server via `GET /auth/me`; if the server cannot confirm a session, the
  * cached user is dropped and the route guard sends the visitor to /login.
  *
  * The cache is therefore an *optimistic hint*, never a credential. Anything
@@ -151,10 +150,11 @@ export interface AuthProviderProps {
  * route — public or private — can read `useAuth()` without prop-drilling.
  *
  * Mount sequence:
- *   1. Hydrate `user` synchronously from localStorage so the first frame
- *      reflects the previous session optimistically.
+ *   1. Hydrate `user` synchronously from localStorage as a short-lived hint
+ *      while `/auth/me` is pending. Protected routes must still wait for
+ *      `isLoading` to clear before rendering authenticated data.
  *   2. Kick off `GET /auth/me` to confirm with the server. If the cookie is
- *      missing/expired the cached user is cleared.
+ *      missing, expired, or cannot be validated, the cached user is cleared.
  *   3. While that round-trip is pending, `isLoading` is true so route
  *      guards can show a spinner instead of redirecting prematurely.
  */
@@ -168,6 +168,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * navigation make this a real, not theoretical, hazard).
    */
   const aliveRef = useRef<boolean>(true);
+  const authMutationRef = useRef<number>(0);
   useEffect(() => {
     aliveRef.current = true;
     return () => {
@@ -180,23 +181,37 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
    * cache in lock-step. Every code path that mutates `user` must go through
    * this so the two never drift.
    */
-  const applyUser = useCallback((next: ApiUser | null): void => {
-    setUser(next);
-    writeCachedUser(next);
-  }, []);
+  const applyUser = useCallback(
+    (next: ApiUser | null, options?: { countAsAuthMutation?: boolean }): void => {
+      if (options?.countAsAuthMutation !== false) {
+        authMutationRef.current += 1;
+      }
+      setUser(next);
+      writeCachedUser(next);
+    },
+    [],
+  );
 
   // Initial hydration: confirm the cached user against the server.
   useEffect(() => {
     let cancelled = false;
+    const initialAuthMutation = authMutationRef.current;
     (async () => {
       try {
         const fresh = await fetchCurrentUser();
         if (cancelled || !aliveRef.current) return;
-        applyUser(fresh);
+        if (authMutationRef.current === initialAuthMutation) {
+          applyUser(fresh, { countAsAuthMutation: false });
+        }
       } catch {
-        // Genuine failure (network down, server 500). Keep whatever we
-        // hydrated from cache so the UI stays usable; the next mutation
-        // attempt will surface the real problem.
+        // The cached user is only an optimistic display hint, not proof of an
+        // authenticated session. If the initial server validation fails
+        // before we have a fresh `/auth/me` user, drop the hint rather than
+        // letting RequireAuth render protected routes from stale localStorage.
+        if (cancelled || !aliveRef.current) return;
+        if (authMutationRef.current === initialAuthMutation) {
+          applyUser(null, { countAsAuthMutation: false });
+        }
       } finally {
         if (!cancelled && aliveRef.current) setIsLoading(false);
       }
