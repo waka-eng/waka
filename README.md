@@ -100,6 +100,8 @@ into your shell.)
 
 ### 5. Run the dev stack
 
+#### Option A — SST sandbox
+
 ```bash
 pnpm dev    # alias for `sst dev`
 ```
@@ -113,6 +115,27 @@ SST prints two URLs:
 > If Google OAuth bounces with `redirect_uri_mismatch`, copy the printed
 > `apiUrl` into your Google Cloud Console "Authorized redirect URIs" as
 > `<apiUrl>/auth/google/callback` and try again.
+
+#### Option B — one-command local Hono + Vite
+
+Use this when you want the API and web dev servers running locally without
+starting an SST sandbox:
+
+```bash
+pnpm dev:local
+```
+
+The tracked runner starts both child processes, stops both on `Ctrl+C`, and
+shuts the stack down if either child exits. It does not print environment
+variable values or secrets. Open:
+
+- API health: <http://localhost:3010/health>
+- API origin: <http://localhost:3010>
+- Web app: <http://127.0.0.1:5175>
+
+`pnpm dev:local` sets `VITE_API_URL=http://localhost:3010` for Vite and runs
+Vite with `--host 127.0.0.1 --port 5175 --strictPort`, so a busy web port fails
+fast instead of silently moving to another port.
 
 ### 6. Optional local demo seed
 
@@ -145,7 +168,9 @@ via the existing API auth helper so the demo account can log in.
 
 ### 7. End-to-end browser flow (manual smoke)
 
-Open <http://localhost:5173>. The app should redirect you to `/login`. Then:
+Open the web URL for the stack you started: <http://localhost:5173> for Option A
+or <http://127.0.0.1:5175> for Option B. The app should redirect you to
+`/login`. Then:
 
 1. **Sign up** with email + password from the Sign-up tab. Expect a redirect
    to `/` with the original WAKA UI rendered (gradient backdrop, capture
@@ -176,6 +201,7 @@ Open <http://localhost:5173>. The app should redirect you to `/login`. Then:
 ### 8. Run the test suite
 
 ```bash
+pnpm test:dev-local-script       # syntax-check the tracked Option B runner
 pnpm --filter @waka/api test         # vitest in-process Hono smoke + queue tests
 pnpm --filter @waka/api typecheck
 pnpm --filter @waka/web typecheck
