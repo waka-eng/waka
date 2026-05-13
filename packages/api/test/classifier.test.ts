@@ -279,6 +279,12 @@ describe("classifier handler — message processing", () => {
     // handler passed the actual row text to Gemini (not, say, an empty
     // string from a mis-shaped read).
     expect(call.body).toContain("the more I optimise the slower I get");
+    expect(call.url).toBe(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+    );
+    expect(call.url).not.toContain("?key=");
+    expect(call.headers["x-goog-api-key"]).toBeTruthy();
+    expect(call.headers["content-type"]).toBe("application/json");
   });
 
   it("processes mixed records in a single batch independently", async () => {

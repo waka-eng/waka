@@ -459,8 +459,14 @@ export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
     });
   }
 
-  const payload = (body ?? {}) as Partial<ListWowMomentsResponse>;
-  return Array.isArray(payload.wowMoments) ? payload.wowMoments : [];
+  const payload = body as Partial<ListWowMomentsResponse> | null;
+  if (!payload || !Array.isArray(payload.wowMoments)) {
+    throw new ApiError({
+      status: res.status,
+      message: "Malformed WOW moments response",
+    });
+  }
+  return payload.wowMoments;
 }
 
 // ---------------------------------------------------------------------------

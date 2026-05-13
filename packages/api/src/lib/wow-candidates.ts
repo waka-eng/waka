@@ -8,7 +8,7 @@
  * clear backfill/recompute semantics.
  */
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../db/index.js";
 import {
@@ -30,6 +30,7 @@ import type { WakaDb } from "./inspiration-embeddings.js";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+export const MAX_DB_CANDIDATE_POOL = 200;
 const SURPRISE_SIMILARITY_PEAK = 0.55;
 const TIME_DISTANCE_MAX_DAYS = 365;
 
@@ -98,6 +99,11 @@ function normalizeLimit(limit: number | undefined): number {
   return Math.max(0, Math.min(MAX_LIMIT, Math.floor(limit ?? DEFAULT_LIMIT)));
 }
 
+function dbCandidatePoolLimit(limit: number): number {
+  if (limit <= 0) return 0;
+  return Math.min(MAX_DB_CANDIDATE_POOL, Math.max(limit * 5, limit + 20));
+}
+
 function calculateSurpriseSimilarityFromDirectSimilarity(
   similarity: SimilarityScore,
 ): SurpriseSimilarityScore {
@@ -147,10 +153,19 @@ async function loadTenantCandidatePool(
   db: WakaDb,
   userId: string,
   triggerInspirationId: string,
-  triggerEmbedding: { model: string; dimensions: number },
+  triggerEmbedding: { model: string; dimensions: number; embedding: number[] },
+  poolLimit: number,
 ) {
+  // TODO(pgvector): once the extension is available in local + production DBs,
+  // replace this explainable bounded preselection with an ANN cosine query.
+  // For now, keep embedding as jsonb number[] and use the indexed tenant/model/
+  // dimensions predicate plus durable inspiration signals to cap DB rows before
+  // app-side cosine ranking.
   return db
-    .select({ inspiration: inspirations, embedding: inspirationEmbeddings })
+    .select({
+      inspiration: inspirations,
+      embedding: inspirationEmbeddings,
+    })
     .from(inspirationEmbeddings)
     .innerJoin(
       inspirations,
@@ -167,7 +182,9 @@ async function loadTenantCandidatePool(
         eq(inspirationEmbeddings.model, triggerEmbedding.model),
         eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
       ),
-    );
+    )
+    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt))
+    .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
 }
 
 /**
@@ -194,6 +211,7 @@ export async function findWowMomentCandidates(
     params.userId,
     params.triggerInspirationId,
     trigger.embedding,
+    dbCandidatePoolLimit(limit),
   );
 
   const candidates = candidatePool

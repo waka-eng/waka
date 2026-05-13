@@ -12,10 +12,12 @@ import {
 } from "../../../tools/demo-seed-data";
 import {
   assertLocalDatabase,
+  buildDemoWowMomentIdempotencyKey,
   loadDemoSeedEnv,
   parseArgs,
   replacePriorDemoRows,
   resolveDemoUser,
+  seedDemoRows,
 } from "../../../tools/seed-demo";
 
 describe("demo seed data", () => {
@@ -112,6 +114,58 @@ describe("demo seed CLI helpers", () => {
     } finally {
       if (originalDb === undefined) delete process.env.DB_CONNECTION_URL;
       else process.env.DB_CONNECTION_URL = originalDb;
+    }
+  });
+
+  it("builds title-independent idempotency keys from version, user, trigger, kind, and sorted related ids", () => {
+    const key = buildDemoWowMomentIdempotencyKey({
+      userId: "user-1",
+      triggerInspirationId: "trigger-1",
+      kind: "bridge",
+      relatedInspirationIds: ["related-b", "related-a", "related-b"],
+    });
+
+    expect(key).toBe("wow-moment-v2:user-1:trigger-1:bridge:related-a,related-b");
+    expect(key).not.toContain("title");
+  });
+
+  it("includes a deterministic idempotency_key in every seeded WOW moment insert", async () => {
+    const calls: Array<{ sql: string; values: unknown[] }> = [];
+    const fakeSql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ sql: strings.join("?"), values });
+      return [];
+    }) as never;
+    const userId = "00000000-0000-0000-0000-000000000000";
+
+    await seedDemoRows(fakeSql, userId);
+
+    const inspirationIdsBySlug = new Map<string, string>();
+    const inspirationInserts = calls.filter((call) => /insert into inspirations/.test(call.sql));
+    for (let index = 0; index < inspirationInserts.length; index += 1) {
+      const call = inspirationInserts[index]!;
+      inspirationIdsBySlug.set(DEMO_INSPIRATIONS[index]!.slug, call.values[0] as string);
+    }
+
+    const wowInserts = calls.filter((call) => /insert into wow_moments/.test(call.sql));
+    expect(wowInserts).toHaveLength(DEMO_WOW_MOMENTS.length);
+    for (let index = 0; index < wowInserts.length; index += 1) {
+      const call = wowInserts[index]!;
+      const moment = DEMO_WOW_MOMENTS[index]!;
+      const relatedInspirationIds = moment.related.map((related) => {
+        const id = inspirationIdsBySlug.get(related.inspirationSlug);
+        expect(id).toBeTruthy();
+        return id!;
+      });
+      const expectedKey = buildDemoWowMomentIdempotencyKey({
+        userId,
+        triggerInspirationId: relatedInspirationIds[0]!,
+        kind: moment.kind,
+        relatedInspirationIds,
+      });
+
+      expect(call.sql).toContain("idempotency_key");
+      expect(call.values[4]).toBe(expectedKey);
+      expect(call.values[4]).not.toBe(moment.title);
     }
   });
 

@@ -197,7 +197,24 @@ export async function replacePriorDemoRows(sql: SeedSql, userId: string): Promis
   `;
 }
 
-async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> {
+export function buildDemoWowMomentIdempotencyKey(params: {
+  userId: string;
+  triggerInspirationId: string;
+  kind: string;
+  relatedInspirationIds: string[];
+  version?: number;
+}): string {
+  const stableRelatedIds = Array.from(new Set(params.relatedInspirationIds)).sort();
+  return [
+    `wow-moment-v${params.version ?? 2}`,
+    params.userId,
+    params.triggerInspirationId,
+    params.kind,
+    stableRelatedIds.join(","),
+  ].join(":");
+}
+
+export async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> {
   const inspirationIds = new Map<string, string>();
   const now = Date.now();
 
@@ -220,26 +237,43 @@ async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> {
   for (const [momentIndex, moment] of DEMO_WOW_MOMENTS.entries()) {
     const id = randomUUID();
     const createdAt = new Date(now - momentIndex * 30 * 60 * 1000);
+    const relatedInspirationIds = moment.related.map((related) => {
+      const inspirationId = inspirationIds.get(related.inspirationSlug);
+      if (!inspirationId) {
+        throw new Error(`Demo WOW moment references unknown inspiration slug ${related.inspirationSlug}`);
+      }
+      return inspirationId;
+    });
+    const triggerInspirationId = relatedInspirationIds[0];
+    if (!triggerInspirationId) {
+      throw new Error(`Demo WOW moment ${moment.slug} must reference at least one inspiration`);
+    }
+    const idempotencyKey = buildDemoWowMomentIdempotencyKey({
+      userId,
+      triggerInspirationId,
+      kind: moment.kind,
+      relatedInspirationIds,
+    });
     await sql`
       insert into wow_moments (
-        id, user_id, title, kind, why, reflection_question, wow_score,
+        id, user_id, title, kind, idempotency_key, why, reflection_question, wow_score,
         created_at, updated_at
       ) values (
-        ${id}, ${userId}, ${moment.title}, ${moment.kind}::wow_kind, ${moment.why},
+        ${id}, ${userId}, ${moment.title}, ${moment.kind}::wow_kind, ${idempotencyKey}, ${moment.why},
         ${moment.reflectionQuestion}, ${moment.wowScore}, ${createdAt}, ${createdAt}
       )
     `;
 
     for (const [relatedIndex, related] of moment.related.entries()) {
-      const inspirationId = inspirationIds.get(related.inspirationSlug);
+      const inspirationId = relatedInspirationIds[relatedIndex];
       if (!inspirationId) {
         throw new Error(`Demo WOW moment references unknown inspiration slug ${related.inspirationSlug}`);
       }
       await sql`
         insert into wow_moment_inspirations (
-          id, wow_moment_id, inspiration_id, role, reason, sort_order, created_at
+          id, user_id, wow_moment_id, inspiration_id, role, reason, sort_order, created_at
         ) values (
-          ${randomUUID()}, ${id}, ${inspirationId}, ${related.role}, ${related.reason},
+          ${randomUUID()}, ${userId}, ${id}, ${inspirationId}, ${related.role}, ${related.reason},
           ${relatedIndex}, ${createdAt}
         )
       `;

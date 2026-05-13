@@ -9,6 +9,7 @@
 
 import { relations } from "drizzle-orm";
 import {
+  foreignKey,
   index,
   integer,
   pgEnum,
@@ -65,6 +66,10 @@ export const wowMoments = pgTable(
       table.userId,
       table.createdAt.desc(),
     ),
+    userIdIdUnique: uniqueIndex("wow_moments_user_id_id_unique_idx").on(
+      table.userId,
+      table.id,
+    ),
     userScoreIdx: index("wow_moments_user_score_idx").on(
       table.userId,
       table.wowScore.desc(),
@@ -77,6 +82,9 @@ export const wowMomentInspirations = pgTable(
   "wow_moment_inspirations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     wowMomentId: uuid("wow_moment_id")
       .notNull()
       .references(() => wowMoments.id, { onDelete: "cascade" }),
@@ -92,12 +100,24 @@ export const wowMomentInspirations = pgTable(
   },
   (table) => ({
     momentOrderIdx: index("wow_moment_inspirations_moment_order_idx").on(
+      table.userId,
       table.wowMomentId,
       table.sortOrder,
     ),
     inspirationIdx: index("wow_moment_inspirations_inspiration_idx").on(
+      table.userId,
       table.inspirationId,
     ),
+    momentUserFk: foreignKey({
+      name: "wow_moment_inspirations_user_moment_fk",
+      columns: [table.userId, table.wowMomentId],
+      foreignColumns: [wowMoments.userId, wowMoments.id],
+    }).onDelete("cascade"),
+    inspirationUserFk: foreignKey({
+      name: "wow_moment_inspirations_user_inspiration_fk",
+      columns: [table.userId, table.inspirationId],
+      foreignColumns: [inspirations.userId, inspirations.id],
+    }).onDelete("cascade"),
     momentInspirationUniqueIdx: uniqueIndex(
       "wow_moment_inspirations_moment_inspiration_unique_idx",
     ).on(table.wowMomentId, table.inspirationId),

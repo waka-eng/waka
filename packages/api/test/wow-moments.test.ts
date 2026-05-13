@@ -15,7 +15,7 @@ import {
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { createUserFixture } from "./fixtures/users.js";
-import { authedClient, createCleanupTracker } from "./helpers/index.js";
+import { apiRequest, authedClient, createCleanupTracker } from "./helpers/index.js";
 
 const cleanup = createCleanupTracker();
 
@@ -59,6 +59,82 @@ interface ListWowMomentsResponse {
   wowMoments: ApiWowMoment[];
 }
 
+async function insertWowMomentForUser(
+  userId: string,
+  input: {
+    title: string;
+    createdAt: Date;
+    wowScore?: number;
+    idempotencyKey: string;
+  },
+): Promise<{ id: string }> {
+  const [moment] = await getDb()
+    .insert(wowMoments)
+    .values({
+      userId,
+      title: input.title,
+      kind: "bridge",
+      why: `${input.title} why`,
+      reflectionQuestion: null,
+      wowScore: input.wowScore ?? 50,
+      createdAt: input.createdAt,
+      updatedAt: input.createdAt,
+      idempotencyKey: input.idempotencyKey,
+    } as typeof wowMoments.$inferInsert)
+    .returning({ id: wowMoments.id });
+
+  expect(moment).toBeTruthy();
+  return moment!;
+}
+
+describe("GET /wow-moments — list contract", () => {
+  it("requires authentication", async () => {
+    const res = await apiRequest("/wow-moments");
+
+    expect(res.status).toBe(401);
+  });
+
+  it("returns an empty list for an authenticated user with no WOW moments", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+
+    const res = await authedClient(alice).get<ListWowMomentsResponse>(
+      "/wow-moments",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ wowMoments: [] });
+  });
+
+  it("orders newest WOW moments first and caps the response at 20", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+
+    for (let index = 0; index < 23; index += 1) {
+      await insertWowMomentForUser(alice.user.id, {
+        title: `WOW ${index.toString().padStart(2, "0")}`,
+        createdAt: new Date(Date.UTC(2026, 4, 1, 12, index, 0)),
+        wowScore: index,
+        idempotencyKey: `test:wow-moments:limit:${alice.user.id}:${index}`,
+      });
+    }
+
+    const res = await authedClient(alice).get<ListWowMomentsResponse>(
+      "/wow-moments",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.wowMoments).toHaveLength(20);
+    expect(res.body.wowMoments.map((moment) => moment.title)).toEqual(
+      Array.from({ length: 20 }, (_, offset) =>
+        `WOW ${(22 - offset).toString().padStart(2, "0")}`,
+      ),
+    );
+  });
+});
+
 describe("GET /wow-moments — ownership", () => {
   it("does not leak cross-tenant related inspiration text through malformed join rows", async () => {
     const db = getDb();
@@ -100,22 +176,25 @@ describe("GET /wow-moments — ownership", () => {
       .returning({ id: wowMoments.id });
     expect(moment).toBeTruthy();
 
-    await db.insert(wowMomentInspirations).values([
-      {
-        wowMomentId: moment!.id,
-        inspirationId: aliceInspiration!.id,
-        role: "primary",
-        reason: "Same tenant row should be visible.",
-        sortOrder: 0,
-      },
-      {
+    await db.insert(wowMomentInspirations).values({
+      userId: alice.user.id,
+      wowMomentId: moment!.id,
+      inspirationId: aliceInspiration!.id,
+      role: "primary",
+      reason: "Same tenant row should be visible.",
+      sortOrder: 0,
+    } as typeof wowMomentInspirations.$inferInsert);
+
+    await expect(
+      db.insert(wowMomentInspirations).values({
+        userId: alice.user.id,
         wowMomentId: moment!.id,
         inspirationId: bobInspiration!.id,
         role: "malformed-cross-tenant",
-        reason: "Defensive route query must suppress this row.",
+        reason: "Composite tenant FK must reject this row.",
         sortOrder: 1,
-      },
-    ] as unknown as Array<typeof wowMomentInspirations.$inferInsert>);
+      } as typeof wowMomentInspirations.$inferInsert),
+    ).rejects.toThrow();
 
     const res = await authedClient(alice).get<ListWowMomentsResponse>(
       "/wow-moments",
