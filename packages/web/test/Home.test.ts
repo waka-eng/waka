@@ -6,6 +6,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InspirationsBoard } from "../src/components/InspirationsBoard";
+import { fetchInspirations, fetchWowMoments } from "../src/lib/api";
+import type { ApiInspiration, ApiWowMoment } from "../src/lib/api";
 import {
   HomePage,
   HomeViewToggle,
@@ -44,6 +46,95 @@ vi.mock("../src/lib/api", async (importOriginal) => {
 let mountedRoot: Root | null = null;
 let mountedContainer: HTMLDivElement | null = null;
 
+const sampleInspirations: ApiInspiration[] = [
+  {
+    id: "insp-1",
+    userId: "user-1",
+    text: "Architecture essay about bridge rhythms in city walks",
+    kind: "note",
+    category: null,
+    importanceScore: 7,
+    wowScore: 4,
+    cluster: "bridge",
+    classifiedAt: "2026-05-10T12:00:00.000Z",
+    createdAt: "2026-05-10T12:00:00.000Z",
+    updatedAt: "2026-05-10T12:00:00.000Z",
+  },
+  {
+    id: "insp-2",
+    userId: "user-1",
+    text: "Synthetic memory note for rereading old journals",
+    kind: "quote",
+    category: null,
+    importanceScore: 5,
+    wowScore: 8,
+    cluster: "tension",
+    classifiedAt: "2026-05-09T12:00:00.000Z",
+    createdAt: "2026-05-09T12:00:00.000Z",
+    updatedAt: "2026-05-09T12:00:00.000Z",
+  },
+  {
+    id: "insp-3",
+    userId: "user-1",
+    text: "Unclassified cooking image idea",
+    kind: "image",
+    category: null,
+    importanceScore: 2,
+    wowScore: 1,
+    cluster: null,
+    classifiedAt: null,
+    createdAt: "2026-05-08T12:00:00.000Z",
+    updatedAt: "2026-05-08T12:00:00.000Z",
+  },
+];
+
+const sampleWowMoments: ApiWowMoment[] = [
+  {
+    id: "wow-1",
+    userId: "user-1",
+    title: "Cities keep teaching through bridges",
+    kind: "bridge",
+    why: "Several saves connect architecture essays with walking routes and jazz history.",
+    reflectionQuestion: "What bridge keeps reappearing?",
+    wowScore: 9,
+    createdAt: "2026-05-11T12:00:00.000Z",
+    updatedAt: "2026-05-11T12:00:00.000Z",
+    relatedInspirations: [
+      {
+        inspirationId: "insp-1",
+        role: "anchor",
+        reason: "This save anchors the pattern.",
+        text: "Architecture essay about bridge rhythms in city walks",
+        kind: "note",
+        createdAt: "2026-05-10T12:00:00.000Z",
+      },
+    ],
+  },
+  {
+    id: "wow-2",
+    userId: "user-1",
+    title: "Memory tools are productive tensions",
+    kind: "tension",
+    why: "Your notes keep treating synthetic memory as both tool and crutch.",
+    reflectionQuestion: null,
+    wowScore: 8,
+    createdAt: "2026-05-10T12:00:00.000Z",
+    updatedAt: "2026-05-10T12:00:00.000Z",
+    relatedInspirations: [],
+  },
+];
+
+function setApiFixtures({
+  inspirations = sampleInspirations,
+  wowMoments = sampleWowMoments,
+}: {
+  inspirations?: ApiInspiration[];
+  wowMoments?: ApiWowMoment[];
+} = {}): void {
+  vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
+  vi.mocked(fetchWowMoments).mockResolvedValue(wowMoments);
+}
+
 afterEach(() => {
   if (mountedRoot) {
     act(() => {
@@ -66,6 +157,7 @@ async function renderHomePage(): Promise<HTMLDivElement> {
   await act(async () => {
     root.render(createElement(HomePage));
   });
+  await flushReactWork();
 
   return container;
 }
@@ -76,22 +168,121 @@ async function flushReactWork(): Promise<void> {
   });
 }
 
-describe("HomePage view model", () => {
-  it("defaults to Wow Moment First and does not render the inspiration grid above it", () => {
-    const html = renderToStaticMarkup(createElement(HomePage));
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
 
-    expect(html).toContain("data-active-view=\"wow\"");
-    expect(html).toContain("Wow Moment First");
-    expect(html).toContain("WAKA <em>— wow moments</em>");
-    expect(html).toContain("WOW moments");
-    expect(html).toContain("Loading WOW moments");
-    expect(html).toContain("Default home");
-    expect(html).not.toContain("WAKA <em>— your inspirations</em>");
-    expect(html).not.toContain("grid home-grid");
-    expect(html).not.toContain("cell capture");
+function setSelectValue(select: HTMLSelectElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+describe("HomePage view model", () => {
+  it("defaults to Wow Moment First as a primary grid of WOW moment cards", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(
+      container.querySelector<HTMLElement>(".home-view-switcher")?.dataset
+        .activeView,
+    ).toBe("wow");
+    expect(container.textContent).toContain("WAKA — wow moments");
+    expect(container.textContent).toContain("Wow Moment First");
+    expect(container.textContent).toContain("WOW moment dashboard");
+    expect(container.querySelector(".wow-moments-grid")).not.toBeNull();
+    expect(container.querySelectorAll(".wow-moment-card")).toHaveLength(2);
+    expect(container.textContent).toContain("Cities keep teaching through bridges");
+    expect(container.querySelector(".grid.home-grid")).toBeNull();
+    expect(container.querySelector("#capNote")).toBeNull();
+  });
+
+  it("switches from WOW Moment First to Inspiration First with the view switcher", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const inspirationButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        ".home-view-switcher button",
+      ),
+    ).find((button) => button.textContent === "Inspiration First");
+
+    await act(async () => {
+      inspirationButton?.click();
+    });
+    await flushReactWork();
+
+    const nextInspirationButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        ".home-view-switcher button",
+      ),
+    ).find((button) => button.textContent === "Inspiration First");
+
+    expect(
+      container.querySelector<HTMLElement>(".home-view-switcher")?.dataset
+        .activeView,
+    ).toBe("inspiration");
+    expect(nextInspirationButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("WAKA — your inspirations");
+    expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
+    expect(container.querySelector(".grid.home-grid")).not.toBeNull();
+  });
+
+  it("filters Inspiration First results by text and cluster with clear counts and empty states", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const inspirationButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        ".home-view-switcher button",
+      ),
+    ).find((button) => button.textContent === "Inspiration First");
+    await act(async () => {
+      inspirationButton?.click();
+    });
+    await flushReactWork();
+
+    const panel = container.querySelector<HTMLElement>(
+      ".inspiration-discovery-panel",
+    );
+    expect(panel?.textContent).toContain("3 of 3 inspirations");
+    const search = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Search inspirations"]',
+    );
+    expect(search).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(search!, "synthetic");
+    });
+    const searchedPanel = container.querySelector<HTMLElement>(
+      ".inspiration-discovery-panel",
+    );
+    expect(searchedPanel?.textContent).toContain("1 of 3 inspirations");
+    expect(searchedPanel?.textContent).toContain("Synthetic memory note");
+    expect(searchedPanel?.textContent).not.toContain("Architecture essay");
+
+    const clusterSelect = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Filter by cluster"]',
+    );
+    await act(async () => {
+      setSelectValue(clusterSelect!, "bridge");
+    });
+    expect(
+      container.querySelector<HTMLElement>(".inspiration-discovery-panel")
+        ?.textContent,
+    ).toContain("No inspirations match those filters");
   });
 
   it("clicking the Wow header Capture button switches to Inspiration First and focuses capture", async () => {
+    setApiFixtures();
     const container = await renderHomePage();
 
     const initialSwitcher = container.querySelector<HTMLElement>(

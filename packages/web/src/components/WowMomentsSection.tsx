@@ -34,7 +34,7 @@ export function WowMomentsSection({
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
       <div className="wow-moments-heading">
         <div>
-          <span className="wow-moments-eyebrow">WOW moments</span>
+          <span className="wow-moments-eyebrow">WOW moment dashboard</span>
           <h2 id="wow-moments-title">Patterns worth returning to</h2>
         </div>
         {!loading && !error && moments.length > 0 ? (
@@ -49,7 +49,7 @@ export function WowMomentsSection({
           <span>{error}</span>
         </div>
       ) : loading ? (
-        <div className="wow-moments-list" aria-busy="true" aria-live="polite" role="status">
+        <div className="wow-moments-grid" aria-busy="true" aria-live="polite" role="status">
           <span className="sr-only">Loading WOW moments…</span>
           {[0, 1].map((index) => (
             <article className="wow-moment-card wow-moment-card--loading" key={index}>
@@ -70,7 +70,7 @@ export function WowMomentsSection({
           </span>
         </div>
       ) : (
-        <div className="wow-moments-list">
+        <div className="wow-moments-grid">
           {moments.map((moment) => (
             <article className="wow-moment-card" key={moment.id}>
               <div className="wow-moment-card-topline">

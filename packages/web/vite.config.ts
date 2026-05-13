@@ -26,6 +26,7 @@ export default defineConfig({
     proxy: {
       "/auth": { target: API_TARGET, changeOrigin: true, secure: false },
       "/inspirations": { target: API_TARGET, changeOrigin: true, secure: false },
+      "/wow-moments": { target: API_TARGET, changeOrigin: true, secure: false },
       "/attachments": { target: API_TARGET, changeOrigin: true, secure: false },
       "/health": { target: API_TARGET, changeOrigin: true, secure: false },
     },

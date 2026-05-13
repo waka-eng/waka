@@ -2966,6 +2966,147 @@ body.reflect-bg {
   margin-top: var(--space-6);
 }
 
+.inspiration-discovery-panel {
+  width: min(100%, 1120px);
+  margin: var(--space-4) auto var(--space-5);
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 253, 247, 0.58);
+  box-shadow: 0 22px 70px rgba(15, 15, 14, 0.05);
+}
+
+.inspiration-discovery-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.inspiration-discovery-heading span,
+.inspiration-discovery-heading strong,
+.inspiration-filter-bar label > span,
+.inspiration-result-meta,
+.inspiration-result-topic {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.inspiration-discovery-heading h2 {
+  margin: 4px 0 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+.inspiration-discovery-heading strong {
+  padding: 6px 10px;
+  border: var(--border-hairline);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.inspiration-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(5, minmax(120px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.inspiration-filter-bar label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.inspiration-filter-bar input,
+.inspiration-filter-bar select {
+  width: 100%;
+  min-height: 38px;
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(246, 242, 232, 0.62);
+  color: var(--ink);
+  padding: 8px 10px;
+  font: 13px/1.3 var(--font-sans);
+}
+
+.inspiration-filter-bar input:focus,
+.inspiration-filter-bar select:focus {
+  outline: 1px solid rgba(15, 15, 14, 0.24);
+  outline-offset: 2px;
+}
+
+.inspiration-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+
+.inspiration-result-card {
+  appearance: none;
+  text-align: left;
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 247, 0.68);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  cursor: pointer;
+  color: var(--ink);
+  box-shadow: 0 14px 34px rgba(15, 15, 14, 0.04);
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.inspiration-result-card:hover {
+  background: rgba(255, 253, 247, 0.92);
+  transform: translateY(-1px);
+}
+
+.inspiration-result-text {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.28;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.inspiration-result-topic {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspiration-results-empty {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(246, 242, 232, 0.56);
+  color: var(--muted);
+}
+
+.inspiration-results-empty strong {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 22px;
+  color: var(--ink);
+}
+
 .wow-moments-section {
   width: min(100%, 1040px);
   margin: var(--space-8) auto var(--space-8);
@@ -3021,7 +3162,7 @@ body.reflect-bg {
   line-height: 1.5;
 }
 
-.wow-moments-list {
+.wow-moments-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: var(--space-4);
@@ -3173,12 +3314,17 @@ body.reflect-bg {
 }
 
 @media (max-width: 640px) {
-  .wow-moments-heading {
+  .wow-moments-heading,
+  .inspiration-discovery-heading {
     align-items: start;
     flex-direction: column;
   }
 
-  .wow-moments-list {
+  .inspiration-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .wow-moments-grid {
     grid-template-columns: 1fr;
   }
 }
