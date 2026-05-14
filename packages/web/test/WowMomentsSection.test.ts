@@ -43,7 +43,7 @@ describe("WowMomentsSection", () => {
     const html = renderSection({ moments: [], loading: false, error: null });
 
     expect(html).toContain("No WOW moments yet.");
-    expect(html).toContain("Keep saving inspirations");
+    expect(html).toContain("patterns will appear here");
   });
 
   it("renders an error state", () => {
@@ -102,10 +102,10 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("1 moments · 4 links");
-    expect(html).toContain("87% confidence");
+    expect(html).toContain("aria-label=\"1 WOW moments shown\"");
+    expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
-    expect(html).toContain("Connects a mobile note with a design sketch.");
+    expect(html).not.toContain("Connects a mobile note with a design sketch.");
     expect(html).toContain("A field note about playful prototypes.");
     expect(html).toContain("A sketch that turned the field note into a grid.");
     expect(html).toContain("A voice memo asking for smaller WOW cards.");
@@ -147,7 +147,7 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("9 moments · 9 links");
+    expect(html).toContain("aria-label=\"9 WOW moments shown\"");
     expect(html).not.toContain("9 of 11");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
     expect(html.match(/class=\"wow-moment-card\"/g)).toHaveLength(9);

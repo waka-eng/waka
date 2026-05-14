@@ -14,21 +14,17 @@ export function WowMomentsSection({
   error,
 }: WowMomentsSectionProps): JSX.Element {
   const visibleMoments = moments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
-  const totalRelated = visibleMoments.reduce(
-    (count, moment) => count + moment.relatedInspirations.length,
-    0,
-  );
 
   return (
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
       <div className="wow-moments-heading">
-        <div>
-          <span className="wow-moments-eyebrow">WOW moment dashboard</span>
-          <h2 id="wow-moments-title">Patterns worth returning to</h2>
-        </div>
+        <h2 id="wow-moments-title">WOW moments</h2>
         {!loading && !error && moments.length > 0 ? (
-          <span className="wow-moments-count">
-            {visibleMoments.length} moments · {totalRelated} links
+          <span
+            className="wow-moments-count"
+            aria-label={`${visibleMoments.length} WOW moments shown`}
+          >
+            {visibleMoments.length}
           </span>
         ) : null}
       </div>
@@ -52,22 +48,14 @@ export function WowMomentsSection({
       ) : moments.length === 0 ? (
         <div className="wow-moments-state">
           <strong>No WOW moments yet.</strong>
-          <span>
-            Keep saving inspirations; WAKA will surface recurrences, bridges,
-            tensions, and outliers here once the generator finds a durable
-            pattern.
-          </span>
+          <span>Keep saving inspirations; patterns will appear here.</span>
         </div>
       ) : (
         <div className="wow-moments-grid wow-moments-grid--populated">
           {visibleMoments.map((moment) => {
             return (
               <article className="wow-moment-card" key={moment.id}>
-                <div className="wow-moment-card-topline">
-                  <span>{moment.wowScore}% confidence</span>
-                </div>
                 <h3>{moment.title}</h3>
-                <p className="wow-moment-why">{moment.why}</p>
                 {moment.relatedInspirations.length > 0 ? (
                   <ol className="wow-moment-related" aria-label="Related inspirations">
                     {moment.relatedInspirations.map((related) => (
