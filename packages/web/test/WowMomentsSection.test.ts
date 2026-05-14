@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -26,11 +29,35 @@ const sampleMoment: ApiWowMoment = {
   ],
 };
 
+const packageCssPath = resolve(process.cwd(), "src/styles/global.css");
+const workspaceCssPath = resolve(process.cwd(), "packages/web/src/styles/global.css");
+const globalCss = readFileSync(existsSync(packageCssPath) ? packageCssPath : workspaceCssPath, "utf8");
+
 function renderSection(props: Parameters<typeof WowMomentsSection>[0]): string {
   return renderToStaticMarkup(WowMomentsSection(props));
 }
 
 describe("WowMomentsSection", () => {
+  it("keeps the populated WOW grid three columns with no gap in the mobile override", () => {
+    const mobileCss = globalCss.match(/@media \(max-width: 640px\) \{[\s\S]*\}\s*$/)?.[0] ?? "";
+
+    expect(mobileCss).toMatch(
+      /\.wow-moments-grid--populated\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[\s\S]*?gap:\s*0;/,
+    );
+    expect(mobileCss).toMatch(
+      /\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{[\s\S]*?margin-left:\s*-1px;/,
+    );
+    expect(mobileCss).toMatch(
+      /\.wow-moments-grid--populated \.wow-moment-card:nth-child\(3n \+ 1\)\s*\{[\s\S]*?margin-left:\s*0;/,
+    );
+    expect(mobileCss).toMatch(
+      /\.wow-moments-grid--populated \.wow-moment-card:nth-child\(n \+ 4\)\s*\{[\s\S]*?margin-top:\s*-1px;/,
+    );
+    expect(mobileCss).not.toMatch(
+      /\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{[^}]*margin-top:\s*-1px;/,
+    );
+  });
+
   it("renders a loading state", () => {
     const html = renderSection({ moments: [], loading: true, error: null });
 
@@ -57,7 +84,7 @@ describe("WowMomentsSection", () => {
     expect(html).toContain("Malformed WOW moments response");
   });
 
-  it("renders at most two short related inspiration snippets with a source count", () => {
+  it("renders every related inspiration as short plain source snippets", () => {
     const momentWithManyRelatedInspirations: ApiWowMoment = {
       ...sampleMoment,
       relatedInspirations: [
@@ -106,23 +133,13 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
     expect(html).not.toContain("Connects a mobile note with a design sketch.");
-    expect(html).toContain("A field note about playful prototypes.");
-    expect(html).toContain("A sketch that turned the field note into a grid.");
-    expect(html).toContain("+2 sources");
-    expect(
-      renderSection({
-        moments: [
-          {
-            ...momentWithManyRelatedInspirations,
-            relatedInspirations: momentWithManyRelatedInspirations.relatedInspirations.slice(0, 3),
-          },
-        ],
-        loading: false,
-        error: null,
-      }),
-    ).toContain("+1 source");
-    expect(html).not.toContain("A voice memo asking for smaller WOW cards.");
-    expect(html).not.toContain("A prototype review that asked to keep every spark visible.");
+    expect(html).toContain("A field note about playful prototyp…");
+    expect(html).toContain("A sketch that turned the field note…");
+    expect(html).toContain("A voice memo asking for smaller WOW…");
+    expect(html).toContain("A prototype review that asked to ke…");
+    expect(html).not.toContain("+1 source");
+    expect(html).not.toContain("+2 sources");
+    expect(html).not.toContain("wow-moment-related-more");
     expect(html).not.toContain("wow-moment-related-index");
     expect(html).not.toContain("Bridge");
     expect(html).not.toContain("primary");
@@ -157,7 +174,7 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("This very long source inspiration should be clipped s…");
+    expect(html).toContain("This very long source inspiration s…");
     expect(html).not.toContain("tiny WOW card stays compact");
   });
 
