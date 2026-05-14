@@ -3167,6 +3167,13 @@ body.reflect-bg {
   align-items: start;
 }
 
+.wow-moments-grid--populated {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(260px, 1fr);
+  gap: 0;
+  align-items: stretch;
+}
+
 .wow-moment-card {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
@@ -3175,6 +3182,26 @@ body.reflect-bg {
   box-shadow: 0 10px 30px rgba(15, 15, 14, 0.04);
   display: flex;
   flex-direction: column;
+}
+
+.wow-moments-grid--populated .wow-moment-card {
+  height: 100%;
+  min-height: 260px;
+  overflow: hidden;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
+  margin-left: -1px;
+}
+
+.wow-moments-grid--populated .wow-moment-card:nth-child(3n + 1) {
+  margin-left: 0;
+}
+
+.wow-moments-grid--populated .wow-moment-card:nth-child(n + 4) {
+  margin-top: -1px;
 }
 
 .wow-moment-card-topline {
@@ -3297,5 +3324,14 @@ body.reflect-bg {
 
   .wow-moments-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wow-moments-grid--populated .wow-moment-card,
+  .wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
+    margin-left: 0;
+  }
+
+  .wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
+    margin-top: -1px;
   }
 }

@@ -127,7 +127,7 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("What would make this bridge testable this week?");
   });
 
-  it("caps populated WOW moment cards at nine while keeping related inspiration evidence", () => {
+  it("caps populated WOW moment cards at nine and counts only visible related evidence", () => {
     const manyMoments = Array.from({ length: 11 }, (_, index) => ({
       ...sampleMoment,
       id: `moment-${index + 1}`,
@@ -147,12 +147,15 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("9 of 11 moments · 9 links");
+    expect(html).toContain("9 moments · 9 links");
+    expect(html).not.toContain("9 of 11");
+    expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
     expect(html.match(/class=\"wow-moment-card\"/g)).toHaveLength(9);
     expect(html).toContain("WOW card 9");
     expect(html).toContain("Related inspiration evidence 9");
     expect(html).not.toContain("Evidence reason 9");
     expect(html).not.toContain("primary");
     expect(html).not.toContain("WOW card 10");
+    expect(html).not.toContain("Related inspiration evidence 10");
   });
 });

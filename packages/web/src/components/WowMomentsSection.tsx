@@ -28,8 +28,7 @@ export function WowMomentsSection({
         </div>
         {!loading && !error && moments.length > 0 ? (
           <span className="wow-moments-count">
-            {visibleMoments.length}
-            {moments.length > visibleMoments.length ? ` of ${moments.length}` : ""} moments · {totalRelated} links
+            {visibleMoments.length} moments · {totalRelated} links
           </span>
         ) : null}
       </div>
@@ -60,7 +59,7 @@ export function WowMomentsSection({
           </span>
         </div>
       ) : (
-        <div className="wow-moments-grid">
+        <div className="wow-moments-grid wow-moments-grid--populated">
           {visibleMoments.map((moment) => {
             return (
               <article className="wow-moment-card" key={moment.id}>
