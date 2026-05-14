@@ -133,6 +133,12 @@ variable values or secrets. Open:
 - API origin: <http://localhost:3010>
 - Web app: <http://127.0.0.1:5175>
 
+`pnpm dev:local` loads repo-root `.env.local` for the local API process, without
+printing environment variable values or secrets. Variables already present in the
+shell keep their values, and the runner's local development exports still win for
+`PORT`, `PUBLIC_API_URL`, `PUBLIC_WEB_URL`, and `VITE_API_URL`. The local runner
+does not load root `.env` or `.env.production` for API development.
+
 `pnpm dev:local` sets `VITE_API_URL=http://localhost:3010` for Vite and runs
 Vite with `--host 127.0.0.1 --port 5175 --strictPort`, so a busy web port fails
 fast instead of silently moving to another port.

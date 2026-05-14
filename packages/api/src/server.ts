@@ -1,8 +1,9 @@
 import { serve } from "@hono/node-server";
-import dotenv from "dotenv";
+import { config as loadDotenv } from "dotenv";
 import { resolve } from "node:path";
 
-dotenv.config({ path: resolve(process.cwd(), "../../.env") });
+const dotenvPath = process.env.WAKA_API_DOTENV_PATH ?? resolve(process.cwd(), "../../.env");
+loadDotenv({ path: dotenvPath });
 
 if (process.env.AWS_ACCESS_KEY_ID_APP && !process.env.AWS_ACCESS_KEY_ID) {
   process.env.AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID_APP;
