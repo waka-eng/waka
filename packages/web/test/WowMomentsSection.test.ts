@@ -57,7 +57,7 @@ describe("WowMomentsSection", () => {
     expect(html).toContain("Malformed WOW moments response");
   });
 
-  it("renders every related inspiration as text snippets only", () => {
+  it("renders at most two short related inspiration snippets with a source count", () => {
     const momentWithManyRelatedInspirations: ApiWowMoment = {
       ...sampleMoment,
       relatedInspirations: [
@@ -108,8 +108,21 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("Connects a mobile note with a design sketch.");
     expect(html).toContain("A field note about playful prototypes.");
     expect(html).toContain("A sketch that turned the field note into a grid.");
-    expect(html).toContain("A voice memo asking for smaller WOW cards.");
-    expect(html).toContain("A prototype review that asked to keep every spark visible.");
+    expect(html).toContain("+2 sources");
+    expect(
+      renderSection({
+        moments: [
+          {
+            ...momentWithManyRelatedInspirations,
+            relatedInspirations: momentWithManyRelatedInspirations.relatedInspirations.slice(0, 3),
+          },
+        ],
+        loading: false,
+        error: null,
+      }),
+    ).toContain("+1 source");
+    expect(html).not.toContain("A voice memo asking for smaller WOW cards.");
+    expect(html).not.toContain("A prototype review that asked to keep every spark visible.");
     expect(html).not.toContain("wow-moment-related-index");
     expect(html).not.toContain("Bridge");
     expect(html).not.toContain("primary");
@@ -125,6 +138,27 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("Apr 30");
     expect(html).not.toContain("May 3");
     expect(html).not.toContain("What would make this bridge testable this week?");
+  });
+
+  it("shortens long source snippets before rendering them in the card", () => {
+    const html = renderSection({
+      moments: [
+        {
+          ...sampleMoment,
+          relatedInspirations: [
+            {
+              ...sampleMoment.relatedInspirations[0]!,
+              text: "This very long source inspiration should be clipped so the tiny WOW card stays compact and readable.",
+            },
+          ],
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    expect(html).toContain("This very long source inspiration should be clipped s…");
+    expect(html).not.toContain("tiny WOW card stays compact");
   });
 
   it("caps populated WOW moment cards at nine and counts only visible related evidence", () => {

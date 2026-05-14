@@ -1,6 +1,14 @@
 import type { ApiWowMoment } from "../lib/api";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
+const MAX_VISIBLE_SOURCES_PER_CARD = 2;
+const SOURCE_SNIPPET_MAX_LENGTH = 54;
+
+function getSourceSnippet(text: string): string {
+  const compactText = text.trim().replace(/\s+/g, " ");
+  if (compactText.length <= SOURCE_SNIPPET_MAX_LENGTH) return compactText;
+  return `${compactText.slice(0, SOURCE_SNIPPET_MAX_LENGTH - 1).trimEnd()}…`;
+}
 
 interface WowMomentsSectionProps {
   moments: ApiWowMoment[];
@@ -53,16 +61,24 @@ export function WowMomentsSection({
       ) : (
         <div className="wow-moments-grid wow-moments-grid--populated">
           {visibleMoments.map((moment) => {
+            const visibleSources = moment.relatedInspirations.slice(0, MAX_VISIBLE_SOURCES_PER_CARD);
+            const hiddenSourceCount = Math.max(0, moment.relatedInspirations.length - visibleSources.length);
+
             return (
               <article className="wow-moment-card" key={moment.id}>
                 <h3>{moment.title}</h3>
-                {moment.relatedInspirations.length > 0 ? (
+                {visibleSources.length > 0 ? (
                   <ol className="wow-moment-related" aria-label="Related inspirations">
-                    {moment.relatedInspirations.map((related) => (
+                    {visibleSources.map((related) => (
                       <li key={`${moment.id}-${related.inspirationId}`}>
-                        <blockquote>{related.text}</blockquote>
+                        <blockquote>{getSourceSnippet(related.text)}</blockquote>
                       </li>
                     ))}
+                    {hiddenSourceCount > 0 ? (
+                      <li className="wow-moment-related-more">
+                        +{hiddenSourceCount} {hiddenSourceCount === 1 ? "source" : "sources"}
+                      </li>
+                    ) : null}
                   </ol>
                 ) : null}
               </article>
