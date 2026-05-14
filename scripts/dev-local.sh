@@ -77,12 +77,24 @@ load_env_local
 
 export PORT=3010
 export PUBLIC_API_URL="http://localhost:3010"
-export PUBLIC_WEB_URL="http://127.0.0.1:5175"
+export PUBLIC_WEB_URL="http://localhost:5175"
 export VITE_API_URL="http://localhost:3010"
+web_host="localhost"
+web_port="5175"
 
 if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
   if [[ "$WAKA_API_DOTENV_PATH" != "$repo_root/.env.local" ]]; then
     echo "dev:local dry run failed: API dotenv path is not repo-root .env.local" >&2
+    exit 1
+  fi
+
+  if [[ "$PUBLIC_API_URL" != "http://localhost:3010" ]] || [[ "$VITE_API_URL" != "http://localhost:3010" ]]; then
+    echo "dev:local dry run failed: local API URLs must use localhost:3010" >&2
+    exit 1
+  fi
+
+  if [[ "$PUBLIC_WEB_URL" != "http://localhost:5175" ]] || [[ "$web_host" != "localhost" ]] || [[ "$web_port" != "5175" ]]; then
+    echo "dev:local dry run failed: local web URL must use localhost:5175" >&2
     exit 1
   fi
 
@@ -93,13 +105,13 @@ fi
 echo "Starting WAKA local dev (Option B)..."
 echo "  API:    http://localhost:3010"
 echo "  Health: http://localhost:3010/health"
-echo "  Web:    http://127.0.0.1:5175"
+echo "  Web:    http://localhost:5175"
 echo "Press Ctrl+C to stop both servers."
 
 pnpm --filter @waka/api exec tsx src/server.ts &
 api_pid=$!
 
-pnpm --filter @waka/web exec vite --host 127.0.0.1 --port 5175 --strictPort &
+pnpm --filter @waka/web exec vite --host "$web_host" --port "$web_port" --strictPort &
 web_pid=$!
 
 while true; do
