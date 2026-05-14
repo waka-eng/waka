@@ -11,7 +11,12 @@ import {
 
 import { eq, sql } from "drizzle-orm";
 
-import { backgroundJobs, inspirations } from "../src/db/index.js";
+import {
+  backgroundJobs,
+  inspirations,
+  wowMomentInspirations,
+  wowMoments,
+} from "../src/db/index.js";
 import {
   drainBackgroundJobs,
   enqueueClassification,
@@ -55,6 +60,30 @@ type AdminJobResponse = {
     createdAt: string;
     updatedAt: string;
     payloadSummary: Record<string, unknown>;
+    pipeline?: {
+      type: "process_inspiration";
+      inspiration: {
+        id: string;
+        textPreview: string;
+        kind: string | null;
+        category: number | null;
+        cluster: string | null;
+        classifiedAt: string | null;
+        importanceScore: number;
+        wowScore: number;
+        createdAt: string;
+        updatedAt: string;
+      } | null;
+      inspirationMissingReason: "payload_missing" | "not_found_or_not_visible" | null;
+      wowMoments: Array<{
+        id: string;
+        kind: string;
+        titlePreview: string;
+        explanationPreview: string;
+        wowScore: number;
+        createdAt: string;
+      }>;
+    };
   };
 };
 
@@ -561,6 +590,151 @@ describe("admin background jobs API", () => {
     );
 
     expect(res.status).toBe(404);
+  });
+
+  it("enriches process_inspiration detail with tenant-scoped safe inspiration and WOW previews", async () => {
+    setAdminGate(true);
+    const owner = await createUserFixture(getDb());
+    const other = await createUserFixture(getDb());
+    cleanup.trackUser(owner.user.id);
+    cleanup.trackUser(other.user.id);
+    const classifiedAt = new Date("2026-05-01T00:02:00.000Z");
+    const longText = `Own inspiration ${"safe preview ".repeat(40)}raw tail should be truncated`;
+    const longTitle = `Bridge insight ${"bounded title ".repeat(20)}raw title tail should be truncated`;
+    const longWhy = `WOW explanation ${"bounded detail ".repeat(40)}raw explanation tail should be truncated`;
+    const ownInspiration = await createInspirationFixture(getDb(), owner.user.id, {
+      text: longText,
+      kind: "note",
+      category: 4,
+      cluster: "bridge",
+      classifiedAt,
+      importanceScore: 8,
+      wowScore: 13,
+    });
+    const otherInspiration = await createInspirationFixture(getDb(), other.user.id, {
+      text: "Other tenant raw inspiration must stay hidden",
+      kind: "note",
+    });
+    const [ownWow] = await getDb()
+      .insert(wowMoments)
+      .values({
+        userId: owner.user.id,
+        title: longTitle,
+        kind: "surprise_bridge",
+        idempotencyKey: `admin-detail-wow-${ownInspiration.id}`,
+        why: longWhy,
+        wowScore: 21,
+      } as any)
+      .returning();
+    await getDb().insert(wowMomentInspirations).values({
+      userId: owner.user.id,
+      wowMomentId: ownWow!.id,
+      inspirationId: ownInspiration.id,
+      role: "seed",
+      reason: "safe link",
+      sortOrder: 0,
+    } as any);
+    const [job] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: owner.user.id,
+        type: "process_inspiration",
+        payload: {
+          inspirationId: ownInspiration.id,
+          rawText: "do-not-return-raw-payload",
+          secretToken: "do-not-return-secret",
+        } as any,
+        status: "succeeded",
+      } as any)
+      .returning({ id: backgroundJobs.id });
+    const [crossTenantPayloadJob] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: owner.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: otherInspiration.id } as any,
+        status: "succeeded",
+      } as any)
+      .returning({ id: backgroundJobs.id });
+
+    const detail = await authedClient(owner).get<AdminJobResponse>(
+      `/api/admin/background-jobs/${job!.id}`,
+    );
+    const crossTenantPayloadDetail = await authedClient(owner).get<AdminJobResponse>(
+      `/api/admin/background-jobs/${crossTenantPayloadJob!.id}`,
+    );
+
+    expect(detail.status).toBe(200);
+    expect(detail.body.job.payloadSummary).toEqual({ inspirationId: ownInspiration.id });
+    expect(detail.body.job.pipeline).toMatchObject({
+      type: "process_inspiration",
+      inspiration: {
+        id: ownInspiration.id,
+        kind: "note",
+        category: 4,
+        cluster: "bridge",
+        classifiedAt: classifiedAt.toISOString(),
+        importanceScore: 8,
+        wowScore: 13,
+      },
+      inspirationMissingReason: null,
+      wowMoments: [
+        {
+          id: ownWow!.id,
+          kind: "surprise_bridge",
+          titlePreview: expect.stringContaining("Bridge insight"),
+          wowScore: 21,
+        },
+      ],
+    });
+    expect(detail.body.job.pipeline!.inspiration!.textPreview.length).toBeLessThanOrEqual(240);
+    expect(detail.body.job.pipeline!.inspiration!.textPreview).toContain("Own inspiration");
+    expect(detail.body.job.pipeline!.inspiration!.textPreview).not.toContain("raw tail should be truncated");
+    expect(detail.body.job.pipeline!.wowMoments[0]!.titlePreview.length).toBeLessThanOrEqual(120);
+    expect(detail.body.job.pipeline!.wowMoments[0]!.titlePreview).toContain("Bridge insight");
+    expect(detail.body.job.pipeline!.wowMoments[0]!.titlePreview).not.toContain("raw title tail should be truncated");
+    expect(detail.body.job.pipeline!.wowMoments[0]!.explanationPreview.length).toBeLessThanOrEqual(240);
+    expect(detail.body.job.pipeline!.wowMoments[0]!.explanationPreview).toContain("WOW explanation");
+    expect(detail.body.job.pipeline!.wowMoments[0]!.explanationPreview).not.toContain("raw explanation tail should be truncated");
+    expect(JSON.stringify(detail.body)).not.toContain("rawText");
+    expect(JSON.stringify(detail.body)).not.toContain("raw title tail should be truncated");
+    expect(JSON.stringify(detail.body)).not.toContain("raw explanation tail should be truncated");
+    expect(JSON.stringify(detail.body)).not.toContain("do-not-return");
+
+    expect(crossTenantPayloadDetail.status).toBe(200);
+    expect(crossTenantPayloadDetail.body.job.pipeline).toMatchObject({
+      type: "process_inspiration",
+      inspiration: null,
+      inspirationMissingReason: "not_found_or_not_visible",
+      wowMoments: [],
+    });
+    expect(JSON.stringify(crossTenantPayloadDetail.body)).not.toContain("Other tenant raw inspiration");
+  });
+
+  it("returns null inspiration and empty WOW moments when process_inspiration payload has no visible inspiration", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const [inserted] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000999" },
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(fixture).get<AdminJobResponse>(
+      `/api/admin/background-jobs/${inserted!.id}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.job.pipeline).toEqual({
+      type: "process_inspiration",
+      inspiration: null,
+      inspirationMissingReason: "not_found_or_not_visible",
+      wowMoments: [],
+    });
   });
 
   it("retries failed jobs by resetting them to pending", async () => {

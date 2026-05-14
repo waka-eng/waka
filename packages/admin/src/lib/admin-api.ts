@@ -1,6 +1,31 @@
 export type AdminJobStatus = "pending" | "running" | "succeeded" | "failed";
 export type AdminJobType = "process_inspiration";
 
+export interface AdminBackgroundJobPipelineDetail {
+  type: "process_inspiration";
+  inspiration: {
+    id: string;
+    textPreview: string;
+    kind: string | null;
+    category: number | null;
+    cluster: string | null;
+    classifiedAt: string | null;
+    importanceScore: number;
+    wowScore: number;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  inspirationMissingReason: "payload_missing" | "not_found_or_not_visible" | null;
+  wowMoments: Array<{
+    id: string;
+    kind: string;
+    titlePreview: string;
+    explanationPreview: string;
+    wowScore: number;
+    createdAt: string;
+  }>;
+}
+
 export interface AdminBackgroundJob {
   id: string;
   userId: string;
@@ -18,6 +43,7 @@ export interface AdminBackgroundJob {
     inspirationId?: unknown;
     [key: string]: unknown;
   };
+  pipeline?: AdminBackgroundJobPipelineDetail;
 }
 
 export interface ListBackgroundJobsFilters {
@@ -65,6 +91,64 @@ function messageFromBody(body: unknown, fallback: string): string {
   return fallback;
 }
 
+function isStringOrNull(value: unknown): value is string | null {
+  return typeof value === "string" || value === null;
+}
+
+function assertPipeline(value: unknown): AdminBackgroundJobPipelineDetail {
+  if (!value || typeof value !== "object") {
+    throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
+  }
+  const candidate = value as Partial<AdminBackgroundJobPipelineDetail>;
+  if (
+    candidate.type !== "process_inspiration" ||
+    !Array.isArray(candidate.wowMoments) ||
+    !(
+      candidate.inspirationMissingReason === null ||
+      candidate.inspirationMissingReason === "payload_missing" ||
+      candidate.inspirationMissingReason === "not_found_or_not_visible"
+    )
+  ) {
+    throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
+  }
+
+  if (candidate.inspiration !== null) {
+    const inspiration = candidate.inspiration;
+    if (
+      !inspiration ||
+      typeof inspiration.id !== "string" ||
+      typeof inspiration.textPreview !== "string" ||
+      !isStringOrNull(inspiration.kind) ||
+      !(typeof inspiration.category === "number" || inspiration.category === null) ||
+      !isStringOrNull(inspiration.cluster) ||
+      !isStringOrNull(inspiration.classifiedAt) ||
+      typeof inspiration.importanceScore !== "number" ||
+      typeof inspiration.wowScore !== "number" ||
+      typeof inspiration.createdAt !== "string" ||
+      typeof inspiration.updatedAt !== "string"
+    ) {
+      throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
+    }
+  }
+
+  for (const moment of candidate.wowMoments) {
+    if (
+      !moment ||
+      typeof moment !== "object" ||
+      typeof moment.id !== "string" ||
+      typeof moment.kind !== "string" ||
+      typeof moment.titlePreview !== "string" ||
+      typeof moment.explanationPreview !== "string" ||
+      typeof moment.wowScore !== "number" ||
+      typeof moment.createdAt !== "string"
+    ) {
+      throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
+    }
+  }
+
+  return candidate as AdminBackgroundJobPipelineDetail;
+}
+
 function assertJob(value: unknown): AdminBackgroundJob {
   if (!value || typeof value !== "object") {
     throw new AdminApiError({ status: 200, message: "Malformed background job response" });
@@ -84,7 +168,37 @@ function assertJob(value: unknown): AdminBackgroundJob {
   ) {
     throw new AdminApiError({ status: 200, message: "Malformed background job response" });
   }
+  if ("pipeline" in candidate && candidate.pipeline !== undefined) {
+    candidate.pipeline = assertPipeline(candidate.pipeline);
+  }
   return candidate as AdminBackgroundJob;
+}
+
+async function fetchJobRequest(path: string, fallback: string): Promise<AdminBackgroundJob> {
+  let res: Response;
+  try {
+    res = await fetch(adminApiPath(path), {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new AdminApiError({ status: 0, message: fallback });
+  }
+
+  const body = await parseJsonBody(res);
+  if (!res.ok) {
+    throw new AdminApiError({
+      status: res.status,
+      message: errorMessageForStatus(res.status, messageFromBody(body, "Failed to load job detail")),
+    });
+  }
+
+  if (!body || typeof body !== "object" || !("job" in body)) {
+    throw new AdminApiError({ status: res.status, message: "Malformed background job detail response" });
+  }
+
+  return assertJob((body as { job: unknown }).job);
 }
 
 export async function fetchBackgroundJobs(
@@ -119,6 +233,13 @@ export async function fetchBackgroundJobs(
   }
 
   return (body as { jobs: unknown[] }).jobs.map(assertJob);
+}
+
+export async function fetchBackgroundJobDetail(id: string): Promise<AdminBackgroundJob> {
+  return fetchJobRequest(
+    `/api/admin/background-jobs/${id}`,
+    "Network unreachable while loading job detail",
+  );
 }
 
 export async function retryBackgroundJob(id: string): Promise<AdminBackgroundJob> {

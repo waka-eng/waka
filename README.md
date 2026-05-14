@@ -168,13 +168,14 @@ advertised.
 
 Endpoints:
 
-- `GET /api/admin/background-jobs?status=&type=&userId=&limit=` lists newest jobs first. `limit` defaults to 50 and is clamped to 100.
-- `GET /api/admin/background-jobs/:id` returns one job or 404.
+- `GET /api/admin/background-jobs?status=&type=&userId=&limit=` lists newest jobs first. `limit` defaults to 50 and is clamped to 100. The list stays lightweight.
+- `GET /api/admin/background-jobs/:id` returns one tenant-scoped job or 404. For `process_inspiration` jobs it also includes a bounded `pipeline` object with the visible inspiration preview, cluster/classification status, scores, and linked WOW moment previews (`titlePreview` and `explanationPreview`). Missing or cross-tenant inspirations are reported as `inspiration: null` with a missing reason rather than a 500.
 - `POST /api/admin/background-jobs/:id/retry` resets a failed job to `pending`; non-failed jobs return 409.
 
 Responses return safe job metadata plus `payloadSummary` only. For
 `process_inspiration` jobs, `payloadSummary` includes `inspirationId`; raw
-payload fields are not exposed.
+payload fields are not exposed. Detail `pipeline` text fields are previews only
+and remain scoped to the authenticated user's tenant.
 
 A separate minimal admin frontend lives in `packages/admin` and runs on port
 5174. It uses a same-origin Vite `/api` proxy to the local API target, defaulting
@@ -193,7 +194,9 @@ pnpm --filter @waka/admin dev
 
 Then open <http://localhost:5174>. Sign into the normal WAKA app first so the
 admin app can send the existing auth cookie. The UI lists background jobs, lets
-you filter by status/type, and only shows a retry button for failed jobs.
+you filter by status/type, opens a detail panel when you select a row, shows
+safe pipeline previews for `process_inspiration` jobs, and only enables retry for
+failed jobs.
 
 ### 6. Optional local demo seed
 
