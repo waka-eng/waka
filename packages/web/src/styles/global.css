@@ -2944,6 +2944,63 @@ body.reflect-bg {
   aspect-ratio: unset;
 }
 
+.internal-wow-status {
+  width: min(100%, 1120px);
+  margin: var(--space-3) auto var(--space-4);
+  padding: var(--space-3);
+  border: 1px dashed rgba(15, 15, 14, 0.22);
+  border-radius: var(--radius-lg);
+  background: rgba(246, 242, 232, 0.5);
+  color: var(--ink);
+}
+
+.internal-wow-status-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.internal-wow-status-heading span,
+.internal-wow-status-heading strong,
+.internal-wow-status-steps span,
+.internal-wow-status-steps strong,
+.internal-wow-status-steps time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.internal-wow-status-heading span,
+.internal-wow-status-steps time {
+  color: var(--muted);
+}
+
+.internal-wow-status-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.internal-wow-status-steps li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--space-2);
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 247, 0.52);
+}
+
+.internal-wow-status-steps strong {
+  color: var(--ink);
+}
+
 .inspiration-discovery-panel {
   width: min(100%, 1120px);
   margin: var(--space-4) auto var(--space-5);

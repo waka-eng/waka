@@ -10,15 +10,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InspirationsBoard } from "../src/components/InspirationsBoard";
 import {
+  createInspiration,
+  fetchBackgroundJobs,
   fetchInspirations,
   fetchReflections,
   fetchWowMoments,
 } from "../src/lib/api";
-import type { ApiInspiration, ApiWowMoment } from "../src/lib/api";
+import type { ApiBackgroundJob, ApiInspiration, ApiWowMoment } from "../src/lib/api";
 import {
   HomePage,
   HomeViewToggle,
   nextHomeCaptureHandoffState,
+  shouldShowInternalStatus,
 } from "../src/pages/Home";
 
 vi.mock("../src/lib/auth-context", () => ({
@@ -44,6 +47,10 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchInspirations: vi.fn(async () => []),
     fetchReflections: vi.fn(async () => []),
     fetchWowMoments: vi.fn(async () => []),
+    createInspiration: vi.fn(async () => {
+      throw new Error("createInspiration mock not configured");
+    }),
+    fetchBackgroundJobs: vi.fn(async () => []),
   };
 });
 
@@ -153,7 +160,9 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
+  vi.useRealTimers();
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
 });
 
 async function renderHomePage(): Promise<HTMLDivElement> {
@@ -177,14 +186,73 @@ async function flushReactWork(): Promise<void> {
   });
 }
 
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(
-    window.HTMLInputElement.prototype,
-    "value",
-  )?.set;
+function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const proto =
+    input instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
   setter?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+async function switchToInspirationFirst(container: HTMLElement): Promise<void> {
+  const inspirationButton = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".home-view-switcher button"),
+  ).find((button) => button.textContent === "Inspiration First");
+
+  await act(async () => {
+    inspirationButton?.click();
+  });
+  await flushReactWork();
+}
+
+async function saveInspirationFromCapture(
+  container: HTMLElement,
+  text: string,
+): Promise<void> {
+  const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
+  expect(textarea).not.toBeNull();
+
+  await act(async () => {
+    setInputValue(textarea!, text);
+  });
+
+  const saveButton = container.querySelector<HTMLButtonElement>("#capSave");
+  expect(saveButton).not.toBeNull();
+
+  await act(async () => {
+    saveButton?.click();
+  });
+  await flushReactWork();
+}
+
+function persistedInspiration(overrides: Partial<ApiInspiration> = {}): ApiInspiration {
+  return {
+    id: "insp-new-1234567890",
+    userId: "user-1",
+    text: "New demo inspiration about recurring library rituals",
+    kind: null,
+    category: null,
+    importanceScore: 0,
+    wowScore: 0,
+    cluster: null,
+    classifiedAt: null,
+    createdAt: "2026-05-14T16:30:00.000Z",
+    updatedAt: "2026-05-14T16:30:00.000Z",
+    ...overrides,
+  };
+}
+
+const sampleBackgroundJobs: ApiBackgroundJob[] = [
+  {
+    id: "job-process-1",
+    type: "process_inspiration",
+    status: "running",
+    createdAt: "2026-05-14T16:30:01.000Z",
+    updatedAt: "2026-05-14T16:30:02.000Z",
+  },
+];
 
 const packageCssPath = resolve(process.cwd(), "src/styles/global.css");
 const workspaceCssPath = resolve(process.cwd(), "packages/web/src/styles/global.css");
@@ -432,5 +500,108 @@ describe("HomePage view model", () => {
     const html = renderToStaticMarkup(createElement(InspirationsBoard));
 
     expect(html).toContain("WAKA <em>— your inspirations</em>");
+  });
+
+  it("gates the internal WOW status affordance to dev/demo environments", async () => {
+    expect(
+      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: undefined }),
+    ).toBe(false);
+    expect(
+      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "true" }),
+    ).toBe(true);
+    expect(
+      shouldShowInternalStatus({ DEV: true, VITE_SHOW_INTERNAL_STATUS: undefined }),
+    ).toBe(true);
+  });
+
+  it("does not render the internal WOW status UI when the dev/demo gate is disabled", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "false");
+    setApiFixtures();
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({ id: "insp-gated-off" }),
+    );
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+    await saveInspirationFromCapture(container, "Gated-off internal status save");
+
+    expect(container.querySelector(".internal-wow-status")).toBeNull();
+    expect(fetchBackgroundJobs).not.toHaveBeenCalled();
+  });
+
+  it("shows an internal demo-only pipeline status after a successful save and poll path", async () => {
+    vi.useFakeTimers();
+    setApiFixtures();
+    vi.mocked(fetchBackgroundJobs).mockResolvedValue(sampleBackgroundJobs);
+    vi.mocked(createInspiration).mockResolvedValue(persistedInspiration());
+    vi.mocked(fetchInspirations)
+      .mockResolvedValueOnce(sampleInspirations)
+      .mockResolvedValueOnce([
+        persistedInspiration({ cluster: "bridge", classifiedAt: "2026-05-14T16:30:03.000Z" }),
+        ...sampleInspirations,
+      ]);
+    vi.mocked(fetchWowMoments)
+      .mockResolvedValueOnce(sampleWowMoments)
+      .mockResolvedValueOnce(sampleWowMoments)
+      .mockResolvedValueOnce([
+        {
+          ...sampleWowMoments[0],
+          id: "wow-3",
+          title: "Library rituals keep becoming prompts",
+          createdAt: "2026-05-14T16:30:04.000Z",
+        },
+        ...sampleWowMoments,
+      ]);
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+    await saveInspirationFromCapture(
+      container,
+      "New demo inspiration about recurring library rituals",
+    );
+
+    const panel = container.querySelector<HTMLElement>(".internal-wow-status");
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain("Internal/demo-only WOW pipeline status");
+    expect(panel?.textContent).toContain("Saved inspiration insp-new");
+    expect(panel?.textContent).toContain("Saved inspiration");
+    expect(panel?.textContent).toContain("Background classification job running");
+    expect(panel?.textContent).toContain("WOW refresh checking");
+    expect(panel?.textContent).toContain("Latest WOW count 2");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await flushReactWork();
+
+    expect(panel?.textContent).toContain("New WOW moment found");
+    expect(panel?.textContent).toContain("Latest WOW count 3");
+    expect(fetchBackgroundJobs).toHaveBeenCalledWith({
+      type: "process_inspiration",
+      limit: 10,
+    });
+  });
+
+  it("degrades gracefully when admin background-job details are unavailable", async () => {
+    setApiFixtures();
+    vi.mocked(fetchBackgroundJobs).mockRejectedValue(
+      new Error("Failed to load background jobs (HTTP 403)."),
+    );
+    vi.mocked(createInspiration).mockResolvedValue(persistedInspiration());
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+    await saveInspirationFromCapture(
+      container,
+      "Demo save with admin endpoint unavailable",
+    );
+
+    const panel = container.querySelector<HTMLElement>(".internal-wow-status");
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toContain(
+      "Admin job details unavailable; WOW refresh still polling.",
+    );
+    expect(panel?.textContent).toContain("WOW refresh checking");
   });
 });

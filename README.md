@@ -166,6 +166,12 @@ All endpoints still require a normal authenticated session. When the env gate is
 off, `/api/admin/background-jobs` returns 404 so the admin surface is not
 advertised.
 
+The authenticated Home page also has a compact internal/demo-only WOW pipeline
+status strip after a successful inspiration capture. It renders in Vite dev mode
+or when `VITE_SHOW_INTERNAL_STATUS=true` is set for the web app. The strip only
+shows safe fields (short inspiration id, timestamps, simple job/WOW status, WOW
+count) and degrades gracefully if the admin background-jobs endpoint is disabled.
+
 Endpoints:
 
 - `GET /api/admin/background-jobs?status=&type=&userId=&limit=` lists newest jobs first. `limit` defaults to 50 and is clamped to 100. The list stays lightweight.
