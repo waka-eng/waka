@@ -3061,9 +3061,9 @@ body.reflect-bg {
 .inspiration-result-text {
   order: 1;
   font-family: var(--font-serif);
-  font-size: clamp(20px, 2.2vw, 28px);
-  line-height: 1.2;
-  letter-spacing: -0.018em;
+  font-size: clamp(17px, 1.7vw, 22px);
+  line-height: 1.25;
+  letter-spacing: -0.012em;
 }
 
 .inspiration-results-empty {
@@ -3156,10 +3156,11 @@ body.reflect-bg {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
   background: rgba(255, 253, 247, 0.66);
-  padding: 10px;
+  padding: 8px;
   box-shadow: 0 10px 30px rgba(15, 15, 14, 0.04);
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .wow-moments-grid--populated .wow-moment-card {
@@ -3201,10 +3202,10 @@ body.reflect-bg {
 }
 
 .wow-moment-card h3 {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 6px;
   font-family: var(--font-serif);
   font-weight: 400;
-  font-size: clamp(16px, 1.5vw, 20px);
+  font-size: clamp(15px, 1.35vw, 18px);
   line-height: 1.06;
   letter-spacing: -0.03em;
   color: var(--ink);
@@ -3230,41 +3231,35 @@ body.reflect-bg {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  flex: 1;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .wow-moment-related li {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
-  padding: 3px 4px;
+  padding: 2px 3px;
   background: rgba(246, 242, 232, 0.56);
+  min-width: 0;
 }
 
 .wow-moment-related blockquote {
   min-width: 0;
   margin: 0;
-  padding-left: 6px;
+  padding-left: 5px;
   border-left: var(--border-hairline);
   font-family: var(--font-serif);
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 10px;
+  line-height: 1.15;
   color: var(--ink);
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.wow-moment-related .wow-moment-related-more {
-  border: 0;
-  background: transparent;
-  padding: 1px 0 0;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  line-height: 1.2;
-  color: var(--muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .wow-moment-card--loading {
@@ -3316,12 +3311,20 @@ body.reflect-bg {
     grid-template-columns: 1fr;
   }
 
-  .wow-moments-grid--populated .wow-moment-card,
-  .wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
-    margin-left: 0;
+  .wow-moments-grid--populated {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
   }
 
   .wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
+    margin-left: -1px;
+  }
+
+  .wow-moments-grid--populated .wow-moment-card:nth-child(3n + 1) {
+    margin-left: 0;
+  }
+
+  .wow-moments-grid--populated .wow-moment-card:nth-child(n + 4) {
     margin-top: -1px;
   }
 }
