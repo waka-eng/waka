@@ -19,6 +19,7 @@ import {
 import { getDb } from "../src/lib/db.js";
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
+import { apiJson, authedClient } from "./helpers/client.js";
 import { createCleanupTracker } from "./helpers/index.js";
 import {
   type GeminiMockHandle,
@@ -30,6 +31,35 @@ let gemini: GeminiMockHandle;
 const isolatedNow = new Date("2000-01-01T00:00:00.000Z");
 const isolatedRunnableAt = new Date("1999-12-31T23:59:00.000Z");
 
+function setAdminGate(enabled: boolean) {
+  if (enabled) {
+    process.env.WAKA_ENABLE_BACKGROUND_JOBS_ADMIN = "true";
+  } else {
+    delete process.env.WAKA_ENABLE_BACKGROUND_JOBS_ADMIN;
+    delete process.env.WAKA_ENABLE_ADMIN_ROUTES;
+  }
+}
+
+type AdminJobResponse = {
+  job: {
+    id: string;
+    userId: string;
+    type: string;
+    status: string;
+    attempts: number;
+    maxAttempts: number;
+    runAfter: string;
+    lockedAt: string | null;
+    lastError: string | null;
+    idempotencyKey: string | null;
+    createdAt: string;
+    updatedAt: string;
+    payloadSummary: Record<string, unknown>;
+  };
+};
+
+type AdminJobsResponse = { jobs: AdminJobResponse["job"][] };
+
 beforeAll(() => {
   expect(process.env.DB_CONNECTION_URL, "DB_CONNECTION_URL").toBeTruthy();
   gemini = installGeminiMock();
@@ -40,6 +70,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  setAdminGate(false);
   await cleanup.flush();
 });
 
@@ -243,5 +274,389 @@ describe("DB-backed background jobs", () => {
       SELECT id FROM background_jobs WHERE id = ${inserted!.id}
     `);
     expect(Array.from(remaining as any[])).toHaveLength(0);
+  });
+});
+
+
+describe("admin background jobs API", () => {
+  it("returns 404 for authenticated requests when the admin gate is disabled", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+
+    const res = await authedClient(fixture).get("/api/admin/background-jobs");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 401 for unauthenticated requests when the admin gate is enabled", async () => {
+    setAdminGate(true);
+
+    const res = await apiJson("/api/admin/background-jobs");
+
+    expect(res.status).toBe(401);
+  });
+
+  it("enables the route with the broad admin routes alias", async () => {
+    process.env.WAKA_ENABLE_ADMIN_ROUTES = "true";
+    delete process.env.WAKA_ENABLE_BACKGROUND_JOBS_ADMIN;
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+
+    const res = await authedClient(fixture).get<AdminJobsResponse>(
+      "/api/admin/background-jobs",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toEqual([]);
+  });
+
+  it("uses a default list limit of 50", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const base = Date.parse("2026-02-01T00:00:00.000Z");
+    const inserted = await getDb()
+      .insert(backgroundJobs)
+      .values(
+        Array.from({ length: 55 }, (_, index) => ({
+          userId: fixture.user.id,
+          type: "process_inspiration" as const,
+          payload: {
+            inspirationId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+          },
+          createdAt: new Date(base + index * 1000),
+          updatedAt: new Date(base + index * 1000),
+        })),
+      )
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(fixture).get<AdminJobsResponse>(
+      "/api/admin/background-jobs",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(50);
+    expect(res.body.jobs[0]!.id).toBe(inserted[54]!.id);
+    expect(res.body.jobs.at(-1)!.id).toBe(inserted[5]!.id);
+  });
+
+  it("filters list results by process_inspiration type", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const [matching] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000777" },
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(fixture).get<AdminJobsResponse>(
+      "/api/admin/background-jobs?type=process_inspiration",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.jobs.map((job) => job.id)).toContain(matching!.id);
+    expect(res.body.jobs.every((job) => job.type === "process_inspiration")).toBe(true);
+  });
+
+  it("lists safe job summaries with status filtering, limit clamp, and newest-first order", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const base = Date.parse("2026-01-01T00:00:00.000Z");
+    const inserted = await getDb()
+      .insert(backgroundJobs)
+      .values(
+        Array.from({ length: 105 }, (_, index) => ({
+          userId: fixture.user.id,
+          type: "process_inspiration" as const,
+          payload: {
+            inspirationId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+            secretToken: `do-not-return-${index}`,
+          } as any,
+          status: index % 2 === 0 ? ("failed" as const) : ("pending" as const),
+          attempts: index % 2 === 0 ? 2 : 0,
+          maxAttempts: 3,
+          runAfter: new Date(base + index * 1000),
+          lastError: index % 2 === 0 ? "sanitized provider error" : null,
+          idempotencyKey: `admin-list-${fixture.user.id}-${index}`,
+          createdAt: new Date(base + index * 1000),
+          updatedAt: new Date(base + index * 1000),
+        })),
+      )
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(fixture).get<AdminJobsResponse>(
+      "/api/admin/background-jobs?status=failed&limit=999",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.jobs).toHaveLength(53);
+    expect(res.body.jobs.map((job) => job.id)).toEqual(
+      inserted
+        .filter((_, index) => index % 2 === 0)
+        .map((job) => job.id)
+        .reverse(),
+    );
+    expect(res.body.jobs[0]).toEqual({
+      id: inserted[104]!.id,
+      userId: fixture.user.id,
+      type: "process_inspiration",
+      status: "failed",
+      attempts: 2,
+      maxAttempts: 3,
+      runAfter: new Date(base + 104_000).toISOString(),
+      lockedAt: null,
+      lastError: "sanitized provider error",
+      idempotencyKey: `admin-list-${fixture.user.id}-104`,
+      createdAt: new Date(base + 104_000).toISOString(),
+      updatedAt: new Date(base + 104_000).toISOString(),
+      payloadSummary: { inspirationId: "00000000-0000-4000-8000-000000000104" },
+    });
+    expect(JSON.stringify(res.body)).not.toContain("secretToken");
+    expect(JSON.stringify(res.body)).not.toContain("do-not-return");
+
+    const clamped = await authedClient(fixture).get<AdminJobsResponse>(
+      `/api/admin/background-jobs?userId=${fixture.user.id}&limit=999`,
+    );
+    expect(clamped.status).toBe(200);
+    expect(clamped.body.jobs).toHaveLength(100);
+    expect(clamped.body.jobs[0]!.id).toBe(inserted[104]!.id);
+    expect(clamped.body.jobs.at(-1)!.id).toBe(inserted[5]!.id);
+  });
+
+  it("sanitizes secret-looking lastError values in list and detail responses", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const rawBearer = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.rawsignaturevalue1234567890";
+    const rawApiKey = "sk-test-raw-admin-api-key";
+    const rawPassword = "correct-horse-battery-staple";
+    const rawLongToken = "rawlongtokenvalue1234567890abcdefRAWLONGTOKEN";
+    const [inserted] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000805" },
+        status: "failed",
+        attempts: 3,
+        lastError: `Provider failed: Authorization: Bearer ${rawBearer}; api_key=${rawApiKey} password="${rawPassword}" token: ${rawLongToken}. ${"safe diagnostic context ".repeat(80)}`,
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const list = await authedClient(fixture).get<AdminJobsResponse>(
+      "/api/admin/background-jobs?status=failed",
+    );
+    const detail = await authedClient(fixture).get<AdminJobResponse>(
+      `/api/admin/background-jobs/${inserted!.id}`,
+    );
+
+    expect(list.status).toBe(200);
+    expect(detail.status).toBe(200);
+    const listedJob = list.body.jobs.find((job) => job.id === inserted!.id)!;
+    const responseText = JSON.stringify({ list: list.body, detail: detail.body });
+    for (const rawSecret of [rawBearer, rawApiKey, rawPassword, rawLongToken]) {
+      expect(responseText).not.toContain(rawSecret);
+    }
+    for (const lastError of [listedJob.lastError, detail.body.job.lastError]) {
+      expect(lastError).toBeTruthy();
+      expect(lastError).toContain("Provider failed");
+      expect(lastError).toContain("[redacted]");
+      expect(lastError!.length).toBeLessThanOrEqual(1_000);
+    }
+  });
+
+  it("keeps list results tenant-scoped even with another userId filter", async () => {
+    setAdminGate(true);
+    const owner = await createUserFixture(getDb());
+    const other = await createUserFixture(getDb());
+    cleanup.trackUser(owner.user.id);
+    cleanup.trackUser(other.user.id);
+    const [ownerJob] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: owner.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000801" },
+      })
+      .returning({ id: backgroundJobs.id });
+    await getDb().insert(backgroundJobs).values({
+      userId: other.user.id,
+      type: "process_inspiration",
+      payload: { inspirationId: "00000000-0000-4000-8000-000000000802" },
+    });
+
+    const defaultList = await authedClient(owner).get<AdminJobsResponse>(
+      "/api/admin/background-jobs",
+    );
+    const crossTenantList = await authedClient(owner).get<AdminJobsResponse>(
+      `/api/admin/background-jobs?userId=${other.user.id}`,
+    );
+
+    expect(defaultList.status).toBe(200);
+    expect(defaultList.body.jobs.map((job) => job.id)).toContain(ownerJob!.id);
+    expect(defaultList.body.jobs.every((job) => job.userId === owner.user.id)).toBe(true);
+    expect(crossTenantList.status).toBe(200);
+    expect(crossTenantList.body.jobs).toEqual([]);
+  });
+
+  it("returns 404 for missing job detail and a safe summary for an existing job", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const [inserted] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: {
+          inspirationId: "00000000-0000-4000-8000-000000000321",
+          accessToken: "do-not-return",
+        } as any,
+        status: "succeeded",
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const missing = await authedClient(fixture).get<AdminJobResponse>(
+      "/api/admin/background-jobs/00000000-0000-4000-8000-000000000000",
+    );
+    const existing = await authedClient(fixture).get<AdminJobResponse>(
+      `/api/admin/background-jobs/${inserted!.id}`,
+    );
+
+    expect(missing.status).toBe(404);
+    expect(existing.status).toBe(200);
+    expect(existing.body.job).toMatchObject({
+      id: inserted!.id,
+      userId: fixture.user.id,
+      type: "process_inspiration",
+      status: "succeeded",
+      payloadSummary: { inspirationId: "00000000-0000-4000-8000-000000000321" },
+    });
+    expect(JSON.stringify(existing.body)).not.toContain("accessToken");
+    expect(JSON.stringify(existing.body)).not.toContain("do-not-return");
+  });
+
+  it("returns 404 for another tenant's job detail", async () => {
+    setAdminGate(true);
+    const owner = await createUserFixture(getDb());
+    const other = await createUserFixture(getDb());
+    cleanup.trackUser(owner.user.id);
+    cleanup.trackUser(other.user.id);
+    const [otherJob] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: other.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000803" },
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(owner).get(
+      `/api/admin/background-jobs/${otherJob!.id}`,
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("retries failed jobs by resetting them to pending", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const oldDate = new Date("2025-01-01T00:00:00.000Z");
+    const [inserted] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000456" },
+        status: "failed",
+        attempts: 3,
+        maxAttempts: 3,
+        runAfter: oldDate,
+        lockedAt: oldDate,
+        lastError: "sanitized failure",
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(fixture).json<AdminJobResponse>(
+      "POST",
+      `/api/admin/background-jobs/${inserted!.id}/retry`,
+    );
+    const persisted = await loadJob(inserted!.id);
+
+    expect(res.status).toBe(200);
+    expect(res.body.job).toMatchObject({
+      id: inserted!.id,
+      status: "pending",
+      attempts: 0,
+      lockedAt: null,
+      lastError: null,
+      payloadSummary: { inspirationId: "00000000-0000-4000-8000-000000000456" },
+    });
+    expect(new Date(res.body.job.runAfter).getTime()).toBeGreaterThan(oldDate.getTime());
+    expect(persisted.status).toBe("pending");
+    expect(persisted.attempts).toBe(0);
+    expect(persisted.lockedAt).toBeNull();
+    expect(persisted.lastError).toBeNull();
+  });
+
+  it("returns 409 when retrying a non-failed job", async () => {
+    setAdminGate(true);
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const [inserted] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000654" },
+        status: "pending",
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(fixture).json(
+      "POST",
+      `/api/admin/background-jobs/${inserted!.id}/retry`,
+    );
+    const persisted = await loadJob(inserted!.id);
+
+    expect(res.status).toBe(409);
+    expect(persisted.status).toBe("pending");
+    expect(persisted.attempts).toBe(0);
+  });
+
+  it("returns 404 and does not retry another tenant's failed job", async () => {
+    setAdminGate(true);
+    const owner = await createUserFixture(getDb());
+    const other = await createUserFixture(getDb());
+    cleanup.trackUser(owner.user.id);
+    cleanup.trackUser(other.user.id);
+    const [otherJob] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: other.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: "00000000-0000-4000-8000-000000000804" },
+        status: "failed",
+        attempts: 3,
+        lastError: "sanitized failure",
+      })
+      .returning({ id: backgroundJobs.id });
+
+    const res = await authedClient(owner).json(
+      "POST",
+      `/api/admin/background-jobs/${otherJob!.id}/retry`,
+    );
+    const persisted = await loadJob(otherJob!.id);
+
+    expect(res.status).toBe(404);
+    expect(persisted.status).toBe("failed");
+    expect(persisted.attempts).toBe(3);
+    expect(persisted.lastError).toBe("sanitized failure");
   });
 });

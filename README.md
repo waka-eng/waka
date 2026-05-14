@@ -151,6 +151,31 @@ Because Option B serves a built Vite bundle from Hono, Vite hot reload is not
 part of `pnpm dev:local`. Use the separate Vite/SST development flow when you
 need HMR.
 
+### Internal background jobs admin API
+
+The background-jobs observability API is disabled by default and is intended only
+for internal/dev debugging. Enable it explicitly with either:
+
+```bash
+WAKA_ENABLE_ADMIN_ROUTES=true
+# or
+WAKA_ENABLE_BACKGROUND_JOBS_ADMIN=true
+```
+
+All endpoints still require a normal authenticated session. When the env gate is
+off, `/api/admin/background-jobs` returns 404 so the admin surface is not
+advertised.
+
+Endpoints:
+
+- `GET /api/admin/background-jobs?status=&type=&userId=&limit=` lists newest jobs first. `limit` defaults to 50 and is clamped to 100.
+- `GET /api/admin/background-jobs/:id` returns one job or 404.
+- `POST /api/admin/background-jobs/:id/retry` resets a failed job to `pending`; non-failed jobs return 409.
+
+Responses return safe job metadata plus `payloadSummary` only. For
+`process_inspiration` jobs, `payloadSummary` includes `inspirationId`; raw
+payload fields are not exposed.
+
 ### 6. Optional local demo seed
 
 For quick UI review with a realistic 10-inspiration board plus persisted WOW
