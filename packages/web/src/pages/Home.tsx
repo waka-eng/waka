@@ -850,15 +850,7 @@ export function HomePage(): JSX.Element {
         historyDetail={historyDetail}
       >
         {viewSwitcher}
-        <section className="wow-first-home" aria-labelledby="wow-first-title">
-          <div className="wow-first-intro">
-            <span>Default home</span>
-            <h2 id="wow-first-title">Wow Moment First</h2>
-            <p>
-              Start with the durable patterns WAKA has found across your saves,
-              then switch to Inspiration First when you want the raw save history.
-            </p>
-          </div>
+        <section className="wow-first-home" aria-label="Wow Moment First">
           <WowMomentsSection
             moments={wowMoments}
             loading={wowMomentsLoading}
@@ -876,6 +868,7 @@ export function HomePage(): JSX.Element {
         onPersisted={handlePersisted}
         onPersistError={handlePersistError}
         onSelectInspiration={handleSelectInspiration}
+        captureFirst
         beforeGridContent={
           <>
             {viewSwitcher}

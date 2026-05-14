@@ -232,6 +232,13 @@ export interface InspirationsBoardProps {
   afterGridContent?: ReactNode;
 
   /**
+   * Renders capture as the first content block instead of inside the home grid.
+   * Used by Inspiration First so capture is the top-most action and the archive
+   * follows below it.
+   */
+  captureFirst?: boolean;
+
+  /**
    * Monotonic request token from a parent that wants the capture surface
    * opened/focused immediately after the board mounts or re-renders.
    */
@@ -251,6 +258,7 @@ export function InspirationsBoard({
   onSelectCluster,
   beforeGridContent,
   afterGridContent,
+  captureFirst = false,
   autoFocusCaptureRequest,
 }: InspirationsBoardProps): JSX.Element {
   // ---------------------------------------------------------------
@@ -509,6 +517,23 @@ export function InspirationsBoard({
     [onPersisted],
   );
 
+  const captureForm = (
+    <CaptureForm
+      ref={captureRef}
+      view={view}
+      visualState={{
+        dragover,
+        focused,
+        saveFlash,
+      }}
+      focused={focused}
+      onToggleFocus={handleToggleFocus}
+      onOptimisticAdd={onOptimisticAdd}
+      onPersisted={handlePersisted}
+      onPersistError={onPersistError}
+    />
+  );
+
   // ---------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------
@@ -521,36 +546,29 @@ export function InspirationsBoard({
       historyContent={historyContent}
       historyDetail={historyDetail}
     >
+      {captureFirst ? (
+        <div className="inspiration-first-capture">{captureForm}</div>
+      ) : null}
+
       {beforeGridContent}
 
-      <ClusterGrid
-        empty={!loading && clusterNodes.length === 0}
-        loading={loading}
-      >
-        {/*
-          Insert the capture cell at the center of the 3×3 grid. The
-          prototype builds the grid by inserting each cluster tile
-          *before* `.cell.capture`, so the capture cell ends up as the
-          5th child (index 4). We mirror by slicing the cluster list
-          around the capture insertion index.
-        */}
-        {clusterNodes.slice(0, CAPTURE_INSERTION_INDEX)}
-        <CaptureForm
-          ref={captureRef}
-          view={view}
-          visualState={{
-            dragover,
-            focused,
-            saveFlash,
-          }}
-          focused={focused}
-          onToggleFocus={handleToggleFocus}
-          onOptimisticAdd={onOptimisticAdd}
-          onPersisted={handlePersisted}
-          onPersistError={onPersistError}
-        />
-        {clusterNodes.slice(CAPTURE_INSERTION_INDEX)}
-      </ClusterGrid>
+      {captureFirst ? null : (
+        <ClusterGrid
+          empty={!loading && clusterNodes.length === 0}
+          loading={loading}
+        >
+          {/*
+            Insert the capture cell at the center of the 3×3 grid. The
+            prototype builds the grid by inserting each cluster tile
+            *before* `.cell.capture`, so the capture cell ends up as the
+            5th child (index 4). We mirror by slicing the cluster list
+            around the capture insertion index.
+          */}
+          {clusterNodes.slice(0, CAPTURE_INSERTION_INDEX)}
+          {captureForm}
+          {clusterNodes.slice(CAPTURE_INSERTION_INDEX)}
+        </ClusterGrid>
+      )}
 
       {afterGridContent}
 

@@ -194,7 +194,9 @@ describe("HomePage view model", () => {
     ).toBe("wow");
     expect(container.textContent).toContain("WAKA — wow moments");
     expect(container.textContent).toContain("Wow Moment First");
-    expect(container.textContent).toContain("WOW moment dashboard");
+    expect(container.textContent).toContain("WOW moments");
+    expect(container.textContent).not.toContain("WOW moment dashboard");
+    expect(container.textContent).not.toContain("Start with the durable patterns");
     expect(container.querySelector(".wow-moments-grid")).not.toBeNull();
     expect(container.querySelectorAll(".wow-moment-card")).toHaveLength(2);
     expect(container.textContent).toContain("Cities keep teaching through bridges");
@@ -230,7 +232,20 @@ describe("HomePage view model", () => {
     expect(nextInspirationButton?.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).toContain("WAKA — your inspirations");
     expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
-    expect(container.querySelector(".grid.home-grid")).not.toBeNull();
+    expect(container.querySelector(".inspiration-first-capture #capture")).not.toBeNull();
+    expect(container.querySelector(".grid.home-grid")).toBeNull();
+
+    const captureCell = container.querySelector<HTMLElement>("#capture");
+    const switcher = container.querySelector<HTMLElement>(".home-view-switcher");
+    const discoveryPanel = container.querySelector<HTMLElement>(
+      ".inspiration-discovery-panel",
+    );
+    expect(
+      Boolean(captureCell?.compareDocumentPosition(switcher!) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(
+      Boolean(captureCell?.compareDocumentPosition(discoveryPanel!) & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
   });
 
   it("renders Inspiration First as a simple list without cluster or kind controls/cards", async () => {
