@@ -9,8 +9,7 @@
  *     ever materialised inside the Lambda execution environment via the
  *     `link` mechanism below.
  *   - Stand up the runtime resources: a Bucket for attachment uploads, a
- *     Queue for the async classifier worker, a Hono Function for the API,
- *     and a StaticSite for the Vite/React frontend.
+ *     Hono Function for the API, and a StaticSite for the Vite/React frontend.
  *   - Wire the Function's environment via `link` so the Hono handler can
  *     read each secret through `Resource.<name>.value` (or the matching
  *     uppercase env var SST injects automatically).
@@ -38,8 +37,8 @@
  *      authorized redirect URIs for `sst dev`.)
  *
  *   2. `pnpm dev` (alias for `sst dev`) starts the StaticSite, the API
- *      Function URL, the Bucket, and the Queue. The Function picks up each
- *      linked secret through `Resource.<name>.value` at request time.
+ *      Function URL, and the Bucket. The Function picks up each linked secret
+ *      through `Resource.<name>.value` at request time.
  *
  * Why SST Secrets and not plain `environment: { ... }`?
  *   - Secrets are encrypted at rest in SSM Parameter Store, never end up in
@@ -160,64 +159,6 @@ export default $config({
     });
 
     // -----------------------------------------------------------------------
-    // Queue (classifier worker)
-    // -----------------------------------------------------------------------
-
-    /**
-     * Dead-letter queue for the classifier (Sub-AC 10.4).
-     *
-     * Why a DLQ at all?
-     * -----------------
-     * The worker (`packages/api/src/queue/classifier.ts`) classifies failures
-     * into two buckets:
-     *
-     *   - Permanent skips (malformed body, missing row, already-classified
-     *     row, Gemini safety block, out-of-set label) → ack the message,
-     *     never reach this queue. Retrying these would just burn budget.
-     *
-     *   - Transient failures (Gemini 5xx / 429, network / DNS, Postgres
-     *     hiccups) → push onto `batchItemFailures` so SQS redelivers after
-     *     the visibility timeout. After `dlq.retry` attempts exceed without
-     *     a clean ack, SQS moves the message HERE.
-     *
-     * Without this resource, an inspiration that hits a *durable* outage
-     * (e.g. a malformed payload that the parser somehow accepts but the
-     * downstream rejects, or a Gemini outage that outlasts the redrive
-     * budget) would loop until SQS gives up and silently drops it. Routing
-     * those to a DLQ instead lets us inspect them in CloudWatch / the SQS
-     * console and replay once the underlying issue is fixed.
-     *
-     * No subscriber is attached to the DLQ on purpose — it's an inspection
-     * surface, not a retry surface. Any future "drain DLQ → re-enqueue"
-     * tooling can read from `Resource.ClassifierDLQ.url` directly.
-     */
-    const classifierDLQ = new sst.aws.Queue("ClassifierDLQ");
-
-    /**
-     * Classifier queue. POST /api/inspirations enqueues here; the consumer in
-     * packages/api/src/queue/classifier.ts calls Gemini and updates the
-     * inspirations row. Async by design so the save endpoint stays sub-200ms.
-     *
-     * `dlq.retry: 3` means: SQS delivers the message, the consumer marks it
-     * as `batchItemFailure`, the message becomes visible again after the
-     * visibility timeout, and this happens at most 3 times before the
-     * message is moved to `classifierDLQ`. Three is the SST default and
-     * tracks AWS's recommended baseline — high enough to ride out a brief
-     * Gemini 5xx / Neon hiccup, low enough that a permanently-broken
-     * payload doesn't dominate the budget for healthy traffic.
-     */
-    const classifierQueue = new sst.aws.Queue("ClassifierQueue", {
-      dlq: {
-        queue: classifierDLQ.arn,
-        retry: 3,
-      },
-    });
-    classifierQueue.subscribe({
-      handler: "packages/api/src/queue/classifier.handler",
-      link: [dbConnectionUrl, geminiApiKey],
-    });
-
-    // -----------------------------------------------------------------------
     // Hono API Function
     //
     // The `link` array is the security boundary. Anything in here is
@@ -245,20 +186,6 @@ export default $config({
      * returns 403 SignatureDoesNotMatch / AccessDenied" — the signature
      * was fine, the role just had no permission.
      *
-     * Linking `classifierQueue` similarly grants `sqs:SendMessage` so
-     * `POST /api/inspirations` can enqueue a classification job. SST's link
-     * mechanism handles two things in one call:
-     *   1. Attaches an IAM policy granting `sqs:SendMessage` (and the related
-     *      attribute reads) on the queue's ARN to the Lambda's role. This is
-     *      the enqueue permission half of Sub-AC 10.1.
-     *   2. Generates the typed `Resource.ClassifierQueue.{url,arn}` binding
-     *      so the enqueue code path (Sub-AC 10.3) can resolve the queue URL
-     *      without hard-coding it.
-     *
-     * `CLASSIFIER_QUEUE_URL` / `CLASSIFIER_QUEUE_REGION` are also exposed as
-     * plain env vars below for the same reason `ATTACHMENTS_BUCKET` /
-     * `ATTACHMENTS_REGION` are: it lets the enqueue helper run in vitest /
-     * smoke contexts where the SST `Resource.*` shim is not initialised.
      */
     const api = new sst.aws.Function("Api", {
       handler: "packages/api/src/index.handler",
@@ -271,7 +198,6 @@ export default $config({
         dbConnectionUrl,
         geminiApiKey,
         attachmentsBucket,
-        classifierQueue,
       ],
       // Fallback environment names so the existing Hono code that reads
       // `process.env.JWT_SECRET` / `process.env.DB_CONNECTION_URL` keeps
@@ -293,12 +219,6 @@ export default $config({
         GEMINI_API_KEY: geminiApiKey.value,
         ATTACHMENTS_BUCKET: attachmentsBucket.name,
         ATTACHMENTS_REGION: AWS_REGION,
-        // Exposed for the enqueue helper (Sub-AC 10.3). The IAM permission
-        // to call `sqs:SendMessage` against this URL comes from including
-        // `classifierQueue` in `link` above; this env var is just so the
-        // SDK knows where to send the message.
-        CLASSIFIER_QUEUE_URL: classifierQueue.url,
-        CLASSIFIER_QUEUE_REGION: AWS_REGION,
       },
     });
 
@@ -327,11 +247,6 @@ export default $config({
       apiUrl: api.url,
       webUrl: web.url,
       attachmentsBucket: attachmentsBucket.name,
-      classifierQueueUrl: classifierQueue.url,
-      // Surfaced so operators can inspect poison messages in the SQS console
-      // (Sub-AC 10.4). Not bound to any consumer — drain tooling reads it
-      // directly via the SST output JSON.
-      classifierDLQUrl: classifierDLQ.url,
     };
   },
 });

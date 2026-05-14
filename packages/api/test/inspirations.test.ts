@@ -49,7 +49,7 @@ import {
 
 import { eq } from "drizzle-orm";
 
-import { inspirations } from "../src/db/index.js";
+import { backgroundJobs, inspirations } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { createUserFixture } from "./fixtures/users.js";
 import {
@@ -192,6 +192,25 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(dbRows[0]!.importanceScore).toBe(row.importanceScore);
     expect(dbRows[0]!.wowScore).toBe(row.wowScore);
     expect(dbRows[0]!.cluster).toBeNull();
+
+    const jobs = await getDb()
+      .select({
+        id: backgroundJobs.id,
+        userId: backgroundJobs.userId,
+        type: backgroundJobs.type,
+        payload: backgroundJobs.payload,
+        status: backgroundJobs.status,
+      })
+      .from(backgroundJobs)
+      .where(eq(backgroundJobs.userId, fixture.user.id));
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.type).toBe("process_inspiration");
+    expect(jobs[0]!.payload).toEqual({ inspirationId: row.id });
+    expect(jobs[0]!.userId).toBe(fixture.user.id);
+    expect(["pending", "running", "succeeded", "failed"]).toContain(
+      jobs[0]!.status,
+    );
+    expect("autoWowGeneration" in res.body).toBe(false);
   });
 
   it("accepts a minimal payload (text only) and defaults kind/category to NULL", async () => {

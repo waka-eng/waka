@@ -10,7 +10,7 @@ The stack is:
 | ------------ | -------------------------------------------------------------- |
 | Frontend     | Vite + React 18 + React Router (SST `StaticSite`)              |
 | API          | Hono on AWS Lambda Function URL (SST `Function`)               |
-| Async work   | SQS queue → Gemini classifier worker (SST `Queue` + DLQ)       |
+| Async work   | Postgres `background_jobs` → Gemini classifier/background worker |
 | Storage      | S3 bucket, presigned PUT only (SST `Bucket`)                   |
 | Database     | Existing **Neon** Postgres via Drizzle ORM (NOT provisioned by SST) |
 | Auth         | Email + password and Google OAuth (custom OpenAuth-style cookie) |
@@ -28,7 +28,7 @@ shipped UI is the React decomposition under `packages/web/src/`.
   ```bash
   corepack enable && corepack prepare pnpm@9.12.0 --activate
   ```
-- **AWS account** with permission to create Lambda / S3 / SQS / SSM resources.
+- **AWS account** with permission to create Lambda / S3 / SSM resources.
   `sst dev` will deploy a personal sandbox stack into your account.
 - **AWS credentials** discoverable by the SDK chain — either
   `AWS_PROFILE=...` exported in your shell, or `AWS_ACCESS_KEY_ID` /
@@ -53,11 +53,11 @@ The required variables and where each one is consumed:
 
 | Variable                                                    | Used by                                         | Notes                                                                                  |
 | ----------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `DB_CONNECTION_URL`                                         | Hono API, classifier worker, `drizzle-kit`      | Neon pooled URL with `sslmode=require`. `DATABASE_URL` is accepted as a fallback name. |
+| `DB_CONNECTION_URL`                                         | Hono API, background worker, `drizzle-kit`      | Neon pooled URL with `sslmode=require`. `DATABASE_URL` is accepted as a fallback name. |
 | `AUTH_SECRET`                                               | Session cookie signing                          | `openssl rand -base64 48`                                                              |
 | `JWT_SECRET`                                                | JWT bearer signing in `lib/auth.ts`             | `openssl rand -base64 48`                                                              |
 | `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`                     | `/api/auth/google` route                            | From Google Cloud Console; redirect URI must point at `sst dev`'s API URL.             |
-| `GEMINI_API_KEY`                                            | Classifier queue worker                         | Never reaches the browser.                                                             |
+| `GEMINI_API_KEY`                                            | Classifier/background worker                    | Never reaches the browser.                                                             |
 | `AWS_REGION_APP` / `AWS_ACCESS_KEY_ID_APP` / `AWS_SECRET_ACCESS_KEY_APP` | `sst dev` and smoke tests          | Or use a named profile with `AWS_PROFILE=...`. Region pinned to `us-west-2`.           |
 
 > `.env` is read by `drizzle-kit` and the `*.smoke.ts` harnesses. **At Lambda
@@ -77,8 +77,8 @@ You can sanity-check the schema in the browser:
 pnpm db:studio
 ```
 
-You should see `users`, `inspirations`, `attachments`, `reflections`, and
-`sessions` tables.
+You should see `users`, `inspirations`, `attachments`, `reflections`,
+`sessions`, and `background_jobs` tables.
 
 ### 4. Push secrets into SST
 
@@ -183,7 +183,7 @@ via the existing API auth helper so the demo account can log in.
 ### 7. End-to-end browser flow (manual smoke)
 
 Open the web URL for the stack you started: <http://localhost:5173> for Option A
-or <http://localhost:5175> for Option B. The app should redirect you to
+or <http://localhost:3010> for Option B. The app should redirect you to
 `/login`. Then:
 
 1. **Sign up** with email + password from the Sign-up tab. Expect a redirect
@@ -216,7 +216,7 @@ or <http://localhost:5175> for Option B. The app should redirect you to
 
 ```bash
 pnpm test:dev-local-script       # syntax-check the tracked Option B runner
-pnpm --filter @waka/api test         # vitest in-process Hono smoke + queue tests
+pnpm --filter @waka/api test         # vitest in-process Hono + background job tests
 pnpm --filter @waka/api typecheck
 pnpm --filter @waka/web typecheck
 pnpm --filter @waka/web build
@@ -235,7 +235,7 @@ the harnesses opt in.
 | `DB_CONNECTION_URL is not set` from drizzle-kit             | `.env` not at repo root, or `set -a; source .env; set +a` before running.                            |
 | Browser PUT returns 301 PermanentRedirect                   | `AWS_REGION` mismatch. The bucket lives in `us-west-2`; presign with the same region.                |
 | Browser PUT returns 403 SignatureDoesNotMatch / AccessDenied | Lambda role is missing `s3:PutObject` on the bucket. Check `link: [attachmentsBucket]` in `sst.config.ts`. |
-| Cluster chip never appears                                  | Inspect `ClassifierDLQ` in the AWS SQS console — Gemini key invalid or out-of-quota messages land there. |
+| Cluster chip never appears                                  | Inspect the `background_jobs` table for pending/failed `process_inspiration` jobs; Gemini key invalid or out-of-quota errors are recorded there. |
 | `redirect_uri_mismatch` from Google                         | The `sst dev` API URL changed. Update the authorized redirect URI in Google Cloud Console.           |
 
 ---

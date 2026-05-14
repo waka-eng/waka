@@ -12,9 +12,9 @@
  *
  * Cluster classification is intentionally NOT performed in POST. The seed
  * contract requires the create endpoint to return as soon as the row is
- * durable so the UI is not blocked on an LLM round-trip; a downstream SST
- * Queue worker picks the row up by id and fills `cluster` / `classified_at`
- * later. The row is therefore inserted with `cluster = NULL`, which the
+ * durable so the UI is not blocked on an LLM round-trip; a downstream
+ * Postgres-backed background job picks the row up by id and fills `cluster` /
+ * `classified_at` later. The row is therefore inserted with `cluster = NULL`, which the
  * `inspirations_cluster_null_idx` partial index supports for the worker's
  * backfill scan. The GET endpoint surfaces whatever cluster value happens
  * to be live at read time — `null` while classification is pending,
@@ -63,8 +63,8 @@ import { enqueueClassification } from "../lib/queue.js";
  *                  `integer` column in `inspirations.category`.
  *
  * Notable absences:
- *   - `cluster` / `classified_at` — populated asynchronously by the queue
- *     worker, never accepted from the client.
+ *   - `cluster` / `classified_at` — populated asynchronously by the background
+ *     classifier, never accepted from the client.
  *   - `user_id` — derived from the auth context, never accepted from the
  *     client. Allowing it would be a tenant-isolation footgun.
  *   - `id` — generated server-side via `defaultRandom()`.
@@ -121,13 +121,13 @@ export function createInspirationsRoutes(
  * Flow:
  *   1. Parse + validate JSON body. Return 400 on schema failure.
  *   2. Insert a new row with `user_id` taken from the auth context. Cluster
- *      and classified_at remain NULL — the queue worker fills them in.
+ *      and classified_at remain NULL — the background classifier fills them in.
  *   3. Return 201 with the freshly-inserted row so the SPA can render it
  *      optimistically without a follow-up GET.
  *
  * Performance contract: this endpoint returns only after bounded local DB work
  * and a classification enqueue attempt. Automatic WOW generation is attempted
- * later by the async classifier worker path, never inline in this request.
+ * later by the background classifier path, never inline in this request.
  */
 routes.post("/", async (c) => {
   // 1. Parse body. Tolerate non-JSON gracefully so a misbehaving client
@@ -157,7 +157,7 @@ routes.post("/", async (c) => {
 
   // 2. Insert. We `.returning()` the columns the SPA needs to render the
   //    new row immediately. cluster / classified_at are intentionally NULL
-  //    here — the SST Queue worker will UPDATE them later.
+  //    here — the background classifier will UPDATE them later.
   const [inserted] = await db
     .insert(inspirations)
     .values({
@@ -189,22 +189,21 @@ routes.post("/", async (c) => {
   const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };
 
-  // 3. Enqueue a classification job (Sub-AC 10.2). The SQS Queue worker in
-  //    `queue/classifier.ts` consumes `{ inspirationId }`, calls Gemini, and
-  //    UPDATEs `cluster` / `classified_at` on the row.
+  // 3. Enqueue a durable background classification job. The worker consumes
+  //    `{ inspirationId }`, calls Gemini, and UPDATEs `cluster` /
+  //    `classified_at` on the row.
   //
   //    Failure semantics: the row is already durable in Postgres at this
-  //    point. If `sqs:SendMessage` fails (IAM, transport, throttle), we MUST
-  //    NOT surface a 5xx to the caller — that would tempt the SPA into
-  //    retrying the save and producing a duplicate inspiration row. Instead
-  //    we log with the inspiration id so the missed enqueue is visible in
-  //    Lambda logs, and rely on a future backfill scan over
-  //    `inspirations_cluster_null_idx` to catch any rows whose enqueue was
+  //    point. If enqueue fails, we MUST NOT surface a 5xx to the caller — that
+  //    would tempt the SPA into retrying the save and producing a duplicate
+  //    inspiration row. Instead we log with the inspiration id so the missed
+  //    enqueue is visible in Lambda logs, and rely on a future backfill scan
+  //    over `inspirations_cluster_null_idx` to catch rows whose enqueue was
   //    lost. The user-visible UX is: the inspiration appears immediately with
   //    `cluster = null`, and stays "uncategorised" until either the worker
   //    catches up or the backfill scan re-enqueues.
   try {
-    await enqueueClassificationJob(scoredInserted.id);
+    await enqueueClassificationJob(scoredInserted.id, scoredInserted.userId);
   } catch (err) {
     console.error("[inspirations] failed to enqueue classification job:", {
       inspirationId: scoredInserted.id,

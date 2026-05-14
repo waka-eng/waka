@@ -1,46 +1,35 @@
 /**
- * Classifier queue worker.
+ * Classifier background worker.
  *
- * SST wires this module via `sst.config.ts`:
+ * The product path is DB-backed: `lib/queue.ts` writes durable
+ * `background_jobs` rows and drains them in-process by calling
+ * `runClassificationJob`. The small Lambda/SQS-shaped `handler` at the bottom
+ * remains only as a compatibility/unit-test wrapper around the same core job
+ * function; SST no longer provisions or links an external queue for this workflow.
  *
- *   const classifierQueue = new sst.aws.Queue("ClassifierQueue");
- *   classifierQueue.subscribe({
- *     handler: "packages/api/src/queue/classifier.handler",
- *     link: [dbConnectionUrl, geminiApiKey],
- *   });
- *
- * The Hono API Lambda is granted `sqs:SendMessage` on this queue because the
- * queue is included in the API's `link` array. That binding is the *enqueue
- * side*: any code path running inside the API Lambda can publish a
- * `{ inspirationId }` job to the queue without provisioning extra IAM, and
- * `Resource.ClassifierQueue.url` resolves at runtime to the queue URL the
- * SDK needs.
- *
- * Scope of this file (Sub-AC 10.3.4)
- * ----------------------------------
+ * Scope of this file
+ * ------------------
  * Closes the classification loop end-to-end:
- *   1. Consume SQS records from the standard Lambda batch event.
- *   2. Parse each `record.body` as JSON `{ inspirationId: string }`.
- *   3. SELECT the corresponding `inspirations` row by id via Drizzle ORM.
- *   4. Call Gemini (`classifyInspirationText`) with the row's text and let
+ *   1. Receive an `{ inspirationId }` job from the DB-backed worker.
+ *   2. SELECT the corresponding `inspirations` row by id + job user id via Drizzle ORM.
+ *   3. Call Gemini (`classifyInspirationText`) with the row's text and let
  *      the result cascade through this file's retry/permanent decision tree.
- *   5. UPDATE the row's `cluster` + `classified_at` (+ `updated_at`) when a
+ *   4. UPDATE the row's `cluster` + `classified_at` (+ `updated_at`) when a
  *      validated label comes back, guarded by `WHERE cluster IS NULL` for
- *      idempotency under SQS at-least-once delivery.
- *   6. Best-effort automatic WOW generation after classification reaches a
+ *      idempotency under at-least-once worker execution.
+ *   5. Best-effort automatic WOW generation after classification reaches a
  *      success/permanent-skip outcome. WOW provider/runtime failures are
- *      swallowed here and must not alter SQS classification retry semantics.
+ *      swallowed here and must not alter classification retry semantics.
  *
  * Error & retry semantics (the contract)
  * --------------------------------------
- * The handler uses the SQS partial-batch-response contract: any record id
- * placed in `batchItemFailures` stays on the queue (re-delivered after the
- * visibility timeout); everything else is deleted by the Lambda runtime.
+ * `runClassificationJob` succeeds for permanent outcomes and throws for
+ * transient ones. The DB-backed worker records retry/backoff/failure state in
+ * `background_jobs`; the compatibility handler translates thrown transient
+ * failures into a partial-batch-style response for existing tests.
  *
- *   - Malformed body (non-JSON, missing/blank `inspirationId`)
- *     → permanent failure, NOT retried. Logged and treated as success so
- *       SQS deletes it. A retry of a poisoned message just burns budget
- *       until the redrive policy gives up; better to surface in logs once.
+ *   - Malformed body (compatibility handler only)
+ *     → permanent failure, NOT retried. Logged and treated as success.
  *
  *   - Inspiration row not found
  *     → also treated as success. The row was deleted between enqueue and
@@ -55,19 +44,15 @@
  *
  *   - Gemini returns null cluster (safety block, schema drift, out-of-set
  *     label, empty text)
- *     → permanent skip. Leave `cluster` NULL on the row, ack the message.
- *       The same input on a retry would produce the same null; the row is
- *       reachable for a future backfill via the `inspirations_cluster_null_idx`
- *       partial index. Retrying through SQS would just burn the redrive
- *       budget for no behavioural change.
+ *     → permanent skip. Leave `cluster` NULL on the row. The same input on a
+ *       retry would produce the same null; the row is reachable for a future
+ *       backfill via the `inspirations_cluster_null_idx` partial index.
  *
  *   - Gemini throws (non-2xx HTTP, network error, non-JSON body, missing
  *     API key)
  *   - Drizzle / Postgres throws (SELECT or UPDATE)
- *     → transient. Pushed onto `batchItemFailures` so SQS retries after
- *       the visibility timeout. Neon hiccups, Gemini 5xx / 429, network
- *       blips, and cold-start races all fall in this bucket. Eventually the
- *       SQS redrive policy moves a permanently-broken message to the DLQ.
+ *     → transient. The DB-backed worker retries with backoff up to the job's
+ *       configured `max_attempts`, then marks the row failed for inspection.
  */
 
 import { and, eq, isNull } from "drizzle-orm";
@@ -78,13 +63,13 @@ import { getDb } from "../lib/db.js";
 import { classifyInspirationText } from "./gemini.js";
 
 // ---------------------------------------------------------------------------
-// Lambda SQS event types (minimal subset)
+// Legacy Lambda/SQS-shaped event types (minimal subset)
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal subset of the AWS Lambda SQS event shape we depend on. Inlining
+ * Minimal subset of the legacy AWS Lambda SQS event shape we depend on. Inlining
  * this avoids adding `@types/aws-lambda` as a dependency just for the two
- * fields we read. Replace with the full type from `aws-lambda` if/when other
+ * fields legacy tests read. Replace with the full type from `aws-lambda` if/when other
  * handlers in this package start needing richer Lambda typings.
  */
 interface SQSRecordLike {
@@ -105,12 +90,12 @@ interface SQSBatchResponse {
 // ---------------------------------------------------------------------------
 
 /**
- * Payload published to the classifier queue by `lib/queue.ts:enqueueClassification`.
+ * Legacy compatibility payload accepted by `handler` below.
  *
  * Kept narrow on purpose — the worker re-reads the row from Postgres by id,
- * so the message and the row can never drift out of sync. Adding fields here
- * (e.g. `userId`, `correlationId`) only requires a matching change in the
- * producer; nothing else needs to know.
+ * so the message and the row can never drift out of sync. The current
+ * DB-backed worker stores tenant scope on `background_jobs.user_id`
+ * and passes it separately to `runClassificationJob`.
  */
 interface ClassificationJob {
   inspirationId: string;
@@ -118,10 +103,11 @@ interface ClassificationJob {
 
 export interface ClassificationJobDependencies {
   generateAutoWowMoment?: typeof generateAutoWowMomentForInspiration;
+  userId?: string;
 }
 
 /**
- * Parse and minimally validate a raw SQS message body.
+ * Parse and minimally validate a raw legacy message body.
  *
  * Returns `null` for any structural problem (non-JSON, missing field, wrong
  * type, blank string). The caller treats `null` as a permanent failure and
@@ -157,19 +143,23 @@ function parseJob(body: string): ClassificationJob | null {
 
 /**
  * Fetch the inspiration row referenced by a job, or `null` if the row no
- * longer exists. Scoped to a single SELECT by primary key — there is no
- * tenant filtering here on purpose: the worker runs out-of-band of any user
- * session, and the only way an id arrives on this queue is via the API's
- * authenticated POST handler, which has already enforced ownership.
+ * longer exists. When `userId` is supplied by the DB-backed worker, the SELECT
+ * is tenant-scoped so a forged/stale job cannot classify or WOW another user's
+ * row. The legacy compatibility handler omits `userId` to preserve old tests.
  */
 async function loadInspiration(
   inspirationId: string,
+  userId?: string,
 ): Promise<Inspiration | null> {
   const db = getDb();
   const rows = await db
     .select()
     .from(inspirations)
-    .where(eq(inspirations.id, inspirationId))
+    .where(
+      userId
+        ? and(eq(inspirations.id, inspirationId), eq(inspirations.userId, userId))
+        : eq(inspirations.id, inspirationId),
+    )
     .limit(1);
 
   return rows[0] ?? null;
@@ -186,25 +176,24 @@ async function loadInspiration(
  *
  * Returns successfully on permanent outcomes (row missing, already
  * classified, Gemini returns null) so callers don't retry pointlessly.
- * Throws on transient failures (DB / Gemini / network) so the SQS handler
- * can push the record onto `batchItemFailures` and the inline (dev)
- * caller can log + drop without retrying — both behaviours sit at the
- * call-site, not here.
+ * Throws on transient failures (DB / Gemini / network) so the DB-backed
+ * worker can apply retry/backoff policy. Compatibility batch behaviour also
+ * lives at the call-site, not here.
  *
  * Reused from two places:
- *   1. The SQS `handler` below (production path, async via SST queue).
- *   2. `lib/queue.ts:enqueueClassification` when SQS is not configured
- *      (local dev / `pnpm dev` without SST).
+ *   1. `lib/queue.ts` for current DB-backed background jobs.
+ *   2. The legacy-shaped `handler` below for compatibility tests.
  */
 export async function runClassificationJob(
   inspirationId: string,
   deps: ClassificationJobDependencies = {},
 ): Promise<void> {
-  const row = await loadInspiration(inspirationId);
+  const row = await loadInspiration(inspirationId, deps.userId);
 
   if (!row) {
     console.warn("[classifier] inspiration not found, skipping", {
       inspirationId,
+      userId: deps.userId,
     });
     return;
   }
@@ -239,7 +228,13 @@ export async function runClassificationJob(
       classifiedAt: now,
       updatedAt: now,
     })
-    .where(and(eq(inspirations.id, row.id), isNull(inspirations.cluster)))
+    .where(
+      and(
+        eq(inspirations.id, row.id),
+        eq(inspirations.userId, row.userId),
+        isNull(inspirations.cluster),
+      ),
+    )
     .returning({ id: inspirations.id });
 
   if (updated.length === 0) {
@@ -294,8 +289,8 @@ async function attemptAutoWowGeneration(
 // ---------------------------------------------------------------------------
 
 /**
- * SQS Lambda entry-point. SST's `Queue.subscribe` binds this function as the
- * queue consumer.
+ * Legacy-shaped batch entry point retained as a compatibility wrapper around
+ * `runClassificationJob`. SST no longer binds this function to a queue.
  *
  * Implementation note: we process records sequentially rather than via
  * `Promise.all`. Two reasons:
@@ -304,9 +299,8 @@ async function attemptAutoWowGeneration(
  *   2. The downstream Gemini call (later sub-AC) has its own per-key rate
  *      limit; serializing here keeps that cost obvious in the log timeline.
  *
- * The return value uses the partial-batch-response contract: any message id
- * placed in `batchItemFailures` is left on the queue and will be retried;
- * everything else is treated as successfully processed and deleted.
+ * The return value preserves the partial-batch-response shape: any message id
+ * placed in `batchItemFailures` represents a transient failure.
  */
 export const handler = async (
   event: SQSEventLike,
@@ -326,11 +320,9 @@ export const handler = async (
     try {
       await runClassificationJob(job.inspirationId);
     } catch (err) {
-      // Transient DB / Gemini / network failure. Push onto batchItemFailures
-      // so SQS re-delivers the message after the visibility timeout. The
-      // SQS redrive policy on the queue (configured in `sst.config.ts`)
-      // bounds the retry budget — once exceeded, the message lands in the
-      // DLQ instead of looping forever.
+      // Transient DB / Gemini / network failure. Current DB-backed workers
+      // record retry/backoff state in `background_jobs`; this compatibility
+      // wrapper reports the same transient outcome via `batchItemFailures`.
       console.error("[classifier] transient failure, will retry", {
         messageId: record.messageId,
         inspirationId: job.inspirationId,

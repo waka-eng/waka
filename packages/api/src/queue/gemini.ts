@@ -9,14 +9,14 @@
  * single source of truth for "how do we ask Gemini to classify an inspiration?"
  *
  * Specifically NOT in scope here:
- *   - SQS event handling          (queue/classifier.ts)
- *   - DB SELECT / UPDATE          (queue/classifier.ts + future sub-AC)
- *   - Retry / batch-failure logic (queue/classifier.ts)
+ *   - DB-backed job claiming      (lib/queue.ts)
+ *   - DB SELECT / UPDATE          (queue/classifier.ts)
+ *   - Retry/backoff bookkeeping   (lib/queue.ts)
  *
  * Keeping the prompt + the HTTP shape in one isolated module means:
  *   1. The classifier handler never grows tangled `fetch(...)` boilerplate.
  *   2. Prompt iteration is a single-file diff; reviewers can evaluate the
- *      prompt change without scrolling through SQS plumbing.
+ *      prompt change without scrolling through background-job plumbing.
  *   3. The function is trivially unit-testable: pass a string in, mock fetch,
  *      assert one of the six labels comes out.
  *
@@ -238,8 +238,8 @@ interface GenerateContentRequest {
 //
 // Why Zod here (and not in queue/classifier.ts)?
 // ----------------------------------------------
-// `classifier.ts` validates a one-field SQS envelope (`{ inspirationId }`)
-// where adding zod is dead weight. The Gemini response, in contrast, is a
+// `classifier.ts` validates a one-field legacy compatibility envelope
+// (`{ inspirationId }`) where adding zod is dead weight. The Gemini response, in contrast, is a
 // nested wire shape we don't control — Google can extend it, drop fields,
 // reorder candidates, or change the safety-block envelope. Centralising the
 // "what does a usable Gemini response look like?" rule into a Zod schema buys
@@ -486,18 +486,16 @@ export interface ClassificationResult {
  *
  * Throws on:
  *   - missing API key                       → fail-loud configuration error
- *   - non-2xx HTTP response                 → transient; caller will retry via
- *                                             SQS partial-batch-failure
+ *   - non-2xx HTTP response                 → transient; DB-backed worker will retry
  *   - network error inside `fetch`          → same as above
  *   - non-JSON response body                → indicates an upstream protocol
  *                                             change; loud failure is correct
  *
- * The split between "return null" and "throw" matters because the queue
+ * The split between "return null" and "throw" matters because the DB-backed
  * worker uses it to decide retry-vs-give-up:
- *   - `null` → permanent: leave `cluster` NULL on the row, ack the SQS
- *     message. A backfill job can revisit later if we want.
- *   - throw  → transient: NACK the SQS message so it gets re-delivered after
- *     the visibility timeout.
+ *   - `null` → permanent: leave `cluster` NULL on the row and mark the job
+ *     succeeded. A backfill job can revisit later if we want.
+ *   - throw  → transient: leave the job pending with backoff for another drain.
  */
 export async function classifyInspirationText(
   rawText: string,
@@ -549,8 +547,8 @@ export async function classifyInspirationText(
   // Validate the envelope shape via the shared Zod schema. A shape failure
   // here is treated as "permanent skip" (cluster=null) rather than thrown,
   // because a malformed envelope will be malformed on every retry — the
-  // model genuinely produced something we can't classify, and retrying via
-  // SQS partial-batch-failure would just burn through the redrive budget.
+  // model genuinely produced something we can't classify, and retrying would
+  // just burn through the background job attempt budget.
   const envelope = generateContentResponseSchema.safeParse(rawJson);
   if (!envelope.success) {
     console.warn("[gemini] generateContent body failed schema validation", {

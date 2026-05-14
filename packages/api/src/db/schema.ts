@@ -122,7 +122,7 @@ export type NewUser = typeof users.$inferInsert;
 /**
  * A single inspiration captured by a user.
  *
- * cluster + classified_at are populated asynchronously by the SST Queue
+ * cluster + classified_at are populated asynchronously by the background
  * classifier worker. Both stay NULL until classification succeeds. If Gemini
  * returns nothing or an invalid label, cluster remains NULL and the UI
  * degrades gracefully (per AC).

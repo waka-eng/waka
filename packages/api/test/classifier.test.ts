@@ -1,20 +1,22 @@
 /**
- * Classifier queue handler test suite — Sub-AC 13.5.
+ * Classifier compatibility-handler test suite — Sub-AC 13.5.
  *
  * Surface under test
  * ------------------
- * `src/queue/classifier.ts` is the SQS Lambda entry-point for the cluster
- * classification loop. Per AC 10/11 it must:
+ * `src/queue/classifier.ts` owns the classifier core. Its handler export is a
+ * legacy SQS-shaped compatibility wrapper; the current product path is
+ * DB-backed `background_jobs` drained by `src/lib/queue.ts`. Per AC 10/11 the
+ * classifier must:
  *
- *   1. Parse `{ inspirationId }` from each SQS record body.
- *   2. SELECT the inspiration row by id (no tenant filter — see classifier.ts
- *      file header for why that's correct out-of-band of any user session).
+ *   1. Parse `{ inspirationId }` from each legacy record body.
+ *   2. SELECT the inspiration row by id; DB-backed callers additionally pass
+ *      `background_jobs.user_id` for tenant scoping.
  *   3. Call Gemini via `classifyInspirationText` (gemini.ts).
  *   4. UPDATE the row's `cluster` + `classified_at` + `updated_at` on a valid
  *      label, guarded by `WHERE cluster IS NULL` for at-least-once idempotency.
  *
- * The handler returns an `SQSBatchResponse` whose `batchItemFailures[]` lists
- * the messageIds SQS should re-deliver. This test suite covers the three
+ * The compatibility handler returns a partial-batch-shaped response whose
+ * `batchItemFailures[]` lists transient messageIds. This test suite covers the three
  * coverage buckets the Seed mandates for queue/Gemini work:
  *
  *   • Message processing      — happy parse, malformed JSON, missing field,
@@ -27,12 +29,12 @@
  *                               malformed envelope / empty text) leaves
  *                               cluster NULL and ACKs; transient failure
  *                               (5xx / network throw / non-JSON) returns
- *                               batchItemFailures so SQS retries
+ *                               batchItemFailures so legacy callers retry
  *
  * Why we drive the live handler against the real DB
  * -------------------------------------------------
- * Stubbing Drizzle here would replace the tenant-irrelevant SELECT/UPDATE
- * pair with hand-written assumptions, hiding the very predicates that close
+ * Stubbing Drizzle here would replace the SELECT/UPDATE pair with hand-written
+ * assumptions, hiding the very predicates that close
  * the at-least-once race (`WHERE id = :id AND cluster IS NULL`). We exercise
  * the production `getDb()` singleton against the same Neon database the
  * smoke test uses, with cleanup-tracked users so cascade reaps everything.
@@ -129,8 +131,8 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// Local helpers — the SQS event shape is intentionally minimal (matches the
-// `SQSEventLike` subset the handler depends on) so we don't need to pull in
+// Local helpers — the legacy SQS-shaped event is intentionally minimal (matches
+// the `SQSEventLike` subset the handler depends on) so we don't need to pull in
 // `@types/aws-lambda` just to build a test fixture.
 // ---------------------------------------------------------------------------
 
@@ -294,7 +296,7 @@ describe("classifier handler — message processing", () => {
   });
 
   it("processes mixed records in a single batch independently", async () => {
-    // SQS batches can contain a mix of valid + malformed + ghost records.
+    // Legacy batches can contain a mix of valid + malformed + ghost records.
     // Each record's outcome must be independent — one bad record never
     // poisons the whole batch.
     const fixture = await createUserFixture(getDb());
@@ -513,7 +515,7 @@ describe("classifier handler — cluster assignment persistence", () => {
     });
     const seedUpdatedAt = insp.updatedAt.getTime();
 
-    // Simulate the gap between two redeliveries.
+    // Simulate the gap between two legacy compatibility retries.
     await new Promise((resolve) => setTimeout(resolve, 10));
 
     const res = await handler(
@@ -644,8 +646,8 @@ describe("classifier handler — transient failures (batchItemFailures, row stay
   });
 
   it("Gemini HTTP 429 (rate limit) → batchItemFailures; row NULL", async () => {
-    // Treat 429 the same as 5xx: caller-bounded transient failure. The SQS
-    // visibility timeout doubles as our backoff budget.
+    // Treat 429 the same as 5xx: caller-bounded transient failure. The current
+    // DB-backed worker handles backoff in `background_jobs`.
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
 
@@ -688,9 +690,9 @@ describe("classifier handler — transient failures (batchItemFailures, row stay
   it("non-JSON 200 body → batchItemFailures (loud failure on contract drift)", async () => {
     // `classifyInspirationText` re-throws when `Response.json()` fails.
     // The handler treats throws as transient and adds the messageId to
-    // `batchItemFailures`. This is a deliberate "crash loud" branch: a
-    // permanent contract change should burn through redrive and land in
-    // the DLQ rather than silently NULL-ing every row.
+    // `batchItemFailures`. This is a deliberate "crash loud" legacy-wrapper
+    // branch: a permanent contract change should stay visible rather than
+    // silently NULL-ing every row.
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
 
@@ -712,7 +714,7 @@ describe("classifier handler — transient failures (batchItemFailures, row stay
 
   it("isolates a transient failure to its own messageId in a mixed batch", async () => {
     // A 5xx on one record must NOT prevent the other records from being
-    // processed. Classic SQS partial-batch-response contract.
+    // processed. Legacy partial-batch-response contract.
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
 
@@ -739,7 +741,7 @@ describe("classifier handler — transient failures (batchItemFailures, row stay
     expect(res.batchItemFailures[0]?.itemIdentifier).toBe("m-fail-mix");
 
     // The successful record's row was updated; the failing record's row
-    // remains NULL so SQS can retry it.
+    // remains NULL so a retry can fill it in.
     const okAfter = await loadRow(okInsp.id);
     expect(okAfter?.cluster).toBe("morph");
     const failAfter = await loadRow(failInsp.id);

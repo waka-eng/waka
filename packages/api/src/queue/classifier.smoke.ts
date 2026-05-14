@@ -1,5 +1,7 @@
 /**
- * Standalone smoke test for the classifier SQS handler (Sub-AC 10.3.4).
+ * Standalone smoke test for the legacy classifier SQS-shaped compatibility
+ * handler (Sub-AC 10.3.4). The current product path is DB-backed
+ * `background_jobs`; this file only preserves the old partial-batch wrapper.
  *
  * Run with:
  *   pnpm --filter @waka/api exec tsx src/queue/classifier.smoke.ts
@@ -25,7 +27,7 @@
  *      whether the response is a documented `promptFeedback.blockReason` or
  *      an out-of-set label.
  *   7. Gemini transient HTTP 5xx → message id appears in `batchItemFailures`
- *      so SQS will redeliver after the visibility timeout. Row stays NULL.
+ *      so legacy callers retry. Row stays NULL.
  *   8. Gemini network throw (fetch rejects) → same retry semantics as 5xx.
  *   9. Idempotency under at-least-once delivery: replaying the same job
  *      twice in one batch updates the row exactly once and the second

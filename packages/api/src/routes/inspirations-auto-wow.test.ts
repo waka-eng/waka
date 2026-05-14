@@ -55,7 +55,7 @@ describe("POST /api/inspirations automatic WOW generation", () => {
       createInspirationsRoutes({
         getDatabase: () => db,
         authMiddleware: authMiddleware(),
-        enqueueClassificationJob: vi.fn(async () => undefined),
+        enqueueClassificationJob: vi.fn(async () => ({ jobId: "00000000-0000-4000-8000-000000000999" })),
         persistScores: vi.fn(async () => ({ importanceScore: 10, wowScore: 20 })),
       }),
     );
