@@ -151,7 +151,7 @@ Because Option B serves a built Vite bundle from Hono, Vite hot reload is not
 part of `pnpm dev:local`. Use the separate Vite/SST development flow when you
 need HMR.
 
-### Internal background jobs admin API
+### Internal background jobs admin API and app
 
 The background-jobs observability API is disabled by default and is intended only
 for internal/dev debugging. Enable it explicitly with either:
@@ -175,6 +175,25 @@ Endpoints:
 Responses return safe job metadata plus `payloadSummary` only. For
 `process_inspiration` jobs, `payloadSummary` includes `inspirationId`; raw
 payload fields are not exposed.
+
+A separate minimal admin frontend lives in `packages/admin` and runs on port
+5174. It uses a same-origin Vite `/api` proxy to the local API target, defaulting
+to `http://localhost:3010`; set `VITE_API_URL` if your API is elsewhere.
+
+Run it locally with two terminals:
+
+```bash
+# Terminal A: API/local user app with the admin API gate enabled
+WAKA_ENABLE_BACKGROUND_JOBS_ADMIN=true pnpm dev:local
+
+# Terminal B: admin app
+pnpm --filter @waka/admin dev
+# or: pnpm dev:admin
+```
+
+Then open <http://localhost:5174>. Sign into the normal WAKA app first so the
+admin app can send the existing auth cookie. The UI lists background jobs, lets
+you filter by status/type, and only shows a retry button for failed jobs.
 
 ### 6. Optional local demo seed
 
