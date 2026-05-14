@@ -11,6 +11,7 @@ import { Hono } from "hono";
 
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
+import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
 
@@ -24,6 +25,11 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 
 // Auth routes (signup, login, ...) live under /api/auth.
 app.route("/api/auth", authRoutes);
+
+// Internal/dev-only background job observability routes. The router itself
+// applies both env-gate and requireAuth so the namespace stays hidden by
+// default while returning 401 for unauthenticated requests when explicitly on.
+app.route("/api/admin/background-jobs", adminBackgroundJobsRoutes);
 
 // Inspirations routes (create, list, ...) live under /api/inspirations.
 // Every handler in this router requires a valid session — the router
