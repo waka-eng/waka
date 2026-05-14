@@ -46,10 +46,12 @@ import {
 } from "../components/history";
 import {
   type ApiAttachment,
+  type ApiBackgroundJob,
   type ApiError,
   type ApiInspiration,
   type ApiWowMoment,
   type ClusterKind,
+  fetchBackgroundJobs,
   fetchInspirations,
   fetchWowMoments,
 } from "../lib/api";
@@ -196,6 +198,80 @@ export function nextHomeCaptureHandoffState(
     activeView: "inspiration",
     autoFocusCaptureRequest: previousAutoFocusCaptureRequest + 1,
   };
+}
+
+interface InternalStatusEnv {
+  DEV?: boolean;
+  VITE_SHOW_INTERNAL_STATUS?: string;
+}
+
+export function shouldShowInternalStatus(env: InternalStatusEnv): boolean {
+  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true";
+}
+
+type InternalWowPipelinePhase = "checking" | "found" | "none";
+
+interface InternalWowStatusState {
+  inspirationId: string;
+  savedAt: string;
+  latestWowCount: number;
+  initialWowCount: number;
+  wowPhase: InternalWowPipelinePhase;
+  jobStatus: ApiBackgroundJob["status"] | "checking" | "unavailable";
+  jobUpdatedAt?: string;
+  adminUnavailable: boolean;
+}
+
+function shortId(id: string): string {
+  return id.slice(0, 8);
+}
+
+function InternalWowStatusPanel({
+  status,
+}: {
+  status: InternalWowStatusState;
+}): JSX.Element {
+  const jobText = status.adminUnavailable
+    ? "Admin job details unavailable; WOW refresh still polling."
+    : status.jobStatus === "checking"
+      ? "Background classification job checking"
+      : `Background classification job ${status.jobStatus}`;
+  const wowText =
+    status.wowPhase === "found"
+      ? "New WOW moment found"
+      : status.wowPhase === "none"
+        ? "No new WOW yet"
+        : "WOW refresh checking";
+
+  return (
+    <aside
+      className="internal-wow-status"
+      aria-label="Internal/demo-only WOW pipeline status"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="internal-wow-status-heading">
+        <span>Internal/demo-only WOW pipeline status</span>
+        <strong>Latest WOW count {status.latestWowCount}</strong>
+      </div>
+      <ol className="internal-wow-status-steps">
+        <li>
+          <span>Saved inspiration {shortId(status.inspirationId)}</span>
+          <time dateTime={status.savedAt}>{formatTimestamp(status.savedAt)}</time>
+        </li>
+        <li>
+          <span>{jobText}</span>
+          {status.jobUpdatedAt ? (
+            <time dateTime={status.jobUpdatedAt}>{formatTimestamp(status.jobUpdatedAt)}</time>
+          ) : null}
+        </li>
+        <li>
+          <span>{wowText}</span>
+          <strong>{status.latestWowCount}</strong>
+        </li>
+      </ol>
+    </aside>
+  );
 }
 
 interface HomeViewToggleProps {
@@ -438,6 +514,9 @@ export function HomePage(): JSX.Element {
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
+  const [internalWowStatus, setInternalWowStatus] =
+    useState<InternalWowStatusState | null>(null);
+  const internalStatusEnabled = shouldShowInternalStatus(import.meta.env);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -475,6 +554,7 @@ export function HomePage(): JSX.Element {
       wowMomentsRequestIdRef.current += 1;
       setEntries([]);
       setWowMoments([]);
+      setInternalWowStatus(null);
       setWowMomentsLoading(false);
       setWowMomentsError(null);
       return;
@@ -552,8 +632,8 @@ export function HomePage(): JSX.Element {
     async (options?: {
       showLoading?: boolean;
       surfaceErrors?: boolean;
-    }): Promise<boolean> => {
-      if (!user) return false;
+    }): Promise<ApiWowMoment[] | null> => {
+      if (!user) return null;
 
       const requestUserId = user.id;
       const requestId = wowMomentsRequestIdRef.current + 1;
@@ -564,24 +644,25 @@ export function HomePage(): JSX.Element {
 
       try {
         const rows = await fetchWowMoments();
-        if (wowMomentsRequestIdRef.current !== requestId) return false;
+        if (wowMomentsRequestIdRef.current !== requestId) return null;
         // Match the inspirations load's defence-in-depth tenant guard: the
         // route is scoped by session, but the page still refuses to render any
         // row whose user id does not match the current auth context.
-        setWowMoments(rows.filter((row) => row.userId === requestUserId));
+        const ownRows = rows.filter((row) => row.userId === requestUserId);
+        setWowMoments(ownRows);
         wowMomentsLoadedForUserIdRef.current = requestUserId;
         setWowMomentsLoading(false);
         setWowMomentsError(null);
-        return true;
+        return ownRows;
       } catch (err) {
-        if (wowMomentsRequestIdRef.current !== requestId) return false;
+        if (wowMomentsRequestIdRef.current !== requestId) return null;
         if (options?.surfaceErrors ?? true) {
           const message =
             err instanceof Error ? err.message : "Failed to load WOW moments";
           setWowMomentsError(message);
         }
         setWowMomentsLoading(false);
-        return false;
+        return null;
       }
     },
     [user],
@@ -609,6 +690,58 @@ export function HomePage(): JSX.Element {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
   }, []);
 
+  const updateInternalWowCount = useCallback((rows: ApiWowMoment[] | null) => {
+    if (!rows) return;
+    setInternalWowStatus((prev) => {
+      if (!prev) return prev;
+      const nextPhase: InternalWowPipelinePhase =
+        rows.length > prev.initialWowCount ? "found" : "none";
+      return {
+        ...prev,
+        latestWowCount: rows.length,
+        wowPhase: nextPhase,
+      };
+    });
+  }, []);
+
+  const refreshInternalBackgroundJob = useCallback(
+    (inspirationId: string) => {
+      void (async () => {
+        try {
+          const jobs = await fetchBackgroundJobs({
+            type: "process_inspiration",
+            limit: 10,
+          });
+          const matchingJob =
+            jobs.find((job) => job.payloadSummary?.inspirationId === inspirationId) ??
+            jobs[0];
+          setInternalWowStatus((prev) => {
+            if (!prev || prev.inspirationId !== inspirationId) return prev;
+            if (!matchingJob) {
+              return { ...prev, jobStatus: "checking", adminUnavailable: false };
+            }
+            return {
+              ...prev,
+              jobStatus: matchingJob.status,
+              jobUpdatedAt: matchingJob.updatedAt,
+              adminUnavailable: false,
+            };
+          });
+        } catch {
+          setInternalWowStatus((prev) => {
+            if (!prev || prev.inspirationId !== inspirationId) return prev;
+            return {
+              ...prev,
+              jobStatus: "unavailable",
+              adminUnavailable: true,
+            };
+          });
+        }
+      })();
+    },
+    [],
+  );
+
   const handlePersisted = useCallback(
     (tempId: string, result: PersistedResult) => {
       setEntries((prev) =>
@@ -624,7 +757,31 @@ export function HomePage(): JSX.Element {
         ),
       );
 
-      void refreshWowMoments({ showLoading: false, surfaceErrors: true });
+      const targetId = result.inspiration.id;
+      if (internalStatusEnabled) {
+        setInternalWowStatus({
+          inspirationId: targetId,
+          savedAt: result.inspiration.createdAt,
+          latestWowCount: wowMoments.length,
+          initialWowCount: wowMoments.length,
+          wowPhase: "checking",
+          jobStatus: "checking",
+          adminUnavailable: false,
+        });
+        refreshInternalBackgroundJob(targetId);
+        void refreshWowMoments({ showLoading: false, surfaceErrors: true }).then(
+          (rows) => {
+            if (!rows) return;
+            setInternalWowStatus((prev) =>
+              prev && prev.inspirationId === targetId
+                ? { ...prev, latestWowCount: rows.length }
+                : prev,
+            );
+          },
+        );
+      } else {
+        void refreshWowMoments({ showLoading: false, surfaceErrors: true });
+      }
 
       // The classifier worker (or the dev-mode inline fallback) writes
       // `cluster` asynchronously after the row is persisted. Without a
@@ -633,7 +790,6 @@ export function HomePage(): JSX.Element {
       // backoff schedule — fast classifications (warm Gemini, ~1 s)
       // surface immediately; slower ones still get picked up before the
       // user gives up.
-      const targetId = result.inspiration.id;
       const delays = [1500, 2500, 3500, 5000];
       let classifiedRefreshRequested = false;
       for (const delay of delays) {
@@ -659,7 +815,11 @@ export function HomePage(): JSX.Element {
               });
               if (!classifiedRefreshRequested) {
                 classifiedRefreshRequested = true;
-                void refreshWowMoments({ showLoading: false, surfaceErrors: false });
+                void refreshWowMoments({
+                  showLoading: false,
+                  surfaceErrors: false,
+                }).then(updateInternalWowCount);
+                if (internalStatusEnabled) refreshInternalBackgroundJob(targetId);
               }
             } catch {
               // Silent — the user will pick up the classification on
@@ -671,7 +831,13 @@ export function HomePage(): JSX.Element {
         }, delay);
       }
     },
-    [refreshWowMoments],
+    [
+      internalStatusEnabled,
+      refreshInternalBackgroundJob,
+      refreshWowMoments,
+      updateInternalWowCount,
+      wowMoments.length,
+    ],
   );
 
   const handlePersistError = useCallback(
@@ -872,6 +1038,9 @@ export function HomePage(): JSX.Element {
         beforeGridContent={
           <>
             {viewSwitcher}
+            {internalStatusEnabled && internalWowStatus ? (
+              <InternalWowStatusPanel status={internalWowStatus} />
+            ) : null}
             <InspirationDiscoveryPanel
               entries={entries}
               filteredEntries={filteredEntries}

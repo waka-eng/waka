@@ -442,6 +442,37 @@ export interface ListWowMomentsResponse {
   wowMoments: ApiWowMoment[];
 }
 
+export type BackgroundJobType = "process_inspiration";
+export type BackgroundJobStatus = "pending" | "running" | "succeeded" | "failed";
+
+export interface ApiBackgroundJob {
+  id: string;
+  userId?: string;
+  type: BackgroundJobType;
+  status: BackgroundJobStatus;
+  attempts?: number;
+  maxAttempts?: number;
+  runAfter?: string;
+  lockedAt?: string | null;
+  lastError?: string | null;
+  idempotencyKey?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  payloadSummary?: {
+    inspirationId?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface FetchBackgroundJobsOptions {
+  type?: BackgroundJobType;
+  limit?: number;
+}
+
+export interface ListBackgroundJobsResponse {
+  jobs: ApiBackgroundJob[];
+}
+
 export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
   let res: Response;
   try {
@@ -482,6 +513,50 @@ export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
     });
   }
   return payload.wowMoments;
+}
+
+export async function fetchBackgroundJobs(
+  options: FetchBackgroundJobsOptions = {},
+): Promise<ApiBackgroundJob[]> {
+  const params = new URLSearchParams();
+  if (options.type) params.set("type", options.type);
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const path = apiPath(`/admin/background-jobs${query ? `?${query}` : ""}`);
+
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while loading background jobs",
+    });
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as { error?: string };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ??
+        `Failed to load background jobs (HTTP ${res.status}). Please try again.`,
+    });
+  }
+
+  const payload = (body ?? {}) as Partial<ListBackgroundJobsResponse>;
+  return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
 // ---------------------------------------------------------------------------
