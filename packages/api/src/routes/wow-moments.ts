@@ -2,9 +2,10 @@
  * WOW moments routes.
  *
  * Authenticated users can list persisted WOW moments and explicitly request a
- * bounded manual generation attempt for one existing inspiration. Automatic
- * create/update triggers and background workers remain intentionally out of
- * scope for this route slice.
+ * bounded manual generation attempt for one existing inspiration. The create
+ * async classifier worker reuses the same bounded pipeline for best-effort
+ * automatic generation after a capture has been processed; this manual route
+ * keeps its existing response semantics.
  */
 
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
@@ -23,13 +24,15 @@ import {
 } from "../lib/inspiration-embeddings.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import {
+  DEFAULT_WOW_GENERATION_LIMIT,
+  MAX_WOW_GENERATION_LIMIT,
+} from "../lib/wow-generation-config.js";
+import {
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
 } from "../lib/wow-judge.js";
 
 const MAX_WOW_MOMENTS = 20;
-const DEFAULT_GENERATION_LIMIT = 10;
-const MAX_GENERATION_LIMIT = 50;
 
 const generateWowMomentRequestSchema = z
   .object({
@@ -38,7 +41,7 @@ const generateWowMomentRequestSchema = z
       .number()
       .int("limit must be an integer")
       .min(1, "limit must be at least 1")
-      .max(MAX_GENERATION_LIMIT, `limit must be <= ${MAX_GENERATION_LIMIT}`)
+      .max(MAX_WOW_GENERATION_LIMIT, `limit must be <= ${MAX_WOW_GENERATION_LIMIT}`)
       .optional(),
   })
   .strict();
@@ -164,7 +167,7 @@ export function createWowMomentsRoutes(
 
     const user = c.get("user");
     const db = getDatabase();
-    const limit = parsed.data.limit ?? DEFAULT_GENERATION_LIMIT;
+    const limit = parsed.data.limit ?? DEFAULT_WOW_GENERATION_LIMIT;
 
     try {
       const embeddingResult = await ensureEmbedding({

@@ -1,10 +1,10 @@
 /**
  * Gemini embedding foundation for inspirations.
  *
- * This module intentionally stops at persisted embeddings. It does not generate
- * WOW moments and is not called automatically from create/update routes in this
- * slice; workers/routes can call `ensureInspirationEmbedding` explicitly when
- * their architecture is ready to pay the Gemini round-trip.
+ * This module intentionally stops at persisted embeddings. WOW moment routes and
+ * the async classifier/WOW handoff call `ensureInspirationEmbedding` explicitly
+ * when they are ready to pay the Gemini round-trip; embedding generation itself
+ * remains tenant-scoped and idempotent here.
  */
 
 import { createHash } from "node:crypto";

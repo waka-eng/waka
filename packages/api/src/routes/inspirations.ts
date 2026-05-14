@@ -36,7 +36,7 @@ import {
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
 import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { attachments, inspirations, reflections } from "../db/index.js";
@@ -95,12 +95,25 @@ export type CreateInspirationInput = z.infer<typeof createInspirationSchema>;
 // Router
 // ---------------------------------------------------------------------------
 
-export const inspirationsRoutes = new Hono<AuthEnv>();
+export interface InspirationsRouteDependencies {
+  getDatabase?: typeof getDb;
+  authMiddleware?: MiddlewareHandler<AuthEnv>;
+  enqueueClassificationJob?: typeof enqueueClassification;
+  persistScores?: typeof persistLocalInspirationScores;
+}
 
-// Every route under this router requires a valid session. Mounting the
-// middleware once at the router level (rather than per-handler) ensures we
-// cannot accidentally ship an unauthenticated handler in this namespace.
-inspirationsRoutes.use("*", requireAuth);
+export function createInspirationsRoutes(
+  deps: InspirationsRouteDependencies = {},
+): Hono<AuthEnv> {
+  const routes = new Hono<AuthEnv>();
+  const getDatabase = deps.getDatabase ?? getDb;
+  const enqueueClassificationJob = deps.enqueueClassificationJob ?? enqueueClassification;
+  const persistScores = deps.persistScores ?? persistLocalInspirationScores;
+
+  // Every route under this router requires a valid session. Mounting the
+  // middleware once at the router level (rather than per-handler) ensures we
+  // cannot accidentally ship an unauthenticated handler in this namespace.
+  routes.use("*", deps.authMiddleware ?? requireAuth);
 
 /**
  * POST /api/inspirations
@@ -112,11 +125,11 @@ inspirationsRoutes.use("*", requireAuth);
  *   3. Return 201 with the freshly-inserted row so the SPA can render it
  *      optimistically without a follow-up GET.
  *
- * Performance contract: the seed requires this endpoint to be effectively
- * synchronous-on-the-DB-only. We do exactly one INSERT and return; no LLM
- * call, no S3 call, no extra round-trip.
+ * Performance contract: this endpoint returns only after bounded local DB work
+ * and a classification enqueue attempt. Automatic WOW generation is attempted
+ * later by the async classifier worker path, never inline in this request.
  */
-inspirationsRoutes.post("/", async (c) => {
+routes.post("/", async (c) => {
   // 1. Parse body. Tolerate non-JSON gracefully so a misbehaving client
   //    receives a 400 with a message rather than an unhandled exception.
   let rawBody: unknown;
@@ -140,7 +153,7 @@ inspirationsRoutes.post("/", async (c) => {
   }
 
   const user = c.get("user");
-  const db = getDb();
+  const db = getDatabase();
 
   // 2. Insert. We `.returning()` the columns the SPA needs to render the
   //    new row immediately. cluster / classified_at are intentionally NULL
@@ -173,7 +186,7 @@ inspirationsRoutes.post("/", async (c) => {
     return c.json({ error: "Failed to create inspiration" }, 500);
   }
 
-  const createdScores = await persistLocalInspirationScores(db, inserted);
+  const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };
 
   // 3. Enqueue a classification job (Sub-AC 10.2). The SQS Queue worker in
@@ -191,7 +204,7 @@ inspirationsRoutes.post("/", async (c) => {
   //    `cluster = null`, and stays "uncategorised" until either the worker
   //    catches up or the backfill scan re-enqueues.
   try {
-    await enqueueClassification(scoredInserted.id);
+    await enqueueClassificationJob(scoredInserted.id);
   } catch (err) {
     console.error("[inspirations] failed to enqueue classification job:", {
       inspirationId: scoredInserted.id,
@@ -239,9 +252,9 @@ inspirationsRoutes.post("/", async (c) => {
  */
 const MAX_LIST_LIMIT = 500;
 
-inspirationsRoutes.get("/", async (c) => {
+routes.get("/", async (c) => {
   const user = c.get("user");
-  const db = getDb();
+  const db = getDatabase();
 
   const rows = await db
     .select({
@@ -341,7 +354,7 @@ const updateInspirationSchema = z
     },
   );
 
-export type UpdateInspirationInput = z.infer<typeof updateInspirationSchema>;
+type UpdateInspirationInput = z.infer<typeof updateInspirationSchema>;
 
 /**
  * PATCH /api/inspirations/:id
@@ -373,7 +386,7 @@ export type UpdateInspirationInput = z.infer<typeof updateInspirationSchema>;
  * `inspirations.id` primary key. No LLM, no S3, no follow-up SELECT — the
  * `.returning()` clause hands back the canonical row in the same round-trip.
  */
-inspirationsRoutes.patch("/:id", async (c) => {
+routes.patch("/:id", async (c) => {
   // 1. Validate the path parameter as a uuid up front. Reject malformed ids
   //    with a 400 rather than letting Postgres complain about "invalid input
   //    syntax for type uuid".
@@ -405,7 +418,7 @@ inspirationsRoutes.patch("/:id", async (c) => {
   }
 
   const user = c.get("user");
-  const db = getDb();
+  const db = getDatabase();
 
   // 3. Build the UPDATE patch. Only fields the caller actually supplied are
   //    written; an absent field is left alone in Postgres. We bump
@@ -500,7 +513,7 @@ const createReflectionSchema = z.object({
   skipped: z.boolean().optional(),
 });
 
-export type CreateReflectionInput = z.infer<typeof createReflectionSchema>;
+type CreateReflectionInput = z.infer<typeof createReflectionSchema>;
 
 /**
  * POST /api/inspirations/:id/reflections
@@ -525,7 +538,7 @@ export type CreateReflectionInput = z.infer<typeof createReflectionSchema>;
  * Performance contract: one SELECT (ownership check) + one INSERT (the row),
  * both indexed lookups. No LLM or S3 round-trips on this path.
  */
-inspirationsRoutes.post("/:id/reflections", async (c) => {
+routes.post("/:id/reflections", async (c) => {
   // 1. Validate the path parameter as a uuid up front. Reject malformed
   //    ids with a 400 rather than letting Postgres complain about "invalid
   //    input syntax for type uuid".
@@ -557,7 +570,7 @@ inspirationsRoutes.post("/:id/reflections", async (c) => {
   }
 
   const user = c.get("user");
-  const db = getDb();
+  const db = getDatabase();
 
   // 3. Confirm the parent inspiration exists AND belongs to the caller.
   //    A single composite-indexed lookup; the primary key + user filter is
@@ -648,7 +661,7 @@ inspirationsRoutes.post("/:id/reflections", async (c) => {
  * when the inspiration exists and the caller owns it but has not yet attached
  * any reflections; "no reflections yet" is a valid state, not an error.
  */
-inspirationsRoutes.get("/:id/reflections", async (c) => {
+routes.get("/:id/reflections", async (c) => {
   // 1. Validate the path parameter as a uuid up front. Reject malformed
   //    ids with a 400 rather than letting Postgres complain about "invalid
   //    input syntax for type uuid".
@@ -659,7 +672,7 @@ inspirationsRoutes.get("/:id/reflections", async (c) => {
   }
 
   const user = c.get("user");
-  const db = getDb();
+  const db = getDatabase();
 
   // 2. Confirm the parent inspiration exists AND belongs to the caller.
   //    Same pattern as the POST sibling — 404 (not 403) on miss/cross-tenant
@@ -799,7 +812,7 @@ function getDeleteBucketName(): string | null {
  * DeleteObjects to S3 (skipped when there are no keys), one DELETE on
  * `inspirations` (the row's PK). Cascade work is server-side in Postgres.
  */
-inspirationsRoutes.delete("/:id", async (c) => {
+routes.delete("/:id", async (c) => {
   // 1. Validate the path parameter as a uuid up front. Reject malformed ids
   //    with a 400 rather than letting Postgres complain about "invalid input
   //    syntax for type uuid".
@@ -810,7 +823,7 @@ inspirationsRoutes.delete("/:id", async (c) => {
   }
 
   const user = c.get("user");
-  const db = getDb();
+  const db = getDatabase();
 
   // 2. Confirm ownership FIRST and collect s3_keys in the same indexed
   //    lookup. Doing the ownership check + key fetch as one query (rather
@@ -922,3 +935,9 @@ inspirationsRoutes.delete("/:id", async (c) => {
   //    without parsing the URL again.
   return c.json({ id: deleted[0]!.id }, 200);
 });
+
+
+  return routes;
+}
+
+export const inspirationsRoutes = createInspirationsRoutes();
