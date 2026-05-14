@@ -56,6 +56,12 @@ describe("WowMomentsSection", () => {
     expect(mobileCss).not.toMatch(
       /\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{[^}]*margin-top:\s*-1px;/,
     );
+    expect(globalCss).toMatch(
+      /\.wow-moment-related\s*\{[\s\S]*?grid-auto-rows:\s*minmax\(0, 1fr\);[\s\S]*?align-content:\s*stretch;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-related blockquote\s*\{[\s\S]*?font-size:\s*11px;[\s\S]*?line-height:\s*1\.22;/,
+    );
   });
 
   it("renders a loading state", () => {
@@ -129,7 +135,9 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("aria-label=\"1 WOW moments shown\"");
+    expect(html).not.toContain("wow-moments-count");
+    expect(html).not.toContain("WOW moments shown");
+    expect(html).not.toContain(">1</span>");
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
     expect(html).not.toContain("Connects a mobile note with a design sketch.");
@@ -198,7 +206,8 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("aria-label=\"9 WOW moments shown\"");
+    expect(html).not.toContain("wow-moments-count");
+    expect(html).not.toContain("WOW moments shown");
     expect(html).not.toContain("9 of 11");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
     expect(html.match(/class=\"wow-moment-card\"/g)).toHaveLength(9);

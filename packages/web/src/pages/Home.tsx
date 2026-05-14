@@ -933,23 +933,25 @@ export function HomePage(): JSX.Element {
         }}
         style={{
           position: "fixed",
-          bottom: 16,
-          left: 16,
+          bottom: 10,
+          left: 10,
           zIndex: 300,
-          background: "transparent",
-          border: "1px solid var(--line)",
+          background: "rgba(255, 253, 247, 0.52)",
+          border: "1px solid rgba(15, 15, 14, 0.12)",
           borderRadius: 999,
-          padding: "6px 14px",
+          padding: "4px 9px",
           fontFamily: "var(--font-mono)",
-          fontSize: 10,
-          letterSpacing: "0.12em",
+          fontSize: 8,
+          letterSpacing: "0.1em",
           textTransform: "uppercase",
           color: "var(--muted)",
+          opacity: 0.72,
           cursor: "pointer",
         }}
         aria-label={`Sign out ${user.email}`}
+        title={`Sign out ${user.name}`}
       >
-        Sign out · {user.name}
+        Sign out
       </button>
     </>
   );

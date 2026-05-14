@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -176,12 +179,19 @@ async function flushReactWork(): Promise<void> {
 
 function setInputValue(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(
-    HTMLInputElement.prototype,
+    window.HTMLInputElement.prototype,
     "value",
   )?.set;
   setter?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+const packageCssPath = resolve(process.cwd(), "src/styles/global.css");
+const workspaceCssPath = resolve(process.cwd(), "packages/web/src/styles/global.css");
+const globalCss = readFileSync(
+  existsSync(packageCssPath) ? packageCssPath : workspaceCssPath,
+  "utf8",
+);
 
 describe("HomePage view model", () => {
   it("defaults to Wow Moment First as a primary grid of WOW moment cards", async () => {
@@ -271,6 +281,9 @@ describe("HomePage view model", () => {
     expect(container.querySelector('select[aria-label="Filter by cluster"]')).toBeNull();
     expect(container.querySelector('select[aria-label="Filter by kind"]')).toBeNull();
     expect(container.querySelectorAll(".grid.home-grid .wm-card")).toHaveLength(0);
+    expect(globalCss).toMatch(
+      /\.inspiration-result-text\s*\{[\s\S]*?font-size:\s*clamp\(14px, 1\.25vw, 18px\);[\s\S]*?line-height:\s*1\.28;/,
+    );
 
     const search = container.querySelector<HTMLInputElement>(
       'input[aria-label="Search inspirations"]',
