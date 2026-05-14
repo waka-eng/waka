@@ -57,21 +57,74 @@ describe("WowMomentsSection", () => {
     expect(html).toContain("Malformed WOW moments response");
   });
 
-  it("renders populated WOW moment cards", () => {
+  it("renders every related inspiration as text snippets only", () => {
+    const momentWithManyRelatedInspirations: ApiWowMoment = {
+      ...sampleMoment,
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-1",
+          role: "primary",
+          reason: "First signal in the bridge.",
+          text: "A field note about playful prototypes.",
+          createdAt: "2026-04-30T00:00:00.000Z",
+        },
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-2",
+          role: "supporting",
+          reason: "Second signal in the bridge.",
+          text: "A sketch that turned the field note into a grid.",
+          createdAt: "2026-05-01T00:00:00.000Z",
+        },
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-3",
+          role: "contrast",
+          reason: "Third signal in the bridge.",
+          text: "A voice memo asking for smaller WOW cards.",
+          createdAt: "2026-05-02T00:00:00.000Z",
+        },
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-4",
+          role: "igniter",
+          reason: "Fourth signal in the bridge.",
+          text: "A prototype review that asked to keep every spark visible.",
+          createdAt: "2026-05-03T00:00:00.000Z",
+        },
+      ],
+    };
+
     const html = renderSection({
-      moments: [sampleMoment],
+      moments: [momentWithManyRelatedInspirations],
       loading: false,
       error: null,
     });
 
-    expect(html).toContain("1 moments · 1 links");
-    expect(html).toContain("Bridge");
+    expect(html).toContain("1 moments · 4 links");
     expect(html).toContain("87% confidence");
     expect(html).toContain("Prototype idea keeps returning");
     expect(html).toContain("Connects a mobile note with a design sketch.");
     expect(html).toContain("A field note about playful prototypes.");
-    expect(html).toContain("First signal in the bridge.");
-    expect(html).toContain("What would make this bridge testable this week?");
+    expect(html).toContain("A sketch that turned the field note into a grid.");
+    expect(html).toContain("A voice memo asking for smaller WOW cards.");
+    expect(html).toContain("A prototype review that asked to keep every spark visible.");
+    expect(html).not.toContain("wow-moment-related-index");
+    expect(html).not.toContain("Bridge");
+    expect(html).not.toContain("primary");
+    expect(html).not.toContain("supporting");
+    expect(html).not.toContain("contrast");
+    expect(html).not.toContain("igniter");
+    expect(html).not.toContain("First signal in the bridge.");
+    expect(html).not.toContain("Second signal in the bridge.");
+    expect(html).not.toContain("Third signal in the bridge.");
+    expect(html).not.toContain("Fourth signal in the bridge.");
+    expect(html).not.toContain("2026-04-30");
+    expect(html).not.toContain("2026-05-03");
+    expect(html).not.toContain("Apr 30");
+    expect(html).not.toContain("May 3");
+    expect(html).not.toContain("What would make this bridge testable this week?");
   });
 
   it("caps populated WOW moment cards at nine while keeping related inspiration evidence", () => {
@@ -98,7 +151,8 @@ describe("WowMomentsSection", () => {
     expect(html.match(/class=\"wow-moment-card\"/g)).toHaveLength(9);
     expect(html).toContain("WOW card 9");
     expect(html).toContain("Related inspiration evidence 9");
-    expect(html).toContain("Evidence reason 9");
+    expect(html).not.toContain("Evidence reason 9");
+    expect(html).not.toContain("primary");
     expect(html).not.toContain("WOW card 10");
   });
 });

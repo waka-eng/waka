@@ -1,25 +1,11 @@
-import type { ApiWowMoment, WowKind } from "../lib/api";
+import type { ApiWowMoment } from "../lib/api";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
-
-const WOW_KIND_LABELS: Record<WowKind, string> = {
-  recurrence: "Recurrence",
-  bridge: "Bridge",
-  surprise_bridge: "Surprise bridge",
-  tension: "Tension",
-  outlier: "Outlier",
-};
 
 interface WowMomentsSectionProps {
   moments: ApiWowMoment[];
   loading: boolean;
   error: string | null;
-}
-
-function formatRelatedDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
 export function WowMomentsSection({
@@ -75,41 +61,26 @@ export function WowMomentsSection({
         </div>
       ) : (
         <div className="wow-moments-grid">
-          {visibleMoments.map((moment) => (
-            <article className="wow-moment-card" key={moment.id}>
-              <div className="wow-moment-card-topline">
-                <span>{WOW_KIND_LABELS[moment.kind]}</span>
-                <span>{moment.relatedInspirations.length} inspirations</span>
-                <span>{moment.wowScore}% confidence</span>
-              </div>
-              <h3>{moment.title}</h3>
-              <p className="wow-moment-why">{moment.why}</p>
-              {moment.relatedInspirations.length > 0 ? (
-                <ol className="wow-moment-related" aria-label="Related inspirations">
-                  {moment.relatedInspirations.map((related, index) => (
-                    <li key={`${moment.id}-${related.inspirationId}`}>
-                      <div className="wow-moment-related-index">{index + 1}</div>
-                      <div className="wow-moment-related-body">
-                        <div className="wow-moment-related-meta">
-                          <strong>{related.role}</strong>
-                          <span>{formatRelatedDate(related.createdAt)}</span>
-                        </div>
-                        {related.reason ? (
-                          <p className="wow-moment-related-reason">{related.reason}</p>
-                        ) : null}
+          {visibleMoments.map((moment) => {
+            return (
+              <article className="wow-moment-card" key={moment.id}>
+                <div className="wow-moment-card-topline">
+                  <span>{moment.wowScore}% confidence</span>
+                </div>
+                <h3>{moment.title}</h3>
+                <p className="wow-moment-why">{moment.why}</p>
+                {moment.relatedInspirations.length > 0 ? (
+                  <ol className="wow-moment-related" aria-label="Related inspirations">
+                    {moment.relatedInspirations.map((related) => (
+                      <li key={`${moment.id}-${related.inspirationId}`}>
                         <blockquote>{related.text}</blockquote>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : null}
-              {moment.reflectionQuestion ? (
-                <p className="wow-moment-reflection">
-                  {moment.reflectionQuestion}
-                </p>
-              ) : null}
-            </article>
-          ))}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
