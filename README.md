@@ -116,32 +116,40 @@ SST prints two URLs:
 > `apiUrl` into your Google Cloud Console "Authorized redirect URIs" as
 > `<apiUrl>/auth/google/callback` and try again.
 
-#### Option B — one-command local Hono + Vite
+#### Option B — one-command monolithic local server
 
-Use this when you want the API and web dev servers running locally without
-starting an SST sandbox:
+Use this when you want the API and browser app running from the same local
+origin without starting an SST sandbox:
 
 ```bash
 pnpm dev:local
 ```
 
-The tracked runner starts both child processes, stops both on `Ctrl+C`, and
-shuts the stack down if either child exits. It does not print environment
-variable values or secrets. Open:
+The tracked runner builds the Vite client, then starts one Hono/node-server
+process that serves both the API routes and `packages/web/dist`. It stops the
+server on `Ctrl+C` and does not print environment variable values or secrets.
+Open one browser URL only:
 
-- API health: <http://localhost:3010/health>
-- API origin: <http://localhost:3010>
-- Web app: <http://localhost:5175>
+- <http://localhost:3010>
+
+The API health endpoint remains available at <http://localhost:3010/health>.
 
 `pnpm dev:local` loads repo-root `.env.local` for the local API process, without
 printing environment variable values or secrets. Variables already present in the
 shell keep their values, and the runner's local development exports still win for
-`PORT`, `PUBLIC_API_URL`, `PUBLIC_WEB_URL`, and `VITE_API_URL`. The local runner
-does not load root `.env` or `.env.production` for API development.
+`PORT`, `PUBLIC_API_URL`, `PUBLIC_WEB_URL`, `VITE_API_URL`,
+`WAKA_SERVE_WEB_DIST`, and `WAKA_WEB_DIST_DIR`. The local runner does not load
+root `.env` or `.env.production` for API development.
 
-`pnpm dev:local` sets `VITE_API_URL=http://localhost:3010` for Vite and runs
-Vite with `--host localhost --port 5175 --strictPort`, so a busy web port fails
-fast instead of silently moving to another port.
+This mode intentionally clears `VITE_API_URL` before building the client so
+browser API calls and Google OAuth navigation use same-origin paths such as
+`/auth/google/login`. API routes are mounted before static assets; the SPA
+fallback serves `index.html` only for non-API GET routes and will not intercept
+`/auth/*`, `/inspirations/*`, `/attachments/*`, `/wow-moments/*`, or `/health`.
+
+Because Option B serves a built Vite bundle from Hono, Vite hot reload is not
+part of `pnpm dev:local`. Use the separate Vite/SST development flow when you
+need HMR.
 
 ### 6. Optional local demo seed
 
