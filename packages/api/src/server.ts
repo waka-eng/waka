@@ -2,6 +2,8 @@ import { serve } from "@hono/node-server";
 import { config as loadDotenv } from "dotenv";
 import { resolve } from "node:path";
 
+import { createLocalWebApp, defaultWebDistDir } from "./local-web.js";
+
 const dotenvPath = process.env.WAKA_API_DOTENV_PATH ?? resolve(process.cwd(), "../../.env");
 loadDotenv({ path: dotenvPath });
 
@@ -19,8 +21,13 @@ if (!process.env.PUBLIC_WEB_URL) process.env.PUBLIC_WEB_URL = "http://localhost:
 if (!process.env.PUBLIC_API_URL) process.env.PUBLIC_API_URL = "http://localhost:3001";
 
 const { app } = await import("./index.js");
+const fetchApp =
+  process.env.WAKA_SERVE_WEB_DIST === "1"
+    ? createLocalWebApp(app, process.env.WAKA_WEB_DIST_DIR ?? defaultWebDistDir())
+    : app;
 
 const port = Number(process.env.PORT ?? 3001);
-serve({ fetch: app.fetch, port }, (info) => {
-  console.log(`[api] http://localhost:${info.port}`);
+const hostname = process.env.WAKA_SERVE_WEB_DIST === "1" ? "localhost" : undefined;
+serve({ fetch: fetchApp.fetch, port, ...(hostname ? { hostname } : {}) }, (info) => {
+  console.log(`[api] http://${info.address}:${info.port}`);
 });

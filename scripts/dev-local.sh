@@ -2,9 +2,9 @@
 set -euo pipefail
 
 api_pid=""
-web_pid=""
 shutting_down=0
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+web_dist_dir="$repo_root/packages/web/dist"
 
 load_env_local() {
   local env_file="$repo_root/.env.local"
@@ -59,11 +59,9 @@ cleanup() {
 
   trap - EXIT INT TERM
 
-  for pid in "$api_pid" "$web_pid"; do
-    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-      kill "$pid" 2>/dev/null || true
-    fi
-  done
+  if [[ -n "$api_pid" ]] && kill -0 "$api_pid" 2>/dev/null; then
+    kill "$api_pid" 2>/dev/null || true
+  fi
 
   wait 2>/dev/null || true
   return "$exit_code"
@@ -77,10 +75,10 @@ load_env_local
 
 export PORT=3010
 export PUBLIC_API_URL="http://localhost:3010"
-export PUBLIC_WEB_URL="http://localhost:5175"
-export VITE_API_URL="http://localhost:3010"
-web_host="localhost"
-web_port="5175"
+export PUBLIC_WEB_URL="http://localhost:3010"
+export VITE_API_URL=""
+export WAKA_SERVE_WEB_DIST=1
+export WAKA_WEB_DIST_DIR="$web_dist_dir"
 
 if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
   if [[ "$WAKA_API_DOTENV_PATH" != "$repo_root/.env.local" ]]; then
@@ -88,13 +86,18 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
     exit 1
   fi
 
-  if [[ "$PUBLIC_API_URL" != "http://localhost:3010" ]] || [[ "$VITE_API_URL" != "http://localhost:3010" ]]; then
-    echo "dev:local dry run failed: local API URLs must use localhost:3010" >&2
+  if [[ "$PUBLIC_API_URL" != "http://localhost:3010" ]] || [[ "$PUBLIC_WEB_URL" != "http://localhost:3010" ]]; then
+    echo "dev:local dry run failed: local API and web URLs must both use localhost:3010" >&2
     exit 1
   fi
 
-  if [[ "$PUBLIC_WEB_URL" != "http://localhost:5175" ]] || [[ "$web_host" != "localhost" ]] || [[ "$web_port" != "5175" ]]; then
-    echo "dev:local dry run failed: local web URL must use localhost:5175" >&2
+  if [[ -n "$VITE_API_URL" ]]; then
+    echo "dev:local dry run failed: VITE_API_URL must be empty so the built client uses same-origin API paths" >&2
+    exit 1
+  fi
+
+  if [[ "$WAKA_SERVE_WEB_DIST" != "1" ]] || [[ "$WAKA_WEB_DIST_DIR" != "$web_dist_dir" ]]; then
+    echo "dev:local dry run failed: web dist serving is not configured" >&2
     exit 1
   fi
 
@@ -102,36 +105,15 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
   exit 0
 fi
 
-echo "Starting WAKA local dev (Option B)..."
-echo "  API:    http://localhost:3010"
-echo "  Health: http://localhost:3010/health"
-echo "  Web:    http://localhost:5175"
-echo "Press Ctrl+C to stop both servers."
+echo "Starting WAKA local dev (Option B monolithic)..."
+echo "  Browser: http://localhost:3010"
+echo "Building web app for same-origin API paths..."
+
+pnpm --filter @waka/web build
+
+echo "Starting monolithic local server. Press Ctrl+C to stop."
 
 pnpm --filter @waka/api exec tsx src/server.ts &
 api_pid=$!
 
-pnpm --filter @waka/web exec vite --host "$web_host" --port "$web_port" --strictPort &
-web_pid=$!
-
-while true; do
-  if ! kill -0 "$api_pid" 2>/dev/null; then
-    set +e
-    wait "$api_pid"
-    exit_code=$?
-    set -e
-    echo "API server exited with code $exit_code; stopping web server."
-    exit "$exit_code"
-  fi
-
-  if ! kill -0 "$web_pid" 2>/dev/null; then
-    set +e
-    wait "$web_pid"
-    exit_code=$?
-    set -e
-    echo "Web server exited with code $exit_code; stopping API server."
-    exit "$exit_code"
-  fi
-
-  sleep 1
-done
+wait "$api_pid"
