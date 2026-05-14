@@ -6,7 +6,7 @@
  * deliberately returns a safe summary of queue payloads instead of raw JSONB.
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 
 import {
@@ -16,7 +16,10 @@ import {
   type BackgroundJob,
   type BackgroundJobStatus,
   type BackgroundJobType,
+  inspirations,
   type ProcessInspirationPayload,
+  wowMomentInspirations,
+  wowMoments,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
@@ -24,6 +27,9 @@ import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_LAST_ERROR_LENGTH = 1_000;
+const MAX_INSPIRATION_PREVIEW_LENGTH = 240;
+const MAX_WOW_TITLE_PREVIEW_LENGTH = 120;
+const MAX_WOW_EXPLANATION_PREVIEW_LENGTH = 240;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SECRET_ASSIGNMENT_RE =
   /\b(api[_-]?key|x-api-key|secret|password|token|access[_-]?token|refresh[_-]?token)\b\s*[:=]\s*("[^"]+"|'[^']+'|[^\s,;&]+)/gi;
@@ -51,6 +57,35 @@ export interface AdminBackgroundJobSummary {
   createdAt: string;
   updatedAt: string;
   payloadSummary: Record<string, unknown>;
+}
+
+export interface AdminBackgroundJobPipelineDetail {
+  type: "process_inspiration";
+  inspiration: {
+    id: string;
+    textPreview: string;
+    kind: string | null;
+    category: number | null;
+    cluster: string | null;
+    classifiedAt: string | null;
+    importanceScore: number;
+    wowScore: number;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  inspirationMissingReason: "payload_missing" | "not_found_or_not_visible" | null;
+  wowMoments: Array<{
+    id: string;
+    kind: string;
+    titlePreview: string;
+    explanationPreview: string;
+    wowScore: number;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminBackgroundJobDetail extends AdminBackgroundJobSummary {
+  pipeline?: AdminBackgroundJobPipelineDetail;
 }
 
 export function isAdminBackgroundJobsEnabled(): boolean {
@@ -109,6 +144,12 @@ function sanitizeLastError(lastError: string | null): string | null {
     .slice(0, MAX_LAST_ERROR_LENGTH);
 }
 
+function truncatePreview(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
 function serializeJob(job: BackgroundJob): AdminBackgroundJobSummary {
   return {
     id: job.id,
@@ -125,6 +166,107 @@ function serializeJob(job: BackgroundJob): AdminBackgroundJobSummary {
     updatedAt: job.updatedAt.toISOString(),
     payloadSummary: summarizePayload(job),
   };
+}
+
+async function loadProcessInspirationPipeline(input: {
+  db: ReturnType<typeof getDb>;
+  job: BackgroundJob;
+  currentUserId: string;
+}): Promise<AdminBackgroundJobPipelineDetail> {
+  const payloadSummary = summarizePayload(input.job);
+  const inspirationId = payloadSummary.inspirationId;
+  if (typeof inspirationId !== "string" || !UUID_RE.test(inspirationId)) {
+    return {
+      type: "process_inspiration",
+      inspiration: null,
+      inspirationMissingReason: "payload_missing",
+      wowMoments: [],
+    };
+  }
+
+  const inspirationRows = await input.db
+    .select({
+      id: inspirations.id,
+      text: inspirations.text,
+      kind: inspirations.kind,
+      category: inspirations.category,
+      cluster: inspirations.cluster,
+      classifiedAt: inspirations.classifiedAt,
+      importanceScore: inspirations.importanceScore,
+      wowScore: inspirations.wowScore,
+      createdAt: inspirations.createdAt,
+      updatedAt: inspirations.updatedAt,
+    })
+    .from(inspirations)
+    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.userId, input.currentUserId)))
+    .limit(1);
+
+  const inspiration = inspirationRows[0];
+  if (!inspiration) {
+    return {
+      type: "process_inspiration",
+      inspiration: null,
+      inspirationMissingReason: "not_found_or_not_visible",
+      wowMoments: [],
+    };
+  }
+
+  const linkedWowMoments = await input.db
+    .select({
+      id: wowMoments.id,
+      kind: wowMoments.kind,
+      title: wowMoments.title,
+      why: wowMoments.why,
+      wowScore: wowMoments.wowScore,
+      createdAt: wowMoments.createdAt,
+    })
+    .from(wowMomentInspirations)
+    .innerJoin(wowMoments, eq(wowMomentInspirations.wowMomentId, wowMoments.id))
+    .where(
+      and(
+        eq(wowMomentInspirations.userId, input.currentUserId),
+        eq(wowMomentInspirations.inspirationId, inspiration.id),
+        eq(wowMoments.userId, input.currentUserId),
+      ),
+    )
+    .orderBy(asc(wowMomentInspirations.sortOrder), asc(wowMomentInspirations.createdAt));
+
+  return {
+    type: "process_inspiration",
+    inspiration: {
+      id: inspiration.id,
+      textPreview: truncatePreview(inspiration.text, MAX_INSPIRATION_PREVIEW_LENGTH),
+      kind: inspiration.kind,
+      category: inspiration.category,
+      cluster: inspiration.cluster,
+      classifiedAt: inspiration.classifiedAt?.toISOString() ?? null,
+      importanceScore: inspiration.importanceScore,
+      wowScore: inspiration.wowScore,
+      createdAt: inspiration.createdAt.toISOString(),
+      updatedAt: inspiration.updatedAt.toISOString(),
+    },
+    inspirationMissingReason: null,
+    wowMoments: linkedWowMoments.map((moment) => ({
+      id: moment.id,
+      kind: moment.kind,
+      titlePreview: truncatePreview(moment.title, MAX_WOW_TITLE_PREVIEW_LENGTH),
+      explanationPreview: truncatePreview(moment.why, MAX_WOW_EXPLANATION_PREVIEW_LENGTH),
+      wowScore: moment.wowScore,
+      createdAt: moment.createdAt.toISOString(),
+    })),
+  };
+}
+
+async function serializeJobDetail(input: {
+  db: ReturnType<typeof getDb>;
+  job: BackgroundJob;
+  currentUserId: string;
+}): Promise<AdminBackgroundJobDetail> {
+  const detail: AdminBackgroundJobDetail = serializeJob(input.job);
+  if (input.job.type === "process_inspiration") {
+    detail.pipeline = await loadProcessInspirationPipeline(input);
+  }
+  return detail;
 }
 
 export function createAdminBackgroundJobsRoutes(
@@ -182,7 +324,7 @@ export function createAdminBackgroundJobsRoutes(
     const job = rows[0];
     if (!job) return c.notFound();
 
-    return c.json({ job: serializeJob(job) });
+    return c.json({ job: await serializeJobDetail({ db: getDatabase(), job, currentUserId }) });
   });
 
   routes.post("/:id/retry", async (c) => {

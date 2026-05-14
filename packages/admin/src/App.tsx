@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   AdminApiError,
+  fetchBackgroundJobDetail,
   fetchBackgroundJobs,
   retryBackgroundJob,
   type AdminBackgroundJob,
@@ -48,12 +49,79 @@ function classifyError(error: unknown): Notice {
   return { kind: "error", message: "Unexpected error while loading background jobs" };
 }
 
+function PipelineDetail({ job }: { job: AdminBackgroundJob }): JSX.Element {
+  const pipeline = job.pipeline;
+  if (!pipeline) {
+    return <p className="empty">No bounded pipeline detail is available for this job type.</p>;
+  }
+
+  return (
+    <div className="detail-grid">
+      <section>
+        <h3>Inspiration</h3>
+        {pipeline.inspiration ? (
+          <dl>
+            <dt>ID</dt>
+            <dd className="mono">{pipeline.inspiration.id}</dd>
+            <dt>Preview</dt>
+            <dd>{pipeline.inspiration.textPreview || "—"}</dd>
+            <dt>Kind / category</dt>
+            <dd>
+              {pipeline.inspiration.kind ?? "—"} / {pipeline.inspiration.category ?? "—"}
+            </dd>
+            <dt>Cluster</dt>
+            <dd>{pipeline.inspiration.cluster ?? "Unclassified"}</dd>
+            <dt>Classified at</dt>
+            <dd>{formatDate(pipeline.inspiration.classifiedAt)}</dd>
+            <dt>Scores</dt>
+            <dd>
+              importance {pipeline.inspiration.importanceScore}, wow {pipeline.inspiration.wowScore}
+            </dd>
+            <dt>Created / updated</dt>
+            <dd>
+              {formatDate(pipeline.inspiration.createdAt)} / {formatDate(pipeline.inspiration.updatedAt)}
+            </dd>
+          </dl>
+        ) : (
+          <p className="empty inline-empty">
+            Inspiration is not visible: {pipeline.inspirationMissingReason ?? "unknown"}.
+          </p>
+        )}
+      </section>
+
+      <section>
+        <h3>Linked WOW moments</h3>
+        {pipeline.wowMoments.length > 0 ? (
+          <ul className="wow-list">
+            {pipeline.wowMoments.map((moment) => (
+              <li key={moment.id}>
+                <div className="wow-title">
+                  <strong>{moment.titlePreview}</strong>
+                  <span className="pill status-succeeded">{moment.kind}</span>
+                </div>
+                <p>{moment.explanationPreview || "—"}</p>
+                <p className="muted">
+                  score {moment.wowScore} · {formatDate(moment.createdAt)} · <span className="mono">{moment.id}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty inline-empty">No linked WOW moments.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function App(): JSX.Element {
   const [jobs, setJobs] = useState<AdminBackgroundJob[]>([]);
+  const [selectedJob, setSelectedJob] = useState<AdminBackgroundJob | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
   const filters = useMemo(
@@ -67,13 +135,33 @@ export function App(): JSX.Element {
     try {
       const nextJobs = await fetchBackgroundJobs(filters);
       setJobs(nextJobs);
+      setSelectedJob((current) => {
+        if (!current) return null;
+        return nextJobs.some((job) => job.id === current.id) ? current : null;
+      });
     } catch (error) {
       setJobs([]);
+      setSelectedJob(null);
       setNotice(classifyError(error));
     } finally {
       setIsLoading(false);
     }
   }, [filters]);
+
+  const loadJobDetail = useCallback(async (job: AdminBackgroundJob) => {
+    setSelectedJob(job);
+    setIsDetailLoading(true);
+    setNotice(null);
+    try {
+      const detail = await fetchBackgroundJobDetail(job.id);
+      setSelectedJob(detail);
+      setJobs((current) => current.map((item) => (item.id === detail.id ? { ...item, ...detail } : item)));
+    } catch (error) {
+      setNotice(classifyError(error));
+    } finally {
+      setIsDetailLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void loadJobs();
@@ -86,6 +174,9 @@ export function App(): JSX.Element {
       const updated = await retryBackgroundJob(job.id);
       setJobs((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       setNotice({ kind: "success", message: `Queued retry for job ${updated.id}` });
+      if (selectedJob?.id === updated.id) {
+        await loadJobDetail(updated);
+      }
     } catch (error) {
       setNotice(classifyError(error));
     } finally {
@@ -164,7 +255,7 @@ export function App(): JSX.Element {
               </thead>
               <tbody>
                 {jobs.map((job) => (
-                  <tr key={job.id}>
+                  <tr key={job.id} className={selectedJob?.id === job.id ? "selected-row" : undefined}>
                     <td>
                       <span className={`pill status-${job.status}`}>{job.status}</span>
                     </td>
@@ -177,7 +268,10 @@ export function App(): JSX.Element {
                     <td className="mono">{inspirationId(job)}</td>
                     <td>{formatDate(job.createdAt)}</td>
                     <td>{formatDate(job.updatedAt)}</td>
-                    <td>
+                    <td className="action-cell">
+                      <button type="button" onClick={() => void loadJobDetail(job)} disabled={isDetailLoading}>
+                        {selectedJob?.id === job.id && isDetailLoading ? "Loading…" : "Details"}
+                      </button>
                       {job.status === "failed" ? (
                         <button
                           type="button"
@@ -187,9 +281,7 @@ export function App(): JSX.Element {
                         >
                           {retryingId === job.id ? "Retrying…" : "Retry"}
                         </button>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 ))}
@@ -198,6 +290,56 @@ export function App(): JSX.Element {
           </div>
         )}
       </section>
+
+      {selectedJob ? (
+        <section className="card detail-card" aria-live="polite">
+          <div className="card-header">
+            <h2>Job detail</h2>
+            <span className="mono">{selectedJob.id}</span>
+          </div>
+          <div className="detail-body">
+            <dl className="metadata-grid">
+              <dt>Status</dt>
+              <dd>
+                <span className={`pill status-${selectedJob.status}`}>{selectedJob.status}</span>
+              </dd>
+              <dt>Type</dt>
+              <dd>{selectedJob.type}</dd>
+              <dt>User</dt>
+              <dd className="mono">{selectedJob.userId}</dd>
+              <dt>Attempts</dt>
+              <dd>
+                {selectedJob.attempts}/{selectedJob.maxAttempts}
+              </dd>
+              <dt>Run after</dt>
+              <dd>{formatDate(selectedJob.runAfter)}</dd>
+              <dt>Locked at</dt>
+              <dd>{formatDate(selectedJob.lockedAt)}</dd>
+              <dt>Last error</dt>
+              <dd className="error-cell">{selectedJob.lastError ?? "—"}</dd>
+              <dt>Payload summary</dt>
+              <dd>
+                inspirationId: <span className="mono">{inspirationId(selectedJob)}</span>
+              </dd>
+              <dt>Created / updated</dt>
+              <dd>
+                {formatDate(selectedJob.createdAt)} / {formatDate(selectedJob.updatedAt)}
+              </dd>
+            </dl>
+            <PipelineDetail job={selectedJob} />
+            {selectedJob.status === "failed" ? (
+              <button
+                type="button"
+                className="secondary detail-retry"
+                onClick={() => void handleRetry(selectedJob)}
+                disabled={retryingId === selectedJob.id}
+              >
+                {retryingId === selectedJob.id ? "Retrying…" : "Retry failed job"}
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

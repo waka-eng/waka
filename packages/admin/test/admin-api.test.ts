@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   AdminApiError,
+  fetchBackgroundJobDetail,
   fetchBackgroundJobs,
   retryBackgroundJob,
   type AdminBackgroundJob,
@@ -57,6 +58,46 @@ describe("admin background jobs API", () => {
       message:
         "Admin routes are disabled. Set WAKA_ENABLE_BACKGROUND_JOBS_ADMIN=true on the API/dev server.",
     } satisfies Partial<AdminApiError>);
+  });
+
+  it("fetches detail pipeline without requiring or rendering raw payload fields", async () => {
+    const detail: AdminBackgroundJob = {
+      ...job,
+      pipeline: {
+        type: "process_inspiration",
+        inspiration: {
+          id: "insp-1",
+          textPreview: "bounded preview only",
+          kind: "note",
+          category: 2,
+          cluster: "bridge",
+          classifiedAt: "2026-05-01T00:02:00.000Z",
+          importanceScore: 7,
+          wowScore: 9,
+          createdAt: "2026-05-01T00:00:00.000Z",
+          updatedAt: "2026-05-01T00:02:00.000Z",
+        },
+        inspirationMissingReason: null,
+        wowMoments: [
+          {
+            id: "wow-1",
+            kind: "surprise_bridge",
+            titlePreview: "Bridge insight",
+            explanationPreview: "safe explanation preview",
+            wowScore: 11,
+            createdAt: "2026-05-01T00:03:00.000Z",
+          },
+        ],
+      },
+    };
+    stubFetch(Response.json({ job: detail, payload: { accessToken: "do-not-use" } }));
+
+    await expect(fetchBackgroundJobDetail(job.id)).resolves.toEqual(detail);
+    expect(fetch).toHaveBeenCalledWith("/api/admin/background-jobs/job-1", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
   });
 
   it("retries a failed job and returns the updated job", async () => {
