@@ -26,14 +26,6 @@ export function WowMomentsSection({
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
       <div className="wow-moments-heading">
         <h2 id="wow-moments-title">WOW moments</h2>
-        {!loading && !error && moments.length > 0 ? (
-          <span
-            className="wow-moments-count"
-            aria-label={`${visibleMoments.length} WOW moments shown`}
-          >
-            {visibleMoments.length}
-          </span>
-        ) : null}
       </div>
       {error ? (
         <div className="wow-moments-state" role="status">

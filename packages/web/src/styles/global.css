@@ -3035,7 +3035,7 @@ body.reflect-bg {
   border: 0;
   border-bottom: var(--border-hairline);
   background: transparent;
-  padding: var(--space-4) 0;
+  padding: var(--space-3) 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--space-3);
@@ -3061,9 +3061,9 @@ body.reflect-bg {
 .inspiration-result-text {
   order: 1;
   font-family: var(--font-serif);
-  font-size: clamp(17px, 1.7vw, 22px);
-  line-height: 1.25;
-  letter-spacing: -0.012em;
+  font-size: clamp(14px, 1.25vw, 18px);
+  line-height: 1.28;
+  letter-spacing: -0.006em;
 }
 
 .inspiration-results-empty {
@@ -3092,9 +3092,9 @@ body.reflect-bg {
 .wow-moments-heading {
   display: flex;
   align-items: end;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-4);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .wow-moments-eyebrow,
@@ -3147,7 +3147,7 @@ body.reflect-bg {
 
 .wow-moments-grid--populated {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-rows: minmax(180px, 1fr);
+  grid-auto-rows: minmax(190px, 1fr);
   gap: 0;
   align-items: stretch;
 }
@@ -3156,7 +3156,7 @@ body.reflect-bg {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
   background: rgba(255, 253, 247, 0.66);
-  padding: 8px;
+  padding: 10px;
   box-shadow: 0 10px 30px rgba(15, 15, 14, 0.04);
   display: flex;
   flex-direction: column;
@@ -3165,7 +3165,7 @@ body.reflect-bg {
 
 .wow-moments-grid--populated .wow-moment-card {
   height: 100%;
-  min-height: 180px;
+  min-height: 190px;
   overflow: hidden;
   border-radius: 0;
   box-shadow: none;
@@ -3202,12 +3202,12 @@ body.reflect-bg {
 }
 
 .wow-moment-card h3 {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   font-family: var(--font-serif);
   font-weight: 400;
-  font-size: clamp(15px, 1.35vw, 18px);
-  line-height: 1.06;
-  letter-spacing: -0.03em;
+  font-size: clamp(14px, 1.1vw, 17px);
+  line-height: 1.08;
+  letter-spacing: -0.022em;
   color: var(--ink);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -3231,9 +3231,10 @@ body.reflect-bg {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
-  align-content: start;
+  grid-auto-rows: minmax(0, 1fr);
+  align-content: stretch;
   min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -3242,19 +3243,21 @@ body.reflect-bg {
 .wow-moment-related li {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
-  padding: 2px 3px;
-  background: rgba(246, 242, 232, 0.56);
+  padding: 4px 5px;
+  background: rgba(246, 242, 232, 0.7);
+  display: flex;
+  align-items: center;
   min-width: 0;
 }
 
 .wow-moment-related blockquote {
   min-width: 0;
   margin: 0;
-  padding-left: 5px;
+  padding-left: 6px;
   border-left: var(--border-hairline);
   font-family: var(--font-serif);
-  font-size: 10px;
-  line-height: 1.15;
+  font-size: 11px;
+  line-height: 1.22;
   color: var(--ink);
   display: -webkit-box;
   -webkit-line-clamp: 1;
