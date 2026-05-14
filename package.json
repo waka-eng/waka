@@ -8,6 +8,9 @@
   "scripts": {
     "dev": "sst dev",
     "dev:local": "bash scripts/dev-local.sh",
+    "dev:admin": "pnpm --filter @waka/admin dev",
+    "build:admin": "pnpm --filter @waka/admin build",
+    "typecheck:admin": "pnpm --filter @waka/admin typecheck",
     "test:dev-local-script": "bash -n scripts/dev-local.sh && WAKA_DEV_LOCAL_DRY_RUN=1 bash scripts/dev-local.sh",
     "dev:boot": "tsx tools/dev-stack/boot-and-wait.ts",
     "deploy": "sst deploy",
