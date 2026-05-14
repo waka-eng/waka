@@ -1,5 +1,7 @@
 import type { ApiWowMoment, WowKind } from "../lib/api";
 
+const MAX_VISIBLE_WOW_MOMENTS = 9;
+
 const WOW_KIND_LABELS: Record<WowKind, string> = {
   recurrence: "Recurrence",
   bridge: "Bridge",
@@ -25,7 +27,8 @@ export function WowMomentsSection({
   loading,
   error,
 }: WowMomentsSectionProps): JSX.Element {
-  const totalRelated = moments.reduce(
+  const visibleMoments = moments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
+  const totalRelated = visibleMoments.reduce(
     (count, moment) => count + moment.relatedInspirations.length,
     0,
   );
@@ -39,7 +42,8 @@ export function WowMomentsSection({
         </div>
         {!loading && !error && moments.length > 0 ? (
           <span className="wow-moments-count">
-            {moments.length} moments · {totalRelated} links
+            {visibleMoments.length}
+            {moments.length > visibleMoments.length ? ` of ${moments.length}` : ""} moments · {totalRelated} links
           </span>
         ) : null}
       </div>
@@ -71,12 +75,12 @@ export function WowMomentsSection({
         </div>
       ) : (
         <div className="wow-moments-grid">
-          {moments.map((moment) => (
+          {visibleMoments.map((moment) => (
             <article className="wow-moment-card" key={moment.id}>
               <div className="wow-moment-card-topline">
                 <span>{WOW_KIND_LABELS[moment.kind]}</span>
                 <span>{moment.relatedInspirations.length} inspirations</span>
-                <span>score {moment.wowScore}</span>
+                <span>{moment.wowScore}% confidence</span>
               </div>
               <h3>{moment.title}</h3>
               <p className="wow-moment-why">{moment.why}</p>
@@ -88,9 +92,7 @@ export function WowMomentsSection({
                       <div className="wow-moment-related-body">
                         <div className="wow-moment-related-meta">
                           <strong>{related.role}</strong>
-                          <span>
-                            {related.kind ?? "inspiration"} · {formatRelatedDate(related.createdAt)}
-                          </span>
+                          <span>{formatRelatedDate(related.createdAt)}</span>
                         </div>
                         {related.reason ? (
                           <p className="wow-moment-related-reason">{related.reason}</p>

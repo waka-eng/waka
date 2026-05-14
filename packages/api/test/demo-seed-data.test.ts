@@ -21,15 +21,15 @@ import {
 } from "../../../tools/seed-demo";
 
 describe("demo seed data", () => {
-  it("provides exactly ten real persisted inspiration seeds", () => {
-    expect(DEMO_INSPIRATIONS).toHaveLength(10);
-    expect(new Set(DEMO_INSPIRATIONS.map((seed) => seed.slug)).size).toBe(10);
+  it("provides exactly thirty real persisted inspiration seeds", () => {
+    expect(DEMO_INSPIRATIONS).toHaveLength(30);
+    expect(new Set(DEMO_INSPIRATIONS.map((seed) => seed.slug)).size).toBe(30);
     expect(DEMO_INSPIRATIONS.every((seed) => seed.kind === DEMO_SEED_KIND)).toBe(true);
     expect(DEMO_INSPIRATIONS.every((seed) => seed.text.length > 80)).toBe(true);
   });
 
   it("includes multiple WOW moments that link multiple inspirations", () => {
-    expect(DEMO_WOW_MOMENTS.length).toBeGreaterThanOrEqual(2);
+    expect(DEMO_WOW_MOMENTS.length).toBeGreaterThanOrEqual(10);
     expect(DEMO_WOW_MOMENTS.every((moment) => moment.related.length >= 2)).toBe(true);
 
     const inspirationSlugs = new Set(DEMO_INSPIRATIONS.map((seed) => seed.slug));
@@ -43,9 +43,9 @@ describe("demo seed data", () => {
 
   it("reports the summary used by the seed CLI", () => {
     expect(getDemoSeedSummary()).toEqual({
-      inspirationCount: 10,
+      inspirationCount: 30,
       wowMomentCount: DEMO_WOW_MOMENTS.length,
-      linkedInspirationCount: 6,
+      linkedInspirationCount: 30,
     });
   });
 });

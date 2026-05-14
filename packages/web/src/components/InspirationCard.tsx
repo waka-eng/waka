@@ -10,8 +10,7 @@
  *       <a href="…" target="_blank" rel="noopener">hostname</a>
  *       …
  *     </div>
- *     <div class="history-item-meta">KIND · 2 days ago · …</div>
- *     <div class="history-item-cluster">cluster topic</div>
+ *     <div class="history-item-meta">saving · 2 days ago · …</div>
  *     <div class="history-item-reflections">2 of 3 reflected</div>
  *   </div>
  *
@@ -58,14 +57,8 @@ export interface InspirationCardData {
   links?: string[] | null;
   /** Human-readable timestamp (e.g. "2 days ago"). Joined into the meta row. */
   timestamp?: string | null;
-  /** Inspiration "kind" tag (e.g. "note", "link"). Rendered uppercased. */
+  /** Optional transient save status label (e.g. "saving", "save failed"). */
   kind?: string | null;
-  /**
-   * Optional cluster topic copy already resolved by the parent (prototype
-   * looked this up via `CLUSTER_TOPICS[item.cluster]`). Rendering the
-   * resolved string keeps the component free of the cluster taxonomy.
-   */
-  clusterTopic?: string | null;
   /** Number of reflections that have been answered (i.e. `!skipped`). */
   reflectionsAnswered?: number;
   /** Total reflections attached to this inspiration. */
@@ -106,19 +99,14 @@ export function InspirationCard({
     links,
     timestamp,
     kind,
-    clusterTopic,
     reflectionsAnswered = 0,
     reflectionsTotal = 0,
   } = item;
 
   /**
-   * Build the meta row exactly like the prototype:
-   *
-   *   const metaParts = [kindLabel, item.timestamp, catLabel].filter(Boolean);
-   *   meta.textContent = metaParts.join(' · ');
-   *
-   * `catLabel` was always null in the prototype, so we drop it. `kindLabel`
-   * is uppercased to match `item.kind.toUpperCase()`.
+   * Build the meta row from transient save state and timestamp only. Backend
+   * inspiration kind/category/cluster metadata intentionally stays out of the
+   * product UI.
    */
   const metaText = useMemo(() => {
     const parts: string[] = [];
@@ -191,10 +179,6 @@ export function InspirationCard({
 
       {metaText ? (
         <div className="history-item-meta">{metaText}</div>
-      ) : null}
-
-      {clusterTopic ? (
-        <div className="history-item-cluster">{clusterTopic}</div>
       ) : null}
 
       {hasReflections ? (
