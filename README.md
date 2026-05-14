@@ -131,7 +131,7 @@ variable values or secrets. Open:
 
 - API health: <http://localhost:3010/health>
 - API origin: <http://localhost:3010>
-- Web app: <http://127.0.0.1:5175>
+- Web app: <http://localhost:5175>
 
 `pnpm dev:local` loads repo-root `.env.local` for the local API process, without
 printing environment variable values or secrets. Variables already present in the
@@ -140,7 +140,7 @@ shell keep their values, and the runner's local development exports still win fo
 does not load root `.env` or `.env.production` for API development.
 
 `pnpm dev:local` sets `VITE_API_URL=http://localhost:3010` for Vite and runs
-Vite with `--host 127.0.0.1 --port 5175 --strictPort`, so a busy web port fails
+Vite with `--host localhost --port 5175 --strictPort`, so a busy web port fails
 fast instead of silently moving to another port.
 
 ### 6. Optional local demo seed
@@ -175,7 +175,7 @@ via the existing API auth helper so the demo account can log in.
 ### 7. End-to-end browser flow (manual smoke)
 
 Open the web URL for the stack you started: <http://localhost:5173> for Option A
-or <http://127.0.0.1:5175> for Option B. The app should redirect you to
+or <http://localhost:5175> for Option B. The app should redirect you to
 `/login`. Then:
 
 1. **Sign up** with email + password from the Sign-up tab. Expect a redirect
