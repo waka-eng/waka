@@ -66,9 +66,39 @@ describe("WowMomentsSection", () => {
 
     expect(html).toContain("1 moments · 1 links");
     expect(html).toContain("Bridge");
+    expect(html).toContain("87% confidence");
     expect(html).toContain("Prototype idea keeps returning");
     expect(html).toContain("Connects a mobile note with a design sketch.");
     expect(html).toContain("A field note about playful prototypes.");
+    expect(html).toContain("First signal in the bridge.");
     expect(html).toContain("What would make this bridge testable this week?");
+  });
+
+  it("caps populated WOW moment cards at nine while keeping related inspiration evidence", () => {
+    const manyMoments = Array.from({ length: 11 }, (_, index) => ({
+      ...sampleMoment,
+      id: `moment-${index + 1}`,
+      title: `WOW card ${index + 1}`,
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: `inspiration-${index + 1}`,
+          reason: `Evidence reason ${index + 1}`,
+          text: `Related inspiration evidence ${index + 1}`,
+        },
+      ],
+    }));
+    const html = renderSection({
+      moments: manyMoments,
+      loading: false,
+      error: null,
+    });
+
+    expect(html).toContain("9 of 11 moments · 9 links");
+    expect(html.match(/class=\"wow-moment-card\"/g)).toHaveLength(9);
+    expect(html).toContain("WOW card 9");
+    expect(html).toContain("Related inspiration evidence 9");
+    expect(html).toContain("Evidence reason 9");
+    expect(html).not.toContain("WOW card 10");
   });
 });

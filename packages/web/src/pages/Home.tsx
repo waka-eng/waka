@@ -30,7 +30,6 @@ import {
 } from "react";
 
 import { InspirationsBoard } from "../components/InspirationsBoard";
-import type { HomeCardData } from "../components/InspirationsBoard";
 import {
   InspirationCard,
   type InspirationCardData,
@@ -55,43 +54,6 @@ import {
   fetchWowMoments,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-
-/**
- * Cluster topic resolution mirrors the prototype's `CLUSTER_TOPICS` map
- * (index.html ~2524). The classifier worker fills in the `cluster` enum
- * asynchronously; until then the chip is hidden.
- */
-const CLUSTER_TOPICS: Record<ClusterKind, string> = {
-  outlier: "a single quote I can’t shake",
-  bridge: "architecture essays and jazz history",
-  morph: "identity, reread",
-  convergence: "education in the AI era",
-  tension: "synthetic memory: tool or crutch",
-  loop: "what it means to know something",
-};
-
-/**
- * Canonical render order for the cluster grid. Stable across renders so
- * the user's tiles don't reorder on every save — only their `count`,
- * `artifact`, and presence change. Mirrors the seed's `ClusterEnum` order.
- */
-const CLUSTER_ORDER: ReadonlyArray<ClusterKind> = [
-  "outlier",
-  "bridge",
-  "morph",
-  "convergence",
-  "tension",
-  "loop",
-];
-
-/** Tile artifact column is short — keep excerpt under one paragraph. */
-const ARTIFACT_MAX_CHARS = 140;
-function makeArtifact(text: string): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.length <= ARTIFACT_MAX_CHARS) return trimmed;
-  return `${trimmed.slice(0, ARTIFACT_MAX_CHARS - 1).trimEnd()}…`;
-}
 
 /**
  * Internal state shape for the inspirations list. We track three bits the
@@ -120,32 +82,20 @@ interface InspirationListEntry {
   timestamp: string;
   /** Last error message, if `status === "error"`. */
   errorMessage?: string;
-  /**
-   * Server-side `kind` carried over for rows fetched from GET /inspirations.
-   * Optimistic entries leave this `undefined`; the meta-row label still
-   * surfaces the in-flight `"saving"` / `"save failed"` chip in that case.
-   */
-  serverKind?: string | null;
 }
 
 function entryToCardData(entry: InspirationListEntry): InspirationCardData {
-  const clusterTopic = entry.cluster ? CLUSTER_TOPICS[entry.cluster] : null;
-  // Surface the saving / error state as the kind tag so the user has an
-  // immediate visual cue without us inventing new chrome. The prototype
-  // already uppercases `kind` in the meta row. For server-fetched rows
-  // (`status === "saved"` and no in-flight tempId) we fall back to the
-  // server's own `kind` metadata when present.
-  let kind: string | null = null;
-  if (entry.status === "saving") kind = "saving";
-  else if (entry.status === "error") kind = "save failed";
-  else if (entry.serverKind) kind = entry.serverKind;
+  // Product UI no longer exposes backend inspiration kind or cluster labels.
+  // Keep only transient save status as a user-useful state cue in the meta row.
+  let statusLabel: string | null = null;
+  if (entry.status === "saving") statusLabel = "saving";
+  else if (entry.status === "error") statusLabel = "save failed";
   return {
     id: entry.id,
     text: entry.text || null,
     links: entry.links.length > 0 ? entry.links : null,
     timestamp: entry.timestamp,
-    kind,
-    clusterTopic,
+    kind: statusLabel,
   };
 }
 
@@ -193,7 +143,6 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
     cluster: row.cluster,
     createdAt: row.createdAt,
     timestamp: formatTimestamp(row.createdAt),
-    serverKind: row.kind ?? null,
   };
 }
 
@@ -285,12 +234,10 @@ export function HomeViewToggle({
 }
 
 type InspirationDateFilter = "all" | "today" | "week" | "month";
-type InspirationSort = "newest" | "oldest" | "wow";
+type InspirationSort = "newest" | "oldest";
 
 interface InspirationDiscoveryFilters {
   search: string;
-  cluster: ClusterKind | "all" | "unclassified";
-  kind: string;
   status: InspirationStatus | "all";
   date: InspirationDateFilter;
   sort: InspirationSort;
@@ -298,8 +245,6 @@ interface InspirationDiscoveryFilters {
 
 const DEFAULT_INSPIRATION_FILTERS: InspirationDiscoveryFilters = {
   search: "",
-  cluster: "all",
-  kind: "all",
   status: "all",
   date: "all",
   sort: "newest",
@@ -325,21 +270,8 @@ function filterAndSortInspirationEntries(
 ): InspirationListEntry[] {
   const query = filters.search.trim().toLowerCase();
   const filtered = entries.filter((entry) => {
-    const clusterTopic = entry.cluster ? CLUSTER_TOPICS[entry.cluster] : "";
-    const haystack = [entry.text, entry.serverKind ?? "", clusterTopic]
-      .join(" ")
-      .toLowerCase();
+    const haystack = entry.text.toLowerCase();
     if (query && !haystack.includes(query)) return false;
-    if (filters.cluster !== "all") {
-      if (filters.cluster === "unclassified") {
-        if (entry.cluster !== null) return false;
-      } else if (entry.cluster !== filters.cluster) {
-        return false;
-      }
-    }
-    if (filters.kind !== "all" && (entry.serverKind ?? "unknown") !== filters.kind) {
-      return false;
-    }
     if (filters.status !== "all" && entry.status !== filters.status) return false;
     return entryMatchesDateFilter(entry, filters.date);
   });
@@ -347,15 +279,6 @@ function filterAndSortInspirationEntries(
   return [...filtered].sort((a, b) => {
     if (filters.sort === "oldest") {
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    }
-    if (filters.sort === "wow") {
-      // The current GET /inspirations response does not expose a dedicated
-      // client-side sort key beyond timestamps for every saved row. Keep the
-      // affordance frontend-only by ranking classified/saved rows first, then
-      // newest within that group.
-      const aRank = (a.cluster ? 1 : 0) + (a.status === "saved" ? 1 : 0);
-      const bRank = (b.cluster ? 1 : 0) + (b.status === "saved" ? 1 : 0);
-      if (aRank !== bRank) return bRank - aRank;
     }
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
@@ -365,7 +288,6 @@ interface InspirationDiscoveryPanelProps {
   entries: InspirationListEntry[];
   filteredEntries: InspirationListEntry[];
   filters: InspirationDiscoveryFilters;
-  kindOptions: string[];
   onFiltersChange: (filters: InspirationDiscoveryFilters) => void;
   onSelectInspiration: (id: string) => void;
 }
@@ -374,7 +296,6 @@ function InspirationDiscoveryPanel({
   entries,
   filteredEntries,
   filters,
-  kindOptions,
   onFiltersChange,
   onSelectInspiration,
 }: InspirationDiscoveryPanelProps): JSX.Element {
@@ -406,49 +327,11 @@ function InspirationDiscoveryPanel({
             aria-label="Search inspirations"
             type="search"
             value={filters.search}
-            placeholder="Search text, kind, or cluster…"
+            placeholder="Search your inspiration archive…"
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               updateFilter("search", event.target.value)
             }
           />
-        </label>
-        <label>
-          <span>Cluster</span>
-          <select
-            aria-label="Filter by cluster"
-            value={filters.cluster}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-              updateFilter(
-                "cluster",
-                event.target.value as InspirationDiscoveryFilters["cluster"],
-              )
-            }
-          >
-            <option value="all">All clusters</option>
-            {CLUSTER_ORDER.map((cluster) => (
-              <option value={cluster} key={cluster}>
-                {cluster}
-              </option>
-            ))}
-            <option value="unclassified">Unclassified</option>
-          </select>
-        </label>
-        <label>
-          <span>Kind</span>
-          <select
-            aria-label="Filter by kind"
-            value={filters.kind}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-              updateFilter("kind", event.target.value)
-            }
-          >
-            <option value="all">All kinds</option>
-            {kindOptions.map((kind) => (
-              <option value={kind} key={kind}>
-                {kind}
-              </option>
-            ))}
-          </select>
         </label>
         <label>
           <span>Status</span>
@@ -500,7 +383,6 @@ function InspirationDiscoveryPanel({
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
-            <option value="wow">Most signal</option>
           </select>
         </label>
       </div>
@@ -508,7 +390,7 @@ function InspirationDiscoveryPanel({
       {filteredEntries.length === 0 ? (
         <div className="inspiration-results-empty" role="status">
           <strong>No inspirations match those filters.</strong>
-          <span>Try a broader search, a different cluster, or clear the filters.</span>
+          <span>Try a broader search, a wider date range, or clear the filters.</span>
         </div>
       ) : (
         <div className="inspiration-results-grid" aria-label={resultLabel}>
@@ -520,16 +402,10 @@ function InspirationDiscoveryPanel({
               onClick={() => onSelectInspiration(entry.id)}
             >
               <span className="inspiration-result-meta">
-                {entry.serverKind ?? entry.status}
-                {entry.cluster ? ` · ${entry.cluster}` : " · unclassified"}
+                {entry.status === "saved" ? "saved" : entry.status}
                 {` · ${entry.timestamp}`}
               </span>
               <span className="inspiration-result-text">{entry.text}</span>
-              {entry.cluster ? (
-                <span className="inspiration-result-topic">
-                  {CLUSTER_TOPICS[entry.cluster]}
-                </span>
-              ) : null}
             </button>
           ))}
         </div>
@@ -823,24 +699,7 @@ export function HomePage(): JSX.Element {
     setSelectedId(id);
   }, []);
 
-  /**
-   * Cluster tile click → drill into the most recent inspiration in
-   * that cluster. The history sidebar opens with the detail view
-   * mounted on the freshest match — the same affordance as clicking
-   * the row in the history list, just reached via the home grid.
-   *
-   * `entries` is stored newest-first, so the first match is also the
-   * most recent. Falls through if no entry has that cluster (which
-   * would only happen if the user just deleted the last one).
-   */
-  const handleSelectCluster = useCallback(
-    (card: HomeCardData) => {
-      const target = entries.find((e) => e.cluster === card.kind);
-      if (!target) return;
-      setSelectedId(target.id);
-    },
-    [entries],
-  );
+
 
   const handleBackFromDetail = useCallback(() => {
     setSelectedId(null);
@@ -879,10 +738,6 @@ export function HomePage(): JSX.Element {
       links: selectedEntry.links,
       attachments: selectedEntry.attachments,
       timestamp: selectedEntry.timestamp,
-      kind: selectedEntry.serverKind ?? null,
-      clusterTopic: selectedEntry.cluster
-        ? CLUSTER_TOPICS[selectedEntry.cluster]
-        : null,
     };
   }, [selectedEntry]);
 
@@ -905,15 +760,7 @@ export function HomePage(): JSX.Element {
     return [...filteredEntries].reverse().map(entryToCardData);
   }, [filteredEntries]);
 
-  const kindOptions = useMemo(() => {
-    return Array.from(
-      new Set(
-        entries
-          .map((entry) => entry.serverKind)
-          .filter((kind): kind is string => Boolean(kind)),
-      ),
-    ).sort((a, b) => a.localeCompare(b));
-  }, [entries]);
+
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -926,48 +773,7 @@ export function HomePage(): JSX.Element {
     ));
   }, [cardItems, handleSelectInspiration]);
 
-  /**
-   * Cluster grid derived from the user's own saves. Entries that haven't
-   * been classified yet (`cluster === null`) don't get a tile — the
-   * classifier worker fills the column in asynchronously and the grid
-   * picks them up on the next render.
-   *
-   * `entries` is stored newest-first, so the *first* entry encountered in
-   * a cluster bucket is also the most recent — exactly the excerpt we
-   * want as the tile's artifact.
-   */
-  const homeCards = useMemo<HomeCardData[]>(() => {
-    const buckets = new Map<
-      ClusterKind,
-      { count: number; latestText: string | null }
-    >();
-    for (const entry of entries) {
-      if (!entry.cluster) continue;
-      const current = buckets.get(entry.cluster);
-      if (current) {
-        current.count += 1;
-        if (!current.latestText && entry.text) current.latestText = entry.text;
-      } else {
-        buckets.set(entry.cluster, {
-          count: 1,
-          latestText: entry.text || null,
-        });
-      }
-    }
-    return CLUSTER_ORDER.flatMap((kind) => {
-      const bucket = buckets.get(kind);
-      if (!bucket) return [];
-      return [
-        {
-          kind,
-          count: bucket.count,
-          topic: CLUSTER_TOPICS[kind],
-          artifact: bucket.latestText ? makeArtifact(bucket.latestText) : null,
-          awake: true,
-        },
-      ];
-    });
-  }, [entries]);
+
 
   const handleWowHeaderCapture = useCallback(() => {
     const next = nextHomeCaptureHandoffState(autoFocusCaptureRequest);
@@ -1063,14 +869,13 @@ export function HomePage(): JSX.Element {
     ) : (
       <InspirationsBoard
         inspirations={filteredCardItems}
-        homeCards={homeCards}
+        homeCards={[]}
         totalInspirations={entries.length}
         loading={initialLoading}
         onOptimisticAdd={handleOptimisticAdd}
         onPersisted={handlePersisted}
         onPersistError={handlePersistError}
         onSelectInspiration={handleSelectInspiration}
-        onSelectCluster={handleSelectCluster}
         beforeGridContent={
           <>
             {viewSwitcher}
@@ -1078,7 +883,6 @@ export function HomePage(): JSX.Element {
               entries={entries}
               filteredEntries={filteredEntries}
               filters={inspirationFilters}
-              kindOptions={kindOptions}
               onFiltersChange={setInspirationFilters}
               onSelectInspiration={handleSelectInspiration}
             />

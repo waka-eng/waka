@@ -6,7 +6,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InspirationsBoard } from "../src/components/InspirationsBoard";
-import { fetchInspirations, fetchWowMoments } from "../src/lib/api";
+import {
+  fetchInspirations,
+  fetchReflections,
+  fetchWowMoments,
+} from "../src/lib/api";
 import type { ApiInspiration, ApiWowMoment } from "../src/lib/api";
 import {
   HomePage,
@@ -35,6 +39,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     fetchInspirations: vi.fn(async () => []),
+    fetchReflections: vi.fn(async () => []),
     fetchWowMoments: vi.fn(async () => []),
   };
 });
@@ -132,6 +137,7 @@ function setApiFixtures({
   wowMoments?: ApiWowMoment[];
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
+  vi.mocked(fetchReflections).mockResolvedValue([]);
   vi.mocked(fetchWowMoments).mockResolvedValue(wowMoments);
 }
 
@@ -175,15 +181,6 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   )?.set;
   setter?.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
-function setSelectValue(select: HTMLSelectElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(
-    HTMLSelectElement.prototype,
-    "value",
-  )?.set;
-  setter?.call(select, value);
-  select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 describe("HomePage view model", () => {
@@ -236,7 +233,7 @@ describe("HomePage view model", () => {
     expect(container.querySelector(".grid.home-grid")).not.toBeNull();
   });
 
-  it("filters Inspiration First results by text and cluster with clear counts and empty states", async () => {
+  it("renders Inspiration First as a simple list without cluster or kind controls/cards", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -254,6 +251,12 @@ describe("HomePage view model", () => {
       ".inspiration-discovery-panel",
     );
     expect(panel?.textContent).toContain("3 of 3 inspirations");
+    expect(container.querySelector(".inspiration-results-grid")).not.toBeNull();
+    expect(container.querySelectorAll(".inspiration-result-card")).toHaveLength(3);
+    expect(container.querySelector('select[aria-label="Filter by cluster"]')).toBeNull();
+    expect(container.querySelector('select[aria-label="Filter by kind"]')).toBeNull();
+    expect(container.querySelectorAll(".grid.home-grid .wm-card")).toHaveLength(0);
+
     const search = container.querySelector<HTMLInputElement>(
       'input[aria-label="Search inspirations"]',
     );
@@ -268,17 +271,67 @@ describe("HomePage view model", () => {
     expect(searchedPanel?.textContent).toContain("1 of 3 inspirations");
     expect(searchedPanel?.textContent).toContain("Synthetic memory note");
     expect(searchedPanel?.textContent).not.toContain("Architecture essay");
+  });
 
-    const clusterSelect = container.querySelector<HTMLSelectElement>(
-      'select[aria-label="Filter by cluster"]',
-    );
+  it("does not render backend kind or cluster metadata in Inspiration First history or detail", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const inspirationButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(
+        ".home-view-switcher button",
+      ),
+    ).find((button) => button.textContent === "Inspiration First");
     await act(async () => {
-      setSelectValue(clusterSelect!, "bridge");
+      inspirationButton?.click();
     });
-    expect(
-      container.querySelector<HTMLElement>(".inspiration-discovery-panel")
-        ?.textContent,
-    ).toContain("No inspirations match those filters");
+    await flushReactWork();
+
+    await act(async () => {
+      container.querySelector<HTMLElement>("#metaCount")?.click();
+    });
+    await flushReactWork();
+
+    const historyPanel = container.querySelector<HTMLElement>(".history-overlay");
+    expect(historyPanel?.classList.contains("visible")).toBe(true);
+    expect(historyPanel?.querySelectorAll(".history-item")).toHaveLength(3);
+    expect(historyPanel?.querySelector(".history-item-cluster")).toBeNull();
+
+    const historyMetaText = Array.from(
+      historyPanel?.querySelectorAll<HTMLElement>(".history-item-meta") ?? [],
+    ).map((node) => node.textContent ?? "");
+    expect(historyMetaText.some((text) => /\b(NOTE|QUOTE|IMAGE)\b/.test(text))).toBe(false);
+    expect(historyPanel?.textContent).not.toContain(
+      "architecture essays and jazz history",
+    );
+    expect(historyPanel?.textContent).not.toContain(
+      "synthetic memory: tool or crutch",
+    );
+
+    const bridgeCard = Array.from(
+      historyPanel?.querySelectorAll<HTMLElement>(".history-item") ?? [],
+    ).find((card) =>
+      card.textContent?.includes("Architecture essay about bridge rhythms"),
+    );
+    expect(bridgeCard).not.toBeUndefined();
+
+    await act(async () => {
+      bridgeCard?.click();
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    const detail = container.querySelector<HTMLElement>(".detail-view");
+    expect(detail?.textContent).toContain(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail?.querySelector(".detail-meta")?.textContent).not.toContain(
+      "architecture essays and jazz history",
+    );
+    expect(detail?.querySelector(".detail-meta")?.textContent).not.toContain(
+      "note",
+    );
+    expect(vi.mocked(fetchReflections)).toHaveBeenCalledWith("insp-1");
   });
 
   it("clicking the Wow header Capture button switches to Inspiration First and focuses capture", async () => {

@@ -69,14 +69,8 @@ export interface InspirationDetailData {
   attachments?: ApiAttachment[] | null;
   /** Pre-formatted timestamp string for the meta row. */
   timestamp: string;
-  /** Optional kind / category copy for the meta row. */
+  /** Optional transient save status copy retained for compatibility. */
   kind?: string | null;
-  /**
-   * Optional cluster topic (e.g. "architecture essays and jazz history")
-   * — preferred over `kind` in the meta row when present, since the AI
-   * cluster carries more semantic information than the manual kind tag.
-   */
-  clusterTopic?: string | null;
 }
 
 export interface InspirationDetailProps {
@@ -391,10 +385,7 @@ export function InspirationDetail({
           </div>
         ) : null}
 
-        <div className="detail-meta">
-          {inspiration.timestamp} ·{" "}
-          {inspiration.clusterTopic ?? inspiration.kind ?? "uncategorized"}
-        </div>
+        <div className="detail-meta">{inspiration.timestamp}</div>
 
         {/* Reflections panel — loading / error / empty / list */}
         {state.status === "loading" ? (
