@@ -1,205 +1,262 @@
 /**
- * SQS enqueue helper for the classifier queue (Sub-AC 10.2).
+ * Neutral scheduler/worker for durable background classification work.
  *
- * The Hono `POST /inspirations` handler calls `enqueueClassification(id)`
- * after the inspiration row is durable in Neon. The message is consumed by
- * the SST-managed worker bound in `sst.config.ts`:
- *
- *   const classifierQueue = new sst.aws.Queue("ClassifierQueue");
- *   classifierQueue.subscribe({
- *     handler: "packages/api/src/queue/classifier.handler",
- *     ...
- *   });
- *
- * Wire-format
- * -----------
- * The message body is JSON `{ inspirationId: string }`. The worker is the only
- * consumer — keep this contract local to the two endpoints (this file and
- * `queue/classifier.ts`) so a future schema change is a single PR rather than
- * a search-and-replace across handlers.
- *
- * Why a thin wrapper instead of inlining the SDK call?
- *   - One place to resolve the queue URL (env var → SST link fallback), so a
- *     misconfigured stack fails loudly here rather than silently no-oping in
- *     each call site.
- *   - One place to pin the message schema. If we add a `userId` or a
- *     `correlationId` later, every enqueue path picks it up automatically.
- *   - Singleton SQSClient — initialising the SDK is cheap but not free, and
- *     this helper is on the hot path of every save.
- *
- * Failure semantics
- * -----------------
- * The handler in `routes/inspirations.ts` wraps this call in a try/catch and
- * does NOT fail the HTTP request if enqueue throws. Rationale:
- *   - The Drizzle insert has already succeeded — the user's data is durable.
- *   - The classifier is *eventual*. The `inspirations_cluster_null_idx`
- *     partial index lets a future backfill scan rescue any rows whose enqueue
- *     was lost.
- *   - Returning 5xx after a successful save would tempt the client into
- *     retrying, producing duplicate rows.
- *
- * The catch site logs the error with the inspiration id so a missed enqueue is
- * visible in Lambda logs without taking down the save flow.
+ * The public name remains `enqueueClassification` for the existing route call
+ * site, but this module no longer talks to a broker. It writes a Postgres
+ * `background_jobs` row and schedules an in-process drain tick. If the process
+ * exits before the tick runs, the pending DB row is still inspectable and can
+ * be drained manually or by future cron via `drainBackgroundJobs`.
  */
 
-import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
+import { eq, sql } from "drizzle-orm";
 
+import {
+  type BackgroundJob,
+  backgroundJobs,
+  type BackgroundJobStatus,
+  type ProcessInspirationPayload,
+} from "../db/index.js";
 import { runClassificationJob } from "../queue/classifier.js";
+import { getDb } from "./db.js";
 
-// ---------------------------------------------------------------------------
-// Configuration resolution
-// ---------------------------------------------------------------------------
+const DEFAULT_MAX_ATTEMPTS = 3;
+const MAX_ERROR_LENGTH = 1_000;
+const STALE_LOCK_SECONDS = 15 * 60;
 
-/**
- * Resolve the classifier queue's SQS URL.
- *
- * Resolution order mirrors `attachments.ts:getBucketName`:
- *
- *   1. `CLASSIFIER_QUEUE_URL` — set explicitly by `sst.config.ts` from
- *      `classifierQueue.url`. This is the contract: production code paths go
- *      through this env var so the dependency on the SST link is visible in
- *      the stack file and not buried in a runtime probe.
- *
- *   2. `SST_RESOURCE_ClassifierQueue` — auto-injected by SST when the Function
- *      is `link`ed to the Queue. JSON-encoded `{ url, ... }`. Kept as a
- *      fallback so the handler still works if a future engineer wires the
- *      link without re-exporting the env var.
- *
- * Throws if neither is present so a misconfigured deployment fails loudly the
- * first time someone tries to save an inspiration, rather than silently
- * dropping classification jobs.
- */
-function getQueueUrl(): string {
-  const fromEnv = process.env.CLASSIFIER_QUEUE_URL;
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
+let drainScheduled = false;
 
-  const sstLink = process.env.SST_RESOURCE_ClassifierQueue;
-  if (sstLink) {
+export interface EnqueueClassificationResult {
+  jobId: string;
+}
+
+export interface DrainBackgroundJobsOptions {
+  limit?: number;
+  now?: Date;
+  processor?: (job: BackgroundJob) => Promise<void>;
+}
+
+export interface DrainBackgroundJobsResult {
+  claimed: number;
+  succeeded: number;
+  retried: number;
+  failed: number;
+}
+
+export async function enqueueClassification(
+  inspirationId: string,
+  userId: string,
+): Promise<EnqueueClassificationResult> {
+  const db = getDb();
+  const idempotencyKey = `process_inspiration:${inspirationId}`;
+  const [job] = await db
+    .insert(backgroundJobs)
+    .values({
+      userId,
+      type: "process_inspiration",
+      payload: { inspirationId },
+      maxAttempts: DEFAULT_MAX_ATTEMPTS,
+      idempotencyKey,
+    })
+    .onConflictDoUpdate({
+      target: backgroundJobs.idempotencyKey,
+      targetWhere: sql`${backgroundJobs.idempotencyKey} IS NOT NULL`,
+      set: {
+        updatedAt: new Date(),
+      },
+    })
+    .returning({ id: backgroundJobs.id });
+
+  if (shouldAutoDrainBackgroundJobs()) {
+    scheduleBackgroundJobDrain();
+  }
+  return { jobId: job!.id };
+}
+
+function shouldAutoDrainBackgroundJobs(): boolean {
+  if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "1") return true;
+  if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "0") return false;
+  return process.env.NODE_ENV !== "test";
+}
+
+export function scheduleBackgroundJobDrain(): void {
+  if (drainScheduled) return;
+  drainScheduled = true;
+  setImmediate(() => {
+    drainScheduled = false;
+    drainBackgroundJobs().catch((err) => {
+      console.error("[background-jobs] drain tick failed", {
+        error: sanitizeError(err),
+      });
+    });
+  });
+}
+
+export async function drainBackgroundJobs(
+  options: DrainBackgroundJobsOptions = {},
+): Promise<DrainBackgroundJobsResult> {
+  const limit = Math.max(0, Math.min(Math.trunc(options.limit ?? 10), 100));
+  const result: DrainBackgroundJobsResult = {
+    claimed: 0,
+    succeeded: 0,
+    retried: 0,
+    failed: 0,
+  };
+
+  for (let processed = 0; processed < limit; processed += 1) {
+    const job = await claimNextBackgroundJob(options.now);
+    if (!job) return result;
+    result.claimed += 1;
+
     try {
-      const parsed = JSON.parse(sstLink) as { url?: string };
-      if (parsed?.url) return parsed.url;
-    } catch {
-      // fall through to error
+      await (options.processor ?? processBackgroundJob)(job);
+      await markJobSucceeded(job.id);
+      result.succeeded += 1;
+    } catch (err) {
+      const exhausted = job.attempts >= job.maxAttempts;
+      await markJobFailedOrPending(job, err, exhausted, options.now ?? new Date());
+      if (exhausted) result.failed += 1;
+      else result.retried += 1;
     }
   }
 
-  throw new Error(
-    "Classifier queue URL is not configured (CLASSIFIER_QUEUE_URL / SST_RESOURCE_ClassifierQueue).",
-  );
+  return result;
 }
 
-/**
- * Resolve the SQS region.
- *
- * Same shape as `attachments.ts:getRegion` — explicit env > Lambda runtime env
- * > us-west-2 default. SQS is regional; this MUST equal the region the queue
- * was provisioned in or the SDK request signs against the wrong endpoint.
- */
-function getRegion(): string {
-  return (
-    process.env.CLASSIFIER_QUEUE_REGION ||
-    process.env.AWS_REGION ||
-    process.env.AWS_DEFAULT_REGION ||
-    "us-west-2"
-  );
+export async function runBackgroundJobWorker(
+  options: DrainBackgroundJobsOptions = {},
+): Promise<DrainBackgroundJobsResult> {
+  return drainBackgroundJobs(options);
 }
 
-// ---------------------------------------------------------------------------
-// Client (lazy singleton)
-// ---------------------------------------------------------------------------
-
-/**
- * Lazily-instantiated SQS client. One per process; reused across warm Lambda
- * invocations. Credentials come from the standard provider chain — on Lambda
- * this is the execution role attached by SST when the Function is `link`ed to
- * the queue (which grants `sqs:SendMessage` on this queue's ARN).
- */
-let cachedSqs: SQSClient | null = null;
-function getSqs(): SQSClient {
-  if (cachedSqs) return cachedSqs;
-  cachedSqs = new SQSClient({ region: getRegion() });
-  return cachedSqs;
-}
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Message body shape published to the classifier queue. Kept narrow on
- * purpose — the worker re-reads the row from Postgres by id, so we never have
- * to worry about the message and the row drifting out of sync.
- */
-export interface ClassificationJob {
-  inspirationId: string;
-}
-
-/**
- * Whether SQS is reachable in this runtime. SST production wires
- * `CLASSIFIER_QUEUE_URL` (or the `SST_RESOURCE_ClassifierQueue` JSON link)
- * into the Lambda environment; local dev (`pnpm dev` without SST) ships
- * neither. We branch on this so the same `enqueueClassification` call site
- * works in both worlds.
- */
-function isQueueConfigured(): boolean {
-  if (
-    typeof process.env.CLASSIFIER_QUEUE_URL === "string" &&
-    process.env.CLASSIFIER_QUEUE_URL.length > 0
-  ) {
-    return true;
+async function processBackgroundJob(job: BackgroundJob): Promise<void> {
+  if (job.type !== "process_inspiration") {
+    throw new Error(`Unsupported background job type: ${job.type}`);
   }
-  return Boolean(process.env.SST_RESOURCE_ClassifierQueue);
-}
 
-/**
- * Publish a classification job for `inspirationId`.
- *
- * Production (SST) path: send the job to the SQS queue. Returns the
- * SQS-issued `MessageId` on success (handy for log correlation).
- *
- * Local dev path (no SQS configured): run the classifier inline as a
- * fire-and-forget background task. The HTTP request returns immediately —
- * `setImmediate` defers the work to the next tick of the Node event loop —
- * so the user's POST is unblocked, exactly like the SQS path. Errors are
- * swallowed and logged (the row keeps `cluster=NULL` and is reachable for
- * a future backfill via `inspirations_cluster_null_idx`); we never throw
- * out of the dev fallback because the caller treats every enqueue failure
- * as non-fatal anyway.
- *
- * Throws on configuration / transport / IAM failures in the SQS path —
- * callers wrap in try/catch and decide whether to surface to the user. See
- * `routes/inspirations.ts` POST handler for the canonical "log and continue"
- * pattern.
- */
-export async function enqueueClassification(
-  inspirationId: string,
-): Promise<string | undefined> {
-  if (!isQueueConfigured()) {
-    // Local-dev fallback: run inline, fire-and-forget. `setImmediate`
-    // ensures we yield back to the HTTP handler before classification
-    // starts — the POST response goes out, then the worker logic runs.
-    setImmediate(() => {
-      runClassificationJob(inspirationId).catch((err) => {
-        console.error("[queue] inline classification failed", {
-          inspirationId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
+  const payload = parseProcessInspirationPayload(job.payload);
+  if (!payload) {
+    // Permanent poison payload: do not throw/retry. Mark as succeeded so the
+    // queue does not loop forever; the sanitized warning stays in logs.
+    console.warn("[background-jobs] dropping malformed process_inspiration job", {
+      jobId: job.id,
     });
-    return undefined;
+    return;
   }
 
-  const queueUrl = getQueueUrl();
-  const sqs = getSqs();
+  await runClassificationJob(payload.inspirationId, { userId: job.userId });
+}
 
-  const result = await sqs.send(
-    new SendMessageCommand({
-      QueueUrl: queueUrl,
-      // JSON.stringify is deterministic for a single-key object — no need for
-      // a stable-stringify helper here.
-      MessageBody: JSON.stringify({ inspirationId } satisfies ClassificationJob),
-    }),
-  );
+function parseProcessInspirationPayload(
+  payload: unknown,
+): ProcessInspirationPayload | null {
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    typeof (payload as { inspirationId?: unknown }).inspirationId !== "string"
+  ) {
+    return null;
+  }
+  const inspirationId = (payload as { inspirationId: string }).inspirationId.trim();
+  if (!inspirationId) return null;
+  return { inspirationId };
+}
 
-  return result.MessageId;
+async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob | null> {
+  const db = getDb();
+  const nowIso = now.toISOString();
+  const rows = await db.execute(sql<BackgroundJob>`
+    UPDATE background_jobs AS job
+    SET
+      status = 'running'::background_job_status,
+      attempts = job.attempts + 1,
+      locked_at = ${nowIso}::timestamptz,
+      updated_at = ${nowIso}::timestamptz
+    WHERE job.id = (
+      SELECT candidate.id
+      FROM background_jobs AS candidate
+      WHERE
+        (
+          candidate.status = 'pending'::background_job_status
+          AND candidate.run_after <= ${nowIso}::timestamptz
+        )
+        OR (
+          candidate.status = 'running'::background_job_status
+          AND candidate.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+        )
+      ORDER BY candidate.run_after ASC, candidate.created_at ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING
+      job.id,
+      job.user_id AS "userId",
+      job.type,
+      job.payload,
+      job.status,
+      job.attempts,
+      job.max_attempts AS "maxAttempts",
+      job.run_after AS "runAfter",
+      job.locked_at AS "lockedAt",
+      job.last_error AS "lastError",
+      job.idempotency_key AS "idempotencyKey",
+      job.created_at AS "createdAt",
+      job.updated_at AS "updatedAt"
+  `);
+
+  const result = rows as unknown as BackgroundJob[];
+  return result[0] ?? null;
+}
+
+async function markJobSucceeded(jobId: string): Promise<void> {
+  const now = new Date();
+  await getDb()
+    .update(backgroundJobs)
+    .set({
+      status: "succeeded",
+      lockedAt: null,
+      lastError: null,
+      updatedAt: now,
+    })
+    .where(eq(backgroundJobs.id, jobId));
+}
+
+async function markJobFailedOrPending(
+  job: BackgroundJob,
+  err: unknown,
+  exhausted: boolean,
+  now: Date,
+): Promise<void> {
+  const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
+  await getDb()
+    .update(backgroundJobs)
+    .set({
+      status,
+      lockedAt: exhausted ? coerceNullableDate(job.lockedAt) : null,
+      runAfter: exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now),
+      lastError: sanitizeError(err),
+      updatedAt: now,
+    })
+    .where(eq(backgroundJobs.id, job.id));
+}
+
+function coerceDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function coerceNullableDate(value: Date | string | null): Date | null {
+  if (value === null) return null;
+  return coerceDate(value);
+}
+
+function calculateBackoffRunAfter(attempts: number, now: Date): Date {
+  const delaySeconds = Math.min(15 * 60, 30 * 2 ** Math.max(0, attempts - 1));
+  return new Date(now.getTime() + delaySeconds * 1_000);
+}
+
+function sanitizeError(err: unknown): string {
+  const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  return raw
+    .replace(/(api[_-]?key|token|secret|password)=([^\s&]+)/gi, "$1=[redacted]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .slice(0, MAX_ERROR_LENGTH);
 }

@@ -20,7 +20,7 @@
  * ------
  * The standalone `src/queue/classifier.smoke.ts` script proved out a
  * `globalThis.fetch` swap that scopes the override to Gemini's hostname and
- * delegates everything else (Neon's HTTPS, the SQS SDK, etc.) to the real
+ * delegates everything else (Neon's HTTPS, DB-backed job drains, etc.) to the real
  * transport. We lift that pattern into a reusable harness with three
  * additions the smoke script didn't need:
  *
@@ -97,7 +97,8 @@ import type { Cluster } from "../../src/db/index.js";
  *                      Tests that schema-drift is treated as permanent skip,
  *                      not retried.
  *   - `http`         : Non-2xx response. Drives the "transport-level error
- *                      → throw → SQS retry via batchItemFailures" path.
+ *                      → throw → background job retry / compatibility
+ *                      batchItemFailures" path.
  *                      Both 4xx and 5xx are valid here.
  *   - `nonJson`      : 200 OK with a body that fails `Response.json()`.
  *                      Drives the "Google changed the API contract" loud-fail

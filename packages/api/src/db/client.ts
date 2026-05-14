@@ -3,7 +3,7 @@
  *
  * Builds a single Drizzle instance bound to the existing Neon Postgres
  * database, using the postgres-js driver. Every server-side caller (Hono
- * handlers, SST Queue worker, vitest suite) imports `db` from this module —
+ * handlers, DB-backed background worker, vitest suite) imports `db` from this module —
  * we never instantiate the client inline. Centralizing the connection here
  * gives us:
  *

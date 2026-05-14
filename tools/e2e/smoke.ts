@@ -241,11 +241,10 @@ const CLUSTER_TOPIC_COPY: Record<AllowedCluster, string> = {
 };
 
 /**
- * Total wall-clock budget we give the queue worker to classify the new
- * inspiration. Sized for `sst dev`'s Live Lambda harness (cold-start of
- * the worker container + Gemini round-trip + Postgres UPDATE), plus a
- * generous margin for transient Gemini 5xx → SQS visibility-timeout
- * redelivery. If this expires the smoke fails with a precise message
+ * Total wall-clock budget we give the DB-backed worker to classify the new
+ * inspiration. Sized for the in-process drain tick + Gemini round-trip +
+ * Postgres UPDATE, plus a generous margin for transient Gemini backoff/retry.
+ * If this expires the smoke fails with a precise message
  * pointing at the classifier loop rather than a generic UI timeout.
  */
 const CLASSIFICATION_TIMEOUT_MS = 90_000;
@@ -272,7 +271,7 @@ function isAllowedCluster(value: unknown): value is AllowedCluster {
  *
  * Why poll the API and not the SPA?  The SPA does not auto-refresh the
  * cluster chip after mount (see HomePage's coordinator note: "Cluster
- * updates from the SQS classifier are not yet streamed to the SPA — the
+ * updates from the background classifier are not yet streamed to the SPA — the
  * user only sees the new cluster on a full reload."). Polling the API
  * directly is the canonical observability hook for the async loop closing
  * — once we see a label here, we reload the page in the browser to verify
@@ -646,10 +645,9 @@ async function run(): Promise<void> {
      * Sub-AC 14.3.3 / seed exit condition `classification_loop_closed`.
      *
      * The POST /api/inspirations response we asserted in step 4 had
-     * `cluster: null` — the API enqueues classification on the SST
-     * Queue and returns immediately (`async_correctness`). The SST
-     * `Queue.subscribe` worker (`packages/api/src/queue/classifier.ts`)
-     * picks the message up, calls Gemini's `:generateContent` REST
+     * `cluster: null` — the API enqueues a durable `background_jobs`
+     * classification row and returns immediately (`async_correctness`). The
+     * DB-backed worker picks the job up, calls Gemini's `:generateContent` REST
      * endpoint, and writes one of the six allowed cluster labels back
      * onto the row alongside `classified_at`.
      *
@@ -658,7 +656,7 @@ async function run(): Promise<void> {
      *   (a) Polling `GET /api/inspirations` with the same JWT until the
      *       row's `cluster` enum lands and `classified_at` is set.
      *       This is the *server-side* observability hook — it proves
-     *       the queue → Gemini → Postgres path actually closed for
+     *       the background_jobs → Gemini → Postgres path actually closed for
      *       this particular inspiration.
      *
      *   (b) Reloading the SPA and asserting `.history-item-cluster`
