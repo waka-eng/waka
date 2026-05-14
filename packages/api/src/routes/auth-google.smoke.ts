@@ -5,14 +5,14 @@
  *   pnpm --filter @waka/api exec tsx src/routes/auth-google.smoke.ts
  *
  * What we cover (without actually round-tripping to Google):
- *   1. GET /auth/google/login redirects to accounts.google.com with the
+ *   1. GET /api/auth/google/login redirects to accounts.google.com with the
  *      expected query params (response_type=code, scope, state,
  *      code_challenge_method=S256) and sets both temp cookies.
- *   2. GET /auth/google/callback rejects requests with no `code`+`state`
+ *   2. GET /api/auth/google/callback rejects requests with no `code`+`state`
  *      with a redirect back to /login?error=missing_code.
- *   3. GET /auth/google/callback rejects state mismatch (cookie value
+ *   3. GET /api/auth/google/callback rejects state mismatch (cookie value
  *      different from query value) with /login?error=state_mismatch.
- *   4. GET /auth/google/callback rejects requests where the temp cookies
+ *   4. GET /api/auth/google/callback rejects requests where the temp cookies
  *      are absent (simulating cookie expiry / cross-origin tampering).
  *
  * The token-exchange + ID-token-decode path is exercised in vitest with
@@ -61,15 +61,15 @@ function readSetCookie(res: Response, name: string): string | null {
 
 async function main() {
   // -------------------------------------------------------------------------
-  // 1. /auth/google/login → 302 to Google with PKCE + state.
+  // 1. /api/auth/google/login → 302 to Google with PKCE + state.
   // -------------------------------------------------------------------------
-  const login = await app.request("/auth/google/login", {
+  const login = await app.request("/api/auth/google/login", {
     method: "GET",
     redirect: "manual",
   } as RequestInit);
   assert(
     login.status === 302,
-    `Expected 302 from /auth/google/login, got ${login.status}: ${await login.text()}`,
+    `Expected 302 from /api/auth/google/login, got ${login.status}: ${await login.text()}`,
   );
 
   const location = login.headers.get("location") ?? "";
@@ -101,9 +101,9 @@ async function main() {
   console.log("[1/4] /login redirect + PKCE + state cookies ✅");
 
   // -------------------------------------------------------------------------
-  // 2. /auth/google/callback with no code/state → /login?error=missing_code
+  // 2. /api/auth/google/callback with no code/state → /login?error=missing_code
   // -------------------------------------------------------------------------
-  const noCode = await app.request("/auth/google/callback", {
+  const noCode = await app.request("/api/auth/google/callback", {
     method: "GET",
     redirect: "manual",
   } as RequestInit);
@@ -116,10 +116,10 @@ async function main() {
   console.log("[2/4] callback without code → missing_code ✅");
 
   // -------------------------------------------------------------------------
-  // 3. /auth/google/callback with state cookie absent → state_expired
+  // 3. /api/auth/google/callback with state cookie absent → state_expired
   // -------------------------------------------------------------------------
   const noCookie = await app.request(
-    "/auth/google/callback?code=abc&state=xyz",
+    "/api/auth/google/callback?code=abc&state=xyz",
     { method: "GET", redirect: "manual" } as RequestInit,
   );
   assert(noCookie.status === 302, `Expected 302, got ${noCookie.status}`);
@@ -131,10 +131,10 @@ async function main() {
   console.log("[3/4] callback without cookies → state_expired ✅");
 
   // -------------------------------------------------------------------------
-  // 4. /auth/google/callback with state cookie that does NOT match → mismatch
+  // 4. /api/auth/google/callback with state cookie that does NOT match → mismatch
   // -------------------------------------------------------------------------
   const mismatch = await app.request(
-    "/auth/google/callback?code=abc&state=fromUrl",
+    "/api/auth/google/callback?code=abc&state=fromUrl",
     {
       method: "GET",
       redirect: "manual",

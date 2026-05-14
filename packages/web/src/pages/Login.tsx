@@ -23,7 +23,7 @@ import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Location } from "react-router-dom";
 
-import { ApiError } from "../lib/api";
+import { ApiError, apiPath } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
@@ -47,19 +47,16 @@ const DEFAULT_REDIRECT = "/";
  * Build the absolute (or relative) URL the browser should navigate to in
  * order to start the Google OAuth flow.
  *
- * - In `sst dev` / `pnpm dev` the SPA is served by Vite, which proxies
- *   `/auth/*` to the local Hono Function. A relative URL works there.
- * - In production the StaticSite (CloudFront) and the API (Lambda Function
- *   URL) live on different origins. SST inlines the API URL as
- *   `VITE_API_URL` at build time so we can prefix it.
+ * - In same-origin mode this navigates to `/api/auth/google/login`.
+ * - When `VITE_API_URL` points at a different API origin, `apiPath` prefixes
+ *   that origin while still targeting the API's `/api` route namespace.
  *
  * Centralised here (rather than inlined in JSX) so the same helper can be
  * unit-tested and reused if a future page adds a "Re-authenticate with
  * Google" affordance.
  */
 function googleLoginUrl(): string {
-  const base = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
-  return `${base}/auth/google/login`;
+  return apiPath("/auth/google/login");
 }
 
 /**
@@ -446,7 +443,7 @@ export function LoginForm(): JSX.Element {
 // ---------------------------------------------------------------------------
 
 /**
- * Full-page navigation to the API's `/auth/google/login` endpoint, which
+ * Full-page navigation to the API's `/api/auth/google/login` endpoint, which
  * sets the OAuth `state`/PKCE cookies and 302-redirects to Google's consent
  * screen. We deliberately use `window.location.assign` (not `fetch`) because:
  *

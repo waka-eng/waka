@@ -151,7 +151,7 @@ export interface CleanupTracker {
  *     it("creates an inspiration", async () => {
  *       const alice = await createUserFixture(getDb());
  *       cleanup.trackUser(alice.user.id);
- *       // ... drive `app.request("/inspirations", ...)` etc.
+ *       // ... drive `app.request("/api/inspirations", ...)` etc.
  *     });
  */
 export function createCleanupTracker(): CleanupTracker {

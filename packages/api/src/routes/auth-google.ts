@@ -1,16 +1,16 @@
 /**
  * Google OAuth 2.0 routes (Authorization Code flow + PKCE).
  *
- * Mounted under /auth/google by the parent auth router. Two endpoints:
+ * Mounted under /api/auth/google by the parent auth router. Two endpoints:
  *
- *   GET /auth/google/login
+ *   GET /api/auth/google/login
  *     Generates a one-time `state` value and a PKCE code_verifier/challenge
  *     pair, persists them as short-lived httpOnly cookies, and 302-redirects
  *     the visitor to Google's consent screen. The state cookie defends
  *     against CSRF/login-fixation; the PKCE pair defends against an attacker
  *     who steals the authorization `code` from the redirect URL.
  *
- *   GET /auth/google/callback
+ *   GET /api/auth/google/callback
  *     Receives `?code=...&state=...` from Google, validates the state cookie
  *     matches, exchanges the code for tokens (passing the PKCE verifier),
  *     decodes and validates the ID token's iss/aud/exp claims, upserts the
@@ -223,7 +223,7 @@ function decodeIdToken(idToken: string): GoogleIdTokenClaims {
 export const googleAuthRoutes = new Hono();
 
 /**
- * GET /auth/google/login
+ * GET /api/auth/google/login
  *
  * Side effects:
  *   1. Mints a fresh `state` and a PKCE verifier+challenge pair.
@@ -232,7 +232,7 @@ export const googleAuthRoutes = new Hono();
  *   3. 302-redirects to Google's authorization endpoint.
  *
  * Caller flow:
- *   <a href="${API_URL}/auth/google/login">Continue with Google</a>
+ *   <a href="${API_URL}/api/auth/google/login">Continue with Google</a>
  */
 googleAuthRoutes.get("/login", async (c) => {
   const state = randomToken(32);
@@ -265,7 +265,7 @@ googleAuthRoutes.get("/login", async (c) => {
 });
 
 /**
- * GET /auth/google/callback
+ * GET /api/auth/google/callback
  *
  * Validates the `state` cookie, exchanges the `code` for tokens, verifies
  * the ID token's claims, upserts the user row, sets the session cookie,
@@ -539,7 +539,7 @@ googleAuthRoutes.get("/callback", async (c) => {
     email: userRow.email,
   });
 
-  // Persist the matching server-side session row so `/auth/logout` can
+  // Persist the matching server-side session row so `/api/auth/logout` can
   // revoke this exact session. Mirrors the post-signup write in
   // routes/auth.ts — both paths must produce the same row shape so the
   // middleware can't tell OAuth and password sessions apart.

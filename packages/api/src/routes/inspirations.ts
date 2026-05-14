@@ -2,10 +2,10 @@
  * Inspirations routes.
  *
  * Exposes:
- *   - POST /inspirations : create a new inspiration scoped to the
+ *   - POST /api/inspirations : create a new inspiration scoped to the
  *                          authenticated caller, validate the payload, persist
  *                          it via Drizzle, and return the row immediately.
- *   - GET  /inspirations : list inspirations owned by the authenticated
+ *   - GET  /api/inspirations : list inspirations owned by the authenticated
  *                          caller, newest first. Strictly scoped by
  *                          `user_id = c.get("user").id` — no other user's
  *                          rows can leak through this endpoint.
@@ -103,7 +103,7 @@ export const inspirationsRoutes = new Hono<AuthEnv>();
 inspirationsRoutes.use("*", requireAuth);
 
 /**
- * POST /inspirations
+ * POST /api/inspirations
  *
  * Flow:
  *   1. Parse + validate JSON body. Return 400 on schema failure.
@@ -206,7 +206,7 @@ inspirationsRoutes.post("/", async (c) => {
 });
 
 /**
- * GET /inspirations
+ * GET /api/inspirations
  *
  * List inspirations owned by the authenticated user, newest first.
  *
@@ -232,7 +232,7 @@ inspirationsRoutes.post("/", async (c) => {
  */
 
 /**
- * Hard upper bound on rows returned by GET /inspirations. Sized large enough
+ * Hard upper bound on rows returned by GET /api/inspirations. Sized large enough
  * that no realistic single-user history hits it during the local-dev scope,
  * but small enough that the response stays under 1 MB even if every row is
  * close to the 8 KB text cap. Tunable in a future paginated revision.
@@ -271,7 +271,7 @@ inspirationsRoutes.get("/", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// PATCH /inspirations/:id
+// PATCH /api/inspirations/:id
 // ---------------------------------------------------------------------------
 
 /**
@@ -344,7 +344,7 @@ const updateInspirationSchema = z
 export type UpdateInspirationInput = z.infer<typeof updateInspirationSchema>;
 
 /**
- * PATCH /inspirations/:id
+ * PATCH /api/inspirations/:id
  *
  * Partially update one of the caller's inspirations. Unspecified fields are
  * left as-is; `null` explicitly clears `kind` / `category`. `text` cannot be
@@ -460,7 +460,7 @@ inspirationsRoutes.patch("/:id", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /inspirations/:id/reflections
+// POST /api/inspirations/:id/reflections
 // ---------------------------------------------------------------------------
 
 /**
@@ -503,7 +503,7 @@ const createReflectionSchema = z.object({
 export type CreateReflectionInput = z.infer<typeof createReflectionSchema>;
 
 /**
- * POST /inspirations/:id/reflections
+ * POST /api/inspirations/:id/reflections
  *
  * Create a reflection attached to one of the caller's inspirations.
  *
@@ -619,11 +619,11 @@ inspirationsRoutes.post("/:id/reflections", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /inspirations/:id/reflections
+// GET /api/inspirations/:id/reflections
 // ---------------------------------------------------------------------------
 
 /**
- * GET /inspirations/:id/reflections
+ * GET /api/inspirations/:id/reflections
  *
  * List all reflections attached to one of the caller's inspirations, ordered
  * by `created_at` ascending so the client renders the thread in the same
@@ -710,11 +710,11 @@ inspirationsRoutes.get("/:id/reflections", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /inspirations/:id
+// DELETE /api/inspirations/:id
 // ---------------------------------------------------------------------------
 
 /**
- * Lazy S3 client used by DELETE /inspirations/:id to remove the underlying
+ * Lazy S3 client used by DELETE /api/inspirations/:id to remove the underlying
  * S3 objects backing any image / file attachments before the row goes away.
  *
  * The DB foreign keys already cascade `inspirations → attachments` and
@@ -758,7 +758,7 @@ function getDeleteBucketName(): string | null {
 }
 
 /**
- * DELETE /inspirations/:id
+ * DELETE /api/inspirations/:id
  *
  * Permanently removes one of the caller's inspirations along with every
  * attachment row and reflection row attached to it.
@@ -834,7 +834,7 @@ inspirationsRoutes.delete("/:id", async (c) => {
   if (ownershipRow.length === 0) {
     // 404 (not 403) so the endpoint cannot be used to enumerate uuids that
     // exist for other tenants. Same convention as POST /:id/reflections and
-    // POST /attachments.
+    // POST /api/attachments.
     return c.json({ error: "Inspiration not found" }, 404);
   }
 

@@ -1,5 +1,5 @@
 /**
- * Standalone smoke test for POST /auth/signup.
+ * Standalone smoke test for POST /api/auth/signup.
  *
  * Run with:
  *   pnpm --filter @waka/api exec tsx src/routes/auth.smoke.ts
@@ -28,7 +28,7 @@ async function main() {
   const password = "supersecret123";
 
   // 1. Happy path: 201 + token + cookie + DB row.
-  const ok = await app.request("/auth/signup", {
+  const ok = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, name: "Smoke" }),
@@ -55,7 +55,7 @@ async function main() {
   console.log("[1/4] happy path ✅");
 
   // 2. Duplicate: 409.
-  const dup = await app.request("/auth/signup", {
+  const dup = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -66,7 +66,7 @@ async function main() {
   console.log("[2/4] duplicate email ✅");
 
   // 3. Bad email: 400.
-  const badEmail = await app.request("/auth/signup", {
+  const badEmail = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: "not-an-email", password }),
@@ -77,7 +77,7 @@ async function main() {
   console.log("[3/4] invalid email ✅");
 
   // 4. Short password: 400.
-  const shortPw = await app.request("/auth/signup", {
+  const shortPw = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email: `x${email}`, password: "short" }),

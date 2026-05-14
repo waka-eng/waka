@@ -27,8 +27,8 @@
  *   1. The cross-tenant assertions are easy to lose during a future test
  *      refactor that moves them around for unrelated reasons.
  *   2. Some surface area is not covered at all in the inline tests
- *      (POST /inspirations/:id/reflections cross-tenant, POST
- *      /attachments cross-tenant via inspirationId, DELETE side-effects
+ *      (POST /api/inspirations/:id/reflections cross-tenant, POST
+ *      /api/attachments cross-tenant via inspirationId, DELETE side-effects
  *      MUST NOT touch the victim's S3 attachments, …).
  *   3. A single file dedicated to ownership invariants makes the
  *      "tenant-isolation regression" review story a one-line `git blame`
@@ -36,18 +36,18 @@
  *
  * What "read", "update", "delete" map to in this codebase
  * -------------------------------------------------------
- * The inspirations namespace exposes no dedicated `GET /inspirations/:id`
+ * The inspirations namespace exposes no dedicated `GET /api/inspirations/:id`
  * endpoint today — the canonical "fetch by id" path is via
- * `GET /inspirations/:id/reflections`, plus filtering the
- * `GET /inspirations` list response by id. The ownership matrix below is
+ * `GET /api/inspirations/:id/reflections`, plus filtering the
+ * `GET /api/inspirations` list response by id. The ownership matrix below is
  * therefore:
  *
- *   READ:   GET  /inspirations                                — list scope
- *           GET  /inspirations/:id/reflections                 — by-id read
- *   UPDATE: PATCH /inspirations/:id                            — partial mutate
- *           POST  /inspirations/:id/reflections                — child write
- *           POST  /attachments  (with inspirationId)           — child write
- *   DELETE: DELETE /inspirations/:id                           — destructive
+ *   READ:   GET  /api/inspirations                                — list scope
+ *           GET  /api/inspirations/:id/reflections                 — by-id read
+ *   UPDATE: PATCH /api/inspirations/:id                            — partial mutate
+ *           POST  /api/inspirations/:id/reflections                — child write
+ *           POST  /api/attachments  (with inspirationId)           — child write
+ *   DELETE: DELETE /api/inspirations/:id                           — destructive
  *
  * Each row in the matrix gets a paired test:
  *   - cross-tenant attempt returns 404 (or, for the attachments S3-key
@@ -216,12 +216,12 @@ async function seedAliceInspiration(
 }> {
   const created = await aliceClient.json<CreateInspirationResponse>(
     "POST",
-    "/inspirations",
+    "/api/inspirations",
     payload,
   );
   expect(
     created.status,
-    `seed POST /inspirations failed: ${JSON.stringify(created.body)}`,
+    `seed POST /api/inspirations failed: ${JSON.stringify(created.body)}`,
   ).toBe(201);
   const row = created.body.inspiration;
   return {
@@ -234,12 +234,12 @@ async function seedAliceInspiration(
 }
 
 // ---------------------------------------------------------------------------
-// READ ownership — GET /inspirations and GET /inspirations/:id/reflections
+// READ ownership — GET /api/inspirations and GET /api/inspirations/:id/reflections
 // ---------------------------------------------------------------------------
 //
 // The "read" surface for an inspiration is two endpoints:
-//   1. GET /inspirations             → list scoped to the caller.
-//   2. GET /inspirations/:id/reflections
+//   1. GET /api/inspirations             → list scoped to the caller.
+//   2. GET /api/inspirations/:id/reflections
 //                                    → by-id read of the row's reflections;
 //                                      404 cross-tenant.
 //
@@ -248,7 +248,7 @@ async function seedAliceInspiration(
 //   - bob's GET /:id/reflections on alice's id is 404 (not 403, not 200, not
 //     a leak of the empty array).
 
-describe("READ ownership — GET /inspirations (list scope)", () => {
+describe("READ ownership — GET /api/inspirations (list scope)", () => {
   it("bob's list never contains any of alice's inspirations, even when alice has multiple", async () => {
     const { alice, bob, aliceClient, bobClient } = await setupTwoTenants();
 
@@ -272,7 +272,7 @@ describe("READ ownership — GET /inspirations (list scope)", () => {
     // Bob has zero inspirations. The contract is a 200 with an empty array
     // — never a 404, never a "system" leak of alice's rows.
     const bobList = await bobClient.get<ListInspirationsResponse>(
-      "/inspirations",
+      "/api/inspirations",
     );
     expect(bobList.status).toBe(200);
     expect(Array.isArray(bobList.body.inspirations)).toBe(true);
@@ -299,7 +299,7 @@ describe("READ ownership — GET /inspirations (list scope)", () => {
     const { alice, bobClient, aliceClient } = await setupTwoTenants();
 
     const bobBefore = await bobClient.get<ListInspirationsResponse>(
-      "/inspirations",
+      "/api/inspirations",
     );
     expect(bobBefore.status).toBe(200);
     expect(bobBefore.body.inspirations).toHaveLength(0);
@@ -307,7 +307,7 @@ describe("READ ownership — GET /inspirations (list scope)", () => {
     await seedAliceInspiration(aliceClient, { text: "post-fetch by alice" });
 
     const bobAfter = await bobClient.get<ListInspirationsResponse>(
-      "/inspirations",
+      "/api/inspirations",
     );
     expect(bobAfter.status).toBe(200);
     expect(bobAfter.body.inspirations).toHaveLength(0);
@@ -317,7 +317,7 @@ describe("READ ownership — GET /inspirations (list scope)", () => {
   }, 20_000);
 });
 
-describe("READ ownership — GET /inspirations/:id/reflections", () => {
+describe("READ ownership — GET /api/inspirations/:id/reflections", () => {
   it("returns 404 when bob tries to read reflections under alice's inspiration id", async () => {
     const { aliceClient, bobClient } = await setupTwoTenants();
 
@@ -332,14 +332,14 @@ describe("READ ownership — GET /inspirations/:id/reflections", () => {
 
     const refCreate = await aliceClient.json<CreateReflectionResponse>(
       "POST",
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
       { question: "what does alice know that bob shouldn't?" },
     );
     expect(refCreate.status).toBe(201);
 
     // Bob attempts the read.
     const bobAttempt = await bobClient.get<ErrorBody>(
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
     );
 
     // 404 (not 403, not 200) — the route's contract says cross-tenant ids
@@ -350,7 +350,7 @@ describe("READ ownership — GET /inspirations/:id/reflections", () => {
     // Sanity: alice can still read her reflection (the 404 must come from
     // an ownership predicate, not from a corrupted row).
     const aliceRead = await aliceClient.get<ListReflectionsResponse>(
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
     );
     expect(aliceRead.status).toBe(200);
     expect(aliceRead.body.reflections).toHaveLength(1);
@@ -371,7 +371,7 @@ describe("READ ownership — GET /inspirations/:id/reflections", () => {
     });
 
     const bobAttempt = await bobClient.get<ErrorBody>(
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
     );
     expect(bobAttempt.status).toBe(404);
     expect(bobAttempt.body.error).toMatch(/not found/i);
@@ -379,22 +379,22 @@ describe("READ ownership — GET /inspirations/:id/reflections", () => {
 });
 
 // ---------------------------------------------------------------------------
-// UPDATE ownership — PATCH /inspirations/:id, POST child writes
+// UPDATE ownership — PATCH /api/inspirations/:id, POST child writes
 // ---------------------------------------------------------------------------
 //
 // Three side channels through which a malicious caller could try to "update"
 // (in the broadest sense — mutate state attached to) another tenant's row:
 //
-//   1. Direct PATCH /inspirations/:id           — change text/kind/category.
-//   2. POST /inspirations/:id/reflections       — graft a new reflection
+//   1. Direct PATCH /api/inspirations/:id           — change text/kind/category.
+//   2. POST /api/inspirations/:id/reflections       — graft a new reflection
 //                                                 onto someone else's row.
-//   3. POST /attachments (with inspirationId)   — graft a new attachment
+//   3. POST /api/attachments (with inspirationId)   — graft a new attachment
 //                                                 onto someone else's row.
 //
 // Each must 404 (or 403 for the attachments S3 key namespace check) and
 // each must leave Postgres in the exact state alice wrote.
 
-describe("UPDATE ownership — PATCH /inspirations/:id", () => {
+describe("UPDATE ownership — PATCH /api/inspirations/:id", () => {
   it("returns 404 when bob attempts to PATCH alice's row, and alice's row is unchanged", async () => {
     const { alice, aliceClient, bobClient } = await setupTwoTenants();
 
@@ -410,7 +410,7 @@ describe("UPDATE ownership — PATCH /inspirations/:id", () => {
     // alice's row never sees Postgres traffic.
     const bobAttempt = await bobClient.json<ErrorBody>(
       "PATCH",
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
       {
         text: "pwned by bob",
         kind: "image",
@@ -460,7 +460,7 @@ describe("UPDATE ownership — PATCH /inspirations/:id", () => {
 
     const bobAttempt = await bobClient.json<ErrorBody>(
       "PATCH",
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
       { kind: "note" }, // valid, minimal patch
     );
 
@@ -480,7 +480,7 @@ describe("UPDATE ownership — PATCH /inspirations/:id", () => {
     });
     const fresh404 = await bobClient.json<ErrorBody>(
       "PATCH",
-      `/inspirations/${fresh.id}`,
+      `/api/inspirations/${fresh.id}`,
       { text: "pwned-fresh" },
     );
     expect(fresh404.status).toBe(404);
@@ -492,7 +492,7 @@ describe("UPDATE ownership — PATCH /inspirations/:id", () => {
     });
     const stale404 = await bobClient.json<ErrorBody>(
       "PATCH",
-      `/inspirations/${stale.id}`,
+      `/api/inspirations/${stale.id}`,
       { text: "pwned-stale" },
     );
     expect(stale404.status).toBe(404);
@@ -513,7 +513,7 @@ describe("UPDATE ownership — PATCH /inspirations/:id", () => {
   }, 20_000);
 });
 
-describe("UPDATE ownership — POST /inspirations/:id/reflections", () => {
+describe("UPDATE ownership — POST /api/inspirations/:id/reflections", () => {
   it("returns 404 when bob tries to attach a reflection to alice's inspiration; no row is inserted", async () => {
     // The reflections POST is a "child write" — it doesn't mutate the
     // inspiration row itself, but it creates a row pointing at it. Same
@@ -526,7 +526,7 @@ describe("UPDATE ownership — POST /inspirations/:id/reflections", () => {
 
     const bobAttempt = await bobClient.json<ErrorBody>(
       "POST",
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
       { question: "bob's covert reflection" },
     );
 
@@ -546,7 +546,7 @@ describe("UPDATE ownership — POST /inspirations/:id/reflections", () => {
     // from the ownership predicate, not from a corrupted row).
     const aliceWrite = await aliceClient.json<CreateReflectionResponse>(
       "POST",
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
       { question: "alice's legitimate reflection" },
     );
     expect(aliceWrite.status).toBe(201);
@@ -566,7 +566,7 @@ describe("UPDATE ownership — POST /inspirations/:id/reflections", () => {
 
     const bobAttempt = await bobClient.json<ErrorBody>(
       "POST",
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
       {
         question: "bob's covert reflection",
         userId: "00000000-0000-0000-0000-000000000000",
@@ -584,7 +584,7 @@ describe("UPDATE ownership — POST /inspirations/:id/reflections", () => {
   });
 });
 
-describe("UPDATE ownership — POST /attachments (cross-tenant inspirationId)", () => {
+describe("UPDATE ownership — POST /api/attachments (cross-tenant inspirationId)", () => {
   it("returns 404 when bob tries to finalize a link attachment against alice's inspiration", async () => {
     // The attachments-finalize endpoint validates ownership of the
     // referenced inspiration before INSERTing the attachment row. This is
@@ -602,7 +602,7 @@ describe("UPDATE ownership — POST /attachments (cross-tenant inspirationId)", 
 
     const bobAttempt = await bobClient.json<ErrorBody>(
       "POST",
-      "/attachments",
+      "/api/attachments",
       {
         type: "link",
         inspirationId: seeded.id,
@@ -638,7 +638,7 @@ describe("UPDATE ownership — POST /attachments (cross-tenant inspirationId)", 
 
     const bobAttempt = await bobClient.json<ErrorBody>(
       "POST",
-      "/attachments",
+      "/api/attachments",
       {
         type: "image",
         inspirationId: seeded.id,
@@ -668,7 +668,7 @@ describe("UPDATE ownership — POST /attachments (cross-tenant inspirationId)", 
 });
 
 // ---------------------------------------------------------------------------
-// DELETE ownership — DELETE /inspirations/:id
+// DELETE ownership — DELETE /api/inspirations/:id
 // ---------------------------------------------------------------------------
 //
 // The most dangerous side channel — a successful cross-tenant DELETE would
@@ -679,7 +679,7 @@ describe("UPDATE ownership — POST /attachments (cross-tenant inspirationId)", 
 //     (no covert cascade fired under the 404);
 //   - alice's GET list still returns the row.
 
-describe("DELETE ownership — DELETE /inspirations/:id", () => {
+describe("DELETE ownership — DELETE /api/inspirations/:id", () => {
   it("returns 404 when bob attempts to delete alice's inspiration; alice's row + children survive", async () => {
     const { alice, aliceClient, bobClient } = await setupTwoTenants();
 
@@ -693,14 +693,14 @@ describe("DELETE ownership — DELETE /inspirations/:id", () => {
     // inspiration row itself.)
     const reflectionCreate = await aliceClient.json<CreateReflectionResponse>(
       "POST",
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
       { question: "should survive bob's delete attempt" },
     );
     expect(reflectionCreate.status).toBe(201);
     const reflectionId = reflectionCreate.body.reflection.id;
 
     const bobAttempt = await bobClient.delete<ErrorBody>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
 
     expect(bobAttempt.status).toBe(404);
@@ -728,7 +728,7 @@ describe("DELETE ownership — DELETE /inspirations/:id", () => {
 
     // 3. Alice's GET list still shows the row at the top.
     const aliceList = await aliceClient.get<ListInspirationsResponse>(
-      "/inspirations",
+      "/api/inspirations",
     );
     expect(aliceList.status).toBe(200);
     expect(aliceList.body.inspirations.some((r) => r.id === seeded.id)).toBe(
@@ -747,12 +747,12 @@ describe("DELETE ownership — DELETE /inspirations/:id", () => {
     });
 
     const first = await bobClient.delete<ErrorBody>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
     expect(first.status).toBe(404);
 
     const second = await bobClient.delete<ErrorBody>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
     expect(second.status).toBe(404);
 
@@ -781,19 +781,19 @@ describe("DELETE ownership — DELETE /inspirations/:id", () => {
 
     // Bob → 404
     const bob404 = await bobClient.delete<ErrorBody>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
     expect(bob404.status).toBe(404);
 
     // Charlie → 404
     const charlie404 = await charlieClient.delete<ErrorBody>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
     expect(charlie404.status).toBe(404);
 
     // Charlie also cannot READ alice's reflections endpoint.
     const charlieRead = await charlieClient.get<ErrorBody>(
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
     );
     expect(charlieRead.status).toBe(404);
 
@@ -828,12 +828,12 @@ describe("cross-cutting — cross-tenant 404 is indistinguishable from never-exi
 
     const crossTenant = await bobClient.json<ErrorBody>(
       "PATCH",
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
       { text: "pwned" },
     );
     const unknown = await bobClient.json<ErrorBody>(
       "PATCH",
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
       { text: "ghost" },
     );
 
@@ -852,10 +852,10 @@ describe("cross-cutting — cross-tenant 404 is indistinguishable from never-exi
     });
 
     const crossTenant = await bobClient.delete<ErrorBody>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
     const unknown = await bobClient.delete<ErrorBody>(
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
     );
 
     expect(crossTenant.status).toBe(404);
@@ -871,10 +871,10 @@ describe("cross-cutting — cross-tenant 404 is indistinguishable from never-exi
     });
 
     const crossTenant = await bobClient.get<ErrorBody>(
-      `/inspirations/${seeded.id}/reflections`,
+      `/api/inspirations/${seeded.id}/reflections`,
     );
     const unknown = await bobClient.get<ErrorBody>(
-      "/inspirations/00000000-0000-0000-0000-000000000000/reflections",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000/reflections",
     );
 
     expect(crossTenant.status).toBe(404);
@@ -905,21 +905,21 @@ describe("sanity — alice's own access path is unaffected by bob's failed attem
     await Promise.all([
       bobClient.json<ErrorBody>(
         "PATCH",
-        `/inspirations/${seeded.id}`,
+        `/api/inspirations/${seeded.id}`,
         { text: "pwned" },
       ),
       bobClient.json<ErrorBody>(
         "POST",
-        `/inspirations/${seeded.id}/reflections`,
+        `/api/inspirations/${seeded.id}/reflections`,
         { question: "covert" },
       ),
-      bobClient.delete<ErrorBody>(`/inspirations/${seeded.id}`),
+      bobClient.delete<ErrorBody>(`/api/inspirations/${seeded.id}`),
     ]);
 
     // Alice's PATCH still works.
     const alicePatch = await aliceClient.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
       { text: "alice's edit, post-attack" },
     );
     expect(alicePatch.status).toBe(200);
@@ -930,7 +930,7 @@ describe("sanity — alice's own access path is unaffected by bob's failed attem
 
     // Alice's DELETE still works.
     const aliceDelete = await aliceClient.delete<{ id: string }>(
-      `/inspirations/${seeded.id}`,
+      `/api/inspirations/${seeded.id}`,
     );
     expect(aliceDelete.status).toBe(200);
     expect(aliceDelete.body.id).toBe(seeded.id);

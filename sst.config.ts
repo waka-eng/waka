@@ -147,7 +147,7 @@ export default $config({
      *
      * `exposeHeaders: ["ETag"]` lets the SPA read the upload's ETag back
      * from the PUT response, which is useful if we ever want to fingerprint
-     * the object client-side before calling `POST /attachments`.
+     * the object client-side before calling `POST /api/attachments`.
      */
     const attachmentsBucket = new sst.aws.Bucket("Attachments", {
       cors: {
@@ -194,7 +194,7 @@ export default $config({
     const classifierDLQ = new sst.aws.Queue("ClassifierDLQ");
 
     /**
-     * Classifier queue. POST /inspirations enqueues here; the consumer in
+     * Classifier queue. POST /api/inspirations enqueues here; the consumer in
      * packages/api/src/queue/classifier.ts calls Gemini and updates the
      * inspirations row. Async by design so the save endpoint stays sub-200ms.
      *
@@ -246,7 +246,7 @@ export default $config({
      * was fine, the role just had no permission.
      *
      * Linking `classifierQueue` similarly grants `sqs:SendMessage` so
-     * `POST /inspirations` can enqueue a classification job. SST's link
+     * `POST /api/inspirations` can enqueue a classification job. SST's link
      * mechanism handles two things in one call:
      *   1. Attaches an IAM policy granting `sqs:SendMessage` (and the related
      *      attribute reads) on the queue's ARN to the Lambda's role. This is

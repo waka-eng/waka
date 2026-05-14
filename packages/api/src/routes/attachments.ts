@@ -5,7 +5,7 @@
  *   - POST /attachments/presign : mint an S3 presigned PUT URL the browser
  *                                 can use to upload an attachment payload
  *                                 directly, bypassing the API for the bytes.
- *   - POST /attachments         : finalize an upload (or record a link) by
+ *   - POST /api/attachments         : finalize an upload (or record a link) by
  *                                 inserting an `attachments` row tied to an
  *                                 inspiration owned by the caller. Called by
  *                                 the SPA *after* the browser's S3 PUT
@@ -265,7 +265,7 @@ attachmentsRoutes.use("*", requireAuth);
  * a dangling DB row pointing at a missing object.
  */
 /**
- * POST /attachments — finalize an upload (or record a link).
+ * POST /api/attachments — finalize an upload (or record a link).
  *
  * Called by the SPA after the browser's S3 PUT returns 200 (for image / file)
  * or directly when the user pastes a URL (for link). Inserts the row into
@@ -594,7 +594,7 @@ attachmentsRoutes.post("/presign", async (c) => {
   ).toISOString();
 
   // 3. Return the URL + the canonical key the client must echo back when it
-  //    later POSTs to /attachments to record the row.
+  //    later POSTs to /api/attachments to record the row.
   return c.json(
     {
       uploadUrl,

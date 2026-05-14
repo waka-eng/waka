@@ -19,7 +19,7 @@ constraints:
   - "Auth: SST OpenAuth with email+password and Google OAuth using AUTH_SECRET / AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET / JWT_SECRET from .env"
   - "Storage: SST Bucket (S3) accessed via presigned PUT URLs; do NOT proxy file bytes through API"
   - "LLM: Gemini via GEMINI_API_KEY from .env (gemini-2.0-flash or equivalent)"
-  - "Cluster classification: ASYNC only — POST /inspirations returns immediately; SST Queue worker runs Gemini classification and updates row"
+  - "Cluster classification: ASYNC only — POST /api/inspirations returns immediately; SST Queue worker runs Gemini classification and updates row"
   - "Frontend: Original 4282-line index.html MUST be decomposed into React components — no monolithic single-file shipped"
   - "Routing: React Router with /login route and / (authenticated) route; unauthenticated access to / redirects to /login"
   - "No mock SEED_INSPIRATIONS in production code path — users must be able to save real inspirations"
@@ -181,7 +181,7 @@ target_layout:
   - "drizzle/migrations/**                          # generated"
 
 risks_and_unknowns:
-  - "OpenAuth setup with Google requires authorized redirect URI to match sst dev URL — first run may need user to add http://localhost:<port>/auth/google/callback to Google Cloud Console"
+  - "OpenAuth setup with Google requires authorized redirect URI to match sst dev URL — first run may need user to add http://localhost:<port>/api/auth/google/callback to Google Cloud Console"
   - "Animations and SVG shape morphs in index.html are stateful with seeded RNG; React migration must preserve canvas/SVG lifecycle (use useRef + useEffect)"
   - "Neon serverless driver vs node-postgres: pick @neondatabase/serverless for Lambda cold-start friendliness"
   - "SST Queue worker bundling — ensure GEMINI_API_KEY is bound as a Resource link, not just env"

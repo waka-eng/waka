@@ -11,7 +11,7 @@
  * need a deterministic "stack is ready, you may now hit it" gate, otherwise
  * tests race the boot sequence and flake on cold starts. This script is that
  * gate: it owns the lifecycle of `sst dev`, parses the API URL out of its
- * stdout, polls both `apiUrl/health` and the Vite StaticSite, and only then
+ * stdout, polls both `apiUrl/api/health` and the Vite StaticSite, and only then
  * spawns the handoff command. When the handoff exits, this script tears
  * `sst dev` down and exits with the handoff's exit code.
  *
@@ -23,8 +23,8 @@
  *
  * Flags
  * -----
- *   --api-url <url>          skip stdout parsing; use this URL for /health
- *   --api-health-path <p>    default /health
+ *   --api-url <url>          skip stdout parsing; use this URL for /api/health
+ *   --api-health-path <p>    default /api/health
  *   --web-url <url>          default http://localhost:5173
  *   --no-boot                do NOT spawn `sst dev`; assume it's already up
  *                            (must pass --api-url with this)
@@ -41,7 +41,7 @@
  * Environment passed to the handoff
  * ---------------------------------
  *   WAKA_API_URL          e.g. https://xxx.lambda-url.us-west-2.on.aws
- *   WAKA_API_HEALTH_URL   e.g. https://xxx.lambda-url.../health
+ *   WAKA_API_HEALTH_URL   e.g. https://xxx.lambda-url.../api/health
  *   WAKA_WEB_URL          e.g. http://localhost:5173
  *
  * Design notes
@@ -78,7 +78,7 @@ interface ParsedArgs {
 
 function parseArgs(argv: string[]): ParsedArgs {
   const args: ParsedArgs = {
-    apiHealthPath: "/health",
+    apiHealthPath: "/api/health",
     webUrl: "http://localhost:5173",
     noBoot: false,
     timeoutMs: 180_000,
@@ -158,7 +158,7 @@ function printHelp(): void {
     "",
     "Flags:",
     "  --api-url <url>          Skip parsing; use this API URL",
-    "  --api-health-path <p>    Path appended to the API URL for the health probe (default /health)",
+    "  --api-health-path <p>    Path appended to the API URL for the health probe (default /api/health)",
     "  --web-url <url>          StaticSite/Vite dev URL to probe (default http://localhost:5173)",
     "  --no-boot                Do NOT spawn `sst dev`; requires --api-url",
     "  --timeout-ms <n>         Total wait budget; default 180000",
@@ -206,7 +206,7 @@ interface PollOptions {
  *
  * "Any non-5xx" is intentionally permissive: we want to know the *process*
  * is up, not that the route is happy with our request. The Vite dev server,
- * for instance, returns 200 on `/`; the API's `/health` returns 200; if a
+ * for instance, returns 200 on `/`; the API's `/api/health` returns 200; if a
  * future probe URL returns 401 (because it requires auth), that still
  * proves the listener is alive and serving HTTP.
  */

@@ -3,7 +3,7 @@
  *
  * These tests focus on the tenant-bound read surface introduced by the WOW
  * moments foundation slice. In particular, a malformed join row must not let a
- * caller see another user's inspiration text through /wow-moments.
+ * caller see another user's inspiration text through /api/wow-moments.
  */
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -94,9 +94,9 @@ async function insertWowMomentForUser(
   return moment!;
 }
 
-describe("GET /wow-moments — list contract", () => {
+describe("GET /api/wow-moments — list contract", () => {
   it("requires authentication", async () => {
-    const res = await apiRequest("/wow-moments");
+    const res = await apiRequest("/api/wow-moments");
 
     expect(res.status).toBe(401);
   });
@@ -107,7 +107,7 @@ describe("GET /wow-moments — list contract", () => {
     cleanup.trackUser(alice.user.id);
 
     const res = await authedClient(alice).get<ListWowMomentsResponse>(
-      "/wow-moments",
+      "/api/wow-moments",
     );
 
     expect(res.status).toBe(200);
@@ -129,7 +129,7 @@ describe("GET /wow-moments — list contract", () => {
     }
 
     const res = await authedClient(alice).get<ListWowMomentsResponse>(
-      "/wow-moments",
+      "/api/wow-moments",
     );
 
     expect(res.status).toBe(200);
@@ -142,7 +142,7 @@ describe("GET /wow-moments — list contract", () => {
   });
 });
 
-describe("GET /wow-moments — ownership", () => {
+describe("GET /api/wow-moments — ownership", () => {
   it("does not leak cross-tenant related inspiration text through malformed join rows", async () => {
     const db = getDb();
     const alice = await createUserFixture(db);
@@ -204,7 +204,7 @@ describe("GET /wow-moments — ownership", () => {
     ).rejects.toThrow();
 
     const res = await authedClient(alice).get<ListWowMomentsResponse>(
-      "/wow-moments",
+      "/api/wow-moments",
     );
 
     expect(res.status).toBe(200);
@@ -269,9 +269,9 @@ function mockGeminiFetch(judgment: unknown) {
   });
 }
 
-describe("POST /wow-moments/generate — manual generation", () => {
+describe("POST /api/wow-moments/generate — manual generation", () => {
   it("requires authentication", async () => {
-    const res = await apiRequest("/wow-moments/generate", {
+    const res = await apiRequest("/api/wow-moments/generate", {
       method: "POST",
       body: { inspirationId: "00000000-0000-4000-8000-000000000001" },
     });
@@ -285,14 +285,14 @@ describe("POST /wow-moments/generate — manual generation", () => {
     cleanup.trackUser(alice.user.id);
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    const malformed = await authedClient(alice).request("/wow-moments/generate", {
+    const malformed = await authedClient(alice).request("/api/wow-moments/generate", {
       method: "POST",
       body: "not-json",
     });
     expect(malformed.status).toBe(400);
     expect(await malformed.json()).toEqual({ error: "Request body must be valid JSON" });
 
-    const invalid = await authedClient(alice).json("POST", "/wow-moments/generate", {
+    const invalid = await authedClient(alice).json("POST", "/api/wow-moments/generate", {
       inspirationId: "not-a-uuid",
       limit: 51,
       extra: true,
@@ -313,10 +313,10 @@ describe("POST /wow-moments/generate — manual generation", () => {
     });
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    const unknown = await authedClient(alice).json("POST", "/wow-moments/generate", {
+    const unknown = await authedClient(alice).json("POST", "/api/wow-moments/generate", {
       inspirationId: "00000000-0000-4000-8000-000000000001",
     });
-    const crossTenant = await authedClient(alice).json("POST", "/wow-moments/generate", {
+    const crossTenant = await authedClient(alice).json("POST", "/api/wow-moments/generate", {
       inspirationId: bobInspiration.id,
     });
 
@@ -335,7 +335,7 @@ describe("POST /wow-moments/generate — manual generation", () => {
     await insertEmbedding(alice.user.id, candidate.id, 0.5);
     mockGeminiFetch({ isWowMoment: false });
 
-    const res = await authedClient(alice).json("POST", "/wow-moments/generate", {
+    const res = await authedClient(alice).json("POST", "/api/wow-moments/generate", {
       inspirationId: trigger.id,
       limit: 5,
     });
@@ -370,11 +370,11 @@ describe("POST /wow-moments/generate — manual generation", () => {
       relatedInspirationIds: [candidate.id],
     });
 
-    const first = await authedClient(alice).json<any>("POST", "/wow-moments/generate", {
+    const first = await authedClient(alice).json<any>("POST", "/api/wow-moments/generate", {
       inspirationId: trigger.id,
       limit: 5,
     });
-    const second = await authedClient(alice).json<any>("POST", "/wow-moments/generate", {
+    const second = await authedClient(alice).json<any>("POST", "/api/wow-moments/generate", {
       inspirationId: trigger.id,
       limit: 5,
     });
@@ -407,7 +407,7 @@ describe("POST /wow-moments/generate — manual generation", () => {
       cleanup.trackUser(alice.user.id);
       const trigger = await createInspirationFixture(db, alice.user.id, { text: "Needs embedding" });
 
-      const res = await authedClient(alice).json("POST", "/wow-moments/generate", {
+      const res = await authedClient(alice).json("POST", "/api/wow-moments/generate", {
         inspirationId: trigger.id,
       });
 
@@ -434,7 +434,7 @@ describe("POST /wow-moments/generate — manual generation", () => {
     const app = new Hono();
     const fakeDb = getDb();
     app.route(
-      "/wow-moments",
+      "/api/wow-moments",
       createWowMomentsRoutes({
         getDatabase: () => fakeDb,
         authMiddleware: async (c, next) => {
@@ -459,7 +459,7 @@ describe("POST /wow-moments/generate — manual generation", () => {
       }),
     );
 
-    const res = await app.request("/wow-moments/generate", {
+    const res = await app.request("/api/wow-moments/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ inspirationId: "00000000-0000-4000-8000-000000000001" }),

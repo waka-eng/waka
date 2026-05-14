@@ -4,11 +4,9 @@
  * Two responsibilities worth calling out:
  *   1. `@vitejs/plugin-react` enables Fast Refresh + the automatic JSX
  *      runtime so we never have to import React in every component.
- *   2. The `/auth` and `/inspirations` paths are proxied to the local Hono
- *      Lambda during `pnpm dev` / `sst dev`. This lets the React app call
- *      same-origin URLs (e.g. `fetch("/auth/signup")`) without CORS or a
- *      separate API base URL — which is what the Lambda Function URL would
- *      give us in production.
+ *   2. The `/api` path is proxied to the local Hono Lambda during
+ *      `pnpm dev` / `sst dev`. This lets the React app call same-origin
+ *      URLs (e.g. `fetch("/api/auth/signup")`) without CORS.
  */
 
 import { defineConfig } from "vite";
@@ -24,11 +22,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/auth": { target: API_TARGET, changeOrigin: true, secure: false },
-      "/inspirations": { target: API_TARGET, changeOrigin: true, secure: false },
-      "/wow-moments": { target: API_TARGET, changeOrigin: true, secure: false },
-      "/attachments": { target: API_TARGET, changeOrigin: true, secure: false },
-      "/health": { target: API_TARGET, changeOrigin: true, secure: false },
+      "/api": { target: API_TARGET, changeOrigin: true, secure: false },
     },
   },
 });

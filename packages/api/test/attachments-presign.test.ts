@@ -212,7 +212,7 @@ interface ValidationErrorBody {
 
 describe("POST /attachments/presign — authorization", () => {
   it("returns 401 when no Authorization header is presented", async () => {
-    const res = await apiRequest("/attachments/presign", {
+    const res = await apiRequest("/api/attachments/presign", {
       method: "POST",
       body: { filename: "x.png", contentType: "image/png", size: 1024 },
     });
@@ -226,7 +226,7 @@ describe("POST /attachments/presign — authorization", () => {
   });
 
   it("returns 401 when the bearer token is malformed", async () => {
-    const res = await apiRequest("/attachments/presign", {
+    const res = await apiRequest("/api/attachments/presign", {
       method: "POST",
       headers: { Authorization: "Bearer not-a-real-jwt" },
       body: { filename: "x.png", contentType: "image/png", size: 1024 },
@@ -239,7 +239,7 @@ describe("POST /attachments/presign — authorization", () => {
   it("returns 401 when the session cookie is malformed", async () => {
     // Cookie path mirrors the bearer path — same middleware reads either.
     // A malformed cookie value MUST 401 just like a bad bearer token.
-    const res = await apiRequest("/attachments/presign", {
+    const res = await apiRequest("/api/attachments/presign", {
       method: "POST",
       headers: { Cookie: "waka_session=not-a-jwt" },
       body: { filename: "x.png", contentType: "image/png", size: 1024 },
@@ -258,7 +258,7 @@ describe("POST /attachments/presign — authorization", () => {
 
     const res = await client.json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "ok.png", contentType: "image/png", size: 2048 },
     );
 
@@ -292,7 +292,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
 
     const res = await client.json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "kitten.png", contentType: "image/png", size: 2048 },
     );
 
@@ -334,7 +334,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
 
     const res = await client.json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "doc.pdf", contentType: "application/pdf", size: 4096 },
     );
     expect(res.status).toBe(200);
@@ -380,7 +380,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
 
     const res = await client.json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "x.png", contentType: "image/png", size: 1024 },
     );
     expect(res.status).toBe(200);
@@ -405,12 +405,12 @@ describe("POST /attachments/presign — presigned URL generation", () => {
 
     const aliceRes = await authedClient(alice).json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "alice.png", contentType: "image/png", size: 1024 },
     );
     const bobRes = await authedClient(bob).json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "bob.png", contentType: "image/png", size: 1024 },
     );
     expect(aliceRes.status).toBe(200);
@@ -431,12 +431,12 @@ describe("POST /attachments/presign — presigned URL generation", () => {
     cleanup.trackUser(fixture.user.id);
     const c = authedClient(fixture);
 
-    const a = await c.json<PresignSuccessBody>("POST", "/attachments/presign", {
+    const a = await c.json<PresignSuccessBody>("POST", "/api/attachments/presign", {
       filename: "same.png",
       contentType: "image/png",
       size: 1024,
     });
-    const b = await c.json<PresignSuccessBody>("POST", "/attachments/presign", {
+    const b = await c.json<PresignSuccessBody>("POST", "/api/attachments/presign", {
       filename: "same.png",
       contentType: "image/png",
       size: 1024,
@@ -460,7 +460,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
     for (const tc of cases) {
       const res = await c.json<PresignSuccessBody>(
         "POST",
-        "/attachments/presign",
+        "/api/attachments/presign",
         { filename: tc.filename, contentType: tc.contentType, size: 1024 },
       );
       expect(res.status, `for ${tc.filename}`).toBe(200);
@@ -479,7 +479,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
 
     const res = await c.json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       {
         filename: "evil.../../etc/passwd",
         // The extension after the last "." is "../etc/passwd" → regex fail
@@ -513,7 +513,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
 
     const res = await c.json<{ error: string }>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "x.png", contentType: "image/png", size: 1024 },
     );
 
@@ -541,7 +541,7 @@ describe("POST /attachments/presign — presigned URL generation", () => {
     const c = authedClient(fixture);
 
     try {
-      const res = await c.json<unknown>("POST", "/attachments/presign", {
+      const res = await c.json<unknown>("POST", "/api/attachments/presign", {
         filename: "x.png",
         contentType: "image/png",
         size: 1024,
@@ -584,7 +584,7 @@ describe("POST /attachments/presign — content-type validation", () => {
   ): Promise<{ status: number; body: ValidationErrorBody | PresignSuccessBody }> {
     const res = await client.json<ValidationErrorBody | PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       {
         filename: extras.filename ?? "file.bin",
         contentType,
@@ -701,7 +701,7 @@ describe("POST /attachments/presign — content-type validation", () => {
 
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "x.png", contentType: 123, size: 1024 },
     );
     expect(res.status).toBe(400);
@@ -737,7 +737,7 @@ describe("POST /attachments/presign — body validation", () => {
 
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "x.png" },
     );
     expect(res.status).toBe(400);
@@ -756,7 +756,7 @@ describe("POST /attachments/presign — body validation", () => {
     // forwards it verbatim because typeof body === "string".
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       "<<not-json>>",
     );
     expect(res.status).toBe(400);
@@ -770,7 +770,7 @@ describe("POST /attachments/presign — body validation", () => {
 
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "", contentType: "image/png", size: 1024 },
     );
     expect(res.status).toBe(400);
@@ -784,7 +784,7 @@ describe("POST /attachments/presign — body validation", () => {
 
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       {
         filename: "a".repeat(256) + ".png",
         contentType: "image/png",
@@ -803,7 +803,7 @@ describe("POST /attachments/presign — body validation", () => {
     for (const bad of [0, -1, -1024]) {
       const res = await c.json<ValidationErrorBody>(
         "POST",
-        "/attachments/presign",
+        "/api/attachments/presign",
         { filename: "x.png", contentType: "image/png", size: bad },
       );
       expect(res.status, `for size=${bad}`).toBe(400);
@@ -818,7 +818,7 @@ describe("POST /attachments/presign — body validation", () => {
 
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       { filename: "x.png", contentType: "image/png", size: 1.5 },
     );
     expect(res.status).toBe(400);
@@ -833,7 +833,7 @@ describe("POST /attachments/presign — body validation", () => {
     const oversized = 25 * 1024 * 1024 + 1;
     const res = await c.json<ValidationErrorBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       {
         filename: "huge.bin",
         contentType: "application/octet-stream",
@@ -854,7 +854,7 @@ describe("POST /attachments/presign — body validation", () => {
     const exactly = 25 * 1024 * 1024;
     const res = await c.json<PresignSuccessBody>(
       "POST",
-      "/attachments/presign",
+      "/api/attachments/presign",
       {
         filename: "max.bin",
         contentType: "application/octet-stream",

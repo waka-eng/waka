@@ -1,5 +1,5 @@
 /**
- * Standalone smoke test for POST /inspirations/:id/reflections.
+ * Standalone smoke test for POST /api/inspirations/:id/reflections.
  *
  * Run with:
  *   pnpm --filter @waka/api exec tsx src/routes/reflections.smoke.ts
@@ -43,7 +43,7 @@ async function signupTestUser(label: string) {
     .toString(36)
     .slice(2, 8)}@example.test`;
   const password = "supersecret123";
-  const signup = await app.request("/auth/signup", {
+  const signup = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, name: `Refl Smoke ${label}` }),
@@ -58,7 +58,7 @@ async function signupTestUser(label: string) {
 }
 
 async function createInspiration(token: string, text: string) {
-  const r = await app.request("/inspirations", {
+  const r = await app.request("/api/inspirations", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -85,7 +85,7 @@ async function main() {
   try {
     // 1. Unauthenticated → 401.
     const noAuth = await app.request(
-      `/inspirations/${inspA.id}/reflections`,
+      `/api/inspirations/${inspA.id}/reflections`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -99,7 +99,7 @@ async function main() {
 
     // 2. Malformed uuid → 400.
     const badId = await app.request(
-      "/inspirations/not-a-uuid/reflections",
+      "/api/inspirations/not-a-uuid/reflections",
       {
         method: "POST",
         headers: {
@@ -116,7 +116,7 @@ async function main() {
 
     // 3. Missing question → 400.
     const noQ = await app.request(
-      `/inspirations/${inspA.id}/reflections`,
+      `/api/inspirations/${inspA.id}/reflections`,
       {
         method: "POST",
         headers: {
@@ -133,7 +133,7 @@ async function main() {
 
     // 4. Cross-tenant → 404 (NOT 403; never leak existence).
     const cross = await app.request(
-      `/inspirations/${inspB.id}/reflections`,
+      `/api/inspirations/${inspB.id}/reflections`,
       {
         method: "POST",
         headers: {
@@ -150,7 +150,7 @@ async function main() {
 
     // 5. Non-existent inspiration → 404.
     const ghost = await app.request(
-      "/inspirations/00000000-0000-0000-0000-000000000000/reflections",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000/reflections",
       {
         method: "POST",
         headers: {
@@ -167,7 +167,7 @@ async function main() {
 
     // 6. Happy path with answer.
     const ok = await app.request(
-      `/inspirations/${inspA.id}/reflections`,
+      `/api/inspirations/${inspA.id}/reflections`,
       {
         method: "POST",
         headers: {
@@ -214,7 +214,7 @@ async function main() {
 
     // 7. Skipped state with no answer.
     const skipped = await app.request(
-      `/inspirations/${inspA.id}/reflections`,
+      `/api/inspirations/${inspA.id}/reflections`,
       {
         method: "POST",
         headers: {
@@ -248,12 +248,12 @@ async function main() {
     console.log("[7/13] skipped reflection → 201 with skipped=true ✅");
 
     // -----------------------------------------------------------------
-    // GET /inspirations/:id/reflections
+    // GET /api/inspirations/:id/reflections
     // -----------------------------------------------------------------
 
     // 8. Unauthenticated GET → 401.
     const getNoAuth = await app.request(
-      `/inspirations/${inspA.id}/reflections`,
+      `/api/inspirations/${inspA.id}/reflections`,
       { method: "GET" },
     );
     if (getNoAuth.status !== 401) {
@@ -264,7 +264,7 @@ async function main() {
     console.log("[8/13] GET unauthenticated → 401 ✅");
 
     // 9. Malformed uuid → 400.
-    const getBadId = await app.request("/inspirations/not-a-uuid/reflections", {
+    const getBadId = await app.request("/api/inspirations/not-a-uuid/reflections", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -276,7 +276,7 @@ async function main() {
     // 10. Cross-tenant → 404 (NOT 403; never leak existence). Token A is
     //     trying to read reflections under inspiration B.
     const getCross = await app.request(
-      `/inspirations/${inspB.id}/reflections`,
+      `/api/inspirations/${inspB.id}/reflections`,
       {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
@@ -291,7 +291,7 @@ async function main() {
 
     // 11. Non-existent inspiration → 404.
     const getGhost = await app.request(
-      "/inspirations/00000000-0000-0000-0000-000000000000/reflections",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000/reflections",
       {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
@@ -308,7 +308,7 @@ async function main() {
     //     6 and 7); they should be returned in ascending created_at order.
     //     Tenant isolation: nothing from user B can leak in.
     const list = await app.request(
-      `/inspirations/${inspA.id}/reflections`,
+      `/api/inspirations/${inspA.id}/reflections`,
       {
         method: "GET",
         headers: { Authorization: `Bearer ${token}` },
@@ -377,7 +377,7 @@ async function main() {
 
     // 13. Empty list — user B owns inspB but has no reflections on it.
     const empty = await app.request(
-      `/inspirations/${inspB.id}/reflections`,
+      `/api/inspirations/${inspB.id}/reflections`,
       {
         method: "GET",
         headers: { Authorization: `Bearer ${tokenB}` },

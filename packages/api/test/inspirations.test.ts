@@ -7,10 +7,10 @@
  * Per Sub-AC 13.3.2, this spec covers the inspiration capture + retrieval
  * endpoints in five buckets:
  *
- *   1. Successful creation                    → POST /inspirations (201)
- *   2. Validation errors                      → POST /inspirations (400)
- *   3. Listing the caller's own inspirations  → GET  /inspirations (200, scoped)
- *   4. Fetching by id                         → GET  /inspirations/:id/reflections
+ *   1. Successful creation                    → POST /api/inspirations (201)
+ *   2. Validation errors                      → POST /api/inspirations (400)
+ *   3. Listing the caller's own inspirations  → GET  /api/inspirations (200, scoped)
+ *   4. Fetching by id                         → GET  /api/inspirations/:id/reflections
  *                                                + locating a specific row in the
  *                                                  list response (no dedicated
  *                                                  single-row endpoint exists for
@@ -134,10 +134,10 @@ interface ListReflectionsResponse {
 }
 
 // ---------------------------------------------------------------------------
-// POST /inspirations — successful creation
+// POST /api/inspirations — successful creation
 // ---------------------------------------------------------------------------
 
-describe("POST /inspirations — successful creation", () => {
+describe("POST /api/inspirations — successful creation", () => {
   it("returns 201 with a fully-populated row on the happy path", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
@@ -145,7 +145,7 @@ describe("POST /inspirations — successful creation", () => {
 
     const res = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       {
         text: "  light bends around dense thoughts  ",
         kind: "note",
@@ -201,7 +201,7 @@ describe("POST /inspirations — successful creation", () => {
 
     const res = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "minimal payload" },
     );
 
@@ -223,7 +223,7 @@ describe("POST /inspirations — successful creation", () => {
     // immediately rather than as a tenant-isolation incident in production.
     const res = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       {
         text: "should still belong to me",
         userId: "00000000-0000-0000-0000-000000000000",
@@ -240,10 +240,10 @@ describe("POST /inspirations — successful creation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /inspirations — validation errors
+// POST /api/inspirations — validation errors
 // ---------------------------------------------------------------------------
 
-describe("POST /inspirations — validation errors", () => {
+describe("POST /api/inspirations — validation errors", () => {
   it("rejects a missing text with 400 + per-field details", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
@@ -251,7 +251,7 @@ describe("POST /inspirations — validation errors", () => {
 
     const res = await client.json<ValidationErrorResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { kind: "note" },
     );
 
@@ -269,7 +269,7 @@ describe("POST /inspirations — validation errors", () => {
 
     const res = await client.json<ValidationErrorResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "   \n  \t  " },
     );
 
@@ -286,7 +286,7 @@ describe("POST /inspirations — validation errors", () => {
     const huge = "a".repeat(8193);
     const res = await client.json<ValidationErrorResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: huge },
     );
 
@@ -301,7 +301,7 @@ describe("POST /inspirations — validation errors", () => {
 
     const res = await client.json<ValidationErrorResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "hello", category: 1.5 },
     );
 
@@ -316,7 +316,7 @@ describe("POST /inspirations — validation errors", () => {
 
     const res = await client.json<ValidationErrorResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "hello", category: -1 },
     );
 
@@ -333,7 +333,7 @@ describe("POST /inspirations — validation errors", () => {
     // forwards it verbatim because typeof body === "string".
     const res = await client.json<ValidationErrorResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       "<<not json>>",
     );
 
@@ -343,16 +343,16 @@ describe("POST /inspirations — validation errors", () => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /inspirations — listing the caller's own rows
+// GET /api/inspirations — listing the caller's own rows
 // ---------------------------------------------------------------------------
 
-describe("GET /inspirations — listing", () => {
+describe("GET /api/inspirations — listing", () => {
   it("returns an empty array for a brand-new user", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
 
-    const res = await client.get<ListInspirationsResponse>("/inspirations");
+    const res = await client.get<ListInspirationsResponse>("/api/inspirations");
 
     // A fresh user has no rows; the contract is `200 { inspirations: [] }` —
     // never a 404. The empty-state copy lives in the SPA, not the API.
@@ -375,7 +375,7 @@ describe("GET /inspirations — listing", () => {
     for (const text of texts) {
       const created = await client.json<CreateInspirationResponse>(
         "POST",
-        "/inspirations",
+        "/api/inspirations",
         { text },
       );
       expect(created.status).toBe(201);
@@ -383,7 +383,7 @@ describe("GET /inspirations — listing", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
-    const res = await client.get<ListInspirationsResponse>("/inspirations");
+    const res = await client.get<ListInspirationsResponse>("/api/inspirations");
 
     expect(res.status).toBe(200);
     expect(res.body.inspirations.length).toBeGreaterThanOrEqual(3);
@@ -414,12 +414,12 @@ describe("GET /inspirations — listing", () => {
     // Alice creates two rows.
     const aliceCreate1 = await aliceClient.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "alice-one" },
     );
     const aliceCreate2 = await aliceClient.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "alice-two" },
     );
     expect(aliceCreate1.status).toBe(201);
@@ -428,14 +428,14 @@ describe("GET /inspirations — listing", () => {
     // Bob creates one row.
     const bobCreate = await bobClient.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "bob-one" },
     );
     expect(bobCreate.status).toBe(201);
 
     // Alice's list contains exactly her two rows, never bob's.
     const aliceList = await aliceClient.get<ListInspirationsResponse>(
-      "/inspirations",
+      "/api/inspirations",
     );
     expect(aliceList.status).toBe(200);
     const aliceTexts = aliceList.body.inspirations.map((r) => r.text);
@@ -449,7 +449,7 @@ describe("GET /inspirations — listing", () => {
 
     // Bob's list contains exactly his one row, never alice's.
     const bobList = await bobClient.get<ListInspirationsResponse>(
-      "/inspirations",
+      "/api/inspirations",
     );
     expect(bobList.status).toBe(200);
     const bobTexts = bobList.body.inspirations.map((r) => r.text);
@@ -462,7 +462,7 @@ describe("GET /inspirations — listing", () => {
 
 // ---------------------------------------------------------------------------
 // "Fetch by id" — locate a specific inspiration via the list response, and
-// drive GET /inspirations/:id/reflections (the only `:id`-keyed read in the
+// drive GET /api/inspirations/:id/reflections (the only `:id`-keyed read in the
 // inspirations namespace today). Both flows assert the caller can address
 // individual rows by id without any cross-tenant leakage.
 // ---------------------------------------------------------------------------
@@ -475,7 +475,7 @@ describe("Fetching by id", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "find-me-by-id", kind: "note", category: 7 },
     );
     expect(created.status).toBe(201);
@@ -485,7 +485,7 @@ describe("Fetching by id", () => {
     // dedicated GET /:id exists yet). Filtering the response by id is the
     // public way to "fetch by id" today; a future GET /:id endpoint would
     // be a strict superset and this assertion would still hold.
-    const list = await client.get<ListInspirationsResponse>("/inspirations");
+    const list = await client.get<ListInspirationsResponse>("/api/inspirations");
     expect(list.status).toBe(200);
 
     const match = list.body.inspirations.find((r) => r.id === targetId);
@@ -496,7 +496,7 @@ describe("Fetching by id", () => {
     expect(match!.category).toBe(7);
   });
 
-  it("GET /inspirations/:id/reflections returns the reflections attached to that id", async () => {
+  it("GET /api/inspirations/:id/reflections returns the reflections attached to that id", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
@@ -504,7 +504,7 @@ describe("Fetching by id", () => {
     // Create the inspiration, then attach one reflection.
     const inspirationCreate = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "parent inspiration" },
     );
     expect(inspirationCreate.status).toBe(201);
@@ -512,7 +512,7 @@ describe("Fetching by id", () => {
 
     const reflectionCreate = await client.json<ReflectionResponse>(
       "POST",
-      `/inspirations/${inspirationId}/reflections`,
+      `/api/inspirations/${inspirationId}/reflections`,
       { question: "what does this remind me of?" },
     );
     expect(reflectionCreate.status).toBe(201);
@@ -520,7 +520,7 @@ describe("Fetching by id", () => {
 
     // The "fetch by id" path on the inspirations namespace.
     const res = await client.get<ListReflectionsResponse>(
-      `/inspirations/${inspirationId}/reflections`,
+      `/api/inspirations/${inspirationId}/reflections`,
     );
     expect(res.status).toBe(200);
     expect(res.body.reflections).toHaveLength(1);
@@ -532,7 +532,7 @@ describe("Fetching by id", () => {
     );
   });
 
-  it("GET /inspirations/:id/reflections returns 404 for another user's id (no enumeration)", async () => {
+  it("GET /api/inspirations/:id/reflections returns 404 for another user's id (no enumeration)", async () => {
     const alice = await createUserFixture(getDb());
     const bob = await createUserFixture(getDb());
     cleanup.trackUser(alice.user.id);
@@ -541,7 +541,7 @@ describe("Fetching by id", () => {
     // Alice creates an inspiration that bob will try to address by id.
     const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "alice's private save" },
     );
     expect(aliceCreate.status).toBe(201);
@@ -552,18 +552,18 @@ describe("Fetching by id", () => {
     // enumerate alice's uuids. 404 is intentional and matches the
     // attachments-finalize convention.
     const res = await authedClient(bob).get<{ error: string }>(
-      `/inspirations/${aliceInspirationId}/reflections`,
+      `/api/inspirations/${aliceInspirationId}/reflections`,
     );
     expect(res.status).toBe(404);
   });
 
-  it("GET /inspirations/:id/reflections returns 400 for a malformed id", async () => {
+  it("GET /api/inspirations/:id/reflections returns 400 for a malformed id", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
 
     const res = await client.get<{ error: string }>(
-      "/inspirations/not-a-uuid/reflections",
+      "/api/inspirations/not-a-uuid/reflections",
     );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/invalid inspiration id/i);
@@ -576,35 +576,35 @@ describe("Fetching by id", () => {
 // ---------------------------------------------------------------------------
 
 describe("authentication required", () => {
-  it("POST /inspirations returns 401 when no session is presented", async () => {
-    const res = await apiRequest("/inspirations", {
+  it("POST /api/inspirations returns 401 when no session is presented", async () => {
+    const res = await apiRequest("/api/inspirations", {
       method: "POST",
       body: { text: "anonymous" },
     });
     expect(res.status).toBe(401);
   });
 
-  it("GET /inspirations returns 401 when no session is presented", async () => {
-    const res = await apiRequest("/inspirations", { method: "GET" });
+  it("GET /api/inspirations returns 401 when no session is presented", async () => {
+    const res = await apiRequest("/api/inspirations", { method: "GET" });
     expect(res.status).toBe(401);
   });
 
-  it("GET /inspirations/:id/reflections returns 401 when no session is presented", async () => {
+  it("GET /api/inspirations/:id/reflections returns 401 when no session is presented", async () => {
     // The route checks authn BEFORE parsing the path, so a syntactically
     // valid uuid produces 401, not 400, on the unauthenticated path. We use
     // a real-looking uuid to make the assertion narrow-scoped.
     const res = await apiRequest(
-      "/inspirations/00000000-0000-0000-0000-000000000000/reflections",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000/reflections",
       { method: "GET" },
     );
     expect(res.status).toBe(401);
   });
 
-  it("POST /inspirations rejects a malformed bearer token with 401", async () => {
+  it("POST /api/inspirations rejects a malformed bearer token with 401", async () => {
     // Even with an Authorization header present, an unparsable token must
     // not be accepted. Guards against a regression where the middleware
     // accidentally treats absence-of-throw as "ok".
-    const res = await apiRequest("/inspirations", {
+    const res = await apiRequest("/api/inspirations", {
       method: "POST",
       headers: { Authorization: "Bearer not-a-real-jwt" },
       body: { text: "should not save" },
@@ -620,13 +620,13 @@ describe("authentication required", () => {
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
 
-    const res = await client.get<ListInspirationsResponse>("/inspirations");
+    const res = await client.get<ListInspirationsResponse>("/api/inspirations");
     expect(res.status).toBe(200);
   });
 });
 
 // ---------------------------------------------------------------------------
-// PATCH /inspirations/:id — update / partial update
+// PATCH /api/inspirations/:id — update / partial update
 // ---------------------------------------------------------------------------
 //
 // Sub-AC 13.3.3 mandates coverage of:
@@ -645,7 +645,7 @@ describe("authentication required", () => {
 // Neon so we know the route + schema actually meet the seed's
 // `data_isolation` evaluation principle.
 
-describe("PATCH /inspirations/:id — successful updates", () => {
+describe("PATCH /api/inspirations/:id — successful updates", () => {
   it("updates every editable field in one PATCH (text, kind, category) and bumps updatedAt", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
@@ -656,7 +656,7 @@ describe("PATCH /inspirations/:id — successful updates", () => {
     // than the row simply being recently created).
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before edit", kind: "note", category: 1 },
     );
     expect(created.status).toBe(201);
@@ -670,7 +670,7 @@ describe("PATCH /inspirations/:id — successful updates", () => {
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${original.id}`,
+      `/api/inspirations/${original.id}`,
       { text: "after edit", kind: "link", category: 7 },
     );
 
@@ -721,14 +721,14 @@ describe("PATCH /inspirations/:id — successful updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "original" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { text: "  trimmed value  " },
     );
 
@@ -747,14 +747,14 @@ describe("PATCH /inspirations/:id — successful updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       {
         text: "after",
         userId: "00000000-0000-0000-0000-000000000000",
@@ -779,7 +779,7 @@ describe("PATCH /inspirations/:id — successful updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "still pending classification" },
     );
     expect(created.status).toBe(201);
@@ -787,7 +787,7 @@ describe("PATCH /inspirations/:id — successful updates", () => {
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       {
         text: "edited text",
         cluster: "outlier",
@@ -804,7 +804,7 @@ describe("PATCH /inspirations/:id — successful updates", () => {
   });
 });
 
-describe("PATCH /inspirations/:id — partial updates", () => {
+describe("PATCH /api/inspirations/:id — partial updates", () => {
   it("updates only `text` when only `text` is supplied; kind/category are preserved", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
@@ -812,14 +812,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before", kind: "note", category: 4 },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { text: "after-only-text" },
     );
 
@@ -837,14 +837,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before", kind: "note", category: 9 },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { kind: "image" },
     );
 
@@ -861,14 +861,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before", kind: "note", category: 1 },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { category: 42 },
     );
 
@@ -888,7 +888,7 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before", kind: "note", category: 3 },
     );
     expect(created.status).toBe(201);
@@ -896,7 +896,7 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { kind: null },
     );
 
@@ -913,14 +913,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before", kind: "note", category: 5 },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { category: null },
     );
 
@@ -938,14 +938,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<ValidationErrorResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       {},
     );
 
@@ -963,14 +963,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<ValidationErrorResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { text: "   \t  \n  " },
     );
 
@@ -985,14 +985,14 @@ describe("PATCH /inspirations/:id — partial updates", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<ValidationErrorResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { category: 2.5 },
     );
 
@@ -1001,7 +1001,7 @@ describe("PATCH /inspirations/:id — partial updates", () => {
   });
 });
 
-describe("PATCH /inspirations/:id — 404 on missing resources", () => {
+describe("PATCH /api/inspirations/:id — 404 on missing resources", () => {
   it("returns 404 for an unknown (well-formed) uuid", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
@@ -1011,7 +1011,7 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
     // contract is 404 + JSON error body — not 500, not silent 200.
     const res = await client.json<{ error: string }>(
       "PATCH",
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
       { text: "ghost" },
     );
 
@@ -1030,7 +1030,7 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
 
     const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "alice's private save", kind: "note", category: 1 },
     );
     expect(aliceCreate.status).toBe(201);
@@ -1040,7 +1040,7 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
     // Bob attempts to PATCH Alice's row.
     const bobAttempt = await authedClient(bob).json<{ error: string }>(
       "PATCH",
-      `/inspirations/${aliceInspirationId}`,
+      `/api/inspirations/${aliceInspirationId}`,
       { text: "pwned by bob" },
     );
     expect(bobAttempt.status).toBe(404);
@@ -1065,7 +1065,7 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
 
     const res = await client.json<{ error: string }>(
       "PATCH",
-      "/inspirations/not-a-uuid",
+      "/api/inspirations/not-a-uuid",
       { text: "anything" },
     );
 
@@ -1083,19 +1083,19 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "to be deleted then patched" },
     );
     expect(created.status).toBe(201);
 
     const del = await client.delete(
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
     );
     expect(del.status).toBe(200);
 
     const res = await client.json<{ error: string }>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { text: "post-delete edit" },
     );
     expect(res.status).toBe(404);
@@ -1103,7 +1103,7 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
 });
 
 // ---------------------------------------------------------------------------
-// DELETE /inspirations/:id — deletion
+// DELETE /api/inspirations/:id — deletion
 // ---------------------------------------------------------------------------
 //
 // Exercises the same five buckets as the PATCH section (success, idempotency
@@ -1112,7 +1112,7 @@ describe("PATCH /inspirations/:id — 404 on missing resources", () => {
 // SELECT against the DB so a future migration that weakens the cascade
 // surfaces here, not in production.
 
-describe("DELETE /inspirations/:id — successful deletion", () => {
+describe("DELETE /api/inspirations/:id — successful deletion", () => {
   it("returns 200 with the deleted id and removes the row from the DB", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
@@ -1120,14 +1120,14 @@ describe("DELETE /inspirations/:id — successful deletion", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "to be deleted" },
     );
     expect(created.status).toBe(201);
     const targetId = created.body.inspiration.id;
 
     const res = await client.delete<{ id: string }>(
-      `/inspirations/${targetId}`,
+      `/api/inspirations/${targetId}`,
     );
 
     expect(res.status).toBe(200);
@@ -1142,7 +1142,7 @@ describe("DELETE /inspirations/:id — successful deletion", () => {
     expect(dbRows).toHaveLength(0);
   });
 
-  it("removes the row from the GET /inspirations list immediately", async () => {
+  it("removes the row from the GET /api/inspirations list immediately", async () => {
     // The user-visible contract: after a successful delete, the row is
     // gone from the history sidebar on the next list fetch. No `?include
     // _deleted` flag, no soft-delete leakage.
@@ -1152,21 +1152,21 @@ describe("DELETE /inspirations/:id — successful deletion", () => {
 
     const a = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "row-a-keep" },
     );
     const b = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "row-b-delete" },
     );
     expect(a.status).toBe(201);
     expect(b.status).toBe(201);
 
-    const del = await client.delete(`/inspirations/${b.body.inspiration.id}`);
+    const del = await client.delete(`/api/inspirations/${b.body.inspiration.id}`);
     expect(del.status).toBe(200);
 
-    const list = await client.get<ListInspirationsResponse>("/inspirations");
+    const list = await client.get<ListInspirationsResponse>("/api/inspirations");
     expect(list.status).toBe(200);
     const ids = list.body.inspirations.map((r) => r.id);
     expect(ids).toContain(a.body.inspiration.id);
@@ -1185,7 +1185,7 @@ describe("DELETE /inspirations/:id — successful deletion", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "parent of reflections" },
     );
     expect(created.status).toBe(201);
@@ -1195,38 +1195,38 @@ describe("DELETE /inspirations/:id — successful deletion", () => {
     // first one a buggy `LIMIT 1` cascade might catch).
     const r1 = await client.json<ReflectionResponse>(
       "POST",
-      `/inspirations/${inspirationId}/reflections`,
+      `/api/inspirations/${inspirationId}/reflections`,
       { question: "first reflection?" },
     );
     const r2 = await client.json<ReflectionResponse>(
       "POST",
-      `/inspirations/${inspirationId}/reflections`,
+      `/api/inspirations/${inspirationId}/reflections`,
       { question: "second reflection?" },
     );
     expect(r1.status).toBe(201);
     expect(r2.status).toBe(201);
 
     // Delete the parent.
-    const del = await client.delete(`/inspirations/${inspirationId}`);
+    const del = await client.delete(`/api/inspirations/${inspirationId}`);
     expect(del.status).toBe(200);
 
     // Reflections endpoint now 404s the parent — same idempotent
     // not-found shape as a never-existing id.
     const after = await client.get(
-      `/inspirations/${inspirationId}/reflections`,
+      `/api/inspirations/${inspirationId}/reflections`,
     );
     expect(after.status).toBe(404);
   });
 });
 
-describe("DELETE /inspirations/:id — 404 on missing resources", () => {
+describe("DELETE /api/inspirations/:id — 404 on missing resources", () => {
   it("returns 404 for an unknown (well-formed) uuid", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
 
     const res = await client.delete<{ error: string }>(
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
     );
 
     expect(res.status).toBe(404);
@@ -1243,17 +1243,17 @@ describe("DELETE /inspirations/:id — 404 on missing resources", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "double-delete-me" },
     );
     expect(created.status).toBe(201);
     const targetId = created.body.inspiration.id;
 
-    const first = await client.delete(`/inspirations/${targetId}`);
+    const first = await client.delete(`/api/inspirations/${targetId}`);
     expect(first.status).toBe(200);
 
     const second = await client.delete<{ error: string }>(
-      `/inspirations/${targetId}`,
+      `/api/inspirations/${targetId}`,
     );
     expect(second.status).toBe(404);
   });
@@ -1270,14 +1270,14 @@ describe("DELETE /inspirations/:id — 404 on missing resources", () => {
 
     const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "alice's private save" },
     );
     expect(aliceCreate.status).toBe(201);
     const aliceInspirationId = aliceCreate.body.inspiration.id;
 
     const bobAttempt = await authedClient(bob).delete<{ error: string }>(
-      `/inspirations/${aliceInspirationId}`,
+      `/api/inspirations/${aliceInspirationId}`,
     );
     expect(bobAttempt.status).toBe(404);
 
@@ -1296,7 +1296,7 @@ describe("DELETE /inspirations/:id — 404 on missing resources", () => {
     const client = authedClient(fixture);
 
     const res = await client.delete<{ error: string }>(
-      "/inspirations/not-a-uuid",
+      "/api/inspirations/not-a-uuid",
     );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/invalid inspiration id/i);
@@ -1311,12 +1311,12 @@ describe("DELETE /inspirations/:id — 404 on missing resources", () => {
 // ---------------------------------------------------------------------------
 
 describe("authentication required — PATCH / DELETE", () => {
-  it("PATCH /inspirations/:id returns 401 when no session is presented", async () => {
+  it("PATCH /api/inspirations/:id returns 401 when no session is presented", async () => {
     // Use a real-looking uuid so the assertion is narrow-scoped: the
     // route checks authn BEFORE parsing the path/body, so the response
     // is 401 even with a valid id and body shape.
     const res = await apiRequest(
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
       {
         method: "PATCH",
         body: { text: "anonymous edit" },
@@ -1325,20 +1325,20 @@ describe("authentication required — PATCH / DELETE", () => {
     expect(res.status).toBe(401);
   });
 
-  it("DELETE /inspirations/:id returns 401 when no session is presented", async () => {
+  it("DELETE /api/inspirations/:id returns 401 when no session is presented", async () => {
     const res = await apiRequest(
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
       { method: "DELETE" },
     );
     expect(res.status).toBe(401);
   });
 
-  it("PATCH /inspirations/:id rejects a malformed bearer token with 401", async () => {
+  it("PATCH /api/inspirations/:id rejects a malformed bearer token with 401", async () => {
     // Even with an Authorization header present, an unparsable token must
     // not be accepted. Guards against a regression where the middleware
     // accidentally treats absence-of-throw as "ok".
     const res = await apiRequest(
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
       {
         method: "PATCH",
         headers: { Authorization: "Bearer not-a-real-jwt" },
@@ -1348,9 +1348,9 @@ describe("authentication required — PATCH / DELETE", () => {
     expect(res.status).toBe(401);
   });
 
-  it("DELETE /inspirations/:id rejects a malformed bearer token with 401", async () => {
+  it("DELETE /api/inspirations/:id rejects a malformed bearer token with 401", async () => {
     const res = await apiRequest(
-      "/inspirations/00000000-0000-0000-0000-000000000000",
+      "/api/inspirations/00000000-0000-0000-0000-000000000000",
       {
         method: "DELETE",
         headers: { Authorization: "Bearer not-a-real-jwt" },
@@ -1369,14 +1369,14 @@ describe("authentication required — PATCH / DELETE", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "before" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.json<CreateInspirationResponse>(
       "PATCH",
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
       { text: "after" },
     );
     expect(res.status).toBe(200);
@@ -1390,13 +1390,13 @@ describe("authentication required — PATCH / DELETE", () => {
 
     const created = await client.json<CreateInspirationResponse>(
       "POST",
-      "/inspirations",
+      "/api/inspirations",
       { text: "to be deleted" },
     );
     expect(created.status).toBe(201);
 
     const res = await client.delete<{ id: string }>(
-      `/inspirations/${created.body.inspiration.id}`,
+      `/api/inspirations/${created.body.inspiration.id}`,
     );
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(created.body.inspiration.id);
