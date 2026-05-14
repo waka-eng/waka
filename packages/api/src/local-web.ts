@@ -4,22 +4,14 @@ import { readFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { Hono, type Env } from "hono";
 
-const API_ROUTE_PREFIXES = [
-  "/auth",
-  "/inspirations",
-  "/attachments",
-  "/wow-moments",
-  "/health",
-] as const;
+const API_ROUTE_PREFIX = "/api";
 
 export function defaultWebDistDir(): string {
   return resolve(process.cwd(), "../../packages/web/dist");
 }
 
 export function isApiRoute(pathname: string): boolean {
-  return API_ROUTE_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  return pathname === API_ROUTE_PREFIX || pathname.startsWith(`${API_ROUTE_PREFIX}/`);
 }
 
 export function createLocalWebApp<E extends Env>(apiApp: Hono<E>, distDir: string): Hono<E> {
@@ -35,11 +27,11 @@ export function createLocalWebApp<E extends Env>(apiApp: Hono<E>, distDir: strin
   const app = new Hono<E>();
   const staticRoot = relative(process.cwd(), distDir) || ".";
 
-  // API routes are registered before static assets and the SPA fallback so their
+  // `/api` routes are registered before static assets and the SPA fallback so their
   // auth/session behavior remains unchanged.
   app.route("/", apiApp);
 
-  // If an API-shaped URL did not match the registered API routes above, return
+  // If an `/api` URL did not match the registered API routes above, return
   // the normal API 404 instead of serving a static file or index.html.
   app.use("*", async (c, next) => {
     if (isApiRoute(c.req.path)) {

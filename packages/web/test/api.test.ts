@@ -33,7 +33,7 @@ describe("fetchWowMoments", () => {
     stubFetch(Response.json(body));
 
     await expect(fetchWowMoments()).resolves.toEqual(body.wowMoments);
-    expect(fetch).toHaveBeenCalledWith("/wow-moments", {
+    expect(fetch).toHaveBeenCalledWith("/api/wow-moments", {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },

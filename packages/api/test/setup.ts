@@ -31,9 +31,9 @@
  * The auth routes go through the production `getDb()` singleton which is
  * bound to the public schema by design (Lambda cold-start path). Schema
  * isolation via `createTestDatabase()` exists for tests that drive Drizzle
- * directly, but for `app.request("/auth/...")` we use unique
+ * directly, but for `app.request("/api/auth/...")` we use unique
  * RFC-6761-reserved emails (`@example.test`) plus per-test cleanup of
- * inserted user rows — see `test/auth.test.ts`. ON DELETE CASCADE on
+ * inserted user rows — see `test/api/auth.test.ts`. ON DELETE CASCADE on
  * `sessions.user_id` reaps any session rows along with the user.
  */
 

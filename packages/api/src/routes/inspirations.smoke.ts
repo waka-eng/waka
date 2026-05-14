@@ -1,11 +1,11 @@
 /**
- * Standalone smoke test for POST /inspirations and GET /inspirations.
+ * Standalone smoke test for POST /api/inspirations and GET /api/inspirations.
  *
  * Run with:
  *   pnpm --filter @waka/api exec tsx src/routes/inspirations.smoke.ts
  *
  * Exits 0 on full pass, 1 on any failure. Creates two throw-away users via
- * /auth/signup, exercises the inspirations endpoints with each user's token,
+ * /api/auth/signup, exercises the inspirations endpoints with each user's token,
  * then cleans up the inspiration rows + the users. Does not depend on the
  * vitest harness — this is the same one-off-script style used elsewhere in
  * `packages/api/src/routes` while the proper test suite is built out.
@@ -39,7 +39,7 @@ async function signupTestUser(label: string) {
     .toString(36)
     .slice(2, 8)}@example.test`;
   const password = "supersecret123";
-  const signup = await app.request("/auth/signup", {
+  const signup = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, name: `Insp Smoke ${label}` }),
@@ -61,7 +61,7 @@ async function main() {
 
   try {
     // 1. Unauthenticated request → 401.
-    const noAuth = await app.request("/inspirations", {
+    const noAuth = await app.request("/api/inspirations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "anonymous" }),
@@ -72,7 +72,7 @@ async function main() {
     console.log("[1/7] unauthenticated POST → 401 ✅");
 
     // 2. Happy path → 201 with row, cluster NULL.
-    const ok = await app.request("/inspirations", {
+    const ok = await app.request("/api/inspirations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -120,7 +120,7 @@ async function main() {
     console.log("[2/7] happy path 201 + nulls ✅");
 
     // 3. Missing text → 400.
-    const noText = await app.request("/inspirations", {
+    const noText = await app.request("/api/inspirations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -134,7 +134,7 @@ async function main() {
     console.log("[3/7] missing text → 400 ✅");
 
     // 4. Forged user_id is silently ignored — server uses the auth context.
-    const forged = await app.request("/inspirations", {
+    const forged = await app.request("/api/inspirations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -162,7 +162,7 @@ async function main() {
     console.log("[4/7] forged user_id ignored ✅");
 
     // 5. Unauthenticated GET → 401.
-    const noAuthGet = await app.request("/inspirations", { method: "GET" });
+    const noAuthGet = await app.request("/api/inspirations", { method: "GET" });
     if (noAuthGet.status !== 401) {
       throw new Error(`Expected 401 on GET without auth, got ${noAuthGet.status}`);
     }
@@ -170,7 +170,7 @@ async function main() {
 
     // 6. Authenticated GET as user A returns A's rows, newest first.
     //    Insert a second row so we can verify ordering.
-    await app.request("/inspirations", {
+    await app.request("/api/inspirations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -178,7 +178,7 @@ async function main() {
       },
       body: JSON.stringify({ text: "a-second-save" }),
     });
-    const listA = await app.request("/inspirations", {
+    const listA = await app.request("/api/inspirations", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -216,14 +216,14 @@ async function main() {
       const cur = new Date(listABody.inspirations[i]!.createdAt).getTime();
       if (prev < cur) {
         throw new Error(
-          `GET /inspirations is not newest-first: ${prev} < ${cur} at index ${i}`,
+          `GET /api/inspirations is not newest-first: ${prev} < ${cur} at index ${i}`,
         );
       }
     }
     console.log("[6/7] GET returns caller's rows newest-first ✅");
 
     // 7. Tenant isolation on GET: user B sees zero of user A's rows.
-    const listB = await app.request("/inspirations", {
+    const listB = await app.request("/api/inspirations", {
       method: "GET",
       headers: { Authorization: `Bearer ${tokenB}` },
     });
@@ -250,7 +250,7 @@ async function main() {
     // 8. DELETE coverage.
     //    8a. Unauthenticated DELETE → 401.
     const deleteNoAuth = await app.request(
-      `/inspirations/${listABody.inspirations[0]!.id}`,
+      `/api/inspirations/${listABody.inspirations[0]!.id}`,
       { method: "DELETE" },
     );
     if (deleteNoAuth.status !== 401) {
@@ -260,7 +260,7 @@ async function main() {
     }
 
     //    8b. Invalid uuid → 400.
-    const deleteBadId = await app.request("/inspirations/not-a-uuid", {
+    const deleteBadId = await app.request("/api/inspirations/not-a-uuid", {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -273,7 +273,7 @@ async function main() {
     //    8c. Cross-tenant DELETE → 404 (don't leak existence).
     const targetId = listABody.inspirations[0]!.id;
     const deleteCrossTenant = await app.request(
-      `/inspirations/${targetId}`,
+      `/api/inspirations/${targetId}`,
       {
         method: "DELETE",
         headers: { Authorization: `Bearer ${tokenB}` },
@@ -285,7 +285,7 @@ async function main() {
       );
     }
     // The row must still exist for user A.
-    const stillThere = await app.request("/inspirations", {
+    const stillThere = await app.request("/api/inspirations", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -300,7 +300,7 @@ async function main() {
 
     //    8d. Add a reflection so we can verify cascade behaviour.
     const reflectionInsert = await app.request(
-      `/inspirations/${targetId}/reflections`,
+      `/api/inspirations/${targetId}/reflections`,
       {
         method: "POST",
         headers: {
@@ -320,7 +320,7 @@ async function main() {
     ).reflection.id;
 
     //    8e. Happy-path DELETE → 200, returns { id }.
-    const deleteOk = await app.request(`/inspirations/${targetId}`, {
+    const deleteOk = await app.request(`/api/inspirations/${targetId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -336,8 +336,8 @@ async function main() {
       );
     }
 
-    //    8f. Row is gone from GET /inspirations.
-    const afterDelete = await app.request("/inspirations", {
+    //    8f. Row is gone from GET /api/inspirations.
+    const afterDelete = await app.request("/api/inspirations", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -346,7 +346,7 @@ async function main() {
     };
     if (afterDeleteBody.inspirations.some((r) => r.id === targetId)) {
       throw new Error(
-        "DELETE did not remove the row from GET /inspirations",
+        "DELETE did not remove the row from GET /api/inspirations",
       );
     }
 
@@ -364,7 +364,7 @@ async function main() {
     }
 
     //    8h. Re-delete is 404 (no-op for the caller).
-    const deleteAgain = await app.request(`/inspirations/${targetId}`, {
+    const deleteAgain = await app.request(`/api/inspirations/${targetId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

@@ -15,7 +15,7 @@
  *        a ready-to-use session JWT, so a spec can immediately hit a
  *        protected route as that user via:
  *
- *          await app.request("/inspirations", {
+ *          await app.request("/api/inspirations", {
  *            headers: { Authorization: `Bearer ${user.token}` },
  *          });
  *
@@ -230,7 +230,7 @@ export async function userFactory(
  * integration tests:
  *
  *   const alice = await createUserFixture(testDb.db);
- *   const res = await app.request("/inspirations", {
+ *   const res = await app.request("/api/inspirations", {
  *     method: "POST",
  *     headers: {
  *       "Content-Type": "application/json",
@@ -240,7 +240,7 @@ export async function userFactory(
  *   });
  *
  * `password` defaults to {@link DEFAULT_TEST_PASSWORD} so a follow-up
- * login-flow test can call `/auth/login` with the same plaintext and
+ * login-flow test can call `/api/auth/login` with the same plaintext and
  * succeed.
  *
  * IMPORTANT: this helper assumes `process.env.JWT_SECRET` (or

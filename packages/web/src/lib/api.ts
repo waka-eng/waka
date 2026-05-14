@@ -74,6 +74,21 @@ export class ApiError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// API path helper
+// ---------------------------------------------------------------------------
+
+const API_ROUTE_PREFIX = "/api";
+
+function apiBaseUrl(): string {
+  return (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+}
+
+export function apiPath(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${apiBaseUrl()}${API_ROUTE_PREFIX}${normalizedPath}`;
+}
+
+// ---------------------------------------------------------------------------
 // Signup
 // ---------------------------------------------------------------------------
 
@@ -106,7 +121,7 @@ export interface SignupResponse {
  * predictable failure path (try/catch instead of a discriminated union).
  */
 export async function signup(input: SignupRequest): Promise<SignupResponse> {
-  return postJson<SignupResponse>("/auth/signup", input, "Signup failed");
+  return postJson<SignupResponse>(apiPath("/auth/signup"), input, "Signup failed");
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +149,7 @@ export interface LoginResponse {
  * which the auth context surfaces to the caller without crashing.
  */
 export async function login(input: LoginRequest): Promise<LoginResponse> {
-  return postJson<LoginResponse>("/auth/login", input, "Login failed");
+  return postJson<LoginResponse>(apiPath("/auth/login"), input, "Login failed");
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +166,7 @@ export async function login(input: LoginRequest): Promise<LoginResponse> {
  * the server has already invalidated. The auth context handles that policy.
  */
 export async function logout(): Promise<void> {
-  await fetch("/auth/logout", {
+  await fetch(apiPath("/auth/logout"), {
     method: "POST",
     credentials: "include",
   }).catch(() => {
@@ -178,7 +193,7 @@ export async function logout(): Promise<void> {
 export async function fetchCurrentUser(): Promise<ApiUser | null> {
   let res: Response;
   try {
-    res = await fetch("/auth/me", {
+    res = await fetch(apiPath("/auth/me"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -283,7 +298,7 @@ export async function createInspiration(
   input: CreateInspirationRequest,
 ): Promise<ApiInspiration> {
   const body = await postJson<CreateInspirationResponse>(
-    "/inspirations",
+    apiPath("/inspirations"),
     input,
     "Failed to save inspiration",
   );
@@ -312,7 +327,7 @@ export interface ListInspirationsResponse {
 export async function fetchInspirations(): Promise<ApiInspiration[]> {
   let res: Response;
   try {
-    res = await fetch("/inspirations", {
+    res = await fetch(apiPath("/inspirations"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -362,7 +377,7 @@ export async function fetchInspirations(): Promise<ApiInspiration[]> {
  * the 404 themselves.
  */
 export async function deleteInspiration(id: string): Promise<void> {
-  const path = `/inspirations/${encodeURIComponent(id)}`;
+  const path = apiPath(`/inspirations/${encodeURIComponent(id)}`);
   let res: Response;
   try {
     res = await fetch(path, {
@@ -430,7 +445,7 @@ export interface ListWowMomentsResponse {
 export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
   let res: Response;
   try {
-    res = await fetch("/wow-moments", {
+    res = await fetch(apiPath("/wow-moments"), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
@@ -527,7 +542,7 @@ export async function presignAttachment(
   input: PresignRequest,
 ): Promise<PresignResponse> {
   return postJson<PresignResponse>(
-    "/attachments/presign",
+    apiPath("/attachments/presign"),
     input,
     "Failed to mint upload URL",
   );
@@ -604,7 +619,7 @@ export async function finalizeAttachment(
   input: FinalizeAttachmentRequest,
 ): Promise<ApiAttachment> {
   const body = await postJson<FinalizeAttachmentResponse>(
-    "/attachments",
+    apiPath("/attachments"),
     input,
     "Failed to record attachment",
   );
@@ -668,7 +683,7 @@ export async function createReflection(
 ): Promise<ApiReflection> {
   // Encode the path component so a malformed id doesn't smuggle a `?` /
   // `#` into the URL. The server validates as a uuid and 400s on a miss.
-  const path = `/inspirations/${encodeURIComponent(inspirationId)}/reflections`;
+  const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`);
   const body = await postJson<CreateReflectionResponse>(
     path,
     input,
@@ -693,7 +708,7 @@ export interface ListReflectionsResponse {
 export async function fetchReflections(
   inspirationId: string,
 ): Promise<ApiReflection[]> {
-  const path = `/inspirations/${encodeURIComponent(inspirationId)}/reflections`;
+  const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`);
   let res: Response;
   try {
     res = await fetch(path, {

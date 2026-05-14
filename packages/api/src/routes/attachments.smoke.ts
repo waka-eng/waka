@@ -7,7 +7,7 @@
  *   pnpm --filter @waka/api exec tsx src/routes/attachments.smoke.ts
  *
  * Exits 0 on full pass, 1 on any failure. Creates a throw-away user via
- * /auth/signup, exercises /attachments/presign with that user's token, then
+ * /api/auth/signup, exercises /attachments/presign with that user's token, then
  * cleans up the user. Same one-off-script style used by the other smoke
  * tests in this directory.
  *
@@ -49,7 +49,7 @@ async function main() {
   const password = "supersecret123";
 
   // Bootstrap: create an account so we have a valid bearer token.
-  const signup = await app.request("/auth/signup", {
+  const signup = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, name: "Attach Smoke" }),
@@ -64,7 +64,7 @@ async function main() {
 
   try {
     // 1. Unauthenticated request → 401.
-    const noAuth = await app.request("/attachments/presign", {
+    const noAuth = await app.request("/api/attachments/presign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -79,7 +79,7 @@ async function main() {
     console.log("[1/5] unauthenticated → 401 ✅");
 
     // 2. Happy path → 200 with presigned URL + key + headers.
-    const ok = await app.request("/attachments/presign", {
+    const ok = await app.request("/api/attachments/presign", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -139,7 +139,7 @@ async function main() {
     console.log("[2/5] happy path 200 + signed URL ✅");
 
     // 3a. Missing fields → 400.
-    const missing = await app.request("/attachments/presign", {
+    const missing = await app.request("/api/attachments/presign", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -153,7 +153,7 @@ async function main() {
     console.log("[3/5] missing fields → 400 ✅");
 
     // 3b. Disallowed contentType → 400.
-    const badType = await app.request("/attachments/presign", {
+    const badType = await app.request("/api/attachments/presign", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -173,7 +173,7 @@ async function main() {
     console.log("[4/5] disallowed contentType → 400 ✅");
 
     // 3c. Oversize → 400.
-    const oversize = await app.request("/attachments/presign", {
+    const oversize = await app.request("/api/attachments/presign", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -191,11 +191,11 @@ async function main() {
     console.log("[5/5] oversize → 400 ✅");
 
     // ------------------------------------------------------------------
-    // POST /attachments — finalize-upload endpoint (Sub-AC 3.3).
+    // POST /api/attachments — finalize-upload endpoint (Sub-AC 3.3).
     // ------------------------------------------------------------------
 
     // Need an inspiration to attach to. Create one using the same token.
-    const inspRes = await app.request("/inspirations", {
+    const inspRes = await app.request("/api/inspirations", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -213,7 +213,7 @@ async function main() {
     };
 
     // F1. Unauthenticated finalize → 401.
-    const finNoAuth = await app.request("/attachments", {
+    const finNoAuth = await app.request("/api/attachments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -230,7 +230,7 @@ async function main() {
     console.log("[6/12] finalize unauthenticated → 401 ✅");
 
     // F2. Invalid JSON body → 400.
-    const finBadJson = await app.request("/attachments", {
+    const finBadJson = await app.request("/api/attachments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -244,7 +244,7 @@ async function main() {
     console.log("[7/12] finalize bad JSON → 400 ✅");
 
     // F3. Schema failure (missing required field for link type) → 400.
-    const finBadShape = await app.request("/attachments", {
+    const finBadShape = await app.request("/api/attachments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -264,7 +264,7 @@ async function main() {
 
     // F4. Foreign / unknown inspiration uuid → 404 (no leak).
     const foreignId = "00000000-0000-0000-0000-000000000000";
-    const finForeign = await app.request("/attachments", {
+    const finForeign = await app.request("/api/attachments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -284,7 +284,7 @@ async function main() {
     console.log("[9/12] finalize foreign inspiration → 404 ✅");
 
     // F5. Happy path: link attachment.
-    const finLink = await app.request("/attachments", {
+    const finLink = await app.request("/api/attachments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -330,7 +330,7 @@ async function main() {
 
     // F6. S3-key tenant prefix violation → 403.
     //     We pass a key that does NOT start with `users/<this-user>/...`.
-    const finStolenKey = await app.request("/attachments", {
+    const finStolenKey = await app.request("/api/attachments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -358,7 +358,7 @@ async function main() {
     //     is allowed through with a console.warn. If you ever run this
     //     against a real bucket without uploading first, expect a 404.
     const ownKey = `users/${user.id}/attachments/${Date.now()}-smoke.png`;
-    const finOwn = await app.request("/attachments", {
+    const finOwn = await app.request("/api/attachments", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -123,10 +123,10 @@ describe("test harness", () => {
 
     const client = authedClient(fixture);
 
-    // GET /inspirations is the simplest authenticated route in the surface
+    // GET /api/inspirations is the simplest authenticated route in the surface
     // we're standing up tests for. A fresh user has no rows, so the
     // contract is `200 { inspirations: [] }` — no test-data setup needed.
-    const res = await client.get<{ inspirations: unknown[] }>("/inspirations");
+    const res = await client.get<{ inspirations: unknown[] }>("/api/inspirations");
     expect(res.status).toBe(200);
     expect(res.body).toBeTruthy();
     expect(Array.isArray(res.body.inspirations)).toBe(true);
@@ -141,7 +141,7 @@ describe("test harness", () => {
     expect(cookieClient.authMode).toBe("cookie");
 
     const res = await cookieClient.get<{ inspirations: unknown[] }>(
-      "/inspirations",
+      "/api/inspirations",
     );
     // Same route, same outcome — proves `requireAuth` accepted the cookie
     // form and the harness merged it correctly.
@@ -153,17 +153,17 @@ describe("test harness", () => {
     // Drives `apiRequest` (no auth injection) so a future regression that
     // accidentally treats absence-of-header as authenticated would fail
     // here, well before any business-logic spec.
-    const res = await apiRequest("/inspirations");
+    const res = await apiRequest("/api/inspirations");
     expect(res.status).toBe(401);
   });
 
   it("apiRequest returns the raw Response (Set-Cookie inspectable)", async () => {
-    // /health is a public route — no auth, no cookies, no body shape to
+    // /api/health is a public route — no auth, no cookies, no body shape to
     // assume. The point of this case is to prove the harness doesn't
     // mangle Response so a test that needs the raw object can use it.
-    const res = await apiRequest("/health");
+    const res = await apiRequest("/api/health");
     expect(res.status).toBe(200);
-    // No Set-Cookie expected on /health, but the helper must return null
+    // No Set-Cookie expected on /api/health, but the helper must return null
     // (not throw) when asked for a missing cookie.
     expect(extractSetCookieOptional(res, "waka_session")).toBeNull();
   });

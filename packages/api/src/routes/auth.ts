@@ -2,7 +2,7 @@
  * Authentication routes.
  *
  * Currently exposes:
- *   - POST /auth/signup : create an email+password account, mint a session
+ *   - POST /api/auth/signup : create an email+password account, mint a session
  *                         JWT, and return it both in the response body and
  *                         as an httpOnly cookie.
  *
@@ -111,13 +111,13 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export const authRoutes = new Hono<AuthEnv>();
 
 // Google OAuth (initiation + callback) is mounted as a sub-router at
-// /auth/google so the parent prefix mounting in src/index.ts (`/auth`)
+// /api/auth/google so the parent prefix mounting in src/index.ts (`/api/auth`)
 // covers both password and OAuth flows. Lives in its own file to keep
 // the password-auth diff small and reviewable.
 authRoutes.route("/google", googleAuthRoutes);
 
 /**
- * POST /auth/signup
+ * POST /api/auth/signup
  *
  * Flow:
  *   1. Parse + validate JSON body with zod. Return 400 on schema failure.
@@ -212,7 +212,7 @@ authRoutes.post("/signup", async (c) => {
   });
 
   // 5b. Persist a server-side session row keyed by SHA-256(token). This
-  //     is what makes the JWT revocable: /auth/logout deletes this row
+  //     is what makes the JWT revocable: /api/auth/logout deletes this row
   //     and the auth middleware then refuses the cookie even though the
   //     JWT itself is still cryptographically valid.
   await createSessionRow({ userId: inserted.id, token });
@@ -233,7 +233,7 @@ authRoutes.post("/signup", async (c) => {
 });
 
 /**
- * POST /auth/login
+ * POST /api/auth/login
  *
  * Authenticate an existing email+password account.
  *
@@ -252,9 +252,9 @@ authRoutes.post("/signup", async (c) => {
  *      where the email-uniqueness signal is already exposed by /signup
  *      (which returns 409 on duplicate).
  *   4. On match, mint a session JWT, persist the server-side session row
- *      (so /auth/logout can revoke it), set the httpOnly cookie, and
+ *      (so /api/auth/logout can revoke it), set the httpOnly cookie, and
  *      return the user record + token in the JSON body — same shape as
- *      /auth/signup so the SPA's auth context handles both responses
+ *      /api/auth/signup so the SPA's auth context handles both responses
  *      with one code path.
  */
 authRoutes.post("/login", async (c) => {
@@ -333,14 +333,14 @@ authRoutes.post("/login", async (c) => {
 });
 
 /**
- * GET /auth/me
+ * GET /api/auth/me
  *
  * Returns the currently authenticated user. Used by the SPA on boot to
  * decide whether to render the home view or bounce to /login. Returns
  * 401 (not 200 with `user: null`) when unauthenticated so the frontend
  * can branch with a single status check.
  *
- * Response shape mirrors the user object returned by /auth/signup so the
+ * Response shape mirrors the user object returned by /api/auth/signup so the
  * SPA's user store has one canonical type.
  */
 authRoutes.get("/me", requireAuth, (c) => {
@@ -356,7 +356,7 @@ authRoutes.get("/me", requireAuth, (c) => {
 });
 
 /**
- * POST /auth/logout
+ * POST /api/auth/logout
  *
  * Idempotent — safe to call multiple times, safe to call without a
  * cookie. We:

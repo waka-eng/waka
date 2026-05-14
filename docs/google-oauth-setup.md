@@ -8,7 +8,7 @@ app as runtime secrets bound to the Hono API Lambda.
 > (`AUTH_GOOGLE_ID=211425047387-...apps.googleusercontent.com`,
 > `AUTH_GOOGLE_SECRET=GOCSPX-...`) are real and were created for `https://waka.im`.
 > If you only need a local `sst dev` run, you may reuse them by adding
-> `http://localhost:3001/auth/google/callback` to that client's authorized
+> `http://localhost:3001/api/auth/google/callback` to that client's authorized
 > redirect URIs. For any new stage (preview, prod-2, …) provision a fresh
 > client per the steps below.
 
@@ -36,8 +36,8 @@ app as runtime secrets bound to the Hono API Lambda.
    - **Authorized redirect URIs** — add the exact callback URL the API
      handler will receive `code` on:
      ```
-     http://localhost:3001/auth/google/callback
-     https://<sst-function-url>/auth/google/callback
+     http://localhost:3001/api/auth/google/callback
+     https://<sst-function-url>/api/auth/google/callback
      ```
      The path **must** match `getGoogleRedirectUri()` in
      `packages/api/src/lib/google-oauth.ts`.
@@ -80,7 +80,7 @@ Inspect with `pnpm sst secret list`.
 After `pnpm dev` (alias for `sst dev`) is running:
 
 ```bash
-curl -s "$API_URL/health"          # → {"ok":true}
+curl -s "$API_URL/api/health"          # → {"ok":true}
 ```
 
 …and inside the Hono handler the secrets are visible as either:

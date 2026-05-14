@@ -56,7 +56,7 @@ The required variables and where each one is consumed:
 | `DB_CONNECTION_URL`                                         | Hono API, classifier worker, `drizzle-kit`      | Neon pooled URL with `sslmode=require`. `DATABASE_URL` is accepted as a fallback name. |
 | `AUTH_SECRET`                                               | Session cookie signing                          | `openssl rand -base64 48`                                                              |
 | `JWT_SECRET`                                                | JWT bearer signing in `lib/auth.ts`             | `openssl rand -base64 48`                                                              |
-| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`                     | `/auth/google` route                            | From Google Cloud Console; redirect URI must point at `sst dev`'s API URL.             |
+| `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`                     | `/api/auth/google` route                            | From Google Cloud Console; redirect URI must point at `sst dev`'s API URL.             |
 | `GEMINI_API_KEY`                                            | Classifier queue worker                         | Never reaches the browser.                                                             |
 | `AWS_REGION_APP` / `AWS_ACCESS_KEY_ID_APP` / `AWS_SECRET_ACCESS_KEY_APP` | `sst dev` and smoke tests          | Or use a named profile with `AWS_PROFILE=...`. Region pinned to `us-west-2`.           |
 
@@ -114,7 +114,7 @@ SST prints two URLs:
 
 > If Google OAuth bounces with `redirect_uri_mismatch`, copy the printed
 > `apiUrl` into your Google Cloud Console "Authorized redirect URIs" as
-> `<apiUrl>/auth/google/callback` and try again.
+> `<apiUrl>/api/auth/google/callback` and try again.
 
 #### Option B — one-command monolithic local server
 
@@ -132,7 +132,7 @@ Open one browser URL only:
 
 - <http://localhost:3010>
 
-The API health endpoint remains available at <http://localhost:3010/health>.
+The API health endpoint remains available at <http://localhost:3010/api/health>.
 
 `pnpm dev:local` loads repo-root `.env.local` for the local API process, without
 printing environment variable values or secrets. Variables already present in the
@@ -143,9 +143,9 @@ root `.env` or `.env.production` for API development.
 
 This mode intentionally clears `VITE_API_URL` before building the client so
 browser API calls and Google OAuth navigation use same-origin paths such as
-`/auth/google/login`. API routes are mounted before static assets; the SPA
+`/api/auth/google/login`. API routes are mounted before static assets; the SPA
 fallback serves `index.html` only for non-API GET routes and will not intercept
-`/auth/*`, `/inspirations/*`, `/attachments/*`, `/wow-moments/*`, or `/health`.
+`/api/auth/*`, `/api/inspirations/*`, `/api/attachments/*`, `/api/wow-moments/*`, or `/api/health`.
 
 Because Option B serves a built Vite bundle from Hono, Vite hot reload is not
 part of `pnpm dev:local`. Use the separate Vite/SST development flow when you

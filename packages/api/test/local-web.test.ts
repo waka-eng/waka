@@ -9,14 +9,16 @@ import { describe, expect, it } from "vitest";
 import { createLocalWebApp, isApiRoute } from "../src/local-web.js";
 
 describe("local web dist server", () => {
-  it("classifies protected API route prefixes", () => {
-    expect(isApiRoute("/auth/google/login")).toBe(true);
-    expect(isApiRoute("/inspirations/123")).toBe(true);
-    expect(isApiRoute("/attachments/presign")).toBe(true);
-    expect(isApiRoute("/wow-moments")).toBe(true);
-    expect(isApiRoute("/health")).toBe(true);
+  it("classifies only /api as protected from the SPA fallback", () => {
+    expect(isApiRoute("/api")).toBe(true);
+    expect(isApiRoute("/api/auth/google/login")).toBe(true);
+    expect(isApiRoute("/api/inspirations/123")).toBe(true);
+    expect(isApiRoute("/api/attachments/presign")).toBe(true);
+    expect(isApiRoute("/api/wow-moments")).toBe(true);
+    expect(isApiRoute("/api/health")).toBe(true);
+    expect(isApiRoute("/auth/google/login")).toBe(false);
+    expect(isApiRoute("/inspirations/123")).toBe(false);
     expect(isApiRoute("/healthy-client-route")).toBe(false);
-    expect(isApiRoute("/author-profile")).toBe(false);
   });
 
   it("serves static files and falls back to index only for non-API GET routes", async () => {
@@ -26,12 +28,12 @@ describe("local web dist server", () => {
     await writeFile(join(distDir, "assets", "app.js"), "console.log('waka');");
 
     const api = new Hono();
-    api.get("/health", (c) => c.json({ ok: true }));
-    api.get("/auth/me", (c) => c.json({ user: null }, 401));
+    api.get("/api/health", (c) => c.json({ ok: true }));
+    api.get("/api/auth/me", (c) => c.json({ user: null }, 401));
 
     const app = createLocalWebApp(api, distDir);
 
-    const health = await app.request("/health");
+    const health = await app.request("/api/health");
     expect(health.status).toBe(200);
     await expect(health.json()).resolves.toEqual({ ok: true });
 
@@ -44,7 +46,12 @@ describe("local web dist server", () => {
     expect(clientRoute.headers.get("content-type")).toContain("text/html");
     await expect(clientRoute.text()).resolves.toBe("<main>WAKA SPA</main>");
 
-    const unknownApi = await app.request("/auth/not-a-real-route");
+    const productRoute = await app.request("/inspirations");
+    expect(productRoute.status).toBe(200);
+    expect(productRoute.headers.get("content-type")).toContain("text/html");
+    await expect(productRoute.text()).resolves.toBe("<main>WAKA SPA</main>");
+
+    const unknownApi = await app.request("/api/auth/not-a-real-route");
     expect(unknownApi.status).toBe(404);
     await expect(unknownApi.text()).resolves.not.toContain("WAKA SPA");
   });

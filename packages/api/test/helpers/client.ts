@@ -25,7 +25,7 @@
  *     const client = authedClient(alice);
  *     const { status, body } = await client.json<{ inspiration: Inspiration }>(
  *       "POST",
- *       "/inspirations",
+ *       "/api/inspirations",
  *       { text: "hello" },
  *     );
  *

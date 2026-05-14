@@ -20,24 +20,24 @@ export const app = new Hono();
  * Liveness probe. Useful for `sst dev` smoke tests and for any future
  * uptime monitor that just needs a 200 to confirm the Lambda is awake.
  */
-app.get("/health", (c) => c.json({ ok: true }));
+app.get("/api/health", (c) => c.json({ ok: true }));
 
-// Auth routes (signup, login, ...) live under /auth.
-app.route("/auth", authRoutes);
+// Auth routes (signup, login, ...) live under /api/auth.
+app.route("/api/auth", authRoutes);
 
-// Inspirations routes (create, list, ...) live under /inspirations.
+// Inspirations routes (create, list, ...) live under /api/inspirations.
 // Every handler in this router requires a valid session — the router
 // applies `requireAuth` at the mount point.
-app.route("/inspirations", inspirationsRoutes);
+app.route("/api/inspirations", inspirationsRoutes);
 
-// Attachments routes (presigned uploads, ...) live under /attachments.
+// Attachments routes (presigned uploads, ...) live under /api/attachments.
 // The router applies `requireAuth` at the mount point, so no anonymous
 // caller can mint an S3 upload URL.
-app.route("/attachments", attachmentsRoutes);
+app.route("/api/attachments", attachmentsRoutes);
 
 // WOW moment routes list persisted generated moments for the signed-in user.
 // Generation/scoring pipelines land later; this mount only exposes rows that
 // already exist in the database.
-app.route("/wow-moments", wowMomentsRoutes);
+app.route("/api/wow-moments", wowMomentsRoutes);
 
 export default app;

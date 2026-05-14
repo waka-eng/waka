@@ -1,5 +1,5 @@
 /**
- * Auth route test suite — covers POST /auth/signup and POST /auth/login.
+ * Auth route test suite — covers POST /api/auth/signup and POST /api/auth/login.
  *
  * Surface under test
  * ------------------
@@ -60,7 +60,7 @@ import { app } from "../src/index.js";
 
 /**
  * Every user id inserted during the suite. Populated by helpers that hit
- * `/auth/signup` (which is the only path that creates rows in these tests),
+ * `/api/auth/signup` (which is the only path that creates rows in these tests),
  * and drained by `afterEach` so a failed assertion never leaks a row into
  * the shared schema. ON DELETE CASCADE on `sessions.user_id` cleans up
  * any associated session rows along with the user.
@@ -131,7 +131,7 @@ function extractSessionCookieValue(setCookie: string | null): string {
 async function signupUser(
   payload: ReturnType<typeof makeSignupPayload>,
 ): Promise<{ id: string; email: string; name: string; token: string }> {
-  const res = await app.request("/auth/signup", {
+  const res = await app.request("/api/auth/signup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -178,13 +178,13 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /auth/signup
+// POST /api/auth/signup
 // ---------------------------------------------------------------------------
 
-describe("POST /auth/signup", () => {
+describe("POST /api/auth/signup", () => {
   it("creates a new user, hashes the password, returns a token + cookie", async () => {
     const payload = makeSignupPayload();
-    const res = await app.request("/auth/signup", {
+    const res = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -257,7 +257,7 @@ describe("POST /auth/signup", () => {
         .toString(36)
         .slice(2, 6)}@Example.Test  `,
     });
-    const res = await app.request("/auth/signup", {
+    const res = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -271,7 +271,7 @@ describe("POST /auth/signup", () => {
   });
 
   it("rejects an invalid email with 400 + per-field errors", async () => {
-    const res = await app.request("/auth/signup", {
+    const res = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "not-an-email", password: "supersecret123" }),
@@ -286,7 +286,7 @@ describe("POST /auth/signup", () => {
   });
 
   it("rejects a too-short password with 400 + per-field errors", async () => {
-    const res = await app.request("/auth/signup", {
+    const res = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -302,7 +302,7 @@ describe("POST /auth/signup", () => {
   });
 
   it("rejects a non-JSON body with 400", async () => {
-    const res = await app.request("/auth/signup", {
+    const res = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "<<not json>>",
@@ -314,7 +314,7 @@ describe("POST /auth/signup", () => {
 
   it("rejects a duplicate email with 409", async () => {
     const payload = makeSignupPayload();
-    const first = await app.request("/auth/signup", {
+    const first = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -323,7 +323,7 @@ describe("POST /auth/signup", () => {
     const firstBody = (await first.json()) as { user: { id: string } };
     trackUser(firstBody.user.id);
 
-    const dup = await app.request("/auth/signup", {
+    const dup = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -338,7 +338,7 @@ describe("POST /auth/signup", () => {
     const lower = `dupe-case-${tail}@example.test`;
     const upper = `DUPE-CASE-${tail}@EXAMPLE.TEST`;
 
-    const first = await app.request("/auth/signup", {
+    const first = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: lower, password: "supersecret123" }),
@@ -347,7 +347,7 @@ describe("POST /auth/signup", () => {
     const firstBody = (await first.json()) as { user: { id: string } };
     trackUser(firstBody.user.id);
 
-    const dup = await app.request("/auth/signup", {
+    const dup = await app.request("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: upper, password: "supersecret123" }),
@@ -357,15 +357,15 @@ describe("POST /auth/signup", () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /auth/login
+// POST /api/auth/login
 // ---------------------------------------------------------------------------
 
-describe("POST /auth/login", () => {
+describe("POST /api/auth/login", () => {
   it("returns 200 + token + cookie for a valid email/password pair", async () => {
     const payload = makeSignupPayload();
     const created = await signupUser(payload);
 
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -413,7 +413,7 @@ describe("POST /auth/login", () => {
     const payload = makeSignupPayload();
     await signupUser(payload);
 
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -428,7 +428,7 @@ describe("POST /auth/login", () => {
     const payload = makeSignupPayload();
     await signupUser(payload);
 
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -459,7 +459,7 @@ describe("POST /auth/login", () => {
   });
 
   it("returns the same generic 401 for an unknown email (no enumeration)", async () => {
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -490,7 +490,7 @@ describe("POST /auth/login", () => {
       .returning({ id: users.id });
     trackUser(inserted!.id);
 
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password: "supersecret123" }),
@@ -501,7 +501,7 @@ describe("POST /auth/login", () => {
   });
 
   it("rejects a missing email with 400 + per-field errors", async () => {
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: "", password: "supersecret123" }),
@@ -514,7 +514,7 @@ describe("POST /auth/login", () => {
   });
 
   it("rejects a missing password with 400 + per-field errors", async () => {
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -530,7 +530,7 @@ describe("POST /auth/login", () => {
   });
 
   it("rejects a non-JSON body with 400", async () => {
-    const res = await app.request("/auth/login", {
+    const res = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "<<not json>>",

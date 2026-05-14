@@ -11,15 +11,15 @@
  *      establishes a session, and lands the user on `/`.
  *   3. The home page's `<CaptureForm>` accepts a typed note + a file
  *      attachment, drives the SPA's API round-trip
- *      (`POST /inspirations` → `POST /attachments/presign` → S3 PUT →
- *      `POST /attachments`), and surfaces the in-app "Saved" confirmation.
+ *      (`POST /api/inspirations` → `POST /attachments/presign` → S3 PUT →
+ *      `POST /api/attachments`), and surfaces the in-app "Saved" confirmation.
  *   4. The history drawer renders the new row with the user's note text.
  *   5. The persisted state is independently verifiable through the Hono API
- *      itself: a `GET /inspirations` call with the signup-issued JWT returns
+ *      itself: a `GET /api/inspirations` call with the signup-issued JWT returns
  *      the new row, owned by the authenticated user (data-isolation contract).
  *   6. (Sub-AC 14.3.3) The asynchronous Gemini-powered classification loop
- *      closes end-to-end: `POST /inspirations` returned `cluster: null` (the
- *      worker fills it later); we poll `GET /inspirations` until the row's
+ *      closes end-to-end: `POST /api/inspirations` returned `cluster: null` (the
+ *      worker fills it later); we poll `GET /api/inspirations` until the row's
  *      `cluster` enum lands and `classified_at` is non-null. We then reload
  *      the SPA and verify the `.history-item-cluster` chip surfaces the
  *      cluster topic copy in the browser. The polled API row + the rendered
@@ -72,7 +72,7 @@ import postgres from "postgres";
  * forgets to thread the env vars still hits the right local processes.
  *
  * The browser drives the SPA (`WAKA_WEB_URL`) which, in dev, proxies its
- * `/auth /inspirations /attachments /health` paths through Vite to the
+ * `/api/auth /api/inspirations /api/attachments /api/health` paths through Vite to the
  * Hono Function. The persisted-state assertion at the end of this script
  * calls the API directly (`WAKA_API_URL`) so a regression in the Vite
  * proxy cannot silently mask a regression in the API itself.
@@ -251,7 +251,7 @@ const CLUSTER_TOPIC_COPY: Record<AllowedCluster, string> = {
 const CLASSIFICATION_TIMEOUT_MS = 90_000;
 
 /**
- * Interval between `GET /inspirations` polls while waiting on the
+ * Interval between `GET /api/inspirations` polls while waiting on the
  * classifier. 1 s is small enough to surface a fast classification
  * promptly without hammering the API on a slow Gemini call.
  */
@@ -265,7 +265,7 @@ function isAllowedCluster(value: unknown): value is AllowedCluster {
 }
 
 /**
- * Poll `GET /inspirations` with the signup JWT until the row identified by
+ * Poll `GET /api/inspirations` with the signup JWT until the row identified by
  * `inspirationId` has a non-null `cluster`, the `classifiedAt` timestamp is
  * set, and the value lies in `ALLOWED_CLUSTERS`. Returns the classified
  * row. Throws on timeout / API failure / out-of-set label.
@@ -288,20 +288,20 @@ async function pollUntilClassified(
 
   while (Date.now() < deadline) {
     attempts++;
-    const resp = await fetch(`${API_URL}/inspirations`, {
+    const resp = await fetch(`${API_URL}/api/inspirations`, {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
     });
     if (resp.status !== 200) {
       throw new AssertionFailed(
-        `GET /inspirations during classification poll expected 200, got ${resp.status}: ${await resp.text()}`,
+        `GET /api/inspirations during classification poll expected 200, got ${resp.status}: ${await resp.text()}`,
       );
     }
     const body = (await resp.json()) as { inspirations: InspirationRow[] };
     const row = body.inspirations.find((r) => r.id === inspirationId);
     if (!row) {
       throw new AssertionFailed(
-        `Inspiration row ${inspirationId} disappeared from GET /inspirations mid-poll`,
+        `Inspiration row ${inspirationId} disappeared from GET /api/inspirations mid-poll`,
       );
     }
     lastSeen = row;
@@ -349,7 +349,7 @@ async function run(): Promise<void> {
   const password = "supersecret123";
   const displayName = `E2E Smoke ${suffix}`;
   // The note text is matched verbatim by both the UI assertion (history
-  // drawer) and the API assertion (GET /inspirations). Embedding the
+  // drawer) and the API assertion (GET /api/inspirations). Embedding the
   // suffix means parallel runs cannot collide on the same row.
   const noteText = `e2e-smoke note ${suffix}`;
 
@@ -401,7 +401,7 @@ async function run(): Promise<void> {
     // can replay the JWT against the API directly.
     const signupResponsePromise = page.waitForResponse(
       (r) =>
-        r.url().endsWith("/auth/signup") && r.request().method() === "POST",
+        r.url().endsWith("/api/auth/signup") && r.request().method() === "POST",
       { timeout: NAV_TIMEOUT_MS },
     );
 
@@ -452,11 +452,11 @@ async function run(): Promise<void> {
     ok("note + image attachment staged");
 
     /* ------------------------------------------------------------
-     * Step 4 — Save: drive the full POST /inspirations + presign +
+     * Step 4 — Save: drive the full POST /api/inspirations + presign +
      *           S3 PUT + finalize round-trip and assert each stage.
      * ---------------------------------------------------------- */
     step(
-      "Save round-trip exercises POST /inspirations, presign, S3 PUT, finalize",
+      "Save round-trip exercises POST /api/inspirations, presign, S3 PUT, finalize",
       4,
       7,
     );
@@ -465,14 +465,14 @@ async function run(): Promise<void> {
     // doesn't return between the click and our `await`.
     //
     // We anchor each filter on the URL suffix + HTTP method to avoid
-    // accidentally matching the GET /inspirations the home page issues
+    // accidentally matching the GET /api/inspirations the home page issues
     // on mount or the OPTIONS preflight against S3.
     const inspirationPostPromise: Promise<Response> = page.waitForResponse(
       (r) => {
         if (r.request().method() !== "POST") return false;
         const u = new URL(r.url());
-        // Match exactly /inspirations (not /inspirations/:id/reflections).
-        return u.pathname === "/inspirations";
+        // Match exactly /api/inspirations (not /api/inspirations/:id/reflections).
+        return u.pathname === "/api/inspirations";
       },
       { timeout: NAV_TIMEOUT_MS },
     );
@@ -495,8 +495,8 @@ async function run(): Promise<void> {
       (r) => {
         if (r.request().method() !== "POST") return false;
         const u = new URL(r.url());
-        // Exact `/attachments` — exclude `/attachments/presign`.
-        return u.pathname === "/attachments";
+        // Exact `/api/attachments` — exclude `/attachments/presign`.
+        return u.pathname === "/api/attachments";
       },
       { timeout: NAV_TIMEOUT_MS },
     );
@@ -506,19 +506,19 @@ async function run(): Promise<void> {
     const inspResp = await inspirationPostPromise;
     assert(
       inspResp.status() === 201,
-      `POST /inspirations expected 201, got ${inspResp.status()}: ${await inspResp.text()}`,
+      `POST /api/inspirations expected 201, got ${inspResp.status()}: ${await inspResp.text()}`,
     );
     const inspBody = (await inspResp.json()) as { inspiration: InspirationRow };
     inspirationId = inspBody.inspiration.id;
     assert(
       inspBody.inspiration.userId === signupBody.user.id,
-      `Tenant mismatch on POST /inspirations: row.userId=${inspBody.inspiration.userId} vs signed-in ${signupBody.user.id}`,
+      `Tenant mismatch on POST /api/inspirations: row.userId=${inspBody.inspiration.userId} vs signed-in ${signupBody.user.id}`,
     );
     assert(
       inspBody.inspiration.cluster === null,
       `Cluster must be null on insert (worker fills it), got ${inspBody.inspiration.cluster}`,
     );
-    ok(`POST /inspirations → 201 (id=${inspirationId})`);
+    ok(`POST /api/inspirations → 201 (id=${inspirationId})`);
 
     const presignResp = await presignPromise;
     assert(
@@ -546,7 +546,7 @@ async function run(): Promise<void> {
     const finalizeResp = await finalizePromise;
     assert(
       finalizeResp.status() === 201,
-      `POST /attachments expected 201, got ${finalizeResp.status()}: ${await finalizeResp.text()}`,
+      `POST /api/attachments expected 201, got ${finalizeResp.status()}: ${await finalizeResp.text()}`,
     );
     const finalizeBody = (await finalizeResp.json()) as {
       attachment: {
@@ -568,7 +568,7 @@ async function run(): Promise<void> {
       finalizeBody.attachment.s3Key === presignBody.key,
       `Attachment s3Key mismatch: ${finalizeBody.attachment.s3Key} vs ${presignBody.key}`,
     );
-    ok(`POST /attachments → 201 (attachment.id=${finalizeBody.attachment.id})`);
+    ok(`POST /api/attachments → 201 (attachment.id=${finalizeBody.attachment.id})`);
 
     /* ------------------------------------------------------------
      * Step 5 — UI confirms saved state and the row appears in history
@@ -601,31 +601,31 @@ async function run(): Promise<void> {
      * ---------------------------------------------------------- */
     step("Hono API confirms persisted, tenant-scoped row", 6, 7);
 
-    const apiResp = await fetch(`${API_URL}/inspirations`, {
+    const apiResp = await fetch(`${API_URL}/api/inspirations`, {
       method: "GET",
       headers: { Authorization: `Bearer ${signupBody.token}` },
     });
     assert(
       apiResp.status === 200,
-      `GET /inspirations expected 200, got ${apiResp.status}: ${await apiResp.text()}`,
+      `GET /api/inspirations expected 200, got ${apiResp.status}: ${await apiResp.text()}`,
     );
     const apiBody = (await apiResp.json()) as {
       inspirations: InspirationRow[];
     };
     assert(
       Array.isArray(apiBody.inspirations),
-      `Unexpected GET /inspirations shape: ${JSON.stringify(apiBody)}`,
+      `Unexpected GET /api/inspirations shape: ${JSON.stringify(apiBody)}`,
     );
     const persisted = apiBody.inspirations.find(
       (r) => r.id === inspirationId && r.text === noteText,
     );
     assert(
       persisted !== undefined,
-      `Persisted row not surfaced by GET /inspirations (id=${inspirationId})`,
+      `Persisted row not surfaced by GET /api/inspirations (id=${inspirationId})`,
     );
     assert(
       persisted.userId === signupBody.user.id,
-      `Tenant leak on GET /inspirations: row.userId=${persisted.userId} vs ${signupBody.user.id}`,
+      `Tenant leak on GET /api/inspirations: row.userId=${persisted.userId} vs ${signupBody.user.id}`,
     );
     // Defence-in-depth: every row the API returns to this caller MUST
     // belong to them. A regression on the server filter would surface
@@ -633,11 +633,11 @@ async function run(): Promise<void> {
     for (const row of apiBody.inspirations) {
       assert(
         row.userId === signupBody.user.id,
-        `Tenant leak: GET /inspirations returned a row owned by ${row.userId} to user ${signupBody.user.id}`,
+        `Tenant leak: GET /api/inspirations returned a row owned by ${row.userId} to user ${signupBody.user.id}`,
       );
     }
     ok(
-      `GET /inspirations confirms id=${inspirationId} for user=${signupBody.user.id}`,
+      `GET /api/inspirations confirms id=${inspirationId} for user=${signupBody.user.id}`,
     );
 
     /* ------------------------------------------------------------
@@ -645,7 +645,7 @@ async function run(): Promise<void> {
      *
      * Sub-AC 14.3.3 / seed exit condition `classification_loop_closed`.
      *
-     * The POST /inspirations response we asserted in step 4 had
+     * The POST /api/inspirations response we asserted in step 4 had
      * `cluster: null` — the API enqueues classification on the SST
      * Queue and returns immediately (`async_correctness`). The SST
      * `Queue.subscribe` worker (`packages/api/src/queue/classifier.ts`)
@@ -655,7 +655,7 @@ async function run(): Promise<void> {
      *
      * We exercise that loop end-to-end by:
      *
-     *   (a) Polling `GET /inspirations` with the same JWT until the
+     *   (a) Polling `GET /api/inspirations` with the same JWT until the
      *       row's `cluster` enum lands and `classified_at` is set.
      *       This is the *server-side* observability hook — it proves
      *       the queue → Gemini → Postgres path actually closed for
@@ -681,7 +681,7 @@ async function run(): Promise<void> {
       `cluster=${classified.cluster} classified_at=${classified.classifiedAt} (server-side hook)`,
     );
 
-    // Reload the SPA so HomePage's mount-time `GET /inspirations`
+    // Reload the SPA so HomePage's mount-time `GET /api/inspirations`
     // re-runs and the new cluster value flows into `<InspirationCard>`.
     // We use `domcontentloaded` rather than `networkidle` so a long-
     // poll websocket from Vite HMR cannot stall this wait.
