@@ -27,6 +27,9 @@
  *   5. UPDATE the row's `cluster` + `classified_at` (+ `updated_at`) when a
  *      validated label comes back, guarded by `WHERE cluster IS NULL` for
  *      idempotency under SQS at-least-once delivery.
+ *   6. Best-effort automatic WOW generation after classification reaches a
+ *      success/permanent-skip outcome. WOW provider/runtime failures are
+ *      swallowed here and must not alter SQS classification retry semantics.
  *
  * Error & retry semantics (the contract)
  * --------------------------------------
@@ -70,6 +73,7 @@
 import { and, eq, isNull } from "drizzle-orm";
 
 import { type Inspiration, inspirations } from "../db/index.js";
+import { generateAutoWowMomentForInspiration } from "../lib/auto-wow-generation.js";
 import { getDb } from "../lib/db.js";
 import { classifyInspirationText } from "./gemini.js";
 
@@ -110,6 +114,10 @@ interface SQSBatchResponse {
  */
 interface ClassificationJob {
   inspirationId: string;
+}
+
+export interface ClassificationJobDependencies {
+  generateAutoWowMoment?: typeof generateAutoWowMomentForInspiration;
 }
 
 /**
@@ -190,6 +198,7 @@ async function loadInspiration(
  */
 export async function runClassificationJob(
   inspirationId: string,
+  deps: ClassificationJobDependencies = {},
 ): Promise<void> {
   const row = await loadInspiration(inspirationId);
 
@@ -201,10 +210,11 @@ export async function runClassificationJob(
   }
 
   if (row.cluster !== null) {
-    console.log("[classifier] inspiration already classified, skipping", {
+    console.log("[classifier] inspiration already classified, skipping classification", {
       inspirationId,
       cluster: row.cluster,
     });
+    await attemptAutoWowGeneration(row, deps);
     return;
   }
 
@@ -216,6 +226,7 @@ export async function runClassificationJob(
       finishReason: result.finishReason,
       blockReason: result.blockReason,
     });
+    await attemptAutoWowGeneration(row, deps);
     return;
   }
 
@@ -235,6 +246,7 @@ export async function runClassificationJob(
     console.log("[classifier] update skipped, row already classified", {
       inspirationId: row.id,
     });
+    await attemptAutoWowGeneration(row, deps);
     return;
   }
 
@@ -244,6 +256,37 @@ export async function runClassificationJob(
     cluster: result.cluster,
     finishReason: result.finishReason,
   });
+
+  await attemptAutoWowGeneration(row, deps);
+}
+
+async function attemptAutoWowGeneration(
+  row: Inspiration,
+  deps: ClassificationJobDependencies,
+): Promise<void> {
+  const generateAutoWowMoment =
+    deps.generateAutoWowMoment ?? generateAutoWowMomentForInspiration;
+
+  try {
+    const result = await generateAutoWowMoment({
+      db: getDb(),
+      userId: row.userId,
+      inspirationId: row.id,
+    });
+
+    if (result.status === "unavailable") {
+      console.warn("[classifier] automatic WOW generation unavailable", {
+        inspirationId: row.id,
+        userId: row.userId,
+      });
+    }
+  } catch (err) {
+    console.warn("[classifier] automatic WOW generation threw", {
+      inspirationId: row.id,
+      userId: row.userId,
+      errorName: err instanceof Error ? err.name : typeof err,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

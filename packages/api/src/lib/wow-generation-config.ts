@@ -1,0 +1,2 @@
+export const DEFAULT_WOW_GENERATION_LIMIT = 10;
+export const MAX_WOW_GENERATION_LIMIT = 50;

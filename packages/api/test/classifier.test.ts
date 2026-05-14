@@ -63,6 +63,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from "vitest";
 
 import { eq } from "drizzle-orm";
@@ -73,7 +74,7 @@ import {
   inspirations,
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
-import { handler } from "../src/queue/classifier.js";
+import { handler, runClassificationJob } from "../src/queue/classifier.js";
 
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -146,6 +147,10 @@ function jobBody(inspirationId: string): string {
   return JSON.stringify({ inspirationId });
 }
 
+function classifierGeminiCalls() {
+  return gemini.calls.filter((call) => call.url.includes(":generateContent"));
+}
+
 /**
  * Read the row directly from Postgres so a test can assert the persisted
  * state — never relying on the handler's return value to prove the UPDATE
@@ -174,7 +179,7 @@ describe("classifier handler — message processing", () => {
     );
 
     expect(res.batchItemFailures).toHaveLength(0);
-    expect(gemini.calls).toHaveLength(0);
+    expect(classifierGeminiCalls()).toHaveLength(0);
   });
 
   it("drops a body missing inspirationId without retry", async () => {
@@ -183,7 +188,7 @@ describe("classifier handler — message processing", () => {
     );
 
     expect(res.batchItemFailures).toHaveLength(0);
-    expect(gemini.calls).toHaveLength(0);
+    expect(classifierGeminiCalls()).toHaveLength(0);
   });
 
   it("drops a body whose inspirationId is the wrong type", async () => {
@@ -213,7 +218,7 @@ describe("classifier handler — message processing", () => {
     );
     expect(whitespace.batchItemFailures).toHaveLength(0);
 
-    expect(gemini.calls).toHaveLength(0);
+    expect(classifierGeminiCalls()).toHaveLength(0);
   });
 
   it("drops a row-not-found message without retry", async () => {
@@ -227,7 +232,7 @@ describe("classifier handler — message processing", () => {
     );
 
     expect(res.batchItemFailures).toHaveLength(0);
-    expect(gemini.calls).toHaveLength(0);
+    expect(classifierGeminiCalls()).toHaveLength(0);
   });
 
   it("short-circuits an already-classified row without calling Gemini", async () => {
@@ -249,7 +254,7 @@ describe("classifier handler — message processing", () => {
     );
 
     expect(res.batchItemFailures).toHaveLength(0);
-    expect(gemini.calls).toHaveLength(0);
+    expect(classifierGeminiCalls()).toHaveLength(0);
 
     const after = await loadRow(insp.id);
     // Cluster is unchanged — the worker did NOT clobber the prior label.
@@ -274,7 +279,8 @@ describe("classifier handler — message processing", () => {
     );
 
     expect(res.batchItemFailures).toHaveLength(0);
-    const call = gemini.expectCalls(1);
+    const call = classifierGeminiCalls()[0];
+    expect(call).toBeDefined();
     // The request body MUST contain the inspiration text — proves the
     // handler passed the actual row text to Gemini (not, say, an empty
     // string from a mis-shaped read).
@@ -312,10 +318,80 @@ describe("classifier handler — message processing", () => {
     // is permanent-skip; valid succeeded.
     expect(res.batchItemFailures).toHaveLength(0);
     // Only the valid record reached Gemini.
-    expect(gemini.calls).toHaveLength(1);
+    expect(classifierGeminiCalls()).toHaveLength(1);
 
     const after = await loadRow(valid.id);
     expect(after?.cluster).toBe("bridge");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bucket 1b — Async automatic WOW handoff
+// ---------------------------------------------------------------------------
+
+describe("classifier job — automatic WOW handoff", () => {
+  it("attempts automatic WOW generation after a created inspiration is classified", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+
+    const insp = await createInspirationFixture(getDb(), fixture.user.id, {
+      text: "classification can unlock a wow attempt",
+    });
+    const generateAutoWowMoment = vi.fn(async () => ({
+      status: "not_wow" as const,
+      generated: false,
+      embeddingStatus: "unchanged" as const,
+      judgment: { isWowMoment: false as const },
+    }));
+
+    gemini.queueResponse(geminiLabel("bridge"));
+
+    await runClassificationJob(insp.id, { generateAutoWowMoment });
+
+    expect(generateAutoWowMoment).toHaveBeenCalledWith({
+      db: getDb(),
+      userId: fixture.user.id,
+      inspirationId: insp.id,
+    });
+  });
+
+  it("does not let automatic WOW provider failures fail the classification job", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+
+    const insp = await createInspirationFixture(getDb(), fixture.user.id, {
+      text: "classification success should remain successful",
+    });
+    const generateAutoWowMoment = vi.fn(async () => {
+      throw new Error("runtime provider failure");
+    });
+
+    gemini.queueResponse(geminiLabel("loop"));
+
+    await expect(
+      runClassificationJob(insp.id, { generateAutoWowMoment }),
+    ).resolves.toBeUndefined();
+
+    const after = await loadRow(insp.id);
+    expect(after?.cluster).toBe("loop");
+    expect(generateAutoWowMoment).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves transient classification retry semantics and skips automatic WOW", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+
+    const insp = await createInspirationFixture(getDb(), fixture.user.id, {
+      text: "retry before wow",
+    });
+    const generateAutoWowMoment = vi.fn();
+
+    gemini.queueResponse(geminiHttpError(503, "service unavailable"));
+
+    await expect(
+      runClassificationJob(insp.id, { generateAutoWowMoment }),
+    ).rejects.toThrow();
+    expect(generateAutoWowMoment).not.toHaveBeenCalled();
   });
 });
 
@@ -414,7 +490,7 @@ describe("classifier handler — cluster assignment persistence", () => {
     // Exactly ONE Gemini call — the second record short-circuits before
     // the (would-be) second fetch. If both records had gone through, the
     // mock would throw on the empty queue.
-    expect(gemini.calls).toHaveLength(1);
+    expect(classifierGeminiCalls()).toHaveLength(1);
 
     const after = await loadRow(insp.id);
     // Final cluster equals the FIRST result, not whatever a second pass
