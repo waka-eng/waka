@@ -79,6 +79,8 @@ interface InspirationListEntry {
    *  without re-fetching. */
   attachments: ApiAttachment[];
   cluster: ClusterKind | null;
+  /** Backend-calculated WOW score; absent while optimistic saves are in flight. */
+  wowScore: number | null;
   createdAt: string;
   /** Best-effort timestamp string for the meta row. */
   timestamp: string;
@@ -143,6 +145,7 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
     links: [],
     attachments: [],
     cluster: row.cluster,
+    wowScore: row.wowScore,
     createdAt: row.createdAt,
     timestamp: formatTimestamp(row.createdAt),
   };
@@ -159,6 +162,7 @@ function buildOptimisticEntry(
     links: pending.links,
     attachments: [],
     cluster: null,
+    wowScore: null,
     createdAt: pending.createdAt,
     timestamp: formatNow(),
   };
@@ -176,6 +180,7 @@ function applyPersisted(
     status: failedCount > 0 ? "error" : "saved",
     text: inspiration.text,
     cluster: inspiration.cluster,
+    wowScore: inspiration.wowScore,
     attachments,
     errorMessage:
       failedCount > 0
@@ -386,6 +391,15 @@ function InspirationDiscoveryPanel({
     entries.length === 1 ? "" : "s"
   }`;
 
+  const buildMetaText = (entry: InspirationListEntry): string => {
+    const parts = [
+      entry.status === "saved" ? "saved" : entry.status,
+      entry.timestamp,
+    ];
+    if (entry.wowScore !== null) parts.push(`WOW ${entry.wowScore}`);
+    return parts.join(" · ");
+  };
+
   return (
     <section className="inspiration-discovery-panel" aria-labelledby="inspiration-discovery-title">
       <div className="inspiration-discovery-heading">
@@ -478,8 +492,7 @@ function InspirationDiscoveryPanel({
               onClick={() => onSelectInspiration(entry.id)}
             >
               <span className="inspiration-result-meta">
-                {entry.status === "saved" ? "saved" : entry.status}
-                {` · ${entry.timestamp}`}
+                {buildMetaText(entry)}
               </span>
               <span className="inspiration-result-text">{entry.text}</span>
             </button>
@@ -798,21 +811,27 @@ export function HomePage(): JSX.Element {
             try {
               const rows = await fetchInspirations();
               const target = rows.find((r) => r.id === targetId);
-              if (!target?.cluster) return;
-              // Patch only the cluster on the matching row; preserve
+              if (!target) return;
+              // Patch server-calculated fields on the matching row; preserve
               // other local fields (status, attachments, errorMessage)
-              // we already committed via `applyPersisted`. The setter
-              // is also a no-op when the cluster is already set, which
-              // keeps successive polls cheap if the first one wins.
+              // we already committed via `applyPersisted`. The setter is
+              // also a no-op when those fields are already set, which keeps
+              // successive polls cheap if the first one wins.
               setEntries((prev) => {
                 const found = prev.find((e) => e.id === target.id);
-                if (!found || found.cluster === target.cluster) return prev;
+                if (
+                  !found ||
+                  (found.cluster === target.cluster && found.wowScore === target.wowScore)
+                ) {
+                  return prev;
+                }
                 return prev.map((e) =>
                   e.id === target.id
-                    ? { ...e, cluster: target.cluster }
+                    ? { ...e, cluster: target.cluster, wowScore: target.wowScore }
                     : e,
                 );
               });
+              if (!target.cluster) return;
               if (!classifiedRefreshRequested) {
                 classifiedRefreshRequested = true;
                 void refreshWowMoments({

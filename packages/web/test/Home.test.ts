@@ -346,6 +346,18 @@ describe("HomePage view model", () => {
     expect(panel?.textContent).toContain("3 of 3 inspirations");
     expect(container.querySelector(".inspiration-results-grid")).not.toBeNull();
     expect(container.querySelectorAll(".inspiration-result-card")).toHaveLength(3);
+    const resultMetaText = Array.from(
+      container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
+    ).map((node) => node.textContent ?? "");
+    expect(resultMetaText).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("WOW 4"),
+        expect.stringContaining("WOW 8"),
+        expect.stringContaining("WOW 1"),
+      ]),
+    );
+    expect(resultMetaText.some((text) => /\b(NOTE|QUOTE|IMAGE)\b/.test(text))).toBe(false);
+    expect(resultMetaText.some((text) => /\b(BRIDGE|TENSION)\b/.test(text))).toBe(false);
     expect(container.querySelector('select[aria-label="Filter by cluster"]')).toBeNull();
     expect(container.querySelector('select[aria-label="Filter by kind"]')).toBeNull();
     expect(container.querySelectorAll(".grid.home-grid .wm-card")).toHaveLength(0);
@@ -367,6 +379,49 @@ describe("HomePage view model", () => {
     expect(searchedPanel?.textContent).toContain("1 of 3 inspirations");
     expect(searchedPanel?.textContent).toContain("Synthetic memory note");
     expect(searchedPanel?.textContent).not.toContain("Architecture essay");
+  });
+
+  it("keeps optimistic Inspiration First saves simple, then shows returned WOW score after persistence", async () => {
+    setApiFixtures({ inspirations: [] });
+    let resolveCreate: (value: ApiInspiration) => void = () => undefined;
+    const createPromise = new Promise<ApiInspiration>((resolve) => {
+      resolveCreate = resolve;
+    });
+    vi.mocked(createInspiration).mockReturnValue(createPromise);
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+    await saveInspirationFromCapture(
+      container,
+      "Fresh note with a server-scored surprise",
+    );
+
+    const optimisticMeta = Array.from(
+      container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
+    ).map((node) => node.textContent ?? "");
+    expect(optimisticMeta).toHaveLength(1);
+    expect(optimisticMeta[0]).toContain("saving");
+    expect(optimisticMeta[0]).not.toContain("WOW");
+
+    await act(async () => {
+      resolveCreate(
+        persistedInspiration({
+          id: "insp-wow-after-save",
+          text: "Fresh note with a server-scored surprise",
+          wowScore: 8,
+        }),
+      );
+      await createPromise;
+    });
+    await flushReactWork();
+
+    const persistedMeta = Array.from(
+      container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
+    ).map((node) => node.textContent ?? "");
+    expect(persistedMeta).toHaveLength(1);
+    expect(persistedMeta[0]).toContain("saved");
+    expect(persistedMeta[0]).toContain("WOW 8");
+    expect(persistedMeta[0]).not.toMatch(/\b(NOTE|QUOTE|IMAGE|BRIDGE|TENSION)\b/);
   });
 
   it("does not render backend kind or cluster metadata in Inspiration First history or detail", async () => {
