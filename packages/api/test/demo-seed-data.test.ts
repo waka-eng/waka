@@ -186,20 +186,26 @@ describe("demo seed CLI helpers", () => {
     }
   });
 
-  it("replaces prior demo rows by joining WOW moments through demo inspirations", async () => {
-    const calls: string[] = [];
-    const fakeSql = (async (strings: TemplateStringsArray) => {
-      calls.push(strings.join("?"));
+  it("replaces all prior demo-seed rows and linked WOW moments for the selected user", async () => {
+    const calls: Array<{ sql: string; values: unknown[] }> = [];
+    const fakeSql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      calls.push({ sql: strings.join("?"), values });
       return [];
     }) as never;
+    const userId = "00000000-0000-0000-0000-000000000000";
 
-    await replacePriorDemoRows(fakeSql, "00000000-0000-0000-0000-000000000000");
+    await replacePriorDemoRows(fakeSql, userId);
 
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toContain("prior_demo_inspirations");
-    expect(calls[0]).toContain("inner join prior_demo_inspirations");
-    expect(calls[0]).toContain("delete from wow_moments");
-    expect(calls[1]).toContain("delete from inspirations");
+    expect(calls[0]!.sql).toContain("prior_demo_inspirations");
+    expect(calls[0]!.sql).toContain("inner join prior_demo_inspirations");
+    expect(calls[0]!.sql).toContain("delete from wow_moments");
+    expect(calls[0]!.sql).not.toContain("wm.title = any");
+    expect(calls[1]!.sql).toContain("delete from inspirations");
+    expect(calls[1]!.sql).toContain("kind = ?");
+    expect(calls[1]!.sql).not.toContain("text = any");
+    expect(calls[0]!.values).toContain(userId);
+    expect(calls[1]!.values).toContain(DEMO_SEED_KIND);
   });
 
   it("requires an explicit create-user flag and password before inserting an email user", () => {
