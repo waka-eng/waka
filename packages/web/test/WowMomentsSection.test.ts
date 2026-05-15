@@ -1,8 +1,13 @@
+/* @vitest-environment jsdom */
+
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+import * as React from "react";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { WowMomentsSection } from "../src/components/WowMomentsSection";
 import type { ApiWowMoment } from "../src/lib/api";
@@ -42,9 +47,37 @@ const componentSource = readFileSync(
   "utf8",
 );
 
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
 function renderSection(props: Parameters<typeof WowMomentsSection>[0]): string {
-  return renderToStaticMarkup(WowMomentsSection(props));
+  return renderToStaticMarkup(React.createElement(WowMomentsSection, props));
 }
+
+let mountedRoot: ReturnType<typeof createRoot> | null = null;
+let mountedContainer: HTMLDivElement | null = null;
+
+function renderInteractiveSection(props: Parameters<typeof WowMomentsSection>[0]): HTMLDivElement {
+  mountedContainer = document.createElement("div");
+  document.body.appendChild(mountedContainer);
+  mountedRoot = createRoot(mountedContainer);
+
+  act(() => {
+    mountedRoot?.render(React.createElement(WowMomentsSection, props));
+  });
+
+  return mountedContainer;
+}
+
+afterEach(() => {
+  if (mountedRoot) {
+    act(() => {
+      mountedRoot?.unmount();
+    });
+  }
+  mountedRoot = null;
+  mountedContainer?.remove();
+  mountedContainer = null;
+});
 
 describe("WowMomentsSection", () => {
   it("keeps the populated WOW grid three columns with no gap in the mobile override", () => {
@@ -212,6 +245,61 @@ describe("WowMomentsSection", () => {
     expect(componentSource).not.toMatch(/SOURCE_SNIPPET|getSourceSnippet|substring\(/);
   });
 
+  it("opens a focused detail panel from a populated WOW card and keeps richer detail out of the grid", () => {
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
+
+    expect(container.textContent).toContain("Prototype idea keeps returning");
+    expect(container.textContent).toContain("A field note about playful prototypes.");
+    expect(container.textContent).not.toContain("Connects a mobile note with a design sketch.");
+    expect(container.textContent).not.toContain("What would make this bridge testable this week?");
+
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+    expect(card).not.toBeNull();
+    expect(card?.getAttribute("tabindex")).toBe("0");
+    expect(card?.getAttribute("aria-label")).toContain("Open WOW moment details");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain("Prototype idea keeps returning");
+    expect(dialog?.textContent).toContain("Connects a mobile note with a design sketch.");
+    expect(dialog?.textContent).toContain("What would make this bridge testable this week?");
+    expect(dialog?.textContent).toContain("A field note about playful prototypes.");
+  });
+
+  it("opens details with keyboard activation and closes with the Close button and Escape", () => {
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    expect(container.querySelector("[role='dialog']")?.textContent).toContain(
+      "Connects a mobile note with a design sketch.",
+    );
+
+    const closeButton = container.querySelector<HTMLButtonElement>(".wow-moment-detail-close");
+    act(() => {
+      closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.querySelector("[role='dialog']")).toBeNull();
+
+    act(() => {
+      card?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    });
+    expect(container.querySelector("[role='dialog']")?.textContent).toContain(
+      "What would make this bridge testable this week?",
+    );
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(container.querySelector("[role='dialog']")).toBeNull();
+  });
+
   it("caps populated WOW moment cards at nine and counts only visible related evidence", () => {
     const manyMoments = Array.from({ length: 11 }, (_, index) => ({
       ...sampleMoment,
@@ -236,7 +324,7 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("WOW moments shown");
     expect(html).not.toContain("9 of 11");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
-    expect(html.match(/class=\"wow-moment-card\"/g)).toHaveLength(9);
+    expect(html.match(/class=\"wow-moment-card wow-moment-card--interactive\"/g)).toHaveLength(9);
     expect(html).toContain("WOW card 9");
     expect(html).toContain("Related inspiration evidence 9");
     expect(html).not.toContain("Evidence reason 9");
