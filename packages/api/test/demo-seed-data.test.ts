@@ -33,12 +33,13 @@ describe("demo seed data", () => {
     const inspirationImportanceScores = DEMO_INSPIRATIONS.map((seed) => seed.importanceScore);
     const wowMomentScores = DEMO_WOW_MOMENTS.map((moment) => moment.wowScore);
 
-    expect(Math.min(...inspirationWowScores)).toBeGreaterThanOrEqual(30);
-    expect(Math.max(...inspirationWowScores)).toBeLessThanOrEqual(68);
+    expect(Math.min(...inspirationWowScores)).toBeGreaterThanOrEqual(20);
+    expect(Math.max(...inspirationWowScores)).toBeLessThan(40);
+    expect(inspirationWowScores.every((score) => score < 40)).toBe(true);
     expect(Math.min(...inspirationImportanceScores)).toBeGreaterThanOrEqual(25);
     expect(Math.max(...inspirationImportanceScores)).toBeLessThanOrEqual(66);
-    expect(inspirationWowScores.filter((score) => score >= 55).length).toBeGreaterThanOrEqual(6);
-    expect(inspirationWowScores.filter((score) => score <= 40).length).toBeGreaterThanOrEqual(10);
+    expect(inspirationWowScores.filter((score) => score >= 30).length).toBeGreaterThanOrEqual(8);
+    expect(inspirationWowScores.filter((score) => score <= 25).length).toBeGreaterThanOrEqual(10);
 
     expect(Math.min(...wowMomentScores)).toBeGreaterThanOrEqual(20);
     expect(Math.max(...wowMomentScores)).toBeLessThan(40);
