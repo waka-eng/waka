@@ -129,6 +129,16 @@ function formatScore(score: number | null): string {
   return score === null ? "—" : String(score);
 }
 
+function formatCount(value: number, singular: string, plural = `${singular}s`): string {
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function formatRevisitFactors(
+  revisit: ApiInspirationScoreBreakdown["factors"]["revisit"],
+): string {
+  return `${formatCount(revisit.uniqueRevisitDays, "unique day")} · ${formatCount(revisit.totalRevisitCount, "total revisit")} · ${formatCount(revisit.recentRevisitCount, "recent revisit")} · signals: ${revisit.uniqueRevisitDaysScore} unique-day, ${revisit.totalRevisitCountScore} total-revisit, ${revisit.revisitedInLast7DaysScore} recent`;
+}
+
 function ScoreRow({ label, value }: { label: string; value: string | number }): JSX.Element {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
@@ -223,7 +233,7 @@ function ScoreBreakdownPanel({ state }: { state: ScoreBreakdownState }): JSX.Ele
             <ScoreRow label="Revisit" value={state.breakdown.factors.revisit.score} />
             <ScoreRow
               label="Revisit factors"
-              value={`${state.breakdown.factors.revisit.uniqueRevisitDaysScore} unique days · ${state.breakdown.factors.revisit.totalRevisitCountScore} total · ${state.breakdown.factors.revisit.revisitedInLast7DaysScore} recent`}
+              value={formatRevisitFactors(state.breakdown.factors.revisit)}
             />
             <ScoreRow
               label="Relationship"

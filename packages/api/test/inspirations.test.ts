@@ -135,6 +135,21 @@ interface RevisitResponse {
   } | null;
 }
 
+interface ScoreBreakdownResponse {
+  scoreBreakdown: {
+    factors: {
+      revisit: {
+        uniqueRevisitDays: number;
+        totalRevisitCount: number;
+        recentRevisitCount: number;
+        uniqueRevisitDaysScore: number;
+        totalRevisitCountScore: number;
+        revisitedInLast7DaysScore: number;
+      };
+    };
+  };
+}
+
 interface ReflectionResponse {
   reflection: {
     id: string;
@@ -656,6 +671,42 @@ describe("POST /api/inspirations/:id/revisits", () => {
     expect(res.body.inspiration?.importanceScore).toEqual(expect.any(Number));
     expect(res.body.inspiration?.wowScore).toEqual(expect.any(Number));
     expect(await countRevisitEvents(inspirationId)).toBe(1);
+  });
+
+  it("score breakdown exposes one raw unique day separately from the 33 unique-day signal", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "new inspiration with one detail-open revisit" },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+
+    const revisit = await client.json<RevisitResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/revisits`,
+      { eventType: "detail_opened" },
+    );
+    expect(revisit.status).toBe(201);
+
+    const breakdown = await client.json<ScoreBreakdownResponse>(
+      "GET",
+      `/api/inspirations/${inspirationId}/score-breakdown`,
+    );
+
+    expect(breakdown.status).toBe(200);
+    expect(breakdown.body.scoreBreakdown.factors.revisit).toMatchObject({
+      uniqueRevisitDays: 1,
+      totalRevisitCount: 1,
+      recentRevisitCount: 1,
+      uniqueRevisitDaysScore: 33,
+      totalRevisitCountScore: 23,
+      revisitedInLast7DaysScore: 100,
+    });
   });
 
   it("returns 404 for another user's inspiration and does not create a revisit", async () => {

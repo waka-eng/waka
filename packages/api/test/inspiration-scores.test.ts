@@ -5,6 +5,7 @@ import { inArray } from "drizzle-orm";
 import {
   attachments,
   inspirationEmbeddings,
+  inspirationRevisitEvents,
   inspirations,
   reflections,
   type Inspiration,
@@ -252,6 +253,36 @@ describe("persistLocalInspirationScores relationship signals", () => {
     });
 
     expect(snapshot).toEqual(baseline);
+  });
+
+  it("exposes raw revisit counts separately from normalized revisit score signals", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const inspiration = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "Newly opened inspiration should show one raw revisit day.",
+      createdAt: NOW,
+    });
+
+    await testDb.db.insert(inspirationRevisitEvents).values({
+      inspirationId: inspiration.id,
+      userId: alice.user.id,
+      eventType: "detail_opened",
+      createdAt: NOW,
+    } as typeof inspirationRevisitEvents.$inferInsert);
+
+    const breakdown = await calculateInspirationScoreBreakdown(testDb.db as PersistDb, {
+      userId: alice.user.id,
+      inspirationId: inspiration.id,
+      now: NOW,
+    });
+
+    expect(breakdown?.factors.revisit).toMatchObject({
+      uniqueRevisitDays: 1,
+      totalRevisitCount: 1,
+      recentRevisitCount: 1,
+      uniqueRevisitDaysScore: 33,
+      totalRevisitCountScore: 23,
+      revisitedInLast7DaysScore: 100,
+    });
   });
 
   it("returns selected-inspiration breakdown with stored, read-time, and unavailable relationship fields", async () => {

@@ -95,6 +95,9 @@ export interface InspirationScoreBreakdown {
     };
     revisit: {
       score: number;
+      uniqueRevisitDays: number;
+      totalRevisitCount: number;
+      recentRevisitCount: number;
       uniqueRevisitDaysScore: number;
       totalRevisitCountScore: number;
       revisitedInLast7DaysScore: number;
@@ -293,6 +296,9 @@ function buildScoreBreakdown(input: {
       },
       revisit: {
         score: persisted(revisit),
+        uniqueRevisitDays: input.revisitSignals.uniqueRevisitDays,
+        totalRevisitCount: input.revisitSignals.totalRevisitCount,
+        recentRevisitCount: input.revisitSignals.recentRevisitCount,
         uniqueRevisitDaysScore: persisted(
           input.revisitSignals.uniqueRevisitDaysScore,
         ),
@@ -480,6 +486,9 @@ async function discoverRevisitSignals(db: Db, row: InspirationScoreRow) {
   const recentRevisitCount = Number(signals?.recentRevisitCount ?? 0);
 
   return {
+    uniqueRevisitDays,
+    totalRevisitCount,
+    recentRevisitCount,
     uniqueRevisitDaysScore: logNormalize(uniqueRevisitDays, {
       max: UNIQUE_REVISIT_DAYS_MAX,
     }),
