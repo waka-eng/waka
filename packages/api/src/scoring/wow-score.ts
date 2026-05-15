@@ -188,6 +188,57 @@ export function calculateSurpriseSimilarityScore(value: number): SurpriseSimilar
   return clamp01(value);
 }
 
+export interface RelationshipCandidateSignalInput {
+  similarity: SimilarityScore;
+  daysApart: number;
+}
+
+export interface AggregateRelationshipSignalsInput {
+  candidates: readonly RelationshipCandidateSignalInput[];
+  limit?: number;
+}
+
+const SURPRISE_SIMILARITY_IDEAL = 0.62;
+const SURPRISE_SIMILARITY_WIDTH = 0.18;
+const TIME_DISTANCE_RELATIONSHIP_DAYS = 90;
+
+function calculateSurpriseSimilaritySignal(similarity: SimilarityScore): SurpriseSimilarityScore {
+  const distance = Math.abs(clamp01(similarity) - SURPRISE_SIMILARITY_IDEAL);
+  return calculateSurpriseSimilarityScore(1 - distance / SURPRISE_SIMILARITY_WIDTH);
+}
+
+export function aggregateRelationshipSignals(
+  input: AggregateRelationshipSignalsInput,
+): RelationshipInputs {
+  const limit = Math.max(0, Math.floor(input.limit ?? input.candidates.length));
+  const candidates = input.candidates
+    .map((candidate) => ({
+      similarity: calculateSimilarityScore(candidate.similarity),
+      surpriseSimilarity: calculateSurpriseSimilaritySignal(candidate.similarity),
+      timeDistance: clamp01(candidate.daysApart / TIME_DISTANCE_RELATIONSHIP_DAYS),
+    }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+
+  if (candidates.length === 0) {
+    return {
+      topSimilaritySignal: 0,
+      topSurpriseSimilaritySignal: 0,
+      timeDistanceSignal: 0,
+    };
+  }
+
+  return {
+    topSimilaritySignal: Math.max(...candidates.map((candidate) => candidate.similarity)),
+    topSurpriseSimilaritySignal: Math.max(
+      ...candidates.map((candidate) => candidate.surpriseSimilarity),
+    ),
+    timeDistanceSignal:
+      candidates.reduce((sum, candidate) => sum + candidate.timeDistance, 0) /
+      candidates.length,
+  };
+}
+
 export function calculateWowScore(inputs: WowInputs): WowScore {
   const relationship = calculateRelationshipScore({
     topSimilaritySignal: inputs.topSimilaritySignal,

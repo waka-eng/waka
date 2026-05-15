@@ -22,6 +22,7 @@ import {
   ensureInspirationEmbedding,
   type WakaDb,
 } from "../lib/inspiration-embeddings.js";
+import { persistLocalInspirationScoresById } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import {
   DEFAULT_WOW_GENERATION_LIMIT,
@@ -189,6 +190,15 @@ export function createWowMomentsRoutes(
           },
           409,
         );
+      }
+
+      try {
+        await persistLocalInspirationScoresById(db, {
+          userId: user.id,
+          inspirationId: parsed.data.inspirationId,
+        });
+      } catch (error) {
+        logSafeGenerationError(error);
       }
 
       const judgment = await judgeWowMoment({
