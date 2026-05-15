@@ -245,6 +245,21 @@ describe("WowMomentsSection", () => {
     expect(componentSource).not.toMatch(/SOURCE_SNIPPET|getSourceSnippet|substring\(/);
   });
 
+  it("adds a visually quiet open-detail cue to each populated WOW card", () => {
+    const html = renderSection({ moments: [sampleMoment], loading: false, error: null });
+
+    expect(html).toContain("wow-moment-open-cue");
+    expect(html).toContain("Open detail");
+    expect(html).toContain("aria-hidden=\"true\"");
+    expect(html).toContain("aria-label=\"Open WOW moment details: Prototype idea keeps returning\"");
+    expect(globalCss).toMatch(
+      /\.wow-moment-open-cue\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?pointer-events:\s*none;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-card--interactive:is\(:hover, :focus-visible, :focus-within\) \.wow-moment-open-cue\s*\{[\s\S]*?opacity:\s*1;/,
+    );
+  });
+
   it("opens a focused detail panel from a populated WOW card and keeps richer detail out of the grid", () => {
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
 

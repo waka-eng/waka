@@ -93,6 +93,9 @@ export function WowMomentsSection({
                 tabIndex={0}
               >
                 <h3>{moment.title}</h3>
+                <span className="wow-moment-open-cue" aria-hidden="true">
+                  Open detail
+                </span>
                 {relatedSources.length > 0 ? (
                   <ol className="wow-moment-related" aria-label="Related inspirations">
                     {relatedSources.map((related) => (
