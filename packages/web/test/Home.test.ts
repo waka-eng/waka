@@ -743,6 +743,13 @@ describe("HomePage view model", () => {
       "It turns a quick save into something I can use.",
     );
     expect(container.textContent).toContain("Hide reflection · 2 notes");
+    expect(container.querySelector(".history-list")).toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#detailBack")?.click();
+    });
+    await flushReactWork();
+
     expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
       "2 of 2 reflected",
     );
@@ -796,6 +803,13 @@ describe("HomePage view model", () => {
         'button[aria-label="Process this inspiration with a reflection"]',
       ),
     ).not.toBeNull();
+    expect(container.querySelector(".history-list")).toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#detailBack")?.click();
+    });
+    await flushReactWork();
+
     expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
       "1 of 1 reflected",
     );
@@ -929,7 +943,7 @@ describe("HomePage view model", () => {
     await flushReactWork();
     await flushReactWork();
 
-    const detail = container.querySelector<HTMLElement>(".detail-view");
+    const detail = container.querySelector<HTMLElement>(".detail-view.visible");
     expect(detail?.textContent).toContain("Inspiration details");
     expect(
       detail?.querySelector<HTMLTextAreaElement>(
@@ -940,7 +954,22 @@ describe("HomePage view model", () => {
     expect(detail?.querySelector(".detail-links")).toBeNull();
     expect(detail?.querySelector(".detail-attachments")).toBeNull();
     expect(detail?.querySelector(".detail-meta")).toBeNull();
+    expect(historyPanel?.querySelector(".history-list")).toBeNull();
+    expect(historyPanel?.querySelector(".history-item")).toBeNull();
     expect(vi.mocked(fetchReflections)).toHaveBeenCalledWith("insp-1");
+
+    await act(async () => {
+      detail?.querySelector<HTMLButtonElement>("#detailBack")?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".detail-view.visible")).toBeNull();
+    expect(historyPanel?.querySelectorAll(".history-item")).toHaveLength(3);
+    expect(
+      Array.from(historyPanel?.querySelectorAll<HTMLElement>(".history-item") ?? []).some(
+        (card) => card.textContent?.includes("Architecture essay about bridge rhythms"),
+      ),
+    ).toBe(true);
   });
 
   it("clicking the Wow header Capture button switches to Inspiration First and focuses capture", async () => {

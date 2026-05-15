@@ -104,17 +104,20 @@ export function HistoryPanel({
             ×
           </button>
         </div>
-        <div className="history-list" id="historyList">
-          {children ?? (
-            <div className="history-empty">Nothing saved yet</div>
-          )}
-        </div>
+        {detail ? null : (
+          <div className="history-list" id="historyList">
+            {children ?? (
+              <div className="history-empty">Nothing saved yet</div>
+            )}
+          </div>
+        )}
         {/*
           Detail-view shell. The parent can supply a fully-rendered
           detail (typically `<InspirationDetail>`) via the `detail` prop;
           when omitted we fall back to the inert wrapper so the
           slide-over CSS still has a stable target before any selection
-          is made.
+          is made. While detail is mounted, suppress the saved-inspirations
+          list so the drawer shows only the edit/detail surface.
         */}
         {detail ?? (
           <div className="detail-view" id="detailView">
