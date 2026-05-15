@@ -274,6 +274,7 @@ export function InspirationDetail({
   const [scoreBreakdownState, setScoreBreakdownState] =
     useState<ScoreBreakdownState>({ status: "loading" });
   const reflectionsRef = useRef<ApiReflection[]>([]);
+  const scoreBreakdownRequestRef = useRef(0);
   const [reflecting, setReflecting] = useState(false);
   const [detailsText, setDetailsText] = useState(inspiration.text);
   const [saveState, setSaveState] = useState<
@@ -314,12 +315,16 @@ export function InspirationDetail({
   const [threadOpen, setThreadOpen] = useState(false);
 
   const loadScoreBreakdown = useCallback(() => {
+    const requestId = scoreBreakdownRequestRef.current + 1;
+    scoreBreakdownRequestRef.current = requestId;
     setScoreBreakdownState({ status: "loading" });
     void (async () => {
       try {
         const breakdown = await fetchInspirationScoreBreakdown(inspiration.id);
+        if (scoreBreakdownRequestRef.current !== requestId) return;
         setScoreBreakdownState({ status: "ready", breakdown });
       } catch (caught) {
+        if (scoreBreakdownRequestRef.current !== requestId) return;
         const message =
           caught instanceof ApiError
             ? caught.message
@@ -366,6 +371,7 @@ export function InspirationDetail({
 
     return () => {
       cancelled = true;
+      scoreBreakdownRequestRef.current += 1;
     };
   }, [inspiration.id, loadScoreBreakdown, onReflectionCountChanged]);
 
