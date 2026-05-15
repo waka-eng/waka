@@ -154,7 +154,7 @@ async function recordRevisitEvent(input: {
   persistSingleScore: typeof persistSingleLocalInspirationScoreById;
 }) {
   const [parent] = await input.db
-    .select({ id: inspirations.id })
+    .select({ id: inspirations.id, createdAt: inspirations.createdAt })
     .from(inspirations)
     .where(
       and(
@@ -193,7 +193,7 @@ async function recordRevisitEvent(input: {
     });
   }
 
-  return { event, scores };
+  return { event, scores, parent };
 }
 
 export function createInspirationsRoutes(
@@ -428,7 +428,10 @@ routes.post("/:id/revisits", async (c) => {
         ? {
             id: idCheck.data,
             importanceScore: result.scores.importanceScore,
-            wowScore: result.scores.wowScore,
+            wowScore: calculateDisplayedInspirationScore({
+              coreWowScore: result.scores.wowScore,
+              createdAt: result.parent.createdAt,
+            }),
           }
         : null,
     },
