@@ -471,6 +471,66 @@ describe("HomePage view model", () => {
     expect(document.activeElement).toBe(captureTextarea);
   });
 
+  it("Escape shrinks expanded Inspiration First capture without discarding draft or attachments", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
+    const fileInput = container.querySelector<HTMLInputElement>("#capFile");
+    const expandButton = container.querySelector<HTMLButtonElement>("#capExpand");
+    expect(textarea).not.toBeNull();
+    expect(fileInput).not.toBeNull();
+    expect(expandButton).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(textarea!, "Draft that must survive Escape");
+      const file = new File(["notes"], "notes.txt", { type: "text/plain" });
+      Object.defineProperty(fileInput!, "files", {
+        value: [file],
+        configurable: true,
+      });
+      fileInput!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    await act(async () => {
+      expandButton?.click();
+    });
+    await flushReactWork();
+
+    const focusedCaptureCell = container.querySelector<HTMLElement>("#capture");
+    expect(focusedCaptureCell?.classList.contains("focused")).toBe(true);
+    expect(container.querySelector("#capStrip")?.textContent).toContain("notes.txt");
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    await flushReactWork();
+
+    const shrunkCaptureCell = container.querySelector<HTMLElement>("#capture");
+    expect(shrunkCaptureCell?.classList.contains("focused")).toBe(false);
+    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
+      "Draft that must survive Escape",
+    );
+    expect(container.querySelector("#capStrip")?.textContent).toContain("notes.txt");
+    expect(container.querySelector<HTMLButtonElement>("#capSave")?.disabled).toBe(false);
+    expect(createInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    await flushReactWork();
+
+    const stillSmallCaptureCell = container.querySelector<HTMLElement>("#capture");
+    expect(stillSmallCaptureCell?.classList.contains("focused")).toBe(false);
+    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
+      "Draft that must survive Escape",
+    );
+    expect(container.querySelector("#capStrip")?.textContent).toContain("notes.txt");
+    expect(createInspiration).not.toHaveBeenCalled();
+  });
+
   it("can render the switcher in Inspiration First state", () => {
     const html = renderToStaticMarkup(
       createElement(HomeViewToggle, {

@@ -487,6 +487,19 @@ export function InspirationsBoard({
     setFocused(next);
   }, []);
 
+  useEffect(() => {
+    if (!focused) return;
+
+    const handleEscape = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setFocused(false);
+    };
+
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [focused]);
+
   const handleDiscard = useCallback(() => {
     setCloseConfirmOpen(false);
     setFocused(false);
