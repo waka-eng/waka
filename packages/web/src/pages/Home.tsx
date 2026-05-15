@@ -519,18 +519,104 @@ function InspirationDiscoveryPanel({
         >
           <h3 id="inspiration-score-explainer-title">How WAKA scoring works</h3>
           <p>
-            WAKA starts with ImportanceScore, then looks at Relationship,
-            Similarity, and SurpriseSimilarity signals to notice saves that
-            matter together or stand out in a useful way.
+            This debugging explainer separates the formula persisted today from the
+            target scoring model we discussed. Scores are normalized to the same 0–100
+            scale before each weighted blend unless noted.
+          </p>
+          <section aria-labelledby="current-scoring-title">
+            <h4 id="current-scoring-title">Current implementation</h4>
+            <p>
+              The persisted <code>WowScore</code> formula used today is{" "}
+              <code>
+                45% ImportanceScore + 25% TopSimilarity + 20% TopSurpriseSimilarity +
+                10% TimeDistance
+              </code>
+              . Until embedding-backed relationship updates land, the relationship and
+              time-distance signals are currently <code>0</code>, so the stored score mostly
+              reflects ImportanceScore.
+            </p>
+          </section>
+          <section aria-labelledby="target-scoring-title">
+            <h4 id="target-scoring-title">Target scoring model we discussed</h4>
+            <dl>
+              <div>
+                <dt>ImportanceScore</dt>
+                <dd>
+                  <code>
+                    ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit +
+                    10% TimeSignal
+                  </code>
+                </dd>
+              </div>
+              <div>
+                <dt>ContentDepth</dt>
+                <dd>
+                  <code>ContentDepth = 70% TextDepth + 30% Context</code>. TextDepth rewards
+                  richer saved text; Context rewards supporting signals such as links,
+                  attachments, and surrounding metadata.
+                </dd>
+              </div>
+              <div>
+                <dt>Processing</dt>
+                <dd>
+                  Includes <code>hasReflection</code> as a binary signal: reflected saves get
+                  the processing credit, unreflected saves do not.
+                </dd>
+              </div>
+              <div>
+                <dt>Revisit</dt>
+                <dd>
+                  <code>
+                    Revisit = 65% Unique days + 25% total revisits + 10% revisited last 7
+                    days
+                  </code>
+                  . Unique days counts spread across days, total revisits counts repeated
+                  returns, and revisited last 7 days is a recent-return boost.
+                </dd>
+              </div>
+              <div>
+                <dt>RelationshipScore</dt>
+                <dd>
+                  <code>
+                    RelationshipScore = 45% TopSimilarity + 35% TopSurpriseSimilarity +
+                    20% TimeDistance
+                  </code>
+                  . Similarity and surprise use embeddings plus top-k, bounded retrieval;
+                  WAKA does not send the full inspiration history to an LLM for this step.
+                </dd>
+              </div>
+              <div>
+                <dt>CoreWowScore</dt>
+                <dd>
+                  <code>CoreWowScore = 55% ImportanceScore + 45% RelationshipScore</code>.
+                </dd>
+              </div>
+              <div>
+                <dt>FreshnessDecay</dt>
+                <dd>
+                  <code>FreshnessDecay = 100 × 0.5^(ageDays / 30)</code>. The 30-day
+                  freshness half-life means the freshness contribution halves every 30
+                  days after save time.
+                </dd>
+              </div>
+              <div>
+                <dt>Final / displayed score</dt>
+                <dd>
+                  <code>DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay</code>. This
+                  is the proposed displayed score, not the score persisted today.
+                </dd>
+              </div>
+            </dl>
+          </section>
+          <p>
+            Target updates would run on save, edit, reflection, revisit, embedding
+            refresh, new related inspiration, and WOW generation. Each trigger uses
+            bounded updates so one change does not rescore the whole archive.
           </p>
           <p>
-            Recent saves get a small boost: freshness has a 30-day freshness
-            half-life and only a 10% freshness weight, so older ideas can still
-            win when they are meaningful.
-          </p>
-          <p>
-            AI/LLM judgment is used for WOW moment judgment and user-facing
-            explanations, not for basic score arithmetic.
+            AI/LLM judgment is reserved for judging and writing WOW moments and their
+            explanations. Basic score arithmetic and bounded retrieval remain deterministic;
+            WAKA does not ask an LLM to calculate the score.
           </p>
         </div>
       ) : null}

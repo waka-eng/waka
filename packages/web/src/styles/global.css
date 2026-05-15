@@ -3122,16 +3122,45 @@ body.reflect-bg {
   letter-spacing: -0.02em;
 }
 
-.inspiration-score-explainer p {
+.inspiration-score-explainer p,
+.inspiration-score-explainer dd {
   margin: 0;
-  max-width: 76ch;
+  max-width: 82ch;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
 }
 
-.inspiration-score-explainer p + p {
+.inspiration-score-explainer p + p,
+.inspiration-score-explainer dl + p {
   margin-top: var(--space-2);
+}
+
+.inspiration-score-explainer dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+}
+
+.inspiration-score-explainer dl > div {
+  display: grid;
+  gap: 4px;
+  padding-top: var(--space-2);
+  border-top: 1px solid rgba(15, 15, 14, 0.08);
+}
+
+.inspiration-score-explainer dt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.inspiration-score-explainer code {
+  font-family: var(--font-mono);
+  font-size: 0.94em;
+  color: var(--ink);
 }
 
 .inspiration-filter-bar {
