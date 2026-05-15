@@ -13,6 +13,7 @@ import {
   createInspiration,
   createReflection,
   fetchBackgroundJobs,
+  fetchInspirationScoreBreakdown,
   fetchInspirations,
   fetchReflections,
   fetchWowMoments,
@@ -52,6 +53,50 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     fetchInspirations: vi.fn(async () => []),
+    fetchInspirationScoreBreakdown: vi.fn(async () => ({
+      inspirationId: "insp-1",
+      displayedWowScore: 12,
+      persistedCoreWowScore: 7,
+      importanceScore: 9,
+      freshnessAdjustment: {
+        ageDays: 2,
+        freshnessScore: 95,
+        displayedMinusCore: 5,
+        source: "read_time",
+      },
+      stored: { importanceScore: 9, coreWowScore: 7 },
+      factors: {
+        content: {
+          score: 18,
+          textDepthScore: 14,
+          contextScore: 27,
+          meaningfulLinkCount: 1,
+          nonLinkAttachmentCount: 0,
+          reflectionTextChars: 44,
+        },
+        processing: { score: 100, hasReflection: true },
+        revisit: {
+          score: 21,
+          uniqueRevisitDaysScore: 33,
+          totalRevisitCountScore: 20,
+          revisitedInLast7DaysScore: 100,
+        },
+        relationship: {
+          available: false,
+          score: null,
+          topSimilaritySignal: null,
+          topSurpriseSimilaritySignal: null,
+          timeDistanceSignal: null,
+          relatedCandidateCount: 0,
+          note: "No stored embedding for this inspiration, so no relationship score is shown; viewing does not generate embeddings.",
+        },
+      },
+      formulas: {
+        importance: "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
+        coreWow: "CoreWowScore = 55% ImportanceScore + 45% RelationshipScore",
+        displayedWow: "DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay",
+      },
+    })),
     fetchReflections: vi.fn(async () => []),
     fetchWowMoments: vi.fn(async () => []),
     createReflection: vi.fn(async () => {
@@ -668,6 +713,35 @@ describe("HomePage view model", () => {
     expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
       "Save only after I process this",
     );
+  });
+
+  it("shows a selected inspiration WOW score breakdown in the detail panel", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const firstResult = container.querySelector<HTMLButtonElement>(
+      ".inspiration-result-card",
+    );
+    expect(firstResult).not.toBeNull();
+    await act(async () => {
+      firstResult?.click();
+    });
+    await flushReactWork();
+
+    expect(fetchInspirationScoreBreakdown).toHaveBeenCalledWith("insp-1");
+    const detail = container.querySelector<HTMLElement>(".detail-view");
+    expect(detail?.textContent).toContain("WOW score breakdown");
+    expect(detail?.textContent).toContain("WOW 12");
+    expect(detail?.textContent).toContain("Displayed WOW");
+    expect(detail?.textContent).toContain("Stored/core WOW");
+    expect(detail?.textContent).toContain("Freshness adjustment");
+    expect(detail?.textContent).toContain("Content/text/context");
+    expect(detail?.textContent).toContain("Processing/reflection");
+    expect(detail?.textContent).toContain("Revisit");
+    expect(detail?.textContent).toContain("Relationship");
+    expect(detail?.textContent).toContain("viewing this panel does not run provider calls or generate embeddings");
+    expect(detail?.textContent).toContain("No stored embedding");
   });
 
   it("opens saved inspirations as editable details without a static preview and saves edits", async () => {

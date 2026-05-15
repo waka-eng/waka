@@ -12,6 +12,7 @@ import {
 import {
   calculateContextScore,
   calculateDisplayedInspirationScore,
+  calculateInspirationScoreBreakdown,
   calculateLocalInspirationScoreSnapshot,
   persistLocalInspirationScores,
 } from "../src/lib/inspiration-scores.js";
@@ -251,6 +252,49 @@ describe("persistLocalInspirationScores relationship signals", () => {
     });
 
     expect(snapshot).toEqual(baseline);
+  });
+
+  it("returns selected-inspiration breakdown with stored, read-time, and unavailable relationship fields", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const target = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "A detailed note about civic furniture and folding shade structures.",
+      createdAt: daysAgo(30),
+    });
+
+    await testDb.db.insert(reflections).values({
+      inspirationId: target.id,
+      userId: alice.user.id,
+      question: "Why save this?",
+      answer: "It connects a physical design pattern to public spaces.",
+    });
+
+    const snapshot = await persistLocalInspirationScores(testDb.db as PersistDb, target);
+    const breakdown = await calculateInspirationScoreBreakdown(testDb.db as PersistDb, {
+      userId: alice.user.id,
+      inspirationId: target.id,
+      now: NOW,
+    });
+
+    expect(breakdown).not.toBeNull();
+    expect(breakdown!.inspirationId).toBe(target.id);
+    expect(breakdown!.persistedCoreWowScore).toBe(snapshot.wowScore);
+    expect(breakdown!.stored.coreWowScore).toBe(snapshot.wowScore);
+    expect(breakdown!.importanceScore).toBe(snapshot.importanceScore);
+    expect(breakdown!.stored.importanceScore).toBe(snapshot.importanceScore);
+    expect(breakdown!.displayedWowScore).toBe(
+      calculateDisplayedInspirationScore({
+        coreWowScore: snapshot.wowScore,
+        createdAt: target.createdAt,
+        now: NOW,
+      }),
+    );
+    expect(breakdown!.freshnessAdjustment.source).toBe("read_time");
+    expect(breakdown!.factors.content.reflectionTextChars).toBeGreaterThan(0);
+    expect(breakdown!.factors.processing.hasReflection).toBe(true);
+    expect(breakdown!.factors.relationship.available).toBe(false);
+    expect(breakdown!.factors.relationship.score).toBeNull();
+    expect(breakdown!.factors.relationship.note).toContain("viewing does not generate embeddings");
+    expect(breakdown!.formulas.displayedWow).toContain("FreshnessDecay");
   });
 
   it("persists higher bounded scores from tenant-scoped context signals", async () => {
