@@ -3226,6 +3226,28 @@ body.reflect-bg {
   box-shadow: none;
 }
 
+.wow-moment-card--interactive {
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.wow-moment-card--interactive:hover,
+.wow-moment-card--interactive:focus-visible {
+  background: rgba(255, 253, 247, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(15, 15, 14, 0.22), 0 18px 42px rgba(15, 15, 14, 0.08);
+  outline: none;
+  transform: translateY(-1px);
+  z-index: 1;
+}
+
+.wow-moment-card--interactive:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(15, 15, 14, 0.5), 0 18px 42px rgba(15, 15, 14, 0.1);
+}
+
 .wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
   margin-left: -1px;
 }
@@ -3334,6 +3356,133 @@ body.reflect-bg {
 .wow-moment-skeleton--title {
   width: 72%;
   height: 28px;
+}
+
+.wow-moment-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 48px);
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 253, 247, 0.94), rgba(246, 242, 232, 0.72) 42%, rgba(15, 15, 14, 0.18)),
+    rgba(15, 15, 14, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.wow-moment-detail-panel {
+  width: min(720px, 100%);
+  max-height: min(82vh, 760px);
+  overflow: auto;
+  border: 1px solid rgba(15, 15, 14, 0.2);
+  border-radius: 28px;
+  padding: clamp(22px, 4vw, 34px);
+  background:
+    linear-gradient(145deg, rgba(255, 253, 247, 0.98), rgba(246, 242, 232, 0.96)),
+    var(--paper);
+  box-shadow: 0 34px 90px rgba(15, 15, 14, 0.24);
+  animation: wmOverlaySlide 220ms ease-out;
+}
+
+.wow-moment-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.wow-moment-detail-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wow-moment-detail-close {
+  border: var(--border-hairline);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(255, 253, 247, 0.76);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.wow-moment-detail-close:hover,
+.wow-moment-detail-close:focus-visible {
+  background: var(--ink);
+  color: var(--paper);
+  outline: none;
+}
+
+.wow-moment-detail-panel h3 {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(30px, 5vw, 54px);
+  line-height: 0.96;
+  letter-spacing: -0.045em;
+  color: var(--ink);
+}
+
+.wow-moment-detail-section {
+  border-top: var(--border-hairline);
+  padding-top: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.wow-moment-detail-section h4 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wow-moment-detail-section p {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(17px, 2vw, 22px);
+  line-height: 1.45;
+}
+
+.wow-moment-detail-section--reflection {
+  border: 1px solid rgba(15, 15, 14, 0.12);
+  border-radius: 20px;
+  padding: var(--space-4);
+  background: rgba(246, 242, 232, 0.72);
+}
+
+.wow-moment-detail-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wow-moment-detail-sources li {
+  border: var(--border-hairline);
+  border-radius: 18px;
+  padding: var(--space-3);
+  background: rgba(255, 253, 247, 0.78);
+}
+
+.wow-moment-detail-sources blockquote {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid rgba(15, 15, 14, 0.22);
+  font-family: var(--font-serif);
+  font-size: clamp(16px, 1.8vw, 20px);
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 640px) {

@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+
 import type { ApiWowMoment } from "../lib/api";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
@@ -14,6 +17,38 @@ export function WowMomentsSection({
   error,
 }: WowMomentsSectionProps): JSX.Element {
   const visibleMoments = moments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
+  const [selectedMoment, setSelectedMoment] = useState<ApiWowMoment | null>(null);
+
+  useEffect(() => {
+    if (!selectedMoment) return undefined;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedMoment(null);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [selectedMoment]);
+
+  useEffect(() => {
+    if (!selectedMoment) return;
+    if (!visibleMoments.some((moment) => moment.id === selectedMoment.id)) {
+      setSelectedMoment(null);
+    }
+  }, [selectedMoment, visibleMoments]);
+
+  const openMoment = (moment: ApiWowMoment) => {
+    setSelectedMoment(moment);
+  };
+
+  const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLElement>, moment: ApiWowMoment) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openMoment(moment);
+    }
+  };
 
   return (
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
@@ -48,7 +83,15 @@ export function WowMomentsSection({
             const relatedSources = moment.relatedInspirations;
 
             return (
-              <article className="wow-moment-card" key={moment.id}>
+              <article
+                aria-label={`Open WOW moment details: ${moment.title}`}
+                className="wow-moment-card wow-moment-card--interactive"
+                key={moment.id}
+                onClick={() => openMoment(moment)}
+                onKeyDown={(event) => handleCardKeyDown(event, moment)}
+                role="button"
+                tabIndex={0}
+              >
                 <h3>{moment.title}</h3>
                 {relatedSources.length > 0 ? (
                   <ol className="wow-moment-related" aria-label="Related inspirations">
@@ -64,6 +107,53 @@ export function WowMomentsSection({
           })}
         </div>
       )}
+
+      {selectedMoment ? (
+        <div className="wow-moment-detail-backdrop" role="presentation">
+          <aside
+            aria-labelledby="wow-moment-detail-title"
+            aria-modal="true"
+            className="wow-moment-detail-panel"
+            role="dialog"
+          >
+            <div className="wow-moment-detail-header">
+              <p className="wow-moment-detail-kicker">WOW moment detail</p>
+              <button
+                className="wow-moment-detail-close"
+                onClick={() => setSelectedMoment(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
+            {selectedMoment.why ? (
+              <section className="wow-moment-detail-section">
+                <h4>Why it matters</h4>
+                <p>{selectedMoment.why}</p>
+              </section>
+            ) : null}
+            {selectedMoment.reflectionQuestion ? (
+              <section className="wow-moment-detail-section wow-moment-detail-section--reflection">
+                <h4>Reflection question</h4>
+                <p>{selectedMoment.reflectionQuestion}</p>
+              </section>
+            ) : null}
+            {selectedMoment.relatedInspirations.length > 0 ? (
+              <section className="wow-moment-detail-section">
+                <h4>Related source inspirations</h4>
+                <ol className="wow-moment-detail-sources">
+                  {selectedMoment.relatedInspirations.map((related) => (
+                    <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
+                      <blockquote>{related.text}</blockquote>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
+          </aside>
+        </div>
+      ) : null}
     </section>
   );
 }
