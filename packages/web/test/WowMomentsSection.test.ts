@@ -32,6 +32,15 @@ const sampleMoment: ApiWowMoment = {
 const packageCssPath = resolve(process.cwd(), "src/styles/global.css");
 const workspaceCssPath = resolve(process.cwd(), "packages/web/src/styles/global.css");
 const globalCss = readFileSync(existsSync(packageCssPath) ? packageCssPath : workspaceCssPath, "utf8");
+const packageComponentPath = resolve(process.cwd(), "src/components/WowMomentsSection.tsx");
+const workspaceComponentPath = resolve(
+  process.cwd(),
+  "packages/web/src/components/WowMomentsSection.tsx",
+);
+const componentSource = readFileSync(
+  existsSync(packageComponentPath) ? packageComponentPath : workspaceComponentPath,
+  "utf8",
+);
 
 function renderSection(props: Parameters<typeof WowMomentsSection>[0]): string {
   return renderToStaticMarkup(WowMomentsSection(props));
@@ -57,11 +66,19 @@ describe("WowMomentsSection", () => {
       /\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{[^}]*margin-top:\s*-1px;/,
     );
     expect(globalCss).toMatch(
-      /\.wow-moment-related\s*\{[\s\S]*?grid-auto-rows:\s*minmax\(0, 1fr\);[\s\S]*?align-content:\s*stretch;/,
+      /\.wow-moments-grid--populated\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[\s\S]*?grid-auto-rows:\s*minmax\(190px, auto\);[\s\S]*?gap:\s*0;/,
     );
     expect(globalCss).toMatch(
-      /\.wow-moment-related blockquote\s*\{[\s\S]*?font-size:\s*11px;[\s\S]*?line-height:\s*1\.22;/,
+      /\.wow-moment-related\s*\{[\s\S]*?grid-auto-rows:\s*auto;[\s\S]*?align-content:\s*start;/,
     );
+    expect(globalCss).toMatch(
+      /\.wow-moment-related blockquote\s*\{[\s\S]*?font-size:\s*12px;[\s\S]*?line-height:\s*1\.34;[\s\S]*?overflow-wrap:\s*anywhere;/,
+    );
+    const blockquoteRule = globalCss.match(/\.wow-moment-related blockquote\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    expect(blockquoteRule).not.toMatch(/-webkit-line-clamp|overflow:\s*hidden|display:\s*-webkit-box/);
+    const populatedCardRule =
+      globalCss.match(/\.wow-moments-grid--populated \.wow-moment-card\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    expect(populatedCardRule).not.toMatch(/overflow:\s*hidden|height:\s*100%/);
   });
 
   it("renders a loading state", () => {
@@ -90,7 +107,7 @@ describe("WowMomentsSection", () => {
     expect(html).toContain("Malformed WOW moments response");
   });
 
-  it("renders every related inspiration as short plain source snippets", () => {
+  it("renders every related inspiration as complete plain source text", () => {
     const momentWithManyRelatedInspirations: ApiWowMoment = {
       ...sampleMoment,
       relatedInspirations: [
@@ -141,10 +158,14 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
     expect(html).not.toContain("Connects a mobile note with a design sketch.");
-    expect(html).toContain("A field note about playful prototyp…");
-    expect(html).toContain("A sketch that turned the field note…");
-    expect(html).toContain("A voice memo asking for smaller WOW…");
-    expect(html).toContain("A prototype review that asked to ke…");
+    expect(html).toContain("A field note about playful prototypes.");
+    expect(html).toContain("A sketch that turned the field note into a grid.");
+    expect(html).toContain("A voice memo asking for smaller WOW cards.");
+    expect(html).toContain("A prototype review that asked to keep every spark visible.");
+    expect(html).not.toContain("prototyp…");
+    expect(html).not.toContain("note…");
+    expect(html).not.toContain("WOW…");
+    expect(html).not.toContain("ke…");
     expect(html).not.toContain("+1 source");
     expect(html).not.toContain("+2 sources");
     expect(html).not.toContain("wow-moment-related-more");
@@ -165,7 +186,9 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("What would make this bridge testable this week?");
   });
 
-  it("shortens long source snippets before rendering them in the card", () => {
+  it("renders long related inspiration text in full without a snippet ellipsis", () => {
+    const longSourceText =
+      "This very long source inspiration should stay complete so the WOW card can grow and show the tiny WOW card context without hiding the final sentence about readable evidence.";
     const html = renderSection({
       moments: [
         {
@@ -173,7 +196,7 @@ describe("WowMomentsSection", () => {
           relatedInspirations: [
             {
               ...sampleMoment.relatedInspirations[0]!,
-              text: "This very long source inspiration should be clipped so the tiny WOW card stays compact and readable.",
+              text: longSourceText,
             },
           ],
         },
@@ -182,8 +205,11 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("This very long source inspiration s…");
-    expect(html).not.toContain("tiny WOW card stays compact");
+    expect(html).toContain(longSourceText);
+    expect(html).toContain("tiny WOW card context");
+    expect(html).toContain("final sentence about readable evidence");
+    expect(html).not.toContain("…");
+    expect(componentSource).not.toMatch(/SOURCE_SNIPPET|getSourceSnippet|substring\(/);
   });
 
   it("caps populated WOW moment cards at nine and counts only visible related evidence", () => {

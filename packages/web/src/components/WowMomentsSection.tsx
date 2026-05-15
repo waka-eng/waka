@@ -1,13 +1,6 @@
 import type { ApiWowMoment } from "../lib/api";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
-const SOURCE_SNIPPET_MAX_LENGTH = 36;
-
-function getSourceSnippet(text: string): string {
-  const compactText = text.trim().replace(/\s+/g, " ");
-  if (compactText.length <= SOURCE_SNIPPET_MAX_LENGTH) return compactText;
-  return `${compactText.slice(0, SOURCE_SNIPPET_MAX_LENGTH - 1).trimEnd()}…`;
-}
 
 interface WowMomentsSectionProps {
   moments: ApiWowMoment[];
@@ -61,7 +54,7 @@ export function WowMomentsSection({
                   <ol className="wow-moment-related" aria-label="Related inspirations">
                     {relatedSources.map((related) => (
                       <li key={`${moment.id}-${related.inspirationId}`}>
-                        <blockquote>{getSourceSnippet(related.text)}</blockquote>
+                        <blockquote>{related.text}</blockquote>
                       </li>
                     ))}
                   </ol>
