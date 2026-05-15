@@ -43,7 +43,9 @@ import {
   deleteInspiration,
   fetchReflections,
   type ApiAttachment,
+  type ApiInspirationScorePatch,
   type ApiReflection,
+  type CreateReflectionResponse,
 } from "../../lib/api";
 import { ReflectionForm, type PendingReflection } from "./ReflectionForm";
 import { ReflectionThread, type ReflectionEntry } from "./ReflectionThread";
@@ -99,6 +101,8 @@ export interface InspirationDetailProps {
    * list rows stay aligned with the detail thread.
    */
   onReflectionCountChanged?: (id: string, count: number) => void;
+  /** Fires after reflection POST returns recomputed parent scores. */
+  onInspirationScoresChanged?: (scores: ApiInspirationScorePatch) => void;
 }
 
 /* ============================================================
@@ -115,6 +119,7 @@ export function InspirationDetail({
   onBack,
   onDeleted,
   onReflectionCountChanged,
+  onInspirationScoresChanged,
 }: InspirationDetailProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const reflectionsRef = useRef<ApiReflection[]>([]);
@@ -251,18 +256,21 @@ export function InspirationDetail({
   );
 
   const handlePersistedReflection = useCallback(
-    (tempId: string, server: ApiReflection) => {
+    (tempId: string, server: CreateReflectionResponse) => {
       const hadOptimistic = reflectionsRef.current.some((row) => row.id === tempId);
       const nextReflections = hadOptimistic
-        ? reflectionsRef.current.map((row) => (row.id === tempId ? server : row))
-        : [...reflectionsRef.current, server];
+        ? reflectionsRef.current.map((row) =>
+            row.id === tempId ? server.reflection : row,
+          )
+        : [...reflectionsRef.current, server.reflection];
       reflectionsRef.current = nextReflections;
       setState({ status: "ready", reflections: nextReflections });
       setReflecting(false);
       setThreadOpen(true);
       onReflectionCountChanged?.(inspiration.id, nextReflections.length);
+      if (server.inspiration) onInspirationScoresChanged?.(server.inspiration);
     },
-    [inspiration.id, onReflectionCountChanged],
+    [inspiration.id, onInspirationScoresChanged, onReflectionCountChanged],
   );
 
   const handleReflectionError = useCallback((tempId: string) => {

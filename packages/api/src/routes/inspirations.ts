@@ -625,9 +625,19 @@ routes.post("/:id/reflections", async (c) => {
     return c.json({ error: "Failed to create reflection" }, 500);
   }
 
-  await persistLocalInspirationScores(db, parent);
+  const updatedScores = await persistLocalInspirationScores(db, parent);
 
-  return c.json({ reflection: inserted }, 201);
+  return c.json(
+    {
+      reflection: inserted,
+      inspiration: {
+        id: parent.id,
+        importanceScore: updatedScores.importanceScore,
+        wowScore: updatedScores.wowScore,
+      },
+    },
+    201,
+  );
 });
 
 // ---------------------------------------------------------------------------

@@ -501,13 +501,20 @@ describe("HomePage view model", () => {
       }),
     );
     vi.mocked(createReflection).mockResolvedValue({
-      id: "reflection-1",
-      inspirationId: "insp-reflective-save",
-      userId: "user-1",
-      question: "What about this is worth remembering?",
-      answer: "It names the quiet system behind the ritual.",
-      skipped: false,
-      createdAt: "2026-05-14T16:31:00.000Z",
+      reflection: {
+        id: "reflection-1",
+        inspirationId: "insp-reflective-save",
+        userId: "user-1",
+        question: "What about this is worth remembering?",
+        answer: "It names the quiet system behind the ritual.",
+        skipped: false,
+        createdAt: "2026-05-14T16:31:00.000Z",
+      },
+      inspiration: {
+        id: "insp-reflective-save",
+        importanceScore: 3,
+        wowScore: 7,
+      },
     });
 
     const container = await renderHomePage();
@@ -555,6 +562,9 @@ describe("HomePage view model", () => {
     expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
       "1 of 1 reflected",
     );
+    expect(container.querySelector(".inspiration-result-meta")?.textContent).toContain(
+      "WOW 7",
+    );
   });
 
   it("keeps reflective mode open and explains that a reflection answer is needed", async () => {
@@ -598,12 +608,17 @@ describe("HomePage view model", () => {
         answer: "This already helped once.",
       }),
     ]);
-    vi.mocked(createReflection).mockResolvedValue(
-      persistedReflection({
+    vi.mocked(createReflection).mockResolvedValue({
+      reflection: persistedReflection({
         id: "reflection-later",
         answer: "It turns a quick save into something I can use.",
       }),
-    );
+      inspiration: {
+        id: "insp-1",
+        importanceScore: 9,
+        wowScore: 10,
+      },
+    });
 
     const container = await renderHomePage();
     await switchToInspirationFirst(container);
@@ -658,6 +673,11 @@ describe("HomePage view model", () => {
     expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
       "2 of 2 reflected",
     );
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>(".inspiration-result-meta")).some(
+        (node) => node.textContent?.includes("WOW 10"),
+      ),
+    ).toBe(true);
   });
 
   it("keeps the detail reflection entry point hidden until existing reflections are ready", async () => {

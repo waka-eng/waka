@@ -85,7 +85,7 @@ import {
 import {
   ApiError,
   createReflection,
-  type ApiReflection,
+  type CreateReflectionResponse,
 } from "../../lib/api";
 
 /* ============================================================
@@ -161,7 +161,7 @@ export interface ReflectionFormProps {
   /** Fires immediately when Save / Skip lands a non-empty submission. */
   onOptimisticAdd?: (pending: PendingReflection) => void;
   /** Fires when the POST resolves with the canonical server row. */
-  onPersisted?: (tempId: string, server: ApiReflection) => void;
+  onPersisted?: (tempId: string, server: CreateReflectionResponse) => void;
   /** Fires when the POST fails (network or 4xx/5xx). */
   onPersistError?: (tempId: string, error: ApiError) => void;
 }

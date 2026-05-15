@@ -61,7 +61,7 @@ import {
   uploadToPresignedUrl,
   type ApiAttachment,
   type ApiInspiration,
-  type ApiReflection,
+  type CreateReflectionResponse,
 } from "../../lib/api";
 import {
   CaptureCell,
@@ -119,7 +119,7 @@ export interface PendingInspiration {
 export interface PersistedResult {
   inspiration: ApiInspiration;
   attachments: ApiAttachment[];
-  reflection?: ApiReflection;
+  reflection?: CreateReflectionResponse;
   /** Per-attachment failures. Surfaces the original `localId` so the parent
    *  can keep the failed one visible (e.g. with a retry affordance) while
    *  the inspiration row itself is treated as saved. */
