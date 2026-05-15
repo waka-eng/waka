@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateLocalInspirationScoreSnapshot } from "../src/lib/inspiration-scores.js";
+import {
+  calculateDisplayedInspirationScore,
+  calculateLocalInspirationScoreSnapshot,
+} from "../src/lib/inspiration-scores.js";
 
 const NOW = new Date("2026-05-12T00:00:00.000Z");
 
@@ -37,7 +40,25 @@ describe("local inspiration score snapshots", () => {
         ...base,
         createdAt: daysAgo(180),
       }),
-    ).toEqual({ importanceScore: 10, wowScore: 5 });
+    ).toEqual({ importanceScore: 10, wowScore: 6 });
+  });
+
+  it("calculates the freshness-adjusted displayed score from persisted core WOW", () => {
+    expect(
+      calculateDisplayedInspirationScore({
+        coreWowScore: 60,
+        createdAt: daysAgo(0),
+        now: NOW,
+      }),
+    ).toBe(64);
+
+    expect(
+      calculateDisplayedInspirationScore({
+        coreWowScore: 60,
+        createdAt: daysAgo(30),
+        now: NOW,
+      }),
+    ).toBe(59);
   });
 
   it("does not use coarse kind/category metadata as context score", () => {

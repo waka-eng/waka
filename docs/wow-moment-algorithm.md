@@ -7,8 +7,9 @@ This document captures the current agreed shape for WOW moments. It replaces old
 - Every inspiration carries a persistent `importance_score` and `wow_score`.
 - Scores are normalized internally to the inclusive `0..1` range.
 - Persisted integer score columns may store normalized scores as `0..100` values by rounding `score * 100`.
-- `wow_score` is a stored snapshot, not a value recalculated during list reads.
-- Update rule: workers update `wow_score` only when one of its constituent signals changes (`importance`, top similarity, top surprise similarity, or time distance). If those signals do not change, the stored `wow_score` stays unchanged.
+- Persisted `wow_score` is the core WOW snapshot (`CoreWowScore`), excluding the freshness adjustment.
+- API/UI inspiration rows expose the user-facing displayed WOW score as `wowScore`: `DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay`.
+- Update rule: workers update persisted `wow_score` only when one of its core constituent signals changes (`importance`, top similarity, top surprise similarity, or time distance). Freshness changes with age at response/render time and does not require DB rewrites.
 - There is no separate `OutlierScore`; outlier behavior is represented by WOW kind and by the same score pipeline as other moments.
 
 ## Score formulas
@@ -29,10 +30,15 @@ ImportanceScore = 0.40*ContentDepth
                 + 0.25*Revisit
                 + 0.10*TimeSignal
 
-WowScore = 0.45*Importance
-         + 0.25*TopSimilaritySignal
-         + 0.20*TopSurpriseSimilaritySignal
-         + 0.10*TimeDistanceSignal
+RelationshipScore = 0.45*TopSimilaritySignal
+                  + 0.35*TopSurpriseSimilaritySignal
+                  + 0.20*TimeDistanceSignal
+
+CoreWowScore = 0.55*ImportanceScore
+             + 0.45*RelationshipScore
+
+FreshnessDecay = 0.5^(ageDays/30)
+DisplayedScore = 0.90*CoreWowScore + 0.10*FreshnessDecay
 
 RuntimeCandidateScore = 0.50*WowScore
                       + 0.25*SimilarityToTrigger

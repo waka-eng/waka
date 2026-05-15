@@ -51,6 +51,7 @@ import { eq } from "drizzle-orm";
 
 import { backgroundJobs, inspirations } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
+import { calculateDisplayedInspirationScore } from "../src/lib/inspiration-scores.js";
 import { createUserFixture } from "./fixtures/users.js";
 import {
   apiRequest,
@@ -180,6 +181,7 @@ describe("POST /api/inspirations — successful creation", () => {
         text: inspirations.text,
         importanceScore: inspirations.importanceScore,
         wowScore: inspirations.wowScore,
+        createdAt: inspirations.createdAt,
         cluster: inspirations.cluster,
       })
       .from(inspirations)
@@ -190,7 +192,14 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(row.importanceScore).toEqual(expect.any(Number));
     expect(row.wowScore).toEqual(expect.any(Number));
     expect(dbRows[0]!.importanceScore).toBe(row.importanceScore);
-    expect(dbRows[0]!.wowScore).toBe(row.wowScore);
+    expect(row.wowScore).toBe(
+      calculateDisplayedInspirationScore({
+        coreWowScore: dbRows[0]!.wowScore,
+        createdAt: dbRows[0]!.createdAt,
+        now: new Date(row.createdAt),
+      }),
+    );
+    expect(dbRows[0]!.wowScore).not.toBe(row.wowScore);
     expect(dbRows[0]!.cluster).toBeNull();
 
     const jobs = await getDb()

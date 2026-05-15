@@ -457,11 +457,10 @@ describe("HomePage view model", () => {
     expect(explainer).not.toBeNull();
     const explainerText = (explainer?.textContent ?? "").replace(/\s+/g, " ").trim();
     expect(explainerText).toContain("Current implementation");
-    expect(explainerText).toContain("persisted WowScore formula used today");
-    expect(explainerText).toContain(
-      "45% ImportanceScore + 25% TopSimilarity + 20% TopSurpriseSimilarity + 10% TimeDistance",
-    );
-    expect(explainerText).toContain("relationship and time-distance signals are currently 0");
+    expect(explainerText).toContain("database persists WowScore as a core WOW snapshot");
+    expect(explainerText).toContain("freshness-adjusted WOW score");
+    expect(explainerText).toContain("relationship signals are currently 0");
+    expect(explainerText).toContain("Revisit signal is also 0");
     expect(explainerText).toContain("Target scoring model we discussed");
     expect(explainerText).toContain(
       "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
@@ -478,13 +477,13 @@ describe("HomePage view model", () => {
       "CoreWowScore = 55% ImportanceScore + 45% RelationshipScore",
     );
     expect(explainerText).toContain(
-      "FreshnessDecay = 100 × 0.5^(ageDays / 30)",
+      "FreshnessDecay = 0.5^(ageDays / 30)",
     );
     expect(explainerText).toContain("30-day freshness half-life");
     expect(explainerText).toContain(
       "DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay",
     );
-    expect(explainerText).toContain("proposed displayed score, not the score persisted today");
+    expect(explainerText).toContain("user-facing score returned by the API");
     expect(explainerText).toContain("top-k, bounded retrieval");
     expect(explainerText).toContain("does not send the full inspiration history");
     expect(explainerText).toContain("save, edit, reflection, revisit");
