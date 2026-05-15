@@ -138,12 +138,16 @@ The API health endpoint remains available at <http://localhost:3010/api/health>.
 printing environment variable values or secrets. Variables already present in the
 shell keep their values, and the runner's local development exports still win for
 `PORT`, `PUBLIC_API_URL`, `PUBLIC_WEB_URL`, `VITE_API_URL`,
-`WAKA_SERVE_WEB_DIST`, and `WAKA_WEB_DIST_DIR`. The local runner does not load
-root `.env` or `.env.production` for API development.
+`VITE_SHOW_INTERNAL_STATUS`, `WAKA_SERVE_WEB_DIST`, and `WAKA_WEB_DIST_DIR`. The
+local runner does not load root `.env` or `.env.production` for API development.
 
 This mode intentionally clears `VITE_API_URL` before building the client so
 browser API calls and Google OAuth navigation use same-origin paths such as
-`/api/auth/google/login`. API routes are mounted before static assets; the SPA
+`/api/auth/google/login`. It also builds with `VITE_SHOW_INTERNAL_STATUS=true` so
+the internal/demo-only WOW pipeline status strip is visible in the local
+same-origin demo after a successful Inspiration First capture; normal production
+builds keep the strip hidden unless that Vite env flag is explicitly set. API
+routes are mounted before static assets; the SPA
 fallback serves `index.html` only for non-API GET routes and will not intercept
 `/api/auth/*`, `/api/inspirations/*`, `/api/attachments/*`, `/api/wow-moments/*`, or `/api/health`.
 
@@ -167,8 +171,9 @@ off, `/api/admin/background-jobs` returns 404 so the admin surface is not
 advertised.
 
 The authenticated Home page also has a compact internal/demo-only WOW pipeline
-status strip after a successful inspiration capture. It renders in Vite dev mode
-or when `VITE_SHOW_INTERNAL_STATUS=true` is set for the web app. The strip only
+status strip after a successful inspiration capture. It renders in Vite dev mode,
+in `pnpm dev:local`'s same-origin demo build, or when
+`VITE_SHOW_INTERNAL_STATUS=true` is set explicitly for the web app. The strip only
 shows safe fields (short inspiration id, timestamps, simple job/WOW status, WOW
 count) and degrades gracefully if the admin background-jobs endpoint is disabled.
 
