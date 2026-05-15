@@ -19,9 +19,11 @@ import type { WakaDb } from "./inspiration-embeddings.js";
 import {
   calculateContentDepthScore,
   calculateDisplayedScore,
+  calculateCoreWowScore,
   calculateFreshnessDecayScore,
   calculateImportanceScore,
   calculateProcessingScore,
+  calculateRelationshipScore,
   calculateRevisitScore,
   calculateWowScore,
   aggregateRelationshipSignals,
@@ -61,6 +63,58 @@ export interface PersistableInspirationScoreSnapshot {
   importanceScore: number;
   /** Persisted core WOW score (0..100), excluding freshness display boost. */
   wowScore: number;
+}
+
+export interface InspirationScoreBreakdown {
+  inspirationId: string;
+  displayedWowScore: number;
+  persistedCoreWowScore: number;
+  importanceScore: number;
+  freshnessAdjustment: {
+    ageDays: number;
+    freshnessScore: number;
+    displayedMinusCore: number;
+    source: "read_time";
+  };
+  stored: {
+    importanceScore: number;
+    coreWowScore: number;
+  };
+  factors: {
+    content: {
+      score: number;
+      textDepthScore: number;
+      contextScore: number;
+      meaningfulLinkCount: number;
+      nonLinkAttachmentCount: number;
+      reflectionTextChars: number;
+    };
+    processing: {
+      score: number;
+      hasReflection: boolean;
+    };
+    revisit: {
+      score: number;
+      uniqueRevisitDaysScore: number;
+      totalRevisitCountScore: number;
+      revisitedInLast7DaysScore: number;
+    };
+    relationship: {
+      available: boolean;
+      score: number | null;
+      topSimilaritySignal: number | null;
+      topSurpriseSimilaritySignal: number | null;
+      timeDistanceSignal: number | null;
+      relatedCandidateCount: number;
+      note: string;
+    };
+  };
+  formulas: {
+    importance: string;
+    coreWow: string;
+    displayedWow: string;
+    relationship?: string;
+  };
 }
 
 export interface InspirationScoreRow {
@@ -141,6 +195,146 @@ function calculateCreatedAtTimeSignal(createdAt: Date, now = new Date()) {
   const timeGapPotentialScore = clamp01(ageDays / TIME_GAP_POTENTIAL_DAYS);
 
   return clamp01(0.5 * maturityScore + 0.5 * timeGapPotentialScore);
+}
+
+function persisted(score: number): number {
+  return toPersistedScore(score);
+}
+
+function numericBoolean(value: boolean | number): number {
+  return typeof value === "boolean" ? (value ? 1 : 0) : clamp01(value);
+}
+
+function relationshipUnavailableNote(currentEmbedding: unknown, candidateCount: number): string {
+  if (!currentEmbedding) {
+    return "No stored embedding for this inspiration, so no relationship score is shown; viewing does not generate embeddings.";
+  }
+  if (candidateCount === 0) {
+    return "Stored embedding exists, but no comparable related inspirations were available; viewing does not generate embeddings.";
+  }
+  return "Relationship score uses existing stored embeddings and bounded related inspirations; viewing does not generate embeddings.";
+}
+
+function buildScoreBreakdown(input: {
+  row: InspirationScoreRow & { importanceScore?: number; wowScore?: number };
+  context: Awaited<ReturnType<typeof discoverLocalScoreSignals>>;
+  revisitSignals: Awaited<ReturnType<typeof discoverRevisitSignals>>;
+  relationship: Awaited<ReturnType<typeof loadRelationshipCandidateRows>>;
+  storedImportanceScore?: number;
+  storedCoreWowScore?: number;
+  now?: Date;
+}): InspirationScoreBreakdown {
+  const now = input.now ?? new Date();
+  const contextSignals = input.context.contextSignals;
+  const textDepth = logNormalize(input.row.text.length, { max: MAX_TEXT_DEPTH_CHARS });
+  const contextScore = calculateContextScore(contextSignals);
+  const contentDepth = calculateContentDepthScore({ textDepth, contextScore });
+  const processing = calculateProcessingScore({
+    hasReflection: input.context.hasReflection,
+  });
+  const revisit = calculateRevisitScore({
+    uniqueRevisitDays: input.revisitSignals.uniqueRevisitDaysScore,
+    totalRevisitCount: input.revisitSignals.totalRevisitCountScore,
+    revisitedInLast7Days: input.revisitSignals.revisitedInLast7DaysScore,
+  });
+  const timeSignal = calculateCreatedAtTimeSignal(input.row.createdAt, now);
+  const importance = calculateImportanceScore({
+    contentDepth,
+    processing,
+    revisit,
+    timeSignal,
+  });
+  const relationshipAvailable =
+    Boolean(input.relationship.currentEmbedding) && input.relationship.relatedRows.length > 0;
+  const relationshipScore = relationshipAvailable
+    ? calculateRelationshipScore(input.relationship.relationshipSignals)
+    : null;
+  const coreWow = calculateCoreWowScore({
+    importance,
+    relationship: relationshipScore ?? 0,
+  });
+  const ageDays = calculateAgeDays(input.row.createdAt, now);
+  const freshnessDecay = calculateFreshnessDecayScore({ ageDays });
+  const persistedCoreWowScore = input.storedCoreWowScore ?? persisted(coreWow);
+  const importanceScore = input.storedImportanceScore ?? persisted(importance);
+  const displayed = calculateDisplayedScore({
+    coreWowScore: clamp01(persistedCoreWowScore / 100),
+    freshnessDecay,
+  });
+  const displayedWowScore = persisted(displayed);
+
+  return {
+    inspirationId: input.row.id,
+    displayedWowScore,
+    persistedCoreWowScore,
+    importanceScore,
+    freshnessAdjustment: {
+      ageDays,
+      freshnessScore: persisted(freshnessDecay),
+      displayedMinusCore: displayedWowScore - persistedCoreWowScore,
+      source: "read_time",
+    },
+    stored: {
+      importanceScore,
+      coreWowScore: persistedCoreWowScore,
+    },
+    factors: {
+      content: {
+        score: persisted(contentDepth),
+        textDepthScore: persisted(textDepth),
+        contextScore: persisted(contextScore),
+        meaningfulLinkCount: contextSignals.meaningfulLinkCount,
+        nonLinkAttachmentCount: contextSignals.nonLinkAttachmentCount,
+        reflectionTextChars: contextSignals.reflectionTextChars,
+      },
+      processing: {
+        score: persisted(processing),
+        hasReflection: input.context.hasReflection,
+      },
+      revisit: {
+        score: persisted(revisit),
+        uniqueRevisitDaysScore: persisted(
+          input.revisitSignals.uniqueRevisitDaysScore,
+        ),
+        totalRevisitCountScore: persisted(
+          input.revisitSignals.totalRevisitCountScore,
+        ),
+        revisitedInLast7DaysScore: persisted(
+          numericBoolean(input.revisitSignals.revisitedInLast7DaysScore),
+        ),
+      },
+      relationship: {
+        available: relationshipAvailable,
+        score: relationshipScore === null ? null : persisted(relationshipScore),
+        topSimilaritySignal: relationshipAvailable
+          ? persisted(input.relationship.relationshipSignals.topSimilaritySignal)
+          : null,
+        topSurpriseSimilaritySignal: relationshipAvailable
+          ? persisted(input.relationship.relationshipSignals.topSurpriseSimilaritySignal)
+          : null,
+        timeDistanceSignal: relationshipAvailable
+          ? persisted(input.relationship.relationshipSignals.timeDistanceSignal)
+          : null,
+        relatedCandidateCount: input.relationship.relatedRows.length,
+        note: relationshipUnavailableNote(
+          input.relationship.currentEmbedding,
+          input.relationship.relatedRows.length,
+        ),
+      },
+    },
+    formulas: {
+      importance:
+        "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
+      coreWow: "CoreWowScore = 55% ImportanceScore + 45% RelationshipScore",
+      displayedWow: "DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay",
+      ...(relationshipAvailable
+        ? {
+            relationship:
+              "RelationshipScore = 45% TopSimilarity + 35% TopSurpriseSimilarity + 20% TimeDistance",
+          }
+        : {}),
+    },
+  };
 }
 
 export function calculateDisplayedInspirationScore(input: {
@@ -473,6 +667,49 @@ export async function persistSingleLocalInspirationScoreById(
   const snapshot = await calculatePersistableSnapshot(db, row, { priorOnly: false });
   await updateInspirationScoreRow(db, row, snapshot);
   return snapshot;
+}
+
+export async function calculateInspirationScoreBreakdown(
+  db: Db,
+  params: { userId: string; inspirationId: string; now?: Date },
+): Promise<InspirationScoreBreakdown | null> {
+  const [row] = await db
+    .select({
+      id: inspirations.id,
+      userId: inspirations.userId,
+      text: inspirations.text,
+      kind: inspirations.kind,
+      category: inspirations.category,
+      importanceScore: inspirations.importanceScore,
+      wowScore: inspirations.wowScore,
+      createdAt: inspirations.createdAt,
+    })
+    .from(inspirations)
+    .where(
+      and(
+        eq(inspirations.id, params.inspirationId),
+        eq(inspirations.userId, params.userId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) return null;
+
+  const context = await discoverLocalScoreSignals(db, row);
+  const revisitSignals = await discoverRevisitSignals(db, row);
+  const relationship = await loadRelationshipCandidateRows(db, row, {
+    priorOnly: false,
+  });
+
+  return buildScoreBreakdown({
+    row,
+    context,
+    revisitSignals,
+    relationship,
+    storedImportanceScore: row.importanceScore,
+    storedCoreWowScore: row.wowScore,
+    now: params.now,
+  });
 }
 
 export async function persistLocalInspirationScoresById(

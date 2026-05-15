@@ -277,6 +277,55 @@ export interface ApiInspiration {
   updatedAt: string;
 }
 
+export interface ApiInspirationScoreBreakdown {
+  inspirationId: string;
+  displayedWowScore: number;
+  persistedCoreWowScore: number;
+  importanceScore: number;
+  freshnessAdjustment: {
+    ageDays: number;
+    freshnessScore: number;
+    displayedMinusCore: number;
+    source: "read_time";
+  };
+  stored: {
+    importanceScore: number;
+    coreWowScore: number;
+  };
+  factors: {
+    content: {
+      score: number;
+      textDepthScore: number;
+      contextScore: number;
+      meaningfulLinkCount: number;
+      nonLinkAttachmentCount: number;
+      reflectionTextChars: number;
+    };
+    processing: { score: number; hasReflection: boolean };
+    revisit: {
+      score: number;
+      uniqueRevisitDaysScore: number;
+      totalRevisitCountScore: number;
+      revisitedInLast7DaysScore: number;
+    };
+    relationship: {
+      available: boolean;
+      score: number | null;
+      topSimilaritySignal: number | null;
+      topSurpriseSimilaritySignal: number | null;
+      timeDistanceSignal: number | null;
+      relatedCandidateCount: number;
+      note: string;
+    };
+  };
+  formulas: {
+    importance: string;
+    coreWow: string;
+    displayedWow: string;
+    relationship?: string;
+  };
+}
+
 export interface CreateInspirationRequest {
   text: string;
   kind?: string;
@@ -308,6 +357,10 @@ export interface CreateInspirationRevisitResponse {
     createdAt: string;
   };
   inspiration: ApiInspirationScorePatch | null;
+}
+
+export interface GetInspirationScoreBreakdownResponse {
+  scoreBreakdown: ApiInspirationScoreBreakdown;
 }
 
 /**
@@ -362,6 +415,16 @@ export async function recordInspirationRevisit(
     { eventType },
     "Failed to record inspiration revisit",
   );
+}
+
+export async function fetchInspirationScoreBreakdown(
+  id: string,
+): Promise<ApiInspirationScoreBreakdown> {
+  const body = await getJson<GetInspirationScoreBreakdownResponse>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}/score-breakdown`),
+    "Failed to load score breakdown",
+  );
+  return body.scoreBreakdown;
 }
 
 /** Response shape for GET /inspirations. */
@@ -895,6 +958,44 @@ export async function fetchReflections(
  * JSON-parse / ApiError-translation dance so each endpoint helper above stays
  * small and consistent.
  */
+async function getJson<T>(
+  path: string,
+  fallbackMessage: string,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: `${fallbackMessage}: network unreachable`,
+    });
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+
+  if (!res.ok) {
+    const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ?? `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
+      fieldErrors: errorBody.details,
+    });
+  }
+
+  return body as T;
+}
+
 async function postJson<T>(
   path: string,
   payload: unknown,

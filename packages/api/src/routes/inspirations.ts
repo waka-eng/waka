@@ -50,6 +50,7 @@ import {
 import { getDb } from "../lib/db.js";
 import {
   calculateDisplayedInspirationScore,
+  calculateInspirationScoreBreakdown,
   persistLocalInspirationScores,
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
@@ -376,6 +377,30 @@ routes.get("/", async (c) => {
 
   const now = new Date();
   return c.json({ inspirations: rows.map((row) => withDisplayedWowScore(row, now)) }, 200);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/inspirations/:id/score-breakdown
+// ---------------------------------------------------------------------------
+routes.get("/:id/score-breakdown", async (c) => {
+  const inspirationId = c.req.param("id");
+  const idCheck = z.string().uuid().safeParse(inspirationId);
+  if (!idCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const breakdown = await calculateInspirationScoreBreakdown(db, {
+    userId: user.id,
+    inspirationId: idCheck.data,
+  });
+
+  if (!breakdown) {
+    return c.json({ error: "Inspiration not found" }, 404);
+  }
+
+  return c.json({ scoreBreakdown: breakdown }, 200);
 });
 
 // ---------------------------------------------------------------------------
