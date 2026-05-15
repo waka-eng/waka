@@ -6,9 +6,14 @@
  * WOW-moment generation path.
  */
 
-import { and, desc, eq, lt, ne } from "drizzle-orm";
+import { and, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
 
-import { inspirationEmbeddings, inspirations, reflections } from "../db/index.js";
+import {
+  inspirationEmbeddings,
+  inspirationRevisitEvents,
+  inspirations,
+  reflections,
+} from "../db/index.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import {
   calculateContentDepthScore,
@@ -38,6 +43,11 @@ export interface LocalInspirationScoreInput {
     topSurpriseSimilaritySignal: number;
     timeDistanceSignal: number;
   };
+  revisitSignals?: {
+    uniqueRevisitDaysScore: number;
+    totalRevisitCountScore: number;
+    revisitedInLast7DaysScore: boolean | number;
+  };
   now?: Date;
 }
 
@@ -59,6 +69,9 @@ export interface InspirationScoreRow {
 const MAX_TEXT_DEPTH_CHARS = 8192;
 const MATURITY_SIGNAL_DAYS = 30;
 const TIME_GAP_POTENTIAL_DAYS = 180;
+const UNIQUE_REVISIT_DAYS_MAX = 7;
+const TOTAL_REVISIT_COUNT_MAX = 20;
+const RECENT_REVISIT_DAYS = 7;
 export const CANDIDATE_RETRIEVAL_LIMIT = 50;
 export const SCORE_UPDATE_LIMIT = 20;
 
@@ -116,13 +129,15 @@ export function calculateLocalInspirationScoreSnapshot(
     hasReflection: input.hasReflection,
   });
 
-  // There is no revisit table/signal in the current schema. Keep the score at
-  // zero until concrete revisit data exists rather than inferring it from list
-  // reads or other user actions.
+  const revisitSignals = input.revisitSignals ?? {
+    uniqueRevisitDaysScore: 0,
+    totalRevisitCountScore: 0,
+    revisitedInLast7DaysScore: false,
+  };
   const revisit = calculateRevisitScore({
-    uniqueRevisitDays: 0,
-    totalRevisitCount: 0,
-    revisitedInLast7Days: false,
+    uniqueRevisitDays: revisitSignals.uniqueRevisitDaysScore,
+    totalRevisitCount: revisitSignals.totalRevisitCountScore,
+    revisitedInLast7Days: revisitSignals.revisitedInLast7DaysScore,
   });
 
   const timeSignal = calculateCreatedAtTimeSignal(input.createdAt, input.now);
@@ -166,6 +181,40 @@ async function discoverLocalScoreSignals(db: Db, row: InspirationScoreRow) {
 
   return {
     hasReflection: Boolean(reflection),
+  };
+}
+
+async function discoverRevisitSignals(db: Db, row: InspirationScoreRow) {
+  const recentCutoff = new Date(
+    Date.now() - RECENT_REVISIT_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const recentCutoffIso = recentCutoff.toISOString();
+  const [signals] = await db
+    .select({
+      uniqueRevisitDays: sql<number>`count(distinct date(${inspirationRevisitEvents.createdAt}))::int`,
+      totalRevisitCount: sql<number>`count(*)::int`,
+      recentRevisitCount: sql<number>`count(*) filter (where ${inspirationRevisitEvents.createdAt} >= ${recentCutoffIso}::timestamptz)::int`,
+    })
+    .from(inspirationRevisitEvents)
+    .where(
+      and(
+        eq(inspirationRevisitEvents.userId, row.userId),
+        eq(inspirationRevisitEvents.inspirationId, row.id),
+      ),
+    );
+
+  const uniqueRevisitDays = Number(signals?.uniqueRevisitDays ?? 0);
+  const totalRevisitCount = Number(signals?.totalRevisitCount ?? 0);
+  const recentRevisitCount = Number(signals?.recentRevisitCount ?? 0);
+
+  return {
+    uniqueRevisitDaysScore: logNormalize(uniqueRevisitDays, {
+      max: UNIQUE_REVISIT_DAYS_MAX,
+    }),
+    totalRevisitCountScore: logNormalize(totalRevisitCount, {
+      max: TOTAL_REVISIT_COUNT_MAX,
+    }),
+    revisitedInLast7DaysScore: recentRevisitCount > 0,
   };
 }
 
@@ -263,6 +312,7 @@ async function calculatePersistableSnapshot(
   options: { priorOnly: boolean },
 ): Promise<PersistableInspirationScoreSnapshot> {
   const signals = await discoverLocalScoreSignals(db, row);
+  const revisitSignals = await discoverRevisitSignals(db, row);
   const relationship = await loadRelationshipCandidateRows(db, row, options);
 
   return calculateLocalInspirationScoreSnapshot({
@@ -271,6 +321,7 @@ async function calculatePersistableSnapshot(
     category: row.category,
     createdAt: row.createdAt,
     hasReflection: signals.hasReflection,
+    revisitSignals,
     relationshipSignals: relationship.relationshipSignals,
   });
 }
@@ -287,6 +338,31 @@ async function updateInspirationScoreRow(
       wowScore: snapshot.wowScore,
     } as Partial<typeof inspirations.$inferInsert>)
     .where(and(eq(inspirations.id, row.id), eq(inspirations.userId, row.userId)));
+}
+
+async function loadInspirationScoreRow(
+  db: Db,
+  params: { userId: string; inspirationId: string },
+): Promise<InspirationScoreRow | null> {
+  const [row] = await db
+    .select({
+      id: inspirations.id,
+      userId: inspirations.userId,
+      text: inspirations.text,
+      kind: inspirations.kind,
+      category: inspirations.category,
+      createdAt: inspirations.createdAt,
+    })
+    .from(inspirations)
+    .where(
+      and(
+        eq(inspirations.id, params.inspirationId),
+        eq(inspirations.userId, params.userId),
+      ),
+    )
+    .limit(1);
+
+  return row ?? null;
 }
 
 export async function persistLocalInspirationScores(
@@ -308,28 +384,23 @@ export async function persistLocalInspirationScores(
   return snapshot;
 }
 
+export async function persistSingleLocalInspirationScoreById(
+  db: Db,
+  params: { userId: string; inspirationId: string },
+): Promise<PersistableInspirationScoreSnapshot | null> {
+  const row = await loadInspirationScoreRow(db, params);
+  if (!row) return null;
+
+  const snapshot = await calculatePersistableSnapshot(db, row, { priorOnly: false });
+  await updateInspirationScoreRow(db, row, snapshot);
+  return snapshot;
+}
+
 export async function persistLocalInspirationScoresById(
   db: Db,
   params: { userId: string; inspirationId: string },
 ): Promise<PersistableInspirationScoreSnapshot | null> {
-  const [row] = await db
-    .select({
-      id: inspirations.id,
-      userId: inspirations.userId,
-      text: inspirations.text,
-      kind: inspirations.kind,
-      category: inspirations.category,
-      createdAt: inspirations.createdAt,
-    })
-    .from(inspirations)
-    .where(
-      and(
-        eq(inspirations.id, params.inspirationId),
-        eq(inspirations.userId, params.userId),
-      ),
-    )
-    .limit(1);
-
+  const row = await loadInspirationScoreRow(db, params);
   if (!row) return null;
 
   return persistLocalInspirationScores(db, row);

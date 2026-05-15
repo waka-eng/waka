@@ -295,6 +295,21 @@ export interface UpdateInspirationResponse {
   inspiration: ApiInspiration;
 }
 
+export type InspirationRevisitEventType =
+  | "detail_opened"
+  | "detail_returned"
+  | "reflection_created"
+  | "inspiration_updated";
+
+export interface CreateInspirationRevisitResponse {
+  revisit: {
+    id: string;
+    eventType: InspirationRevisitEventType;
+    createdAt: string;
+  };
+  inspiration: ApiInspirationScorePatch | null;
+}
+
 /**
  * POST /inspirations
  *
@@ -329,6 +344,24 @@ export async function updateInspiration(
     "Failed to update inspiration",
   );
   return body.inspiration;
+}
+
+/**
+ * POST /inspirations/:id/revisits
+ *
+ * Logs a meaningful user return/open interaction separately from list loading.
+ * The server scopes the event by both session user and inspiration id, then
+ * refreshes only that inspiration's local score best-effort.
+ */
+export async function recordInspirationRevisit(
+  id: string,
+  eventType: InspirationRevisitEventType,
+): Promise<CreateInspirationRevisitResponse> {
+  return postJson<CreateInspirationRevisitResponse>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}/revisits`),
+    { eventType },
+    "Failed to record inspiration revisit",
+  );
 }
 
 /** Response shape for GET /inspirations. */

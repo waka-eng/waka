@@ -12,7 +12,7 @@ This document captures the current agreed shape for WOW moments. It replaces old
 - Update rule: workers update persisted `wow_score` only when one of its core constituent signals changes (`importance`, top similarity, top surprise similarity, or time distance). Freshness changes with age at response/render time and does not require DB rewrites.
 - Local inspiration save/edit/reflection score persistence uses already-stored inspiration embeddings when present. It does not call embedding providers or LLMs. If the trigger inspiration has no stored embedding, relationship signals remain zero and only the trigger's local core score is persisted.
 - When stored embeddings are available, relationship signals are computed from a bounded same-user candidate set: at most 50 prior embedded inspirations are retrieved for the trigger, cosine similarity is reused for both top similarity and the surprise-similarity heuristic (ideal `0.62`, width `0.18`), and time distance is normalized as days apart over roughly 90 days. The trigger plus at most 20 related prior inspirations get updated; this is not a full-history recalculation.
-- Revisit event tracking is not implemented in this slice; revisit signals remain zero until a concrete revisit table/event stream exists.
+- Revisit event tracking is implemented via append-only `inspiration_revisit_events` rows for meaningful user returns such as detail open, detail return, reflection creation, and inspiration edit. Ordinary list rendering does not create revisit events.
 - There is no separate `OutlierScore`; outlier behavior is represented by WOW kind and by the same score pipeline as other moments.
 
 ## Score formulas

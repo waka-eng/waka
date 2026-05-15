@@ -71,6 +71,13 @@
       "when": 1778730651254,
       "tag": "0009_friendly_bromley",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778843032025,
+      "tag": "0010_shallow_klaw",
+      "breakpoints": true
     }
   ]
 }
