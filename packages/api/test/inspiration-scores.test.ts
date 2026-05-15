@@ -1,14 +1,70 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { eq, inArray } from "drizzle-orm";
+
+import { inspirationEmbeddings, inspirations, type Inspiration } from "../src/db/index.js";
 import {
   calculateDisplayedInspirationScore,
   calculateLocalInspirationScoreSnapshot,
+  persistLocalInspirationScores,
 } from "../src/lib/inspiration-scores.js";
+
+import { createUserFixture } from "./fixtures/users.js";
+import { createTestDatabase, type TestDatabase } from "./helpers/db.js";
 
 const NOW = new Date("2026-05-12T00:00:00.000Z");
 
 function daysAgo(days: number) {
   return new Date(NOW.getTime() - days * 24 * 60 * 60 * 1000);
+}
+
+async function createEmbedding(
+  testDb: TestDatabase,
+  inspiration: Inspiration,
+  embedding: number[],
+): Promise<void> {
+  await testDb.db.insert(inspirationEmbeddings).values({
+    userId: inspiration.userId,
+    inspirationId: inspiration.id,
+    model: "test-embedding-model",
+    dimensions: embedding.length,
+    inputHash: `hash-${inspiration.id}`,
+    embedding,
+  });
+}
+
+async function createScoreTestInspiration(
+  testDb: TestDatabase,
+  userId: string,
+  values: Pick<Inspiration, "text" | "createdAt">,
+): Promise<Inspiration> {
+  const [row] = await testDb.db
+    .insert(inspirations)
+    .values({
+      userId,
+      text: values.text,
+      kind: "note",
+      category: 0,
+      createdAt: values.createdAt,
+    } as typeof inspirations.$inferInsert)
+    .returning();
+
+  if (!row) {
+    throw new Error("createScoreTestInspiration: insert returned no row");
+  }
+
+  return row;
+}
+
+type PersistDb = Parameters<typeof persistLocalInspirationScores>[0];
+
+async function readScores(testDb: TestDatabase, ids: string[]) {
+  const rows = await testDb.db
+    .select({ id: inspirations.id, importanceScore: inspirations.importanceScore, wowScore: inspirations.wowScore })
+    .from(inspirations)
+    .where(inArray(inspirations.id, ids));
+
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 describe("local inspiration score snapshots", () => {
@@ -81,5 +137,68 @@ describe("local inspiration score snapshots", () => {
     });
 
     expect(categorized).toEqual(sparse);
+  });
+});
+
+describe("persistLocalInspirationScores relationship signals", () => {
+  let testDb: TestDatabase;
+
+  beforeAll(async () => {
+    testDb = await createTestDatabase();
+  });
+
+  beforeEach(async () => {
+    await testDb.truncateAll();
+  });
+
+  afterAll(async () => {
+    await testDb.cleanup();
+  });
+
+  it("uses stored embeddings to persist trigger and bounded related prior core WOW scores", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "Trigger: origami shelters for public plazas.",
+      createdAt: new Date("2026-05-12T00:00:00.000Z"),
+    });
+    const relatedPrior = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "Prior: folding paper structures for shade.",
+      createdAt: new Date("2026-03-28T00:00:00.000Z"),
+    });
+    const surprisingPrior = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "Prior: pop-up libraries as civic furniture.",
+      createdAt: new Date("2026-02-11T00:00:00.000Z"),
+    });
+
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, relatedPrior, [0.8, 0.6]);
+    await createEmbedding(testDb, surprisingPrior, [0.62, Math.sqrt(1 - 0.62 ** 2)]);
+
+    const snapshot = await persistLocalInspirationScores(testDb.db as PersistDb, trigger);
+    const scores = await readScores(testDb, [trigger.id, relatedPrior.id, surprisingPrior.id]);
+
+    expect(snapshot.wowScore).toBeGreaterThan(snapshot.importanceScore);
+    expect(scores.get(trigger.id)?.wowScore).toBe(snapshot.wowScore);
+    expect(scores.get(relatedPrior.id)?.wowScore).toBeGreaterThan(0);
+    expect(scores.get(surprisingPrior.id)?.wowScore).toBeGreaterThan(0);
+  });
+
+  it("keeps relationship signals at zero when the trigger has no stored embedding", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "Trigger without an embedding.",
+      createdAt: NOW,
+    });
+
+    const snapshot = await persistLocalInspirationScores(testDb.db as PersistDb, trigger);
+    const baseline = calculateLocalInspirationScoreSnapshot({
+      text: trigger.text,
+      kind: trigger.kind,
+      category: trigger.category,
+      createdAt: trigger.createdAt,
+      hasReflection: false,
+    });
+
+    expect(snapshot).toEqual(baseline);
   });
 });

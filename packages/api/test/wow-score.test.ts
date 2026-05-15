@@ -7,6 +7,7 @@ import {
   calculateFreshnessDecayScore,
   calculateImportanceScore,
   calculateProcessingScore,
+  aggregateRelationshipSignals,
   calculateRelationshipScore,
   calculateRevisitScore,
   calculateRuntimeCandidateScore,
@@ -89,6 +90,23 @@ describe("WOW scoring calculators", () => {
     expect(cosineSimilarity([0, 0], [1, 0])).toBe(0);
     expect(cosineSimilarity([Number.NaN, 1], [1, 0])).toBe(0);
     expect(cosineSimilarity([Number.POSITIVE_INFINITY, 1], [1, 0])).toBe(0);
+  });
+
+  it("aggregates relationship signals from bounded related candidates", () => {
+    expect(
+      aggregateRelationshipSignals({
+        candidates: [
+          { similarity: 0.8, daysApart: 45 },
+          { similarity: 0.62, daysApart: 90 },
+          { similarity: 0.2, daysApart: 10 },
+        ],
+        limit: 2,
+      }),
+    ).toEqual({
+      topSimilaritySignal: 0.8,
+      topSurpriseSimilaritySignal: 1,
+      timeDistanceSignal: 0.75,
+    });
   });
 
   it("calculates relationship from top similarity, surprise similarity, and time signals", () => {

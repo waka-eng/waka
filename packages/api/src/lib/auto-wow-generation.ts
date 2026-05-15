@@ -3,6 +3,7 @@ import {
   type EnsureInspirationEmbeddingResult,
   type WakaDb,
 } from "./inspiration-embeddings.js";
+import { persistLocalInspirationScoresById } from "./inspiration-scores.js";
 import {
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
@@ -96,6 +97,17 @@ export async function generateAutoWowMomentForInspiration(
         generated: false,
         embeddingStatus: embeddingResult.status,
       };
+    }
+
+    try {
+      await persistLocalInspirationScoresById(params.db, {
+        userId: params.userId,
+        inspirationId: params.inspirationId,
+      });
+    } catch {
+      // Score refresh is best-effort. It should never block automatic WOW
+      // generation or turn a successful capture pipeline into an unavailable
+      // result.
     }
 
     const judgment = await judgeWowMoment({
