@@ -283,7 +283,15 @@ export interface CreateInspirationRequest {
   category?: number;
 }
 
+export interface UpdateInspirationRequest {
+  text: string;
+}
+
 export interface CreateInspirationResponse {
+  inspiration: ApiInspiration;
+}
+
+export interface UpdateInspirationResponse {
   inspiration: ApiInspiration;
 }
 
@@ -301,6 +309,24 @@ export async function createInspiration(
     apiPath("/inspirations"),
     input,
     "Failed to save inspiration",
+  );
+  return body.inspiration;
+}
+
+/**
+ * PATCH /inspirations/:id
+ *
+ * Updates the editable details for one caller-owned inspiration. The server
+ * enforces tenant scope; callers only pass the row id and text body.
+ */
+export async function updateInspiration(
+  id: string,
+  input: UpdateInspirationRequest,
+): Promise<ApiInspiration> {
+  const body = await patchJson<UpdateInspirationResponse>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    input,
+    "Failed to update inspiration",
   );
   return body.inspiration;
 }
@@ -832,16 +858,34 @@ export async function fetchReflections(
 // ---------------------------------------------------------------------------
 
 /**
- * Shared POST-JSON helper. Centralises the credential-include / JSON-parse /
- * ApiError-translation dance so each endpoint helper above stays a one-liner.
+ * Shared POST/PATCH JSON helpers. Centralise the credential-include /
+ * JSON-parse / ApiError-translation dance so each endpoint helper above stays
+ * small and consistent.
  */
 async function postJson<T>(
   path: string,
   payload: unknown,
   fallbackMessage: string,
 ): Promise<T> {
+  return writeJson<T>("POST", path, payload, fallbackMessage);
+}
+
+async function patchJson<T>(
+  path: string,
+  payload: unknown,
+  fallbackMessage: string,
+): Promise<T> {
+  return writeJson<T>("PATCH", path, payload, fallbackMessage);
+}
+
+async function writeJson<T>(
+  method: "POST" | "PATCH",
+  path: string,
+  payload: unknown,
+  fallbackMessage: string,
+): Promise<T> {
   const res = await fetch(path, {
-    method: "POST",
+    method,
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

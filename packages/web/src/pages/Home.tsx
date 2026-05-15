@@ -213,6 +213,23 @@ function applyInspirationScorePatch(
   };
 }
 
+function applyUpdatedInspiration(
+  entry: InspirationListEntry,
+  inspiration: ApiInspiration,
+): InspirationListEntry {
+  if (entry.id !== inspiration.id && entry.tempId !== inspiration.id) return entry;
+  return {
+    ...entry,
+    id: inspiration.id,
+    text: inspiration.text,
+    cluster: inspiration.cluster,
+    wowScore: inspiration.wowScore,
+    status: "saved",
+    createdAt: inspiration.createdAt,
+    timestamp: formatTimestamp(inspiration.createdAt),
+  };
+}
+
 type HomeView = "wow" | "inspiration";
 
 export interface HomeCaptureHandoffState {
@@ -998,6 +1015,12 @@ export function HomePage(): JSX.Element {
     [],
   );
 
+  const handleInspirationUpdated = useCallback((inspiration: ApiInspiration) => {
+    setEntries((prev) =>
+      prev.map((entry) => applyUpdatedInspiration(entry, inspiration)),
+    );
+  }, []);
+
   /**
    * Pull the currently-selected entry out of the local list so we can
    * hand its body / links / attachments to the detail view. Falls back
@@ -1118,6 +1141,7 @@ export function HomePage(): JSX.Element {
       onDeleted={handleDeletedInspiration}
       onReflectionCountChanged={handleDetailReflectionCountChanged}
       onInspirationScoresChanged={handleInspirationScoresChanged}
+      onInspirationUpdated={handleInspirationUpdated}
     />
   ) : undefined;
 

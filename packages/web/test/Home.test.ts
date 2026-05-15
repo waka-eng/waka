@@ -16,6 +16,7 @@ import {
   fetchInspirations,
   fetchReflections,
   fetchWowMoments,
+  updateInspiration,
 } from "../src/lib/api";
 import type {
   ApiBackgroundJob,
@@ -58,6 +59,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     }),
     createInspiration: vi.fn(async () => {
       throw new Error("createInspiration mock not configured");
+    }),
+    updateInspiration: vi.fn(async () => {
+      throw new Error("updateInspiration mock not configured");
     }),
     fetchBackgroundJobs: vi.fn(async () => []),
   };
@@ -600,6 +604,75 @@ describe("HomePage view model", () => {
     );
   });
 
+  it("opens saved inspirations as editable details without a static preview and saves edits", async () => {
+    setApiFixtures();
+    vi.mocked(updateInspiration).mockResolvedValue(
+      persistedInspiration({
+        id: "insp-1",
+        text: "Edited bridge rhythm note for the next walk",
+        wowScore: 6,
+        createdAt: "2026-05-10T12:00:00.000Z",
+        updatedAt: "2026-05-15T12:00:00.000Z",
+      }),
+    );
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const firstResult = container.querySelector<HTMLButtonElement>(
+      ".inspiration-result-card",
+    );
+    expect(firstResult).not.toBeNull();
+    await act(async () => {
+      firstResult?.click();
+    });
+    await flushReactWork();
+
+    const detail = container.querySelector<HTMLElement>(".detail-view");
+    expect(detail).not.toBeNull();
+    expect(detail?.textContent).toContain("Inspiration details");
+    expect(detail?.querySelector(".detail-text")).toBeNull();
+    expect(detail?.querySelector(".detail-links")).toBeNull();
+    expect(detail?.querySelector(".detail-attachments")).toBeNull();
+    expect(detail?.querySelector(".detail-meta")).toBeNull();
+    const detailsTextarea = detail?.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Inspiration details"]',
+    );
+    expect(detailsTextarea?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(
+      detail?.querySelector<HTMLButtonElement>(
+        'button[aria-label="Process this inspiration with a reflection"]',
+      ),
+    ).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(detailsTextarea!, "Edited bridge rhythm note for the next walk");
+    });
+    const saveButton = Array.from(
+      detail?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).find((button) => button.textContent === "Save details");
+    expect(saveButton).not.toBeUndefined();
+    await act(async () => {
+      saveButton?.click();
+    });
+    await flushReactWork();
+
+    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
+      text: "Edited bridge rhythm note for the next walk",
+    });
+    expect(detailsTextarea?.value).toBe("Edited bridge rhythm note for the next walk");
+    expect(getInspirationResultTexts(container)[0]).toContain(
+      "Edited bridge rhythm note for the next walk",
+    );
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>(".inspiration-result-meta")).some(
+        (node) => node.textContent?.includes("WOW 6"),
+      ),
+    ).toBe(true);
+  });
+
   it("adds a later reflection from an existing inspiration detail without refreshing", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([
@@ -857,15 +930,16 @@ describe("HomePage view model", () => {
     await flushReactWork();
 
     const detail = container.querySelector<HTMLElement>(".detail-view");
-    expect(detail?.textContent).toContain(
-      "Architecture essay about bridge rhythms in city walks",
-    );
-    expect(detail?.querySelector(".detail-meta")?.textContent).not.toContain(
-      "architecture essays and jazz history",
-    );
-    expect(detail?.querySelector(".detail-meta")?.textContent).not.toContain(
-      "note",
-    );
+    expect(detail?.textContent).toContain("Inspiration details");
+    expect(
+      detail?.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Inspiration details"]',
+      )?.value,
+    ).toBe("Architecture essay about bridge rhythms in city walks");
+    expect(detail?.querySelector(".detail-text")).toBeNull();
+    expect(detail?.querySelector(".detail-links")).toBeNull();
+    expect(detail?.querySelector(".detail-attachments")).toBeNull();
+    expect(detail?.querySelector(".detail-meta")).toBeNull();
     expect(vi.mocked(fetchReflections)).toHaveBeenCalledWith("insp-1");
   });
 
