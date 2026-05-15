@@ -28,6 +28,23 @@ describe("demo seed data", () => {
     expect(DEMO_INSPIRATIONS.every((seed) => seed.text.length > 80)).toBe(true);
   });
 
+  it("keeps curated demo scores realistic without flattening the showcase", () => {
+    const inspirationWowScores = DEMO_INSPIRATIONS.map((seed) => seed.wowScore);
+    const inspirationImportanceScores = DEMO_INSPIRATIONS.map((seed) => seed.importanceScore);
+    const wowMomentScores = DEMO_WOW_MOMENTS.map((moment) => moment.wowScore);
+
+    expect(Math.min(...inspirationWowScores)).toBeGreaterThanOrEqual(30);
+    expect(Math.max(...inspirationWowScores)).toBeLessThanOrEqual(68);
+    expect(Math.min(...inspirationImportanceScores)).toBeGreaterThanOrEqual(25);
+    expect(Math.max(...inspirationImportanceScores)).toBeLessThanOrEqual(66);
+    expect(inspirationWowScores.filter((score) => score >= 55).length).toBeGreaterThanOrEqual(6);
+    expect(inspirationWowScores.filter((score) => score <= 40).length).toBeGreaterThanOrEqual(10);
+
+    expect(Math.min(...wowMomentScores)).toBeGreaterThanOrEqual(55);
+    expect(Math.max(...wowMomentScores)).toBeLessThanOrEqual(78);
+    expect(wowMomentScores.slice(0, 9)).toEqual([...wowMomentScores].sort((a, b) => b - a).slice(0, 9));
+  });
+
   it("includes multiple WOW moments that link multiple inspirations", () => {
     expect(DEMO_WOW_MOMENTS.length).toBeGreaterThanOrEqual(10);
     expect(DEMO_WOW_MOMENTS.every((moment) => moment.related.length >= 2)).toBe(true);

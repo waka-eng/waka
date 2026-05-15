@@ -39,14 +39,17 @@ export interface DemoWowMomentSeed {
 
 export const DEMO_SEED_KIND = "demo-seed";
 
+// These scores are hand-curated demo baselines, not outputs from the live
+// scoring model. Keep them varied and below the old overconfident 70-90 band
+// so newly processed inspirations and generated WOW moments have room to compete.
 export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
   {
     slug: "notion-first-run-template-gallery",
     kind: DEMO_SEED_KIND,
     category: 1,
     cluster: "convergence",
-    importanceScore: 86,
-    wowScore: 84,
+    importanceScore: 60,
+    wowScore: 55,
     text: "Saved example: Notion's first-run screen lets you pick templates like Class Notes, Project Plan, or Reading List so the blank page already has a useful shape.",
   },
   {
@@ -54,8 +57,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 2,
     cluster: "bridge",
-    importanceScore: 78,
-    wowScore: 80,
+    importanceScore: 50,
+    wowScore: 48,
     text: "Product idea: Figma Community makes every file feel reusable because the Remix button is visible before you even understand the whole design system.",
   },
   {
@@ -63,8 +66,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 3,
     cluster: "loop",
-    importanceScore: 84,
-    wowScore: 88,
+    importanceScore: 66,
+    wowScore: 68,
     text: "Observation: Spotify Wrapped turns private listening data into colorful cards people actually want to share because each stat says something personal in one glance.",
   },
   {
@@ -72,8 +75,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 4,
     cluster: "bridge",
-    importanceScore: 76,
-    wowScore: 77,
+    importanceScore: 45,
+    wowScore: 43,
     text: "Screenshot note: Airbnb wishlists are easier to understand when the saved homes appear as map pins beside the list instead of staying as separate bookmarks.",
   },
   {
@@ -81,8 +84,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 5,
     cluster: "tension",
-    importanceScore: 73,
-    wowScore: 75,
+    importanceScore: 42,
+    wowScore: 46,
     text: "UX note: Duolingo's streak freeze is clever because it protects momentum after a missed day, but it also shows how easily care can become pressure.",
   },
   {
@@ -90,8 +93,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 6,
     cluster: "convergence",
-    importanceScore: 80,
-    wowScore: 82,
+    importanceScore: 57,
+    wowScore: 53,
     text: "Saved interaction: Linear's command menu makes create, assign, and move feel like one fast action, which is why power users talk about flow instead of forms.",
   },
   {
@@ -99,8 +102,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 7,
     cluster: "loop",
-    importanceScore: 70,
-    wowScore: 74,
+    importanceScore: 36,
+    wowScore: 38,
     text: "Work habit: Slack's Save for Later tray works because it turns scattered messages into a visible inbox of things I promised myself I would revisit.",
   },
   {
@@ -108,8 +111,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 8,
     cluster: "loop",
-    importanceScore: 72,
-    wowScore: 81,
+    importanceScore: 44,
+    wowScore: 51,
     text: "Inspiration: Pinterest keeps momentum by showing related pins that are close enough to feel relevant but different enough to make the next click feel like discovery.",
   },
   {
@@ -117,8 +120,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 9,
     cluster: "outlier",
-    importanceScore: 75,
-    wowScore: 73,
+    importanceScore: 40,
+    wowScore: 37,
     text: "Community example: GitHub's good first issue label lowers the fear of contributing because it marks where a newcomer can safely start helping.",
   },
   {
@@ -126,8 +129,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 10,
     cluster: "tension",
-    importanceScore: 82,
-    wowScore: 83,
+    importanceScore: 58,
+    wowScore: 62,
     text: "Observation: Apple Photos Memory movies feel magical when they surface a forgotten weekend, and risky when the algorithm chooses a memory you were not ready to see.",
   },
   {
@@ -135,8 +138,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 11,
     cluster: "morph",
-    importanceScore: 79,
-    wowScore: 78,
+    importanceScore: 48,
+    wowScore: 44,
     text: "Collaboration pattern: Google Docs suggesting mode keeps edits visible as proposals, so feedback feels reversible instead of like someone overwrote your sentence.",
   },
   {
@@ -144,8 +147,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 12,
     cluster: "loop",
-    importanceScore: 71,
-    wowScore: 76,
+    importanceScore: 34,
+    wowScore: 36,
     text: "Saved quote: The best part of a TikTok recipe is often the comments where people report substitutions, oven times, and what actually worked at home.",
   },
   {
@@ -153,8 +156,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 13,
     cluster: "loop",
-    importanceScore: 68,
-    wowScore: 72,
+    importanceScore: 33,
+    wowScore: 35,
     text: "Product note: Goodreads shelves are more than organization; labels like want-to-read, abandoned, and comfort reads let readers describe themselves through piles.",
   },
   {
@@ -162,8 +165,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 14,
     cluster: "tension",
-    importanceScore: 74,
-    wowScore: 79,
+    importanceScore: 43,
+    wowScore: 49,
     text: "Behavior note: Strava segments make the same hill feel like a shared challenge, but the leaderboard can turn a quiet ride into a public performance.",
   },
   {
@@ -171,8 +174,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 15,
     cluster: "morph",
-    importanceScore: 77,
-    wowScore: 80,
+    importanceScore: 54,
+    wowScore: 56,
     text: "Demo idea: Canva Magic Resize is instantly understandable because one finished design becomes an Instagram post, flyer, and slide without starting over.",
   },
   {
@@ -180,8 +183,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 16,
     cluster: "bridge",
-    importanceScore: 81,
-    wowScore: 82,
+    importanceScore: 59,
+    wowScore: 58,
     text: "Workflow example: Loom timestamp comments make video feedback usable because the comment is attached to the exact second instead of a vague note like 'near the end.'",
   },
   {
@@ -189,8 +192,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 17,
     cluster: "convergence",
-    importanceScore: 83,
-    wowScore: 85,
+    importanceScore: 62,
+    wowScore: 61,
     text: "Workshop note: Miro becomes useful when loose sticky notes snap into clusters, because a messy brainstorm suddenly shows themes the room can discuss.",
   },
   {
@@ -198,8 +201,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 18,
     cluster: "tension",
-    importanceScore: 67,
-    wowScore: 70,
+    importanceScore: 28,
+    wowScore: 31,
     text: "UX detail: Superhuman's inbox zero celebration gives a tiny reward for clearing mail, which makes completion visible but can also overvalue speed.",
   },
   {
@@ -207,8 +210,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 19,
     cluster: "loop",
-    importanceScore: 69,
-    wowScore: 73,
+    importanceScore: 35,
+    wowScore: 39,
     text: "Saved pattern: Instagram collections let people turn random saved posts into named folders like apartment ideas, tattoos, or places to eat in Tokyo.",
   },
   {
@@ -216,8 +219,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 20,
     cluster: "bridge",
-    importanceScore: 66,
-    wowScore: 68,
+    importanceScore: 30,
+    wowScore: 32,
     text: "Commerce pattern: Amazon's customers also bought module is blunt but effective because it explains a recommendation through other people's adjacent choices.",
   },
   {
@@ -225,8 +228,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 21,
     cluster: "loop",
-    importanceScore: 85,
-    wowScore: 86,
+    importanceScore: 64,
+    wowScore: 65,
     text: "Personal knowledge habit: Readwise daily review resurfaces old highlights just often enough that a quote saved months ago can become useful today.",
   },
   {
@@ -234,8 +237,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 22,
     cluster: "morph",
-    importanceScore: 70,
-    wowScore: 72,
+    importanceScore: 37,
+    wowScore: 34,
     text: "Media note: YouTube chapter markers turn a long video into a browsable table of contents, so viewers can jump to the idea they came for.",
   },
   {
@@ -243,8 +246,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 23,
     cluster: "convergence",
-    importanceScore: 73,
-    wowScore: 74,
+    importanceScore: 41,
+    wowScore: 40,
     text: "Scheduling example: Calendly's availability grid removes the back-and-forth by showing the open slots first, making coordination feel like choosing instead of negotiating.",
   },
   {
@@ -252,8 +255,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 24,
     cluster: "outlier",
-    importanceScore: 65,
-    wowScore: 69,
+    importanceScore: 29,
+    wowScore: 33,
     text: "Marketplace note: Shopify app listings use reviews, screenshots, and install counts together so a merchant can trust an unfamiliar tool quickly.",
   },
   {
@@ -261,8 +264,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 25,
     cluster: "bridge",
-    importanceScore: 72,
-    wowScore: 75,
+    importanceScore: 39,
+    wowScore: 42,
     text: "Team workflow: Dropbox shared folder activity is helpful because it answers 'what changed?' without forcing everyone to send a status update.",
   },
   {
@@ -270,8 +273,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 26,
     cluster: "outlier",
-    importanceScore: 64,
-    wowScore: 71,
+    importanceScore: 31,
+    wowScore: 38,
     text: "Analog inspiration: A founder marks notebook margins with one star for ideas, two stars for customer quotes, and three stars for things to prototype this week.",
   },
   {
@@ -279,8 +282,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 27,
     cluster: "convergence",
-    importanceScore: 76,
-    wowScore: 78,
+    importanceScore: 46,
+    wowScore: 45,
     text: "Support ops note: A macro library saves the best answer to a repeated customer question, but agents still edit the last line so the reply feels human.",
   },
   {
@@ -288,8 +291,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 28,
     cluster: "morph",
-    importanceScore: 62,
-    wowScore: 70,
+    importanceScore: 27,
+    wowScore: 34,
     text: "Experience idea: A museum audio guide that offers 'two-minute detours' makes exploration less linear while keeping visitors from feeling lost.",
   },
   {
@@ -297,8 +300,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 29,
     cluster: "tension",
-    importanceScore: 74,
-    wowScore: 76,
+    importanceScore: 42,
+    wowScore: 41,
     text: "Launch research: Product Hunt comments are useful because early users often ask the positioning questions the landing page forgot to answer.",
   },
   {
@@ -306,8 +309,8 @@ export const DEMO_INSPIRATIONS: DemoInspirationSeed[] = [
     kind: DEMO_SEED_KIND,
     category: 30,
     cluster: "loop",
-    importanceScore: 63,
-    wowScore: 69,
+    importanceScore: 26,
+    wowScore: 30,
     text: "Visual cue: Trello's card aging power-up fades neglected cards, making stale work visible without adding another report or meeting.",
   },
 ];
@@ -317,7 +320,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "blank-pages-need-starter-shapes",
     title: "Blank pages feel better with starter shapes",
     kind: "recurrence",
-    wowScore: 93,
+    wowScore: 78,
     why: "Notion templates, Canva resize, and YouTube chapters all reduce fear by giving unfinished work a clear structure before the user has to decide everything.",
     reflectionQuestion: "Where could WAKA turn an empty state into an obvious next step?",
     related: [
@@ -330,7 +333,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "saved-things-become-a-map",
     title: "Saved things become useful when they turn into a map",
     kind: "bridge",
-    wowScore: 91,
+    wowScore: 74,
     why: "Airbnb pins, Instagram collections, and Goodreads shelves show that saves become more valuable when people can see groups, places, and intent.",
     reflectionQuestion: "How should WAKA show the shape of what someone has saved?",
     related: [
@@ -343,7 +346,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "community-context-builds-trust-fast",
     title: "Community context explains why something matters",
     kind: "surprise_bridge",
-    wowScore: 90,
+    wowScore: 72,
     why: "Figma remixes, GitHub starter labels, and Shopify proof all help a stranger trust an object because other people have already shown how it can be used.",
     reflectionQuestion: "What social proof would make an inspiration easier to trust?",
     related: [
@@ -356,7 +359,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "timed-comments-beat-vague-feedback",
     title: "Feedback lands when it points to the exact moment",
     kind: "bridge",
-    wowScore: 89,
+    wowScore: 70,
     why: "Loom timestamps, Google Docs suggestions, and support macros keep feedback useful by attaching it to the specific sentence, second, or customer question.",
     reflectionQuestion: "Where should feedback attach directly to evidence instead of becoming a note?",
     related: [
@@ -369,7 +372,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "resurfacing-makes-old-saves-new-again",
     title: "Old saves feel new when resurfaced at the right time",
     kind: "recurrence",
-    wowScore: 88,
+    wowScore: 69,
     why: "Readwise reviews, Slack Save for Later, and Pinterest related pins all make saved material useful again by bringing it back in a timely context.",
     reflectionQuestion: "When should WAKA bring an old inspiration back into view?",
     related: [
@@ -382,7 +385,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "personal-data-needs-emotional-controls",
     title: "Personal data needs emotional controls",
     kind: "tension",
-    wowScore: 87,
+    wowScore: 68,
     why: "Wrapped, Apple Memories, and Strava all show that personal data can delight or pressure people depending on timing, audience, and control.",
     reflectionQuestion: "Which personal insight should WAKA make easy to pause, hide, or share?",
     related: [
@@ -395,7 +398,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "messy-inputs-need-visible-clusters",
     title: "Messy inputs become clear when clusters appear",
     kind: "recurrence",
-    wowScore: 86,
+    wowScore: 66,
     why: "Miro sticky clusters, notebook margin stars, and Trello aging all make a pile of work readable by adding simple visual grouping or priority cues.",
     reflectionQuestion: "What is the smallest visual cue that would make a cluster obvious?",
     related: [
@@ -408,7 +411,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "recommendations-work-when-the-link-is-obvious",
     title: "Recommendations work when the link is obvious",
     kind: "bridge",
-    wowScore: 84,
+    wowScore: 62,
     why: "Amazon adjacent buys, Dropbox activity, and Calendly slots all succeed because the next action is explained by visible context, not mystery.",
     reflectionQuestion: "How can WAKA show why two inspirations belong together?",
     related: [
@@ -421,7 +424,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "small-rewards-can-help-or-hurt",
     title: "Small rewards can support momentum or create pressure",
     kind: "tension",
-    wowScore: 83,
+    wowScore: 59,
     why: "Duolingo freezes, Superhuman celebrations, and Product Hunt comments show that motivation features need care because public feedback and streaks can distort behavior.",
     reflectionQuestion: "Where should WAKA encourage momentum without turning it into a scoreboard?",
     related: [
@@ -434,7 +437,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "short-paths-keep-exploration-light",
     title: "Short paths keep exploration from feeling heavy",
     kind: "outlier",
-    wowScore: 81,
+    wowScore: 56,
     why: "TikTok recipe comments, museum audio detours, and Linear's command menu all show that users explore more when the side path is short, clear, and easy to leave.",
     reflectionQuestion: "What shortcut or detour would add context without overwhelming the card?",
     related: [
