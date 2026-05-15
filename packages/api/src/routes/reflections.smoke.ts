@@ -14,8 +14,9 @@
  *   3. 400 on missing/empty `question`.
  *   4. 404 when the inspiration is owned by another user (cross-tenant).
  *   5. 404 when the inspiration does not exist at all.
- *   6. 201 happy path — full row returned, question/answer/skipped echoed,
- *      `userId` taken from auth context, `inspirationId` taken from URL.
+ *   6. 201 happy path — full row plus recomputed parent scores returned,
+ *      question/answer/skipped echoed, `userId` taken from auth context,
+ *      `inspirationId` taken from URL.
  *   7. 201 when `skipped=true` with no answer (deliberate skip is a valid
  *      persistent state distinct from "answer is null pending").
  *
@@ -193,6 +194,11 @@ async function main() {
         skipped: boolean;
         createdAt: string;
       };
+      inspiration?: {
+        id: string;
+        importanceScore?: number;
+        wowScore?: number;
+      };
     };
     const r = okBody.reflection;
     if (r.inspirationId !== inspA.id) {
@@ -210,7 +216,18 @@ async function main() {
     if (r.skipped !== false) {
       throw new Error(`skipped should default to false, got ${r.skipped}`);
     }
-    console.log("[6/13] happy path → 201 with full row ✅");
+    if (okBody.inspiration?.id !== inspA.id) {
+      throw new Error(
+        `score payload id mismatch: ${okBody.inspiration?.id} vs ${inspA.id}`,
+      );
+    }
+    if (typeof okBody.inspiration.wowScore !== "number") {
+      throw new Error("Expected numeric wowScore in reflection score payload");
+    }
+    if (typeof okBody.inspiration.importanceScore !== "number") {
+      throw new Error("Expected numeric importanceScore in reflection score payload");
+    }
+    console.log("[6/13] happy path → 201 with full row + score payload ✅");
 
     // 7. Skipped state with no answer.
     const skipped = await app.request(

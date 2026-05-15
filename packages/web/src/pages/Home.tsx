@@ -49,6 +49,7 @@ import {
   type ApiBackgroundJob,
   type ApiError,
   type ApiInspiration,
+  type ApiInspirationScorePatch,
   type ApiWowMoment,
   type ClusterKind,
   fetchBackgroundJobs,
@@ -197,6 +198,18 @@ function applyPersisted(
       failedCount > 0
         ? `${failedCount} attachment${failedCount === 1 ? "" : "s"} failed to upload.`
         : undefined,
+  };
+}
+
+function applyInspirationScorePatch(
+  entry: InspirationListEntry,
+  scores: ApiInspirationScorePatch,
+): InspirationListEntry {
+  if (entry.id !== scores.id && entry.tempId !== scores.id) return entry;
+  return {
+    ...entry,
+    wowScore:
+      typeof scores.wowScore === "number" ? scores.wowScore : entry.wowScore,
   };
 }
 
@@ -799,12 +812,27 @@ export function HomePage(): JSX.Element {
 
   const handlePersisted = useCallback(
     (tempId: string, result: PersistedResult) => {
+      const reflectionScorePatch = result.reflection?.inspiration;
+      const scoredInspiration = reflectionScorePatch
+        ? {
+            ...result.inspiration,
+            importanceScore:
+              typeof reflectionScorePatch.importanceScore === "number"
+                ? reflectionScorePatch.importanceScore
+                : result.inspiration.importanceScore,
+            wowScore:
+              typeof reflectionScorePatch.wowScore === "number"
+                ? reflectionScorePatch.wowScore
+                : result.inspiration.wowScore,
+          }
+        : result.inspiration;
+
       setEntries((prev) =>
         prev.map((e) =>
           e.tempId === tempId
             ? applyPersisted(
                 e,
-                result.inspiration,
+                scoredInspiration,
                 result.attachments,
                 result.failedAttachments.length,
                 result.reflection ? 1 : 0,
@@ -963,6 +991,13 @@ export function HomePage(): JSX.Element {
     [],
   );
 
+  const handleInspirationScoresChanged = useCallback(
+    (scores: ApiInspirationScorePatch) => {
+      setEntries((prev) => prev.map((entry) => applyInspirationScorePatch(entry, scores)));
+    },
+    [],
+  );
+
   /**
    * Pull the currently-selected entry out of the local list so we can
    * hand its body / links / attachments to the detail view. Falls back
@@ -1082,6 +1117,7 @@ export function HomePage(): JSX.Element {
       onBack={handleBackFromDetail}
       onDeleted={handleDeletedInspiration}
       onReflectionCountChanged={handleDetailReflectionCountChanged}
+      onInspirationScoresChanged={handleInspirationScoresChanged}
     />
   ) : undefined;
 

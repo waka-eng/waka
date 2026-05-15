@@ -740,8 +740,16 @@ export interface CreateReflectionRequest {
   skipped?: boolean;
 }
 
+export interface ApiInspirationScorePatch {
+  id: string;
+  importanceScore?: number;
+  wowScore?: number;
+}
+
 export interface CreateReflectionResponse {
   reflection: ApiReflection;
+  /** Added by newer API versions after score recomputation; older responses omit it. */
+  inspiration?: ApiInspirationScorePatch;
 }
 
 /**
@@ -755,7 +763,7 @@ export interface CreateReflectionResponse {
 export async function createReflection(
   inspirationId: string,
   input: CreateReflectionRequest,
-): Promise<ApiReflection> {
+): Promise<CreateReflectionResponse> {
   // Encode the path component so a malformed id doesn't smuggle a `?` /
   // `#` into the URL. The server validates as a uuid and 400s on a miss.
   const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`);
@@ -764,7 +772,7 @@ export async function createReflection(
     input,
     "Failed to save reflection",
   );
-  return body.reflection;
+  return body;
 }
 
 /** Response shape for GET /inspirations/:id/reflections. */
