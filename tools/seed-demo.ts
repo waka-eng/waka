@@ -164,22 +164,17 @@ export async function resolveDemoUser(
 }
 
 export async function replacePriorDemoRows(sql: SeedSql, userId: string): Promise<void> {
-  const demoTitles = DEMO_WOW_MOMENTS.map((moment) => moment.title);
-  const demoTexts = DEMO_INSPIRATIONS.map((inspiration) => inspiration.text);
-
   await sql`
     with prior_demo_inspirations as (
       select id from inspirations
       where user_id = ${userId}
         and kind = ${DEMO_SEED_KIND}
-        and text = any(${demoTexts})
     ), prior_demo_moments as (
       select distinct wmi.wow_moment_id
       from wow_moment_inspirations wmi
       inner join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
       inner join wow_moments wm on wm.id = wmi.wow_moment_id
       where wm.user_id = ${userId}
-        and wm.title = any(${demoTitles})
     ), deleted_links as (
       delete from wow_moment_inspirations
       where wow_moment_id in (select wow_moment_id from prior_demo_moments)
@@ -193,7 +188,6 @@ export async function replacePriorDemoRows(sql: SeedSql, userId: string): Promis
     delete from inspirations
     where user_id = ${userId}
       and kind = ${DEMO_SEED_KIND}
-      and text = any(${demoTexts})
   `;
 }
 
