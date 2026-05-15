@@ -17,7 +17,10 @@ import {
   wowMoments,
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
-import { GEMINI_EMBEDDING_DIMENSIONS } from "../src/lib/inspiration-embeddings.js";
+import {
+  GEMINI_EMBEDDING_DIMENSIONS,
+  GEMINI_EMBEDDING_MODEL,
+} from "../src/lib/inspiration-embeddings.js";
 import { createWowMomentsRoutes } from "../src/routes/wow-moments.js";
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -238,7 +241,7 @@ async function insertEmbedding(userId: string, inspirationId: string, seed = 1) 
     .values({
       userId,
       inspirationId,
-      model: "text-embedding-004",
+      model: GEMINI_EMBEDDING_MODEL,
       dimensions: GEMINI_EMBEDDING_DIMENSIONS,
       inputHash: `test-hash-${inspirationId}`,
       embedding: embeddingVector(seed),

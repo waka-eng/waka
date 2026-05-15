@@ -55,12 +55,16 @@ async function listWowMomentLinks(testDb: TestDatabase, wowMomentId: string) {
 }
 
 function geminiJsonResponse(value: unknown): Response {
+  return geminiTextResponse(JSON.stringify(value));
+}
+
+function geminiTextResponse(text: string): Response {
   return new Response(
     JSON.stringify({
       candidates: [
         {
           finishReason: "STOP",
-          content: { parts: [{ text: JSON.stringify(value) }] },
+          content: { parts: [{ text }] },
         },
       ],
     }),
@@ -135,7 +139,28 @@ describe("GeminiWowJudgeClient", () => {
     ).resolves.toEqual({ isWowMoment: false });
   });
 
-  it("rejects an invalid WOW kind", async () => {
+  it("returns false for truncated or non-JSON Gemini WOW judgment text", async () => {
+    const client = new GeminiWowJudgeClient({
+      apiKey: "test-key",
+      fetchFn: vi.fn().mockResolvedValue(geminiTextResponse('{"isWowMoment":true,"kind":"bridge"')),
+    });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: "trigger-id",
+          text: "A standalone note.",
+          kind: null,
+          category: null,
+          cluster: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [],
+      }),
+    ).resolves.toEqual({ isWowMoment: false });
+  });
+
+  it("returns false for malformed Gemini WOW judgment schema", async () => {
     const triggerId = "00000000-0000-4000-8000-000000000003";
     const fetchMock = vi.fn().mockResolvedValue(
       geminiJsonResponse({
@@ -160,7 +185,59 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
+    ).resolves.toEqual({ isWowMoment: false });
+  });
+
+  it("returns false for non-JSON Gemini HTTP bodies", async () => {
+    const client = new GeminiWowJudgeClient({
+      apiKey: "test-key",
+      fetchFn: vi.fn().mockResolvedValue(
+        new Response("not-json", {
+          status: 200,
+          headers: { "Content-Type": "text/plain" },
+        }),
+      ),
+    });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: "trigger-id",
+          text: "A standalone note.",
+          kind: null,
+          category: null,
+          cluster: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [],
+      }),
+    ).resolves.toEqual({ isWowMoment: false });
+  });
+
+  it("returns false for blocked or empty Gemini WOW responses", async () => {
+    const client = new GeminiWowJudgeClient({
+      apiKey: "test-key",
+      fetchFn: vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ promptFeedback: { blockReason: "SAFETY" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      ),
+    });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: "trigger-id",
+          text: "A standalone note.",
+          kind: null,
+          category: null,
+          cluster: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [],
+      }),
+    ).resolves.toEqual({ isWowMoment: false });
   });
 
   it("builds a bounded prompt from only the trigger and provided candidates", () => {
@@ -194,6 +271,17 @@ describe("GeminiWowJudgeClient", () => {
 
     expect(requestText).toContain("TRIGGER_TEXT_INCLUDED");
     expect(requestText).toContain("TOP_CANDIDATE_INCLUDED");
+    expect(requestText).toContain("Return only one compact JSON object");
+    expect(requestText).toContain("12 words or fewer");
+    expect(request.generationConfig).toEqual(
+      expect.objectContaining({
+        temperature: 0,
+        maxOutputTokens: expect.any(Number),
+        responseMimeType: "application/json",
+      }),
+    );
+    expect(request.generationConfig.maxOutputTokens).toBeGreaterThan(0);
+    expect(request.generationConfig.maxOutputTokens).toBeLessThanOrEqual(1024);
     expect(requestText).not.toContain("FULL_ARCHIVE");
     expect(requestText).not.toContain("not provided");
     expect(userPrompt.candidates[0].untrustedUserContent).toBe(
@@ -281,7 +369,7 @@ describe("judgeWowMomentForInspiration", () => {
     expect(await countWowMoments(testDb)).toBe(0);
   });
 
-  it("rejects related ids outside the trigger plus same-tenant retrieved candidates", async () => {
+  it("conservatively returns false for related ids outside the trigger plus same-tenant retrieved candidates", async () => {
     const alice = await createUserFixture(testDb.db);
     const bob = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
@@ -307,15 +395,15 @@ describe("judgeWowMomentForInspiration", () => {
       }),
     };
 
-    await expect(
-      judgeWowMomentForInspiration({
-        db: testDb.db,
-        userId: alice.user.id,
-        triggerInspirationId: trigger.id,
-        limit: 5,
-        client,
-      }),
-    ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
+    const result = await judgeWowMomentForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      client,
+    });
+
+    expect(result).toEqual({ isWowMoment: false });
     expect(await countWowMoments(testDb)).toBe(0);
   });
 
