@@ -42,7 +42,9 @@ import {
   ApiError,
   deleteInspiration,
   fetchReflections,
+  updateInspiration,
   type ApiAttachment,
+  type ApiInspiration,
   type ApiInspirationScorePatch,
   type ApiReflection,
   type CreateReflectionResponse,
@@ -103,6 +105,8 @@ export interface InspirationDetailProps {
   onReflectionCountChanged?: (id: string, count: number) => void;
   /** Fires after reflection POST returns recomputed parent scores. */
   onInspirationScoresChanged?: (scores: ApiInspirationScorePatch) => void;
+  /** Fires after editing details returns the canonical inspiration row. */
+  onInspirationUpdated?: (inspiration: ApiInspiration) => void;
 }
 
 /* ============================================================
@@ -120,10 +124,18 @@ export function InspirationDetail({
   onDeleted,
   onReflectionCountChanged,
   onInspirationScoresChanged,
+  onInspirationUpdated,
 }: InspirationDetailProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const reflectionsRef = useRef<ApiReflection[]>([]);
   const [reflecting, setReflecting] = useState(false);
+  const [detailsText, setDetailsText] = useState(inspiration.text);
+  const [saveState, setSaveState] = useState<
+    | { status: "idle" }
+    | { status: "saving" }
+    | { status: "saved" }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
   /**
    * Two-stage confirmation for the destructive delete affordance:
    *   - idle             → "Delete" pill in the header.
@@ -165,6 +177,8 @@ export function InspirationDetail({
     // different inspiration so a half-confirmed delete on row A doesn't
     // bleed into row B.
     setDeleteState({ status: "idle" });
+    setDetailsText(inspiration.text);
+    setSaveState({ status: "idle" });
 
     void (async () => {
       try {
@@ -189,6 +203,32 @@ export function InspirationDetail({
       cancelled = true;
     };
   }, [inspiration.id, onReflectionCountChanged]);
+
+  const detailsChanged = detailsText !== inspiration.text;
+  const detailsEmpty = detailsText.trim().length === 0;
+
+  const handleSaveDetails = useCallback(() => {
+    const nextText = detailsText.trim();
+    if (!nextText || saveState.status === "saving") return;
+
+    setSaveState({ status: "saving" });
+    void (async () => {
+      try {
+        const updated = await updateInspiration(inspiration.id, { text: nextText });
+        setDetailsText(updated.text);
+        setSaveState({ status: "saved" });
+        onInspirationUpdated?.(updated);
+      } catch (caught) {
+        const message =
+          caught instanceof ApiError
+            ? caught.message
+            : caught instanceof Error
+              ? caught.message
+              : "Failed to update inspiration.";
+        setSaveState({ status: "error", message });
+      }
+    })();
+  }, [detailsText, inspiration.id, onInspirationUpdated, saveState.status]);
 
   // ----- Delete handlers ---------------------------------------------------
 
@@ -291,11 +331,6 @@ export function InspirationDetail({
           skipped: r.skipped,
         }))
       : [];
-
-  // Filter non-link attachments for the meta line, preserving the
-  // prototype's `atts.filter(a => a.type !== 'link')` rule.
-  const fileAttachments =
-    inspiration.attachments?.filter((a) => a.type !== "link") ?? [];
 
   return (
     <div className="detail-view visible" id="detailView">
@@ -439,27 +474,85 @@ export function InspirationDetail({
         ) : null}
       </div>
       <div className="detail-body" id="detailBody">
-        {inspiration.text ? (
-          <div className="detail-text">{inspiration.text}</div>
-        ) : null}
-
-        {inspiration.links && inspiration.links.length > 0 ? (
-          <div className="detail-links">
-            {inspiration.links.map((href) => (
-              <a key={href} href={href} target="_blank" rel="noopener noreferrer">
-                {href}
-              </a>
-            ))}
+        <form
+          aria-label="Inspiration details"
+          onSubmit={(event) => {
+            event.preventDefault();
+            handleSaveDetails();
+          }}
+          style={{ display: "grid", gap: 12 }}
+        >
+          <label
+            htmlFor="inspirationDetailText"
+            style={{
+              color: "var(--muted)",
+              fontFamily: "var(--font-mono)",
+              fontSize: 10,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            Inspiration details
+          </label>
+          <textarea
+            id="inspirationDetailText"
+            value={detailsText}
+            onChange={(event) => {
+              setDetailsText(event.currentTarget.value);
+              if (saveState.status !== "idle") setSaveState({ status: "idle" });
+            }}
+            rows={7}
+            aria-label="Inspiration details"
+            style={{
+              width: "100%",
+              resize: "vertical",
+              border: "1px solid var(--line)",
+              borderRadius: 16,
+              background: "rgba(255,255,255,0.72)",
+              color: "var(--ink)",
+              fontFamily: "var(--font-serif)",
+              fontSize: 18,
+              lineHeight: 1.5,
+              padding: 16,
+              boxSizing: "border-box",
+            }}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button
+              type="submit"
+              disabled={!detailsChanged || detailsEmpty || saveState.status === "saving"}
+              style={{
+                background: "var(--ink)",
+                border: "1px solid var(--ink)",
+                borderRadius: 999,
+                color: "var(--bg)",
+                cursor:
+                  !detailsChanged || detailsEmpty || saveState.status === "saving"
+                    ? "not-allowed"
+                    : "pointer",
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                padding: "8px 16px",
+                textTransform: "uppercase",
+                opacity:
+                  !detailsChanged || detailsEmpty || saveState.status === "saving" ? 0.5 : 1,
+              }}
+            >
+              {saveState.status === "saving" ? "Saving…" : "Save details"}
+            </button>
+            {saveState.status === "saved" ? (
+              <span role="status" aria-live="polite" style={{ color: "var(--muted)", fontSize: 12 }}>
+                Saved.
+              </span>
+            ) : null}
+            {saveState.status === "error" ? (
+              <span role="alert" aria-live="polite" style={{ color: "var(--muted)", fontSize: 12 }}>
+                {saveState.message}
+              </span>
+            ) : null}
           </div>
-        ) : null}
-
-        {fileAttachments.length > 0 ? (
-          <div className="detail-attachments">
-            {fileAttachments.map((a) => a.name || a.type).join(" · ")}
-          </div>
-        ) : null}
-
-        <div className="detail-meta">{inspiration.timestamp}</div>
+        </form>
 
         {state.status === "ready" ? (
           <div style={{ marginTop: 18 }}>
