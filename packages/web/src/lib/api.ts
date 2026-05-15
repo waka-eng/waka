@@ -304,6 +304,9 @@ export interface ApiInspirationScoreBreakdown {
     processing: { score: number; hasReflection: boolean };
     revisit: {
       score: number;
+      uniqueRevisitDays: number;
+      totalRevisitCount: number;
+      recentRevisitCount: number;
       uniqueRevisitDaysScore: number;
       totalRevisitCountScore: number;
       revisitedInLast7DaysScore: number;

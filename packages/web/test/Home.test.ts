@@ -77,6 +77,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
         processing: { score: 100, hasReflection: true },
         revisit: {
           score: 21,
+          uniqueRevisitDays: 1,
+          totalRevisitCount: 1,
+          recentRevisitCount: 1,
           uniqueRevisitDaysScore: 33,
           totalRevisitCountScore: 20,
           revisitedInLast7DaysScore: 100,
@@ -739,6 +742,9 @@ describe("HomePage view model", () => {
     expect(detail?.textContent).toContain("Content/text/context");
     expect(detail?.textContent).toContain("Processing/reflection");
     expect(detail?.textContent).toContain("Revisit");
+    expect(detail?.textContent).toContain("1 unique day");
+    expect(detail?.textContent).toContain("33 unique-day signal");
+    expect(detail?.textContent).not.toContain("33 unique days");
     expect(detail?.textContent).toContain("Relationship");
     expect(detail?.textContent).toContain("viewing this panel does not run provider calls or generate embeddings");
     expect(detail?.textContent).toContain("No stored embedding");
