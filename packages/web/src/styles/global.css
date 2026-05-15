@@ -3068,6 +3068,72 @@ body.reflect-bg {
   white-space: nowrap;
 }
 
+.inspiration-discovery-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.inspiration-score-explainer-toggle {
+  appearance: none;
+  border: var(--border-hairline);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.inspiration-score-explainer-toggle:hover,
+.inspiration-score-explainer-toggle[aria-expanded="true"] {
+  background: rgba(15, 15, 14, 0.04);
+  border-color: rgba(15, 15, 14, 0.2);
+}
+
+.inspiration-score-explainer-toggle:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.inspiration-score-explainer {
+  margin: calc(var(--space-4) * -0.35) 0 var(--space-4);
+  padding: var(--space-3);
+  border: var(--border-hairline);
+  border-radius: var(--radius-md);
+  background: rgba(246, 242, 232, 0.56);
+  color: var(--ink);
+}
+
+.inspiration-score-explainer h3 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(18px, 2vw, 24px);
+  letter-spacing: -0.02em;
+}
+
+.inspiration-score-explainer p {
+  margin: 0;
+  max-width: 76ch;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.inspiration-score-explainer p + p {
+  margin-top: var(--space-2);
+}
+
 .inspiration-filter-bar {
   display: grid;
   grid-template-columns: minmax(260px, 1fr);
