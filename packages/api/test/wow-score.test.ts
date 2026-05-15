@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateContentDepthScore,
+  calculateCoreWowScore,
+  calculateDisplayedScore,
+  calculateFreshnessDecayScore,
   calculateImportanceScore,
   calculateProcessingScore,
+  calculateRelationshipScore,
   calculateRevisitScore,
   calculateRuntimeCandidateScore,
   calculateSimilarityScore,
@@ -87,7 +91,23 @@ describe("WOW scoring calculators", () => {
     expect(cosineSimilarity([Number.POSITIVE_INFINITY, 1], [1, 0])).toBe(0);
   });
 
-  it("calculates persisted WOW score from weighted constituent signals", () => {
+  it("calculates relationship from top similarity, surprise similarity, and time signals", () => {
+    expect(
+      calculateRelationshipScore({
+        topSimilaritySignal: 0.8,
+        topSurpriseSimilaritySignal: 0.25,
+        timeDistanceSignal: 0.4,
+      }),
+    ).toBeCloseTo(0.5275);
+  });
+
+  it("calculates core WOW as 55% ImportanceScore + 45% RelationshipScore", () => {
+    expect(calculateCoreWowScore({ importance: 0.7015, relationship: 0.5275 })).toBeCloseTo(
+      0.623325,
+    );
+  });
+
+  it("keeps calculateWowScore as the core WOW composition helper", () => {
     expect(
       calculateWowScore({
         importance: 0.7015,
@@ -95,22 +115,31 @@ describe("WOW scoring calculators", () => {
         topSurpriseSimilaritySignal: 0.25,
         timeDistanceSignal: 0.4,
       }),
-    ).toBeCloseTo(0.605675);
+    ).toBeCloseTo(0.623325);
+  });
+
+  it("calculates freshness decay and displayed score with a 30-day half-life", () => {
+    expect(calculateFreshnessDecayScore({ ageDays: 0 })).toBe(1);
+    expect(calculateFreshnessDecayScore({ ageDays: 30 })).toBeCloseTo(0.5);
+    expect(calculateFreshnessDecayScore({ ageDays: 60 })).toBeCloseTo(0.25);
+    expect(
+      calculateDisplayedScore({ coreWowScore: 0.6, freshnessDecay: 0.5 }),
+    ).toBeCloseTo(0.59);
   });
 
   it("calculates runtime candidate score separately from persisted WOW score", () => {
     expect(
       calculateRuntimeCandidateScore({
-        wowScore: 0.605675,
+        wowScore: 0.623325,
         similarityToTrigger: 0.3,
         surpriseSimilarityToTrigger: 0.6,
         timeDistanceToTrigger: 0.9,
       }),
-    ).toBeCloseTo(0.5428375);
+    ).toBeCloseTo(0.5516625);
   });
 
   it("round-trips normalized scores through 0..100 persisted integers", () => {
-    expect(toPersistedScore(0.605675)).toBe(61);
+    expect(toPersistedScore(0.623325)).toBe(62);
     expect(toPersistedScore(2)).toBe(100);
     expect(toPersistedScore(-1)).toBe(0);
     expect(fromPersistedScore(61)).toBe(0.61);

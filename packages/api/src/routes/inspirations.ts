@@ -41,7 +41,10 @@ import { z } from "zod";
 
 import { attachments, inspirations, reflections } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { persistLocalInspirationScores } from "../lib/inspiration-scores.js";
+import {
+  calculateDisplayedInspirationScore,
+  persistLocalInspirationScores,
+} from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
 
@@ -100,6 +103,34 @@ export interface InspirationsRouteDependencies {
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   enqueueClassificationJob?: typeof enqueueClassification;
   persistScores?: typeof persistLocalInspirationScores;
+}
+
+type InspirationResponseRow = {
+  id: string;
+  userId: string;
+  text: string;
+  kind: string | null;
+  category: number | null;
+  importanceScore: number;
+  wowScore: number;
+  cluster: string | null;
+  classifiedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function withDisplayedWowScore<T extends InspirationResponseRow>(
+  row: T,
+  now = new Date(),
+): T {
+  return {
+    ...row,
+    wowScore: calculateDisplayedInspirationScore({
+      coreWowScore: row.wowScore,
+      createdAt: row.createdAt,
+      now,
+    }),
+  };
 }
 
 export function createInspirationsRoutes(
@@ -214,7 +245,7 @@ routes.post("/", async (c) => {
   // 4. 201 Created with the canonical row payload. Cluster will be `null`
   //    until the classifier worker updates it; the SPA renders an
   //    "uncategorised" state in that window.
-  return c.json({ inspiration: scoredInserted }, 201);
+  return c.json({ inspiration: withDisplayedWowScore(scoredInserted) }, 201);
 });
 
 /**
@@ -279,7 +310,8 @@ routes.get("/", async (c) => {
     .orderBy(desc(inspirations.createdAt))
     .limit(MAX_LIST_LIMIT);
 
-  return c.json({ inspirations: rows }, 200);
+  const now = new Date();
+  return c.json({ inspirations: rows.map((row) => withDisplayedWowScore(row, now)) }, 200);
 });
 
 // ---------------------------------------------------------------------------
@@ -468,7 +500,7 @@ routes.patch("/:id", async (c) => {
   const updatedScores = await persistLocalInspirationScores(db, updated);
   const scoredUpdated = { ...updated, ...updatedScores };
 
-  return c.json({ inspiration: scoredUpdated }, 200);
+  return c.json({ inspiration: withDisplayedWowScore(scoredUpdated) }, 200);
 });
 
 // ---------------------------------------------------------------------------
@@ -633,7 +665,10 @@ routes.post("/:id/reflections", async (c) => {
       inspiration: {
         id: parent.id,
         importanceScore: updatedScores.importanceScore,
-        wowScore: updatedScores.wowScore,
+        wowScore: calculateDisplayedInspirationScore({
+          coreWowScore: updatedScores.wowScore,
+          createdAt: parent.createdAt,
+        }),
       },
     },
     201,

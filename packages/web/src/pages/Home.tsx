@@ -519,21 +519,21 @@ function InspirationDiscoveryPanel({
         >
           <h3 id="inspiration-score-explainer-title">How WAKA scoring works</h3>
           <p>
-            This debugging explainer separates the formula persisted today from the
-            target scoring model we discussed. Scores are normalized to the same 0–100
+            This explainer separates persisted core scoring from the freshness-adjusted
+            score shown in Inspiration First. Scores are normalized to the same 0–100
             scale before each weighted blend unless noted.
           </p>
           <section aria-labelledby="current-scoring-title">
             <h4 id="current-scoring-title">Current implementation</h4>
             <p>
-              The persisted <code>WowScore</code> formula used today is{" "}
-              <code>
-                45% ImportanceScore + 25% TopSimilarity + 20% TopSurpriseSimilarity +
-                10% TimeDistance
-              </code>
-              . Until embedding-backed relationship updates land, the relationship and
-              time-distance signals are currently <code>0</code>, so the stored score mostly
-              reflects ImportanceScore.
+              The database persists <code>WowScore</code> as a core WOW snapshot. The API and
+              UI display a freshness-adjusted WOW score so recent saves get a small,
+              time-decaying display boost without rewriting persisted rows.
+            </p>
+            <p>
+              Until embedding-backed relationship updates land, the relationship signals
+              are currently <code>0</code>. Until revisit events exist, the Revisit signal is
+              also <code>0</code>.
             </p>
           </section>
           <section aria-labelledby="target-scoring-title">
@@ -594,16 +594,18 @@ function InspirationDiscoveryPanel({
               <div>
                 <dt>FreshnessDecay</dt>
                 <dd>
-                  <code>FreshnessDecay = 100 × 0.5^(ageDays / 30)</code>. The 30-day
-                  freshness half-life means the freshness contribution halves every 30
-                  days after save time.
+                  <code>FreshnessDecay = 0.5^(ageDays / 30)</code>. The 30-day freshness
+                  half-life means the normalized freshness contribution halves every 30
+                  days after save time, then the final displayed score is rounded onto the
+                  0–100 WOW scale.
                 </dd>
               </div>
               <div>
                 <dt>Final / displayed score</dt>
                 <dd>
                   <code>DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay</code>. This
-                  is the proposed displayed score, not the score persisted today.
+                  is the user-facing score returned by the API and rendered in
+                  Inspiration First; the persisted database column remains CoreWowScore.
                 </dd>
               </div>
             </dl>

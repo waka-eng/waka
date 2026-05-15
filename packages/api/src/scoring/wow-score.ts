@@ -15,6 +15,10 @@ export type TimeSignalScore = NormalizedScore;
 export type ImportanceScore = NormalizedScore;
 export type SimilarityScore = NormalizedScore;
 export type SurpriseSimilarityScore = NormalizedScore;
+export type RelationshipScore = NormalizedScore;
+export type CoreWowScore = NormalizedScore;
+export type FreshnessDecayScore = NormalizedScore;
+export type DisplayedScore = NormalizedScore;
 export type WowScore = NormalizedScore;
 export type RuntimeCandidateScore = NormalizedScore;
 
@@ -45,6 +49,26 @@ export interface WowInputs {
   topSimilaritySignal: SimilarityScore;
   topSurpriseSimilaritySignal: SurpriseSimilarityScore;
   timeDistanceSignal: TimeSignalScore;
+}
+
+export interface RelationshipInputs {
+  topSimilaritySignal: SimilarityScore;
+  topSurpriseSimilaritySignal: SurpriseSimilarityScore;
+  timeDistanceSignal: TimeSignalScore;
+}
+
+export interface CoreWowInputs {
+  importance: ImportanceScore;
+  relationship: RelationshipScore;
+}
+
+export interface FreshnessDecayInputs {
+  ageDays: number;
+}
+
+export interface DisplayedScoreInputs {
+  coreWowScore: CoreWowScore;
+  freshnessDecay: FreshnessDecayScore;
 }
 
 export interface RuntimeCandidateInputs {
@@ -165,12 +189,41 @@ export function calculateSurpriseSimilarityScore(value: number): SurpriseSimilar
 }
 
 export function calculateWowScore(inputs: WowInputs): WowScore {
+  const relationship = calculateRelationshipScore({
+    topSimilaritySignal: inputs.topSimilaritySignal,
+    topSurpriseSimilaritySignal: inputs.topSurpriseSimilaritySignal,
+    timeDistanceSignal: inputs.timeDistanceSignal,
+  });
+
+  return calculateCoreWowScore({
+    importance: inputs.importance,
+    relationship,
+  });
+}
+
+export function calculateRelationshipScore(
+  inputs: RelationshipInputs,
+): RelationshipScore {
   return clamp01(
-    0.45 * clamp01(inputs.importance) +
-      0.25 * clamp01(inputs.topSimilaritySignal) +
-      0.20 * clamp01(inputs.topSurpriseSimilaritySignal) +
-      0.10 * clamp01(inputs.timeDistanceSignal),
+    0.45 * clamp01(inputs.topSimilaritySignal) +
+      0.35 * clamp01(inputs.topSurpriseSimilaritySignal) +
+      0.20 * clamp01(inputs.timeDistanceSignal),
   );
+}
+
+export function calculateCoreWowScore(inputs: CoreWowInputs): CoreWowScore {
+  return clamp01(0.55 * clamp01(inputs.importance) + 0.45 * clamp01(inputs.relationship));
+}
+
+export function calculateFreshnessDecayScore(
+  inputs: FreshnessDecayInputs,
+): FreshnessDecayScore {
+  const ageDays = Number.isFinite(inputs.ageDays) ? Math.max(0, inputs.ageDays) : 0;
+  return clamp01(Math.pow(0.5, ageDays / 30));
+}
+
+export function calculateDisplayedScore(inputs: DisplayedScoreInputs): DisplayedScore {
+  return clamp01(0.90 * clamp01(inputs.coreWowScore) + 0.10 * clamp01(inputs.freshnessDecay));
 }
 
 export function calculateRuntimeCandidateScore(

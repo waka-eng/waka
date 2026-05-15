@@ -12,6 +12,8 @@ import { inspirations, reflections } from "../db/index.js";
 import type { getDb } from "./db.js";
 import {
   calculateContentDepthScore,
+  calculateDisplayedScore,
+  calculateFreshnessDecayScore,
   calculateImportanceScore,
   calculateProcessingScore,
   calculateRevisitScore,
@@ -34,6 +36,7 @@ export interface LocalInspirationScoreInput {
 
 export interface PersistableInspirationScoreSnapshot {
   importanceScore: number;
+  /** Persisted core WOW score (0..100), excluding freshness display boost. */
   wowScore: number;
 }
 
@@ -50,6 +53,17 @@ const MAX_TEXT_DEPTH_CHARS = 8192;
 const MATURITY_SIGNAL_DAYS = 30;
 const TIME_GAP_POTENTIAL_DAYS = 180;
 
+export function calculateAgeDays(createdAt: Date, now = new Date()): number {
+  const createdMs = createdAt.getTime();
+  const nowMs = now.getTime();
+
+  if (!Number.isFinite(createdMs) || !Number.isFinite(nowMs)) {
+    return 0;
+  }
+
+  return Math.max(0, (nowMs - createdMs) / (24 * 60 * 60 * 1000));
+}
+
 function calculateContextScore() {
   // Current persisted inspiration rows only expose coarse kind/category and
   // attachment presence. Those are not meaningful rich context/caption/link
@@ -58,18 +72,27 @@ function calculateContextScore() {
 }
 
 function calculateCreatedAtTimeSignal(createdAt: Date, now = new Date()) {
-  const createdMs = createdAt.getTime();
-  const nowMs = now.getTime();
-
-  if (!Number.isFinite(createdMs) || !Number.isFinite(nowMs)) {
-    return 0;
-  }
-
-  const ageDays = Math.max(0, (nowMs - createdMs) / (24 * 60 * 60 * 1000));
+  const ageDays = calculateAgeDays(createdAt, now);
   const maturityScore = clamp01(ageDays / MATURITY_SIGNAL_DAYS);
   const timeGapPotentialScore = clamp01(ageDays / TIME_GAP_POTENTIAL_DAYS);
 
   return clamp01(0.5 * maturityScore + 0.5 * timeGapPotentialScore);
+}
+
+export function calculateDisplayedInspirationScore(input: {
+  coreWowScore: number;
+  createdAt: Date;
+  now?: Date;
+}): number {
+  const freshnessDecay = calculateFreshnessDecayScore({
+    ageDays: calculateAgeDays(input.createdAt, input.now),
+  });
+  const displayedScore = calculateDisplayedScore({
+    coreWowScore: clamp01(input.coreWowScore / 100),
+    freshnessDecay,
+  });
+
+  return toPersistedScore(displayedScore);
 }
 
 export function calculateLocalInspirationScoreSnapshot(
