@@ -742,8 +742,12 @@ describe("HomePage view model", () => {
     expect(detail?.textContent).toContain("Content/text/context");
     expect(detail?.textContent).toContain("Processing/reflection");
     expect(detail?.textContent).toContain("Revisit");
-    expect(detail?.textContent).toContain("1 unique day");
-    expect(detail?.textContent).toContain("33 unique-day signal");
+    expect(detail?.textContent).toContain(
+      "1 unique day · 1 total revisit · 1 recent revisit",
+    );
+    expect(detail?.textContent).toContain(
+      "signals: 33 unique-day, 20 total-revisit, 100 recent",
+    );
     expect(detail?.textContent).not.toContain("33 unique days");
     expect(detail?.textContent).toContain("Relationship");
     expect(detail?.textContent).toContain("viewing this panel does not run provider calls or generate embeddings");

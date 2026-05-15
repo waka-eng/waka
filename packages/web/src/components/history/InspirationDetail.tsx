@@ -136,7 +136,7 @@ function formatCount(value: number, singular: string, plural = `${singular}s`): 
 function formatRevisitFactors(
   revisit: ApiInspirationScoreBreakdown["factors"]["revisit"],
 ): string {
-  return `${formatCount(revisit.uniqueRevisitDays, "unique day")} · ${formatCount(revisit.totalRevisitCount, "total revisit")} · ${formatCount(revisit.recentRevisitCount, "recent revisit")} · signals: ${revisit.uniqueRevisitDaysScore} unique-day signal, ${revisit.totalRevisitCountScore} total-revisit signal, ${revisit.revisitedInLast7DaysScore} recent signal`;
+  return `${formatCount(revisit.uniqueRevisitDays, "unique day")} · ${formatCount(revisit.totalRevisitCount, "total revisit")} · ${formatCount(revisit.recentRevisitCount, "recent revisit")} · signals: ${revisit.uniqueRevisitDaysScore} unique-day, ${revisit.totalRevisitCountScore} total-revisit, ${revisit.revisitedInLast7DaysScore} recent`;
 }
 
 function ScoreRow({ label, value }: { label: string; value: string | number }): JSX.Element {

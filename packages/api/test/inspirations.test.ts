@@ -704,6 +704,8 @@ describe("POST /api/inspirations/:id/revisits", () => {
       totalRevisitCount: 1,
       recentRevisitCount: 1,
       uniqueRevisitDaysScore: 33,
+      totalRevisitCountScore: 23,
+      revisitedInLast7DaysScore: 100,
     });
   });
 
