@@ -9,6 +9,7 @@
 import { and, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
 
 import {
+  attachments,
   inspirationEmbeddings,
   inspirationRevisitEvents,
   inspirations,
@@ -38,6 +39,11 @@ export interface LocalInspirationScoreInput {
   category: number | null;
   createdAt: Date;
   hasReflection: boolean;
+  contextSignals?: {
+    meaningfulLinkCount: number;
+    nonLinkAttachmentCount: number;
+    reflectionTextChars: number;
+  };
   relationshipSignals?: {
     topSimilaritySignal: number;
     topSurpriseSimilaritySignal: number;
@@ -67,6 +73,11 @@ export interface InspirationScoreRow {
 }
 
 const MAX_TEXT_DEPTH_CHARS = 8192;
+const MAX_MEANINGFUL_LINKS = 3;
+const MAX_CONTEXT_ATTACHMENTS = 3;
+const MAX_REFLECTION_CONTEXT_CHARS = 1_000;
+const MAX_CONTEXT_ROWS_PER_KIND = 20;
+const MIN_MEANINGFUL_CONTEXT_CHARS = 8;
 const MATURITY_SIGNAL_DAYS = 30;
 const TIME_GAP_POTENTIAL_DAYS = 180;
 const UNIQUE_REVISIT_DAYS_MAX = 7;
@@ -86,11 +97,42 @@ export function calculateAgeDays(createdAt: Date, now = new Date()): number {
   return Math.max(0, (nowMs - createdMs) / (24 * 60 * 60 * 1000));
 }
 
-function calculateContextScore() {
-  // Current persisted inspiration rows only expose coarse kind/category and
-  // attachment presence. Those are not meaningful rich context/caption/link
-  // signals, so keep ContextScore conservative until such fields exist.
-  return 0;
+export interface ContextScoreSignals {
+  meaningfulLinkCount?: number;
+  nonLinkAttachmentCount?: number;
+  reflectionTextChars?: number;
+}
+
+function meaningfulNonUrlTextLength(value: string | null | undefined): number {
+  if (!value) return 0;
+  return value
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/www\.\S+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim().length;
+}
+
+function hasMeaningfulNonUrlText(value: string | null | undefined): boolean {
+  return meaningfulNonUrlTextLength(value) >= MIN_MEANINGFUL_CONTEXT_CHARS;
+}
+
+export function calculateContextScore(signals: ContextScoreSignals = {}) {
+  // ContextScore rewards supporting context that helps a saved idea be useful
+  // later, not raw URL spam. Bounded weights:
+  //   40% meaningful link context/count (named links or links with surrounding text)
+  //   30% non-link attachment count/presence (image/file rows)
+  //   30% reflection question/answer text richness
+  const linkScore = logNormalize(signals.meaningfulLinkCount ?? 0, {
+    max: MAX_MEANINGFUL_LINKS,
+  });
+  const attachmentScore = logNormalize(signals.nonLinkAttachmentCount ?? 0, {
+    max: MAX_CONTEXT_ATTACHMENTS,
+  });
+  const reflectionScore = logNormalize(signals.reflectionTextChars ?? 0, {
+    max: MAX_REFLECTION_CONTEXT_CHARS,
+  });
+
+  return clamp01(0.4 * linkScore + 0.3 * attachmentScore + 0.3 * reflectionScore);
 }
 
 function calculateCreatedAtTimeSignal(createdAt: Date, now = new Date()) {
@@ -122,7 +164,7 @@ export function calculateLocalInspirationScoreSnapshot(
 ): PersistableInspirationScoreSnapshot {
   const contentDepth = calculateContentDepthScore({
     textDepth: logNormalize(input.text.length, { max: MAX_TEXT_DEPTH_CHARS }),
-    contextScore: calculateContextScore(),
+    contextScore: calculateContextScore(input.contextSignals),
   });
 
   const processing = calculateProcessingScore({
@@ -168,8 +210,12 @@ export function calculateLocalInspirationScoreSnapshot(
 }
 
 async function discoverLocalScoreSignals(db: Db, row: InspirationScoreRow) {
-  const [reflection] = await db
-    .select({ id: reflections.id })
+  const reflectionRows = await db
+    .select({
+      id: reflections.id,
+      question: reflections.question,
+      answer: reflections.answer,
+    })
     .from(reflections)
     .where(
       and(
@@ -177,10 +223,42 @@ async function discoverLocalScoreSignals(db: Db, row: InspirationScoreRow) {
         eq(reflections.userId, row.userId),
       ),
     )
-    .limit(1);
+    .limit(MAX_CONTEXT_ROWS_PER_KIND);
+
+  const attachmentRows = await db
+    .select({
+      type: attachments.type,
+      name: attachments.name,
+    })
+    .from(attachments)
+    .where(eq(attachments.inspirationId, row.id))
+    .limit(MAX_CONTEXT_ROWS_PER_KIND);
+
+  const textHasContextAroundUrl =
+    /https?:\/\/\S+|www\.\S+/i.test(row.text) && hasMeaningfulNonUrlText(row.text);
+  const meaningfulLinkCount = attachmentRows.filter(
+    (attachment) =>
+      attachment.type === "link" &&
+      (hasMeaningfulNonUrlText(attachment.name) || textHasContextAroundUrl),
+  ).length;
+  const nonLinkAttachmentCount = attachmentRows.filter(
+    (attachment) => attachment.type === "image" || attachment.type === "file",
+  ).length;
+  const reflectionTextChars = reflectionRows.reduce((total, reflection) => {
+    return (
+      total +
+      meaningfulNonUrlTextLength(reflection.question) +
+      meaningfulNonUrlTextLength(reflection.answer)
+    );
+  }, 0);
 
   return {
-    hasReflection: Boolean(reflection),
+    hasReflection: reflectionRows.length > 0,
+    contextSignals: {
+      meaningfulLinkCount,
+      nonLinkAttachmentCount,
+      reflectionTextChars,
+    },
   };
 }
 
@@ -321,6 +399,7 @@ async function calculatePersistableSnapshot(
     category: row.category,
     createdAt: row.createdAt,
     hasReflection: signals.hasReflection,
+    contextSignals: signals.contextSignals,
     revisitSignals,
     relationshipSignals: relationship.relationshipSignals,
   });

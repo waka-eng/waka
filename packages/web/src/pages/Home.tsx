@@ -555,8 +555,9 @@ function InspirationDiscoveryPanel({
                 <dt>ContentDepth</dt>
                 <dd>
                   <code>ContentDepth = 70% TextDepth + 30% Context</code>. TextDepth rewards
-                  richer saved text; Context rewards supporting signals such as links,
-                  attachments, and surrounding metadata.
+                  richer saved text; Context rewards bounded existing-data signals: meaningful
+                  link labels or surrounding link text, image/file attachments, and reflection
+                  text richness. Bare URL spam does not earn Context credit.
                 </dd>
               </div>
               <div>

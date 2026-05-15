@@ -466,6 +466,7 @@ describe("HomePage view model", () => {
       "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
     );
     expect(explainerText).toContain("ContentDepth = 70% TextDepth + 30% Context");
+    expect(explainerText).toContain("Bare URL spam does not earn Context credit");
     expect(explainerText).toContain("hasReflection");
     expect(explainerText).toContain(
       "Revisit = 65% Unique days + 25% total revisits + 10% revisited last 7 days",
