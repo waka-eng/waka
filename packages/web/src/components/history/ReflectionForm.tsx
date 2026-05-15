@@ -291,7 +291,11 @@ export function ReflectionForm({
 
       const trimmedAnswer = answer.trim();
       if (!skip && trimmedAnswer.length === 0) {
-        setError("Add an answer or click Skip.");
+        setError(
+          hideSkip
+            ? "Add a thought before saving this reflection."
+            : "Add an answer or click Skip.",
+        );
         queueMicrotask(() => answerTextareaRef.current?.focus());
         return;
       }
@@ -370,6 +374,7 @@ export function ReflectionForm({
       onOptimisticAdd,
       onPersisted,
       onPersistError,
+      hideSkip,
     ],
   );
 

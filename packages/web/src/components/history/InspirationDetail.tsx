@@ -36,7 +36,7 @@
  * cannot fix.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -45,6 +45,7 @@ import {
   type ApiAttachment,
   type ApiReflection,
 } from "../../lib/api";
+import { ReflectionForm, type PendingReflection } from "./ReflectionForm";
 import { ReflectionThread, type ReflectionEntry } from "./ReflectionThread";
 
 /* ============================================================
@@ -91,6 +92,13 @@ export interface InspirationDetailProps {
    * component can still be mounted in a read-only context.
    */
   onDeleted?: (id: string) => void;
+  /**
+   * Optional parent-state bridge. Fires whenever this detail view knows the
+   * exact reflection count (after the initial GET, and after a successful
+   * POST). The parent uses the exact count instead of blindly incrementing so
+   * list rows stay aligned with the detail thread.
+   */
+  onReflectionCountChanged?: (id: string, count: number) => void;
 }
 
 /* ============================================================
@@ -106,8 +114,11 @@ export function InspirationDetail({
   inspiration,
   onBack,
   onDeleted,
+  onReflectionCountChanged,
 }: InspirationDetailProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const reflectionsRef = useRef<ApiReflection[]>([]);
+  const [reflecting, setReflecting] = useState(false);
   /**
    * Two-stage confirmation for the destructive delete affordance:
    *   - idle             → "Delete" pill in the header.
@@ -142,7 +153,9 @@ export function InspirationDetail({
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
+    reflectionsRef.current = [];
     setThreadOpen(false);
+    setReflecting(false);
     // Reset the delete affordance whenever the user navigates to a
     // different inspiration so a half-confirmed delete on row A doesn't
     // bleed into row B.
@@ -152,7 +165,9 @@ export function InspirationDetail({
       try {
         const rows = await fetchReflections(inspiration.id);
         if (cancelled) return;
+        reflectionsRef.current = rows;
         setState({ status: "ready", reflections: rows });
+        onReflectionCountChanged?.(inspiration.id, rows.length);
       } catch (caught) {
         if (cancelled) return;
         const message =
@@ -168,7 +183,7 @@ export function InspirationDetail({
     return () => {
       cancelled = true;
     };
-  }, [inspiration.id]);
+  }, [inspiration.id, onReflectionCountChanged]);
 
   // ----- Delete handlers ---------------------------------------------------
 
@@ -204,6 +219,57 @@ export function InspirationDetail({
       }
     })();
   }, [inspiration.id, onDeleted]);
+
+  // ----- Reflection authoring ----------------------------------------------
+
+  const handleStartReflection = useCallback(() => {
+    setReflecting(true);
+  }, []);
+
+  const handleCancelReflection = useCallback(() => {
+    setReflecting(false);
+  }, []);
+
+  const handleOptimisticReflection = useCallback(
+    (pending: PendingReflection) => {
+      const optimistic: ApiReflection = {
+        id: pending.tempId,
+        inspirationId: pending.inspirationId,
+        userId: "",
+        question: pending.question,
+        answer: pending.answer,
+        skipped: pending.skipped,
+        createdAt: pending.createdAt,
+      };
+
+      const nextReflections = [...reflectionsRef.current, optimistic];
+      reflectionsRef.current = nextReflections;
+      setState({ status: "ready", reflections: nextReflections });
+      setThreadOpen(true);
+    },
+    [],
+  );
+
+  const handlePersistedReflection = useCallback(
+    (tempId: string, server: ApiReflection) => {
+      const hadOptimistic = reflectionsRef.current.some((row) => row.id === tempId);
+      const nextReflections = hadOptimistic
+        ? reflectionsRef.current.map((row) => (row.id === tempId ? server : row))
+        : [...reflectionsRef.current, server];
+      reflectionsRef.current = nextReflections;
+      setState({ status: "ready", reflections: nextReflections });
+      setReflecting(false);
+      setThreadOpen(true);
+      onReflectionCountChanged?.(inspiration.id, nextReflections.length);
+    },
+    [inspiration.id, onReflectionCountChanged],
+  );
+
+  const handleReflectionError = useCallback((tempId: string) => {
+    const nextReflections = reflectionsRef.current.filter((row) => row.id !== tempId);
+    reflectionsRef.current = nextReflections;
+    setState({ status: "ready", reflections: nextReflections });
+  }, []);
 
   // Map server rows into the shape `<ReflectionThread>` expects. The
   // server enforces tenant scope so we don't need to filter by user_id
@@ -386,6 +452,33 @@ export function InspirationDetail({
         ) : null}
 
         <div className="detail-meta">{inspiration.timestamp}</div>
+
+        {state.status === "ready" ? (
+          <div style={{ marginTop: 18 }}>
+            {!reflecting ? (
+              <button
+                type="button"
+                className="reflect-btn reflect-next"
+                onClick={handleStartReflection}
+                aria-label="Process this inspiration with a reflection"
+              >
+                Process this inspiration
+              </button>
+            ) : (
+              <ReflectionForm
+                key={inspiration.id}
+                inspirationId={inspiration.id}
+                defaultQuestion="What about this is worth remembering?"
+                answerPlaceholder="Sit with it for a moment, then add what it opens up…"
+                hideSkip
+                onCancel={handleCancelReflection}
+                onOptimisticAdd={handleOptimisticReflection}
+                onPersisted={handlePersistedReflection}
+                onPersistError={handleReflectionError}
+              />
+            )}
+          </div>
+        ) : null}
 
         {/* Reflections panel — loading / error / empty / list */}
         {state.status === "loading" ? (

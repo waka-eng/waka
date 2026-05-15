@@ -946,6 +946,23 @@ export function HomePage(): JSX.Element {
     setSelectedId((current) => (current === id ? null : current));
   }, []);
 
+  const handleDetailReflectionCountChanged = useCallback(
+    (id: string, count: number) => {
+      setEntries((prev) =>
+        prev.map((entry) =>
+          entry.id === id || entry.tempId === id
+            ? {
+                ...entry,
+                reflectionsAnswered: count,
+                reflectionsTotal: count,
+              }
+            : entry,
+        ),
+      );
+    },
+    [],
+  );
+
   /**
    * Pull the currently-selected entry out of the local list so we can
    * hand its body / links / attachments to the detail view. Falls back
@@ -1064,6 +1081,7 @@ export function HomePage(): JSX.Element {
       inspiration={detailData}
       onBack={handleBackFromDetail}
       onDeleted={handleDeletedInspiration}
+      onReflectionCountChanged={handleDetailReflectionCountChanged}
     />
   ) : undefined;
 

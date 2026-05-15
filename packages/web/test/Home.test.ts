@@ -17,7 +17,12 @@ import {
   fetchReflections,
   fetchWowMoments,
 } from "../src/lib/api";
-import type { ApiBackgroundJob, ApiInspiration, ApiWowMoment } from "../src/lib/api";
+import type {
+  ApiBackgroundJob,
+  ApiInspiration,
+  ApiReflection,
+  ApiWowMoment,
+} from "../src/lib/api";
 import {
   HomePage,
   HomeViewToggle,
@@ -250,6 +255,19 @@ function persistedInspiration(overrides: Partial<ApiInspiration> = {}): ApiInspi
     classifiedAt: null,
     createdAt: "2026-05-14T16:30:00.000Z",
     updatedAt: "2026-05-14T16:30:00.000Z",
+    ...overrides,
+  };
+}
+
+function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflection {
+  return {
+    id: "reflection-new-1234567890",
+    inspirationId: "insp-1",
+    userId: "user-1",
+    question: "What about this is worth remembering?",
+    answer: "It turns a quick save into something I can use.",
+    skipped: false,
+    createdAt: "2026-05-14T16:31:00.000Z",
     ...overrides,
   };
 }
@@ -570,6 +588,161 @@ describe("HomePage view model", () => {
     expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
       "Save only after I process this",
     );
+  });
+
+  it("adds a later reflection from an existing inspiration detail without refreshing", async () => {
+    setApiFixtures();
+    vi.mocked(fetchReflections).mockResolvedValue([
+      persistedReflection({
+        id: "reflection-existing",
+        answer: "This already helped once.",
+      }),
+    ]);
+    vi.mocked(createReflection).mockResolvedValue(
+      persistedReflection({
+        id: "reflection-later",
+        answer: "It turns a quick save into something I can use.",
+      }),
+    );
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const firstResult = container.querySelector<HTMLButtonElement>(
+      ".inspiration-result-card",
+    );
+    expect(firstResult).not.toBeNull();
+    await act(async () => {
+      firstResult?.click();
+    });
+    await flushReactWork();
+
+    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(container.textContent).toContain("This already helped once.");
+
+    const processButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Process this inspiration with a reflection"]',
+    );
+    expect(processButton).not.toBeNull();
+    await act(async () => {
+      processButton?.click();
+    });
+    await flushReactWork();
+
+    const detailAnswer = container.querySelector<HTMLTextAreaElement>(
+      '.detail-view .reflect-area textarea[placeholder^="Sit with it"]',
+    );
+    expect(detailAnswer).not.toBeNull();
+    await act(async () => {
+      setInputValue(detailAnswer!, "It turns a quick save into something I can use.");
+    });
+
+    const saveReflectionButton = container.querySelector<HTMLButtonElement>(
+      '.detail-view .reflect-area button[aria-label="Save reflection"]',
+    );
+    await act(async () => {
+      saveReflectionButton?.click();
+    });
+    await flushReactWork();
+
+    expect(createReflection).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledWith("insp-1", {
+      question: "What about this is worth remembering?",
+      answer: "It turns a quick save into something I can use.",
+    });
+    expect(container.textContent).toContain("This already helped once.");
+    expect(container.textContent).toContain(
+      "It turns a quick save into something I can use.",
+    );
+    expect(container.textContent).toContain("Hide reflection · 2 notes");
+    expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
+      "2 of 2 reflected",
+    );
+  });
+
+  it("keeps the detail reflection entry point hidden until existing reflections are ready", async () => {
+    setApiFixtures();
+    let resolveFetchReflections: (rows: ApiReflection[]) => void = () => undefined;
+    const fetchReflectionsPromise = new Promise<ApiReflection[]>((resolve) => {
+      resolveFetchReflections = resolve;
+    });
+    vi.mocked(fetchReflections).mockReturnValue(fetchReflectionsPromise);
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const firstResult = container.querySelector<HTMLButtonElement>(
+      ".inspiration-result-card",
+    );
+    await act(async () => {
+      firstResult?.click();
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("Loading reflections…");
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Process this inspiration with a reflection"]',
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      resolveFetchReflections([
+        persistedReflection({
+          id: "reflection-existing",
+          answer: "Ready reflections can be extended safely.",
+        }),
+      ]);
+      await fetchReflectionsPromise;
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("Ready reflections can be extended safely.");
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label="Process this inspiration with a reflection"]',
+      ),
+    ).not.toBeNull();
+    expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
+      "1 of 1 reflected",
+    );
+  });
+
+  it("does not post an empty later reflection from the inspiration detail", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const firstResult = container.querySelector<HTMLButtonElement>(
+      ".inspiration-result-card",
+    );
+    await act(async () => {
+      firstResult?.click();
+    });
+    await flushReactWork();
+
+    const processButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Process this inspiration with a reflection"]',
+    );
+    await act(async () => {
+      processButton?.click();
+    });
+    await flushReactWork();
+
+    const saveReflectionButton = container.querySelector<HTMLButtonElement>(
+      '.detail-view .reflect-area button[aria-label="Save reflection"]',
+    );
+    await act(async () => {
+      saveReflectionButton?.click();
+    });
+    await flushReactWork();
+
+    expect(createReflection).not.toHaveBeenCalled();
+    expect(container.textContent).toContain(
+      "Add a thought before saving this reflection.",
+    );
+    expect(container.querySelector(".detail-view .reflect-area")).not.toBeNull();
   });
 
   it("keeps optimistic Inspiration First saves simple, then shows returned WOW score after persistence", async () => {
