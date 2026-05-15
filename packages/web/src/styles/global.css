@@ -3050,7 +3050,7 @@ body.reflect-bg {
 
 .inspiration-filter-bar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) repeat(3, minmax(120px, 180px));
+  grid-template-columns: minmax(260px, 1fr);
   gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
@@ -3061,8 +3061,7 @@ body.reflect-bg {
   min-width: 0;
 }
 
-.inspiration-filter-bar input,
-.inspiration-filter-bar select {
+.inspiration-filter-bar input {
   width: 100%;
   min-height: 38px;
   border: var(--border-hairline);
@@ -3073,9 +3072,65 @@ body.reflect-bg {
   font: 13px/1.3 var(--font-sans);
 }
 
-.inspiration-filter-bar input:focus,
-.inspiration-filter-bar select:focus {
+.inspiration-filter-bar input:focus {
   outline: 1px solid rgba(15, 15, 14, 0.24);
+  outline-offset: 2px;
+}
+
+.inspiration-results-shell {
+  border-top: var(--border-hairline);
+}
+
+.inspiration-results-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: stretch;
+  padding: 0 0 var(--space-2);
+  border-bottom: var(--border-hairline);
+}
+
+.inspiration-sort-meta-group {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.inspiration-sort-button {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition:
+    color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.inspiration-sort-button--text {
+  justify-self: start;
+}
+
+.inspiration-sort-button:hover,
+.inspiration-sort-button[aria-pressed="true"] {
+  color: var(--ink);
+  background: rgba(15, 15, 14, 0.04);
+}
+
+.inspiration-sort-button:focus-visible {
+  outline: 1px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -3083,7 +3138,6 @@ body.reflect-bg {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0;
-  border-top: var(--border-hairline);
 }
 
 .inspiration-result-card {
@@ -3528,6 +3582,16 @@ body.reflect-bg {
 
   .inspiration-result-card {
     grid-template-columns: 1fr;
+  }
+
+  .inspiration-results-header,
+  .inspiration-sort-meta-group {
+    grid-template-columns: 1fr;
+  }
+
+  .inspiration-sort-button,
+  .inspiration-sort-button--text {
+    justify-self: stretch;
   }
 
   .inspiration-result-meta {

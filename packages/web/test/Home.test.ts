@@ -196,6 +196,12 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function getInspirationResultTexts(container: HTMLElement): string[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(".inspiration-result-text"),
+  ).map((node) => node.textContent ?? "");
+}
+
 async function switchToInspirationFirst(container: HTMLElement): Promise<void> {
   const inspirationButton = Array.from(
     container.querySelectorAll<HTMLButtonElement>(".home-view-switcher button"),
@@ -345,7 +351,22 @@ describe("HomePage view model", () => {
     );
     expect(panel?.textContent).toContain("3 of 3 inspirations");
     expect(container.querySelector(".inspiration-results-grid")).not.toBeNull();
+    expect(container.querySelector(".inspiration-results-header")).not.toBeNull();
     expect(container.querySelectorAll(".inspiration-result-card")).toHaveLength(3);
+    expect(container.querySelector('select[aria-label="Filter by status"]')).toBeNull();
+    expect(container.querySelector('select[aria-label="Filter by date"]')).toBeNull();
+    expect(container.querySelector('select[aria-label="Sort inspirations"]')).toBeNull();
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[aria-label^="Sort by inspiration text"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label^="Sort by saved time"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label^="Sort by WOW score"]'),
+    ).not.toBeNull();
     const resultMetaText = Array.from(
       container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
     ).map((node) => node.textContent ?? "");
@@ -360,6 +381,10 @@ describe("HomePage view model", () => {
     expect(resultMetaText.some((text) => /\b(BRIDGE|TENSION)\b/.test(text))).toBe(false);
     expect(container.querySelector('select[aria-label="Filter by cluster"]')).toBeNull();
     expect(container.querySelector('select[aria-label="Filter by kind"]')).toBeNull();
+    expect(container.textContent).not.toContain("All statuses");
+    expect(container.textContent).not.toContain("Any date");
+    expect(container.textContent).not.toContain("Newest first");
+    expect(container.textContent).not.toContain("Oldest first");
     expect(container.querySelectorAll(".grid.home-grid .wm-card")).toHaveLength(0);
     expect(globalCss).toMatch(
       /\.inspiration-result-text\s*\{[\s\S]*?font-size:\s*clamp\(14px, 1\.25vw, 18px\);[\s\S]*?line-height:\s*1\.28;/,
@@ -379,6 +404,48 @@ describe("HomePage view model", () => {
     expect(searchedPanel?.textContent).toContain("1 of 3 inspirations");
     expect(searchedPanel?.textContent).toContain("Synthetic memory note");
     expect(searchedPanel?.textContent).not.toContain("Architecture essay");
+  });
+
+  it("sorts Inspiration First rows through accessible column headers", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    expect(getInspirationResultTexts(container)).toEqual([
+      "Architecture essay about bridge rhythms in city walks",
+      "Synthetic memory note for rereading old journals",
+      "Unclassified cooking image idea",
+    ]);
+
+    const wowSort = container.querySelector<HTMLButtonElement>(
+      'button[aria-label^="Sort by WOW score"]',
+    );
+    expect(wowSort).not.toBeNull();
+
+    await act(async () => {
+      wowSort?.click();
+    });
+    await flushReactWork();
+
+    expect(wowSort?.getAttribute("aria-pressed")).toBe("true");
+    expect(wowSort?.getAttribute("aria-label")).toContain("descending");
+    expect(getInspirationResultTexts(container)).toEqual([
+      "Synthetic memory note for rereading old journals",
+      "Architecture essay about bridge rhythms in city walks",
+      "Unclassified cooking image idea",
+    ]);
+
+    await act(async () => {
+      wowSort?.click();
+    });
+    await flushReactWork();
+
+    expect(wowSort?.getAttribute("aria-label")).toContain("ascending");
+    expect(getInspirationResultTexts(container)).toEqual([
+      "Unclassified cooking image idea",
+      "Architecture essay about bridge rhythms in city walks",
+      "Synthetic memory note for rereading old journals",
+    ]);
   });
 
   it("keeps optimistic Inspiration First saves simple, then shows returned WOW score after persistence", async () => {
