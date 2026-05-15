@@ -314,35 +314,48 @@ export function HomeViewToggle({
   );
 }
 
-type InspirationDateFilter = "all" | "today" | "week" | "month";
-type InspirationSort = "newest" | "oldest";
+type InspirationSortColumn = "text" | "saved" | "wow";
+type InspirationSortDirection = "asc" | "desc";
+
+interface InspirationSortState {
+  column: InspirationSortColumn;
+  direction: InspirationSortDirection;
+}
 
 interface InspirationDiscoveryFilters {
   search: string;
-  status: InspirationStatus | "all";
-  date: InspirationDateFilter;
-  sort: InspirationSort;
+  sort: InspirationSortState | null;
 }
 
 const DEFAULT_INSPIRATION_FILTERS: InspirationDiscoveryFilters = {
   search: "",
-  status: "all",
-  date: "all",
-  sort: "newest",
+  sort: null,
 };
 
-function entryMatchesDateFilter(
-  entry: InspirationListEntry,
-  filter: InspirationDateFilter,
-): boolean {
-  if (filter === "all") return true;
-  const created = new Date(entry.createdAt).getTime();
-  if (Number.isNaN(created)) return true;
-  const now = Date.now();
-  const age = now - created;
-  if (filter === "today") return age >= 0 && age <= 24 * 60 * 60 * 1000;
-  if (filter === "week") return age >= 0 && age <= 7 * 24 * 60 * 60 * 1000;
-  return age >= 0 && age <= 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_SORT_DIRECTIONS: Record<
+  InspirationSortColumn,
+  InspirationSortDirection
+> = {
+  text: "asc",
+  saved: "desc",
+  wow: "desc",
+};
+
+function createdAtMs(entry: InspirationListEntry): number {
+  const parsed = new Date(entry.createdAt).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function compareWowScore(
+  a: InspirationListEntry,
+  b: InspirationListEntry,
+  direction: InspirationSortDirection,
+): number {
+  if (a.wowScore === null && b.wowScore === null) return 0;
+  if (a.wowScore === null) return 1;
+  if (b.wowScore === null) return -1;
+  const comparison = a.wowScore - b.wowScore;
+  return direction === "asc" ? comparison : -comparison;
 }
 
 function filterAndSortInspirationEntries(
@@ -352,16 +365,29 @@ function filterAndSortInspirationEntries(
   const query = filters.search.trim().toLowerCase();
   const filtered = entries.filter((entry) => {
     const haystack = entry.text.toLowerCase();
-    if (query && !haystack.includes(query)) return false;
-    if (filters.status !== "all" && entry.status !== filters.status) return false;
-    return entryMatchesDateFilter(entry, filters.date);
+    return !query || haystack.includes(query);
   });
 
   return [...filtered].sort((a, b) => {
-    if (filters.sort === "oldest") {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    const sort = filters.sort;
+    if (!sort) return createdAtMs(b) - createdAtMs(a);
+
+    let comparison = 0;
+    if (sort.column === "text") {
+      comparison = a.text.localeCompare(b.text, undefined, {
+        sensitivity: "base",
+        numeric: true,
+      });
+    } else if (sort.column === "saved") {
+      comparison = createdAtMs(a) - createdAtMs(b);
+    } else {
+      comparison = compareWowScore(a, b, sort.direction);
+      if (comparison === 0) comparison = createdAtMs(b) - createdAtMs(a);
+      return comparison;
     }
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+    if (comparison === 0) comparison = createdAtMs(b) - createdAtMs(a);
+    return sort.direction === "asc" ? comparison : -comparison;
   });
 }
 
@@ -385,6 +411,27 @@ function InspirationDiscoveryPanel({
     value: InspirationDiscoveryFilters[K],
   ) => {
     onFiltersChange({ ...filters, [key]: value });
+  };
+
+  const toggleSort = (column: InspirationSortColumn) => {
+    const current = filters.sort;
+    const direction: InspirationSortDirection =
+      current?.column === column
+        ? current.direction === "asc"
+          ? "desc"
+          : "asc"
+        : DEFAULT_SORT_DIRECTIONS[column];
+    onFiltersChange({ ...filters, sort: { column, direction } });
+  };
+
+  const sortLabel = (column: InspirationSortColumn): string => {
+    if (filters.sort?.column !== column) return "not sorted";
+    return filters.sort.direction === "asc" ? "ascending" : "descending";
+  };
+
+  const sortIndicator = (column: InspirationSortColumn): string => {
+    if (filters.sort?.column !== column) return "↕";
+    return filters.sort.direction === "asc" ? "↑" : "↓";
   };
 
   const resultLabel = `${filteredEntries.length} of ${entries.length} inspiration${
@@ -423,67 +470,50 @@ function InspirationDiscoveryPanel({
             }
           />
         </label>
-        <label>
-          <span>Status</span>
-          <select
-            aria-label="Filter by status"
-            value={filters.status}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-              updateFilter(
-                "status",
-                event.target.value as InspirationDiscoveryFilters["status"],
-              )
-            }
-          >
-            <option value="all">All statuses</option>
-            <option value="saved">Saved</option>
-            <option value="saving">Saving</option>
-            <option value="error">Needs retry</option>
-          </select>
-        </label>
-        <label>
-          <span>Date</span>
-          <select
-            aria-label="Filter by date"
-            value={filters.date}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-              updateFilter(
-                "date",
-                event.target.value as InspirationDiscoveryFilters["date"],
-              )
-            }
-          >
-            <option value="all">Any date</option>
-            <option value="today">Last day</option>
-            <option value="week">Last 7 days</option>
-            <option value="month">Last 30 days</option>
-          </select>
-        </label>
-        <label>
-          <span>Sort</span>
-          <select
-            aria-label="Sort inspirations"
-            value={filters.sort}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-              updateFilter(
-                "sort",
-                event.target.value as InspirationDiscoveryFilters["sort"],
-              )
-            }
-          >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-          </select>
-        </label>
       </div>
 
       {filteredEntries.length === 0 ? (
         <div className="inspiration-results-empty" role="status">
           <strong>No inspirations match those filters.</strong>
-          <span>Try a broader search, a wider date range, or clear the filters.</span>
+          <span>Try a broader search or clear the text query.</span>
         </div>
       ) : (
-        <div className="inspiration-results-grid" aria-label={resultLabel}>
+        <div className="inspiration-results-shell">
+          <div className="inspiration-results-header" aria-label="Sort inspirations">
+            <button
+              type="button"
+              className="inspiration-sort-button inspiration-sort-button--text"
+              aria-label={`Sort by inspiration text, ${sortLabel("text")}`}
+              aria-pressed={filters.sort?.column === "text"}
+              onClick={() => toggleSort("text")}
+            >
+              <span>Inspiration text</span>
+              <span aria-hidden="true">{sortIndicator("text")}</span>
+            </button>
+            <div className="inspiration-sort-meta-group">
+              <button
+                type="button"
+                className="inspiration-sort-button"
+                aria-label={`Sort by saved time, ${sortLabel("saved")}`}
+                aria-pressed={filters.sort?.column === "saved"}
+                onClick={() => toggleSort("saved")}
+              >
+                <span>Saved/time</span>
+                <span aria-hidden="true">{sortIndicator("saved")}</span>
+              </button>
+              <button
+                type="button"
+                className="inspiration-sort-button"
+                aria-label={`Sort by WOW score, ${sortLabel("wow")}`}
+                aria-pressed={filters.sort?.column === "wow"}
+                onClick={() => toggleSort("wow")}
+              >
+                <span>WOW score</span>
+                <span aria-hidden="true">{sortIndicator("wow")}</span>
+              </button>
+            </div>
+          </div>
+          <div className="inspiration-results-grid" aria-label={resultLabel}>
           {filteredEntries.map((entry) => (
             <button
               type="button"
@@ -497,6 +527,7 @@ function InspirationDiscoveryPanel({
               <span className="inspiration-result-text">{entry.text}</span>
             </button>
           ))}
+          </div>
         </div>
       )}
     </section>
