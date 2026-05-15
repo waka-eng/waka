@@ -28,7 +28,7 @@ import {
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
 
-export const GEMINI_EMBEDDING_MODEL = "text-embedding-004";
+export const GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
 export const GEMINI_EMBEDDING_DIMENSIONS = 768;
 export const MAX_GEMINI_EMBEDDING_VALUES = 4096;
 export type WakaDb = PostgresJsDatabase<typeof dbSchema>;
@@ -147,6 +147,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
         model: `models/${this.model}`,
         content: { parts: [{ text: input }] },
         taskType: "RETRIEVAL_DOCUMENT",
+        outputDimensionality: GEMINI_EMBEDDING_DIMENSIONS,
       }),
     });
 
