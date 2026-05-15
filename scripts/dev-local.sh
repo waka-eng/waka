@@ -77,6 +77,7 @@ export PORT=3010
 export PUBLIC_API_URL="http://localhost:3010"
 export PUBLIC_WEB_URL="http://localhost:3010"
 export VITE_API_URL=""
+export VITE_SHOW_INTERNAL_STATUS=true
 export WAKA_SERVE_WEB_DIST=1
 export WAKA_WEB_DIST_DIR="$web_dist_dir"
 
@@ -96,6 +97,11 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
     exit 1
   fi
 
+  if [[ "${VITE_SHOW_INTERNAL_STATUS:-}" != "true" ]]; then
+    echo "dev:local dry run failed: internal WOW status strip must be enabled for the local same-origin demo build" >&2
+    exit 1
+  fi
+
   if [[ "$WAKA_SERVE_WEB_DIST" != "1" ]] || [[ "$WAKA_WEB_DIST_DIR" != "$web_dist_dir" ]]; then
     echo "dev:local dry run failed: web dist serving is not configured" >&2
     exit 1
@@ -107,7 +113,7 @@ fi
 
 echo "Starting WAKA local dev (Option B monolithic)..."
 echo "  Browser: http://localhost:3010"
-echo "Building web app for same-origin API paths..."
+echo "Building web app for same-origin API paths with internal demo status visible..."
 
 pnpm --filter @waka/web build
 

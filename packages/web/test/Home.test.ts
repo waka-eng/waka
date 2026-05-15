@@ -567,6 +567,12 @@ describe("HomePage view model", () => {
       shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: undefined }),
     ).toBe(false);
     expect(
+      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "false" }),
+    ).toBe(false);
+    expect(
+      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "TRUE" }),
+    ).toBe(false);
+    expect(
       shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "true" }),
     ).toBe(true);
     expect(
