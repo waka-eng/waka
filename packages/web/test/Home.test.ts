@@ -432,6 +432,41 @@ describe("HomePage view model", () => {
     expect(searchedPanel?.textContent).not.toContain("Architecture essay");
   });
 
+  it("explains WAKA scoring from an accessible Inspiration First disclosure", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const explainerButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-controls="inspiration-score-explainer"]',
+    );
+    expect(explainerButton).not.toBeNull();
+    expect(explainerButton?.textContent).toContain("How scoring works");
+    expect(explainerButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector("#inspiration-score-explainer")).toBeNull();
+
+    await act(async () => {
+      explainerButton?.click();
+    });
+    await flushReactWork();
+
+    const explainer = container.querySelector<HTMLElement>(
+      "#inspiration-score-explainer",
+    );
+    expect(explainerButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(explainer).not.toBeNull();
+    expect(explainer?.textContent).toContain("ImportanceScore");
+    expect(explainer?.textContent).toContain("Relationship");
+    expect(explainer?.textContent).toContain("Similarity");
+    expect(explainer?.textContent).toContain("SurpriseSimilarity");
+    expect(explainer?.textContent).toContain("30-day freshness half-life");
+    expect(explainer?.textContent).toContain("10% freshness weight");
+    expect(explainer?.textContent).toContain("AI/LLM");
+    expect(explainer?.textContent).toContain("WOW moment judgment");
+    expect(explainer?.textContent).toContain("not for basic score arithmetic");
+    expect(explainer?.textContent).not.toMatch(/cluster|kind|Filter by/i);
+  });
+
   it("sorts Inspiration First rows through accessible column headers", async () => {
     setApiFixtures();
     const container = await renderHomePage();

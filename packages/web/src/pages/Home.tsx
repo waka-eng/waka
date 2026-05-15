@@ -478,6 +478,7 @@ function InspirationDiscoveryPanel({
   const resultLabel = `${filteredEntries.length} of ${entries.length} inspiration${
     entries.length === 1 ? "" : "s"
   }`;
+  const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
 
   const buildMetaText = (entry: InspirationListEntry): string => {
     const parts = [
@@ -495,8 +496,44 @@ function InspirationDiscoveryPanel({
           <span>Find inspirations</span>
           <h2 id="inspiration-discovery-title">Search the raw material</h2>
         </div>
-        <strong aria-live="polite">{resultLabel}</strong>
+        <div className="inspiration-discovery-actions">
+          <button
+            type="button"
+            className="inspiration-score-explainer-toggle"
+            aria-expanded={scoreExplainerOpen}
+            aria-controls="inspiration-score-explainer"
+            onClick={() => setScoreExplainerOpen((open) => !open)}
+          >
+            How scoring works
+          </button>
+          <strong aria-live="polite">{resultLabel}</strong>
+        </div>
       </div>
+
+      {scoreExplainerOpen ? (
+        <div
+          id="inspiration-score-explainer"
+          className="inspiration-score-explainer"
+          role="region"
+          aria-labelledby="inspiration-score-explainer-title"
+        >
+          <h3 id="inspiration-score-explainer-title">How WAKA scoring works</h3>
+          <p>
+            WAKA starts with ImportanceScore, then looks at Relationship,
+            Similarity, and SurpriseSimilarity signals to notice saves that
+            matter together or stand out in a useful way.
+          </p>
+          <p>
+            Recent saves get a small boost: freshness has a 30-day freshness
+            half-life and only a 10% freshness weight, so older ideas can still
+            win when they are meaningful.
+          </p>
+          <p>
+            AI/LLM judgment is used for WOW moment judgment and user-facing
+            explanations, not for basic score arithmetic.
+          </p>
+        </div>
+      ) : null}
 
       <div className="inspiration-filter-bar" role="search" aria-label="Inspiration filters">
         <label className="inspiration-search-field">
