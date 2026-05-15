@@ -55,6 +55,7 @@ import {
   fetchBackgroundJobs,
   fetchInspirations,
   fetchWowMoments,
+  recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
@@ -531,13 +532,15 @@ function InspirationDiscoveryPanel({
               time-decaying display boost without rewriting persisted rows.
             </p>
             <p>
-              Until embedding-backed relationship updates land, the relationship signals
-              are currently <code>0</code>. Until revisit events exist, the Revisit signal is
-              also <code>0</code>.
+              Relationship signals now use stored embeddings when they exist, and revisit
+              signals use meaningful return events such as detail opens, detail returns,
+              reflection creation, and inspiration edits. If an inspiration has no stored
+              embedding or revisit events yet, those corresponding signals safely remain
+              <code>0</code>.
             </p>
           </section>
           <section aria-labelledby="target-scoring-title">
-            <h4 id="target-scoring-title">Target scoring model we discussed</h4>
+            <h4 id="target-scoring-title">Implemented scoring model</h4>
             <dl>
               <div>
                 <dt>ImportanceScore</dt>
@@ -611,7 +614,7 @@ function InspirationDiscoveryPanel({
             </dl>
           </section>
           <p>
-            Target updates would run on save, edit, reflection, revisit, embedding
+            Score updates run on save, edit, reflection, meaningful revisit, embedding
             refresh, new related inspiration, and WOW generation. Each trigger uses
             bounded updates so one change does not rescore the whole archive.
           </p>
@@ -1089,19 +1092,41 @@ export function HomePage(): JSX.Element {
     [],
   );
 
-  const handleSelectInspiration = useCallback((id: string) => {
-    // Sub-AC 9.5 — open the detail view for the activated row. The
-    // `<InspirationDetail>` component fetches reflections via the
-    // GET endpoint on mount; this page only needs to track the
-    // selected id so the panel knows which inspiration to render.
-    setSelectedId(id);
-  }, []);
+  const recordRevisit = useCallback(
+    (id: string, eventType: "detail_opened" | "detail_returned") => {
+      void (async () => {
+        try {
+          const result = await recordInspirationRevisit(id, eventType);
+          if (result.inspiration) {
+            setEntries((prev) =>
+              prev.map((entry) => applyInspirationScorePatch(entry, result.inspiration!)),
+            );
+          }
+        } catch {
+          // Best-effort analytics/scoring signal only; never block detail navigation.
+        }
+      })();
+    },
+    [],
+  );
 
-
+  const handleSelectInspiration = useCallback(
+    (id: string) => {
+      // Sub-AC 9.5 — open the detail view for the activated row. The
+      // `<InspirationDetail>` component fetches reflections via the
+      // GET endpoint on mount; this page only needs to track the
+      // selected id so the panel knows which inspiration to render.
+      setSelectedId(id);
+      recordRevisit(id, "detail_opened");
+    },
+    [recordRevisit],
+  );
 
   const handleBackFromDetail = useCallback(() => {
+    const returningId = selectedId;
     setSelectedId(null);
-  }, []);
+    if (returningId) recordRevisit(returningId, "detail_returned");
+  }, [recordRevisit, selectedId]);
 
   /**
    * Drop the deleted row from local state and dismiss the detail view.

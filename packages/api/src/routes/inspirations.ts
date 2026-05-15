@@ -39,11 +39,19 @@ import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
-import { attachments, inspirations, reflections } from "../db/index.js";
+import {
+  attachments,
+  inspirationRevisitEvents,
+  inspirationRevisitEventTypeValues,
+  inspirations,
+  reflections,
+  type InspirationRevisitEventType,
+} from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import {
   calculateDisplayedInspirationScore,
   persistLocalInspirationScores,
+  persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
@@ -103,6 +111,7 @@ export interface InspirationsRouteDependencies {
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   enqueueClassificationJob?: typeof enqueueClassification;
   persistScores?: typeof persistLocalInspirationScores;
+  persistSingleScore?: typeof persistSingleLocalInspirationScoreById;
 }
 
 type InspirationResponseRow = {
@@ -133,6 +142,60 @@ function withDisplayedWowScore<T extends InspirationResponseRow>(
   };
 }
 
+const revisitEventSchema = z.object({
+  eventType: z.enum(inspirationRevisitEventTypeValues),
+});
+
+async function recordRevisitEvent(input: {
+  db: ReturnType<typeof getDb>;
+  userId: string;
+  inspirationId: string;
+  eventType: InspirationRevisitEventType;
+  persistSingleScore: typeof persistSingleLocalInspirationScoreById;
+}) {
+  const [parent] = await input.db
+    .select({ id: inspirations.id, createdAt: inspirations.createdAt })
+    .from(inspirations)
+    .where(
+      and(
+        eq(inspirations.id, input.inspirationId),
+        eq(inspirations.userId, input.userId),
+      ),
+    )
+    .limit(1);
+
+  if (!parent) return null;
+
+  const [event] = await input.db
+    .insert(inspirationRevisitEvents)
+    .values({
+      userId: input.userId,
+      inspirationId: input.inspirationId,
+      eventType: input.eventType,
+    })
+    .returning({
+      id: inspirationRevisitEvents.id,
+      eventType: inspirationRevisitEvents.eventType,
+      createdAt: inspirationRevisitEvents.createdAt,
+    });
+
+  let scores: Awaited<ReturnType<typeof persistSingleLocalInspirationScoreById>> = null;
+  try {
+    scores = await input.persistSingleScore(input.db, {
+      userId: input.userId,
+      inspirationId: input.inspirationId,
+    });
+  } catch (err) {
+    console.warn("[inspirations] failed to refresh score after revisit event:", {
+      inspirationId: input.inspirationId,
+      eventType: input.eventType,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return { event, scores, parent };
+}
+
 export function createInspirationsRoutes(
   deps: InspirationsRouteDependencies = {},
 ): Hono<AuthEnv> {
@@ -140,6 +203,7 @@ export function createInspirationsRoutes(
   const getDatabase = deps.getDatabase ?? getDb;
   const enqueueClassificationJob = deps.enqueueClassificationJob ?? enqueueClassification;
   const persistScores = deps.persistScores ?? persistLocalInspirationScores;
+  const persistSingleScore = deps.persistSingleScore ?? persistSingleLocalInspirationScoreById;
 
   // Every route under this router requires a valid session. Mounting the
   // middleware once at the router level (rather than per-handler) ensures we
@@ -312,6 +376,67 @@ routes.get("/", async (c) => {
 
   const now = new Date();
   return c.json({ inspirations: rows.map((row) => withDisplayedWowScore(row, now)) }, 200);
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/inspirations/:id/revisits
+// ---------------------------------------------------------------------------
+
+routes.post("/:id/revisits", async (c) => {
+  const inspirationId = c.req.param("id");
+  const idCheck = z.string().uuid().safeParse(inspirationId);
+  if (!idCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "Request body must be valid JSON" }, 400);
+  }
+
+  const parsed = revisitEventSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "Invalid revisit payload",
+        details: parsed.error.flatten().fieldErrors,
+      },
+      400,
+    );
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const result = await recordRevisitEvent({
+    db,
+    userId: user.id,
+    inspirationId: idCheck.data,
+    eventType: parsed.data.eventType,
+    persistSingleScore,
+  });
+
+  if (!result) {
+    return c.json({ error: "Inspiration not found" }, 404);
+  }
+
+  return c.json(
+    {
+      revisit: result.event,
+      inspiration: result.scores
+        ? {
+            id: idCheck.data,
+            importanceScore: result.scores.importanceScore,
+            wowScore: calculateDisplayedInspirationScore({
+              coreWowScore: result.scores.wowScore,
+              createdAt: result.parent.createdAt,
+            }),
+          }
+        : null,
+    },
+    201,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -497,6 +622,21 @@ routes.patch("/:id", async (c) => {
     return c.json({ error: "Inspiration not found" }, 404);
   }
 
+  try {
+    await recordRevisitEvent({
+      db,
+      userId: user.id,
+      inspirationId: updated.id,
+      eventType: "inspiration_updated",
+      persistSingleScore,
+    });
+  } catch (err) {
+    console.warn("[inspirations] failed to record update revisit event:", {
+      inspirationId: updated.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const updatedScores = await persistLocalInspirationScores(db, updated);
   const scoredUpdated = { ...updated, ...updatedScores };
 
@@ -655,6 +795,21 @@ routes.post("/:id/reflections", async (c) => {
 
   if (!inserted) {
     return c.json({ error: "Failed to create reflection" }, 500);
+  }
+
+  try {
+    await recordRevisitEvent({
+      db,
+      userId: user.id,
+      inspirationId: parent.id,
+      eventType: "reflection_created",
+      persistSingleScore,
+    });
+  } catch (err) {
+    console.warn("[inspirations] failed to record reflection revisit event:", {
+      inspirationId: parent.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   const updatedScores = await persistLocalInspirationScores(db, parent);

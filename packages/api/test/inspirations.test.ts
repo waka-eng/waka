@@ -47,9 +47,13 @@ import {
   it,
 } from "vitest";
 
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 
-import { backgroundJobs, inspirations } from "../src/db/index.js";
+import {
+  backgroundJobs,
+  inspirationRevisitEvents,
+  inspirations,
+} from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { calculateDisplayedInspirationScore } from "../src/lib/inspiration-scores.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -116,6 +120,19 @@ interface ListInspirationsResponse {
 interface ValidationErrorResponse {
   error: string;
   details?: Record<string, string[] | undefined>;
+}
+
+interface RevisitResponse {
+  revisit: {
+    id: string;
+    eventType: string;
+    createdAt: string;
+  };
+  inspiration: {
+    id: string;
+    importanceScore: number;
+    wowScore: number;
+  } | null;
 }
 
 interface ReflectionResponse {
@@ -595,6 +612,180 @@ describe("Fetching by id", () => {
     );
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/invalid inspiration id/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/inspirations/:id/revisits — revisit tracking + scoring
+// ---------------------------------------------------------------------------
+
+describe("POST /api/inspirations/:id/revisits", () => {
+  async function countRevisitEvents(inspirationId: string): Promise<number> {
+    const [row] = await getDb()
+      .select({ value: count() })
+      .from(inspirationRevisitEvents)
+      .where(eq(inspirationRevisitEvents.inspirationId, inspirationId));
+
+    return Number(row?.value ?? 0);
+  }
+
+  it("records a revisit event and returns a score patch for the owning user", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "revisit this later" },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+
+    const res = await client.json<RevisitResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/revisits`,
+      { eventType: "detail_opened" },
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.revisit.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(res.body.revisit.eventType).toBe("detail_opened");
+    expect(typeof res.body.revisit.createdAt).toBe("string");
+    expect(res.body.inspiration).toMatchObject({ id: inspirationId });
+    expect(res.body.inspiration?.importanceScore).toEqual(expect.any(Number));
+    expect(res.body.inspiration?.wowScore).toEqual(expect.any(Number));
+    expect(await countRevisitEvents(inspirationId)).toBe(1);
+  });
+
+  it("returns 404 for another user's inspiration and does not create a revisit", async () => {
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "alice private revisit target" },
+    );
+    expect(aliceCreate.status).toBe(201);
+    const inspirationId = aliceCreate.body.inspiration.id;
+
+    const res = await authedClient(bob).json<{ error: string }>(
+      "POST",
+      `/api/inspirations/${inspirationId}/revisits`,
+      { eventType: "detail_opened" },
+    );
+
+    expect(res.status).toBe(404);
+    expect(await countRevisitEvents(inspirationId)).toBe(0);
+  });
+
+  it("returns 400 for invalid revisit event payloads", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "invalid revisit payload target" },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+
+    const invalidEvent = await client.json<ValidationErrorResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/revisits`,
+      { eventType: "list_rendered" },
+    );
+    expect(invalidEvent.status).toBe(400);
+    expect(invalidEvent.body.error).toMatch(/invalid revisit payload/i);
+
+    const missingEvent = await client.json<ValidationErrorResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/revisits`,
+      {},
+    );
+    expect(missingEvent.status).toBe(400);
+    expect(missingEvent.body.error).toMatch(/invalid revisit payload/i);
+    expect(await countRevisitEvents(inspirationId)).toBe(0);
+  });
+
+  it("returns displayed WOW score in the response patch instead of persisted core WOW", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "old note with a displayed score delta" },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+    const createdAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    await getDb()
+      .update(inspirations)
+      .set({ createdAt } as Partial<typeof inspirations.$inferInsert>)
+      .where(eq(inspirations.id, inspirationId));
+
+    const res = await client.json<RevisitResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/revisits`,
+      { eventType: "detail_returned" },
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.inspiration).not.toBeNull();
+
+    const [stored] = await getDb()
+      .select({ importanceScore: inspirations.importanceScore, wowScore: inspirations.wowScore })
+      .from(inspirations)
+      .where(eq(inspirations.id, inspirationId));
+    expect(stored).toBeTruthy();
+
+    const expectedDisplayed = calculateDisplayedInspirationScore({
+      coreWowScore: stored!.wowScore,
+      createdAt,
+      now: new Date(res.body.revisit.createdAt),
+    });
+    expect(res.body.inspiration!.importanceScore).toBe(stored!.importanceScore);
+    expect(res.body.inspiration!.wowScore).toBe(expectedDisplayed);
+    expect(res.body.inspiration!.wowScore).not.toBe(stored!.wowScore);
+  });
+
+  it("GET /api/inspirations does not create revisit events or inflate stored scores", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "list reads are not revisits" },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+
+    const [before] = await getDb()
+      .select({ importanceScore: inspirations.importanceScore, wowScore: inspirations.wowScore })
+      .from(inspirations)
+      .where(eq(inspirations.id, inspirationId));
+    expect(before).toBeTruthy();
+    expect(await countRevisitEvents(inspirationId)).toBe(0);
+
+    const list = await client.get<ListInspirationsResponse>("/api/inspirations");
+    expect(list.status).toBe(200);
+    expect(list.body.inspirations.some((row) => row.id === inspirationId)).toBe(true);
+
+    const [after] = await getDb()
+      .select({ importanceScore: inspirations.importanceScore, wowScore: inspirations.wowScore })
+      .from(inspirations)
+      .where(eq(inspirations.id, inspirationId));
+    expect(after).toEqual(before);
+    expect(await countRevisitEvents(inspirationId)).toBe(0);
   });
 });
 

@@ -459,9 +459,9 @@ describe("HomePage view model", () => {
     expect(explainerText).toContain("Current implementation");
     expect(explainerText).toContain("database persists WowScore as a core WOW snapshot");
     expect(explainerText).toContain("freshness-adjusted WOW score");
-    expect(explainerText).toContain("relationship signals are currently 0");
-    expect(explainerText).toContain("Revisit signal is also 0");
-    expect(explainerText).toContain("Target scoring model we discussed");
+    expect(explainerText).toContain("Relationship signals now use stored embeddings");
+    expect(explainerText).toContain("revisit signals use meaningful return events");
+    expect(explainerText).toContain("Implemented scoring model");
     expect(explainerText).toContain(
       "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
     );
@@ -486,7 +486,7 @@ describe("HomePage view model", () => {
     expect(explainerText).toContain("user-facing score returned by the API");
     expect(explainerText).toContain("top-k, bounded retrieval");
     expect(explainerText).toContain("does not send the full inspiration history");
-    expect(explainerText).toContain("save, edit, reflection, revisit");
+    expect(explainerText).toContain("save, edit, reflection, meaningful revisit");
     expect(explainerText).toContain("embedding refresh");
     expect(explainerText).toContain("new related inspiration");
     expect(explainerText).toContain("WOW generation");
