@@ -24,6 +24,10 @@ ProcessingScore = hasReflection ? 1 : 0
 
 ContentDepthScore = 0.70*TextDepth + 0.30*ContextScore
 
+ContextScore = 0.40*MeaningfulLinkScore
+             + 0.30*AttachmentScore
+             + 0.30*ReflectionTextScore
+
 RevisitScore = 0.65*UniqueRevisitDays
              + 0.25*TotalRevisitCount
              + 0.10*RevisitedInLast7Days
@@ -50,6 +54,12 @@ RuntimeCandidateScore = 0.50*WowScore
 ```
 
 `RuntimeCandidateScore` is a request-time ranking helper for candidates relative to a trigger inspiration. It is not the same as persisted `wow_score`.
+
+`ContextScore` is calculated from existing tenant-scoped inspiration data only; no provider calls are made. It rewards supporting context rather than bare URL spam and is bounded `0..1`:
+
+- `MeaningfulLinkScore`: log-normalized count of link attachments that have a meaningful label or are attached to inspiration text with non-URL surrounding context; unnamed bare links do not count.
+- `AttachmentScore`: log-normalized count of image/file attachments.
+- `ReflectionTextScore`: log-normalized richness of the inspiration owner's reflection question/answer text.
 
 ## WOW kinds
 

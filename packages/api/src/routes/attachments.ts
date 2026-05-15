@@ -59,6 +59,7 @@ import {
   inspirations,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { persistSingleLocalInspirationScoreById } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 
 // ---------------------------------------------------------------------------
@@ -529,6 +530,15 @@ attachmentsRoutes.post("/", async (c) => {
 
   if (!inserted) {
     return c.json({ error: "Failed to record attachment" }, 500);
+  }
+
+  try {
+    await persistSingleLocalInspirationScoreById(db, {
+      userId: user.id,
+      inspirationId: parsed.data.inspirationId,
+    });
+  } catch (err) {
+    console.warn("[attachments] failed to refresh inspiration scores:", err);
   }
 
   return c.json({ attachment: inserted }, 201);

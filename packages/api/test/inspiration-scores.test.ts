@@ -1,9 +1,16 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 
-import { inspirationEmbeddings, inspirations, type Inspiration } from "../src/db/index.js";
 import {
+  attachments,
+  inspirationEmbeddings,
+  inspirations,
+  reflections,
+  type Inspiration,
+} from "../src/db/index.js";
+import {
+  calculateContextScore,
   calculateDisplayedInspirationScore,
   calculateLocalInspirationScoreSnapshot,
   persistLocalInspirationScores,
@@ -138,6 +145,50 @@ describe("local inspiration score snapshots", () => {
 
     expect(categorized).toEqual(sparse);
   });
+
+  it("calculates bounded context from meaningful links, attachments, and reflection text", () => {
+    expect(calculateContextScore()).toBe(0);
+    expect(calculateContextScore({ meaningfulLinkCount: 1 })).toBeGreaterThan(0);
+    expect(calculateContextScore({ nonLinkAttachmentCount: 1 })).toBeGreaterThan(0);
+    expect(calculateContextScore({ reflectionTextChars: 160 })).toBeGreaterThan(0);
+
+    expect(
+      calculateContextScore({
+        meaningfulLinkCount: 99,
+        nonLinkAttachmentCount: 99,
+        reflectionTextChars: 99_999,
+      }),
+    ).toBe(1);
+  });
+
+  it("lets context increase local content depth while bare/minimal content stays bounded", () => {
+    const bare = calculateLocalInspirationScoreSnapshot({
+      text: "https://example.com",
+      kind: null,
+      category: null,
+      createdAt: daysAgo(0),
+      hasReflection: false,
+      now: NOW,
+    });
+
+    const contextual = calculateLocalInspirationScoreSnapshot({
+      text: "https://example.com",
+      kind: null,
+      category: null,
+      createdAt: daysAgo(0),
+      hasReflection: false,
+      contextSignals: {
+        meaningfulLinkCount: 1,
+        nonLinkAttachmentCount: 1,
+        reflectionTextChars: 320,
+      },
+      now: NOW,
+    });
+
+    expect(contextual.importanceScore).toBeGreaterThan(bare.importanceScore);
+    expect(contextual.wowScore).toBeGreaterThan(bare.wowScore);
+    expect(bare.importanceScore).toBeLessThan(10);
+  });
 });
 
 describe("persistLocalInspirationScores relationship signals", () => {
@@ -200,5 +251,79 @@ describe("persistLocalInspirationScores relationship signals", () => {
     });
 
     expect(snapshot).toEqual(baseline);
+  });
+
+  it("persists higher bounded scores from tenant-scoped context signals", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const bob = await createUserFixture(testDb.db, { email: "bob-context@example.com" });
+    const bare = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "https://example.com",
+      createdAt: NOW,
+    });
+    const contextual = await createScoreTestInspiration(testDb, alice.user.id, {
+      text: "https://example.com",
+      createdAt: NOW,
+    });
+    const bobInspiration = await createScoreTestInspiration(testDb, bob.user.id, {
+      text: "https://example.com",
+      createdAt: NOW,
+    });
+
+    await testDb.db.insert(attachments).values([
+      {
+        inspirationId: bare.id,
+        type: "link",
+        url: "https://example.com",
+        name: null,
+      },
+      {
+        inspirationId: contextual.id,
+        type: "link",
+        url: "https://example.com",
+        name: "Research notes about urban shade",
+      },
+      {
+        inspirationId: contextual.id,
+        type: "image",
+        url: "https://bucket.s3.us-west-2.amazonaws.com/context.png",
+        name: "context.png",
+        s3Key: `users/${alice.user.id}/attachments/context.png`,
+        contentType: "image/png",
+        size: 2048,
+      },
+    ] as (typeof attachments.$inferInsert)[]);
+    await testDb.db.insert(reflections).values([
+      {
+        inspirationId: contextual.id,
+        userId: alice.user.id,
+        question: "Why does this matter?",
+        answer:
+          "It connects the pasted source to our own civic furniture idea and captures enough context to revisit it later.",
+      },
+      {
+        inspirationId: contextual.id,
+        userId: bob.user.id,
+        question: "Cross-tenant noise",
+        answer: "This row is malformed on purpose and must not count for Alice.",
+      },
+      {
+        inspirationId: bobInspiration.id,
+        userId: bob.user.id,
+        question: "Bob context",
+        answer: "Bob's rich context must not affect Alice's inspiration scoring.",
+      },
+    ]);
+
+    const bareSnapshot = await persistLocalInspirationScores(testDb.db as PersistDb, bare);
+    const contextualSnapshot = await persistLocalInspirationScores(
+      testDb.db as PersistDb,
+      contextual,
+    );
+
+    expect(contextualSnapshot.importanceScore).toBeGreaterThan(
+      bareSnapshot.importanceScore,
+    );
+    expect(contextualSnapshot.wowScore).toBeGreaterThan(bareSnapshot.wowScore);
+    expect(bareSnapshot.importanceScore).toBeLessThanOrEqual(10);
   });
 });
