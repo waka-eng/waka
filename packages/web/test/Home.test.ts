@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { InspirationsBoard } from "../src/components/InspirationsBoard";
 import {
   createInspiration,
+  createReflection,
   fetchBackgroundJobs,
   fetchInspirations,
   fetchReflections,
@@ -47,6 +48,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchInspirations: vi.fn(async () => []),
     fetchReflections: vi.fn(async () => []),
     fetchWowMoments: vi.fn(async () => []),
+    createReflection: vi.fn(async () => {
+      throw new Error("createReflection mock not configured");
+    }),
     createInspiration: vi.fn(async () => {
       throw new Error("createInspiration mock not configured");
     }),
@@ -446,6 +450,126 @@ describe("HomePage view model", () => {
       "Architecture essay about bridge rhythms in city walks",
       "Synthetic memory note for rereading old journals",
     ]);
+  });
+
+  it("quick save still creates only the inspiration and preserves fast capture behavior", async () => {
+    setApiFixtures({ inspirations: [] });
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({
+        id: "insp-quick-save",
+        text: "Fast save without reflective friction",
+      }),
+    );
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+    await saveInspirationFromCapture(container, "Fast save without reflective friction");
+
+    expect(createInspiration).toHaveBeenCalledTimes(1);
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "Fast save without reflective friction",
+    });
+    expect(createReflection).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
+    expect(container.querySelector(".capture--reflect")).toBeNull();
+  });
+
+  it("reflective save creates the inspiration before attaching the guided reflection", async () => {
+    setApiFixtures({ inspirations: [] });
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({
+        id: "insp-reflective-save",
+        text: "A passage about small rituals compounding",
+      }),
+    );
+    vi.mocked(createReflection).mockResolvedValue({
+      id: "reflection-1",
+      inspirationId: "insp-reflective-save",
+      userId: "user-1",
+      question: "What about this is worth remembering?",
+      answer: "It names the quiet system behind the ritual.",
+      skipped: false,
+      createdAt: "2026-05-14T16:31:00.000Z",
+    });
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      setInputValue(textarea!, "A passage about small rituals compounding");
+    });
+
+    const reflectiveButton = container.querySelector<HTMLButtonElement>("#capReflectiveSave");
+    expect(reflectiveButton).not.toBeNull();
+    await act(async () => {
+      reflectiveButton?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".capture--reflect")).not.toBeNull();
+    expect(container.textContent).toContain("Process this inspiration");
+    expect(container.textContent).toContain("What about this is worth remembering?");
+
+    const reflectionAnswer = container.querySelector<HTMLTextAreaElement>("#reflectAns");
+    expect(reflectionAnswer).not.toBeNull();
+    await act(async () => {
+      setInputValue(reflectionAnswer!, "It names the quiet system behind the ritual.");
+    });
+
+    const continueButton = container.querySelector<HTMLButtonElement>("#reflectNext");
+    await act(async () => {
+      continueButton?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspiration).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledWith("insp-reflective-save", {
+      question: "What about this is worth remembering?",
+      answer: "It names the quiet system behind the ritual.",
+      skipped: false,
+    });
+    expect(vi.mocked(createInspiration).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(createReflection).mock.invocationCallOrder[0],
+    );
+    expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
+      "1 of 1 reflected",
+    );
+  });
+
+  it("keeps reflective mode open and explains that a reflection answer is needed", async () => {
+    setApiFixtures({ inspirations: [] });
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      setInputValue(textarea!, "Save only after I process this");
+    });
+
+    const reflectiveButton = container.querySelector<HTMLButtonElement>("#capReflectiveSave");
+    await act(async () => {
+      reflectiveButton?.click();
+    });
+    await flushReactWork();
+
+    const continueButton = container.querySelector<HTMLButtonElement>("#reflectNext");
+    await act(async () => {
+      continueButton?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspiration).not.toHaveBeenCalled();
+    expect(createReflection).not.toHaveBeenCalled();
+    expect(container.querySelector(".capture--reflect")).not.toBeNull();
+    expect(container.textContent).toContain("Add a thought before reflective save");
+    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
+      "Save only after I process this",
+    );
   });
 
   it("keeps optimistic Inspiration First saves simple, then shows returned WOW score after persistence", async () => {

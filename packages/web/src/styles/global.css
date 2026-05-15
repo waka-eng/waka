@@ -858,6 +858,15 @@ body.dragging .drop-overlay {
 .cap-save:hover:not(:disabled) {
   opacity: 0.85;
 }
+.cap-save--reflect {
+  border-color: rgba(34, 34, 34, 0.28);
+  background: transparent;
+  color: var(--ink);
+}
+.cap-save--reflect:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: rgba(34, 34, 34, 0.06);
+}
 
 .cap-expand {
   flex-shrink: 0;
@@ -1012,6 +1021,17 @@ body.dragging .drop-overlay {
   font-style: italic;
   margin-bottom: var(--space-3);
   animation: qFade 300ms ease;
+}
+.reflect-kicker {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 @keyframes qFade {
   from {

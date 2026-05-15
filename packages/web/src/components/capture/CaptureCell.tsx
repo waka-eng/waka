@@ -132,8 +132,10 @@ export interface CaptureCellProps {
    * the parent makes that decision and toggles via this prop.
    */
   saveVisible?: boolean;
-  /** Fires when the user clicks the save pill. */
+  /** Fires when the user clicks the quick-save pill. */
   onSave?: () => void;
+  /** Fires when the user chooses the guided reflective save flow. */
+  onReflectiveSave?: () => void;
 
   /** Fires when the user picks a file via the `+` button. */
   onFileSelect?: (file: File) => void;
@@ -234,6 +236,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       notePlaceholder = "A link, a note, an image — whatever's inspiring you right now…",
       saveVisible = false,
       onSave,
+      onReflectiveSave,
       onFileSelect,
       focused = false,
       onToggleFocus,
@@ -368,6 +371,15 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           />
           <button
             type="button"
+            className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}`}
+            id="capReflectiveSave"
+            onClick={onReflectiveSave}
+            disabled={!saveVisible}
+          >
+            Process this inspiration
+          </button>
+          <button
+            type="button"
             className={`cap-save${saveVisible ? " visible" : ""}`}
             id="capSave"
             onClick={onSave}
@@ -377,7 +389,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             // semantics (not just visual-only disabling).
             disabled={!saveVisible}
           >
-            Save
+            Quick save
           </button>
           <button
             type="button"

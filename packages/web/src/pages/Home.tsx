@@ -81,6 +81,8 @@ interface InspirationListEntry {
   cluster: ClusterKind | null;
   /** Backend-calculated WOW score; absent while optimistic saves are in flight. */
   wowScore: number | null;
+  reflectionsAnswered: number;
+  reflectionsTotal: number;
   createdAt: string;
   /** Best-effort timestamp string for the meta row. */
   timestamp: string;
@@ -100,6 +102,8 @@ function entryToCardData(entry: InspirationListEntry): InspirationCardData {
     links: entry.links.length > 0 ? entry.links : null,
     timestamp: entry.timestamp,
     kind: statusLabel,
+    reflectionsAnswered: entry.reflectionsAnswered,
+    reflectionsTotal: entry.reflectionsTotal,
   };
 }
 
@@ -146,6 +150,8 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
     attachments: [],
     cluster: row.cluster,
     wowScore: row.wowScore,
+    reflectionsAnswered: 0,
+    reflectionsTotal: 0,
     createdAt: row.createdAt,
     timestamp: formatTimestamp(row.createdAt),
   };
@@ -163,6 +169,8 @@ function buildOptimisticEntry(
     attachments: [],
     cluster: null,
     wowScore: null,
+    reflectionsAnswered: 0,
+    reflectionsTotal: 0,
     createdAt: pending.createdAt,
     timestamp: formatNow(),
   };
@@ -173,6 +181,7 @@ function applyPersisted(
   inspiration: ApiInspiration,
   attachments: ApiAttachment[],
   failedCount: number,
+  reflectionCount = 0,
 ): InspirationListEntry {
   return {
     ...entry,
@@ -181,6 +190,8 @@ function applyPersisted(
     text: inspiration.text,
     cluster: inspiration.cluster,
     wowScore: inspiration.wowScore,
+    reflectionsAnswered: entry.reflectionsAnswered + reflectionCount,
+    reflectionsTotal: entry.reflectionsTotal + reflectionCount,
     attachments,
     errorMessage:
       failedCount > 0
@@ -796,6 +807,7 @@ export function HomePage(): JSX.Element {
                 result.inspiration,
                 result.attachments,
                 result.failedAttachments.length,
+                result.reflection ? 1 : 0,
               )
             : e,
         ),

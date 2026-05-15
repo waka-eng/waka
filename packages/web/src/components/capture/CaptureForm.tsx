@@ -55,11 +55,13 @@ import {
 import {
   ApiError,
   createInspiration,
+  createReflection,
   finalizeAttachment,
   presignAttachment,
   uploadToPresignedUrl,
   type ApiAttachment,
   type ApiInspiration,
+  type ApiReflection,
 } from "../../lib/api";
 import {
   CaptureCell,
@@ -117,6 +119,7 @@ export interface PendingInspiration {
 export interface PersistedResult {
   inspiration: ApiInspiration;
   attachments: ApiAttachment[];
+  reflection?: ApiReflection;
   /** Per-attachment failures. Surfaces the original `localId` so the parent
    *  can keep the failed one visible (e.g. with a retry affordance) while
    *  the inspiration row itself is treated as saved. */
@@ -154,6 +157,7 @@ export interface CaptureFormProps {
  */
 const URL_REGEX = /\bhttps?:\/\/[^\s]+/gi;
 const TRAILING_PUNCT = /[.,)\]>;'"]+$/;
+const REFLECTIVE_SAVE_QUESTION = "What about this is worth remembering?";
 
 export function extractUrlsFromText(text: string): string[] {
   const matches = text.match(URL_REGEX) ?? [];
@@ -218,6 +222,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
      * -------------------------------------------------------- */
 
     const [note, setNote] = useState("");
+    const [activeView, setActiveView] = useState<CaptureView>(view);
+    const [reflectionAnswer, setReflectionAnswer] = useState("");
+    const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [saving, setSaving] = useState(false);
     /**
@@ -228,12 +235,14 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [confirmMessage, setConfirmMessage] = useState<ReactNode>(null);
     const [confirmVisible, setConfirmVisible] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Cleanup the confirm timer when the component unmounts. Without this an
+    // Cleanup timers when the component unmounts. Without this an
     // in-flight setTimeout would fire `setState` on an unmounted instance.
     useEffect(() => {
       return () => {
         if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+        if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
       };
     }, []);
 
@@ -388,10 +397,18 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
      * incurring an extra dependency cycle. Closes over the latest state via
      * its caller (state setters and refs are stable).
      */
-    const triggerSave = useCallback(async (): Promise<void> => {
+    const triggerSave = useCallback(async (options: { reflectionAnswer?: string } = {}): Promise<void> => {
       if (saving) return;
       const trimmed = note.trim();
       if (trimmed.length === 0 && pending.length === 0) return;
+
+      const isReflectiveSave = options.reflectionAnswer !== undefined;
+      const reflectiveAnswer = options.reflectionAnswer?.trim() ?? "";
+      if (isReflectiveSave && reflectiveAnswer.length === 0) {
+        flashConfirm("Add a thought before reflective save", 2600);
+        setActiveView("reflect");
+        return;
+      }
 
       // Lift any URLs in the note body into link attachments. The prototype
       // does this implicitly via paste; doing it again here covers the
@@ -438,6 +455,14 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           text: trimmed.length > 0 ? trimmed : "(attachment-only inspiration)",
         });
 
+        const reflection = isReflectiveSave
+          ? await createReflection(inspiration.id, {
+              question: REFLECTIVE_SAVE_QUESTION,
+              answer: reflectiveAnswer,
+              skipped: false,
+            })
+          : undefined;
+
         // 3. Fan out each attachment. We persist in parallel because they
         //    don't depend on one another. `Promise.allSettled` lets a single
         //    bad upload (e.g. timed-out S3 PUT) coexist with successful
@@ -474,6 +499,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onPersisted?.(tempId, {
           inspiration,
           attachments,
+          reflection,
           failedAttachments: failed,
         });
 
@@ -482,6 +508,16 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
         }
         setNote("");
+        setReflectionAnswer("");
+        setActiveView("note");
+        setReflectGlow(Boolean(reflection));
+        if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
+        if (reflection) {
+          reflectGlowTimerRef.current = setTimeout(() => {
+            setReflectGlow(false);
+            reflectGlowTimerRef.current = null;
+          }, 1800);
+        }
         setPending([]);
         if (failed.length > 0) {
           flashConfirm(
@@ -519,6 +555,31 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       flashConfirm,
     ]);
 
+    const handleStartReflectiveSave = useCallback((): void => {
+      if (saving) return;
+      if (note.trim().length === 0 && pending.length === 0) return;
+      setActiveView("reflect");
+      setReflectGlow(false);
+      onToggleFocus?.(true);
+      queueMicrotask(() => {
+        document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus();
+      });
+    }, [note, pending, saving, onToggleFocus]);
+
+    const handleReflectAnswerKeyDown = useCallback(
+      (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          void triggerSave({ reflectionAnswer: reflectionAnswer });
+        }
+        if (event.key === "Escape" && focused) {
+          event.preventDefault();
+          onToggleFocus?.(false);
+        }
+      },
+      [focused, onToggleFocus, reflectionAnswer, triggerSave],
+    );
+
     /* --------------------------------------------------------
      * Derived flags
      * -------------------------------------------------------- */
@@ -533,8 +594,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     return (
       <CaptureCell
         ref={ref}
-        view={view}
-        visualState={visualState}
+        view={activeView}
+        visualState={{ ...visualState, reflectGlow }}
         noteValue={note}
         onNoteChange={handleNoteChange}
         onNoteKeyDown={handleNoteKeyDown}
@@ -542,11 +603,28 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onSave={() => {
           void triggerSave();
         }}
+        onReflectiveSave={handleStartReflectiveSave}
         focused={focused}
         onToggleFocus={onToggleFocus}
         onFileSelect={addFile}
         confirmVisible={confirmVisible}
         confirmMessage={confirmMessage}
+        reflectQuestion={
+          <>
+            <span className="reflect-kicker">Process this inspiration</span>
+            {REFLECTIVE_SAVE_QUESTION}
+          </>
+        }
+        reflectValue={reflectionAnswer}
+        onReflectChange={setReflectionAnswer}
+        onReflectKeyDown={handleReflectAnswerKeyDown}
+        reflectPlaceholder="What question, connection, or signal should your future self keep?"
+        onReflectLater={() => setActiveView("note")}
+        onReflectNext={() => {
+          void triggerSave({ reflectionAnswer });
+        }}
+        reflectComplete={reflectGlow ? "Saved with reflection" : null}
+        reflectCompleteVisible={reflectGlow}
         attachments={
           pending.length === 0
             ? null
