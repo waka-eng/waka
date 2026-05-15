@@ -455,16 +455,47 @@ describe("HomePage view model", () => {
     );
     expect(explainerButton?.getAttribute("aria-expanded")).toBe("true");
     expect(explainer).not.toBeNull();
-    expect(explainer?.textContent).toContain("ImportanceScore");
-    expect(explainer?.textContent).toContain("Relationship");
-    expect(explainer?.textContent).toContain("Similarity");
-    expect(explainer?.textContent).toContain("SurpriseSimilarity");
-    expect(explainer?.textContent).toContain("30-day freshness half-life");
-    expect(explainer?.textContent).toContain("10% freshness weight");
-    expect(explainer?.textContent).toContain("AI/LLM");
-    expect(explainer?.textContent).toContain("WOW moment judgment");
-    expect(explainer?.textContent).toContain("not for basic score arithmetic");
-    expect(explainer?.textContent).not.toMatch(/cluster|kind|Filter by/i);
+    const explainerText = (explainer?.textContent ?? "").replace(/\s+/g, " ").trim();
+    expect(explainerText).toContain("Current implementation");
+    expect(explainerText).toContain("persisted WowScore formula used today");
+    expect(explainerText).toContain(
+      "45% ImportanceScore + 25% TopSimilarity + 20% TopSurpriseSimilarity + 10% TimeDistance",
+    );
+    expect(explainerText).toContain("relationship and time-distance signals are currently 0");
+    expect(explainerText).toContain("Target scoring model we discussed");
+    expect(explainerText).toContain(
+      "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
+    );
+    expect(explainerText).toContain("ContentDepth = 70% TextDepth + 30% Context");
+    expect(explainerText).toContain("hasReflection");
+    expect(explainerText).toContain(
+      "Revisit = 65% Unique days + 25% total revisits + 10% revisited last 7 days",
+    );
+    expect(explainerText).toContain(
+      "RelationshipScore = 45% TopSimilarity + 35% TopSurpriseSimilarity + 20% TimeDistance",
+    );
+    expect(explainerText).toContain(
+      "CoreWowScore = 55% ImportanceScore + 45% RelationshipScore",
+    );
+    expect(explainerText).toContain(
+      "FreshnessDecay = 100 × 0.5^(ageDays / 30)",
+    );
+    expect(explainerText).toContain("30-day freshness half-life");
+    expect(explainerText).toContain(
+      "DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay",
+    );
+    expect(explainerText).toContain("proposed displayed score, not the score persisted today");
+    expect(explainerText).toContain("top-k, bounded retrieval");
+    expect(explainerText).toContain("does not send the full inspiration history");
+    expect(explainerText).toContain("save, edit, reflection, revisit");
+    expect(explainerText).toContain("embedding refresh");
+    expect(explainerText).toContain("new related inspiration");
+    expect(explainerText).toContain("WOW generation");
+    expect(explainerText).toContain("bounded updates");
+    expect(explainerText).toContain("AI/LLM");
+    expect(explainerText).toContain("judging and writing WOW moments");
+    expect(explainerText).toContain("does not ask an LLM to calculate the score");
+    expect(explainerText).not.toMatch(/cluster|kind|Filter by/i);
   });
 
   it("sorts Inspiration First rows through accessible column headers", async () => {
