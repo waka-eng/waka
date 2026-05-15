@@ -320,7 +320,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "blank-pages-need-starter-shapes",
     title: "Blank pages feel better with starter shapes",
     kind: "recurrence",
-    wowScore: 78,
+    wowScore: 39,
     why: "Notion templates, Canva resize, and YouTube chapters all reduce fear by giving unfinished work a clear structure before the user has to decide everything.",
     reflectionQuestion: "Where could WAKA turn an empty state into an obvious next step?",
     related: [
@@ -333,7 +333,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "saved-things-become-a-map",
     title: "Saved things become useful when they turn into a map",
     kind: "bridge",
-    wowScore: 74,
+    wowScore: 37,
     why: "Airbnb pins, Instagram collections, and Goodreads shelves show that saves become more valuable when people can see groups, places, and intent.",
     reflectionQuestion: "How should WAKA show the shape of what someone has saved?",
     related: [
@@ -346,7 +346,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "community-context-builds-trust-fast",
     title: "Community context explains why something matters",
     kind: "surprise_bridge",
-    wowScore: 72,
+    wowScore: 36,
     why: "Figma remixes, GitHub starter labels, and Shopify proof all help a stranger trust an object because other people have already shown how it can be used.",
     reflectionQuestion: "What social proof would make an inspiration easier to trust?",
     related: [
@@ -359,7 +359,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "timed-comments-beat-vague-feedback",
     title: "Feedback lands when it points to the exact moment",
     kind: "bridge",
-    wowScore: 70,
+    wowScore: 35,
     why: "Loom timestamps, Google Docs suggestions, and support macros keep feedback useful by attaching it to the specific sentence, second, or customer question.",
     reflectionQuestion: "Where should feedback attach directly to evidence instead of becoming a note?",
     related: [
@@ -372,7 +372,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "resurfacing-makes-old-saves-new-again",
     title: "Old saves feel new when resurfaced at the right time",
     kind: "recurrence",
-    wowScore: 69,
+    wowScore: 34,
     why: "Readwise reviews, Slack Save for Later, and Pinterest related pins all make saved material useful again by bringing it back in a timely context.",
     reflectionQuestion: "When should WAKA bring an old inspiration back into view?",
     related: [
@@ -385,7 +385,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "personal-data-needs-emotional-controls",
     title: "Personal data needs emotional controls",
     kind: "tension",
-    wowScore: 68,
+    wowScore: 33,
     why: "Wrapped, Apple Memories, and Strava all show that personal data can delight or pressure people depending on timing, audience, and control.",
     reflectionQuestion: "Which personal insight should WAKA make easy to pause, hide, or share?",
     related: [
@@ -398,7 +398,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "messy-inputs-need-visible-clusters",
     title: "Messy inputs become clear when clusters appear",
     kind: "recurrence",
-    wowScore: 66,
+    wowScore: 31,
     why: "Miro sticky clusters, notebook margin stars, and Trello aging all make a pile of work readable by adding simple visual grouping or priority cues.",
     reflectionQuestion: "What is the smallest visual cue that would make a cluster obvious?",
     related: [
@@ -411,7 +411,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "recommendations-work-when-the-link-is-obvious",
     title: "Recommendations work when the link is obvious",
     kind: "bridge",
-    wowScore: 62,
+    wowScore: 28,
     why: "Amazon adjacent buys, Dropbox activity, and Calendly slots all succeed because the next action is explained by visible context, not mystery.",
     reflectionQuestion: "How can WAKA show why two inspirations belong together?",
     related: [
@@ -424,7 +424,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "small-rewards-can-help-or-hurt",
     title: "Small rewards can support momentum or create pressure",
     kind: "tension",
-    wowScore: 59,
+    wowScore: 25,
     why: "Duolingo freezes, Superhuman celebrations, and Product Hunt comments show that motivation features need care because public feedback and streaks can distort behavior.",
     reflectionQuestion: "Where should WAKA encourage momentum without turning it into a scoreboard?",
     related: [
@@ -437,7 +437,7 @@ export const DEMO_WOW_MOMENTS: DemoWowMomentSeed[] = [
     slug: "short-paths-keep-exploration-light",
     title: "Short paths keep exploration from feeling heavy",
     kind: "outlier",
-    wowScore: 56,
+    wowScore: 22,
     why: "TikTok recipe comments, museum audio detours, and Linear's command menu all show that users explore more when the side path is short, clear, and easy to leave.",
     reflectionQuestion: "What shortcut or detour would add context without overwhelming the card?",
     related: [

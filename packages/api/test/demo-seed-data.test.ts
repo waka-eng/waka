@@ -40,8 +40,9 @@ describe("demo seed data", () => {
     expect(inspirationWowScores.filter((score) => score >= 55).length).toBeGreaterThanOrEqual(6);
     expect(inspirationWowScores.filter((score) => score <= 40).length).toBeGreaterThanOrEqual(10);
 
-    expect(Math.min(...wowMomentScores)).toBeGreaterThanOrEqual(55);
-    expect(Math.max(...wowMomentScores)).toBeLessThanOrEqual(78);
+    expect(Math.min(...wowMomentScores)).toBeGreaterThanOrEqual(20);
+    expect(Math.max(...wowMomentScores)).toBeLessThan(40);
+    expect(wowMomentScores.every((score) => score < 40)).toBe(true);
     expect(wowMomentScores.slice(0, 9)).toEqual([...wowMomentScores].sort((a, b) => b - a).slice(0, 9));
   });
 
