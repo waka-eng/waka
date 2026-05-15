@@ -3204,7 +3204,7 @@ body.reflect-bg {
 
 .wow-moments-grid--populated {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-auto-rows: minmax(190px, 1fr);
+  grid-auto-rows: minmax(190px, auto);
   gap: 0;
   align-items: stretch;
 }
@@ -3221,9 +3221,7 @@ body.reflect-bg {
 }
 
 .wow-moments-grid--populated .wow-moment-card {
-  height: 100%;
   min-height: 190px;
-  overflow: hidden;
   border-radius: 0;
   box-shadow: none;
 }
@@ -3288,38 +3286,32 @@ body.reflect-bg {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
-  grid-auto-rows: minmax(0, 1fr);
-  align-content: stretch;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  grid-auto-rows: auto;
+  align-content: start;
 }
 
 .wow-moment-related li {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
-  padding: 4px 5px;
-  background: rgba(246, 242, 232, 0.7);
+  padding: 6px 7px;
+  background: rgba(246, 242, 232, 0.76);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
 }
 
 .wow-moment-related blockquote {
   min-width: 0;
   margin: 0;
-  padding-left: 6px;
-  border-left: var(--border-hairline);
+  padding-left: 8px;
+  border-left: 2px solid rgba(15, 15, 14, 0.18);
   font-family: var(--font-serif);
-  font-size: 11px;
-  line-height: 1.22;
+  font-size: 12px;
+  line-height: 1.34;
   color: var(--ink);
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .wow-moment-card--loading {
