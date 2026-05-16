@@ -385,6 +385,9 @@ function InternalWowStatusTable({
                   <td>
                     <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : "ready"}</strong>
                     <span>{row.debugReason.detail}</span>
+                    {row.debugReason.rawGeminiPreview ? (
+                      <span>Raw judge preview: {row.debugReason.rawGeminiPreview}</span>
+                    ) : null}
                   </td>
                 </tr>
               ))

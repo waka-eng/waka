@@ -304,6 +304,9 @@ async function recordAutoWowGenerationResult(
             isWowMoment: false as const,
             reason: falseJudgment.reason,
             debugSummary: falseJudgment.debugSummary,
+            ...(falseJudgment.rawGeminiPreview
+              ? { rawGeminiPreview: falseJudgment.rawGeminiPreview }
+              : {}),
           },
         }
       : {}),

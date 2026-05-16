@@ -222,6 +222,7 @@ describe("GET /api/wow-status", () => {
               isWowMoment: false,
               reason: "invalid_judge_json",
               debugSummary: "Gemini returned non-JSON WOW judgment text.",
+              rawGeminiPreview: "```json {not-json token=[REDACTED]}",
             },
           },
         },
@@ -266,6 +267,81 @@ describe("GET /api/wow-status", () => {
       code: "not_wow_judgment",
       label: "invalid_judge_json",
       detail: "Gemini returned non-JSON WOW judgment text.",
+    });
+    expect(byId.get("no-generated-insp")?.debugReason).not.toHaveProperty("rawGeminiPreview");
+  });
+
+  it("includes raw Gemini preview only when internal status is enabled", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const recentInspirations = [
+      {
+        id: "internal-insp",
+        text: "Internal debug row",
+        kind: "note",
+        category: null,
+        cluster: "bridge",
+        classifiedAt: now,
+        importanceScore: 5,
+        wowScore: 3,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    const jobs = [
+      {
+        id: "internal-job",
+        userId: user.id,
+        type: "process_inspiration",
+        status: "succeeded",
+        payload: {
+          inspirationId: "internal-insp",
+          autoWowGeneration: {
+            status: "not_wow",
+            generated: false,
+            judgment: {
+              isWowMoment: false,
+              reason: "invalid_judge_json",
+              debugSummary: "Gemini returned non-JSON WOW judgment text.",
+              rawGeminiPreview: "```json {not-json token=[REDACTED]}",
+            },
+          },
+        },
+        attempts: 1,
+        maxAttempts: 3,
+        lastError: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+
+    const recentSelect = createLimitedSelect(recentInspirations);
+    const jobsSelect = createLimitedSelect(jobs);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(recentSelect.builder)
+        .mockReturnValueOnce(jobsSelect.builder)
+        .mockReturnValueOnce(createWhereSelect([{ inspirationId: "internal-insp" }]))
+        .mockReturnValueOnce(createJoinedSelect([])),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/wow-status",
+      createWowStatusRoutes({
+        getDatabase: () => db as any,
+        authMiddleware: authMiddleware(),
+        showInternalStatus: true,
+      }),
+    );
+
+    const response = await app.request("/api/wow-status?limit=1");
+    const body = (await response.json()) as { rows: Array<{ debugReason: unknown }> };
+
+    expect(body.rows[0]?.debugReason).toMatchObject({
+      code: "not_wow_judgment",
+      label: "invalid_judge_json",
+      detail: "Gemini returned non-JSON WOW judgment text.",
+      rawGeminiPreview: "```json {not-json token=[REDACTED]}",
     });
   });
 

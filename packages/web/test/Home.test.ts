@@ -235,6 +235,7 @@ const sampleWowStatusRows: ApiWowStatusRow[] = [
       code: "linked_wow_ready",
       label: "generated 1",
       detail: "1 linked WOW moment found for this inspiration.",
+      rawGeminiPreview: "```json { invalid judge payload preview",
     },
   },
 ];
@@ -1347,6 +1348,7 @@ describe("HomePage view model", () => {
     const container = await renderHomePage();
     await switchToInspirationFirst(container);
     expect(container.querySelector(".internal-wow-status-table")).toBeNull();
+    expect(container.textContent).not.toContain("Raw judge preview:");
     expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
 
     await switchToWowStatus(container);
@@ -1383,6 +1385,7 @@ describe("HomePage view model", () => {
     expect(table?.textContent).toContain("generated 1");
     expect(table?.textContent).toContain("ready");
     expect(table?.textContent).toContain("1 linked WOW moment found for this inspiration.");
+    expect(table?.textContent).toContain("Raw judge preview: ```json { invalid judge payload preview");
   });
 
   it("does not render the internal WOW status UI when the dev/demo gate is disabled", async () => {

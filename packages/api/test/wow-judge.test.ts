@@ -11,6 +11,7 @@ import {
   buildWowJudgmentRequest,
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
+  sanitizeGeminiRawPreview,
   wowFalseReasonValues,
   type WowJudgeClient,
 } from "../src/lib/wow-judge.js";
@@ -163,11 +164,50 @@ describe("GeminiWowJudgeClient", () => {
     });
   });
 
-  it("returns false for truncated or non-JSON Gemini WOW judgment text", async () => {
-    const client = new GeminiWowJudgeClient({
-      apiKey: "test-key",
-      fetchFn: vi.fn().mockResolvedValue(geminiTextResponse('{"isWowMoment":true,"kind":"bridge"')),
+  it("repairs non-JSON Gemini WOW judgment text into a semantic false judgment", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse("No WOW here: just generic overlap."))
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          isWowMoment: false,
+          reason: "generic_similarity",
+          debugSummary: "Only a generic topical overlap was found.",
+        }),
+      );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: "trigger-id",
+          text: "A standalone note.",
+          kind: null,
+          category: null,
+          cluster: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [],
+      }),
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "generic_similarity",
+      debugSummary: "Only a generic topical overlap was found.",
     });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body)).contents[0].parts[0].text).toContain(
+      "No WOW here: just generic overlap.",
+    );
+  });
+
+  it("returns invalid_judge_json with a sanitized raw preview when repair fails", async () => {
+    const rawText =
+      "```json\n{not-json token=super-secret-token-value Aizaabcdefghijklmnopqrstuvwxyz}\n```";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse(rawText))
+      .mockResolvedValueOnce(geminiTextResponse("still not json"));
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
 
     await expect(
       client.judgeWowMoment({
@@ -185,7 +225,9 @@ describe("GeminiWowJudgeClient", () => {
       isWowMoment: false,
       reason: "invalid_judge_json",
       debugSummary: "Gemini returned non-JSON WOW judgment text.",
+      rawGeminiPreview: sanitizeGeminiRawPreview(rawText),
     });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns false for malformed Gemini WOW judgment schema", async () => {
@@ -217,7 +259,17 @@ describe("GeminiWowJudgeClient", () => {
       isWowMoment: false,
       reason: "invalid_judge_json",
       debugSummary: "Gemini returned a WOW judgment that failed schema validation.",
+      rawGeminiPreview: sanitizeGeminiRawPreview(
+        JSON.stringify({
+          isWowMoment: true,
+          kind: "not_a_wow_kind",
+          title: "Invalid",
+          why: "Invalid kind should not be accepted.",
+          relatedInspirationIds: [triggerId],
+        }),
+      ),
     });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns false for non-JSON Gemini HTTP bodies", async () => {

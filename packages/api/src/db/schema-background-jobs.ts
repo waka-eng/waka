@@ -51,6 +51,7 @@ export interface ProcessInspirationPayload {
       isWowMoment: false;
       reason: string;
       debugSummary: string;
+      rawGeminiPreview?: string;
     };
   };
 }
