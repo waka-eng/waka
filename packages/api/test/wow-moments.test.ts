@@ -339,7 +339,11 @@ describe("POST /api/wow-moments/generate — manual generation", () => {
     const trigger = await createInspirationFixture(db, alice.user.id, { text: "Trigger note" });
     const candidate = await createInspirationFixture(db, alice.user.id, { text: "Related note" });
     await insertEmbedding(alice.user.id, candidate.id, 0.5);
-    mockGeminiFetch({ isWowMoment: false });
+    mockGeminiFetch({
+      isWowMoment: false,
+      reason: "generic_similarity",
+      debugSummary: "Only a generic topical overlap was found.",
+    });
 
     const res = await authedClient(alice).json("POST", "/api/wow-moments/generate", {
       inspirationId: trigger.id,
@@ -350,7 +354,11 @@ describe("POST /api/wow-moments/generate — manual generation", () => {
     expect(res.body).toMatchObject({
       generated: false,
       reason: "not_wow_moment",
-      judgment: { isWowMoment: false },
+      judgment: {
+        isWowMoment: false,
+        reason: "generic_similarity",
+        debugSummary: "Only a generic topical overlap was found.",
+      },
       embeddingStatus: "created",
     });
     const moments = await db

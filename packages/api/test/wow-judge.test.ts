@@ -121,6 +121,25 @@ describe("GeminiWowJudgeClient", () => {
   });
 
   it("returns a validated false WOW judgment from Gemini JSON", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(geminiJsonResponse({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." }));
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: "trigger-id",
+          text: "A standalone note.",
+          kind: null,
+          category: null,
+          cluster: null,
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [],
+      }),
+    ).resolves.toEqual({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." });
+  });
+
+  it("maps legacy false WOW judgments to a safe default reason", async () => {
     const fetchMock = vi.fn().mockResolvedValue(geminiJsonResponse({ isWowMoment: false }));
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
 
@@ -136,7 +155,11 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toEqual({ isWowMoment: false });
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Gemini returned a legacy false WOW judgment without a reason.",
+    });
   });
 
   it("returns false for truncated or non-JSON Gemini WOW judgment text", async () => {
@@ -157,7 +180,7 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toEqual({ isWowMoment: false });
+    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
   });
 
   it("returns false for malformed Gemini WOW judgment schema", async () => {
@@ -185,7 +208,7 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toEqual({ isWowMoment: false });
+    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
   });
 
   it("returns false for non-JSON Gemini HTTP bodies", async () => {
@@ -211,7 +234,7 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toEqual({ isWowMoment: false });
+    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
   });
 
   it("returns false for blocked or empty Gemini WOW responses", async () => {
@@ -237,7 +260,7 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toEqual({ isWowMoment: false });
+    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
   });
 
   it("builds a bounded prompt from only the trigger and provided candidates", () => {
@@ -364,7 +387,7 @@ describe("judgeWowMomentForInspiration", () => {
       client,
     });
 
-    expect(result).toEqual({ isWowMoment: false });
+    expect(result).toMatchObject({ isWowMoment: false });
     expect(client.judgeWowMoment).not.toHaveBeenCalled();
     expect(await countWowMoments(testDb)).toBe(0);
   });
@@ -403,7 +426,7 @@ describe("judgeWowMomentForInspiration", () => {
       client,
     });
 
-    expect(result).toEqual({ isWowMoment: false });
+    expect(result).toMatchObject({ isWowMoment: false });
     expect(await countWowMoments(testDb)).toBe(0);
   });
 
@@ -457,13 +480,13 @@ describe("judgeWowMomentForInspiration", () => {
       db: testDb.db,
       userId: alice.user.id,
       triggerInspirationId: trigger.id,
-      judgment: { isWowMoment: false },
+      judgment: { isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." },
     });
 
     expect(result).toEqual({
       persisted: false,
       reason: "not_wow_moment",
-      judgment: { isWowMoment: false },
+      judgment: { isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." },
     });
     expect(await countWowMoments(testDb)).toBe(0);
     expect(await countWowMomentLinks(testDb)).toBe(0);
@@ -701,7 +724,7 @@ describe("judgeWowMomentForInspiration", () => {
     await createEmbedding(testDb, extraCandidate, [0, 1]);
 
     const client: WowJudgeClient = {
-      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false }),
+      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." }),
     };
 
     await judgeWowMomentForInspiration({

@@ -48,7 +48,22 @@ type WowStatusDebugCode =
   | "waiting_for_job"
   | "missing_embedding"
   | "job_failed"
-  | "no_generated_wow";
+  | "no_generated_wow"
+  | "not_wow_judgment";
+
+function getNotWowJudgment(job: BackgroundJob | null): { reason: string; debugSummary: string } | null {
+  if (!job || job.type !== "process_inspiration") return null;
+  const payload = job.payload as ProcessInspirationPayload;
+  const judgment = payload.autoWowGeneration?.judgment;
+  if (
+    judgment?.isWowMoment === false &&
+    typeof judgment.reason === "string" &&
+    typeof judgment.debugSummary === "string"
+  ) {
+    return { reason: judgment.reason, debugSummary: judgment.debugSummary };
+  }
+  return null;
+}
 
 function buildDebugReason(input: {
   job: BackgroundJob | null;
@@ -86,6 +101,15 @@ function buildDebugReason(input: {
       code: "missing_embedding",
       label: "missing embedding",
       detail: "No retrieval embedding exists for this inspiration, so relationship matching cannot link WOW moments yet.",
+    };
+  }
+
+  const notWowJudgment = getNotWowJudgment(input.job);
+  if (notWowJudgment) {
+    return {
+      code: "not_wow_judgment",
+      label: notWowJudgment.reason,
+      detail: notWowJudgment.debugSummary,
     };
   }
 

@@ -44,6 +44,15 @@ export const backgroundJobTypeEnum = pgEnum(
 
 export interface ProcessInspirationPayload {
   inspirationId: string;
+  autoWowGeneration?: {
+    status: string;
+    generated: boolean;
+    judgment?: {
+      isWowMoment: false;
+      reason: string;
+      debugSummary: string;
+    };
+  };
 }
 
 export const backgroundJobs = pgTable(

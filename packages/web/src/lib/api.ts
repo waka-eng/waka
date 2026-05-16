@@ -628,7 +628,8 @@ export interface ApiWowStatusRow {
       | "waiting_for_job"
       | "missing_embedding"
       | "job_failed"
-      | "no_generated_wow";
+      | "no_generated_wow"
+      | "not_wow_judgment";
     label: string;
     detail: string;
   };
