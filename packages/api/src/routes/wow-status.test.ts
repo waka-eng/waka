@@ -132,8 +132,128 @@ describe("GET /api/wow-status", () => {
             "Cities keep teaching through bridges",
             "Walks reveal hidden structure",
           ],
+          generatedWowMomentCount: 2,
+          debugReason: {
+            code: "linked_wow_ready",
+            label: "generated 2",
+            detail: "2 linked WOW moments found for this inspiration.",
+          },
         },
       ],
+    });
+  });
+
+  it("explains rows with zero linked WOW moments", async () => {
+    const now = new Date("2026-05-10T12:00:00.000Z");
+    const recentInspirations = [
+      {
+        id: "waiting-insp",
+        text: "Waiting row",
+        kind: "note",
+        category: null,
+        cluster: null,
+        classifiedAt: null,
+        importanceScore: 0,
+        wowScore: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "missing-embedding-insp",
+        text: "Missing embedding row",
+        kind: "note",
+        category: null,
+        cluster: "bridge",
+        classifiedAt: now,
+        importanceScore: 5,
+        wowScore: 3,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "no-generated-insp",
+        text: "No generated WOW row",
+        kind: "note",
+        category: null,
+        cluster: "bridge",
+        classifiedAt: now,
+        importanceScore: 5,
+        wowScore: 3,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    const jobs = [
+      {
+        id: "waiting-job",
+        userId: user.id,
+        type: "process_inspiration",
+        status: "pending",
+        payload: { inspirationId: "waiting-insp" },
+        attempts: 0,
+        maxAttempts: 3,
+        lastError: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "missing-embedding-job",
+        userId: user.id,
+        type: "process_inspiration",
+        status: "succeeded",
+        payload: { inspirationId: "missing-embedding-insp" },
+        attempts: 1,
+        maxAttempts: 3,
+        lastError: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "no-generated-job",
+        userId: user.id,
+        type: "process_inspiration",
+        status: "succeeded",
+        payload: { inspirationId: "no-generated-insp" },
+        attempts: 1,
+        maxAttempts: 3,
+        lastError: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+    const embeddedRows = [{ inspirationId: "no-generated-insp" }];
+
+    const recentSelect = createLimitedSelect(recentInspirations);
+    const jobsSelect = createLimitedSelect(jobs);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(recentSelect.builder)
+        .mockReturnValueOnce(jobsSelect.builder)
+        .mockReturnValueOnce(createWhereSelect(embeddedRows))
+        .mockReturnValueOnce(createJoinedSelect([])),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/wow-status",
+      createWowStatusRoutes({ getDatabase: () => db as any, authMiddleware: authMiddleware() }),
+    );
+
+    const response = await app.request("/api/wow-status?limit=3");
+    const body = (await response.json()) as { rows: Array<{ inspiration: { id: string }; debugReason: unknown }> };
+    const byId = new Map(body.rows.map((row) => [row.inspiration.id, row]));
+
+    expect(byId.get("waiting-insp")?.debugReason).toMatchObject({
+      code: "waiting_for_job",
+      label: "waiting for job",
+    });
+    expect(byId.get("missing-embedding-insp")?.debugReason).toMatchObject({
+      code: "missing_embedding",
+      label: "missing embedding",
+    });
+    expect(byId.get("no-generated-insp")?.debugReason).toMatchObject({
+      code: "no_generated_wow",
+      label: "generated 0",
     });
   });
 

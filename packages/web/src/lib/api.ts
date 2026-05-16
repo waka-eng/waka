@@ -620,8 +620,17 @@ export interface ApiWowStatusRow {
     lastError: string | null;
   } | null;
   embedded: boolean;
-  linkedWowMomentCount: number;
-  linkedWowMomentTitles: string[];
+  generatedWowMomentCount: number;
+  debugReason: {
+    code:
+      | "linked_wow_ready"
+      | "waiting_for_job"
+      | "missing_embedding"
+      | "job_failed"
+      | "no_generated_wow";
+    label: string;
+    detail: string;
+  };
 }
 
 export interface ListWowStatusResponse {

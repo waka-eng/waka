@@ -43,6 +43,59 @@ function jobInspirationId(job: BackgroundJob): string | null {
   return typeof payload.inspirationId === "string" ? payload.inspirationId : null;
 }
 
+type WowStatusDebugCode =
+  | "linked_wow_ready"
+  | "waiting_for_job"
+  | "missing_embedding"
+  | "job_failed"
+  | "no_generated_wow";
+
+function buildDebugReason(input: {
+  job: BackgroundJob | null;
+  embedded: boolean;
+  linkedWowMomentCount: number;
+}): { code: WowStatusDebugCode; label: string; detail: string } {
+  if (input.linkedWowMomentCount > 0) {
+    return {
+      code: "linked_wow_ready",
+      label: `generated ${input.linkedWowMomentCount}`,
+      detail: `${input.linkedWowMomentCount} linked WOW moment${input.linkedWowMomentCount === 1 ? "" : "s"} found for this inspiration.`,
+    };
+  }
+
+  if (!input.job || input.job.status === "pending" || input.job.status === "running") {
+    return {
+      code: "waiting_for_job",
+      label: "waiting for job",
+      detail: input.job
+        ? `Processing job is ${input.job.status}; WOW links may appear after it finishes.`
+        : "No process_inspiration job was found in the recent job scan yet.",
+    };
+  }
+
+  if (input.job.status === "failed") {
+    return {
+      code: "job_failed",
+      label: "job failed",
+      detail: "The processing job failed; retry or inspect the redacted admin job error.",
+    };
+  }
+
+  if (!input.embedded) {
+    return {
+      code: "missing_embedding",
+      label: "missing embedding",
+      detail: "No retrieval embedding exists for this inspiration, so relationship matching cannot link WOW moments yet.",
+    };
+  }
+
+  return {
+    code: "no_generated_wow",
+    label: "generated 0",
+    detail: "Processing finished with an embedding, but no WOW moment link was generated for this inspiration.",
+  };
+}
+
 export function createWowStatusRoutes(deps: WowStatusRouteDependencies = {}): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
@@ -133,6 +186,12 @@ export function createWowStatusRoutes(deps: WowStatusRouteDependencies = {}): Ho
       rows: recentInspirations.map((inspiration) => {
         const job = jobByInspirationId.get(inspiration.id) ?? null;
         const wow = wowByInspirationId.get(inspiration.id) ?? { count: 0, titles: [] };
+        const isEmbedded = embedded.has(inspiration.id);
+        const debugReason = buildDebugReason({
+          job,
+          embedded: isEmbedded,
+          linkedWowMomentCount: wow.count,
+        });
         return {
           inspiration: {
             id: inspiration.id,
@@ -156,9 +215,11 @@ export function createWowStatusRoutes(deps: WowStatusRouteDependencies = {}): Ho
                 lastError: job.lastError ? "redacted" : null,
               }
             : null,
-          embedded: embedded.has(inspiration.id),
+          embedded: isEmbedded,
           linkedWowMomentCount: wow.count,
           linkedWowMomentTitles: wow.titles,
+          generatedWowMomentCount: wow.count,
+          debugReason,
         };
       }),
     });
