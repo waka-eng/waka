@@ -11,6 +11,10 @@ interface WowMomentsSectionProps {
   error: string | null;
 }
 
+function formatDevWowScore(score: number): string {
+  return `DEV WOW score ${score}`;
+}
+
 export function WowMomentsSection({
   moments,
   loading,
@@ -100,6 +104,9 @@ export function WowMomentsSection({
                   <ol className="wow-moment-related" aria-label="Related inspirations">
                     {relatedSources.map((related) => (
                       <li key={`${moment.id}-${related.inspirationId}`}>
+                        <span className="wow-moment-related-score">
+                          {formatDevWowScore(related.wowScore)}
+                        </span>
                         <blockquote>{related.text}</blockquote>
                       </li>
                     ))}
@@ -148,6 +155,9 @@ export function WowMomentsSection({
                 <ol className="wow-moment-detail-sources">
                   {selectedMoment.relatedInspirations.map((related) => (
                     <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
+                      <span className="wow-moment-related-score">
+                        {formatDevWowScore(related.wowScore)}
+                      </span>
                       <blockquote>{related.text}</blockquote>
                     </li>
                   ))}

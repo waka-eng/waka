@@ -110,6 +110,7 @@ export function createWowMomentsRoutes(
         inspirationText: inspirations.text,
         inspirationKind: inspirations.kind,
         inspirationCreatedAt: inspirations.createdAt,
+        inspirationWowScore: inspirations.wowScore,
       })
       .from(wowMomentInspirations)
       .innerJoin(
@@ -142,6 +143,7 @@ export function createWowMomentsRoutes(
           text: row.inspirationText,
           kind: row.inspirationKind,
           createdAt: row.inspirationCreatedAt,
+          wowScore: row.inspirationWowScore,
         })),
       })),
     });

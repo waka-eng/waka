@@ -30,6 +30,7 @@ const sampleMoment: ApiWowMoment = {
       text: "A field note about playful prototypes.",
       kind: "note",
       createdAt: "2026-04-30T00:00:00.000Z",
+      wowScore: 73,
     },
   ],
 };
@@ -190,6 +191,7 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain(">1</span>");
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
+    expect(html).toContain("DEV WOW score 73");
     expect(html).not.toContain("Connects a mobile note with a design sketch.");
     expect(html).toContain("A field note about playful prototypes.");
     expect(html).toContain("A sketch that turned the field note into a grid.");
@@ -282,6 +284,7 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("Prototype idea keeps returning");
     expect(dialog?.textContent).toContain("Connects a mobile note with a design sketch.");
     expect(dialog?.textContent).toContain("What would make this bridge testable this week?");
+    expect(dialog?.textContent).toContain("DEV WOW score 73");
     expect(dialog?.textContent).toContain("A field note about playful prototypes.");
   });
 
