@@ -213,7 +213,18 @@ describe("GET /api/wow-status", () => {
         userId: user.id,
         type: "process_inspiration",
         status: "succeeded",
-        payload: { inspirationId: "no-generated-insp" },
+        payload: {
+          inspirationId: "no-generated-insp",
+          autoWowGeneration: {
+            status: "not_wow",
+            generated: false,
+            judgment: {
+              isWowMoment: false,
+              reason: "invalid_judge_json",
+              debugSummary: "Gemini returned non-JSON WOW judgment text.",
+            },
+          },
+        },
         attempts: 1,
         maxAttempts: 3,
         lastError: null,
@@ -252,8 +263,9 @@ describe("GET /api/wow-status", () => {
       label: "missing embedding",
     });
     expect(byId.get("no-generated-insp")?.debugReason).toMatchObject({
-      code: "no_generated_wow",
-      label: "generated 0",
+      code: "not_wow_judgment",
+      label: "invalid_judge_json",
+      detail: "Gemini returned non-JSON WOW judgment text.",
     });
   });
 

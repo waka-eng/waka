@@ -11,6 +11,7 @@ import {
   buildWowJudgmentRequest,
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
+  wowFalseReasonValues,
   type WowJudgeClient,
 } from "../src/lib/wow-judge.js";
 
@@ -180,7 +181,11 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      debugSummary: "Gemini returned non-JSON WOW judgment text.",
+    });
   });
 
   it("returns false for malformed Gemini WOW judgment schema", async () => {
@@ -208,7 +213,11 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      debugSummary: "Gemini returned a WOW judgment that failed schema validation.",
+    });
   });
 
   it("returns false for non-JSON Gemini HTTP bodies", async () => {
@@ -234,7 +243,11 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      debugSummary: "Gemini returned a non-JSON HTTP body.",
+    });
   });
 
   it("returns false for blocked or empty Gemini WOW responses", async () => {
@@ -294,7 +307,8 @@ describe("GeminiWowJudgeClient", () => {
 
     expect(requestText).toContain("TRIGGER_TEXT_INCLUDED");
     expect(requestText).toContain("TOP_CANDIDATE_INCLUDED");
-    expect(requestText).toContain("Return only one compact JSON object");
+    expect(requestText).toContain("Return raw JSON only");
+    expect(requestText).toContain("no markdown fences");
     expect(requestText).toContain("12 words or fewer");
     expect(request.generationConfig).toEqual(
       expect.objectContaining({
@@ -305,6 +319,8 @@ describe("GeminiWowJudgeClient", () => {
     );
     expect(request.generationConfig.maxOutputTokens).toBeGreaterThan(0);
     expect(request.generationConfig.maxOutputTokens).toBeLessThanOrEqual(1024);
+    expect(wowFalseReasonValues).toContain("invalid_judge_json");
+    expect(JSON.stringify(request.generationConfig.responseSchema)).not.toContain("invalid_judge_json");
     expect(requestText).not.toContain("FULL_ARCHIVE");
     expect(requestText).not.toContain("not provided");
     expect(userPrompt.candidates[0].untrustedUserContent).toBe(
