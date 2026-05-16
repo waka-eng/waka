@@ -62,6 +62,7 @@ interface ApiWowMoment {
     text: string;
     kind: string | null;
     createdAt: string;
+    wowScore: number;
   }>;
 }
 
@@ -159,6 +160,7 @@ describe("GET /api/wow-moments — ownership", () => {
         userId: alice.user.id,
         text: "Alice-owned constellation note",
         kind: "note",
+        wowScore: 42,
       } as typeof inspirations.$inferInsert)
       .returning({ id: inspirations.id });
     const [bobInspiration] = await db
@@ -221,6 +223,7 @@ describe("GET /api/wow-moments — ownership", () => {
     expect(returnedMoment!.relatedInspirations[0]!.text).toBe(
       "Alice-owned constellation note",
     );
+    expect(returnedMoment!.relatedInspirations[0]!.wowScore).toBe(42);
     expect(
       returnedMoment!.relatedInspirations.some(
         (related) => related.text === "Bob private inspiration must not leak",

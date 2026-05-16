@@ -548,6 +548,7 @@ export interface ApiWowMomentRelatedInspiration {
   text: string;
   kind: string | null;
   createdAt: string;
+  wowScore: number;
 }
 
 export interface ApiWowMoment {
