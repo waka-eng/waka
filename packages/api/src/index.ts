@@ -14,6 +14,7 @@ import { authRoutes } from "./routes/auth.js";
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
+import { wowStatusRoutes } from "./routes/wow-status.js";
 
 export const app = new Hono();
 
@@ -45,5 +46,8 @@ app.route("/api/attachments", attachmentsRoutes);
 // Generation/scoring pipelines land later; this mount only exposes rows that
 // already exist in the database.
 app.route("/api/wow-moments", wowMomentsRoutes);
+
+// Tenant-scoped development/status view for the visible WOW generation pipeline.
+app.route("/api/wow-status", wowStatusRoutes);
 
 export default app;
