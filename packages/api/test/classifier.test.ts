@@ -71,9 +71,11 @@ import {
 import { eq } from "drizzle-orm";
 
 import {
+  backgroundJobs,
   type Cluster,
   clusterEnumValues,
   inspirations,
+  wowMoments,
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { handler, runClassificationJob } from "../src/queue/classifier.js";
@@ -352,13 +354,48 @@ describe("classifier job — automatic WOW handoff", () => {
 
     gemini.queueResponse(geminiLabel("bridge"));
 
-    await runClassificationJob(insp.id, { generateAutoWowMoment });
+    const [job] = await getDb()
+      .insert(backgroundJobs)
+      .values({
+        userId: fixture.user.id,
+        type: "process_inspiration",
+        payload: { inspirationId: insp.id },
+      })
+      .returning({ id: backgroundJobs.id });
+
+    await runClassificationJob(insp.id, {
+      generateAutoWowMoment,
+      backgroundJobId: job!.id,
+    });
 
     expect(generateAutoWowMoment).toHaveBeenCalledWith({
       db: getDb(),
       userId: fixture.user.id,
       inspirationId: insp.id,
     });
+
+    const [storedJob] = await getDb()
+      .select()
+      .from(backgroundJobs)
+      .where(eq(backgroundJobs.id, job!.id))
+      .limit(1);
+    expect(storedJob?.payload).toMatchObject({
+      inspirationId: insp.id,
+      autoWowGeneration: {
+        status: "not_wow",
+        generated: false,
+        judgment: {
+          isWowMoment: false,
+          reason: "generic_similarity",
+          debugSummary: "Only a generic topical overlap was found.",
+        },
+      },
+    });
+    const persistedWowRows = await getDb()
+      .select({ id: wowMoments.id })
+      .from(wowMoments)
+      .where(eq(wowMoments.userId, fixture.user.id));
+    expect(persistedWowRows).toHaveLength(0);
   });
 
   it("does not let automatic WOW provider failures fail the classification job", async () => {
