@@ -632,6 +632,7 @@ export interface ApiWowStatusRow {
       | "not_wow_judgment";
     label: string;
     detail: string;
+    rawGeminiPreview?: string;
   };
 }
 

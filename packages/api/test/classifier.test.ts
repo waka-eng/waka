@@ -349,6 +349,7 @@ describe("classifier job — automatic WOW handoff", () => {
         isWowMoment: false as const,
         reason: "generic_similarity" as const,
         debugSummary: "Only a generic topical overlap was found.",
+        rawGeminiPreview: "No WOW here: just generic overlap.",
       },
     }));
 
@@ -388,6 +389,7 @@ describe("classifier job — automatic WOW handoff", () => {
           isWowMoment: false,
           reason: "generic_similarity",
           debugSummary: "Only a generic topical overlap was found.",
+          rawGeminiPreview: "No WOW here: just generic overlap.",
         },
       },
     });

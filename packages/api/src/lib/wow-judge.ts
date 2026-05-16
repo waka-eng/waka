@@ -24,6 +24,8 @@ const MAX_TITLE_CHARS = 120;
 const MAX_WHY_CHARS = 800;
 const MAX_REFLECTION_QUESTION_CHARS = 240;
 const MAX_FALSE_DEBUG_SUMMARY_CHARS = 240;
+const MAX_RAW_GEMINI_PREVIEW_CHARS = 360;
+const MAX_REPAIR_INPUT_CHARS = 2000;
 const MAX_OUTPUT_TOKENS = 768;
 
 export const wowFalseReasonValues = [
@@ -50,7 +52,12 @@ export class GeminiWowJudgeValidationError extends Error {
 }
 
 export type WowMomentJudgment =
-  | { isWowMoment: false; reason: WowFalseReason; debugSummary: string }
+  | {
+      isWowMoment: false;
+      reason: WowFalseReason;
+      debugSummary: string;
+      rawGeminiPreview?: string;
+    }
   | {
       isWowMoment: true;
       kind: WowKind;
@@ -225,6 +232,47 @@ export function buildWowJudgmentRequest(input: WowJudgeInput): GenerateContentRe
   };
 }
 
+export function buildWowRepairJudgmentRequest(rawText: string): GenerateContentRequest {
+  const base = buildWowJudgmentRequest({
+    trigger: {
+      id: "00000000-0000-4000-8000-000000000000",
+      text: "repair-only placeholder",
+      kind: null,
+      category: null,
+      cluster: null,
+      createdAt: new Date(0),
+    },
+    candidates: [],
+  });
+
+  return {
+    ...base,
+    systemInstruction: {
+      parts: [
+        {
+          text: `${WOW_JUDGE_SYSTEM_INSTRUCTION}\n\nRepair task: convert malformed prior model output into exactly one valid JSON object matching the accepted WOW judgment schema. Return JSON only. If the prior output is ambiguous or not enough information, return a valid false judgment using reason \"unclear_pattern\". Never include invalid_judge_json.`,
+        },
+      ],
+    },
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: JSON.stringify({
+              instruction:
+                "Repair this prior WOW judge output into exactly one compact JSON object. No markdown fences, no commentary, no extra keys.",
+              acceptedFalseReasons: wowModelFalseReasonValues,
+              acceptedKinds: wowKindEnumValues,
+              rawPriorOutput: trimRepairInput(rawText),
+            }),
+          },
+        ],
+      },
+    ],
+  };
+}
+
 export function buildWowGenerateContentUrl(): string {
   return buildGeminiModelEndpoint(GEMINI_MODEL, "generateContent");
 }
@@ -283,8 +331,34 @@ const wowJudgmentSchema = z.union([enrichedFalseJudgmentSchema, trueJudgmentSche
 function defaultFalseJudgment(
   reason: WowFalseReason = "unclear_pattern",
   debugSummary = "Gemini did not return a usable WOW judgment explanation.",
+  rawGeminiPreview?: string,
 ): Extract<WowMomentJudgment, { isWowMoment: false }> {
-  return { isWowMoment: false, reason, debugSummary };
+  return rawGeminiPreview
+    ? { isWowMoment: false, reason, debugSummary, rawGeminiPreview }
+    : { isWowMoment: false, reason, debugSummary };
+}
+
+function redactCredentialLikeText(text: string): string {
+  return text
+    .replace(/\b(AIza[0-9A-Za-z_-]{20,})\b/g, "[REDACTED_GEMINI_KEY]")
+    .replace(/\b(sk-[0-9A-Za-z_-]{12,})\b/g, "[REDACTED_KEY]")
+    .replace(
+      /\b(api[_-]?key|token|secret|password|authorization)\b\s*[:=]\s*["']?[^\s"',}]{6,}/gi,
+      "$1=[REDACTED]",
+    )
+    .replace(/\bBearer\s+[0-9A-Za-z._~+/=-]{12,}/gi, "Bearer [REDACTED]");
+}
+
+export function sanitizeGeminiRawPreview(text: string): string {
+  const normalized = redactCredentialLikeText(text).replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_RAW_GEMINI_PREVIEW_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_RAW_GEMINI_PREVIEW_CHARS - 1).trimEnd()}…`;
+}
+
+function trimRepairInput(text: string): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_REPAIR_INPUT_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_REPAIR_INPUT_CHARS - 1).trimEnd()}…`;
 }
 
 function normalizeFalseJudgment(parsed: unknown): WowMomentJudgment | null {
@@ -310,35 +384,67 @@ function parseJsonFromGeminiText(text: string): unknown | null {
   }
 }
 
-export function parseWowJudgmentFromResponse(body: unknown): WowMomentJudgment {
+interface WowJudgmentParseResult {
+  judgment: WowMomentJudgment;
+  rawText?: string;
+  repairable: boolean;
+}
+
+function parseWowJudgmentDetailed(body: unknown): WowJudgmentParseResult {
   const envelope = generateContentResponseSchema.safeParse(body);
   if (!envelope.success) {
-    return defaultFalseJudgment();
+    return { judgment: defaultFalseJudgment(), repairable: false };
   }
 
   if (envelope.data.promptFeedback?.blockReason) {
-    return defaultFalseJudgment("unclear_pattern", "Gemini blocked the WOW judgment response.");
+    return {
+      judgment: defaultFalseJudgment("unclear_pattern", "Gemini blocked the WOW judgment response."),
+      repairable: false,
+    };
   }
 
   const text = envelope.data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (typeof text !== "string" || text.trim().length === 0) {
-    return defaultFalseJudgment("unclear_pattern", "Gemini returned an empty WOW judgment response.");
+    return {
+      judgment: defaultFalseJudgment("unclear_pattern", "Gemini returned an empty WOW judgment response."),
+      repairable: false,
+    };
   }
 
   const parsed = parseJsonFromGeminiText(text);
   if (parsed === null) {
-    return defaultFalseJudgment("invalid_judge_json", "Gemini returned non-JSON WOW judgment text.");
+    return {
+      judgment: defaultFalseJudgment(
+        "invalid_judge_json",
+        "Gemini returned non-JSON WOW judgment text.",
+        sanitizeGeminiRawPreview(text),
+      ),
+      rawText: text,
+      repairable: true,
+    };
   }
 
   const falseJudgment = normalizeFalseJudgment(parsed);
-  if (falseJudgment) return falseJudgment;
+  if (falseJudgment) return { judgment: falseJudgment, rawText: text, repairable: false };
 
   const judgment = wowJudgmentSchema.safeParse(parsed);
   if (!judgment.success) {
-    return defaultFalseJudgment("invalid_judge_json", "Gemini returned a WOW judgment that failed schema validation.");
+    return {
+      judgment: defaultFalseJudgment(
+        "invalid_judge_json",
+        "Gemini returned a WOW judgment that failed schema validation.",
+        sanitizeGeminiRawPreview(text),
+      ),
+      rawText: text,
+      repairable: true,
+    };
   }
 
-  return judgment.data as WowMomentJudgment;
+  return { judgment: judgment.data as WowMomentJudgment, rawText: text, repairable: false };
+}
+
+export function parseWowJudgmentFromResponse(body: unknown): WowMomentJudgment {
+  return parseWowJudgmentDetailed(body).judgment;
 }
 
 export interface GeminiWowJudgeClientOptions {
@@ -355,12 +461,11 @@ export class GeminiWowJudgeClient implements WowJudgeClient {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  async judgeWowMoment(input: WowJudgeInput): Promise<WowMomentJudgment> {
-    const apiKey = this.apiKey ?? getGeminiApiKey();
+  private async fetchGeminiJson(apiKey: string, request: GenerateContentRequest): Promise<unknown | null> {
     const response = await this.fetchFn(buildWowGenerateContentUrl(), {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),
-      body: JSON.stringify(buildWowJudgmentRequest(input)),
+      body: JSON.stringify(request),
     });
 
     if (!response.ok) {
@@ -372,14 +477,41 @@ export class GeminiWowJudgeClient implements WowJudgeClient {
       );
     }
 
-    let rawJson: unknown;
     try {
-      rawJson = await response.json();
+      return await response.json();
     } catch {
+      return null;
+    }
+  }
+
+  async judgeWowMoment(input: WowJudgeInput): Promise<WowMomentJudgment> {
+    const apiKey = this.apiKey ?? getGeminiApiKey();
+    const rawJson = await this.fetchGeminiJson(apiKey, buildWowJudgmentRequest(input));
+    if (rawJson === null) {
       return defaultFalseJudgment("invalid_judge_json", "Gemini returned a non-JSON HTTP body.");
     }
 
-    const judgment = parseWowJudgmentFromResponse(rawJson);
+    const parsed = parseWowJudgmentDetailed(rawJson);
+    let judgment = parsed.judgment;
+    if (parsed.repairable && parsed.rawText) {
+      const repairedRawJson = await this.fetchGeminiJson(
+        apiKey,
+        buildWowRepairJudgmentRequest(parsed.rawText),
+      );
+      if (repairedRawJson !== null) {
+        const repaired = parseWowJudgmentDetailed(repairedRawJson);
+        const repairedJudgment = repaired.judgment;
+        if (repairedJudgment.isWowMoment) {
+          judgment = repairedJudgment;
+        } else if (
+          "reason" in repairedJudgment &&
+          repairedJudgment.reason !== "invalid_judge_json"
+        ) {
+          judgment = repairedJudgment;
+        }
+      }
+    }
+
     if (!relatedIdsAreSafe(judgment, input)) {
       return defaultFalseJudgment("unclear_pattern", "Gemini referenced inspiration ids outside retrieved candidates.");
     }

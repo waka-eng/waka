@@ -22,6 +22,7 @@ const MAX_WOW_TITLES = 5;
 export interface WowStatusRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
+  showInternalStatus?: boolean | (() => boolean);
 }
 
 function parseLimit(raw: string | undefined): number {
@@ -29,6 +30,21 @@ function parseLimit(raw: string | undefined): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_LIMIT;
   return Math.min(parsed, MAX_LIMIT);
+}
+
+function shouldShowInternalStatus(dependency: WowStatusRouteDependencies["showInternalStatus"]): boolean {
+  if (typeof dependency === "function") return dependency();
+  if (typeof dependency === "boolean") return dependency;
+  return process.env.WAKA_SHOW_INTERNAL_STATUS === "true" || process.env.NODE_ENV === "development";
+}
+
+function stripInternalDebugFields<T extends { rawGeminiPreview?: string }>(
+  debugReason: T,
+  showInternalStatus: boolean,
+): T | Omit<T, "rawGeminiPreview"> {
+  if (showInternalStatus || debugReason.rawGeminiPreview === undefined) return debugReason;
+  const { rawGeminiPreview: _rawGeminiPreview, ...safeDebugReason } = debugReason;
+  return safeDebugReason;
 }
 
 function truncatePreview(value: string): string {
@@ -51,7 +67,9 @@ type WowStatusDebugCode =
   | "no_generated_wow"
   | "not_wow_judgment";
 
-function getNotWowJudgment(job: BackgroundJob | null): { reason: string; debugSummary: string } | null {
+function getNotWowJudgment(
+  job: BackgroundJob | null,
+): { reason: string; debugSummary: string; rawGeminiPreview?: string } | null {
   if (!job || job.type !== "process_inspiration") return null;
   const payload = job.payload as ProcessInspirationPayload;
   const judgment = payload.autoWowGeneration?.judgment;
@@ -60,7 +78,13 @@ function getNotWowJudgment(job: BackgroundJob | null): { reason: string; debugSu
     typeof judgment.reason === "string" &&
     typeof judgment.debugSummary === "string"
   ) {
-    return { reason: judgment.reason, debugSummary: judgment.debugSummary };
+    return {
+      reason: judgment.reason,
+      debugSummary: judgment.debugSummary,
+      ...(typeof judgment.rawGeminiPreview === "string"
+        ? { rawGeminiPreview: judgment.rawGeminiPreview }
+        : {}),
+    };
   }
   return null;
 }
@@ -69,7 +93,7 @@ function buildDebugReason(input: {
   job: BackgroundJob | null;
   embedded: boolean;
   linkedWowMomentCount: number;
-}): { code: WowStatusDebugCode; label: string; detail: string } {
+}): { code: WowStatusDebugCode; label: string; detail: string; rawGeminiPreview?: string } {
   if (input.linkedWowMomentCount > 0) {
     return {
       code: "linked_wow_ready",
@@ -110,6 +134,9 @@ function buildDebugReason(input: {
       code: "not_wow_judgment",
       label: notWowJudgment.reason,
       detail: notWowJudgment.debugSummary,
+      ...(notWowJudgment.rawGeminiPreview
+        ? { rawGeminiPreview: notWowJudgment.rawGeminiPreview }
+        : {}),
     };
   }
 
@@ -123,6 +150,7 @@ function buildDebugReason(input: {
 export function createWowStatusRoutes(deps: WowStatusRouteDependencies = {}): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
+  const showInternalStatus = shouldShowInternalStatus(deps.showInternalStatus);
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
   routes.get("/", async (c) => {
@@ -211,11 +239,14 @@ export function createWowStatusRoutes(deps: WowStatusRouteDependencies = {}): Ho
         const job = jobByInspirationId.get(inspiration.id) ?? null;
         const wow = wowByInspirationId.get(inspiration.id) ?? { count: 0, titles: [] };
         const isEmbedded = embedded.has(inspiration.id);
-        const debugReason = buildDebugReason({
-          job,
-          embedded: isEmbedded,
-          linkedWowMomentCount: wow.count,
-        });
+        const debugReason = stripInternalDebugFields(
+          buildDebugReason({
+            job,
+            embedded: isEmbedded,
+            linkedWowMomentCount: wow.count,
+          }),
+          showInternalStatus,
+        );
         return {
           inspiration: {
             id: inspiration.id,
