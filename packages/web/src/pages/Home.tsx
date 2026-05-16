@@ -429,6 +429,10 @@ function InternalWowStatusDevPanel({
           <p>When the inspiration was stored for the current user.</p>
         </section>
         <section>
+          <h3>Inspiration</h3>
+          <p>The saved inspiration id and text preview being checked.</p>
+        </section>
+        <section>
           <h3>Job</h3>
           <p>Whether the background classification/processing job is queued, running, or done.</p>
         </section>

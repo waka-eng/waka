@@ -1356,6 +1356,8 @@ describe("HomePage view model", () => {
     expect(container.textContent).toContain("will be removed before the product experience is finalized");
     expect(container.textContent).toContain("Saved");
     expect(container.textContent).toContain("When the inspiration was stored");
+    expect(container.textContent).toContain("Inspiration");
+    expect(container.textContent).toContain("saved inspiration id and text preview");
     expect(container.textContent).toContain("Job");
     expect(container.textContent).toContain("background classification/processing job");
     expect(container.textContent).toContain("Embedded");
