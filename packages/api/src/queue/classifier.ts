@@ -307,6 +307,13 @@ async function recordAutoWowGenerationResult(
             ...(falseJudgment.rawGeminiPreview
               ? { rawGeminiPreview: falseJudgment.rawGeminiPreview }
               : {}),
+            ...(falseJudgment.parseFailureStage
+              ? { parseFailureStage: falseJudgment.parseFailureStage }
+              : {}),
+            ...(falseJudgment.finishReason ? { finishReason: falseJudgment.finishReason } : {}),
+            ...(falseJudgment.schemaIssueSummary
+              ? { schemaIssueSummary: falseJudgment.schemaIssueSummary }
+              : {}),
           },
         }
       : {}),

@@ -223,6 +223,9 @@ describe("GET /api/wow-status", () => {
               reason: "invalid_judge_json",
               debugSummary: "Gemini returned non-JSON WOW judgment text.",
               rawGeminiPreview: "```json {not-json token=[REDACTED]}",
+              parseFailureStage: "repair_non_json",
+              finishReason: "MAX_TOKENS",
+              schemaIssueSummary: "root: invalid json",
             },
           },
         },
@@ -269,6 +272,9 @@ describe("GET /api/wow-status", () => {
       detail: "Gemini returned non-JSON WOW judgment text.",
     });
     expect(byId.get("no-generated-insp")?.debugReason).not.toHaveProperty("rawGeminiPreview");
+    expect(byId.get("no-generated-insp")?.debugReason).not.toHaveProperty("parseFailureStage");
+    expect(byId.get("no-generated-insp")?.debugReason).not.toHaveProperty("finishReason");
+    expect(byId.get("no-generated-insp")?.debugReason).not.toHaveProperty("schemaIssueSummary");
   });
 
   it("includes raw Gemini preview only when internal status is enabled", async () => {
@@ -303,6 +309,9 @@ describe("GET /api/wow-status", () => {
               reason: "invalid_judge_json",
               debugSummary: "Gemini returned non-JSON WOW judgment text.",
               rawGeminiPreview: "```json {not-json token=[REDACTED]}",
+              parseFailureStage: "repair_non_json",
+              finishReason: "MAX_TOKENS",
+              schemaIssueSummary: "root: invalid json",
             },
           },
         },
@@ -342,6 +351,9 @@ describe("GET /api/wow-status", () => {
       label: "invalid_judge_json",
       detail: "Gemini returned non-JSON WOW judgment text.",
       rawGeminiPreview: "```json {not-json token=[REDACTED]}",
+      parseFailureStage: "repair_non_json",
+      finishReason: "MAX_TOKENS",
+      schemaIssueSummary: "root: invalid json",
     });
   });
 
