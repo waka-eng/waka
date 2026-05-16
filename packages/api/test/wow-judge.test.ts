@@ -257,6 +257,25 @@ describe("GeminiWowJudgeClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("accepts a repaired response that starts with prose but contains one balanced JSON object", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse("Not JSON yet"))
+      .mockResolvedValueOnce(
+        geminiTextResponse(
+          'Here is the JSON requested: {"isWowMoment":false,"reason":"unclear_pattern","debugSummary":"Could not safely repair prior WOW judge output."}',
+        ),
+      );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput("trigger-id"))).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Could not safely repair prior WOW judge output.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("returns invalid_judge_json with a sanitized raw preview when repair fails", async () => {
     const rawText =
       "```json\n{not-json token=super-secret-token-value Aizaabcdefghijklmnopqrstuvwxyz}\n```";
@@ -273,6 +292,24 @@ describe("GeminiWowJudgeClient", () => {
       rawGeminiPreview: sanitizeGeminiRawPreview("still not json"),
       parseFailureStage: "repair_non_json",
       finishReason: "STOP",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns safe false diagnostics when repair is non-JSON and hits MAX_TOKENS", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse("Here is the JSON requested:"))
+      .mockResolvedValueOnce(geminiTextResponse("Here is the JSON requested:", "MAX_TOKENS"));
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput("trigger-id"))).resolves.toEqual({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      debugSummary: "Gemini returned non-JSON WOW judgment text.",
+      rawGeminiPreview: sanitizeGeminiRawPreview("Here is the JSON requested:"),
+      parseFailureStage: "repair_non_json",
+      finishReason: "MAX_TOKENS",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -404,10 +441,21 @@ describe("GeminiWowJudgeClient", () => {
     });
   });
 
-  it("uses Gemini 2.5 Flash, main 1024 tokens, and repair 256 tokens", () => {
+  it("uses Gemini 2.5 Flash, disables thinking, main 1024 tokens, and repair 256 tokens", () => {
     expect(buildWowGenerateContentUrl()).toContain("gemini-2.5-flash");
-    expect(buildWowJudgmentRequest(minimalWowJudgeInput()).generationConfig.maxOutputTokens).toBe(1024);
-    expect(buildWowRepairJudgmentRequest("malformed").generationConfig.maxOutputTokens).toBe(256);
+    const mainRequest = buildWowJudgmentRequest(minimalWowJudgeInput());
+    const repairRequest = buildWowRepairJudgmentRequest("malformed");
+
+    expect(mainRequest.generationConfig).toMatchObject({
+      temperature: 0,
+      maxOutputTokens: 1024,
+      thinkingConfig: { thinkingBudget: 0 },
+    });
+    expect(repairRequest.generationConfig).toMatchObject({
+      temperature: 0,
+      maxOutputTokens: 256,
+      thinkingConfig: { thinkingBudget: 0 },
+    });
   });
 
   it("builds a compact repair-only prompt with deterministic false fallback", () => {
@@ -662,6 +710,32 @@ describe("judgeWowMomentForInspiration", () => {
       reason: "not_wow_moment",
       judgment: { isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." },
     });
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
+  });
+
+  it("does not persist cards for invalid_judge_json repair MAX_TOKENS diagnostics", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: repair failure should be a no-op.",
+    });
+
+    const judgment = {
+      isWowMoment: false as const,
+      reason: "invalid_judge_json" as const,
+      debugSummary: "Gemini returned non-JSON WOW judgment text.",
+      rawGeminiPreview: sanitizeGeminiRawPreview("Here is the JSON requested:"),
+      parseFailureStage: "repair_non_json" as const,
+      finishReason: "MAX_TOKENS",
+    };
+    const result = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      judgment,
+    });
+
+    expect(result).toEqual({ persisted: false, reason: "not_wow_moment", judgment });
     expect(await countWowMoments(testDb)).toBe(0);
     expect(await countWowMomentLinks(testDb)).toBe(0);
   });

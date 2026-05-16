@@ -116,6 +116,7 @@ interface GenerateContentRequest {
     maxOutputTokens: number;
     responseMimeType: "application/json";
     responseSchema: unknown;
+    thinkingConfig: { thinkingBudget: number };
   };
 }
 
@@ -236,6 +237,7 @@ export function buildWowJudgmentRequest(input: WowJudgeInput): GenerateContentRe
       temperature: 0,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
       responseMimeType: "application/json",
+      thinkingConfig: { thinkingBudget: 0 },
       responseSchema: {
         type: "OBJECT",
         properties: {
