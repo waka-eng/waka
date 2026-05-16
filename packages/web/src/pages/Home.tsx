@@ -347,27 +347,25 @@ function InternalWowStatusTable({
         <table>
           <thead>
             <tr>
-              <th>Saved</th>
               <th>Inspiration</th>
               <th>Job</th>
               <th>Embedded</th>
-              <th>Cluster</th>
-              <th>Scores</th>
-              <th>WOW links</th>
+              <th>Generated WOW</th>
+              <th>Why no WOW?</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7}>{loading ? "Loading WOW pipeline status…" : "No recent inspirations."}</td>
+                <td colSpan={5}>{loading ? "Loading WOW pipeline status…" : "No recent inspirations."}</td>
               </tr>
             ) : (
               rows.map((row) => (
                 <tr key={row.inspiration.id}>
-                  <td>{formatTimestamp(row.inspiration.createdAt)}</td>
                   <td>
                     <strong>{shortId(row.inspiration.id)}</strong>
                     <span>{row.inspiration.textPreview}</span>
+                    <time dateTime={row.inspiration.createdAt}>{formatTimestamp(row.inspiration.createdAt)}</time>
                   </td>
                   <td>
                     {row.job ? (
@@ -380,14 +378,13 @@ function InternalWowStatusTable({
                     )}
                   </td>
                   <td>{row.embedded ? "yes" : "no"}</td>
-                  <td>{row.inspiration.cluster ?? "—"}</td>
                   <td>
-                    <span>importance {row.inspiration.importanceScore}</span>
-                    <span>wow {row.inspiration.wowScore}</span>
+                    <strong>{row.generatedWowMomentCount}</strong>
+                    <span>{row.debugReason.label}</span>
                   </td>
                   <td>
-                    <strong>{row.linkedWowMomentCount}</strong>
-                    <span>{row.linkedWowMomentTitles.join(", ") || "none"}</span>
+                    <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : "ready"}</strong>
+                    <span>{row.debugReason.detail}</span>
                   </td>
                 </tr>
               ))
@@ -425,32 +422,24 @@ function InternalWowStatusDevPanel({
       </div>
       <div className="internal-wow-status-explainer" aria-label="WOW status column guide">
         <section>
-          <h3>Saved</h3>
-          <p>When the inspiration was stored for the current user.</p>
-        </section>
-        <section>
           <h3>Inspiration</h3>
-          <p>The saved inspiration id and text preview being checked.</p>
+          <p>The saved inspiration id, save time, and text preview being checked.</p>
         </section>
         <section>
           <h3>Job</h3>
-          <p>Whether the background classification/processing job is queued, running, or done.</p>
+          <p>Whether the background classification/processing job is queued, running, done, or missing.</p>
         </section>
         <section>
           <h3>Embedded</h3>
           <p>Whether a retrieval embedding exists for relationship matching.</p>
         </section>
         <section>
-          <h3>Cluster</h3>
-          <p>The internal pattern bucket assigned by processing, if one is ready.</p>
+          <h3>Generated WOW</h3>
+          <p>The generated/linked WOW count visible to the current tenant.</p>
         </section>
         <section>
-          <h3>Scores</h3>
-          <p>The current importance and WOW scores returned by the status endpoint.</p>
-        </section>
-        <section>
-          <h3>WOW links</h3>
-          <p>How many WOW moments are linked back to that inspiration, plus their titles.</p>
+          <h3>Why no WOW?</h3>
+          <p>The likely debug reason when generated WOW is 0: waiting for job, missing embedding, failed job, or no WOW generated.</p>
         </section>
       </div>
       {liveStatus ? <InternalWowStatusPanel status={liveStatus} /> : null}

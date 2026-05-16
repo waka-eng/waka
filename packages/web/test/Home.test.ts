@@ -230,8 +230,12 @@ const sampleWowStatusRows: ApiWowStatusRow[] = [
       lastError: null,
     },
     embedded: true,
-    linkedWowMomentCount: 1,
-    linkedWowMomentTitles: ["Cities keep teaching through bridges"],
+    generatedWowMomentCount: 1,
+    debugReason: {
+      code: "linked_wow_ready",
+      label: "generated 1",
+      detail: "1 linked WOW moment found for this inspiration.",
+    },
   },
 ];
 
@@ -1354,20 +1358,16 @@ describe("HomePage view model", () => {
     ).toBe("wow-status");
     expect(container.textContent).toContain("Temporary development surface");
     expect(container.textContent).toContain("will be removed before the product experience is finalized");
-    expect(container.textContent).toContain("Saved");
-    expect(container.textContent).toContain("When the inspiration was stored");
     expect(container.textContent).toContain("Inspiration");
-    expect(container.textContent).toContain("saved inspiration id and text preview");
+    expect(container.textContent).toContain("saved inspiration id, save time, and text preview");
     expect(container.textContent).toContain("Job");
     expect(container.textContent).toContain("background classification/processing job");
     expect(container.textContent).toContain("Embedded");
     expect(container.textContent).toContain("retrieval embedding");
-    expect(container.textContent).toContain("Cluster");
-    expect(container.textContent).toContain("internal pattern bucket");
-    expect(container.textContent).toContain("Scores");
-    expect(container.textContent).toContain("importance and WOW scores");
-    expect(container.textContent).toContain("WOW links");
-    expect(container.textContent).toContain("linked back to that inspiration");
+    expect(container.textContent).toContain("Generated WOW");
+    expect(container.textContent).toContain("generated/linked WOW count");
+    expect(container.textContent).toContain("Why no WOW?");
+    expect(container.textContent).toContain("waiting for job, missing embedding, failed job, or no WOW generated");
 
     const table = container.querySelector<HTMLElement>(
       '.internal-wow-status-table[aria-label="Development WOW status table"]',
@@ -1380,10 +1380,9 @@ describe("HomePage view model", () => {
     expect(table?.textContent).toContain("succeeded");
     expect(table?.textContent).toContain("1/3");
     expect(table?.textContent).toContain("yes");
-    expect(table?.textContent).toContain("bridge");
-    expect(table?.textContent).toContain("importance 7");
-    expect(table?.textContent).toContain("wow 4");
-    expect(table?.textContent).toContain("Cities keep teaching through bridges");
+    expect(table?.textContent).toContain("generated 1");
+    expect(table?.textContent).toContain("ready");
+    expect(table?.textContent).toContain("1 linked WOW moment found for this inspiration.");
   });
 
   it("does not render the internal WOW status UI when the dev/demo gate is disabled", async () => {
