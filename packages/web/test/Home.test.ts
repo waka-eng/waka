@@ -236,6 +236,9 @@ const sampleWowStatusRows: ApiWowStatusRow[] = [
       label: "generated 1",
       detail: "1 linked WOW moment found for this inspiration.",
       rawGeminiPreview: "```json { invalid judge payload preview",
+      parseFailureStage: "repair_schema_invalid",
+      finishReason: "STOP",
+      schemaIssueSummary: "debugSummary: Required; root: Unrecognized key(s) in object: 'why'",
     },
   },
 ];
@@ -1348,7 +1351,7 @@ describe("HomePage view model", () => {
     const container = await renderHomePage();
     await switchToInspirationFirst(container);
     expect(container.querySelector(".internal-wow-status-table")).toBeNull();
-    expect(container.textContent).not.toContain("Raw judge preview:");
+    expect(container.textContent).not.toContain("Raw judge log");
     expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
 
     await switchToWowStatus(container);
@@ -1370,6 +1373,8 @@ describe("HomePage view model", () => {
     expect(container.textContent).toContain("generated/linked WOW count");
     expect(container.textContent).toContain("Why no WOW?");
     expect(container.textContent).toContain("waiting for job, missing embedding, failed job, or no WOW generated");
+    expect(container.textContent).toContain("Raw judge log");
+    expect(container.textContent).toContain("Gemini raw preview and schema/finish diagnostics when present");
 
     const table = container.querySelector<HTMLElement>(
       '.internal-wow-status-table[aria-label="Development WOW status table"]',
@@ -1385,7 +1390,11 @@ describe("HomePage view model", () => {
     expect(table?.textContent).toContain("generated 1");
     expect(table?.textContent).toContain("ready");
     expect(table?.textContent).toContain("1 linked WOW moment found for this inspiration.");
-    expect(table?.textContent).toContain("Raw judge preview: ```json { invalid judge payload preview");
+    expect(table?.textContent).toContain("Raw judge log");
+    expect(table?.textContent).toContain("raw: ```json { invalid judge payload preview");
+    expect(table?.textContent).toContain("stage: repair_schema_invalid");
+    expect(table?.textContent).toContain("finish: STOP");
+    expect(table?.textContent).toContain("schema: debugSummary: Required; root: Unrecognized key(s) in object: 'why'");
   });
 
   it("does not render the internal WOW status UI when the dev/demo gate is disabled", async () => {

@@ -633,6 +633,9 @@ export interface ApiWowStatusRow {
     label: string;
     detail: string;
     rawGeminiPreview?: string;
+    parseFailureStage?: string;
+    finishReason?: string;
+    schemaIssueSummary?: string;
   };
 }
 
