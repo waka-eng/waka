@@ -52,6 +52,9 @@ export interface ProcessInspirationPayload {
       reason: string;
       debugSummary: string;
       rawGeminiPreview?: string;
+      parseFailureStage?: string;
+      finishReason?: string;
+      schemaIssueSummary?: string;
     };
   };
 }

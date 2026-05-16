@@ -38,12 +38,22 @@ function shouldShowInternalStatus(dependency: WowStatusRouteDependencies["showIn
   return process.env.WAKA_SHOW_INTERNAL_STATUS === "true" || process.env.NODE_ENV === "development";
 }
 
-function stripInternalDebugFields<T extends { rawGeminiPreview?: string }>(
-  debugReason: T,
-  showInternalStatus: boolean,
-): T | Omit<T, "rawGeminiPreview"> {
-  if (showInternalStatus || debugReason.rawGeminiPreview === undefined) return debugReason;
-  const { rawGeminiPreview: _rawGeminiPreview, ...safeDebugReason } = debugReason;
+function stripInternalDebugFields<
+  T extends {
+    rawGeminiPreview?: string;
+    parseFailureStage?: string;
+    finishReason?: string;
+    schemaIssueSummary?: string;
+  },
+>(debugReason: T, showInternalStatus: boolean): T | Omit<T, "rawGeminiPreview" | "parseFailureStage" | "finishReason" | "schemaIssueSummary"> {
+  if (showInternalStatus) return debugReason;
+  const {
+    rawGeminiPreview: _rawGeminiPreview,
+    parseFailureStage: _parseFailureStage,
+    finishReason: _finishReason,
+    schemaIssueSummary: _schemaIssueSummary,
+    ...safeDebugReason
+  } = debugReason;
   return safeDebugReason;
 }
 
@@ -69,7 +79,14 @@ type WowStatusDebugCode =
 
 function getNotWowJudgment(
   job: BackgroundJob | null,
-): { reason: string; debugSummary: string; rawGeminiPreview?: string } | null {
+): {
+  reason: string;
+  debugSummary: string;
+  rawGeminiPreview?: string;
+  parseFailureStage?: string;
+  finishReason?: string;
+  schemaIssueSummary?: string;
+} | null {
   if (!job || job.type !== "process_inspiration") return null;
   const payload = job.payload as ProcessInspirationPayload;
   const judgment = payload.autoWowGeneration?.judgment;
@@ -84,6 +101,13 @@ function getNotWowJudgment(
       ...(typeof judgment.rawGeminiPreview === "string"
         ? { rawGeminiPreview: judgment.rawGeminiPreview }
         : {}),
+      ...(typeof judgment.parseFailureStage === "string"
+        ? { parseFailureStage: judgment.parseFailureStage }
+        : {}),
+      ...(typeof judgment.finishReason === "string" ? { finishReason: judgment.finishReason } : {}),
+      ...(typeof judgment.schemaIssueSummary === "string"
+        ? { schemaIssueSummary: judgment.schemaIssueSummary }
+        : {}),
     };
   }
   return null;
@@ -93,7 +117,15 @@ function buildDebugReason(input: {
   job: BackgroundJob | null;
   embedded: boolean;
   linkedWowMomentCount: number;
-}): { code: WowStatusDebugCode; label: string; detail: string; rawGeminiPreview?: string } {
+}): {
+  code: WowStatusDebugCode;
+  label: string;
+  detail: string;
+  rawGeminiPreview?: string;
+  parseFailureStage?: string;
+  finishReason?: string;
+  schemaIssueSummary?: string;
+} {
   if (input.linkedWowMomentCount > 0) {
     return {
       code: "linked_wow_ready",
@@ -136,6 +168,13 @@ function buildDebugReason(input: {
       detail: notWowJudgment.debugSummary,
       ...(notWowJudgment.rawGeminiPreview
         ? { rawGeminiPreview: notWowJudgment.rawGeminiPreview }
+        : {}),
+      ...(notWowJudgment.parseFailureStage
+        ? { parseFailureStage: notWowJudgment.parseFailureStage }
+        : {}),
+      ...(notWowJudgment.finishReason ? { finishReason: notWowJudgment.finishReason } : {}),
+      ...(notWowJudgment.schemaIssueSummary
+        ? { schemaIssueSummary: notWowJudgment.schemaIssueSummary }
         : {}),
     };
   }

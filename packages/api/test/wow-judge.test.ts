@@ -8,6 +8,7 @@ import {
 import {
   GeminiWowJudgeClient,
   GeminiWowJudgeValidationError,
+  buildWowGenerateContentUrl,
   buildWowJudgmentRequest,
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
@@ -60,12 +61,27 @@ function geminiJsonResponse(value: unknown): Response {
   return geminiTextResponse(JSON.stringify(value));
 }
 
-function geminiTextResponse(text: string): Response {
+
+function minimalWowJudgeInput(triggerId = "00000000-0000-4000-8000-000000000001") {
+  return {
+    trigger: {
+      id: triggerId,
+      text: "A standalone note.",
+      kind: null,
+      category: null,
+      cluster: null,
+      createdAt: new Date("2024-01-01T00:00:00Z"),
+    },
+    candidates: [],
+  };
+}
+
+function geminiTextResponse(text: string, finishReason = "STOP"): Response {
   return new Response(
     JSON.stringify({
       candidates: [
         {
-          finishReason: "STOP",
+          finishReason,
           content: { parts: [{ text }] },
         },
       ],
@@ -209,23 +225,13 @@ describe("GeminiWowJudgeClient", () => {
       .mockResolvedValueOnce(geminiTextResponse("still not json"));
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
 
-    await expect(
-      client.judgeWowMoment({
-        trigger: {
-          id: "trigger-id",
-          text: "A standalone note.",
-          kind: null,
-          category: null,
-          cluster: null,
-          createdAt: new Date("2024-01-01T00:00:00Z"),
-        },
-        candidates: [],
-      }),
-    ).resolves.toEqual({
+    await expect(client.judgeWowMoment(minimalWowJudgeInput("trigger-id"))).resolves.toEqual({
       isWowMoment: false,
       reason: "invalid_judge_json",
       debugSummary: "Gemini returned non-JSON WOW judgment text.",
-      rawGeminiPreview: sanitizeGeminiRawPreview(rawText),
+      rawGeminiPreview: sanitizeGeminiRawPreview("still not json"),
+      parseFailureStage: "repair_non_json",
+      finishReason: "STOP",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -255,19 +261,13 @@ describe("GeminiWowJudgeClient", () => {
         },
         candidates: [],
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       isWowMoment: false,
       reason: "invalid_judge_json",
       debugSummary: "Gemini returned a WOW judgment that failed schema validation.",
-      rawGeminiPreview: sanitizeGeminiRawPreview(
-        JSON.stringify({
-          isWowMoment: true,
-          kind: "not_a_wow_kind",
-          title: "Invalid",
-          why: "Invalid kind should not be accepted.",
-          relatedInspirationIds: [triggerId],
-        }),
-      ),
+      parseFailureStage: "initial_schema_invalid",
+      finishReason: "STOP",
+      schemaIssueSummary: expect.stringContaining("kind"),
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -283,22 +283,11 @@ describe("GeminiWowJudgeClient", () => {
       ),
     });
 
-    await expect(
-      client.judgeWowMoment({
-        trigger: {
-          id: "trigger-id",
-          text: "A standalone note.",
-          kind: null,
-          category: null,
-          cluster: null,
-          createdAt: new Date("2024-01-01T00:00:00Z"),
-        },
-        candidates: [],
-      }),
-    ).resolves.toEqual({
+    await expect(client.judgeWowMoment(minimalWowJudgeInput("trigger-id"))).resolves.toEqual({
       isWowMoment: false,
       reason: "invalid_judge_json",
       debugSummary: "Gemini returned a non-JSON HTTP body.",
+      parseFailureStage: "non_json_http_body",
     });
   });
 
@@ -326,6 +315,57 @@ describe("GeminiWowJudgeClient", () => {
         candidates: [],
       }),
     ).resolves.toMatchObject({ isWowMoment: false, reason: "unclear_pattern" });
+  });
+
+
+  it("accepts fenced JSON without repair", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiTextResponse('```json\n{"isWowMoment":false,"reason":"weak_relationship","debugSummary":"Relationship is too weak."}\n```'),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput())).resolves.toEqual({
+      isWowMoment: false,
+      reason: "weak_relationship",
+      debugSummary: "Relationship is too weak.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a single balanced JSON object surrounded by prose without repair", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiTextResponse('Here is the judgment: {"isWowMoment":false,"reason":"weak_relationship","debugSummary":"Weak bridge."} Thanks.'),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput())).resolves.toEqual({
+      isWowMoment: false,
+      reason: "weak_relationship",
+      debugSummary: "Weak bridge.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails safely for truncated JSON and records initial finish reason when repair body is non-JSON HTTP", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse('{"isWowMoment":true,"kind":"bridge"', "MAX_TOKENS"))
+      .mockResolvedValueOnce(
+        new Response("not-json", { status: 200, headers: { "Content-Type": "text/plain" } }),
+      );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput())).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      parseFailureStage: "initial_non_json",
+      finishReason: "MAX_TOKENS",
+    });
+  });
+
+  it("uses Gemini 2.5 Flash and 1024 max output tokens", () => {
+    expect(buildWowGenerateContentUrl()).toContain("gemini-2.5-flash");
+    expect(buildWowJudgmentRequest(minimalWowJudgeInput()).generationConfig.maxOutputTokens).toBe(1024);
   });
 
   it("builds a bounded prompt from only the trigger and provided candidates", () => {
@@ -362,6 +402,8 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("Return raw JSON only");
     expect(requestText).toContain("no markdown fences");
     expect(requestText).toContain("12 words or fewer");
+    expect(requestText).toContain("why <= 180-240 characters");
+    expect(requestText).toContain("ids belong only in");
     expect(request.generationConfig).toEqual(
       expect.objectContaining({
         temperature: 0,
@@ -370,7 +412,7 @@ describe("GeminiWowJudgeClient", () => {
       }),
     );
     expect(request.generationConfig.maxOutputTokens).toBeGreaterThan(0);
-    expect(request.generationConfig.maxOutputTokens).toBeLessThanOrEqual(1024);
+    expect(request.generationConfig.maxOutputTokens).toBe(1024);
     expect(wowFalseReasonValues).toContain("invalid_judge_json");
     expect(JSON.stringify(request.generationConfig.responseSchema)).not.toContain("invalid_judge_json");
     expect(requestText).not.toContain("FULL_ARCHIVE");
