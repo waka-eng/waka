@@ -2964,6 +2964,74 @@ body.reflect-bg {
   aspect-ratio: unset;
 }
 
+.internal-wow-status-dev-panel {
+  width: min(100%, 1120px);
+  margin: var(--space-2) auto var(--space-8);
+}
+
+.internal-wow-status-dev-heading {
+  padding: var(--space-4);
+  border: var(--border-hairline);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 253, 247, 0.58);
+  box-shadow: 0 22px 70px rgba(15, 15, 14, 0.05);
+}
+
+.internal-wow-status-dev-heading span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.internal-wow-status-dev-heading h2 {
+  margin: 4px 0 var(--space-2);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(32px, 5vw, 58px);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+.internal-wow-status-dev-heading p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.internal-wow-status-explainer {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+
+.internal-wow-status-explainer section {
+  padding: var(--space-3);
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 247, 0.52);
+}
+
+.internal-wow-status-explainer h3 {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.internal-wow-status-explainer p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .internal-wow-status {
   width: min(100%, 1120px);
   margin: var(--space-3) auto var(--space-4);
@@ -3749,9 +3817,15 @@ body.reflect-bg {
 
 @media (max-width: 640px) {
   .wow-moments-heading,
-  .inspiration-discovery-heading {
+  .inspiration-discovery-heading,
+  .internal-wow-status-heading {
     align-items: start;
     flex-direction: column;
+  }
+
+  .internal-wow-status-explainer,
+  .internal-wow-status-steps {
+    grid-template-columns: 1fr;
   }
 
   .inspiration-filter-bar {

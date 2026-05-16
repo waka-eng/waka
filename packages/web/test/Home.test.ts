@@ -312,6 +312,17 @@ async function switchToInspirationFirst(container: HTMLElement): Promise<void> {
   await flushReactWork();
 }
 
+async function switchToWowStatus(container: HTMLElement): Promise<void> {
+  const statusButton = Array.from(
+    container.querySelectorAll<HTMLButtonElement>(".home-view-switcher button"),
+  ).find((button) => button.textContent === "WOW STATUS");
+
+  await act(async () => {
+    statusButton?.click();
+  });
+  await flushReactWork();
+}
+
 async function saveInspirationFromCapture(
   container: HTMLElement,
   text: string,
@@ -1272,7 +1283,22 @@ describe("HomePage view model", () => {
     expect(html).toContain("data-active-view=\"inspiration\"");
     expect(html).toContain("Wow Moment First");
     expect(html).toContain("Inspiration First");
+    expect(html).not.toContain("WOW STATUS");
     expect(html).toContain("aria-pressed=\"true\">Inspiration First</button>");
+  });
+
+  it("can render the dev-only WOW STATUS switcher tab", () => {
+    const html = renderToStaticMarkup(
+      createElement(HomeViewToggle, {
+        activeView: "wow-status",
+        onChange: () => undefined,
+        showInternalStatusTab: true,
+      }),
+    );
+
+    expect(html).toContain("data-active-view=\"wow-status\"");
+    expect(html).toContain("WOW STATUS");
+    expect(html).toContain("aria-pressed=\"true\">WOW STATUS</button>");
   });
 
   it("hands off Wow header Capture to Inspiration First with a focus request", () => {
@@ -1310,13 +1336,36 @@ describe("HomePage view model", () => {
     ).toBe(true);
   });
 
-  it("renders the development WOW status table from the status endpoint", async () => {
+  it("renders the development WOW status table from the status endpoint on a dev-only tab", async () => {
     vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
     setApiFixtures();
 
     const container = await renderHomePage();
     await switchToInspirationFirst(container);
+    expect(container.querySelector(".internal-wow-status-table")).toBeNull();
+    expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
+
+    await switchToWowStatus(container);
     await flushReactWork();
+
+    expect(
+      container.querySelector<HTMLElement>(".home-view-switcher")?.dataset
+        .activeView,
+    ).toBe("wow-status");
+    expect(container.textContent).toContain("Temporary development surface");
+    expect(container.textContent).toContain("will be removed before the product experience is finalized");
+    expect(container.textContent).toContain("Saved");
+    expect(container.textContent).toContain("When the inspiration was stored");
+    expect(container.textContent).toContain("Job");
+    expect(container.textContent).toContain("background classification/processing job");
+    expect(container.textContent).toContain("Embedded");
+    expect(container.textContent).toContain("retrieval embedding");
+    expect(container.textContent).toContain("Cluster");
+    expect(container.textContent).toContain("internal pattern bucket");
+    expect(container.textContent).toContain("Scores");
+    expect(container.textContent).toContain("importance and WOW scores");
+    expect(container.textContent).toContain("WOW links");
+    expect(container.textContent).toContain("linked back to that inspiration");
 
     const table = container.querySelector<HTMLElement>(
       '.internal-wow-status-table[aria-label="Development WOW status table"]',
@@ -1382,6 +1431,10 @@ describe("HomePage view model", () => {
       "New demo inspiration about recurring library rituals",
     );
 
+    expect(container.querySelector(".internal-wow-status")).toBeNull();
+
+    await switchToWowStatus(container);
+
     const panel = container.querySelector<HTMLElement>(".internal-wow-status");
     expect(panel).not.toBeNull();
     expect(panel?.textContent).toContain("Internal/demo-only WOW pipeline status");
@@ -1417,6 +1470,10 @@ describe("HomePage view model", () => {
       container,
       "Demo save with admin endpoint unavailable",
     );
+
+    expect(container.querySelector(".internal-wow-status")).toBeNull();
+
+    await switchToWowStatus(container);
 
     const panel = container.querySelector<HTMLElement>(".internal-wow-status");
     expect(panel).not.toBeNull();

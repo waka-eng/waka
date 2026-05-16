@@ -233,7 +233,7 @@ function applyUpdatedInspiration(
   };
 }
 
-type HomeView = "wow" | "inspiration";
+type HomeView = "wow" | "inspiration" | "wow-status";
 
 export interface HomeCaptureHandoffState {
   activeView: HomeView;
@@ -399,14 +399,77 @@ function InternalWowStatusTable({
   );
 }
 
+function InternalWowStatusDevPanel({
+  liveStatus,
+  rows,
+  loading,
+  error,
+  onRefresh,
+}: {
+  liveStatus: InternalWowStatusState | null;
+  rows: ApiWowStatusRow[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}): JSX.Element {
+  return (
+    <section className="internal-wow-status-dev-panel" aria-labelledby="internal-wow-status-title">
+      <div className="internal-wow-status-dev-heading">
+        <span>Temporary development surface</span>
+        <h2 id="internal-wow-status-title">WOW pipeline status</h2>
+        <p>
+          This tab is for development verification only and will be removed before the
+          product experience is finalized. It shows recent saves moving through the WOW
+          pipeline without exposing secrets or changing API/auth boundaries.
+        </p>
+      </div>
+      <div className="internal-wow-status-explainer" aria-label="WOW status column guide">
+        <section>
+          <h3>Saved</h3>
+          <p>When the inspiration was stored for the current user.</p>
+        </section>
+        <section>
+          <h3>Job</h3>
+          <p>Whether the background classification/processing job is queued, running, or done.</p>
+        </section>
+        <section>
+          <h3>Embedded</h3>
+          <p>Whether a retrieval embedding exists for relationship matching.</p>
+        </section>
+        <section>
+          <h3>Cluster</h3>
+          <p>The internal pattern bucket assigned by processing, if one is ready.</p>
+        </section>
+        <section>
+          <h3>Scores</h3>
+          <p>The current importance and WOW scores returned by the status endpoint.</p>
+        </section>
+        <section>
+          <h3>WOW links</h3>
+          <p>How many WOW moments are linked back to that inspiration, plus their titles.</p>
+        </section>
+      </div>
+      {liveStatus ? <InternalWowStatusPanel status={liveStatus} /> : null}
+      <InternalWowStatusTable
+        rows={rows}
+        loading={loading}
+        error={error}
+        onRefresh={onRefresh}
+      />
+    </section>
+  );
+}
+
 interface HomeViewToggleProps {
   activeView: HomeView;
   onChange: (view: HomeView) => void;
+  showInternalStatusTab?: boolean;
 }
 
 export function HomeViewToggle({
   activeView,
   onChange,
+  showInternalStatusTab = false,
 }: HomeViewToggleProps): JSX.Element {
   return (
     <nav
@@ -430,6 +493,16 @@ export function HomeViewToggle({
       >
         Inspiration First
       </button>
+      {showInternalStatusTab ? (
+        <button
+          type="button"
+          className={activeView === "wow-status" ? "active" : undefined}
+          aria-pressed={activeView === "wow-status"}
+          onClick={() => onChange("wow-status")}
+        >
+          WOW STATUS
+        </button>
+      ) : null}
     </nav>
   );
 }
@@ -981,6 +1054,12 @@ export function HomePage(): JSX.Element {
   }, [internalStatusEnabled, user]);
 
   useEffect(() => {
+    if (!internalStatusEnabled && activeView === "wow-status") {
+      setActiveView("wow");
+    }
+  }, [activeView, internalStatusEnabled]);
+
+  useEffect(() => {
     if (!user || !internalStatusEnabled) return;
     void refreshInternalWowStatusRows();
   }, [internalStatusEnabled, refreshInternalWowStatusRows, user]);
@@ -1383,7 +1462,11 @@ export function HomePage(): JSX.Element {
   }
 
   const viewSwitcher = (
-    <HomeViewToggle activeView={activeView} onChange={setActiveView} />
+    <HomeViewToggle
+      activeView={activeView}
+      onChange={setActiveView}
+      showInternalStatusTab={internalStatusEnabled}
+    />
   );
 
   const historyDetail = detailData ? (
@@ -1402,7 +1485,27 @@ export function HomePage(): JSX.Element {
   ) : undefined;
 
   const primaryContent =
-    activeView === "wow" ? (
+    activeView === "wow-status" && internalStatusEnabled ? (
+      <AppShell
+        count={entries.length}
+        headerTagline="development status"
+        loading={initialLoading}
+        onCaptureClick={handleWowHeaderCapture}
+        historyContent={historyContent}
+        historyDetail={historyDetail}
+      >
+        {viewSwitcher}
+        <InternalWowStatusDevPanel
+          liveStatus={internalWowStatus}
+          rows={internalWowStatusRows}
+          loading={internalWowStatusRowsLoading}
+          error={internalWowStatusRowsError}
+          onRefresh={() => {
+            void refreshInternalWowStatusRows();
+          }}
+        />
+      </AppShell>
+    ) : activeView === "wow" ? (
       <AppShell
         count={entries.length}
         headerTagline="wow moments"
@@ -1434,19 +1537,6 @@ export function HomePage(): JSX.Element {
         beforeGridContent={
           <>
             {viewSwitcher}
-            {internalStatusEnabled && internalWowStatus ? (
-              <InternalWowStatusPanel status={internalWowStatus} />
-            ) : null}
-            {internalStatusEnabled ? (
-              <InternalWowStatusTable
-                rows={internalWowStatusRows}
-                loading={internalWowStatusRowsLoading}
-                error={internalWowStatusRowsError}
-                onRefresh={() => {
-                  void refreshInternalWowStatusRows();
-                }}
-              />
-            ) : null}
             <InspirationDiscoveryPanel
               entries={entries}
               filteredEntries={filteredEntries}
