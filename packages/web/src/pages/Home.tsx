@@ -323,6 +323,23 @@ function InternalWowStatusPanel({
   );
 }
 
+function buildRawJudgeLog(row: ApiWowStatusRow): string[] {
+  const log: string[] = [];
+  if (row.debugReason.rawGeminiPreview) {
+    log.push(`raw: ${row.debugReason.rawGeminiPreview}`);
+  }
+  if (row.debugReason.parseFailureStage) {
+    log.push(`stage: ${row.debugReason.parseFailureStage}`);
+  }
+  if (row.debugReason.finishReason) {
+    log.push(`finish: ${row.debugReason.finishReason}`);
+  }
+  if (row.debugReason.schemaIssueSummary) {
+    log.push(`schema: ${row.debugReason.schemaIssueSummary}`);
+  }
+  return log;
+}
+
 function InternalWowStatusTable({
   rows,
   loading,
@@ -352,45 +369,51 @@ function InternalWowStatusTable({
               <th>Embedded</th>
               <th>Generated WOW</th>
               <th>Why no WOW?</th>
+              <th>Raw judge log</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5}>{loading ? "Loading WOW pipeline status…" : "No recent inspirations."}</td>
+                <td colSpan={6}>{loading ? "Loading WOW pipeline status…" : "No recent inspirations."}</td>
               </tr>
             ) : (
-              rows.map((row) => (
-                <tr key={row.inspiration.id}>
-                  <td>
-                    <strong>{shortId(row.inspiration.id)}</strong>
-                    <span>{row.inspiration.textPreview}</span>
-                    <time dateTime={row.inspiration.createdAt}>{formatTimestamp(row.inspiration.createdAt)}</time>
-                  </td>
-                  <td>
-                    {row.job ? (
-                      <>
-                        <strong>{row.job.status}</strong>
-                        <span>{row.job.attempts}/{row.job.maxAttempts}</span>
-                      </>
-                    ) : (
-                      "none"
-                    )}
-                  </td>
-                  <td>{row.embedded ? "yes" : "no"}</td>
-                  <td>
-                    <strong>{row.generatedWowMomentCount}</strong>
-                    <span>{row.debugReason.label}</span>
-                  </td>
-                  <td>
-                    <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : "ready"}</strong>
-                    <span>{row.debugReason.detail}</span>
-                    {row.debugReason.rawGeminiPreview ? (
-                      <span>Raw judge preview: {row.debugReason.rawGeminiPreview}</span>
-                    ) : null}
-                  </td>
-                </tr>
-              ))
+              rows.map((row) => {
+                const rawJudgeLog = buildRawJudgeLog(row);
+                return (
+                  <tr key={row.inspiration.id}>
+                    <td>
+                      <strong>{shortId(row.inspiration.id)}</strong>
+                      <span>{row.inspiration.textPreview}</span>
+                      <time dateTime={row.inspiration.createdAt}>{formatTimestamp(row.inspiration.createdAt)}</time>
+                    </td>
+                    <td>
+                      {row.job ? (
+                        <>
+                          <strong>{row.job.status}</strong>
+                          <span>{row.job.attempts}/{row.job.maxAttempts}</span>
+                        </>
+                      ) : (
+                        "none"
+                      )}
+                    </td>
+                    <td>{row.embedded ? "yes" : "no"}</td>
+                    <td>
+                      <strong>{row.generatedWowMomentCount}</strong>
+                      <span>{row.debugReason.label}</span>
+                    </td>
+                    <td>
+                      <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : "ready"}</strong>
+                      <span>{row.debugReason.detail}</span>
+                    </td>
+                    <td>
+                      {rawJudgeLog.length > 0
+                        ? rawJudgeLog.map((entry) => <span key={entry}>{entry}</span>)
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -443,6 +466,10 @@ function InternalWowStatusDevPanel({
         <section>
           <h3>Why no WOW?</h3>
           <p>The likely debug reason when generated WOW is 0: waiting for job, missing embedding, failed job, or no WOW generated.</p>
+        </section>
+        <section>
+          <h3>Raw judge log</h3>
+          <p>Gemini raw preview and schema/finish diagnostics when present.</p>
         </section>
       </div>
       {liveStatus ? <InternalWowStatusPanel status={liveStatus} /> : null}

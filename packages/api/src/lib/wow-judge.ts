@@ -347,6 +347,10 @@ const trueJudgmentSchema = z
 
 const wowJudgmentSchema = z.union([enrichedFalseJudgmentSchema, trueJudgmentSchema]);
 
+function isWowFalseReason(value: unknown): value is WowFalseReason {
+  return typeof value === "string" && wowFalseReasonValues.includes(value as WowFalseReason);
+}
+
 function defaultFalseJudgment(
   reason: WowFalseReason = "unclear_pattern",
   debugSummary = "Gemini did not return a usable WOW judgment explanation.",
@@ -400,6 +404,24 @@ function trimRepairInput(text: string): string {
 }
 
 function normalizeFalseJudgment(parsed: unknown): WowMomentJudgment | null {
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    "isWowMoment" in parsed &&
+    (parsed as { isWowMoment?: unknown }).isWowMoment === false
+  ) {
+    const falsePayload = parsed as { reason?: unknown; debugSummary?: unknown; why?: unknown };
+    const debugSummary =
+      typeof falsePayload.debugSummary === "string"
+        ? falsePayload.debugSummary
+        : typeof falsePayload.why === "string"
+          ? falsePayload.why
+          : null;
+    if (isWowFalseReason(falsePayload.reason) && debugSummary) {
+      return defaultFalseJudgment(falsePayload.reason, debugSummary);
+    }
+  }
+
   const enriched = enrichedFalseJudgmentSchema.safeParse(parsed);
   if (enriched.success) return enriched.data as Extract<WowMomentJudgment, { isWowMoment: false }>;
 

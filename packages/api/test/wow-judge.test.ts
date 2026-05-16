@@ -157,6 +157,25 @@ describe("GeminiWowJudgeClient", () => {
     ).resolves.toEqual({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." });
   });
 
+  it("normalizes false WOW judgments that use why instead of debugSummary", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: false,
+        reason: "generic_similarity",
+        why: "The trigger and candidates share a general theme of valuing life",
+        title: "Ignored false title",
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput("trigger-id"))).resolves.toEqual({
+      isWowMoment: false,
+      reason: "generic_similarity",
+      debugSummary: "The trigger and candidates share a general theme of valuing life",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("maps legacy false WOW judgments to a safe default reason", async () => {
     const fetchMock = vi.fn().mockResolvedValue(geminiJsonResponse({ isWowMoment: false }));
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
