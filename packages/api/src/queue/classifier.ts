@@ -57,7 +57,7 @@
 
 import { and, eq, isNull } from "drizzle-orm";
 
-import { type Inspiration, inspirations } from "../db/index.js";
+import { backgroundJobs, type Inspiration, inspirations } from "../db/index.js";
 import { generateAutoWowMomentForInspiration } from "../lib/auto-wow-generation.js";
 import { getDb } from "../lib/db.js";
 import { classifyInspirationText } from "./gemini.js";
@@ -104,6 +104,7 @@ interface ClassificationJob {
 export interface ClassificationJobDependencies {
   generateAutoWowMoment?: typeof generateAutoWowMomentForInspiration;
   userId?: string;
+  backgroundJobId?: string;
 }
 
 /**
@@ -269,6 +270,8 @@ async function attemptAutoWowGeneration(
       inspirationId: row.id,
     });
 
+    await recordAutoWowGenerationResult(deps.backgroundJobId, row.id, result);
+
     if (result.status === "unavailable") {
       console.warn("[classifier] automatic WOW generation unavailable", {
         inspirationId: row.id,
@@ -282,6 +285,37 @@ async function attemptAutoWowGeneration(
       errorName: err instanceof Error ? err.name : typeof err,
     });
   }
+}
+
+async function recordAutoWowGenerationResult(
+  backgroundJobId: string | undefined,
+  inspirationId: string,
+  result: Awaited<ReturnType<typeof generateAutoWowMomentForInspiration>>,
+): Promise<void> {
+  if (!backgroundJobId) return;
+
+  const falseJudgment = result.status === "not_wow" ? result.judgment : null;
+  const summary = {
+    status: result.status,
+    generated: result.generated,
+    ...(falseJudgment
+      ? {
+          judgment: {
+            isWowMoment: false as const,
+            reason: falseJudgment.reason,
+            debugSummary: falseJudgment.debugSummary,
+          },
+        }
+      : {}),
+  };
+
+  await getDb()
+    .update(backgroundJobs)
+    .set({
+      payload: { inspirationId, autoWowGeneration: summary },
+      updatedAt: new Date(),
+    } as Partial<typeof backgroundJobs.$inferInsert>)
+    .where(eq(backgroundJobs.id, backgroundJobId));
 }
 
 // ---------------------------------------------------------------------------

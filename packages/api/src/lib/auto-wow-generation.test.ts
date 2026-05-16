@@ -88,14 +88,14 @@ describe("generateAutoWowMomentForInspiration", () => {
       userId,
       inspirationId,
       ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
-      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false }),
+      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." }),
       persistJudgment,
     });
 
     expect(result).toMatchObject({
       status: "not_wow",
       generated: false,
-      judgment: { isWowMoment: false },
+      judgment: { isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." },
     });
     expect(persistJudgment).not.toHaveBeenCalled();
     expect(findCandidates).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       userId,
       inspirationId,
       ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
-      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false }),
+      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." }),
       persistJudgment,
     });
 

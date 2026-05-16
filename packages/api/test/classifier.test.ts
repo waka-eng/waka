@@ -343,7 +343,11 @@ describe("classifier job — automatic WOW handoff", () => {
       status: "not_wow" as const,
       generated: false,
       embeddingStatus: "unchanged" as const,
-      judgment: { isWowMoment: false as const },
+      judgment: {
+        isWowMoment: false as const,
+        reason: "generic_similarity" as const,
+        debugSummary: "Only a generic topical overlap was found.",
+      },
     }));
 
     gemini.queueResponse(geminiLabel("bridge"));

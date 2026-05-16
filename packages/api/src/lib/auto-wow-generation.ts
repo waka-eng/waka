@@ -36,7 +36,7 @@ export type AutoWowGenerationResult =
       status: "not_wow";
       generated: false;
       embeddingStatus: Exclude<EnsureInspirationEmbeddingResult["status"], "missing_inspiration" | "stale_source">;
-      judgment: WowMomentJudgment;
+      judgment: Extract<WowMomentJudgment, { isWowMoment: false }>;
     }
   | {
       status: "stale_source" | "missing_inspiration" | "unavailable";
@@ -117,7 +117,7 @@ export async function generateAutoWowMomentForInspiration(
       limit,
     });
 
-    if (!judgment.isWowMoment) {
+    if (judgment.isWowMoment === false) {
       return {
         status: "not_wow",
         generated: false,

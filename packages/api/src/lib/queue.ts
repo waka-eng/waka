@@ -143,7 +143,7 @@ async function processBackgroundJob(job: BackgroundJob): Promise<void> {
     return;
   }
 
-  await runClassificationJob(payload.inspirationId, { userId: job.userId });
+  await runClassificationJob(payload.inspirationId, { userId: job.userId, backgroundJobId: job.id });
 }
 
 function parseProcessInspirationPayload(
