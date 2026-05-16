@@ -598,6 +598,45 @@ export interface ListBackgroundJobsResponse {
   jobs: ApiBackgroundJob[];
 }
 
+export interface ApiWowStatusRow {
+  inspiration: {
+    id: string;
+    textPreview: string;
+    kind: string | null;
+    category: number | null;
+    cluster: ClusterKind | null;
+    classifiedAt: string | null;
+    importanceScore: number;
+    wowScore: number;
+    createdAt: string;
+    updatedAt: string;
+  };
+  job: {
+    id: string;
+    status: BackgroundJobStatus;
+    attempts: number;
+    maxAttempts: number;
+    updatedAt: string;
+    lastError: string | null;
+  } | null;
+  embedded: boolean;
+  linkedWowMomentCount: number;
+  linkedWowMomentTitles: string[];
+}
+
+export interface ListWowStatusResponse {
+  rows: ApiWowStatusRow[];
+}
+
+export async function fetchWowStatus(limit = 12): Promise<ApiWowStatusRow[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const body = await getJson<ListWowStatusResponse>(
+    apiPath(`/wow-status?${params.toString()}`),
+    "Failed to load WOW status",
+  );
+  return Array.isArray(body.rows) ? body.rows : [];
+}
+
 export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
   let res: Response;
   try {

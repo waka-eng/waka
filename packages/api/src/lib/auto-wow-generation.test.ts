@@ -79,7 +79,89 @@ describe("generateAutoWowMomentForInspiration", () => {
     expect(result.generated).toBe(false);
   });
 
-  it("reports not_wow without persistence", async () => {
+  it("uses a bounded organic fallback when Gemini returns not_wow but candidate signals are strong", async () => {
+    const persistJudgment = vi.fn().mockResolvedValue({
+      persisted: true,
+      status: "created",
+      judgment: {
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Connection: synth tools memory",
+        why: "fallback",
+        relatedInspirationIds: [relatedId],
+      },
+      wowMoment: { id: "wow-fallback" },
+      inspirationLinks: [{ inspirationId }],
+    });
+
+    const result = await generateAutoWowMomentForInspiration({
+      db,
+      userId,
+      inspirationId,
+      ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
+      judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false }),
+      findCandidates: vi.fn().mockResolvedValue({
+        trigger: {
+          id: inspirationId,
+          userId,
+          text: "synth tools need memory",
+          kind: "note",
+          category: null,
+          cluster: "bridge",
+          importanceScore: 80,
+          wowScore: 80,
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+        candidates: [
+          {
+            inspiration: {
+              id: relatedId,
+              userId,
+              text: "memory makes tools compound",
+              kind: "note",
+              category: null,
+              cluster: "morph",
+              importanceScore: 70,
+              wowScore: 72,
+              createdAt: new Date("2026-01-01T00:00:00.000Z"),
+              updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            },
+            embedding: {
+              model: "test",
+              dimensions: 3,
+              inputHash: "hash",
+              updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            },
+            scores: {
+              similarityScoreToTrigger: 0.72,
+              surpriseSimilarityScoreToTrigger: 0.65,
+              timeDistanceScoreToTrigger: 0.2,
+              persistedWowScore: 0.72,
+              runtimeCandidateScore: 0.6,
+            },
+          },
+        ],
+      }),
+      persistJudgment,
+    });
+
+    expect(result.status).toBe("generated");
+    expect(result.generated).toBe(true);
+    expect(persistJudgment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId,
+        triggerInspirationId: inspirationId,
+        judgment: expect.objectContaining({
+          isWowMoment: true,
+          kind: "bridge",
+          relatedInspirationIds: [relatedId],
+        }),
+      }),
+    );
+  });
+
+  it("reports not_wow without persistence when fallback candidates are weak", async () => {
     const persistJudgment = vi.fn();
     const result = await generateAutoWowMomentForInspiration({
       db,
@@ -87,6 +169,49 @@ describe("generateAutoWowMomentForInspiration", () => {
       inspirationId,
       ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
       judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false }),
+      findCandidates: vi.fn().mockResolvedValue({
+        trigger: {
+          id: inspirationId,
+          userId,
+          text: "short note",
+          kind: null,
+          category: null,
+          cluster: null,
+          importanceScore: 0,
+          wowScore: 0,
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          updatedAt: new Date("2026-01-02T00:00:00.000Z"),
+        },
+        candidates: [
+          {
+            inspiration: {
+              id: relatedId,
+              userId,
+              text: "other weak note",
+              kind: null,
+              category: null,
+              cluster: null,
+              importanceScore: 0,
+              wowScore: 0,
+              createdAt: new Date("2026-01-01T00:00:00.000Z"),
+              updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            },
+            embedding: {
+              model: "test",
+              dimensions: 3,
+              inputHash: "hash",
+              updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+            },
+            scores: {
+              similarityScoreToTrigger: 0.1,
+              surpriseSimilarityScoreToTrigger: 0.1,
+              timeDistanceScoreToTrigger: 0.1,
+              persistedWowScore: 0.1,
+              runtimeCandidateScore: 0.1,
+            },
+          },
+        ],
+      }),
       persistJudgment,
     });
 

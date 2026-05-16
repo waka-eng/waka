@@ -17,6 +17,7 @@ import {
   fetchInspirations,
   fetchReflections,
   fetchWowMoments,
+  fetchWowStatus,
   updateInspiration,
 } from "../src/lib/api";
 import type {
@@ -24,6 +25,7 @@ import type {
   ApiInspiration,
   ApiReflection,
   ApiWowMoment,
+  ApiWowStatusRow,
 } from "../src/lib/api";
 import {
   HomePage,
@@ -32,8 +34,8 @@ import {
   shouldShowInternalStatus,
 } from "../src/pages/Home";
 
-vi.mock("../src/lib/auth-context", () => ({
-  useAuth: () => ({
+const mockAuthState = vi.hoisted(() => ({
+  value: {
     user: {
       id: "user-1",
       email: "river@example.com",
@@ -45,7 +47,11 @@ vi.mock("../src/lib/auth-context", () => ({
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),
     refresh: vi.fn(async () => null),
-  }),
+  },
+}));
+
+vi.mock("../src/lib/auth-context", () => ({
+  useAuth: () => mockAuthState.value,
 }));
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -102,6 +108,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     })),
     fetchReflections: vi.fn(async () => []),
     fetchWowMoments: vi.fn(async () => []),
+    fetchWowStatus: vi.fn(async () => []),
     createReflection: vi.fn(async () => {
       throw new Error("createReflection mock not configured");
     }),
@@ -200,16 +207,47 @@ const sampleWowMoments: ApiWowMoment[] = [
   },
 ];
 
+const sampleWowStatusRows: ApiWowStatusRow[] = [
+  {
+    inspiration: {
+      id: "insp-1",
+      textPreview: "Architecture essay about bridge rhythms in city walks",
+      kind: "note",
+      category: null,
+      cluster: "bridge",
+      classifiedAt: "2026-05-10T12:05:00.000Z",
+      importanceScore: 7,
+      wowScore: 4,
+      createdAt: "2026-05-10T12:00:00.000Z",
+      updatedAt: "2026-05-10T12:05:00.000Z",
+    },
+    job: {
+      id: "job-process-1",
+      status: "succeeded",
+      attempts: 1,
+      maxAttempts: 3,
+      updatedAt: "2026-05-10T12:05:00.000Z",
+      lastError: null,
+    },
+    embedded: true,
+    linkedWowMomentCount: 1,
+    linkedWowMomentTitles: ["Cities keep teaching through bridges"],
+  },
+];
+
 function setApiFixtures({
   inspirations = sampleInspirations,
   wowMoments = sampleWowMoments,
+  wowStatusRows = sampleWowStatusRows,
 }: {
   inspirations?: ApiInspiration[];
   wowMoments?: ApiWowMoment[];
+  wowStatusRows?: ApiWowStatusRow[];
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchReflections).mockResolvedValue([]);
   vi.mocked(fetchWowMoments).mockResolvedValue(wowMoments);
+  vi.mocked(fetchWowStatus).mockResolvedValue(wowStatusRows);
 }
 
 afterEach(() => {
@@ -1270,6 +1308,31 @@ describe("HomePage view model", () => {
     expect(
       shouldShowInternalStatus({ DEV: true, VITE_SHOW_INTERNAL_STATUS: undefined }),
     ).toBe(true);
+  });
+
+  it("renders the development WOW status table from the status endpoint", async () => {
+    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    await switchToInspirationFirst(container);
+    await flushReactWork();
+
+    const table = container.querySelector<HTMLElement>(
+      '.internal-wow-status-table[aria-label="Development WOW status table"]',
+    );
+    expect(table).not.toBeNull();
+    expect(fetchWowStatus).toHaveBeenCalledWith(12);
+    expect(table?.textContent).toContain("Development WOW status");
+    expect(table?.textContent).toContain("insp-1");
+    expect(table?.textContent).toContain("Architecture essay about bridge rhythms");
+    expect(table?.textContent).toContain("succeeded");
+    expect(table?.textContent).toContain("1/3");
+    expect(table?.textContent).toContain("yes");
+    expect(table?.textContent).toContain("bridge");
+    expect(table?.textContent).toContain("importance 7");
+    expect(table?.textContent).toContain("wow 4");
+    expect(table?.textContent).toContain("Cities keep teaching through bridges");
   });
 
   it("does not render the internal WOW status UI when the dev/demo gate is disabled", async () => {

@@ -51,10 +51,12 @@ import {
   type ApiInspiration,
   type ApiInspirationScorePatch,
   type ApiWowMoment,
+  type ApiWowStatusRow,
   type ClusterKind,
   fetchBackgroundJobs,
   fetchInspirations,
   fetchWowMoments,
+  fetchWowStatus,
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -318,6 +320,82 @@ function InternalWowStatusPanel({
         </li>
       </ol>
     </aside>
+  );
+}
+
+function InternalWowStatusTable({
+  rows,
+  loading,
+  error,
+  onRefresh,
+}: {
+  rows: ApiWowStatusRow[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}): JSX.Element {
+  return (
+    <section className="internal-wow-status internal-wow-status-table" aria-label="Development WOW status table">
+      <div className="internal-wow-status-heading">
+        <span>Development WOW status</span>
+        <button type="button" onClick={onRefresh} disabled={loading}>
+          {loading ? "Refreshing" : "Refresh"}
+        </button>
+      </div>
+      {error ? <p className="internal-wow-status-error">{error}</p> : null}
+      <div className="internal-wow-status-table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Saved</th>
+              <th>Inspiration</th>
+              <th>Job</th>
+              <th>Embedded</th>
+              <th>Cluster</th>
+              <th>Scores</th>
+              <th>WOW links</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7}>{loading ? "Loading WOW pipeline status…" : "No recent inspirations."}</td>
+              </tr>
+            ) : (
+              rows.map((row) => (
+                <tr key={row.inspiration.id}>
+                  <td>{formatTimestamp(row.inspiration.createdAt)}</td>
+                  <td>
+                    <strong>{shortId(row.inspiration.id)}</strong>
+                    <span>{row.inspiration.textPreview}</span>
+                  </td>
+                  <td>
+                    {row.job ? (
+                      <>
+                        <strong>{row.job.status}</strong>
+                        <span>{row.job.attempts}/{row.job.maxAttempts}</span>
+                      </>
+                    ) : (
+                      "none"
+                    )}
+                  </td>
+                  <td>{row.embedded ? "yes" : "no"}</td>
+                  <td>{row.inspiration.cluster ?? "—"}</td>
+                  <td>
+                    <span>importance {row.inspiration.importanceScore}</span>
+                    <span>wow {row.inspiration.wowScore}</span>
+                  </td>
+                  <td>
+                    <strong>{row.linkedWowMomentCount}</strong>
+                    <span>{row.linkedWowMomentTitles.join(", ") || "none"}</span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -730,6 +808,9 @@ export function HomePage(): JSX.Element {
   const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
   const [internalWowStatus, setInternalWowStatus] =
     useState<InternalWowStatusState | null>(null);
+  const [internalWowStatusRows, setInternalWowStatusRows] = useState<ApiWowStatusRow[]>([]);
+  const [internalWowStatusRowsLoading, setInternalWowStatusRowsLoading] = useState(false);
+  const [internalWowStatusRowsError, setInternalWowStatusRowsError] = useState<string | null>(null);
   const internalStatusEnabled = shouldShowInternalStatus(import.meta.env);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
@@ -769,6 +850,8 @@ export function HomePage(): JSX.Element {
       setEntries([]);
       setWowMoments([]);
       setInternalWowStatus(null);
+      setInternalWowStatusRows([]);
+      setInternalWowStatusRowsError(null);
       setWowMomentsLoading(false);
       setWowMomentsError(null);
       return;
@@ -881,6 +964,26 @@ export function HomePage(): JSX.Element {
     },
     [user],
   );
+
+  const refreshInternalWowStatusRows = useCallback(async () => {
+    if (!user || !internalStatusEnabled) return;
+    setInternalWowStatusRowsLoading(true);
+    setInternalWowStatusRowsError(null);
+    try {
+      setInternalWowStatusRows(await fetchWowStatus(12));
+    } catch (err) {
+      setInternalWowStatusRowsError(
+        err instanceof Error ? err.message : "Failed to load WOW pipeline status",
+      );
+    } finally {
+      setInternalWowStatusRowsLoading(false);
+    }
+  }, [internalStatusEnabled, user]);
+
+  useEffect(() => {
+    if (!user || !internalStatusEnabled) return;
+    void refreshInternalWowStatusRows();
+  }, [internalStatusEnabled, refreshInternalWowStatusRows, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -999,6 +1102,7 @@ export function HomePage(): JSX.Element {
           adminUnavailable: false,
         });
         refreshInternalBackgroundJob(targetId);
+        void refreshInternalWowStatusRows();
         void refreshWowMoments({ showLoading: false, surfaceErrors: true }).then(
           (rows) => {
             if (!rows) return;
@@ -1070,6 +1174,7 @@ export function HomePage(): JSX.Element {
     [
       internalStatusEnabled,
       refreshInternalBackgroundJob,
+      refreshInternalWowStatusRows,
       refreshWowMoments,
       updateInternalWowCount,
       wowMoments.length,
@@ -1331,6 +1436,16 @@ export function HomePage(): JSX.Element {
             {viewSwitcher}
             {internalStatusEnabled && internalWowStatus ? (
               <InternalWowStatusPanel status={internalWowStatus} />
+            ) : null}
+            {internalStatusEnabled ? (
+              <InternalWowStatusTable
+                rows={internalWowStatusRows}
+                loading={internalWowStatusRowsLoading}
+                error={internalWowStatusRowsError}
+                onRefresh={() => {
+                  void refreshInternalWowStatusRows();
+                }}
+              />
             ) : null}
             <InspirationDiscoveryPanel
               entries={entries}
