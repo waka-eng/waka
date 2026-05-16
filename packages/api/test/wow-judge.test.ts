@@ -10,6 +10,7 @@ import {
   GeminiWowJudgeValidationError,
   buildWowGenerateContentUrl,
   buildWowJudgmentRequest,
+  buildWowRepairJudgmentRequest,
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
   sanitizeGeminiRawPreview,
@@ -235,6 +236,27 @@ describe("GeminiWowJudgeClient", () => {
     );
   });
 
+  it("normalizes a repaired false WOW judgment that uses why instead of debugSummary", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse("Malformed prior false judgment."))
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          isWowMoment: false,
+          reason: "unclear_pattern",
+          why: "Prior output was malformed and could not be safely repaired.",
+        }),
+      );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(minimalWowJudgeInput("trigger-id"))).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Prior output was malformed and could not be safely repaired.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("returns invalid_judge_json with a sanitized raw preview when repair fails", async () => {
     const rawText =
       "```json\n{not-json token=super-secret-token-value Aizaabcdefghijklmnopqrstuvwxyz}\n```";
@@ -382,9 +404,31 @@ describe("GeminiWowJudgeClient", () => {
     });
   });
 
-  it("uses Gemini 2.5 Flash and 1024 max output tokens", () => {
+  it("uses Gemini 2.5 Flash, main 1024 tokens, and repair 256 tokens", () => {
     expect(buildWowGenerateContentUrl()).toContain("gemini-2.5-flash");
     expect(buildWowJudgmentRequest(minimalWowJudgeInput()).generationConfig.maxOutputTokens).toBe(1024);
+    expect(buildWowRepairJudgmentRequest("malformed").generationConfig.maxOutputTokens).toBe(256);
+  });
+
+  it("builds a compact repair-only prompt with deterministic false fallback", () => {
+    const request = buildWowRepairJudgmentRequest("not json");
+    const requestText = JSON.stringify(request);
+    const userPromptText = request.contents[0]?.parts[0]?.text;
+    expect(userPromptText).toBeTypeOf("string");
+    const userPrompt = JSON.parse(userPromptText ?? "{}");
+
+    expect(requestText).toContain("repair structure only");
+    expect(requestText).toContain("Do not re-judge");
+    expect(requestText).toContain("Could not safely repair prior WOW judge output.");
+    expect(requestText).toContain("Never include why on false");
+    expect(requestText).toContain("false debugSummary <= 120 chars");
+    expect(requestText).not.toContain("Decide whether");
+    expect(requestText).not.toContain("archive");
+    expect(userPrompt.fallbackFalse).toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Could not safely repair prior WOW judge output.",
+    });
   });
 
   it("builds a bounded prompt from only the trigger and provided candidates", () => {
@@ -421,7 +465,8 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("Return raw JSON only");
     expect(requestText).toContain("no markdown fences");
     expect(requestText).toContain("12 words or fewer");
-    expect(requestText).toContain("why <= 180-240 characters");
+    expect(requestText).toContain("true why <= 180 chars");
+    expect(requestText).toContain("false debugSummary <= 120 chars");
     expect(requestText).toContain("ids belong only in");
     expect(request.generationConfig).toEqual(
       expect.objectContaining({
