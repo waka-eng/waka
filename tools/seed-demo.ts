@@ -23,6 +23,14 @@ interface Args {
   replace: boolean;
   createUser: boolean;
   allowRemote: boolean;
+  cleanupDemoData: boolean;
+}
+
+export interface DemoCleanupSummary {
+  deletedDemoInspirations: number;
+  deletedDemoWowMoments: number;
+  preservedMixedWowMoments: number;
+  preservedNonDemoWowMoments: number;
 }
 
 type SeedSql = postgres.Sql | postgres.TransactionSql;
@@ -65,6 +73,7 @@ Usage:
   pnpm demo:seed -- --email=demo@example.test
   pnpm demo:seed -- --email=demo@example.test --create-user --password=<password> [--name="Demo User"]
   pnpm demo:seed -- --user-id=<uuid>
+  pnpm demo:seed -- --email=demo@example.test --cleanup-demo-data
 
 Options:
   --database-url=<url>  Defaults to DB_CONNECTION_URL or DATABASE_URL from the environment, .env, or .env.development.
@@ -74,6 +83,7 @@ Options:
   --password=<password> Hash with the API auth helper when --create-user inserts a user.
   --name=<name>         Name used only when --email creates a user. Default: WAKA Demo.
   --append-demo-data    Append another demo dataset instead of replacing this script's prior demo rows.
+  --cleanup-demo-data   Remove this script's prior demo seed rows for an existing user without creating the user or reseeding.
   --allow-remote        Permit a non-local database URL. Prefer local/dev DBs only.
 
 No secrets are logged. The script only writes real tenant-scoped rows for the selected user.`);
@@ -93,6 +103,17 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
 
   const password = readArg("--password", argv);
   const createUser = hasFlag("--create-user", argv);
+  const cleanupDemoData = hasFlag("--cleanup-demo-data", argv);
+  const appendDemoData = hasFlag("--append-demo-data", argv);
+  if (cleanupDemoData && createUser) {
+    throw new Error("--cleanup-demo-data cannot be combined with --create-user; cleanup only works for existing users.");
+  }
+  if (cleanupDemoData && password) {
+    throw new Error("--cleanup-demo-data cannot be combined with --password; cleanup never creates or updates users.");
+  }
+  if (cleanupDemoData && appendDemoData) {
+    throw new Error("--cleanup-demo-data cannot be combined with --append-demo-data.");
+  }
   if (createUser && !email) {
     throw new Error("--create-user requires --email.");
   }
@@ -111,9 +132,10 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
     email,
     password,
     name: readArg("--name", argv) ?? "WAKA Demo",
-    replace: !hasFlag("--append-demo-data", argv),
+    replace: !appendDemoData,
     createUser,
     allowRemote: hasFlag("--allow-remote", argv),
+    cleanupDemoData,
   };
 }
 
@@ -123,7 +145,7 @@ export function assertLocalDatabase(databaseUrl: string, allowRemote: boolean): 
   const host = normalizeDatabaseHost(parsed.hostname);
   if (isLocalDatabaseHost(host)) return;
   throw new Error(
-    `Refusing to seed non-local database host "${host}". Use --allow-remote only for an explicit dev database.`,
+    `Refusing to seed non-local database host "${host}". Use --allow-remote only for an explicit disposable dev database; cleanup uses the same guard.`,
   );
 }
 
@@ -163,32 +185,82 @@ export async function resolveDemoUser(
   return inserted[0]!;
 }
 
-export async function replacePriorDemoRows(sql: SeedSql, userId: string): Promise<void> {
-  await sql`
+export async function replacePriorDemoRows(
+  sql: SeedSql,
+  userId: string,
+): Promise<DemoCleanupSummary> {
+  const wowRows = await sql<Array<{
+    deleted_demo_wow_moments: string | number;
+    preserved_mixed_wow_moments: string | number;
+    preserved_non_demo_wow_moments: string | number;
+  }>>`
     with prior_demo_inspirations as (
       select id from inspirations
       where user_id = ${userId}
         and kind = ${DEMO_SEED_KIND}
-    ), prior_demo_moments as (
-      select distinct wmi.wow_moment_id
+    ), demo_linked_moments as (
+      select distinct wm.id
       from wow_moment_inspirations wmi
       inner join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
       inner join wow_moments wm on wm.id = wmi.wow_moment_id
       where wm.user_id = ${userId}
-    ), deleted_links as (
-      delete from wow_moment_inspirations
-      where wow_moment_id in (select wow_moment_id from prior_demo_moments)
-      returning wow_moment_id
+        and wmi.user_id = ${userId}
+    ), demo_only_moments as (
+      select dlm.id
+      from demo_linked_moments dlm
+      where not exists (
+        select 1
+        from wow_moment_inspirations wmi
+        left join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
+        where wmi.wow_moment_id = dlm.id
+          and wmi.user_id = ${userId}
+          and pdi.id is null
+      )
+    ), mixed_demo_moments as (
+      select dlm.id
+      from demo_linked_moments dlm
+      where exists (
+        select 1
+        from wow_moment_inspirations wmi
+        left join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
+        where wmi.wow_moment_id = dlm.id
+          and wmi.user_id = ${userId}
+          and pdi.id is null
+      )
+    ), non_demo_moments as (
+      select wm.id
+      from wow_moments wm
+      where wm.user_id = ${userId}
+        and not exists (select 1 from demo_linked_moments dlm where dlm.id = wm.id)
+    ), deleted_demo_moments as (
+      delete from wow_moments
+      where user_id = ${userId}
+        and id in (select id from demo_only_moments)
+      returning id
     )
-    delete from wow_moments
-    where user_id = ${userId}
-      and id in (select distinct wow_moment_id from deleted_links)
+    select
+      (select count(*) from deleted_demo_moments) as deleted_demo_wow_moments,
+      (select count(*) from mixed_demo_moments) as preserved_mixed_wow_moments,
+      (select count(*) from non_demo_moments) as preserved_non_demo_wow_moments
   `;
-  await sql`
-    delete from inspirations
-    where user_id = ${userId}
-      and kind = ${DEMO_SEED_KIND}
+  const inspirationRows = await sql<Array<{ deleted_demo_inspirations: string | number }>>`
+    with deleted_demo_inspirations as (
+      delete from inspirations
+      where user_id = ${userId}
+        and kind = ${DEMO_SEED_KIND}
+      returning id
+    )
+    select count(*) as deleted_demo_inspirations from deleted_demo_inspirations
   `;
+
+  const toNumber = (value: string | number | undefined): number => Number(value ?? 0);
+  const wowSummary = wowRows[0];
+  return {
+    deletedDemoInspirations: toNumber(inspirationRows[0]?.deleted_demo_inspirations),
+    deletedDemoWowMoments: toNumber(wowSummary?.deleted_demo_wow_moments),
+    preservedMixedWowMoments: toNumber(wowSummary?.preserved_mixed_wow_moments),
+    preservedNonDemoWowMoments: toNumber(wowSummary?.preserved_non_demo_wow_moments),
+  };
 }
 
 export function buildDemoWowMomentIdempotencyKey(params: {
@@ -287,15 +359,25 @@ async function main(): Promise<void> {
   });
 
   try {
-    const user = await sql.begin(async (tx) => {
+    const result = await sql.begin(async (tx) => {
       const resolvedUser = await resolveDemoUser(tx, args);
+      if (args.cleanupDemoData) {
+        const cleanup = await replacePriorDemoRows(tx, resolvedUser.id);
+        return { user: resolvedUser, cleanup };
+      }
       if (args.replace) await replacePriorDemoRows(tx, resolvedUser.id);
       await seedDemoRows(tx, resolvedUser.id);
-      return resolvedUser;
+      return { user: resolvedUser, cleanup: null };
     });
+    if (result.cleanup) {
+      console.log(
+        `Removed WAKA demo seed data for ${result.user.email}: ${result.cleanup.deletedDemoInspirations} demo inspirations and ${result.cleanup.deletedDemoWowMoments} linked demo WOW moments removed. Account and user-created inspirations preserved.`,
+      );
+      return;
+    }
     const summary = getDemoSeedSummary();
     console.log(
-      `Seeded WAKA demo data for ${user.email}: ${summary.inspirationCount} inspirations, ${summary.wowMomentCount} WOW moments, ${summary.linkedInspirationCount} linked inspiration references.`,
+      `Seeded WAKA demo data for ${result.user.email}: ${summary.inspirationCount} inspirations, ${summary.wowMomentCount} WOW moments, ${summary.linkedInspirationCount} linked inspiration references.`,
     );
   } finally {
     await sql.end({ timeout: 5 });

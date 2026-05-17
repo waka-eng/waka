@@ -136,6 +136,55 @@ describe("demo seed CLI helpers", () => {
     }
   });
 
+  it("parses cleanup-only mode as an existing-user, replace-style operation", () => {
+    const originalDb = process.env.DB_CONNECTION_URL;
+    try {
+      process.env.DB_CONNECTION_URL = "postgres://localhost/waka";
+
+      expect(parseArgs(["--email=demo@example.test", "--cleanup-demo-data"])).toMatchObject({
+        email: "demo@example.test",
+        cleanupDemoData: true,
+        createUser: false,
+        password: undefined,
+        replace: true,
+      });
+      expect(
+        parseArgs([
+          "--user-id=00000000-0000-0000-0000-000000000000",
+          "--cleanup-demo-data",
+        ]),
+      ).toMatchObject({ cleanupDemoData: true, replace: true });
+    } finally {
+      if (originalDb === undefined) delete process.env.DB_CONNECTION_URL;
+      else process.env.DB_CONNECTION_URL = originalDb;
+    }
+  });
+
+  it("rejects cleanup-only combinations that could create users or reseed data", () => {
+    const originalDb = process.env.DB_CONNECTION_URL;
+    try {
+      process.env.DB_CONNECTION_URL = "postgres://localhost/waka";
+
+      expect(() =>
+        parseArgs([
+          "--email=demo@example.test",
+          "--cleanup-demo-data",
+          "--create-user",
+          "--password=local-only-demo",
+        ]),
+      ).toThrow(/cleanup.*create-user/i);
+      expect(() =>
+        parseArgs(["--email=demo@example.test", "--cleanup-demo-data", "--password=local-only-demo"]),
+      ).toThrow(/cleanup.*password/i);
+      expect(() =>
+        parseArgs(["--email=demo@example.test", "--cleanup-demo-data", "--append-demo-data"]),
+      ).toThrow(/cleanup.*append/i);
+    } finally {
+      if (originalDb === undefined) delete process.env.DB_CONNECTION_URL;
+      else process.env.DB_CONNECTION_URL = originalDb;
+    }
+  });
+
   it("builds title-independent idempotency keys from version, user, trigger, kind, and sorted related ids", () => {
     const key = buildDemoWowMomentIdempotencyKey({
       userId: "user-1",
@@ -188,19 +237,37 @@ describe("demo seed CLI helpers", () => {
     }
   });
 
-  it("replaces all prior demo-seed rows and linked WOW moments for the selected user", async () => {
+  it("replaces selected-user demo rows and only demo-only WOW moments", async () => {
     const calls: Array<{ sql: string; values: unknown[] }> = [];
     const fakeSql = (async (strings: TemplateStringsArray, ...values: unknown[]) => {
       calls.push({ sql: strings.join("?"), values });
-      return [];
+      if (calls.length === 1) {
+        return [
+          {
+            deleted_demo_wow_moments: "1",
+            preserved_mixed_wow_moments: "1",
+            preserved_non_demo_wow_moments: "1",
+          },
+        ];
+      }
+      return [{ deleted_demo_inspirations: "2" }];
     }) as never;
     const userId = "00000000-0000-0000-0000-000000000000";
 
-    await replacePriorDemoRows(fakeSql, userId);
+    const summary = await replacePriorDemoRows(fakeSql, userId);
 
+    expect(summary).toEqual({
+      deletedDemoInspirations: 2,
+      deletedDemoWowMoments: 1,
+      preservedMixedWowMoments: 1,
+      preservedNonDemoWowMoments: 1,
+    });
     expect(calls).toHaveLength(2);
     expect(calls[0]!.sql).toContain("prior_demo_inspirations");
-    expect(calls[0]!.sql).toContain("inner join prior_demo_inspirations");
+    expect(calls[0]!.sql).toContain("demo_only_moments");
+    expect(calls[0]!.sql).toContain("mixed_demo_moments");
+    expect(calls[0]!.sql).toContain("left join prior_demo_inspirations");
+    expect(calls[0]!.sql).toContain("pdi.id is null");
     expect(calls[0]!.sql).toContain("delete from wow_moments");
     expect(calls[0]!.sql).not.toContain("wm.title = any");
     expect(calls[1]!.sql).toContain("delete from inspirations");
@@ -208,6 +275,101 @@ describe("demo seed CLI helpers", () => {
     expect(calls[1]!.sql).not.toContain("text = any");
     expect(calls[0]!.values).toContain(userId);
     expect(calls[1]!.values).toContain(DEMO_SEED_KIND);
+  });
+
+  it("preserves accounts, other tenants, non-demo inspirations, and mixed/user-created WOW moments in a faithful cleanup fixture", async () => {
+    const selectedUserId = "selected-user";
+    const otherUserId = "other-user";
+    const users = new Set([selectedUserId, otherUserId]);
+    const inspirations = new Map([
+      ["selected-demo-a", { userId: selectedUserId, kind: DEMO_SEED_KIND }],
+      ["selected-demo-b", { userId: selectedUserId, kind: DEMO_SEED_KIND }],
+      ["selected-note", { userId: selectedUserId, kind: "note" }],
+      ["selected-null", { userId: selectedUserId, kind: null }],
+      ["other-demo", { userId: otherUserId, kind: DEMO_SEED_KIND }],
+    ]);
+    const wowMoments = new Map([
+      ["demo-only-wow", { userId: selectedUserId }],
+      ["mixed-wow", { userId: selectedUserId }],
+      ["user-created-wow", { userId: selectedUserId }],
+      ["other-demo-wow", { userId: otherUserId }],
+    ]);
+    let links = [
+      { userId: selectedUserId, wowMomentId: "demo-only-wow", inspirationId: "selected-demo-a" },
+      { userId: selectedUserId, wowMomentId: "demo-only-wow", inspirationId: "selected-demo-b" },
+      { userId: selectedUserId, wowMomentId: "mixed-wow", inspirationId: "selected-demo-a" },
+      { userId: selectedUserId, wowMomentId: "mixed-wow", inspirationId: "selected-note" },
+      { userId: selectedUserId, wowMomentId: "user-created-wow", inspirationId: "selected-null" },
+      { userId: otherUserId, wowMomentId: "other-demo-wow", inspirationId: "other-demo" },
+    ];
+
+    const fakeSql = (async (strings: TemplateStringsArray) => {
+      const statement = strings.join("?");
+      if (/delete from wow_moments/.test(statement)) {
+        const selectedDemoIds = new Set(
+          Array.from(inspirations.entries())
+            .filter(([, row]) => row.userId === selectedUserId && row.kind === DEMO_SEED_KIND)
+            .map(([id]) => id),
+        );
+        const selectedMomentIds = Array.from(wowMoments.entries())
+          .filter(([, row]) => row.userId === selectedUserId)
+          .map(([id]) => id);
+        const demoLinked = selectedMomentIds.filter((momentId) =>
+          links.some(
+            (link) =>
+              link.userId === selectedUserId &&
+              link.wowMomentId === momentId &&
+              selectedDemoIds.has(link.inspirationId),
+          ),
+        );
+        const demoOnly = demoLinked.filter((momentId) =>
+          links
+            .filter((link) => link.userId === selectedUserId && link.wowMomentId === momentId)
+            .every((link) => selectedDemoIds.has(link.inspirationId)),
+        );
+        const mixed = demoLinked.filter((momentId) => !demoOnly.includes(momentId));
+        const nonDemo = selectedMomentIds.filter((momentId) => !demoLinked.includes(momentId));
+        for (const momentId of demoOnly) wowMoments.delete(momentId);
+        links = links.filter((link) => !demoOnly.includes(link.wowMomentId));
+        return [
+          {
+            deleted_demo_wow_moments: demoOnly.length,
+            preserved_mixed_wow_moments: mixed.length,
+            preserved_non_demo_wow_moments: nonDemo.length,
+          },
+        ];
+      }
+      if (/delete from inspirations/.test(statement)) {
+        const deletedIds = Array.from(inspirations.entries())
+          .filter(([, row]) => row.userId === selectedUserId && row.kind === DEMO_SEED_KIND)
+          .map(([id]) => id);
+        for (const id of deletedIds) inspirations.delete(id);
+        links = links.filter((link) => !deletedIds.includes(link.inspirationId));
+        return [{ deleted_demo_inspirations: deletedIds.length }];
+      }
+      throw new Error(`Unexpected SQL in test: ${statement}`);
+    }) as never;
+
+    const summary = await replacePriorDemoRows(fakeSql, selectedUserId);
+
+    expect(summary).toEqual({
+      deletedDemoInspirations: 2,
+      deletedDemoWowMoments: 1,
+      preservedMixedWowMoments: 1,
+      preservedNonDemoWowMoments: 1,
+    });
+    expect(users.has(selectedUserId)).toBe(true);
+    expect(inspirations.has("selected-demo-a")).toBe(false);
+    expect(inspirations.has("selected-demo-b")).toBe(false);
+    expect(inspirations.has("selected-note")).toBe(true);
+    expect(inspirations.has("selected-null")).toBe(true);
+    expect(inspirations.has("other-demo")).toBe(true);
+    expect(wowMoments.has("demo-only-wow")).toBe(false);
+    expect(wowMoments.has("mixed-wow")).toBe(true);
+    expect(wowMoments.has("user-created-wow")).toBe(true);
+    expect(wowMoments.has("other-demo-wow")).toBe(true);
+    expect(links.some((link) => link.wowMomentId === "mixed-wow" && link.inspirationId === "selected-demo-a")).toBe(false);
+    expect(links.some((link) => link.wowMomentId === "mixed-wow" && link.inspirationId === "selected-note")).toBe(true);
   });
 
   it("requires an explicit create-user flag and password before inserting an email user", () => {

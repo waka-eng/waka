@@ -24,7 +24,9 @@
     "visual-diff": "tsx tools/visual-diff/capture.ts",
     "visual-diff:install": "playwright install chromium",
     "e2e:smoke": "tsx tools/e2e/smoke.ts",
-    "e2e:smoke:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/smoke.ts"
+    "e2e:smoke:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/smoke.ts",
+    "e2e:organic-wow": "tsx tools/e2e/organic-wow.ts",
+    "e2e:organic-wow:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/organic-wow.ts"
   },
   "devDependencies": {
     "dotenv": "^16.4.5",

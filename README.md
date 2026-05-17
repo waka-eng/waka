@@ -211,7 +211,7 @@ failed jobs.
 
 ### 6. Optional local demo seed
 
-For quick UI review with a realistic 10-inspiration board plus persisted WOW
+For quick UI review with a realistic 30-inspiration board plus persisted WOW
 moments, seed a local/dev database for a specific demo user:
 
 ```bash
@@ -223,6 +223,10 @@ pnpm demo:seed -- --email=demo@example.test --create-user --password='local-only
 
 # Or seed an existing user id directly.
 pnpm demo:seed -- --user-id=<uuid>
+
+# Cleanup only: remove curated demo seed rows while preserving the account and
+# normal user-created inspirations/WOW moments.
+pnpm demo:seed -- --email=demo@example.test --cleanup-demo-data
 ```
 
 The command reads `DB_CONNECTION_URL` or `DATABASE_URL` from the current
@@ -232,13 +236,59 @@ as a deliberate override only for an explicitly disposable dev database. It does
 not log secrets, does not mock production code, and only writes real
 tenant-scoped rows for the selected user. By default each run replaces this
 script's prior demo rows for the user so the account keeps exactly one
-10-inspiration demo dataset plus its persisted WOW moments; pass
+30-inspiration demo dataset plus its persisted WOW moments; pass
 `--append-demo-data` only when you intentionally want duplicate demo datasets for
 stress testing. If the `--email` user does not exist, the command fails unless
 you pass `--create-user --password=...`; the password is stored as a bcrypt hash
 via the existing API auth helper so the demo account can log in.
 
-### 7. End-to-end browser flow (manual smoke)
+Cleanup-only mode never creates users and never reseeds data. It deletes only
+`kind = "demo-seed"` inspirations for the selected user plus WOW moments whose
+linked inspirations are all selected-user demo seed rows. Mixed WOW moments that
+include any non-demo/user-created inspiration survive; deleting demo inspirations
+only removes their join rows through the database's tenant-scoped foreign keys.
+
+Safety warning: demo seed and cleanup are local/dev operations. Non-local
+database hosts are refused by default. `--allow-remote` is only for an explicitly
+disposable remote dev database; never point seed or cleanup at production,
+staging, or any database containing real user data.
+
+### 7. Organic WOW end-to-end validation
+
+Use this after creating a login-capable local demo account when you want to prove
+WAKA can generate WOW moments from organic captured inspirations without curated
+demo rows.
+
+Against an already-running local/dev stack:
+
+```bash
+WAKA_ORGANIC_EMAIL=demo@example.test WAKA_ORGANIC_PASSWORD='local-only-demo-password' WAKA_ORGANIC_CLEANUP_DEMO_DATA=1 pnpm e2e:organic-wow
+```
+
+Or let the boot helper start the stack first:
+
+```bash
+WAKA_ORGANIC_EMAIL=demo@example.test WAKA_ORGANIC_PASSWORD='local-only-demo-password' WAKA_ORGANIC_CLEANUP_DEMO_DATA=1 pnpm e2e:organic-wow:boot
+```
+
+The script signs in through `/login`, optionally runs the same guarded demo-data
+cleanup for the existing account, captures multiple related organic notes with a
+unique run marker, waits for classification/background WOW status, and passes
+only when a generated/existing WOW moment links back to at least two captured
+organic rows (by id or run-marker text). It does not create or delete users and
+it avoids printing passwords, tokens, DB URLs, provider prompts, or full payloads.
+
+If `WAKA_ORGANIC_CLEANUP_DEMO_DATA=1` is set, `DB_CONNECTION_URL` or
+`DATABASE_URL` must point at a local/dev database. A remote disposable dev DB can
+be used only by deliberately setting `WAKA_ORGANIC_ALLOW_REMOTE=1`; never use
+that override for production, staging, or real-user data.
+
+This organic smoke proves that seeded demo data can be removed, the account
+remains login-capable, user-created inspirations remain, and the normal
+capture/classification/background WOW pipeline can produce a WOW moment without
+curated demo seed rows.
+
+### 8. End-to-end browser flow (manual smoke)
 
 Open the web URL for the stack you started: <http://localhost:5173> for Option A
 or <http://localhost:3010> for Option B. The app should redirect you to
@@ -270,7 +320,7 @@ or <http://localhost:3010> for Option B. The app should redirect you to
 8. **Tenant isolation check** — sign up as a *second* user in an incognito
    window. The first user's inspirations must NOT appear.
 
-### 8. Run the test suite
+### 9. Run the test suite
 
 ```bash
 pnpm test:dev-local-script       # syntax-check the tracked Option B runner
