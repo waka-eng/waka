@@ -36,7 +36,7 @@ import {
   createSessionRow,
   revokeSessionByToken,
 } from "../lib/session.js";
-import { googleAuthRoutes } from "./auth-google.js";
+import { googleAuthRoutes, handleGoogleCallback } from "./auth-google.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -110,11 +110,12 @@ export type LoginInput = z.infer<typeof loginSchema>;
 
 export const authRoutes = new Hono<AuthEnv>();
 
-// Google OAuth (initiation + callback) is mounted as a sub-router at
-// /api/auth/google so the parent prefix mounting in src/index.ts (`/api/auth`)
-// covers both password and OAuth flows. Lives in its own file to keep
-// the password-auth diff small and reviewable.
+// Google OAuth initiation remains at /api/auth/google/login for the SPA, but
+// the callback is also exposed at the historical NextAuth/Auth.js path
+// /api/auth/callback/google so it matches the redirect URI that the shared
+// Google OAuth client already has registered from kti-app.
 authRoutes.route("/google", googleAuthRoutes);
+authRoutes.get("/callback/google", handleGoogleCallback);
 
 /**
  * POST /api/auth/signup

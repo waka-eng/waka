@@ -187,8 +187,12 @@ export default $config({
      * was fine, the role just had no permission.
      *
      */
+    const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
+    const publicWebUrl = isDevelopmentDomain ? "https://dev.waka.im" : undefined;
+    const publicApiUrl = isDevelopmentDomain ? "https://dev.waka.im" : undefined;
+
     const api = new sst.aws.Function("Api", {
-      handler: "packages/api/src/index.handler",
+      handler: "packages/api/src/lambda.handler",
       url: true,
       link: [
         googleClientId,
@@ -219,6 +223,8 @@ export default $config({
         GEMINI_API_KEY: geminiApiKey.value,
         ATTACHMENTS_BUCKET: attachmentsBucket.name,
         ATTACHMENTS_REGION: AWS_REGION,
+        ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
+        ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
       },
     });
 
@@ -228,6 +234,19 @@ export default $config({
 
     const web = new sst.aws.StaticSite("Web", {
       path: "packages/web",
+      ...(isDevelopmentDomain
+        ? {
+            domain: {
+              name: "dev.waka.im",
+              // Route53 already has a live dev.waka.im record from the legacy
+              // CloudFront distribution. Let SST attach the CloudFront alias
+              // using the existing ACM cert, then we manually UPSERT Route53
+              // after deployment to avoid unmanaged-record create conflicts.
+              dns: false,
+              cert: "arn:aws:acm:us-east-1:182498323408:certificate/742541cb-5e84-4d88-9e5b-d2695f92df12",
+            },
+          }
+        : {}),
       build: {
         command: "pnpm build",
         output: "dist",
@@ -236,7 +255,7 @@ export default $config({
         // Vite inlines anything prefixed VITE_ at build time. We expose only
         // the API URL — never any secret — so the SPA can talk to the
         // Function URL without hard-coding a value.
-        VITE_API_URL: api.url,
+        VITE_API_URL: isDevelopmentDomain ? "" : api.url,
       },
       dev: {
         command: "pnpm --filter @waka/web dev",

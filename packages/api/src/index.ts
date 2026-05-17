@@ -8,6 +8,7 @@
  */
 
 import { Hono } from "hono";
+import { handle } from "hono/aws-lambda";
 
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
@@ -49,5 +50,7 @@ app.route("/api/wow-moments", wowMomentsRoutes);
 
 // Tenant-scoped development/status view for the visible WOW generation pipeline.
 app.route("/api/wow-status", wowStatusRoutes);
+
+export const handler = handle(app);
 
 export default app;

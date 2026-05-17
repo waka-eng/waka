@@ -36,7 +36,7 @@
  */
 
 import { eq } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
 import { users } from "../db/index.js";
@@ -242,9 +242,11 @@ googleAuthRoutes.get("/login", async (c) => {
   setCookie(c, STATE_COOKIE_NAME, state, tempCookieOptions());
   setCookie(c, PKCE_COOKIE_NAME, codeVerifier, tempCookieOptions());
 
+  const redirectUri = getGoogleRedirectUri();
+
   const params = new URLSearchParams({
     client_id: getGoogleClientId(),
-    redirect_uri: getGoogleRedirectUri(),
+    redirect_uri: redirectUri,
     response_type: "code",
     scope: OAUTH_SCOPES.join(" "),
     state,
@@ -273,7 +275,7 @@ googleAuthRoutes.get("/login", async (c) => {
  * `?error=...` query param rather than rendering a server error page so
  * the SPA can surface a friendly message in its own UI shell.
  */
-googleAuthRoutes.get("/callback", async (c) => {
+export async function handleGoogleCallback(c: Context): Promise<Response> {
   const url = new URL(c.req.url);
   const code = url.searchParams.get("code");
   const stateFromUrl = url.searchParams.get("state");
@@ -557,4 +559,6 @@ googleAuthRoutes.get("/callback", async (c) => {
   void getOAuthRedirectOrigin;
 
   return c.redirect(new URL(POST_LOGIN_PATH, webOrigin).toString(), 302);
-});
+}
+
+googleAuthRoutes.get("/callback", handleGoogleCallback);

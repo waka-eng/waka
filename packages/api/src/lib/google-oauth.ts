@@ -107,11 +107,10 @@ export function getSessionSecret(): string {
 }
 
 /**
- * Origin the OAuth callback should redirect to. Used to build
- * `${origin}/api/auth/google/callback` for the `redirect_uri` param. We accept
- * an explicit override (PUBLIC_API_URL) for cases where the API is
- * fronted by a custom domain; otherwise we fall back to the Function URL
- * SST exposes via VITE_API_URL or the local dev origin.
+ * Origin the OAuth callback should redirect to. Used to build the
+ * `redirect_uri` param. We accept an explicit override (PUBLIC_API_URL) for
+ * cases where the API is fronted by a custom domain; otherwise we fall back to
+ * the Function URL SST exposes via VITE_API_URL or the local dev origin.
  */
 export function getOAuthRedirectOrigin(): string {
   const explicit =
@@ -124,10 +123,14 @@ export function getOAuthRedirectOrigin(): string {
 }
 
 /**
- * Build the canonical Google OAuth callback URL. Whatever is returned here
- * MUST be added verbatim to "Authorized redirect URIs" in Google Cloud
- * Console — see docs/google-oauth-setup.md.
+ * Build the canonical Google OAuth callback URL. This intentionally follows
+ * the historical NextAuth/Auth.js Google provider callback shape used by
+ * kti-app (`/api/auth/callback/google`) because this OAuth client already has
+ * that URI registered in Google Cloud Console.
+ *
+ * Whatever is returned here MUST be added verbatim to "Authorized redirect
+ * URIs" in Google Cloud Console — see docs/google-oauth-setup.md.
  */
 export function getGoogleRedirectUri(): string {
-  return `${getOAuthRedirectOrigin()}/api/auth/google/callback`;
+  return `${getOAuthRedirectOrigin()}/api/auth/callback/google`;
 }
