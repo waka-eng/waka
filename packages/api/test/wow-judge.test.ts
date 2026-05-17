@@ -77,6 +77,33 @@ function minimalWowJudgeInput(triggerId = "00000000-0000-4000-8000-000000000001"
   };
 }
 
+function wowJudgeInputWithCandidate(
+  triggerId = "00000000-0000-4000-8000-000000000061",
+  candidateId = "00000000-0000-4000-8000-000000000062",
+) {
+  return {
+    trigger: {
+      id: triggerId,
+      text: "Libraries keep neighborhood memories active.",
+      kind: "note",
+      category: null,
+      cluster: "memory",
+      createdAt: new Date("2024-01-01T00:00:00Z"),
+    },
+    candidates: [
+      {
+        id: candidateId,
+        text: "Seed banks preserve ecological memory for communities.",
+        kind: "note",
+        category: null,
+        cluster: "memory",
+        createdAt: new Date("2024-01-02T00:00:00Z"),
+        scores: { runtimeCandidateScore: 0.88 },
+      },
+    ],
+  };
+}
+
 function geminiTextResponse(text: string, finishReason = "STOP"): Response {
   return new Response(
     JSON.stringify({
@@ -276,6 +303,202 @@ describe("GeminiWowJudgeClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("normalizes malformed true judgments with the original allowed related ids", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000011";
+    const candidateId = "00000000-0000-4000-8000-000000000012";
+    const tooLongWhy = "x".repeat(220);
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Shared Memory",
+        why: tooLongWhy,
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    const result = await client.judgeWowMoment({
+      trigger: {
+        id: triggerId,
+        text: "Libraries keep neighborhood memories active.",
+        kind: "note",
+        category: null,
+        cluster: "memory",
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      candidates: [
+        {
+          id: candidateId,
+          text: "Seed banks preserve ecological memory for communities.",
+          kind: "note",
+          category: null,
+          cluster: "memory",
+          createdAt: new Date("2024-01-02T00:00:00Z"),
+          scores: { runtimeCandidateScore: 0.88 },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      isWowMoment: true,
+      kind: "bridge",
+      title: "Shared Memory",
+      relatedInspirationIds: [triggerId, candidateId],
+    });
+    expect(result.isWowMoment && result.why.length).toBeLessThanOrEqual(180);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes a parsed true judgment with long why and missing related ids from allowed input", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000031";
+    const candidateId = "00000000-0000-4000-8000-000000000032";
+    const secondCandidateId = "00000000-0000-4000-8000-000000000033";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Shared Memory",
+        why: `Both notes connect civic spaces with living memory systems. ${"x".repeat(220)}`,
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    const result = await client.judgeWowMoment({
+      trigger: {
+        id: triggerId,
+        text: "Libraries keep neighborhood memories active.",
+        kind: "note",
+        category: null,
+        cluster: "memory",
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      candidates: [
+        {
+          id: candidateId,
+          text: "Seed banks preserve ecological memory for communities.",
+          kind: "note",
+          category: null,
+          cluster: "memory",
+          createdAt: new Date("2024-01-02T00:00:00Z"),
+          scores: { runtimeCandidateScore: 0.88 },
+        },
+        {
+          id: secondCandidateId,
+          text: "Archives keep local stories alive.",
+          kind: "note",
+          category: null,
+          cluster: "memory",
+          createdAt: new Date("2024-01-03T00:00:00Z"),
+          scores: { runtimeCandidateScore: 0.82 },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      isWowMoment: true,
+      kind: "bridge",
+      title: "Shared Memory",
+      relatedInspirationIds: [triggerId, candidateId, secondCandidateId],
+    });
+    expect(result.isWowMoment && result.why.length).toBeLessThanOrEqual(180);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects unsafe explicit ids from an initially parsed true judgment", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000041";
+    const candidateId = "00000000-0000-4000-8000-000000000042";
+    const unsafeId = "00000000-0000-4000-8000-000000000099";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Shared Memory",
+        why: "Both notes connect civic spaces with living memory systems.",
+        relatedInspirationIds: [triggerId, unsafeId],
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: triggerId,
+          text: "Libraries keep neighborhood memories active.",
+          kind: "note",
+          category: null,
+          cluster: "memory",
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [
+          {
+            id: candidateId,
+            text: "Seed banks preserve ecological memory for communities.",
+            kind: "note",
+            category: null,
+            cluster: "memory",
+            createdAt: new Date("2024-01-02T00:00:00Z"),
+            scores: { runtimeCandidateScore: 0.88 },
+          },
+        ],
+      }),
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Gemini referenced inspiration ids outside retrieved candidates.",
+      parseFailureStage: "unsafe_related_ids",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects unsafe ids returned by repaired true judgments", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000021";
+    const candidateId = "00000000-0000-4000-8000-000000000022";
+    const unsafeId = "00000000-0000-4000-8000-000000000099";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse("Malformed prior true judgment."))
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          isWowMoment: true,
+          kind: "bridge",
+          title: "Shared Memory",
+          why: "Both notes connect civic spaces with living memory systems.",
+          relatedInspirationIds: [unsafeId],
+        }),
+      );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment({
+        trigger: {
+          id: triggerId,
+          text: "Libraries keep neighborhood memories active.",
+          kind: "note",
+          category: null,
+          cluster: "memory",
+          createdAt: new Date("2024-01-01T00:00:00Z"),
+        },
+        candidates: [
+          {
+            id: candidateId,
+            text: "Seed banks preserve ecological memory for communities.",
+            kind: "note",
+            category: null,
+            cluster: "memory",
+            createdAt: new Date("2024-01-02T00:00:00Z"),
+            scores: { runtimeCandidateScore: 0.88 },
+          },
+        ],
+      }),
+    ).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Gemini referenced inspiration ids outside retrieved candidates.",
+      parseFailureStage: "unsafe_related_ids",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("returns invalid_judge_json with a sanitized raw preview when repair fails", async () => {
     const rawText =
       "```json\n{not-json token=super-secret-token-value Aizaabcdefghijklmnopqrstuvwxyz}\n```";
@@ -312,6 +535,61 @@ describe("GeminiWowJudgeClient", () => {
       finishReason: "MAX_TOKENS",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+
+  it("finalizes simple MAX_TOKENS true JSON prefixes with allowed ids", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000061";
+    const candidateId = "00000000-0000-4000-8000-000000000062";
+    const truncatedTruePrefix =
+      '{"isWowMoment":true,"kind":"bridge","title":"Shared Memory","why":"Both notes connect civic spaces with living memory systems."';
+    const fetchMock = vi.fn().mockResolvedValue(geminiTextResponse(truncatedTruePrefix, "MAX_TOKENS"));
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId)),
+    ).resolves.toEqual({
+      isWowMoment: true,
+      kind: "bridge",
+      title: "Shared Memory",
+      why: "Both notes connect civic spaces with living memory systems.",
+      relatedInspirationIds: [triggerId, candidateId],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns safe false when truncated true MAX_TOKENS retry is still bad", async () => {
+    const truncatedTruePrefix = '{"isWowMoment":true,"kind":"bridge"';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse(truncatedTruePrefix, "MAX_TOKENS"))
+      .mockResolvedValueOnce(geminiTextResponse("still not json", "MAX_TOKENS"));
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate())).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary: "Could not safely finalize truncated WOW judge output.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry valid false judgments", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: false,
+        reason: "weak_relationship",
+        debugSummary: "The candidate is adjacent but does not add a concrete pattern.",
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate())).resolves.toEqual({
+      isWowMoment: false,
+      reason: "weak_relationship",
+      debugSummary: "The candidate is adjacent but does not add a concrete pattern.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("returns false for malformed Gemini WOW judgment schema", async () => {
@@ -441,7 +719,7 @@ describe("GeminiWowJudgeClient", () => {
     });
   });
 
-  it("uses Gemini 2.5 Flash, disables thinking, main 1024 tokens, and repair 256 tokens", () => {
+  it("uses Gemini 2.5 Flash, disables thinking, main 1024 tokens, and repair 512 tokens", () => {
     expect(buildWowGenerateContentUrl()).toContain("gemini-2.5-flash");
     const mainRequest = buildWowJudgmentRequest(minimalWowJudgeInput());
     const repairRequest = buildWowRepairJudgmentRequest("malformed");
@@ -453,7 +731,7 @@ describe("GeminiWowJudgeClient", () => {
     });
     expect(repairRequest.generationConfig).toMatchObject({
       temperature: 0,
-      maxOutputTokens: 256,
+      maxOutputTokens: 512,
       thinkingConfig: { thinkingBudget: 0 },
     });
   });
@@ -465,8 +743,10 @@ describe("GeminiWowJudgeClient", () => {
     expect(userPromptText).toBeTypeOf("string");
     const userPrompt = JSON.parse(userPromptText ?? "{}");
 
-    expect(requestText).toContain("repair structure only");
-    expect(requestText).toContain("Do not re-judge");
+    expect(requestText).toContain("Repair structure only");
+    expect(requestText).toContain("Do not create a new judgment");
+    expect(requestText).toContain("allowedRelatedInspirationIds");
+    expect(requestText).toContain("originalInput");
     expect(requestText).toContain("Could not safely repair prior WOW judge output.");
     expect(requestText).toContain("Never include why on false");
     expect(requestText).toContain("false debugSummary <= 120 chars");
