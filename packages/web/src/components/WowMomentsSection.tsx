@@ -5,6 +5,12 @@ import type { ApiWowMoment } from "../lib/api";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
 
+function compareBestRecentWowMoments(a: ApiWowMoment, b: ApiWowMoment): number {
+  const scoreDelta = b.wowScore - a.wowScore;
+  if (scoreDelta !== 0) return scoreDelta;
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+}
+
 interface WowMomentsSectionProps {
   moments: ApiWowMoment[];
   loading: boolean;
@@ -20,8 +26,10 @@ export function WowMomentsSection({
   loading,
   error,
 }: WowMomentsSectionProps): JSX.Element {
-  const visibleMoments = moments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
+  const bestRecentMoments = [...moments].sort(compareBestRecentWowMoments);
+  const visibleMoments = bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
   const [selectedMoment, setSelectedMoment] = useState<ApiWowMoment | null>(null);
+  const [allMomentsOpen, setAllMomentsOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedMoment) return undefined;
@@ -35,6 +43,19 @@ export function WowMomentsSection({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [selectedMoment]);
+
+  useEffect(() => {
+    if (!allMomentsOpen) return undefined;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAllMomentsOpen(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [allMomentsOpen]);
 
   useEffect(() => {
     if (!selectedMoment) return;
@@ -59,6 +80,20 @@ export function WowMomentsSection({
       <div className="wow-moments-heading">
         <h2 id="wow-moments-title">WOW moments</h2>
       </div>
+      {!error && !loading && moments.length > 0 ? (
+        <div className="wow-moments-actions">
+          <p>{visibleMoments.length} best-recent WOW moments shown.</p>
+          <button
+            aria-controls="all-wow-moments-panel"
+            aria-expanded={allMomentsOpen}
+            className="wow-moments-inspect-button"
+            onClick={() => setAllMomentsOpen(true)}
+            type="button"
+          >
+            Inspect all WOW moments ({bestRecentMoments.length})
+          </button>
+        </div>
+      ) : null}
       {error ? (
         <div className="wow-moments-state" role="status">
           <strong>Couldn’t load WOW moments.</strong>
@@ -164,6 +199,55 @@ export function WowMomentsSection({
                 </ol>
               </section>
             ) : null}
+          </aside>
+        </div>
+      ) : null}
+
+      {allMomentsOpen ? (
+        <div className="wow-moment-detail-backdrop" role="presentation">
+          <aside
+            aria-labelledby="all-wow-moments-title"
+            aria-modal="true"
+            className="wow-moment-detail-panel wow-moments-all-panel"
+            id="all-wow-moments-panel"
+            role="dialog"
+          >
+            <div className="wow-moment-detail-header">
+              <p className="wow-moment-detail-kicker">All generated WOW moments</p>
+              <button
+                className="wow-moment-detail-close"
+                onClick={() => setAllMomentsOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <h3 id="all-wow-moments-title">Available WOW moments</h3>
+            <ol className="wow-moments-all-list">
+              {bestRecentMoments.map((moment) => (
+                <li className="wow-moments-all-item" key={`all-${moment.id}`}>
+                  <div className="wow-moments-all-item-header">
+                    <strong>{moment.title}</strong>
+                    <span>{formatDevWowScore(moment.wowScore)}</span>
+                  </div>
+                  <p>
+                    {moment.relatedInspirations.length} related source
+                    {moment.relatedInspirations.length === 1 ? "" : "s"}
+                  </p>
+                  {moment.why ? <blockquote>{moment.why}</blockquote> : null}
+                  {moment.relatedInspirations.length > 0 ? (
+                    <ol className="wow-moments-all-sources">
+                      {moment.relatedInspirations.map((related) => (
+                        <li key={`all-${moment.id}-${related.inspirationId}`}>
+                          <span>{related.role}</span>
+                          <blockquote>{related.text}</blockquote>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
           </aside>
         </div>
       ) : null}

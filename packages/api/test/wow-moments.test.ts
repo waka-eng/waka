@@ -118,7 +118,7 @@ describe("GET /api/wow-moments — list contract", () => {
     expect(res.body).toEqual({ wowMoments: [] });
   });
 
-  it("orders newest WOW moments first and caps the response at 20", async () => {
+  it("orders best-recent WOW moments first and defaults the response cap to 20", async () => {
     const db = getDb();
     const alice = await createUserFixture(db);
     cleanup.trackUser(alice.user.id);
@@ -127,7 +127,7 @@ describe("GET /api/wow-moments — list contract", () => {
       await insertWowMomentForUser(alice.user.id, {
         title: `WOW ${index.toString().padStart(2, "0")}`,
         createdAt: new Date(Date.UTC(2026, 4, 1, 12, index, 0)),
-        wowScore: index,
+        wowScore: 100 - index,
         idempotencyKey: `test:wow-moments:limit:${alice.user.id}:${index}`,
       });
     }
@@ -140,9 +140,48 @@ describe("GET /api/wow-moments — list contract", () => {
     expect(res.body.wowMoments).toHaveLength(20);
     expect(res.body.wowMoments.map((moment) => moment.title)).toEqual(
       Array.from({ length: 20 }, (_, offset) =>
-        `WOW ${(22 - offset).toString().padStart(2, "0")}`,
+        `WOW ${offset.toString().padStart(2, "0")}`,
       ),
     );
+  });
+
+  it("accepts a bounded query limit for larger inspect lists", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+
+    for (let index = 0; index < 23; index += 1) {
+      await insertWowMomentForUser(alice.user.id, {
+        title: `Inspect WOW ${index.toString().padStart(2, "0")}`,
+        createdAt: new Date(Date.UTC(2026, 4, 2, 12, index, 0)),
+        wowScore: 100 - index,
+        idempotencyKey: `test:wow-moments:inspect-limit:${alice.user.id}:${index}`,
+      });
+    }
+
+    const res = await authedClient(alice).get<ListWowMomentsResponse>(
+      "/api/wow-moments?limit=23",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.wowMoments).toHaveLength(23);
+    expect(res.body.wowMoments.map((moment) => moment.title)).toEqual(
+      Array.from({ length: 23 }, (_, offset) =>
+        `Inspect WOW ${offset.toString().padStart(2, "0")}`,
+      ),
+    );
+  });
+
+  it("rejects unsafe query limits", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+
+    const tooLarge = await authedClient(alice).get("/api/wow-moments?limit=101");
+    const malformed = await authedClient(alice).get("/api/wow-moments?limit=all");
+
+    expect(tooLarge.status).toBe(400);
+    expect(malformed.status).toBe(400);
   });
 });
 

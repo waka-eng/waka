@@ -568,6 +568,10 @@ export interface ListWowMomentsResponse {
   wowMoments: ApiWowMoment[];
 }
 
+export interface FetchWowMomentsOptions {
+  limit?: number;
+}
+
 export type BackgroundJobType = "process_inspiration";
 export type BackgroundJobStatus = "pending" | "running" | "succeeded" | "failed";
 
@@ -652,10 +656,16 @@ export async function fetchWowStatus(limit = 12): Promise<ApiWowStatusRow[]> {
   return Array.isArray(body.rows) ? body.rows : [];
 }
 
-export async function fetchWowMoments(): Promise<ApiWowMoment[]> {
+export async function fetchWowMoments(
+  options: FetchWowMomentsOptions = {},
+): Promise<ApiWowMoment[]> {
+  const params = new URLSearchParams();
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+
   let res: Response;
   try {
-    res = await fetch(apiPath("/wow-moments"), {
+    res = await fetch(apiPath(`/wow-moments${query ? `?${query}` : ""}`), {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },

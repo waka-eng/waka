@@ -29,11 +29,33 @@ import {
   MAX_WOW_GENERATION_LIMIT,
 } from "../lib/wow-generation-config.js";
 import {
+  MAX_WOW_MOMENT_SOURCE_LINKS,
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
 } from "../lib/wow-judge.js";
 
-const MAX_WOW_MOMENTS = 20;
+const DEFAULT_WOW_MOMENTS_LIMIT = 20;
+const MAX_WOW_MOMENTS_LIMIT = 100;
+
+const listWowMomentsQuerySchema = z
+  .object({
+    limit: z
+      .string()
+      .regex(/^\d+$/, "limit must be an integer")
+      .transform((value) => Number.parseInt(value, 10))
+      .pipe(
+        z
+          .number()
+          .int("limit must be an integer")
+          .min(1, "limit must be at least 1")
+          .max(
+            MAX_WOW_MOMENTS_LIMIT,
+            `limit must be <= ${MAX_WOW_MOMENTS_LIMIT}`,
+          ),
+      )
+      .optional(),
+  })
+  .strict();
 
 const generateWowMomentRequestSchema = z
   .object({
@@ -75,8 +97,20 @@ export function createWowMomentsRoutes(
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
   routes.get("/", async (c) => {
+    const parsedQuery = listWowMomentsQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        {
+          error: "Invalid WOW moments query",
+          details: parsedQuery.error.flatten().fieldErrors,
+        },
+        400,
+      );
+    }
+
     const user = c.get("user");
     const db = getDatabase();
+    const limit = parsedQuery.data.limit ?? DEFAULT_WOW_MOMENTS_LIMIT;
 
     const moments = await db
       .select({
@@ -92,8 +126,10 @@ export function createWowMomentsRoutes(
       })
       .from(wowMoments)
       .where(eq(wowMoments.userId, user.id))
-      .orderBy(desc(wowMoments.createdAt), desc(wowMoments.wowScore))
-      .limit(MAX_WOW_MOMENTS);
+      // Score first, then recency as a deterministic tie-breaker. Main feed
+      // consumers still render only their own smaller best-recent surface.
+      .orderBy(desc(wowMoments.wowScore), desc(wowMoments.createdAt))
+      .limit(limit);
 
     if (moments.length === 0) {
       return c.json({ wowMoments: [] });
@@ -136,15 +172,17 @@ export function createWowMomentsRoutes(
     return c.json({
       wowMoments: moments.map((moment) => ({
         ...moment,
-        relatedInspirations: (relatedByMomentId.get(moment.id) ?? []).map((row) => ({
-          inspirationId: row.inspirationId,
-          role: row.role,
-          reason: row.reason,
-          text: row.inspirationText,
-          kind: row.inspirationKind,
-          createdAt: row.inspirationCreatedAt,
-          wowScore: row.inspirationWowScore,
-        })),
+        relatedInspirations: (relatedByMomentId.get(moment.id) ?? [])
+          .slice(0, MAX_WOW_MOMENT_SOURCE_LINKS)
+          .map((row) => ({
+            inspirationId: row.inspirationId,
+            role: row.role,
+            reason: row.reason,
+            text: row.inspirationText,
+            kind: row.inspirationKind,
+            createdAt: row.inspirationCreatedAt,
+            wowScore: row.inspirationWowScore,
+          })),
       })),
     });
   });

@@ -61,6 +61,8 @@ import {
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 
+const WOW_MOMENTS_INSPECT_LIMIT = 100;
+
 /**
  * Internal state shape for the inspirations list. We track three bits the
  * canonical `ApiInspiration` doesn't carry: whether the row is still in
@@ -1036,7 +1038,7 @@ export function HomePage(): JSX.Element {
       if (options?.surfaceErrors ?? true) setWowMomentsError(null);
 
       try {
-        const rows = await fetchWowMoments();
+        const rows = await fetchWowMoments({ limit: WOW_MOMENTS_INSPECT_LIMIT });
         if (wowMomentsRequestIdRef.current !== requestId) return null;
         // Match the inspirations load's defence-in-depth tenant guard: the
         // route is scoped by session, but the page still refuses to render any

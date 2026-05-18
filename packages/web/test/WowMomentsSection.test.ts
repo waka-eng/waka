@@ -186,8 +186,8 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).not.toContain("wow-moments-count");
-    expect(html).not.toContain("WOW moments shown");
+    expect(html).toContain("1 best-recent WOW moments shown.");
+    expect(html).toContain("Inspect all WOW moments (1)");
     expect(html).not.toContain(">1</span>");
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
@@ -318,7 +318,7 @@ describe("WowMomentsSection", () => {
     expect(container.querySelector("[role='dialog']")).toBeNull();
   });
 
-  it("caps populated WOW moment cards at nine and counts only visible related evidence", () => {
+  it("caps populated WOW moment cards at nine while showing the best-recent count and inspect action", () => {
     const manyMoments = Array.from({ length: 11 }, (_, index) => ({
       ...sampleMoment,
       id: `moment-${index + 1}`,
@@ -338,9 +338,8 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).not.toContain("wow-moments-count");
-    expect(html).not.toContain("WOW moments shown");
-    expect(html).not.toContain("9 of 11");
+    expect(html).toContain("9 best-recent WOW moments shown.");
+    expect(html).toContain("Inspect all WOW moments (11)");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
     expect(html.match(/class=\"wow-moment-card wow-moment-card--interactive\"/g)).toHaveLength(9);
     expect(html).toContain("WOW card 9");
@@ -349,5 +348,50 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("primary");
     expect(html).not.toContain("WOW card 10");
     expect(html).not.toContain("Related inspiration evidence 10");
+  });
+
+  it("opens the all-moments sidebar only after pressing inspect and lists available moments with source details", () => {
+    const moments = Array.from({ length: 10 }, (_, index) => ({
+      ...sampleMoment,
+      id: `moment-${index + 1}`,
+      title: `WOW card ${index + 1}`,
+      wowScore: 90 - index,
+      why: `Why WOW card ${index + 1} matters.`,
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: `inspiration-${index + 1}`,
+          role: index === 9 ? "contrast" : "primary",
+          text: `Related inspiration evidence ${index + 1}`,
+        },
+      ],
+    }));
+    const container = renderInteractiveSection({ moments, loading: false, error: null });
+
+    expect(container.textContent).toContain("9 best-recent WOW moments shown.");
+    expect(container.textContent).toContain("Inspect all WOW moments (10)");
+    expect(container.textContent).toContain("WOW card 9");
+    expect(container.textContent).not.toContain("Available WOW moments");
+    expect(container.textContent).not.toContain("WOW card 10");
+    expect(container.textContent).not.toContain("Related inspiration evidence 10");
+
+    const inspectButton = container.querySelector<HTMLButtonElement>(".wow-moments-inspect-button");
+    expect(inspectButton).not.toBeNull();
+    expect(inspectButton?.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => {
+      inspectButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialog = container.querySelector<HTMLElement>("#all-wow-moments-panel[role='dialog']");
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain("Available WOW moments");
+    expect(dialog?.textContent).toContain("WOW card 10");
+    expect(dialog?.textContent).toContain("DEV WOW score 81");
+    expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
+    expect(dialog?.textContent).toContain("1 related source");
+    expect(dialog?.textContent).toContain("contrast");
+    expect(dialog?.textContent).toContain("Related inspiration evidence 10");
+    expect(inspectButton?.getAttribute("aria-expanded")).toBe("true");
   });
 });

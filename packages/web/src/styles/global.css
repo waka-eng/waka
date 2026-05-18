@@ -3454,6 +3454,44 @@ body.reflect-bg {
   margin-bottom: var(--space-3);
 }
 
+.wow-moments-count {
+  color: rgba(248, 250, 252, 0.58);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.wow-moments-actions {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin: 0 auto 18px;
+  max-width: 1180px;
+}
+
+.wow-moments-actions p {
+  color: rgba(248, 250, 252, 0.62);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.wow-moments-inspect-button {
+  background: rgba(125, 249, 255, 0.08);
+  border: 1px solid rgba(125, 249, 255, 0.34);
+  border-radius: 999px;
+  color: #c7fbff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  padding: 8px 14px;
+}
+
+.wow-moments-inspect-button:hover,
+.wow-moments-inspect-button:focus-visible {
+  background: rgba(125, 249, 255, 0.16);
+  outline: none;
+}
+
 .wow-moments-eyebrow,
 .wow-moments-count {
   font-family: var(--font-mono);
@@ -3828,8 +3866,78 @@ body.reflect-bg {
   overflow-wrap: anywhere;
 }
 
+.wow-moments-all-panel {
+  max-width: 860px;
+}
+
+.wow-moments-all-list,
+.wow-moments-all-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wow-moments-all-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.wow-moments-all-item {
+  border: var(--border-hairline);
+  border-radius: 18px;
+  background: rgba(255, 253, 247, 0.78);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.wow-moments-all-item-header {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.wow-moments-all-item-header strong {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.wow-moments-all-item-header span,
+.wow-moments-all-sources span,
+.wow-moments-all-item p {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.wow-moments-all-item blockquote {
+  border-left: 2px solid rgba(15, 15, 14, 0.18);
+  color: var(--ink);
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding-left: var(--space-3);
+}
+
+.wow-moments-all-sources {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wow-moments-all-sources li {
+  display: grid;
+  gap: 4px;
+}
+
 @media (max-width: 640px) {
   .wow-moments-heading,
+  .wow-moments-actions,
   .inspiration-discovery-heading,
   .internal-wow-status-heading {
     align-items: start;

@@ -892,6 +892,8 @@ export interface PersistWowMomentForInspirationParams {
   limit?: number;
 }
 
+export const MAX_WOW_MOMENT_SOURCE_LINKS = 4;
+
 function toPromptInput(
   result: Awaited<ReturnType<typeof findWowMomentCandidates>>,
 ): WowJudgeInput | null {
@@ -961,7 +963,10 @@ function uniqueRelatedIdsWithTriggerFirst(
   triggerInspirationId: string,
   relatedInspirationIds: string[],
 ): string[] {
-  return Array.from(new Set([triggerInspirationId, ...relatedInspirationIds]));
+  return Array.from(new Set([triggerInspirationId, ...relatedInspirationIds])).slice(
+    0,
+    MAX_WOW_MOMENT_SOURCE_LINKS,
+  );
 }
 
 function buildWowMomentIdempotencyKey(params: {
