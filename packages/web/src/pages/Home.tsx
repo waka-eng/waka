@@ -745,15 +745,17 @@ function InspirationDiscoveryPanel({
           <section aria-labelledby="candidate-retrieval-title">
             <h4 id="candidate-retrieval-title">Why different inspirations can find different candidates</h4>
             <p>
-              WOW generation starts from the new or trigger inspiration, so the candidate
-              set is not the same for every save. Retrieval uses that trigger’s embedding,
-              your same-user candidate pool, similarity, surprise/bridge signal, time
-              distance, and each candidate’s existing WOW score.
+              Candidate selection happens in stages, and it always starts with the new or
+              trigger inspiration. WAKA excludes that trigger, stays inside your own archive,
+              and only considers inspirations with stored embeddings and enough data for
+              bounded retrieval.
             </p>
             <p>
-              That means different inspirations can retrieve different related candidates.
-              Very high-scoring or recently related archive items can still appear often
-              when they remain genuinely relevant to the trigger.
+              The app then computes a deterministic candidate score at runtime: 50% the
+              candidate’s existing WOW score, 25% similarity to the trigger, 20% surprise
+              or bridge similarity to the trigger, and 5% time distance from the trigger.
+              WAKA takes the top bounded candidates from that ranking; only that selected
+              set goes to the AI judge for WOW writing and selection.
             </p>
           </section>
           <section aria-labelledby="wow-generation-title">
