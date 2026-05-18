@@ -696,109 +696,83 @@ function InspirationDiscoveryPanel({
         >
           <h3 id="inspiration-score-explainer-title">How WAKA scoring works</h3>
           <p>
-            This explainer separates persisted core scoring from the freshness-adjusted
-            score shown in Inspiration First. Scores are normalized to the same 0–100
-            scale before each weighted blend unless noted.
+            WAKA keeps scoring deterministic and bounded. Each inspiration gets a 0–100 WOW
+            score from its depth, reflection and revisit activity, relationship signals, and
+            a small freshness boost; the app does not ask an LLM to calculate scores.
           </p>
-          <section aria-labelledby="current-scoring-title">
-            <h4 id="current-scoring-title">Current implementation</h4>
-            <p>
-              The database persists <code>WowScore</code> as a core WOW snapshot. The API and
-              UI display a freshness-adjusted WOW score so recent saves get a small,
-              time-decaying display boost without rewriting persisted rows.
-            </p>
-            <p>
-              Relationship signals now use stored embeddings when they exist, and revisit
-              signals use meaningful return events such as detail opens, detail returns,
-              reflection creation, and inspiration edits. If an inspiration has no stored
-              embedding or revisit events yet, those corresponding signals safely remain
-              <code>0</code>.
-            </p>
-          </section>
-          <section aria-labelledby="target-scoring-title">
-            <h4 id="target-scoring-title">Implemented scoring model</h4>
+          <section aria-labelledby="score-signals-title">
+            <h4 id="score-signals-title">What raises a WOW score</h4>
             <dl>
               <div>
-                <dt>ImportanceScore</dt>
+                <dt>Depth</dt>
                 <dd>
-                  <code>
-                    ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit +
-                    10% TimeSignal
-                  </code>
-                </dd>
-              </div>
-              <div>
-                <dt>ContentDepth</dt>
-                <dd>
-                  <code>ContentDepth = 70% TextDepth + 30% Context</code>. TextDepth rewards
-                  richer saved text; Context rewards bounded existing-data signals: meaningful
-                  link labels or surrounding link text, image/file attachments, and reflection
-                  text richness. Bare URL spam does not earn Context credit.
+                  Richer saved text, useful link context, attachments, and reflection text
+                  make an inspiration feel more substantial. Bare URL spam does not earn
+                  extra depth credit.
                 </dd>
               </div>
               <div>
                 <dt>Processing</dt>
                 <dd>
-                  Includes <code>hasReflection</code> as a binary signal: reflected saves get
-                  the processing credit, unreflected saves do not.
+                  Reflections count as a clear processing signal, while unreflected saves
+                  stay lighter until you come back to them.
                 </dd>
               </div>
               <div>
-                <dt>Revisit</dt>
+                <dt>Revisits</dt>
                 <dd>
-                  <code>
-                    Revisit = 65% Unique days + 25% total revisits + 10% revisited last 7
-                    days
-                  </code>
-                  . Unique days counts spread across days, total revisits counts repeated
-                  returns, and revisited last 7 days is a recent-return boost.
+                  Meaningful returns—opening details, returning to details, creating
+                  reflections, or editing an inspiration—show that the idea keeps mattering.
                 </dd>
               </div>
               <div>
-                <dt>RelationshipScore</dt>
+                <dt>Relationships</dt>
                 <dd>
-                  <code>
-                    RelationshipScore = 45% TopSimilarity + 35% TopSurpriseSimilarity +
-                    20% TimeDistance
-                  </code>
-                  . Similarity and surprise use embeddings plus top-k, bounded retrieval;
-                  WAKA does not send the full inspiration history to an LLM for this step.
+                  Stored embeddings help WAKA find similar, surprising, or time-distant
+                  connections inside your own archive without sending the full history to an
+                  LLM.
                 </dd>
               </div>
               <div>
-                <dt>CoreWowScore</dt>
+                <dt>Freshness</dt>
                 <dd>
-                  <code>CoreWowScore = 55% ImportanceScore + 45% RelationshipScore</code>.
-                </dd>
-              </div>
-              <div>
-                <dt>FreshnessDecay</dt>
-                <dd>
-                  <code>FreshnessDecay = 0.5^(ageDays / 30)</code>. The 30-day freshness
-                  half-life means the normalized freshness contribution halves every 30
-                  days after save time, then the final displayed score is rounded onto the
-                  0–100 WOW scale.
-                </dd>
-              </div>
-              <div>
-                <dt>Final / displayed score</dt>
-                <dd>
-                  <code>DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay</code>. This
-                  is the user-facing score returned by the API and rendered in
-                  Inspiration First; the persisted database column remains CoreWowScore.
+                  Recent saves get a small display boost that decays over time, so new raw
+                  material can surface without permanently overriding strong older work.
                 </dd>
               </div>
             </dl>
           </section>
+          <section aria-labelledby="candidate-retrieval-title">
+            <h4 id="candidate-retrieval-title">Why different inspirations can find different candidates</h4>
+            <p>
+              WOW generation starts from the new or trigger inspiration, so the candidate
+              set is not the same for every save. Retrieval uses that trigger’s embedding,
+              your same-user candidate pool, similarity, surprise/bridge signal, time
+              distance, and each candidate’s existing WOW score.
+            </p>
+            <p>
+              That means different inspirations can retrieve different related candidates.
+              Very high-scoring or recently related archive items can still appear often
+              when they remain genuinely relevant to the trigger.
+            </p>
+          </section>
+          <section aria-labelledby="wow-generation-title">
+            <h4 id="wow-generation-title">How WOW moments are generated and shown</h4>
+            <p>
+              The AI judge only evaluates and writes WOW moments from this bounded candidate
+              set. Deterministic scoring and retrieval happen first; the LLM does not choose
+              candidates by scanning your whole archive or calculate the numeric scores.
+            </p>
+            <p>
+              WOW moment cards keep source links focused: the trigger inspiration plus up to
+              three related inspirations. The main WOW view shows the best-recent 9 moments,
+              while the inspect panel can show a larger bounded set for review.
+            </p>
+          </section>
           <p>
-            Score updates run on save, edit, reflection, meaningful revisit, embedding
-            refresh, new related inspiration, and WOW generation. Each trigger uses
-            bounded updates so one change does not rescore the whole archive.
-          </p>
-          <p>
-            AI/LLM judgment is reserved for judging and writing WOW moments and their
-            explanations. Basic score arithmetic and bounded retrieval remain deterministic;
-            WAKA does not ask an LLM to calculate the score.
+            Scores refresh on bounded triggers such as save, edit, reflection, meaningful
+            revisit, embedding refresh, new related inspiration, and WOW generation—without
+            rescoring the whole archive every time.
           </p>
         </div>
       ) : null}

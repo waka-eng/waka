@@ -561,45 +561,35 @@ describe("HomePage view model", () => {
     expect(explainerButton?.getAttribute("aria-expanded")).toBe("true");
     expect(explainer).not.toBeNull();
     const explainerText = (explainer?.textContent ?? "").replace(/\s+/g, " ").trim();
-    expect(explainerText).toContain("Current implementation");
-    expect(explainerText).toContain("database persists WowScore as a core WOW snapshot");
-    expect(explainerText).toContain("freshness-adjusted WOW score");
-    expect(explainerText).toContain("Relationship signals now use stored embeddings");
-    expect(explainerText).toContain("revisit signals use meaningful return events");
-    expect(explainerText).toContain("Implemented scoring model");
-    expect(explainerText).toContain(
-      "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
-    );
-    expect(explainerText).toContain("ContentDepth = 70% TextDepth + 30% Context");
-    expect(explainerText).toContain("Bare URL spam does not earn Context credit");
-    expect(explainerText).toContain("hasReflection");
-    expect(explainerText).toContain(
-      "Revisit = 65% Unique days + 25% total revisits + 10% revisited last 7 days",
-    );
-    expect(explainerText).toContain(
-      "RelationshipScore = 45% TopSimilarity + 35% TopSurpriseSimilarity + 20% TimeDistance",
-    );
-    expect(explainerText).toContain(
-      "CoreWowScore = 55% ImportanceScore + 45% RelationshipScore",
-    );
-    expect(explainerText).toContain(
-      "FreshnessDecay = 0.5^(ageDays / 30)",
-    );
-    expect(explainerText).toContain("30-day freshness half-life");
-    expect(explainerText).toContain(
-      "DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay",
-    );
-    expect(explainerText).toContain("user-facing score returned by the API");
-    expect(explainerText).toContain("top-k, bounded retrieval");
-    expect(explainerText).toContain("does not send the full inspiration history");
+    expect(explainerText).toContain("deterministic and bounded");
+    expect(explainerText).toContain("0–100 WOW score");
+    expect(explainerText).toContain("does not ask an LLM to calculate scores");
+    expect(explainerText).toContain("What raises a WOW score");
+    expect(explainerText).toContain("Bare URL spam does not earn extra depth credit");
+    expect(explainerText).toContain("Reflections count as a clear processing signal");
+    expect(explainerText).toContain("Meaningful returns");
+    expect(explainerText).toContain("Stored embeddings help WAKA find similar, surprising, or time-distant connections");
+    expect(explainerText).toContain("without sending the full history to an LLM");
+    expect(explainerText).toContain("Why different inspirations can find different candidates");
+    expect(explainerText).toContain("candidate set is not the same for every save");
+    expect(explainerText).toContain("trigger’s embedding");
+    expect(explainerText).toContain("same-user candidate pool");
+    expect(explainerText).toContain("surprise/bridge signal");
+    expect(explainerText).toContain("time distance");
+    expect(explainerText).toContain("existing WOW score");
+    expect(explainerText).toContain("different inspirations can retrieve different related candidates");
+    expect(explainerText).toContain("Very high-scoring or recently related archive items can still appear often");
+    expect(explainerText).toContain("AI judge only evaluates and writes WOW moments from this bounded candidate set");
+    expect(explainerText).toContain("LLM does not choose candidates by scanning your whole archive");
+    expect(explainerText).toContain("calculate the numeric scores");
+    expect(explainerText).toContain("trigger inspiration plus up to three related inspirations");
+    expect(explainerText).toContain("best-recent 9 moments");
+    expect(explainerText).toContain("inspect panel can show a larger bounded set");
     expect(explainerText).toContain("save, edit, reflection, meaningful revisit");
     expect(explainerText).toContain("embedding refresh");
     expect(explainerText).toContain("new related inspiration");
     expect(explainerText).toContain("WOW generation");
-    expect(explainerText).toContain("bounded updates");
-    expect(explainerText).toContain("AI/LLM");
-    expect(explainerText).toContain("judging and writing WOW moments");
-    expect(explainerText).toContain("does not ask an LLM to calculate the score");
+    expect(explainerText).toContain("without rescoring the whole archive");
     expect(explainerText).not.toMatch(/cluster|kind|Filter by/i);
   });
 
