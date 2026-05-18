@@ -263,12 +263,23 @@ describe("WowMomentsSection", () => {
     );
   });
 
-  it("renders concise WOW reasoning on the main card", () => {
-    const html = renderSection({ moments: [sampleMoment], loading: false, error: null });
+  it("renders full WOW reasoning on the main card without CSS line clamping", () => {
+    const longWhy =
+      "Why it’s a WOW because the pattern connects a mobile note, a design sketch, and a prototype review into one complete insight that should remain visible through the final sentence.";
+    const html = renderSection({
+      moments: [{ ...sampleMoment, why: longWhy }],
+      loading: false,
+      error: null,
+    });
 
     expect(html).toContain("aria-label=\"Why it’s a WOW\"");
     expect(html).toContain("Why it’s a WOW");
-    expect(html).toContain("Connects a mobile note with a design sketch.");
+    expect(html).toContain(longWhy);
+    expect(html).toContain("through the final sentence");
+
+    const whyRule = globalCss.match(/\.wow-moment-why p\s*\{[\s\S]*?\}/)?.[0] ?? "";
+    expect(whyRule).toContain("overflow-wrap: anywhere;");
+    expect(whyRule).not.toMatch(/-webkit-line-clamp|overflow:\s*hidden|display:\s*-webkit-box/);
   });
 
   it("opens a focused detail panel from a populated WOW card and labels reasoning/source reasons", () => {
