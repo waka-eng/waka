@@ -3662,6 +3662,22 @@ body.reflect-bg {
 
 .wow-moment-why {
   margin: 0 0 var(--space-2);
+}
+
+.wow-moment-why span,
+.wow-moment-source-reason span {
+  display: block;
+  margin-bottom: 3px;
+  color: rgba(15, 15, 14, 0.55);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.wow-moment-why p {
+  margin: 0;
   color: var(--ink);
   font-size: 12px;
   line-height: 1.4;
@@ -3866,6 +3882,14 @@ body.reflect-bg {
   overflow-wrap: anywhere;
 }
 
+.wow-moment-source-reason {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .wow-moments-all-panel {
   max-width: 860px;
 }
@@ -3923,6 +3947,11 @@ body.reflect-bg {
   margin: 0;
   overflow-wrap: anywhere;
   padding-left: var(--space-3);
+}
+
+.wow-moments-all-reasoning {
+  display: grid;
+  gap: 4px;
 }
 
 .wow-moments-all-sources {

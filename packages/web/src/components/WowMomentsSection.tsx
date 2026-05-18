@@ -135,6 +135,12 @@ export function WowMomentsSection({
                 <span className="wow-moment-open-cue" aria-hidden="true">
                   Open detail
                 </span>
+                {moment.why ? (
+                  <div className="wow-moment-why" aria-label="Why it’s a WOW">
+                    <span>Why it’s a WOW</span>
+                    <p>{moment.why}</p>
+                  </div>
+                ) : null}
                 {relatedSources.length > 0 ? (
                   <ol className="wow-moment-related" aria-label="Related inspirations">
                     {relatedSources.map((related) => (
@@ -174,7 +180,7 @@ export function WowMomentsSection({
             <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
             {selectedMoment.why ? (
               <section className="wow-moment-detail-section">
-                <h4>Why it matters</h4>
+                <h4>Why it’s a WOW</h4>
                 <p>{selectedMoment.why}</p>
               </section>
             ) : null}
@@ -194,6 +200,12 @@ export function WowMomentsSection({
                         {formatDevWowScore(related.wowScore)}
                       </span>
                       <blockquote>{related.text}</blockquote>
+                      {related.reason ? (
+                        <p className="wow-moment-source-reason">
+                          <span>Source reason</span>
+                          {related.reason}
+                        </p>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
@@ -213,7 +225,7 @@ export function WowMomentsSection({
             role="dialog"
           >
             <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">All generated WOW moments</p>
+              <p className="wow-moment-detail-kicker">All WOW moments</p>
               <button
                 className="wow-moment-detail-close"
                 onClick={() => setAllMomentsOpen(false)}
@@ -234,13 +246,24 @@ export function WowMomentsSection({
                     {moment.relatedInspirations.length} related source
                     {moment.relatedInspirations.length === 1 ? "" : "s"}
                   </p>
-                  {moment.why ? <blockquote>{moment.why}</blockquote> : null}
+                  {moment.why ? (
+                    <div className="wow-moments-all-reasoning">
+                      <p>Reasoning</p>
+                      <blockquote>{moment.why}</blockquote>
+                    </div>
+                  ) : null}
                   {moment.relatedInspirations.length > 0 ? (
                     <ol className="wow-moments-all-sources">
                       {moment.relatedInspirations.map((related) => (
                         <li key={`all-${moment.id}-${related.inspirationId}`}>
                           <span>{related.role}</span>
                           <blockquote>{related.text}</blockquote>
+                          {related.reason ? (
+                            <p className="wow-moment-source-reason">
+                              <span>Source reason</span>
+                              {related.reason}
+                            </p>
+                          ) : null}
                         </li>
                       ))}
                     </ol>

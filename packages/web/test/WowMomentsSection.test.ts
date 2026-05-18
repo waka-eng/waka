@@ -192,7 +192,8 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
     expect(html).toContain("DEV WOW score 73");
-    expect(html).not.toContain("Connects a mobile note with a design sketch.");
+    expect(html).toContain("Why it’s a WOW");
+    expect(html).toContain("Connects a mobile note with a design sketch.");
     expect(html).toContain("A field note about playful prototypes.");
     expect(html).toContain("A sketch that turned the field note into a grid.");
     expect(html).toContain("A voice memo asking for smaller WOW cards.");
@@ -262,12 +263,21 @@ describe("WowMomentsSection", () => {
     );
   });
 
-  it("opens a focused detail panel from a populated WOW card and keeps richer detail out of the grid", () => {
+  it("renders concise WOW reasoning on the main card", () => {
+    const html = renderSection({ moments: [sampleMoment], loading: false, error: null });
+
+    expect(html).toContain("aria-label=\"Why it’s a WOW\"");
+    expect(html).toContain("Why it’s a WOW");
+    expect(html).toContain("Connects a mobile note with a design sketch.");
+  });
+
+  it("opens a focused detail panel from a populated WOW card and labels reasoning/source reasons", () => {
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
 
     expect(container.textContent).toContain("Prototype idea keeps returning");
+    expect(container.textContent).toContain("Why it’s a WOW");
+    expect(container.textContent).toContain("Connects a mobile note with a design sketch.");
     expect(container.textContent).toContain("A field note about playful prototypes.");
-    expect(container.textContent).not.toContain("Connects a mobile note with a design sketch.");
     expect(container.textContent).not.toContain("What would make this bridge testable this week?");
 
     const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
@@ -282,10 +292,13 @@ describe("WowMomentsSection", () => {
     const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
     expect(dialog).not.toBeNull();
     expect(dialog?.textContent).toContain("Prototype idea keeps returning");
+    expect(dialog?.textContent).toContain("Why it’s a WOW");
     expect(dialog?.textContent).toContain("Connects a mobile note with a design sketch.");
     expect(dialog?.textContent).toContain("What would make this bridge testable this week?");
     expect(dialog?.textContent).toContain("DEV WOW score 73");
     expect(dialog?.textContent).toContain("A field note about playful prototypes.");
+    expect(dialog?.textContent).toContain("Source reason");
+    expect(dialog?.textContent).toContain("First signal in the bridge.");
   });
 
   it("opens details with keyboard activation and closes with the Close button and Escape", () => {
@@ -388,10 +401,13 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("Available WOW moments");
     expect(dialog?.textContent).toContain("WOW card 10");
     expect(dialog?.textContent).toContain("DEV WOW score 81");
+    expect(dialog?.textContent).toContain("Reasoning");
     expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
     expect(dialog?.textContent).toContain("1 related source");
     expect(dialog?.textContent).toContain("contrast");
     expect(dialog?.textContent).toContain("Related inspiration evidence 10");
+    expect(dialog?.textContent).toContain("Source reason");
+    expect(dialog?.textContent).toContain("First signal in the bridge.");
     expect(inspectButton?.getAttribute("aria-expanded")).toBe("true");
   });
 });
