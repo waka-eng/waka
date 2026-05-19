@@ -303,7 +303,7 @@ describe("GeminiWowJudgeClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("normalizes malformed true judgments with the original allowed related ids", async () => {
+  it("normalizes malformed true judgments with the original allowed related ids without truncating why", async () => {
     const triggerId = "00000000-0000-4000-8000-000000000011";
     const candidateId = "00000000-0000-4000-8000-000000000012";
     const tooLongWhy = "x".repeat(220);
@@ -345,20 +345,22 @@ describe("GeminiWowJudgeClient", () => {
       title: "Shared Memory",
       relatedInspirationIds: [triggerId, candidateId],
     });
-    expect(result.isWowMoment && result.why.length).toBeLessThanOrEqual(180);
+    expect(result.isWowMoment && result.why).toBe(tooLongWhy);
+    expect(result.isWowMoment && result.why.endsWith("…")).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("normalizes a parsed true judgment with long why and missing related ids from allowed input", async () => {
+  it("normalizes a parsed true judgment with long why and missing related ids from allowed input without truncating why", async () => {
     const triggerId = "00000000-0000-4000-8000-000000000031";
     const candidateId = "00000000-0000-4000-8000-000000000032";
     const secondCandidateId = "00000000-0000-4000-8000-000000000033";
+    const longWhy = `Both notes connect civic spaces with living memory systems. ${"x".repeat(220)}`;
     const fetchMock = vi.fn().mockResolvedValue(
       geminiJsonResponse({
         isWowMoment: true,
         kind: "bridge",
         title: "Shared Memory",
-        why: `Both notes connect civic spaces with living memory systems. ${"x".repeat(220)}`,
+        why: longWhy,
       }),
     );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
@@ -400,7 +402,8 @@ describe("GeminiWowJudgeClient", () => {
       title: "Shared Memory",
       relatedInspirationIds: [triggerId, candidateId, secondCandidateId],
     });
-    expect(result.isWowMoment && result.why.length).toBeLessThanOrEqual(180);
+    expect(result.isWowMoment && result.why).toBe(longWhy);
+    expect(result.isWowMoment && result.why.endsWith("…")).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -793,7 +796,9 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("Return raw JSON only");
     expect(requestText).toContain("no markdown fences");
     expect(requestText).toContain("12 words or fewer");
-    expect(requestText).toContain("true why <= 180 chars");
+    expect(requestText).toContain("why should explain the connection without ids");
+    expect(requestText).not.toContain("true why <= 180 chars");
+    expect(requestText).not.toContain("180 characters or fewer");
     expect(requestText).toContain("false debugSummary <= 120 chars");
     expect(requestText).toContain("ids belong only in");
     expect(request.generationConfig).toEqual(
@@ -933,7 +938,7 @@ describe("judgeWowMomentForInspiration", () => {
   });
 
 
-  it("persists a true bounded judgment with trigger defaults and deduped related rows", async () => {
+  it("persists a true judgment with full long why text and trigger defaults/deduped related rows", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Trigger: public libraries as neighborhood memory systems.",
@@ -943,6 +948,7 @@ describe("judgeWowMomentForInspiration", () => {
     });
     await createEmbedding(testDb, trigger, [1, 0]);
     await createEmbedding(testDb, candidate, [1, 0]);
+    const longWhy = `The trigger and candidate connect civic and ecological memory systems while preserving the full explanatory context the model generated for the user. ${"x".repeat(160)}`;
 
     const result = await persistWowMomentForInspirationJudgment({
       db: testDb.db,
@@ -953,13 +959,15 @@ describe("judgeWowMomentForInspiration", () => {
         isWowMoment: true,
         kind: "bridge",
         title: "Community Memory Infrastructure",
-        why: "The trigger and candidate connect civic and ecological memory systems.",
+        why: longWhy,
         relatedInspirationIds: [candidate.id, candidate.id],
       },
     });
 
     expect(result.persisted).toBe(true);
     expect(result.persisted && result.status).toBe("created");
+    expect(result.persisted && result.wowMoment.why).toBe(longWhy);
+    expect(result.persisted && result.wowMoment.why.endsWith("…")).toBe(false);
     expect(await countWowMoments(testDb)).toBe(1);
     expect(await countWowMomentLinks(testDb)).toBe(2);
     const links = await listWowMomentLinks(
