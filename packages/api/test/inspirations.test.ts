@@ -592,6 +592,62 @@ describe("Fetching by id", () => {
     );
   });
 
+  it("POST /api/inspirations/:id/reflections enqueues organic WOW re-processing for the reflected inspiration", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const inspirationCreate = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "organic reflection should re-check WOW generation", kind: "note" },
+    );
+    expect(inspirationCreate.status).toBe(201);
+    const inspirationId = inspirationCreate.body.inspiration.id;
+
+    const reflectionCreate = await client.json<ReflectionResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/reflections`,
+      {
+        question: "Why is this connected to the weird prototype theme?",
+        answer: "Because the reflection adds organic context after the original save.",
+      },
+    );
+    expect(reflectionCreate.status).toBe(201);
+    const reflectionId = reflectionCreate.body.reflection.id;
+
+    const jobs = await getDb()
+      .select({
+        id: backgroundJobs.id,
+        userId: backgroundJobs.userId,
+        type: backgroundJobs.type,
+        status: backgroundJobs.status,
+        payload: backgroundJobs.payload,
+        idempotencyKey: backgroundJobs.idempotencyKey,
+      })
+      .from(backgroundJobs)
+      .where(eq(backgroundJobs.userId, fixture.user.id));
+
+    const processJobsForInspiration = jobs.filter((job) => {
+      const payload = job.payload as { inspirationId?: unknown } | null;
+      return job.type === "process_inspiration" && payload?.inspirationId === inspirationId;
+    });
+
+    expect(processJobsForInspiration.map((job) => job.idempotencyKey).sort()).toEqual([
+      `process_inspiration:${inspirationId}`,
+      `process_inspiration:${inspirationId}:reflection:${reflectionId}`,
+    ]);
+    expect(
+      processJobsForInspiration.find(
+        (job) => job.idempotencyKey === `process_inspiration:${inspirationId}:reflection:${reflectionId}`,
+      ),
+    ).toMatchObject({
+      userId: fixture.user.id,
+      status: "pending",
+      payload: { inspirationId },
+    });
+  });
+
   it("GET /api/inspirations/:id/reflections returns 404 for another user's id (no enumeration)", async () => {
     const alice = await createUserFixture(getDb());
     const bob = await createUserFixture(getDb());

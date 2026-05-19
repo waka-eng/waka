@@ -279,6 +279,9 @@ describe("WowMomentsSection", () => {
 
     const whyRule = globalCss.match(/\.wow-moment-why p\s*\{[\s\S]*?\}/)?.[0] ?? "";
     expect(whyRule).toContain("overflow-wrap: anywhere;");
+    expect(whyRule).toContain("display: block;");
+    expect(whyRule).toContain("max-height: none;");
+    expect(whyRule).toContain("overflow: visible;");
     expect(whyRule).not.toMatch(/-webkit-line-clamp|overflow:\s*hidden|display:\s*-webkit-box/);
   });
 
