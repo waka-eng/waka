@@ -837,6 +837,18 @@ routes.post("/:id/reflections", async (c) => {
     });
   }
 
+  try {
+    await enqueueClassificationJob(parent.id, user.id, {
+      idempotencyScope: `reflection:${inserted.id}`,
+    });
+  } catch (err) {
+    console.error("[inspirations] failed to enqueue reflection WOW job:", {
+      inspirationId: parent.id,
+      reflectionId: inserted.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const updatedScores = await persistLocalInspirationScores(db, parent);
 
   return c.json(

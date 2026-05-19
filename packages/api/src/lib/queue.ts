@@ -29,6 +29,16 @@ export interface EnqueueClassificationResult {
   jobId: string;
 }
 
+export interface EnqueueClassificationOptions {
+  /**
+   * Optional idempotency scope for re-processing the same inspiration after a
+   * meaningful user event (for example, a reflection). The default keeps the
+   * original create-path behaviour: only one create classification job exists
+   * per inspiration.
+   */
+  idempotencyScope?: string;
+}
+
 export interface DrainBackgroundJobsOptions {
   limit?: number;
   now?: Date;
@@ -45,9 +55,12 @@ export interface DrainBackgroundJobsResult {
 export async function enqueueClassification(
   inspirationId: string,
   userId: string,
+  options: EnqueueClassificationOptions = {},
 ): Promise<EnqueueClassificationResult> {
   const db = getDb();
-  const idempotencyKey = `process_inspiration:${inspirationId}`;
+  const idempotencyKey = options.idempotencyScope
+    ? `process_inspiration:${inspirationId}:${options.idempotencyScope}`
+    : `process_inspiration:${inspirationId}`;
   const [job] = await db
     .insert(backgroundJobs)
     .values({

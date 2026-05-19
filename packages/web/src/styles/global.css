@@ -3681,6 +3681,9 @@ body.reflect-bg {
   color: var(--ink);
   font-size: 12px;
   line-height: 1.4;
+  display: block;
+  max-height: none;
+  overflow: visible;
   overflow-wrap: anywhere;
 }
 
