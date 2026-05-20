@@ -1522,6 +1522,7 @@ export function HomePage(): JSX.Element {
             loading={wowMomentsLoading}
             error={wowMomentsError}
             showDevInspection={internalStatusEnabled}
+            onAddInspiration={handleWowHeaderCapture}
           />
         </section>
       </AppShell>

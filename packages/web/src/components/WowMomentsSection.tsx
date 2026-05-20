@@ -235,6 +235,7 @@ interface WowMomentsSectionProps {
   loading: boolean;
   error: string | null;
   showDevInspection?: boolean;
+  onAddInspiration?: () => void;
 }
 
 export function WowMomentsSection({
@@ -242,6 +243,7 @@ export function WowMomentsSection({
   loading,
   error,
   showDevInspection = false,
+  onAddInspiration,
 }: WowMomentsSectionProps): JSX.Element {
   const bestRecentMoments = [...moments].sort(compareBestRecentWowMoments);
   const visibleMoments = bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
@@ -249,6 +251,7 @@ export function WowMomentsSection({
   const [selectedResonance, setSelectedResonance] = useState<ResonanceOption | null>(null);
   const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
   const [memoryBeliefText, setMemoryBeliefText] = useState("");
+  const [signalExamplesOpen, setSignalExamplesOpen] = useState(false);
   const [expandedSourceReasonIds, setExpandedSourceReasonIds] = useState<Set<string>>(new Set());
   const [allMomentsOpen, setAllMomentsOpen] = useState(false);
 
@@ -256,6 +259,7 @@ export function WowMomentsSection({
     setSelectedResonance(null);
     setMemoryEndingState("prompt");
     setMemoryBeliefText("");
+    setSignalExamplesOpen(false);
   };
 
   const closeMoment = () => {
@@ -310,6 +314,21 @@ export function WowMomentsSection({
     setSelectedResonance(resonance);
     setMemoryEndingState("prompt");
     setMemoryBeliefText(beliefText);
+    setSignalExamplesOpen(false);
+  };
+
+  const handleAddInspirationSignal = () => {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("waka:add-inspiration", {
+          detail: {
+            source: "wow-moment-ending",
+            momentId: selectedMoment?.id ?? null,
+          },
+        }),
+      );
+    }
+    onAddInspiration?.();
   };
 
   const toggleSourceReason = (sourceId: string) => {
@@ -334,6 +353,8 @@ export function WowMomentsSection({
   const selectedPatternReport = selectedMoment ? buildPatternReport(selectedMoment.why) : { lead: "", bodyChunks: [] };
   const selectedPatternVisible = Boolean(selectedPatternReport.lead || selectedPatternReport.bodyChunks.length > 0);
   const selectedBeliefStatement = selectedMoment ? buildBeliefStatement(selectedMoment) : "";
+  const selectedSignalCount = selectedMoment?.relatedInspirations.length ?? 0;
+  const selectedSignalCountLabel = `${selectedSignalCount} inspiration${selectedSignalCount === 1 ? "" : "s"}`;
 
 
   const selectedMomentDetail = selectedMoment ? (
@@ -515,6 +536,40 @@ export function WowMomentsSection({
                 </div>
               </>
             )}
+            <aside className="wow-moment-add-signal" aria-labelledby="wow-moment-add-signal-title">
+              <h5 id="wow-moment-add-signal-title">Help WAKA understand this pattern better</h5>
+              <p>
+                This moment is based on {selectedSignalCountLabel}. Add more signal and WAKA can find sharper,
+                more personal moments.
+              </p>
+              <div className="wow-moment-signal-prompts">
+                <span>Try adding:</span>
+                <ul>
+                  <li>something you keep coming back to</li>
+                  <li>a project or product that feels strangely important</li>
+                  <li>a tension you notice in your work or taste</li>
+                </ul>
+              </div>
+              {signalExamplesOpen ? (
+                <ul className="wow-moment-signal-examples" aria-label="Example inspiration prompts">
+                  <li>A quote, tool, or article you keep reopening without knowing why.</li>
+                  <li>A product or side project that feels important even before it is useful.</li>
+                  <li>A taste tension like calm vs. ambition, polish vs. play, or solitude vs. signal.</li>
+                </ul>
+              ) : null}
+              <div className="wow-moment-signal-actions">
+                <button onClick={handleAddInspirationSignal} type="button">
+                  Add another inspiration
+                </button>
+                <button
+                  aria-expanded={signalExamplesOpen}
+                  onClick={() => setSignalExamplesOpen((isOpen) => !isOpen)}
+                  type="button"
+                >
+                  Show me examples
+                </button>
+              </div>
+            </aside>
           </div>
         ) : null}
       </section>

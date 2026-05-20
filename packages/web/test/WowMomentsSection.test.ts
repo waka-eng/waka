@@ -841,6 +841,135 @@ describe("WowMomentsSection", () => {
     expect(globalCss).toContain(".wow-moment-memory-actions");
   });
 
+  it("shows an add-signal ending panel with count-aware prompts after resonance", () => {
+    const momentWithThreeSources: ApiWowMoment = {
+      ...sampleMoment,
+      relatedInspirations: [
+        sampleMoment.relatedInspirations[0]!,
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-2",
+          text: "A second source about a strangely important product.",
+        },
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-3",
+          text: "A third source about a work tension.",
+        },
+      ],
+    };
+    const container = renderInteractiveSection({ moments: [momentWithThreeSources], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const partlyButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "Partly");
+
+    act(() => {
+      partlyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const signalPanel = container.querySelector<HTMLElement>(".wow-moment-add-signal");
+    expect(signalPanel).not.toBeNull();
+    expect(signalPanel?.textContent).toContain("Help WAKA understand this pattern better");
+    expect(signalPanel?.textContent).toContain(
+      "This moment is based on 3 inspirations. Add more signal and WAKA can find sharper, more personal moments.",
+    );
+    expect(signalPanel?.textContent).toContain("Try adding:");
+    expect(signalPanel?.textContent).toContain("something you keep coming back to");
+    expect(signalPanel?.textContent).toContain("a project or product that feels strangely important");
+    expect(signalPanel?.textContent).toContain("a tension you notice in your work or taste");
+    expect(signalPanel?.textContent).toContain("Add another inspiration");
+    expect(signalPanel?.textContent).toContain("Show me examples");
+    expect(globalCss).toContain(".wow-moment-add-signal");
+    expect(globalCss).toContain(".wow-moment-signal-actions");
+  });
+
+  it("expands local add-signal examples without persistence", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const thatsMeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "That’s me");
+
+    act(() => {
+      thatsMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector(".wow-moment-signal-examples")).toBeNull();
+    const examplesButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-signal-actions button"),
+    ).find((button) => button.textContent?.trim() === "Show me examples");
+    expect(examplesButton?.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => {
+      examplesButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const examples = container.querySelector<HTMLElement>(".wow-moment-signal-examples");
+    expect(examples).not.toBeNull();
+    expect(examplesButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(examples?.textContent).toContain("A quote, tool, or article you keep reopening without knowing why.");
+    expect(examples?.textContent).toContain("A product or side project that feels important even before it is useful.");
+    expect(examples?.textContent).toContain("calm vs. ambition");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("uses a local add-inspiration callback and named event affordance", () => {
+    const fetchSpy = vi.fn();
+    const addSpy = vi.fn();
+    const eventSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    window.addEventListener("waka:add-inspiration", eventSpy);
+    const container = renderInteractiveSection({
+      moments: [sampleMoment],
+      loading: false,
+      error: null,
+      onAddInspiration: addSpy,
+    });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const notQuiteButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "Not quite");
+
+    act(() => {
+      notQuiteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const addButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-signal-actions button"),
+    ).find((button) => button.textContent?.trim() === "Add another inspiration");
+
+    act(() => {
+      addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(addSpy).toHaveBeenCalledTimes(1);
+    expect(eventSpy).toHaveBeenCalledTimes(1);
+    expect((eventSpy.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({
+      source: "wow-moment-ending",
+      momentId: "moment-1",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    window.removeEventListener("waka:add-inspiration", eventSpy);
+  });
+
   it("lets the user locally edit or dismiss the future-memory ending state", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);

@@ -4128,6 +4128,74 @@ body.reflect-bg {
   outline: none;
 }
 
+.wow-moment-add-signal {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid rgba(15, 15, 14, 0.12);
+}
+
+.wow-moment-add-signal h5 {
+  font-size: clamp(17px, 2vw, 22px);
+}
+
+.wow-moment-signal-prompts {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wow-moment-signal-prompts span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wow-moment-signal-prompts ul,
+.wow-moment-signal-examples {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.wow-moment-signal-examples {
+  color: var(--muted);
+}
+
+.wow-moment-signal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.wow-moment-signal-actions button {
+  appearance: none;
+  border: var(--border-hairline);
+  border-radius: 999px;
+  background: rgba(246, 242, 232, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 8px 12px;
+  text-transform: uppercase;
+}
+
+.wow-moment-signal-actions button:hover,
+.wow-moment-signal-actions button:focus-visible,
+.wow-moment-signal-actions button[aria-expanded="true"] {
+  background: var(--ink);
+  color: var(--cell);
+  outline: none;
+}
+
 .wow-moment-memory-edit {
   display: grid;
   gap: 6px;
