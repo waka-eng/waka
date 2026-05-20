@@ -766,6 +766,122 @@ describe("WowMomentsSection", () => {
     ]);
   });
 
+  it("shows a local future-memory ending panel after resonance without persisting", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.textContent).not.toContain("Remember this about me?");
+    const partlyButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "Partly");
+
+    act(() => {
+      partlyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const endingPanel = container.querySelector<HTMLElement>(".wow-moment-memory-ending");
+    expect(endingPanel).not.toBeNull();
+    expect(endingPanel?.textContent).toContain("Remember this about me?");
+    expect(endingPanel?.textContent).toContain("Coming soon: WAKA will remember confirmed beliefs.");
+    expect(endingPanel?.textContent).toContain("Remember this");
+    expect(endingPanel?.textContent).toContain("Edit first");
+    expect(endingPanel?.textContent).toContain("Not for me");
+    expect(endingPanel?.textContent).not.toContain("saved");
+
+    const rememberButton = Array.from(
+      endingPanel?.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button") ?? [],
+    ).find((button) => button.textContent?.trim() === "Remember this");
+
+    act(() => {
+      rememberButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Noted for now");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "This is only marked locally in this reflection. Future memory is coming soon.",
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(globalCss).toContain(".wow-moment-memory-ending");
+    expect(globalCss).toContain(".wow-moment-memory-actions");
+  });
+
+  it("lets the user locally edit or dismiss the future-memory ending state", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const thatsMeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "That’s me");
+
+    act(() => {
+      thatsMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const editButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button"),
+    ).find((button) => button.textContent?.trim() === "Edit first");
+
+    act(() => {
+      editButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const textarea = container.querySelector<HTMLTextAreaElement>(".wow-moment-memory-edit textarea");
+    expect(textarea).not.toBeNull();
+    expect(textarea?.value).toContain("One possible reading");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "Shape the sentence locally before the future memory flow exists.",
+    );
+
+    act(() => {
+      if (textarea) {
+        textarea.value = "I believe small prototypes are worth protecting.";
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    const editedRememberButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button"),
+    ).find((button) => button.textContent?.trim() === "Remember this");
+
+    act(() => {
+      editedRememberButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Noted for now");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "I believe small prototypes are worth protecting.",
+    );
+
+    act(() => {
+      thatsMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const notForMeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button"),
+    ).find((button) => button.textContent?.trim() === "Not for me");
+
+    act(() => {
+      notForMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "We’ll leave this one alone.",
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("opens details with keyboard activation and closes with the Close button and Escape", () => {
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
     const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
