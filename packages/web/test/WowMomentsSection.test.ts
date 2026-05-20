@@ -359,6 +359,79 @@ describe("WowMomentsSection", () => {
     expect(pointText.join("")).toBe(longWhy);
   });
 
+  it("renders a guided WOW disclosure sequence with expandable evidence reasons", () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const guidedMoment: ApiWowMoment = {
+      ...sampleMoment,
+      why: [
+        "WAKA noticed that several saved inspirations return to small prototypes rather than polished plans.",
+        "A note about a quiet mobile workflow and a prototype review both point toward making ideas easier to test before they become heavy.",
+      ].join(" "),
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "source-open",
+          role: "The practice",
+          reason: "This source shows the ritual the pattern keeps returning to.",
+          text: "A note about doing a tiny daily version.",
+        },
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "source-closed",
+          role: "classifier rank id 2026-05-01",
+          reason: "runtimeCandidateScore rank id 2026-05-01 came from the classifier",
+          text: "A legacy note with unsafe metadata around it.",
+        },
+      ],
+    };
+    const container = renderInteractiveSection({ moments: [guidedMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
+    expect(dialog?.textContent).toContain("Guided WOW disclosure");
+    expect(dialog?.textContent).toContain("Step 1 · Recognition");
+    expect(dialog?.textContent).toContain("A mirror WAKA noticed");
+    expect(dialog?.textContent).toContain("This may be a mirror for: Prototype idea keeps returning");
+    expect(dialog?.textContent).toContain("Step 2 · Evidence");
+    expect(dialog?.textContent).toContain("Source inspirations");
+    expect(dialog?.textContent).toContain("The practice");
+    expect(dialog?.textContent).toContain("Source inspiration");
+    expect(dialog?.textContent).not.toContain("classifier rank id 2026-05-01");
+    expect(dialog?.textContent).not.toContain("runtimeCandidateScore");
+    expect(dialog?.textContent).toContain("Step 3 · Meaning");
+    expect(dialog?.textContent).toContain("What this may say about you");
+    expect(dialog?.textContent).toContain("Step 4 · Belief + response");
+    expect(dialog?.textContent).toContain("Ownership, not advice");
+    expect(dialog?.textContent).toContain("For reflection only; not saved.");
+
+    const reasonButtons = Array.from(
+      dialog?.querySelectorAll<HTMLButtonElement>(".wow-moment-source-reason-toggle") ?? [],
+    );
+    expect(reasonButtons.map((button) => button.getAttribute("aria-expanded"))).toEqual([
+      "true",
+      "false",
+    ]);
+    expect(dialog?.querySelector("#wow-source-reason-moment-1-source-open")?.textContent).toContain(
+      "This source shows the ritual the pattern keeps returning to.",
+    );
+    expect(dialog?.querySelector("#wow-source-reason-moment-1-source-closed")).toBeNull();
+
+    act(() => {
+      reasonButtons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(reasonButtons[1]?.getAttribute("aria-expanded")).toBe("true");
+    expect(dialog?.querySelector("#wow-source-reason-moment-1-source-closed")?.textContent).toContain(
+      "Why this source matters",
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("opens a focused detail panel from a populated mirror card and reads as a pattern report", () => {
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
 
@@ -380,7 +453,7 @@ describe("WowMomentsSection", () => {
     const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
     expect(dialog).not.toBeNull();
     expect(dialog?.textContent).toContain("Prototype idea keeps returning");
-    expect(dialog?.textContent).toContain("Personal pattern report");
+    expect(dialog?.textContent).toContain("Guided WOW disclosure");
     expect(dialog?.textContent).toContain("How the pattern shows up");
     expect(dialog?.textContent).toContain("Connects a mobile note with a design sketch.");
     expect(dialog?.textContent).toContain("What this may say about you");
@@ -559,6 +632,40 @@ describe("WowMomentsSection", () => {
     expect(dialogText).not.toContain("You seem drawn to ideas that keep showing up in different forms.");
   });
 
+  it("uses a safe source reason fallback in sparse belief copy when source reason is unsafe", () => {
+    const sparseUnsafeMoment: ApiWowMoment = {
+      ...sampleMoment,
+      title: "Quiet interfaces feel more humane.",
+      why: "",
+      beliefStatement: null,
+      reflectionQuestion: null,
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          role: "classifier rank id 2026-05-01",
+          reason: "runtimeCandidateScore rank id 2026-05-01 came from the classifier provider payload",
+          text: "A simple dashboard with more breathing room.",
+        },
+      ],
+    };
+    const container = renderInteractiveSection({ moments: [sparseUnsafeMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const beliefText =
+      container.querySelector<HTMLElement>(".wow-moment-detail-section--belief > p")?.textContent ?? "";
+    expect(beliefText).toContain("One possible reading");
+    expect(beliefText).toContain(
+      "One possible reading: “Quiet interfaces feel more humane” may matter through this source note: “why this source matters”. It points to a belief worth testing gently.",
+    );
+    expect(beliefText).toContain("Does this feel true?");
+    expect(beliefText).not.toContain("runtimeCandidateScore");
+    expect(beliefText).not.toContain("classifier provider payload");
+    expect(beliefText).not.toContain("2026-05-01");
+  });
 
   it("uses a supplied source-grounded belief statement instead of deriving one from title and why", () => {
     const momentWithBelief: ApiWowMoment = {
