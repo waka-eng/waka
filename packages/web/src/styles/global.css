@@ -4048,6 +4048,102 @@ body.reflect-bg {
   text-transform: uppercase;
 }
 
+.wow-moment-memory-ending {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid rgba(15, 15, 14, 0.12);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 247, 0.72);
+}
+
+.wow-moment-memory-ending h5 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.wow-moment-memory-ending p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.wow-moment-memory-ending blockquote {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid rgba(15, 15, 14, 0.18);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.wow-moment-memory-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.wow-moment-memory-actions button {
+  appearance: none;
+  border: var(--border-hairline);
+  border-radius: 999px;
+  background: rgba(246, 242, 232, 0.78);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 8px 12px;
+  text-transform: uppercase;
+}
+
+.wow-moment-memory-actions button:hover,
+.wow-moment-memory-actions button:focus-visible {
+  background: var(--ink);
+  color: var(--cell);
+  outline: none;
+}
+
+.wow-moment-memory-edit {
+  display: grid;
+  gap: 6px;
+}
+
+.wow-moment-memory-edit span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wow-moment-memory-edit textarea {
+  width: 100%;
+  min-height: 86px;
+  resize: vertical;
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 247, 0.8);
+  color: var(--ink);
+  font: 14px/1.45 var(--font-sans);
+  padding: var(--space-2);
+}
+
+.wow-moment-memory-edit textarea:focus {
+  outline: 1px solid rgba(15, 15, 14, 0.28);
+  outline-offset: 2px;
+}
+
 .wow-moment-detail-sources {
   list-style: none;
   margin: 0;

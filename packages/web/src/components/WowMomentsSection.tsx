@@ -23,6 +23,7 @@ const INTERNAL_SOURCE_ROLE_LABELS = new Set([
   "source",
 ]);
 type ResonanceOption = "thats-me" | "partly" | "not-quite";
+type MemoryEndingState = "prompt" | "editing" | "remembered" | "dismissed";
 
 function cleanBeliefSourceText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -246,12 +247,20 @@ export function WowMomentsSection({
   const visibleMoments = bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
   const [selectedMoment, setSelectedMoment] = useState<ApiWowMoment | null>(null);
   const [selectedResonance, setSelectedResonance] = useState<ResonanceOption | null>(null);
+  const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
+  const [memoryBeliefText, setMemoryBeliefText] = useState("");
   const [expandedSourceReasonIds, setExpandedSourceReasonIds] = useState<Set<string>>(new Set());
   const [allMomentsOpen, setAllMomentsOpen] = useState(false);
 
+  const resetLocalReflectionState = () => {
+    setSelectedResonance(null);
+    setMemoryEndingState("prompt");
+    setMemoryBeliefText("");
+  };
+
   const closeMoment = () => {
     setSelectedMoment(null);
-    setSelectedResonance(null);
+    resetLocalReflectionState();
     setExpandedSourceReasonIds(new Set());
   };
 
@@ -285,16 +294,22 @@ export function WowMomentsSection({
     if (!selectedMoment) return;
     if (!visibleMoments.some((moment) => moment.id === selectedMoment.id)) {
       setSelectedMoment(null);
-      setSelectedResonance(null);
+      resetLocalReflectionState();
       setExpandedSourceReasonIds(new Set());
     }
   }, [selectedMoment, visibleMoments]);
 
   const openMoment = (moment: ApiWowMoment) => {
     setSelectedMoment(moment);
-    setSelectedResonance(null);
+    resetLocalReflectionState();
     const firstSourceId = moment.relatedInspirations[0]?.inspirationId;
     setExpandedSourceReasonIds(firstSourceId ? new Set([firstSourceId]) : new Set());
+  };
+
+  const selectResonance = (resonance: ResonanceOption, beliefText: string) => {
+    setSelectedResonance(resonance);
+    setMemoryEndingState("prompt");
+    setMemoryBeliefText(beliefText);
   };
 
   const toggleSourceReason = (sourceId: string) => {
@@ -318,6 +333,7 @@ export function WowMomentsSection({
 
   const selectedPatternReport = selectedMoment ? buildPatternReport(selectedMoment.why) : { lead: "", bodyChunks: [] };
   const selectedPatternVisible = Boolean(selectedPatternReport.lead || selectedPatternReport.bodyChunks.length > 0);
+  const selectedBeliefStatement = selectedMoment ? buildBeliefStatement(selectedMoment) : "";
 
   return (
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
@@ -513,33 +529,80 @@ export function WowMomentsSection({
               <h4>A belief this may point to</h4>
               <span className="wow-moment-belief-ownership">Ownership, not advice</span>
               <figure className="wow-moment-belief-pullquote">
-                <blockquote>{buildBeliefStatement(selectedMoment)}</blockquote>
+                <blockquote>{selectedBeliefStatement}</blockquote>
                 <figcaption>Does this feel like you?</figcaption>
               </figure>
               <div className="wow-moment-belief-actions" aria-label="Belief resonance options">
                 <button
                   aria-pressed={selectedResonance === "thats-me"}
-                  onClick={() => setSelectedResonance("thats-me")}
+                  onClick={() => selectResonance("thats-me", selectedBeliefStatement)}
                   type="button"
                 >
                   That’s me
                 </button>
                 <button
                   aria-pressed={selectedResonance === "partly"}
-                  onClick={() => setSelectedResonance("partly")}
+                  onClick={() => selectResonance("partly", selectedBeliefStatement)}
                   type="button"
                 >
                   Partly
                 </button>
                 <button
                   aria-pressed={selectedResonance === "not-quite"}
-                  onClick={() => setSelectedResonance("not-quite")}
+                  onClick={() => selectResonance("not-quite", selectedBeliefStatement)}
                   type="button"
                 >
                   Not quite
                 </button>
               </div>
               <p className="wow-moment-belief-note">For reflection only; not saved.</p>
+              {selectedResonance ? (
+                <div className="wow-moment-memory-ending" aria-live="polite">
+                  {memoryEndingState === "remembered" ? (
+                    <>
+                      <h5>Noted for now</h5>
+                      <p>This is only marked locally in this reflection. Future memory is coming soon.</p>
+                      <blockquote>{memoryBeliefText}</blockquote>
+                    </>
+                  ) : memoryEndingState === "dismissed" ? (
+                    <>
+                      <h5>We’ll leave this one alone.</h5>
+                      <p>Nothing is saved; this reflection can stay as a passing mirror.</p>
+                    </>
+                  ) : (
+                    <>
+                      <h5>Remember this about me?</h5>
+                      <p>
+                        {memoryEndingState === "editing"
+                          ? "Shape the sentence locally before the future memory flow exists."
+                          : "Coming soon: WAKA will remember confirmed beliefs."}
+                      </p>
+                      {memoryEndingState === "editing" ? (
+                        <label className="wow-moment-memory-edit">
+                          <span>Local draft belief</span>
+                          <textarea
+                            onChange={(event) => setMemoryBeliefText(event.currentTarget.value)}
+                            onInput={(event) => setMemoryBeliefText(event.currentTarget.value)}
+                            rows={3}
+                            value={memoryBeliefText}
+                          />
+                        </label>
+                      ) : null}
+                      <div className="wow-moment-memory-actions" aria-label="Local future-memory actions">
+                        <button onClick={() => setMemoryEndingState("remembered")} type="button">
+                          Remember this
+                        </button>
+                        <button onClick={() => setMemoryEndingState("editing")} type="button">
+                          Edit first
+                        </button>
+                        <button onClick={() => setMemoryEndingState("dismissed")} type="button">
+                          Not for me
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
             </section>
           </aside>
         </div>
