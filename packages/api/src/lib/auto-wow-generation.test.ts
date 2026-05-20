@@ -24,6 +24,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       kind: "bridge",
       title: "Bridge",
       why: "These ideas connect.",
+      beliefStatement: "You may believe bridges make ideas more humane.",
       relatedInspirationIds: [relatedId],
     };
     const ensureEmbedding = vi.fn().mockResolvedValue(unchangedEmbeddingResult());
@@ -58,6 +59,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       kind: "recurrence",
       title: "Again",
       why: "It repeats.",
+      beliefStatement: "This might suggest you value recurring signals.",
       relatedInspirationIds: [relatedId],
     };
     const result = await generateAutoWowMomentForInspiration({

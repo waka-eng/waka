@@ -119,6 +119,7 @@ export function createWowMomentsRoutes(
         title: wowMoments.title,
         kind: wowMoments.kind,
         why: wowMoments.why,
+        beliefStatement: wowMoments.beliefStatement,
         reflectionQuestion: wowMoments.reflectionQuestion,
         wowScore: wowMoments.wowScore,
         createdAt: wowMoments.createdAt,
