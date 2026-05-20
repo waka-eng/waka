@@ -3809,7 +3809,7 @@ body.reflect-bg {
   color: var(--ink);
   cursor: pointer;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .wow-moment-detail-close:hover,
@@ -3823,8 +3823,8 @@ body.reflect-bg {
   margin: 0 0 var(--space-5);
   font-family: var(--font-serif);
   font-weight: 400;
-  font-size: clamp(30px, 5vw, 54px);
-  line-height: 0.96;
+  font-size: clamp(24px, 4vw, 40px);
+  line-height: 1.02;
   letter-spacing: -0.045em;
   color: var(--ink);
 }
@@ -3904,7 +3904,7 @@ body.reflect-bg {
 .wow-moment-detail-section p {
   margin: 0;
   color: var(--ink);
-  font-size: clamp(17px, 2vw, 22px);
+  font-size: clamp(15px, 1.7vw, 18px);
   line-height: 1.45;
 }
 
@@ -3919,7 +3919,7 @@ body.reflect-bg {
   padding: var(--space-4) var(--space-5);
   background: var(--cell);
   font-family: var(--font-serif);
-  font-size: clamp(21px, 3vw, 31px);
+  font-size: clamp(18px, 2.3vw, 24px);
   font-style: italic;
   line-height: 1.2;
   letter-spacing: -0.02em;
@@ -3952,7 +3952,7 @@ body.reflect-bg {
 .wow-moment-pattern-list li,
 .wow-moment-pattern-body p {
   color: var(--ink);
-  font-size: clamp(15px, 1.7vw, 18px);
+  font-size: clamp(14px, 1.4vw, 16px);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -3989,7 +3989,7 @@ body.reflect-bg {
   max-width: 38rem;
   margin: 0 auto;
   font-family: var(--font-serif);
-  font-size: clamp(23px, 3.4vw, 36px);
+  font-size: clamp(19px, 2.6vw, 28px);
   font-style: italic;
   line-height: 1.18;
   letter-spacing: -0.025em;
@@ -4061,7 +4061,7 @@ body.reflect-bg {
 .wow-moment-memory-ending h5 {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: clamp(20px, 2.6vw, 28px);
+  font-size: clamp(17px, 2vw, 22px);
   font-weight: 400;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -4071,7 +4071,7 @@ body.reflect-bg {
 .wow-moment-memory-ending p {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -4081,7 +4081,7 @@ body.reflect-bg {
   border-left: 2px solid rgba(15, 15, 14, 0.18);
   color: var(--ink);
   font-family: var(--font-serif);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -4135,7 +4135,7 @@ body.reflect-bg {
   border-radius: var(--radius-sm);
   background: rgba(255, 253, 247, 0.8);
   color: var(--ink);
-  font: 14px/1.45 var(--font-sans);
+  font: 13px/1.45 var(--font-sans);
   padding: var(--space-2);
 }
 
@@ -4204,7 +4204,7 @@ body.reflect-bg {
   padding-left: var(--space-3);
   border-left: 1px solid rgba(15, 15, 14, 0.22);
   font-family: var(--font-serif);
-  font-size: clamp(16px, 1.8vw, 20px);
+  font-size: clamp(14px, 1.5vw, 16px);
   line-height: 1.5;
   color: var(--ink);
   overflow-wrap: anywhere;
@@ -4238,7 +4238,7 @@ body.reflect-bg {
 .wow-moment-source-reason {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
