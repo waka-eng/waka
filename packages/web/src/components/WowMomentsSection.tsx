@@ -335,6 +335,191 @@ export function WowMomentsSection({
   const selectedPatternVisible = Boolean(selectedPatternReport.lead || selectedPatternReport.bodyChunks.length > 0);
   const selectedBeliefStatement = selectedMoment ? buildBeliefStatement(selectedMoment) : "";
 
+
+  const selectedMomentDetail = selectedMoment ? (
+    <article
+      aria-labelledby="wow-moment-detail-title"
+      className="wow-moment-detail-panel wow-moment-detail-panel--in-grid"
+    >
+      <div className="wow-moment-detail-header">
+        <p className="wow-moment-detail-kicker">Reflection mode</p>
+        <button
+          className="wow-moment-detail-close"
+          onClick={closeMoment}
+          type="button"
+        >
+          Back to grid
+        </button>
+      </div>
+      <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
+      <section className="wow-moment-detail-section wow-moment-detail-section--recognition">
+        <span className="wow-moment-step-label">First, the mirror</span>
+        <h4>A mirror WAKA noticed</h4>
+        <p>This may be a mirror for: {selectedMoment.title}</p>
+      </section>
+      {selectedMoment.relatedInspirations.length > 0 ? (
+        <section className="wow-moment-detail-section wow-moment-detail-section--evidence">
+          <div className="wow-moment-detail-section-header">
+            <div>
+              <span className="wow-moment-step-label">Where WAKA saw it</span>
+              <h4>Source trail</h4>
+              <p className="wow-moment-section-caption">Artifacts behind this reading</p>
+            </div>
+            <span className="wow-moment-source-count">
+              {`${selectedMoment.relatedInspirations.length} source${
+                selectedMoment.relatedInspirations.length === 1 ? "" : "s"
+              }`}
+            </span>
+          </div>
+          <ol className="wow-moment-detail-sources">
+            {selectedMoment.relatedInspirations.map((related) => {
+              const isReasonExpanded = expandedSourceReasonIds.has(related.inspirationId);
+              const reasonId = `wow-source-reason-${selectedMoment.id}-${related.inspirationId}`;
+              return (
+                <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
+                  <span className="wow-moment-related-label">{safeSourceRoleLabel(related.role)}</span>
+                  <blockquote>{related.text}</blockquote>
+                  <button
+                    aria-controls={reasonId}
+                    aria-expanded={isReasonExpanded}
+                    className="wow-moment-source-reason-toggle"
+                    onClick={() => toggleSourceReason(related.inspirationId)}
+                    type="button"
+                  >
+                    Why this source matters
+                  </button>
+                  {isReasonExpanded ? (
+                    <p className="wow-moment-source-reason" id={reasonId}>
+                      <span>Why this source matters</span>
+                      {safeSourceReason(related.reason)}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ) : null}
+      <section className="wow-moment-detail-section wow-moment-detail-section--pattern">
+        <span className="wow-moment-step-label">What this may say about you</span>
+        <h4>What this may say about you</h4>
+        <p>
+          Across these inspirations, you may be returning to a question that already
+          matters to you. Treat this as a mirror, not a recommendation.
+        </p>
+        {selectedPatternVisible ? (
+          <div className="wow-moment-pattern-report">
+            <h5>How the pattern shows up</h5>
+            {selectedPatternReport.lead ? (
+              <p className="wow-moment-pattern-lead">
+                <span className="wow-moment-pattern-label">Field note</span>
+                <span>{selectedPatternReport.lead}</span>
+              </p>
+            ) : null}
+            {selectedPatternReport.bodyChunks.length > 0 ? (
+              <div className="wow-moment-pattern-body" aria-label="How the pattern shows up">
+                {selectedPatternReport.bodyChunks.length > 1 ? (
+                  <ol className="wow-moment-pattern-list">
+                    {selectedPatternReport.bodyChunks.map((chunk, index) => (
+                      <li key={`${selectedMoment.id}-pattern-${index}`}>{chunk}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>{selectedPatternReport.bodyChunks[0]}</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+      {selectedMoment.reflectionQuestion ? (
+        <section className="wow-moment-detail-section wow-moment-detail-section--reflection">
+          <h4>Reflection question</h4>
+          <p>{selectedMoment.reflectionQuestion}</p>
+        </section>
+      ) : null}
+      <section className="wow-moment-detail-section wow-moment-detail-section--belief">
+        <span className="wow-moment-step-label">The belief underneath</span>
+        <h4>A belief this may point to</h4>
+        <span className="wow-moment-belief-ownership">Ownership, not advice</span>
+        <figure className="wow-moment-belief-pullquote">
+          <blockquote>{selectedBeliefStatement}</blockquote>
+          <figcaption>Does this feel like you?</figcaption>
+        </figure>
+        <div className="wow-moment-belief-actions" aria-label="Belief resonance options">
+          <button
+            aria-pressed={selectedResonance === "thats-me"}
+            onClick={() => selectResonance("thats-me", selectedBeliefStatement)}
+            type="button"
+          >
+            That’s me
+          </button>
+          <button
+            aria-pressed={selectedResonance === "partly"}
+            onClick={() => selectResonance("partly", selectedBeliefStatement)}
+            type="button"
+          >
+            Partly
+          </button>
+          <button
+            aria-pressed={selectedResonance === "not-quite"}
+            onClick={() => selectResonance("not-quite", selectedBeliefStatement)}
+            type="button"
+          >
+            Not quite
+          </button>
+        </div>
+        <p className="wow-moment-belief-note">For reflection only; not saved.</p>
+        {selectedResonance ? (
+          <div className="wow-moment-memory-ending" aria-live="polite">
+            {memoryEndingState === "remembered" ? (
+              <>
+                <h5>Noted for now</h5>
+                <p>This is only marked locally in this reflection. Future memory is coming soon.</p>
+                <blockquote>{memoryBeliefText}</blockquote>
+              </>
+            ) : memoryEndingState === "dismissed" ? (
+              <>
+                <h5>We’ll leave this one alone.</h5>
+                <p>Nothing is saved; this reflection can stay as a passing mirror.</p>
+              </>
+            ) : (
+              <>
+                <h5>Remember this about me?</h5>
+                <p>
+                  {memoryEndingState === "editing"
+                    ? "Shape the sentence locally before the future memory flow exists."
+                    : "Coming soon: WAKA will remember confirmed beliefs."}
+                </p>
+                {memoryEndingState === "editing" ? (
+                  <label className="wow-moment-memory-edit">
+                    <span>Local draft belief</span>
+                    <textarea
+                      onChange={(event) => setMemoryBeliefText(event.currentTarget.value)}
+                      onInput={(event) => setMemoryBeliefText(event.currentTarget.value)}
+                      rows={3}
+                      value={memoryBeliefText}
+                    />
+                  </label>
+                ) : null}
+                <div className="wow-moment-memory-actions" aria-label="Local future-memory actions">
+                  <button onClick={() => setMemoryEndingState("remembered")} type="button">
+                    Remember this
+                  </button>
+                  <button onClick={() => setMemoryEndingState("editing")} type="button">
+                    Edit first
+                  </button>
+                  <button onClick={() => setMemoryEndingState("dismissed")} type="button">
+                    Not for me
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
+      </section>
+    </article>
+  ) : null;
   return (
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
       <div className="wow-moments-heading">
@@ -379,234 +564,49 @@ export function WowMomentsSection({
           <span>Keep saving inspirations; patterns will appear here.</span>
         </div>
       ) : (
-        <div className="wow-moments-grid wow-moments-grid--populated">
-          {visibleMoments.map((moment) => {
-            const relatedSources = moment.relatedInspirations;
+        <div
+          className={`wow-moments-grid wow-moments-grid--populated${selectedMoment ? " wow-moments-grid--expanded" : ""}`}
+        >
+          {selectedMomentDetail ??
+            visibleMoments.map((moment) => {
+              const relatedSources = moment.relatedInspirations;
 
-            return (
-              <article
-                aria-label={`Open mirror moment report: ${moment.title}`}
-                className="wow-moment-card wow-moment-card--interactive"
-                key={moment.id}
-                onClick={() => openMoment(moment)}
-                onKeyDown={(event) => handleCardKeyDown(event, moment)}
-                role="button"
-                tabIndex={0}
-              >
-                <h3>{moment.title}</h3>
-                <span className="wow-moment-open-cue" aria-hidden="true">
-                  See why this matters
-                </span>
-                {moment.why ? (
-                  <div className="wow-moment-why" aria-label="Why WAKA noticed this">
-                    <span>Why WAKA noticed this</span>
-                    <p>{moment.why}</p>
-                  </div>
-                ) : null}
-                {relatedSources.length > 0 ? (
-                  <ol className="wow-moment-related" aria-label="Inspirations behind this">
-                    {relatedSources.map((related) => (
-                      <li key={`${moment.id}-${related.inspirationId}`}>
-                        <span className="wow-moment-related-label">Source inspiration</span>
-                        <blockquote>{related.text}</blockquote>
-                      </li>
-                    ))}
-                  </ol>
-                ) : null}
-              </article>
-            );
-          })}
+              return (
+                <article
+                  aria-label={`Open mirror moment report: ${moment.title}`}
+                  className="wow-moment-card wow-moment-card--interactive"
+                  key={moment.id}
+                  onClick={() => openMoment(moment)}
+                  onKeyDown={(event) => handleCardKeyDown(event, moment)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <h3>{moment.title}</h3>
+                  <span className="wow-moment-open-cue" aria-hidden="true">
+                    See why this matters
+                  </span>
+                  {moment.why ? (
+                    <div className="wow-moment-why" aria-label="Why WAKA noticed this">
+                      <span>Why WAKA noticed this</span>
+                      <p>{moment.why}</p>
+                    </div>
+                  ) : null}
+                  {relatedSources.length > 0 ? (
+                    <ol className="wow-moment-related" aria-label="Inspirations behind this">
+                      {relatedSources.map((related) => (
+                        <li key={`${moment.id}-${related.inspirationId}`}>
+                          <span className="wow-moment-related-label">Source inspiration</span>
+                          <blockquote>{related.text}</blockquote>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                </article>
+              );
+            })}
         </div>
       )}
 
-      {selectedMoment ? (
-        <div className="wow-moment-detail-backdrop" role="presentation">
-          <aside
-            aria-labelledby="wow-moment-detail-title"
-            aria-modal="true"
-            className="wow-moment-detail-panel"
-            role="dialog"
-          >
-            <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">Reflection mode</p>
-              <button
-                className="wow-moment-detail-close"
-                onClick={closeMoment}
-                type="button"
-              >
-                Close
-              </button>
-            </div>
-            <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
-            <section className="wow-moment-detail-section wow-moment-detail-section--recognition">
-              <span className="wow-moment-step-label">First, the mirror</span>
-              <h4>A mirror WAKA noticed</h4>
-              <p>This may be a mirror for: {selectedMoment.title}</p>
-            </section>
-            {selectedMoment.relatedInspirations.length > 0 ? (
-              <section className="wow-moment-detail-section wow-moment-detail-section--evidence">
-                <div className="wow-moment-detail-section-header">
-                  <div>
-                    <span className="wow-moment-step-label">Where WAKA saw it</span>
-                    <h4>Source trail</h4>
-                    <p className="wow-moment-section-caption">Artifacts behind this reading</p>
-                  </div>
-                  <span className="wow-moment-source-count">
-                    {`${selectedMoment.relatedInspirations.length} source${
-                      selectedMoment.relatedInspirations.length === 1 ? "" : "s"
-                    }`}
-                  </span>
-                </div>
-                <ol className="wow-moment-detail-sources">
-                  {selectedMoment.relatedInspirations.map((related) => {
-                    const isReasonExpanded = expandedSourceReasonIds.has(related.inspirationId);
-                    const reasonId = `wow-source-reason-${selectedMoment.id}-${related.inspirationId}`;
-                    return (
-                      <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
-                        <span className="wow-moment-related-label">{safeSourceRoleLabel(related.role)}</span>
-                        <blockquote>{related.text}</blockquote>
-                        <button
-                          aria-controls={reasonId}
-                          aria-expanded={isReasonExpanded}
-                          className="wow-moment-source-reason-toggle"
-                          onClick={() => toggleSourceReason(related.inspirationId)}
-                          type="button"
-                        >
-                          Why this source matters
-                        </button>
-                        {isReasonExpanded ? (
-                          <p className="wow-moment-source-reason" id={reasonId}>
-                            <span>Why this source matters</span>
-                            {safeSourceReason(related.reason)}
-                          </p>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ol>
-              </section>
-            ) : null}
-            <section className="wow-moment-detail-section wow-moment-detail-section--pattern">
-              <span className="wow-moment-step-label">What this may say about you</span>
-              <h4>What this may say about you</h4>
-              <p>
-                Across these inspirations, you may be returning to a question that already
-                matters to you. Treat this as a mirror, not a recommendation.
-              </p>
-              {selectedPatternVisible ? (
-                <div className="wow-moment-pattern-report">
-                  <h5>How the pattern shows up</h5>
-                  {selectedPatternReport.lead ? (
-                    <p className="wow-moment-pattern-lead">
-                      <span className="wow-moment-pattern-label">Field note</span>
-                      <span>{selectedPatternReport.lead}</span>
-                    </p>
-                  ) : null}
-                  {selectedPatternReport.bodyChunks.length > 0 ? (
-                    <div className="wow-moment-pattern-body" aria-label="How the pattern shows up">
-                      {selectedPatternReport.bodyChunks.length > 1 ? (
-                        <ol className="wow-moment-pattern-list">
-                          {selectedPatternReport.bodyChunks.map((chunk, index) => (
-                            <li key={`${selectedMoment.id}-pattern-${index}`}>{chunk}</li>
-                          ))}
-                        </ol>
-                      ) : (
-                        <p>{selectedPatternReport.bodyChunks[0]}</p>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
-            {selectedMoment.reflectionQuestion ? (
-              <section className="wow-moment-detail-section wow-moment-detail-section--reflection">
-                <h4>Reflection question</h4>
-                <p>{selectedMoment.reflectionQuestion}</p>
-              </section>
-            ) : null}
-            <section className="wow-moment-detail-section wow-moment-detail-section--belief">
-              <span className="wow-moment-step-label">The belief underneath</span>
-              <h4>A belief this may point to</h4>
-              <span className="wow-moment-belief-ownership">Ownership, not advice</span>
-              <figure className="wow-moment-belief-pullquote">
-                <blockquote>{selectedBeliefStatement}</blockquote>
-                <figcaption>Does this feel like you?</figcaption>
-              </figure>
-              <div className="wow-moment-belief-actions" aria-label="Belief resonance options">
-                <button
-                  aria-pressed={selectedResonance === "thats-me"}
-                  onClick={() => selectResonance("thats-me", selectedBeliefStatement)}
-                  type="button"
-                >
-                  That’s me
-                </button>
-                <button
-                  aria-pressed={selectedResonance === "partly"}
-                  onClick={() => selectResonance("partly", selectedBeliefStatement)}
-                  type="button"
-                >
-                  Partly
-                </button>
-                <button
-                  aria-pressed={selectedResonance === "not-quite"}
-                  onClick={() => selectResonance("not-quite", selectedBeliefStatement)}
-                  type="button"
-                >
-                  Not quite
-                </button>
-              </div>
-              <p className="wow-moment-belief-note">For reflection only; not saved.</p>
-              {selectedResonance ? (
-                <div className="wow-moment-memory-ending" aria-live="polite">
-                  {memoryEndingState === "remembered" ? (
-                    <>
-                      <h5>Noted for now</h5>
-                      <p>This is only marked locally in this reflection. Future memory is coming soon.</p>
-                      <blockquote>{memoryBeliefText}</blockquote>
-                    </>
-                  ) : memoryEndingState === "dismissed" ? (
-                    <>
-                      <h5>We’ll leave this one alone.</h5>
-                      <p>Nothing is saved; this reflection can stay as a passing mirror.</p>
-                    </>
-                  ) : (
-                    <>
-                      <h5>Remember this about me?</h5>
-                      <p>
-                        {memoryEndingState === "editing"
-                          ? "Shape the sentence locally before the future memory flow exists."
-                          : "Coming soon: WAKA will remember confirmed beliefs."}
-                      </p>
-                      {memoryEndingState === "editing" ? (
-                        <label className="wow-moment-memory-edit">
-                          <span>Local draft belief</span>
-                          <textarea
-                            onChange={(event) => setMemoryBeliefText(event.currentTarget.value)}
-                            onInput={(event) => setMemoryBeliefText(event.currentTarget.value)}
-                            rows={3}
-                            value={memoryBeliefText}
-                          />
-                        </label>
-                      ) : null}
-                      <div className="wow-moment-memory-actions" aria-label="Local future-memory actions">
-                        <button onClick={() => setMemoryEndingState("remembered")} type="button">
-                          Remember this
-                        </button>
-                        <button onClick={() => setMemoryEndingState("editing")} type="button">
-                          Edit first
-                        </button>
-                        <button onClick={() => setMemoryEndingState("dismissed")} type="button">
-                          Not for me
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : null}
-            </section>
-          </aside>
-        </div>
-      ) : null}
 
       {showDevInspection && allMomentsOpen ? (
         <div className="wow-moment-detail-backdrop" role="presentation">
