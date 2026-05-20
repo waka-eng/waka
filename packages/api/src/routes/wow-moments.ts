@@ -31,6 +31,7 @@ import {
 import {
   MAX_WOW_MOMENT_SOURCE_LINKS,
   judgeWowMomentForInspiration,
+  normalizeWowSourceEvidence,
   persistWowMomentForInspirationJudgment,
 } from "../lib/wow-judge.js";
 
@@ -175,15 +176,27 @@ export function createWowMomentsRoutes(
         ...moment,
         relatedInspirations: (relatedByMomentId.get(moment.id) ?? [])
           .slice(0, MAX_WOW_MOMENT_SOURCE_LINKS)
-          .map((row) => ({
-            inspirationId: row.inspirationId,
-            role: row.role,
-            reason: row.reason,
-            text: row.inspirationText,
-            kind: row.inspirationKind,
-            createdAt: row.inspirationCreatedAt,
-            wowScore: row.inspirationWowScore,
-          })),
+          .map((row) => {
+            const [source] = normalizeWowSourceEvidence(
+              [
+                {
+                  inspirationId: row.inspirationId,
+                  role: row.role,
+                  reason: row.reason,
+                },
+              ],
+              [row.inspirationId],
+            );
+            return {
+              inspirationId: row.inspirationId,
+              role: source?.role ?? "Source inspiration",
+              reason: source?.reason ?? "Why this source matters",
+              text: row.inspirationText,
+              kind: row.inspirationKind,
+              createdAt: row.inspirationCreatedAt,
+              wowScore: row.inspirationWowScore,
+            };
+          }),
       })),
     });
   });

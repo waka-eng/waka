@@ -7,6 +7,19 @@ const MAX_VISIBLE_WOW_MOMENTS = 9;
 const MAX_BELIEF_EXCERPT_LENGTH = 72;
 const MAX_WOW_LEAD_LENGTH = 180;
 const MAX_PATTERN_CHUNK_LENGTH = 240;
+const SOURCE_FALLBACK_LABEL = "Source inspiration";
+const SOURCE_FALLBACK_REASON = "Why this source matters";
+const INTERNAL_SOURCE_ROLE_LABELS = new Set([
+  "primary",
+  "supporting",
+  "support",
+  "contrast",
+  "contrasting",
+  "related",
+  "trigger",
+  "candidate",
+  "source",
+]);
 type ResonanceOption = "feels-true" | "not-quite";
 
 function cleanBeliefSourceText(value: string | null | undefined): string {
@@ -29,6 +42,31 @@ function stripTerminalPunctuation(value: string): string {
 
 function normalizeReportText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function isDateLookingSourceRoleLabel(value: string): boolean {
+  return (
+    /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(value) ||
+    /\b(?:19|20)\d{2}\b/.test(value) ||
+    /\b\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?\b/.test(value) ||
+    /\b\d{4}[/-]\d{1,2}(?:[/-]\d{1,2})?\b/.test(value)
+  );
+}
+
+function safeSourceRoleLabel(value: string | null | undefined): string {
+  const normalized = normalizeReportText(value);
+  const canonical = normalized.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  if (!normalized || INTERNAL_SOURCE_ROLE_LABELS.has(canonical)) return SOURCE_FALLBACK_LABEL;
+  if (/\b(score|uuid|classifier|candidate|embedding|similarity|rank|id)\b/i.test(normalized)) return SOURCE_FALLBACK_LABEL;
+  if (isDateLookingSourceRoleLabel(normalized)) return SOURCE_FALLBACK_LABEL;
+  return normalized;
+}
+
+function safeSourceReason(value: string | null | undefined): string {
+  const normalized = normalizeReportText(value);
+  if (!normalized) return SOURCE_FALLBACK_REASON;
+  if (/\b(score|uuid|classifier|embedding|runtimeCandidateScore)\b/i.test(normalized)) return SOURCE_FALLBACK_REASON;
+  return normalized;
 }
 
 function sentenceParts(value: string): string[] {
@@ -392,14 +430,12 @@ export function WowMomentsSection({
                 <ol className="wow-moment-detail-sources">
                   {selectedMoment.relatedInspirations.map((related) => (
                     <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
-                      <span className="wow-moment-related-label">Source inspiration</span>
+                      <span className="wow-moment-related-label">{safeSourceRoleLabel(related.role)}</span>
                       <blockquote>{related.text}</blockquote>
-                      {related.reason ? (
-                        <p className="wow-moment-source-reason">
-                          <span>Why this source matters</span>
-                          {related.reason}
-                        </p>
-                      ) : null}
+                      <p className="wow-moment-source-reason">
+                        <span>Why this source matters</span>
+                        {safeSourceReason(related.reason)}
+                      </p>
                     </li>
                   ))}
                 </ol>
@@ -450,14 +486,12 @@ export function WowMomentsSection({
                     <ol className="wow-moments-all-sources">
                       {moment.relatedInspirations.map((related) => (
                         <li key={`all-${moment.id}-${related.inspirationId}`}>
-                          <span>Source inspiration</span>
+                          <span>{safeSourceRoleLabel(related.role)}</span>
                           <blockquote>{related.text}</blockquote>
-                          {related.reason ? (
-                            <p className="wow-moment-source-reason">
-                              <span>Why this source matters</span>
-                              {related.reason}
-                            </p>
-                          ) : null}
+                          <p className="wow-moment-source-reason">
+                            <span>Why this source matters</span>
+                            {safeSourceReason(related.reason)}
+                          </p>
                         </li>
                       ))}
                     </ol>
