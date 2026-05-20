@@ -1521,6 +1521,7 @@ export function HomePage(): JSX.Element {
             moments={wowMoments}
             loading={wowMomentsLoading}
             error={wowMomentsError}
+            showDevInspection={internalStatusEnabled}
           />
         </section>
       </AppShell>

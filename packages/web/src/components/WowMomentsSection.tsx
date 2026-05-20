@@ -7,6 +7,7 @@ const MAX_VISIBLE_WOW_MOMENTS = 9;
 const MAX_BELIEF_EXCERPT_LENGTH = 72;
 const MAX_WOW_LEAD_LENGTH = 180;
 const MAX_PATTERN_CHUNK_LENGTH = 240;
+const MAX_DEV_INSPECTION_PREVIEW_LENGTH = 180;
 const SOURCE_FALLBACK_LABEL = "Source inspiration";
 const SOURCE_FALLBACK_REASON = "Why this source matters";
 const INTERNAL_SOURCE_ROLE_LABELS = new Set([
@@ -65,7 +66,10 @@ function safeSourceRoleLabel(value: string | null | undefined): string {
 function safeSourceReason(value: string | null | undefined): string {
   const normalized = normalizeReportText(value);
   if (!normalized) return SOURCE_FALLBACK_REASON;
-  if (/\b(score|uuid|classifier|embedding|runtimeCandidateScore)\b/i.test(normalized)) return SOURCE_FALLBACK_REASON;
+  if (/\b(score|uuid|classifier|candidate|embedding|similarity|rank|id|runtimeCandidateScore)\b/i.test(normalized)) {
+    return SOURCE_FALLBACK_REASON;
+  }
+  if (isDateLookingSourceRoleLabel(normalized)) return SOURCE_FALLBACK_REASON;
   return normalized;
 }
 
@@ -125,6 +129,26 @@ function buildPatternReport(value: string | null | undefined): { lead: string; b
   }
 
   return { lead: "", bodyChunks: buildPatternChunks(normalized) };
+}
+
+function boundedInspectionPreview(value: string | null | undefined, fallback = "Not generated"): string {
+  const normalized = normalizeReportText(value);
+  if (!normalized) return fallback;
+  if (/\b(prompt|secret|token|provider payload|db_connection_url|connection string|embedding)\b/i.test(normalized)) {
+    return "[redacted internal value]";
+  }
+  if (normalized.length <= MAX_DEV_INSPECTION_PREVIEW_LENGTH) return normalized;
+
+  const clipped = normalized.slice(0, MAX_DEV_INSPECTION_PREVIEW_LENGTH + 1);
+  const lastSpaceIndex = clipped.lastIndexOf(" ");
+  const preview = (lastSpaceIndex > 80 ? clipped.slice(0, lastSpaceIndex) : normalized.slice(0, MAX_DEV_INSPECTION_PREVIEW_LENGTH)).trim();
+  return `${preview}…`;
+}
+
+function inspectionFieldCount(moment: ApiWowMoment): number {
+  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion].filter(
+    (value) => normalizeReportText(value).length > 0,
+  ).length;
 }
 
 function lowerFirstLetter(value: string): string {
@@ -191,12 +215,14 @@ interface WowMomentsSectionProps {
   moments: ApiWowMoment[];
   loading: boolean;
   error: string | null;
+  showDevInspection?: boolean;
 }
 
 export function WowMomentsSection({
   moments,
   loading,
   error,
+  showDevInspection = false,
 }: WowMomentsSectionProps): JSX.Element {
   const bestRecentMoments = [...moments].sort(compareBestRecentWowMoments);
   const visibleMoments = bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
@@ -266,15 +292,17 @@ export function WowMomentsSection({
       {!error && !loading && moments.length > 0 ? (
         <div className="wow-moments-actions">
           <p>{visibleMoments.length} best-recent mirror moments shown.</p>
-          <button
-            aria-controls="all-wow-moments-panel"
-            aria-expanded={allMomentsOpen}
-            className="wow-moments-inspect-button"
-            onClick={() => setAllMomentsOpen(true)}
-            type="button"
-          >
-            Inspect all WOW moments ({bestRecentMoments.length})
-          </button>
+          {showDevInspection ? (
+            <button
+              aria-controls="dev-wow-inspection-panel"
+              aria-expanded={allMomentsOpen}
+              className="wow-moments-inspect-button"
+              onClick={() => setAllMomentsOpen(true)}
+              type="button"
+            >
+              Dev-only inspect WOW fields ({bestRecentMoments.length})
+            </button>
+          ) : null}
         </div>
       ) : null}
       {error ? (
@@ -445,17 +473,17 @@ export function WowMomentsSection({
         </div>
       ) : null}
 
-      {allMomentsOpen ? (
+      {showDevInspection && allMomentsOpen ? (
         <div className="wow-moment-detail-backdrop" role="presentation">
           <aside
-            aria-labelledby="all-wow-moments-title"
+            aria-labelledby="dev-wow-inspection-title"
             aria-modal="true"
-            className="wow-moment-detail-panel wow-moments-all-panel"
-            id="all-wow-moments-panel"
+            className="wow-moment-detail-panel wow-moments-all-panel wow-moments-dev-inspection-panel"
+            id="dev-wow-inspection-panel"
             role="dialog"
           >
             <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">All WOW moments</p>
+              <p className="wow-moment-detail-kicker">Temporary internal inspection</p>
               <button
                 className="wow-moment-detail-close"
                 onClick={() => setAllMomentsOpen(false)}
@@ -464,33 +492,53 @@ export function WowMomentsSection({
                 Close
               </button>
             </div>
-            <h3 id="all-wow-moments-title">Available WOW moments</h3>
+            <h3 id="dev-wow-inspection-title">Generated field previews</h3>
+            <p className="wow-moments-dev-inspection-note">
+              Safe, bounded previews of generated fields for live internal testing. This panel is only
+              shown behind the internal development gate.
+            </p>
             <ol className="wow-moments-all-list">
               {bestRecentMoments.map((moment) => (
                 <li className="wow-moments-all-item" key={`all-${moment.id}`}>
                   <div className="wow-moments-all-item-header">
-                    <strong>{moment.title}</strong>
+                    <strong>{boundedInspectionPreview(moment.title, "Untitled WOW moment")}</strong>
                   </div>
-                  <p>
-                    {moment.relatedInspirations.length} source
-                    {moment.relatedInspirations.length === 1 ? "" : "s"}
-                    {" "}connected
-                  </p>
-                  {moment.why ? (
-                    <div className="wow-moments-all-reasoning">
-                      <p>Why WAKA noticed this</p>
-                      <blockquote>{moment.why}</blockquote>
+                  <dl className="wow-moments-dev-fields">
+                    <div>
+                      <dt>Title / headline</dt>
+                      <dd>{boundedInspectionPreview(moment.title, "Untitled WOW moment")}</dd>
                     </div>
-                  ) : null}
+                    <div>
+                      <dt>Why / meaning copy</dt>
+                      <dd>{boundedInspectionPreview(moment.why)}</dd>
+                    </div>
+                    <div>
+                      <dt>Belief statement</dt>
+                      <dd>{boundedInspectionPreview(moment.beliefStatement)}</dd>
+                    </div>
+                    <div>
+                      <dt>Reflection prompt</dt>
+                      <dd>{boundedInspectionPreview(moment.reflectionQuestion)}</dd>
+                    </div>
+                    <div>
+                      <dt>Compact counts</dt>
+                      <dd>
+                        {moment.relatedInspirations.length} source
+                        {moment.relatedInspirations.length === 1 ? "" : "s"}; {inspectionFieldCount(moment)}
+                        {" "}generated field
+                        {inspectionFieldCount(moment) === 1 ? "" : "s"} present
+                      </dd>
+                    </div>
+                  </dl>
                   {moment.relatedInspirations.length > 0 ? (
                     <ol className="wow-moments-all-sources">
                       {moment.relatedInspirations.map((related) => (
                         <li key={`all-${moment.id}-${related.inspirationId}`}>
-                          <span>{safeSourceRoleLabel(related.role)}</span>
-                          <blockquote>{related.text}</blockquote>
+                          <span>Source role / reason</span>
+                          <blockquote>{boundedInspectionPreview(related.text)}</blockquote>
                           <p className="wow-moment-source-reason">
-                            <span>Why this source matters</span>
-                            {safeSourceReason(related.reason)}
+                            <span>{boundedInspectionPreview(safeSourceRoleLabel(related.role), SOURCE_FALLBACK_LABEL)}</span>
+                            {boundedInspectionPreview(safeSourceReason(related.reason), SOURCE_FALLBACK_REASON)}
                           </p>
                         </li>
                       ))}

@@ -409,7 +409,8 @@ describe("HomePage view model", () => {
     ).toBe("wow");
     expect(container.textContent).toContain("WAKA — wow moments");
     expect(container.textContent).toContain("Wow Moment First");
-    expect(container.textContent).toContain("WOW moments");
+    expect(container.textContent).toContain("What WAKA noticed");
+    expect(container.textContent).toContain("Dev-only inspect WOW fields (2)");
     expect(container.textContent).not.toContain("WOW moment dashboard");
     expect(container.textContent).not.toContain("Start with the durable patterns");
     expect(container.querySelector(".wow-moments-grid")).not.toBeNull();
