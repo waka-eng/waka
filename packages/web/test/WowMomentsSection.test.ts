@@ -118,7 +118,7 @@ describe("WowMomentsSection", () => {
     expect(populatedCardRule).not.toMatch(/overflow:\s*hidden|height:\s*100%/);
   });
 
-  it("keeps the detail modal typography compact without touching card copy", () => {
+  it("keeps the expanded detail typography compact without touching card copy", () => {
     expect(globalCss).toMatch(
       /\.wow-moment-detail-panel h3\s*\{[\s\S]*?font-size:\s*clamp\(24px, 4vw, 40px\);[\s\S]*?line-height:\s*1\.02;/,
     );
@@ -329,12 +329,12 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog']");
-    const lead = dialog?.querySelector<HTMLElement>(".wow-moment-pattern-lead");
-    const points = Array.from(dialog?.querySelectorAll<HTMLElement>(".wow-moment-pattern-list li") ?? []);
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    const lead = detail?.querySelector<HTMLElement>(".wow-moment-pattern-lead");
+    const points = Array.from(detail?.querySelectorAll<HTMLElement>(".wow-moment-pattern-list li") ?? []);
 
-    expect(dialog?.textContent).toContain("How the pattern shows up");
-    expect(dialog?.querySelector(".wow-moment-pattern-body")?.getAttribute("aria-label")).toBe(
+    expect(detail?.textContent).toContain("How the pattern shows up");
+    expect(detail?.querySelector(".wow-moment-pattern-body")?.getAttribute("aria-label")).toBe(
       "How the pattern shows up",
     );
     expect(lead?.querySelector(".wow-moment-pattern-label")?.textContent).toBe("Field note");
@@ -349,8 +349,8 @@ describe("WowMomentsSection", () => {
       "A note about a quiet mobile workflow, a sketch of a three-column card grid, and a prototype review all point toward making ideas easier to test before they become heavy.",
       "That does not prove a fixed trait; it may simply be a useful mirror for what has felt energizing lately.",
     ]);
-    expect(dialog?.textContent).toContain("A field note about playful prototypes.");
-    expect(dialog?.textContent).toContain("First signal in the bridge.");
+    expect(detail?.textContent).toContain("A field note about playful prototypes.");
+    expect(detail?.textContent).toContain("First signal in the bridge.");
     expect(globalCss).toContain(".wow-moment-pattern-lead");
     expect(globalCss).toContain(".wow-moment-pattern-label");
     expect(globalCss).not.toContain('content: "Field note";');
@@ -370,9 +370,9 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog']");
-    const lead = dialog?.querySelector<HTMLElement>(".wow-moment-pattern-lead");
-    const points = Array.from(dialog?.querySelectorAll<HTMLElement>(".wow-moment-pattern-list li") ?? []);
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    const lead = detail?.querySelector<HTMLElement>(".wow-moment-pattern-lead");
+    const points = Array.from(detail?.querySelectorAll<HTMLElement>(".wow-moment-pattern-list li") ?? []);
     const pointText = points.map((point) => point.textContent ?? "");
 
     expect(lead).toBeNull();
@@ -414,40 +414,40 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
-    expect(dialog?.textContent).toContain("Reflection mode");
-    expect(dialog?.textContent).toContain("First, the mirror");
-    expect(dialog?.textContent).toContain("A mirror WAKA noticed");
-    expect(dialog?.textContent).toContain("This may be a mirror for: Prototype idea keeps returning");
-    expect(dialog?.textContent).toContain("Where WAKA saw it");
-    expect(dialog?.textContent).toContain("Source trail");
-    expect(dialog?.textContent).toContain("The practice");
-    expect(dialog?.textContent).toContain("Source inspiration");
-    expect(dialog?.textContent).not.toContain("classifier rank id 2026-05-01");
-    expect(dialog?.textContent).not.toContain("runtimeCandidateScore");
-    expect(dialog?.textContent).toContain("What this may say about you");
-    expect(dialog?.textContent).toContain("The belief underneath");
-    expect(dialog?.textContent).toContain("Ownership, not advice");
-    expect(dialog?.textContent).toContain("For reflection only; not saved.");
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    expect(detail?.textContent).toContain("Reflection mode");
+    expect(detail?.textContent).toContain("First, the mirror");
+    expect(detail?.textContent).toContain("A mirror WAKA noticed");
+    expect(detail?.textContent).toContain("This may be a mirror for: Prototype idea keeps returning");
+    expect(detail?.textContent).toContain("Where WAKA saw it");
+    expect(detail?.textContent).toContain("Source trail");
+    expect(detail?.textContent).toContain("The practice");
+    expect(detail?.textContent).toContain("Source inspiration");
+    expect(detail?.textContent).not.toContain("classifier rank id 2026-05-01");
+    expect(detail?.textContent).not.toContain("runtimeCandidateScore");
+    expect(detail?.textContent).toContain("What this may say about you");
+    expect(detail?.textContent).toContain("The belief underneath");
+    expect(detail?.textContent).toContain("Ownership, not advice");
+    expect(detail?.textContent).toContain("For reflection only; not saved.");
 
     const reasonButtons = Array.from(
-      dialog?.querySelectorAll<HTMLButtonElement>(".wow-moment-source-reason-toggle") ?? [],
+      detail?.querySelectorAll<HTMLButtonElement>(".wow-moment-source-reason-toggle") ?? [],
     );
     expect(reasonButtons.map((button) => button.getAttribute("aria-expanded"))).toEqual([
       "true",
       "false",
     ]);
-    expect(dialog?.querySelector("#wow-source-reason-moment-1-source-open")?.textContent).toContain(
+    expect(detail?.querySelector("#wow-source-reason-moment-1-source-open")?.textContent).toContain(
       "This source shows the ritual the pattern keeps returning to.",
     );
-    expect(dialog?.querySelector("#wow-source-reason-moment-1-source-closed")).toBeNull();
+    expect(detail?.querySelector("#wow-source-reason-moment-1-source-closed")).toBeNull();
 
     act(() => {
       reasonButtons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(reasonButtons[1]?.getAttribute("aria-expanded")).toBe("true");
-    expect(dialog?.querySelector("#wow-source-reason-moment-1-source-closed")?.textContent).toContain(
+    expect(detail?.querySelector("#wow-source-reason-moment-1-source-closed")?.textContent).toContain(
       "Why this source matters",
     );
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -471,33 +471,40 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
-    expect(dialog).not.toBeNull();
-    expect(dialog?.textContent).toContain("Prototype idea keeps returning");
-    expect(dialog?.textContent).toContain("Reflection mode");
-    expect(dialog?.textContent).toContain("How the pattern shows up");
-    expect(dialog?.textContent).toContain("Connects a mobile note with a design sketch.");
-    expect(dialog?.textContent).toContain("What this may say about you");
-    expect(dialog?.textContent).toContain("Treat this as a mirror, not a recommendation.");
-    expect(dialog?.textContent).toContain("Reflection question");
-    expect(dialog?.textContent).toContain("What would make this bridge testable this week?");
-    expect(dialog?.textContent).toContain("A belief this may point to");
-    expect(dialog?.textContent).toContain(
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    const expandedGrid = container.querySelector<HTMLElement>(".wow-moments-grid--expanded");
+    expect(detail).not.toBeNull();
+    expect(expandedGrid).not.toBeNull();
+    expect(expandedGrid?.contains(detail)).toBe(true);
+    expect(container.querySelector("[role='dialog']")).toBeNull();
+    expect(container.querySelector(".wow-moment-detail-backdrop")).toBeNull();
+    expect(container.querySelectorAll(".wow-moment-card--interactive")).toHaveLength(0);
+    expect(detail?.textContent).toContain("Back to grid");
+    expect(detail?.textContent).toContain("Prototype idea keeps returning");
+    expect(detail?.textContent).toContain("Reflection mode");
+    expect(detail?.textContent).toContain("How the pattern shows up");
+    expect(detail?.textContent).toContain("Connects a mobile note with a design sketch.");
+    expect(detail?.textContent).toContain("What this may say about you");
+    expect(detail?.textContent).toContain("Treat this as a mirror, not a recommendation.");
+    expect(detail?.textContent).toContain("Reflection question");
+    expect(detail?.textContent).toContain("What would make this bridge testable this week?");
+    expect(detail?.textContent).toContain("A belief this may point to");
+    expect(detail?.textContent).toContain(
       "One possible reading: because “Connects a mobile note with a design sketch”, this may point to a belief that “Prototype idea keeps returning” is worth exploring rather than treating as a one-off spark.",
     );
-    expect(dialog?.textContent).not.toContain(
+    expect(detail?.textContent).not.toContain(
       "You seem drawn to ideas that keep showing up in different forms.",
     );
-    expect(dialog?.textContent).toContain("Does this feel like you?");
-    expect(dialog?.textContent).toContain("That’s me");
-    expect(dialog?.textContent).toContain("Partly");
-    expect(dialog?.textContent).toContain("Not quite");
-    expect(dialog?.textContent).not.toContain("DEV WOW score 73");
-    expect(dialog?.textContent).toContain("Artifacts behind this reading");
-    expect(dialog?.textContent).toContain("1 source");
-    expect(dialog?.textContent).toContain("A field note about playful prototypes.");
-    expect(dialog?.textContent).toContain("Why this source matters");
-    expect(dialog?.textContent).toContain("First signal in the bridge.");
+    expect(detail?.textContent).toContain("Does this feel like you?");
+    expect(detail?.textContent).toContain("That’s me");
+    expect(detail?.textContent).toContain("Partly");
+    expect(detail?.textContent).toContain("Not quite");
+    expect(detail?.textContent).not.toContain("DEV WOW score 73");
+    expect(detail?.textContent).toContain("Artifacts behind this reading");
+    expect(detail?.textContent).toContain("1 source");
+    expect(detail?.textContent).toContain("A field note about playful prototypes.");
+    expect(detail?.textContent).toContain("Why this source matters");
+    expect(detail?.textContent).toContain("First signal in the bridge.");
   });
 
   it("uses product-facing source role labels in the detail report with safe legacy fallbacks", () => {
@@ -527,12 +534,12 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialogText = container.querySelector<HTMLElement>("[role='dialog']")?.textContent ?? "";
-    expect(dialogText).toContain("The practice");
-    expect(dialogText).toContain("This source shows the ritual the pattern keeps returning to.");
-    expect(dialogText).toContain("Source inspiration");
-    expect(dialogText).toContain("Why this source matters");
-    expect(dialogText).not.toContain("May 2024");
+    const detailText = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid")?.textContent ?? "";
+    expect(detailText).toContain("The practice");
+    expect(detailText).toContain("This source shows the ritual the pattern keeps returning to.");
+    expect(detailText).toContain("Source inspiration");
+    expect(detailText).toContain("Why this source matters");
+    expect(detailText).not.toContain("May 2024");
   });
 
   it("shows a quiet source count in the detail report without exposing source metadata", () => {
@@ -572,17 +579,17 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
-    const sourceCount = dialog?.querySelector<HTMLElement>(".wow-moment-source-count");
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    const sourceCount = detail?.querySelector<HTMLElement>(".wow-moment-source-count");
 
     expect(sourceCount?.textContent).toBe("3 sources");
-    expect(dialog?.textContent).toContain("Artifacts behind this reading");
-    expect(dialog?.textContent).toContain("A sketch that turned the field note into a grid.");
-    expect(dialog?.textContent).not.toContain("primary");
-    expect(dialog?.textContent).not.toContain("supporting");
-    expect(dialog?.textContent).not.toContain("contrast");
-    expect(dialog?.textContent).not.toContain("DEV WOW score 73");
-    expect(dialog?.textContent).not.toContain("2026-04-30");
+    expect(detail?.textContent).toContain("Artifacts behind this reading");
+    expect(detail?.textContent).toContain("A sketch that turned the field note into a grid.");
+    expect(detail?.textContent).not.toContain("primary");
+    expect(detail?.textContent).not.toContain("supporting");
+    expect(detail?.textContent).not.toContain("contrast");
+    expect(detail?.textContent).not.toContain("DEV WOW score 73");
+    expect(detail?.textContent).not.toContain("2026-04-30");
     expect(globalCss).toContain(".wow-moment-source-count");
     expect(globalCss).toContain(".wow-moment-detail-sources::before");
     expect(globalCss).toContain(".wow-moment-detail-sources li::before");
@@ -614,17 +621,17 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog']");
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
     const beliefText =
-      dialog?.querySelector<HTMLElement>(".wow-moment-belief-pullquote blockquote")?.textContent ?? "";
+      detail?.querySelector<HTMLElement>(".wow-moment-belief-pullquote blockquote")?.textContent ?? "";
     expect(beliefText).toContain("One possible reading");
     expect(beliefText.length).toBeLessThan(260);
     expect(beliefText).toContain("…");
     expect(beliefText).not.toContain("final tail that must stay out of the belief excerpt");
     expect(beliefText).not.toContain("final sentence that proves source cards are not truncated");
-    expect(dialog?.textContent).toContain(longWhy);
-    expect(dialog?.textContent).toContain(longSourceText);
-    expect(dialog?.textContent).toContain(longSourceReason);
+    expect(detail?.textContent).toContain(longWhy);
+    expect(detail?.textContent).toContain(longSourceText);
+    expect(detail?.textContent).toContain(longSourceReason);
   });
 
   it("grounds the belief statement in title and source reason for sparse moments", () => {
@@ -648,13 +655,13 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialogText = container.querySelector<HTMLElement>("[role='dialog']")?.textContent ?? "";
-    expect(dialogText).toContain("A belief this may point to");
-    expect(dialogText).toContain(
+    const detailText = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid")?.textContent ?? "";
+    expect(detailText).toContain("A belief this may point to");
+    expect(detailText).toContain(
       "One possible reading: “Quiet interfaces feel more humane” may matter through this source note: “saved because the calm layout made progress feel less punishing”. It points to a belief worth testing gently.",
     );
-    expect(dialogText).toContain("Does this feel like you?");
-    expect(dialogText).not.toContain("You seem drawn to ideas that keep showing up in different forms.");
+    expect(detailText).toContain("Does this feel like you?");
+    expect(detailText).not.toContain("You seem drawn to ideas that keep showing up in different forms.");
   });
 
   it("uses a safe source reason fallback in sparse belief copy when source reason is unsafe", () => {
@@ -733,10 +740,10 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
-    expect(dialog?.textContent).toContain("For reflection only; not saved.");
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    expect(detail?.textContent).toContain("For reflection only; not saved.");
     const buttons = Array.from(
-      dialog?.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button") ?? [],
+      detail?.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button") ?? [],
     );
     const thatsMeButton = buttons.find((button) => button.textContent?.trim() === "That’s me");
     const partlyButton = buttons.find((button) => button.textContent?.trim() === "Partly");
@@ -774,8 +781,9 @@ describe("WowMomentsSection", () => {
     act(() => {
       closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    const reopenedCard = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
     act(() => {
-      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      reopenedCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     const reopenedButtons = Array.from(
@@ -904,14 +912,14 @@ describe("WowMomentsSection", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("opens details with keyboard activation and closes with the Close button and Escape", () => {
+  it("opens details with keyboard activation and closes with the Back to grid button and Escape", () => {
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
     const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
 
     act(() => {
       card?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
-    expect(container.querySelector("[role='dialog']")?.textContent).toContain(
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")?.textContent).toContain(
       "Connects a mobile note with a design sketch.",
     );
 
@@ -919,19 +927,20 @@ describe("WowMomentsSection", () => {
     act(() => {
       closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    expect(container.querySelector("[role='dialog']")).toBeNull();
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")).toBeNull();
 
+    const reopenedCard = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
     act(() => {
-      card?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      reopenedCard?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
     });
-    expect(container.querySelector("[role='dialog']")?.textContent).toContain(
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")?.textContent).toContain(
       "What would make this bridge testable this week?",
     );
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });
-    expect(container.querySelector("[role='dialog']")).toBeNull();
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")).toBeNull();
   });
 
   it("caps populated WOW moment cards at nine without showing a product inspect action", () => {

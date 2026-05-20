@@ -3552,6 +3552,11 @@ body.reflect-bg {
   align-items: stretch;
 }
 
+.wow-moments-grid--expanded {
+  grid-template-columns: 1fr;
+  grid-auto-rows: auto;
+}
+
 .wow-moment-card {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
@@ -3782,6 +3787,15 @@ body.reflect-bg {
   background: rgba(255, 253, 247, 0.96);
   box-shadow: 0 24px 70px rgba(15, 15, 14, 0.18);
   animation: wmOverlaySlide 220ms ease-out;
+}
+
+.wow-moment-detail-panel--in-grid {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  box-shadow: none;
+  animation: none;
 }
 
 .wow-moment-detail-header {
@@ -4397,6 +4411,10 @@ body.reflect-bg {
   .wow-moments-grid--populated {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
+  }
+
+  .wow-moments-grid--expanded {
+    grid-template-columns: 1fr;
   }
 
   .wow-moments-grid--populated .wow-moment-card + .wow-moment-card {
