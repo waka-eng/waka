@@ -51,6 +51,7 @@ interface ApiWowMoment {
   title: string;
   kind: "recurrence" | "bridge" | "surprise_bridge" | "tension" | "outlier";
   why: string;
+  beliefStatement: string | null;
   reflectionQuestion: string | null;
   wowScore: number;
   createdAt: string;
@@ -77,6 +78,7 @@ async function insertWowMomentForUser(
     createdAt: Date;
     wowScore?: number;
     idempotencyKey: string;
+    beliefStatement?: string | null;
   },
 ): Promise<{ id: string }> {
   const [moment] = await getDb()
@@ -86,6 +88,7 @@ async function insertWowMomentForUser(
       title: input.title,
       kind: "bridge",
       why: `${input.title} why`,
+      beliefStatement: input.beliefStatement ?? null,
       reflectionQuestion: null,
       wowScore: input.wowScore ?? 50,
       createdAt: input.createdAt,
@@ -143,6 +146,38 @@ describe("GET /api/wow-moments — list contract", () => {
         `WOW ${offset.toString().padStart(2, "0")}`,
       ),
     );
+  });
+
+
+  it("returns persisted belief statements and safely includes null for legacy rows", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+
+    await insertWowMomentForUser(alice.user.id, {
+      title: "Belief-backed WOW",
+      createdAt: new Date(Date.UTC(2026, 4, 3, 12, 0, 0)),
+      wowScore: 90,
+      idempotencyKey: `test:wow-moments:belief:${alice.user.id}:new`,
+      beliefStatement: "You may believe progress should feel humane, not pressurized.",
+    });
+    await insertWowMomentForUser(alice.user.id, {
+      title: "Legacy WOW",
+      createdAt: new Date(Date.UTC(2026, 4, 3, 11, 0, 0)),
+      wowScore: 80,
+      idempotencyKey: `test:wow-moments:belief:${alice.user.id}:legacy`,
+      beliefStatement: null,
+    });
+
+    const res = await authedClient(alice).get<ListWowMomentsResponse>(
+      "/api/wow-moments?limit=2",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.wowMoments.map((moment) => ({ title: moment.title, beliefStatement: moment.beliefStatement }))).toEqual([
+      { title: "Belief-backed WOW", beliefStatement: "You may believe progress should feel humane, not pressurized." },
+      { title: "Legacy WOW", beliefStatement: null },
+    ]);
   });
 
   it("accepts a bounded query limit for larger inspect lists", async () => {
@@ -419,6 +454,7 @@ describe("POST /api/wow-moments/generate — manual generation", () => {
       kind: "bridge",
       title: "A bridge appears",
       why: "The trigger and candidate connect two useful frames.",
+      beliefStatement: "You may believe useful progress comes from bridges between frames.",
       reflectionQuestion: "What would you try next?",
       relatedInspirationIds: [candidate.id],
     });
@@ -436,6 +472,8 @@ describe("POST /api/wow-moments/generate — manual generation", () => {
     expect(second.status).toBe(200);
     expect(first.body).toMatchObject({ generated: true, status: "created" });
     expect(second.body).toMatchObject({ generated: true, status: "existing" });
+    expect(first.body.judgment.beliefStatement).toBe("You may believe useful progress comes from bridges between frames.");
+    expect(first.body.wowMoment.beliefStatement).toBe("You may believe useful progress comes from bridges between frames.");
     expect(second.body.wowMoment.id).toBe(first.body.wowMoment.id);
     expect(second.body.inspirationLinks.map((link: { inspirationId: string }) => link.inspirationId)).toEqual([
       trigger.id,

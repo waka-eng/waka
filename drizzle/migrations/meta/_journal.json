@@ -78,6 +78,13 @@
       "when": 1778843032025,
       "tag": "0010_shallow_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779239700993,
+      "tag": "0011_chief_changeling",
+      "breakpoints": true
     }
   ]
 }

@@ -557,6 +557,7 @@ export interface ApiWowMoment {
   title: string;
   kind: WowKind;
   why: string;
+  beliefStatement: string | null;
   reflectionQuestion: string | null;
   wowScore: number;
   createdAt: string;

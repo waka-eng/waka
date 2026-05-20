@@ -98,6 +98,9 @@ function sourceQuote(value: string): string {
 }
 
 function buildBeliefStatement(moment: ApiWowMoment): string {
+  const suppliedBelief = cleanBeliefSourceText(moment.beliefStatement);
+  if (suppliedBelief) return suppliedBelief;
+
   const title = beliefExcerpt(moment.title);
   const why = beliefExcerpt(moment.why);
   const sourceReason = beliefExcerpt(

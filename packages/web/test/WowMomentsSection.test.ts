@@ -18,6 +18,7 @@ const sampleMoment: ApiWowMoment = {
   title: "Prototype idea keeps returning",
   kind: "bridge",
   why: "Connects a mobile note with a design sketch.",
+  beliefStatement: null,
   reflectionQuestion: "What would make this bridge testable this week?",
   wowScore: 87,
   createdAt: "2026-05-01T00:00:00.000Z",
@@ -520,6 +521,29 @@ describe("WowMomentsSection", () => {
     );
     expect(dialogText).toContain("Does this feel true?");
     expect(dialogText).not.toContain("You seem drawn to ideas that keep showing up in different forms.");
+  });
+
+
+  it("uses a supplied source-grounded belief statement instead of deriving one from title and why", () => {
+    const momentWithBelief: ApiWowMoment = {
+      ...sampleMoment,
+      title: "Title that should not be repurposed",
+      why: "Why text that should not become the belief sentence.",
+      beliefStatement: "You may believe progress should feel humane, not pressurized.",
+    };
+    const container = renderInteractiveSection({ moments: [momentWithBelief], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const beliefText =
+      container.querySelector<HTMLElement>(".wow-moment-detail-section--belief > p")?.textContent ?? "";
+    expect(beliefText).toContain("You may believe progress should feel humane, not pressurized. Does this feel true?");
+    expect(beliefText).not.toContain("One possible reading");
+    expect(beliefText).not.toContain("Title that should not be repurposed");
+    expect(beliefText).not.toContain("Why text that should not become the belief sentence");
   });
 
   it("keeps belief resonance buttons local, selected, and explicitly unsaved", () => {
