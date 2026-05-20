@@ -118,6 +118,28 @@ describe("WowMomentsSection", () => {
     expect(populatedCardRule).not.toMatch(/overflow:\s*hidden|height:\s*100%/);
   });
 
+  it("keeps the detail modal typography compact without touching card copy", () => {
+    expect(globalCss).toMatch(
+      /\.wow-moment-detail-panel h3\s*\{[\s\S]*?font-size:\s*clamp\(24px, 4vw, 40px\);[\s\S]*?line-height:\s*1\.02;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-detail-section p\s*\{[\s\S]*?font-size:\s*clamp\(15px, 1\.7vw, 18px\);[\s\S]*?line-height:\s*1\.45;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-belief-pullquote blockquote\s*\{[\s\S]*?font-size:\s*clamp\(19px, 2\.6vw, 28px\);[\s\S]*?line-height:\s*1\.18;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-detail-sources blockquote\s*\{[\s\S]*?font-size:\s*clamp\(14px, 1\.5vw, 16px\);[\s\S]*?line-height:\s*1\.5;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-memory-ending h5\s*\{[\s\S]*?font-size:\s*clamp\(17px, 2vw, 22px\);[\s\S]*?line-height:\s*1\.1;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-memory-ending blockquote\s*\{[\s\S]*?font-size:\s*14px;[\s\S]*?line-height:\s*1\.4;/,
+    );
+    expect(globalCss).toMatch(/\.wow-moment-card h3\s*\{[\s\S]*?font-size:\s*clamp\(14px, 1\.1vw, 17px\);/);
+  });
+
   it("renders a loading state", () => {
     const html = renderSection({ moments: [], loading: true, error: null });
 
