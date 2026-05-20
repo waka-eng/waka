@@ -10,6 +10,7 @@ const MAX_PATTERN_CHUNK_LENGTH = 240;
 const MAX_DEV_INSPECTION_PREVIEW_LENGTH = 180;
 const SOURCE_FALLBACK_LABEL = "Source inspiration";
 const SOURCE_FALLBACK_REASON = "Why this source matters";
+const SOURCE_FALLBACK_TEXT = "a source inspiration";
 const INTERNAL_SOURCE_ROLE_LABELS = new Set([
   "primary",
   "supporting",
@@ -63,13 +64,30 @@ function safeSourceRoleLabel(value: string | null | undefined): string {
   return normalized;
 }
 
+function unsafeSourceTextPattern(value: string): boolean {
+  return /\b(score|uuid|classifier|candidate|embedding|similarity|rank|id|runtimeCandidateScore|provider|payload|prompt|secret|token|debug)\b/i.test(
+    value,
+  );
+}
+
 function safeSourceReason(value: string | null | undefined): string {
   const normalized = normalizeReportText(value);
   if (!normalized) return SOURCE_FALLBACK_REASON;
-  if (/\b(score|uuid|classifier|candidate|embedding|similarity|rank|id|runtimeCandidateScore)\b/i.test(normalized)) {
-    return SOURCE_FALLBACK_REASON;
-  }
+  if (unsafeSourceTextPattern(normalized)) return SOURCE_FALLBACK_REASON;
   if (isDateLookingSourceRoleLabel(normalized)) return SOURCE_FALLBACK_REASON;
+  return normalized;
+}
+
+function safeBeliefSourceReason(value: string | null | undefined): string {
+  const normalized = cleanBeliefSourceText(value);
+  return normalized ? safeSourceReason(normalized) : "";
+}
+
+function safeBeliefSourceText(value: string | null | undefined): string {
+  const normalized = cleanBeliefSourceText(value);
+  if (!normalized) return "";
+  if (unsafeSourceTextPattern(normalized)) return SOURCE_FALLBACK_TEXT;
+  if (isDateLookingSourceRoleLabel(normalized)) return SOURCE_FALLBACK_TEXT;
   return normalized;
 }
 
@@ -166,10 +184,10 @@ function buildBeliefStatement(moment: ApiWowMoment): string {
   const title = beliefExcerpt(moment.title);
   const why = beliefExcerpt(moment.why);
   const sourceReason = beliefExcerpt(
-    moment.relatedInspirations.find((related) => cleanBeliefSourceText(related.reason))?.reason,
+    safeBeliefSourceReason(moment.relatedInspirations.find((related) => cleanBeliefSourceText(related.reason))?.reason),
   );
   const sourceText = beliefExcerpt(
-    moment.relatedInspirations.find((related) => cleanBeliefSourceText(related.text))?.text,
+    safeBeliefSourceText(moment.relatedInspirations.find((related) => cleanBeliefSourceText(related.text))?.text),
   );
 
   if (why && title) {
@@ -228,11 +246,13 @@ export function WowMomentsSection({
   const visibleMoments = bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
   const [selectedMoment, setSelectedMoment] = useState<ApiWowMoment | null>(null);
   const [selectedResonance, setSelectedResonance] = useState<ResonanceOption | null>(null);
+  const [expandedSourceReasonIds, setExpandedSourceReasonIds] = useState<Set<string>>(new Set());
   const [allMomentsOpen, setAllMomentsOpen] = useState(false);
 
   const closeMoment = () => {
     setSelectedMoment(null);
     setSelectedResonance(null);
+    setExpandedSourceReasonIds(new Set());
   };
 
   useEffect(() => {
@@ -266,12 +286,27 @@ export function WowMomentsSection({
     if (!visibleMoments.some((moment) => moment.id === selectedMoment.id)) {
       setSelectedMoment(null);
       setSelectedResonance(null);
+      setExpandedSourceReasonIds(new Set());
     }
   }, [selectedMoment, visibleMoments]);
 
   const openMoment = (moment: ApiWowMoment) => {
     setSelectedMoment(moment);
     setSelectedResonance(null);
+    const firstSourceId = moment.relatedInspirations[0]?.inspirationId;
+    setExpandedSourceReasonIds(firstSourceId ? new Set([firstSourceId]) : new Set());
+  };
+
+  const toggleSourceReason = (sourceId: string) => {
+    setExpandedSourceReasonIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+      if (nextIds.has(sourceId)) {
+        nextIds.delete(sourceId);
+      } else {
+        nextIds.add(sourceId);
+      }
+      return nextIds;
+    });
   };
 
   const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLElement>, moment: ApiWowMoment) => {
@@ -377,7 +412,7 @@ export function WowMomentsSection({
             role="dialog"
           >
             <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">Personal pattern report</p>
+              <p className="wow-moment-detail-kicker">Guided WOW disclosure</p>
               <button
                 className="wow-moment-detail-close"
                 onClick={closeMoment}
@@ -387,36 +422,85 @@ export function WowMomentsSection({
               </button>
             </div>
             <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
-            {selectedPatternVisible ? (
-              <section className="wow-moment-detail-section wow-moment-detail-section--pattern">
-                <h4>How the pattern shows up</h4>
-                {selectedPatternReport.lead ? (
-                  <p className="wow-moment-pattern-lead">
-                    <span className="wow-moment-pattern-label">Field note</span>
-                    <span>{selectedPatternReport.lead}</span>
-                  </p>
-                ) : null}
-                {selectedPatternReport.bodyChunks.length > 0 ? (
-                  <div className="wow-moment-pattern-body" aria-label="How the pattern shows up">
-                    {selectedPatternReport.bodyChunks.length > 1 ? (
-                      <ol className="wow-moment-pattern-list">
-                        {selectedPatternReport.bodyChunks.map((chunk, index) => (
-                          <li key={`${selectedMoment.id}-pattern-${index}`}>{chunk}</li>
-                        ))}
-                      </ol>
-                    ) : (
-                      <p>{selectedPatternReport.bodyChunks[0]}</p>
-                    )}
+            <section className="wow-moment-detail-section wow-moment-detail-section--recognition">
+              <span className="wow-moment-step-label">Step 1 · Recognition</span>
+              <h4>A mirror WAKA noticed</h4>
+              <p>This may be a mirror for: {selectedMoment.title}</p>
+            </section>
+            {selectedMoment.relatedInspirations.length > 0 ? (
+              <section className="wow-moment-detail-section wow-moment-detail-section--evidence">
+                <div className="wow-moment-detail-section-header">
+                  <div>
+                    <span className="wow-moment-step-label">Step 2 · Evidence</span>
+                    <h4>Source inspirations</h4>
+                    <p className="wow-moment-section-caption">Inspirations behind this</p>
                   </div>
-                ) : null}
+                  <span className="wow-moment-source-count">
+                    {`${selectedMoment.relatedInspirations.length} source${
+                      selectedMoment.relatedInspirations.length === 1 ? "" : "s"
+                    }`}
+                  </span>
+                </div>
+                <ol className="wow-moment-detail-sources">
+                  {selectedMoment.relatedInspirations.map((related) => {
+                    const isReasonExpanded = expandedSourceReasonIds.has(related.inspirationId);
+                    const reasonId = `wow-source-reason-${selectedMoment.id}-${related.inspirationId}`;
+                    return (
+                      <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
+                        <span className="wow-moment-related-label">{safeSourceRoleLabel(related.role)}</span>
+                        <blockquote>{related.text}</blockquote>
+                        <button
+                          aria-controls={reasonId}
+                          aria-expanded={isReasonExpanded}
+                          className="wow-moment-source-reason-toggle"
+                          onClick={() => toggleSourceReason(related.inspirationId)}
+                          type="button"
+                        >
+                          Why this source matters
+                        </button>
+                        {isReasonExpanded ? (
+                          <p className="wow-moment-source-reason" id={reasonId}>
+                            <span>Why this source matters</span>
+                            {safeSourceReason(related.reason)}
+                          </p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
               </section>
             ) : null}
-            <section className="wow-moment-detail-section">
+            <section className="wow-moment-detail-section wow-moment-detail-section--pattern">
+              <span className="wow-moment-step-label">Step 3 · Meaning</span>
               <h4>What this may say about you</h4>
               <p>
                 Across these inspirations, you may be returning to a question that already
                 matters to you. Treat this as a mirror, not a recommendation.
               </p>
+              {selectedPatternVisible ? (
+                <div className="wow-moment-pattern-report">
+                  <h5>How the pattern shows up</h5>
+                  {selectedPatternReport.lead ? (
+                    <p className="wow-moment-pattern-lead">
+                      <span className="wow-moment-pattern-label">Field note</span>
+                      <span>{selectedPatternReport.lead}</span>
+                    </p>
+                  ) : null}
+                  {selectedPatternReport.bodyChunks.length > 0 ? (
+                    <div className="wow-moment-pattern-body" aria-label="How the pattern shows up">
+                      {selectedPatternReport.bodyChunks.length > 1 ? (
+                        <ol className="wow-moment-pattern-list">
+                          {selectedPatternReport.bodyChunks.map((chunk, index) => (
+                            <li key={`${selectedMoment.id}-pattern-${index}`}>{chunk}</li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p>{selectedPatternReport.bodyChunks[0]}</p>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </section>
             {selectedMoment.reflectionQuestion ? (
               <section className="wow-moment-detail-section wow-moment-detail-section--reflection">
@@ -425,7 +509,9 @@ export function WowMomentsSection({
               </section>
             ) : null}
             <section className="wow-moment-detail-section wow-moment-detail-section--belief">
+              <span className="wow-moment-step-label">Step 4 · Belief + response</span>
               <h4>A belief this may point to</h4>
+              <span className="wow-moment-belief-ownership">Ownership, not advice</span>
               <p>{buildBeliefStatement(selectedMoment)} Does this feel true?</p>
               <div className="wow-moment-belief-actions" aria-label="Belief resonance options">
                 <button
@@ -445,30 +531,6 @@ export function WowMomentsSection({
               </div>
               <p className="wow-moment-belief-note">For reflection only; not saved.</p>
             </section>
-            {selectedMoment.relatedInspirations.length > 0 ? (
-              <section className="wow-moment-detail-section">
-                <div className="wow-moment-detail-section-header">
-                  <h4>Inspirations behind this</h4>
-                  <span className="wow-moment-source-count">
-                    {`${selectedMoment.relatedInspirations.length} source${
-                      selectedMoment.relatedInspirations.length === 1 ? "" : "s"
-                    }`}
-                  </span>
-                </div>
-                <ol className="wow-moment-detail-sources">
-                  {selectedMoment.relatedInspirations.map((related) => (
-                    <li key={`${selectedMoment.id}-detail-${related.inspirationId}`}>
-                      <span className="wow-moment-related-label">{safeSourceRoleLabel(related.role)}</span>
-                      <blockquote>{related.text}</blockquote>
-                      <p className="wow-moment-source-reason">
-                        <span>Why this source matters</span>
-                        {safeSourceReason(related.reason)}
-                      </p>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            ) : null}
           </aside>
         </div>
       ) : null}
