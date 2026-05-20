@@ -393,19 +393,18 @@ describe("WowMomentsSection", () => {
     });
 
     const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
-    expect(dialog?.textContent).toContain("Guided WOW disclosure");
-    expect(dialog?.textContent).toContain("Step 1 · Recognition");
+    expect(dialog?.textContent).toContain("Reflection mode");
+    expect(dialog?.textContent).toContain("First, the mirror");
     expect(dialog?.textContent).toContain("A mirror WAKA noticed");
     expect(dialog?.textContent).toContain("This may be a mirror for: Prototype idea keeps returning");
-    expect(dialog?.textContent).toContain("Step 2 · Evidence");
-    expect(dialog?.textContent).toContain("Source inspirations");
+    expect(dialog?.textContent).toContain("Where WAKA saw it");
+    expect(dialog?.textContent).toContain("Source trail");
     expect(dialog?.textContent).toContain("The practice");
     expect(dialog?.textContent).toContain("Source inspiration");
     expect(dialog?.textContent).not.toContain("classifier rank id 2026-05-01");
     expect(dialog?.textContent).not.toContain("runtimeCandidateScore");
-    expect(dialog?.textContent).toContain("Step 3 · Meaning");
     expect(dialog?.textContent).toContain("What this may say about you");
-    expect(dialog?.textContent).toContain("Step 4 · Belief + response");
+    expect(dialog?.textContent).toContain("The belief underneath");
     expect(dialog?.textContent).toContain("Ownership, not advice");
     expect(dialog?.textContent).toContain("For reflection only; not saved.");
 
@@ -453,7 +452,7 @@ describe("WowMomentsSection", () => {
     const dialog = container.querySelector<HTMLElement>("[role='dialog'][aria-modal='true']");
     expect(dialog).not.toBeNull();
     expect(dialog?.textContent).toContain("Prototype idea keeps returning");
-    expect(dialog?.textContent).toContain("Guided WOW disclosure");
+    expect(dialog?.textContent).toContain("Reflection mode");
     expect(dialog?.textContent).toContain("How the pattern shows up");
     expect(dialog?.textContent).toContain("Connects a mobile note with a design sketch.");
     expect(dialog?.textContent).toContain("What this may say about you");
@@ -467,11 +466,12 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).not.toContain(
       "You seem drawn to ideas that keep showing up in different forms.",
     );
-    expect(dialog?.textContent).toContain("Does this feel true?");
-    expect(dialog?.textContent).toContain("Feels true");
+    expect(dialog?.textContent).toContain("Does this feel like you?");
+    expect(dialog?.textContent).toContain("That’s me");
+    expect(dialog?.textContent).toContain("Partly");
     expect(dialog?.textContent).toContain("Not quite");
     expect(dialog?.textContent).not.toContain("DEV WOW score 73");
-    expect(dialog?.textContent).toContain("Inspirations behind this");
+    expect(dialog?.textContent).toContain("Artifacts behind this reading");
     expect(dialog?.textContent).toContain("1 source");
     expect(dialog?.textContent).toContain("A field note about playful prototypes.");
     expect(dialog?.textContent).toContain("Why this source matters");
@@ -554,7 +554,7 @@ describe("WowMomentsSection", () => {
     const sourceCount = dialog?.querySelector<HTMLElement>(".wow-moment-source-count");
 
     expect(sourceCount?.textContent).toBe("3 sources");
-    expect(dialog?.textContent).toContain("Inspirations behind this");
+    expect(dialog?.textContent).toContain("Artifacts behind this reading");
     expect(dialog?.textContent).toContain("A sketch that turned the field note into a grid.");
     expect(dialog?.textContent).not.toContain("primary");
     expect(dialog?.textContent).not.toContain("supporting");
@@ -562,6 +562,9 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).not.toContain("DEV WOW score 73");
     expect(dialog?.textContent).not.toContain("2026-04-30");
     expect(globalCss).toContain(".wow-moment-source-count");
+    expect(globalCss).toContain(".wow-moment-detail-sources::before");
+    expect(globalCss).toContain(".wow-moment-detail-sources li::before");
+    expect(globalCss).toContain(".wow-moment-detail-sources li::after");
   });
 
   it("keeps belief excerpts concise while preserving full source evidence elsewhere", () => {
@@ -591,7 +594,7 @@ describe("WowMomentsSection", () => {
 
     const dialog = container.querySelector<HTMLElement>("[role='dialog']");
     const beliefText =
-      dialog?.querySelector<HTMLElement>(".wow-moment-detail-section--belief > p")?.textContent ?? "";
+      dialog?.querySelector<HTMLElement>(".wow-moment-belief-pullquote blockquote")?.textContent ?? "";
     expect(beliefText).toContain("One possible reading");
     expect(beliefText.length).toBeLessThan(260);
     expect(beliefText).toContain("…");
@@ -628,7 +631,7 @@ describe("WowMomentsSection", () => {
     expect(dialogText).toContain(
       "One possible reading: “Quiet interfaces feel more humane” may matter through this source note: “saved because the calm layout made progress feel less punishing”. It points to a belief worth testing gently.",
     );
-    expect(dialogText).toContain("Does this feel true?");
+    expect(dialogText).toContain("Does this feel like you?");
     expect(dialogText).not.toContain("You seem drawn to ideas that keep showing up in different forms.");
   });
 
@@ -656,12 +659,14 @@ describe("WowMomentsSection", () => {
     });
 
     const beliefText =
-      container.querySelector<HTMLElement>(".wow-moment-detail-section--belief > p")?.textContent ?? "";
+      container.querySelector<HTMLElement>(".wow-moment-belief-pullquote blockquote")?.textContent ?? "";
     expect(beliefText).toContain("One possible reading");
     expect(beliefText).toContain(
       "One possible reading: “Quiet interfaces feel more humane” may matter through this source note: “why this source matters”. It points to a belief worth testing gently.",
     );
-    expect(beliefText).toContain("Does this feel true?");
+    expect(container.querySelector<HTMLElement>(".wow-moment-belief-pullquote figcaption")?.textContent).toBe(
+      "Does this feel like you?",
+    );
     expect(beliefText).not.toContain("runtimeCandidateScore");
     expect(beliefText).not.toContain("classifier provider payload");
     expect(beliefText).not.toContain("2026-05-01");
@@ -682,11 +687,18 @@ describe("WowMomentsSection", () => {
     });
 
     const beliefText =
-      container.querySelector<HTMLElement>(".wow-moment-detail-section--belief > p")?.textContent ?? "";
-    expect(beliefText).toContain("You may believe progress should feel humane, not pressurized. Does this feel true?");
+      container.querySelector<HTMLElement>(".wow-moment-belief-pullquote blockquote")?.textContent ?? "";
+    expect(beliefText).toContain("You may believe progress should feel humane, not pressurized.");
     expect(beliefText).not.toContain("One possible reading");
     expect(beliefText).not.toContain("Title that should not be repurposed");
     expect(beliefText).not.toContain("Why text that should not become the belief sentence");
+    expect(globalCss).toMatch(
+      /\.wow-moment-belief-pullquote\s*\{[\s\S]*?max-width:\s*46rem;[\s\S]*?margin:\s*var\(--space-3\) auto 0;[\s\S]*?text-align:\s*center;/,
+    );
+    expect(globalCss).toMatch(
+      /\.wow-moment-belief-pullquote blockquote\s*\{[\s\S]*?max-width:\s*38rem;[\s\S]*?margin:\s*0 auto;[\s\S]*?font-style:\s*italic;/,
+    );
+    expect(globalCss).toContain(".wow-moment-belief-pullquote figcaption");
   });
 
   it("keeps belief resonance buttons local, selected, and explicitly unsaved", () => {
@@ -704,26 +716,31 @@ describe("WowMomentsSection", () => {
     const buttons = Array.from(
       dialog?.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button") ?? [],
     );
-    const feelsTrueButton = buttons.find((button) => button.textContent?.trim() === "Feels true");
+    const thatsMeButton = buttons.find((button) => button.textContent?.trim() === "That’s me");
+    const partlyButton = buttons.find((button) => button.textContent?.trim() === "Partly");
     const notQuiteButton = buttons.find((button) => button.textContent?.trim() === "Not quite");
 
-    expect(feelsTrueButton).not.toBeUndefined();
+    expect(thatsMeButton).not.toBeUndefined();
+    expect(partlyButton).not.toBeUndefined();
     expect(notQuiteButton).not.toBeUndefined();
-    expect(feelsTrueButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(thatsMeButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(partlyButton?.getAttribute("aria-pressed")).toBe("false");
     expect(notQuiteButton?.getAttribute("aria-pressed")).toBe("false");
 
     act(() => {
-      feelsTrueButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      thatsMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(feelsTrueButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(thatsMeButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(partlyButton?.getAttribute("aria-pressed")).toBe("false");
     expect(notQuiteButton?.getAttribute("aria-pressed")).toBe("false");
 
     act(() => {
       notQuiteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(feelsTrueButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(thatsMeButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(partlyButton?.getAttribute("aria-pressed")).toBe("false");
     expect(notQuiteButton?.getAttribute("aria-pressed")).toBe("true");
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(globalCss).toMatch(
@@ -743,6 +760,7 @@ describe("WowMomentsSection", () => {
       container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
     );
     expect(reopenedButtons.map((button) => button.getAttribute("aria-pressed"))).toEqual([
+      "false",
       "false",
       "false",
     ]);

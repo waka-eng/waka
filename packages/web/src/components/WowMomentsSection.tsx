@@ -22,7 +22,7 @@ const INTERNAL_SOURCE_ROLE_LABELS = new Set([
   "candidate",
   "source",
 ]);
-type ResonanceOption = "feels-true" | "not-quite";
+type ResonanceOption = "thats-me" | "partly" | "not-quite";
 
 function cleanBeliefSourceText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -412,7 +412,7 @@ export function WowMomentsSection({
             role="dialog"
           >
             <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">Guided WOW disclosure</p>
+              <p className="wow-moment-detail-kicker">Reflection mode</p>
               <button
                 className="wow-moment-detail-close"
                 onClick={closeMoment}
@@ -423,7 +423,7 @@ export function WowMomentsSection({
             </div>
             <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
             <section className="wow-moment-detail-section wow-moment-detail-section--recognition">
-              <span className="wow-moment-step-label">Step 1 · Recognition</span>
+              <span className="wow-moment-step-label">First, the mirror</span>
               <h4>A mirror WAKA noticed</h4>
               <p>This may be a mirror for: {selectedMoment.title}</p>
             </section>
@@ -431,9 +431,9 @@ export function WowMomentsSection({
               <section className="wow-moment-detail-section wow-moment-detail-section--evidence">
                 <div className="wow-moment-detail-section-header">
                   <div>
-                    <span className="wow-moment-step-label">Step 2 · Evidence</span>
-                    <h4>Source inspirations</h4>
-                    <p className="wow-moment-section-caption">Inspirations behind this</p>
+                    <span className="wow-moment-step-label">Where WAKA saw it</span>
+                    <h4>Source trail</h4>
+                    <p className="wow-moment-section-caption">Artifacts behind this reading</p>
                   </div>
                   <span className="wow-moment-source-count">
                     {`${selectedMoment.relatedInspirations.length} source${
@@ -471,7 +471,7 @@ export function WowMomentsSection({
               </section>
             ) : null}
             <section className="wow-moment-detail-section wow-moment-detail-section--pattern">
-              <span className="wow-moment-step-label">Step 3 · Meaning</span>
+              <span className="wow-moment-step-label">What this may say about you</span>
               <h4>What this may say about you</h4>
               <p>
                 Across these inspirations, you may be returning to a question that already
@@ -509,17 +509,27 @@ export function WowMomentsSection({
               </section>
             ) : null}
             <section className="wow-moment-detail-section wow-moment-detail-section--belief">
-              <span className="wow-moment-step-label">Step 4 · Belief + response</span>
+              <span className="wow-moment-step-label">The belief underneath</span>
               <h4>A belief this may point to</h4>
               <span className="wow-moment-belief-ownership">Ownership, not advice</span>
-              <p>{buildBeliefStatement(selectedMoment)} Does this feel true?</p>
+              <figure className="wow-moment-belief-pullquote">
+                <blockquote>{buildBeliefStatement(selectedMoment)}</blockquote>
+                <figcaption>Does this feel like you?</figcaption>
+              </figure>
               <div className="wow-moment-belief-actions" aria-label="Belief resonance options">
                 <button
-                  aria-pressed={selectedResonance === "feels-true"}
-                  onClick={() => setSelectedResonance("feels-true")}
+                  aria-pressed={selectedResonance === "thats-me"}
+                  onClick={() => setSelectedResonance("thats-me")}
                   type="button"
                 >
-                  Feels true
+                  That’s me
+                </button>
+                <button
+                  aria-pressed={selectedResonance === "partly"}
+                  onClick={() => setSelectedResonance("partly")}
+                  type="button"
+                >
+                  Partly
                 </button>
                 <button
                   aria-pressed={selectedResonance === "not-quite"}

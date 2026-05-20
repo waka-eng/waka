@@ -3977,6 +3977,35 @@ body.reflect-bg {
   background: rgba(246, 242, 232, 0.58);
 }
 
+.wow-moment-belief-pullquote {
+  max-width: 46rem;
+  margin: var(--space-3) auto 0;
+  padding: var(--space-4) 0 0;
+  border-top: var(--border-hairline);
+  text-align: center;
+}
+
+.wow-moment-belief-pullquote blockquote {
+  max-width: 38rem;
+  margin: 0 auto;
+  font-family: var(--font-serif);
+  font-size: clamp(23px, 3.4vw, 36px);
+  font-style: italic;
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.wow-moment-belief-pullquote figcaption {
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .wow-moment-belief-actions {
   display: flex;
   flex-wrap: wrap;
@@ -4022,9 +4051,20 @@ body.reflect-bg {
 .wow-moment-detail-sources {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 var(--space-4);
   display: grid;
-  gap: var(--space-2);
+  gap: 0;
+  position: relative;
+}
+
+.wow-moment-detail-sources::before {
+  content: "";
+  position: absolute;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  left: 4px;
+  width: 1px;
+  background: var(--line);
 }
 
 .wow-moment-detail-sources li {
@@ -4034,12 +4074,39 @@ body.reflect-bg {
   background: rgba(255, 253, 247, 0.78);
   display: grid;
   gap: var(--space-2);
+  position: relative;
+}
+
+.wow-moment-detail-sources li + li {
+  margin-top: var(--space-3);
+}
+
+.wow-moment-detail-sources li::before {
+  content: "";
+  position: absolute;
+  top: var(--space-4);
+  left: calc(-1 * var(--space-4) - 1px);
+  width: var(--space-4);
+  height: 1px;
+  background: var(--line);
+}
+
+.wow-moment-detail-sources li::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-4) - 3px);
+  left: calc(-1 * var(--space-4) - 4px);
+  width: 7px;
+  height: 7px;
+  border: var(--border-hairline);
+  border-radius: 50%;
+  background: var(--cell);
 }
 
 .wow-moment-detail-sources blockquote {
   margin: 0;
   padding-left: var(--space-3);
-  border-left: 2px solid rgba(15, 15, 14, 0.22);
+  border-left: 1px solid rgba(15, 15, 14, 0.22);
   font-family: var(--font-serif);
   font-size: clamp(16px, 1.8vw, 20px);
   line-height: 1.5;
