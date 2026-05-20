@@ -404,6 +404,41 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("First signal in the bridge.");
   });
 
+  it("uses product-facing source role labels in the detail report with safe legacy fallbacks", () => {
+    const momentWithSourceRoles: ApiWowMoment = {
+      ...sampleMoment,
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-practice",
+          role: "The practice",
+          reason: "This source shows the ritual the pattern keeps returning to.",
+          text: "A note about doing a tiny daily version.",
+        },
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "inspiration-legacy",
+          role: "May 2024",
+          reason: "",
+          text: "A legacy note with no product-facing explanation.",
+        },
+      ],
+    };
+    const container = renderInteractiveSection({ moments: [momentWithSourceRoles], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialogText = container.querySelector<HTMLElement>("[role='dialog']")?.textContent ?? "";
+    expect(dialogText).toContain("The practice");
+    expect(dialogText).toContain("This source shows the ritual the pattern keeps returning to.");
+    expect(dialogText).toContain("Source inspiration");
+    expect(dialogText).toContain("Why this source matters");
+    expect(dialogText).not.toContain("May 2024");
+  });
+
   it("shows a quiet source count in the detail report without exposing source metadata", () => {
     const momentWithThreeSources: ApiWowMoment = {
       ...sampleMoment,

@@ -131,6 +131,18 @@ describe("GeminiWowJudgeClient", () => {
         beliefStatement: "You may believe shared memory should live in community places.",
         reflectionQuestion: "What other civic spaces behave like memory systems?",
         relatedInspirationIds: [triggerId, candidateId],
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "The memory place",
+            reason: "This source frames libraries as places that preserve neighborhood memory.",
+          },
+          {
+            inspirationId: candidateId,
+            role: "The parallel practice",
+            reason: "This source shows the same memory-preservation pattern in seed banks.",
+          },
+        ],
       }),
     );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
@@ -165,7 +177,199 @@ describe("GeminiWowJudgeClient", () => {
       beliefStatement: "You may believe shared memory should live in community places.",
       reflectionQuestion: "What other civic spaces behave like memory systems?",
       relatedInspirationIds: [triggerId, candidateId],
+      sourceEvidence: [
+        {
+          inspirationId: triggerId,
+          role: "The memory place",
+          reason: "This source frames libraries as places that preserve neighborhood memory.",
+        },
+        {
+          inspirationId: candidateId,
+          role: "The parallel practice",
+          reason: "This source shows the same memory-preservation pattern in seed banks.",
+        },
+      ],
     });
+  });
+
+  it("rejects true WOW judgments that use internal source evidence role labels", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000071";
+    const candidateId = "00000000-0000-4000-8000-000000000072";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "tension",
+        title: "Practice Meets Philosophy",
+        why: "One source names a daily ritual while another names the belief behind it.",
+        beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+        relatedInspirationIds: [triggerId, candidateId],
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "The practice",
+            reason: "This note shows the behavior the pattern keeps returning to.",
+          },
+          {
+            inspirationId: candidateId,
+            role: "primary",
+            reason: "This source names the underlying philosophy without turning it into advice.",
+          },
+        ],
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId))).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      debugSummary: "Gemini returned a WOW judgment that failed schema validation.",
+      parseFailureStage: "initial_schema_invalid",
+      schemaIssueSummary: expect.stringContaining("sourceEvidence"),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects true WOW judgments with missing sourceEvidence", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000073";
+    const candidateId = "00000000-0000-4000-8000-000000000074";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Practice Meets Philosophy",
+        why: "One source names a daily ritual while another names the belief behind it.",
+        beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+        relatedInspirationIds: [triggerId, candidateId],
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId))).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      parseFailureStage: "initial_schema_invalid",
+      schemaIssueSummary: expect.stringContaining("sourceEvidence"),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects true WOW judgments with incomplete sourceEvidence", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000075";
+    const candidateId = "00000000-0000-4000-8000-000000000076";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Practice Meets Philosophy",
+        why: "One source names a daily ritual while another names the belief behind it.",
+        beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+        relatedInspirationIds: [triggerId, candidateId],
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "The practice",
+            reason: "This note shows the behavior the pattern keeps returning to.",
+          },
+        ],
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId))).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      parseFailureStage: "initial_schema_invalid",
+      schemaIssueSummary: expect.stringContaining("sourceEvidence"),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("repairs a true WOW judgment with no related ids and empty sourceEvidence instead of synthesizing generic source labels", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000077";
+    const candidateId = "00000000-0000-4000-8000-000000000078";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          isWowMoment: true,
+          kind: "bridge",
+          title: "Practice Meets Philosophy",
+          why: "One source names a daily ritual while another names the belief behind it.",
+          beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+          sourceEvidence: [],
+        }),
+      )
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          isWowMoment: true,
+          kind: "bridge",
+          title: "Practice Meets Philosophy",
+          why: "One source names a daily ritual while another names the belief behind it.",
+          beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+          relatedInspirationIds: [triggerId, candidateId],
+          sourceEvidence: [
+            {
+              inspirationId: triggerId,
+              role: "The daily ritual",
+              reason: "This source grounds the practical behavior in the pattern.",
+            },
+            {
+              inspirationId: candidateId,
+              role: "The underlying philosophy",
+              reason: "This source grounds the belief that gives the ritual meaning.",
+            },
+          ],
+        }),
+      );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId))).resolves.toEqual({
+      isWowMoment: true,
+      kind: "bridge",
+      title: "Practice Meets Philosophy",
+      why: "One source names a daily ritual while another names the belief behind it.",
+      beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+      relatedInspirationIds: [triggerId, candidateId],
+      sourceEvidence: [
+        {
+          inspirationId: triggerId,
+          role: "The daily ritual",
+          reason: "This source grounds the practical behavior in the pattern.",
+        },
+        {
+          inspirationId: candidateId,
+          role: "The underlying philosophy",
+          reason: "This source grounds the belief that gives the ritual meaning.",
+        },
+      ],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects repaired true WOW judgments that still omit related ids and source evidence", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000079";
+    const candidateId = "00000000-0000-4000-8000-000000000080";
+    const unsafeTrueOutput = {
+      isWowMoment: true,
+      kind: "bridge",
+      title: "Practice Meets Philosophy",
+      why: "One source names a daily ritual while another names the belief behind it.",
+      beliefStatement: "You may believe durable progress needs both ritual and philosophy.",
+      sourceEvidence: [],
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiJsonResponse(unsafeTrueOutput))
+      .mockResolvedValueOnce(geminiJsonResponse(unsafeTrueOutput));
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId))).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      parseFailureStage: "repair_schema_invalid",
+      schemaIssueSummary: expect.stringMatching(/relatedInspirationIds|sourceEvidence/),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns a validated false WOW judgment from Gemini JSON", async () => {
@@ -316,6 +520,18 @@ describe("GeminiWowJudgeClient", () => {
         title: "Shared Memory",
         why: tooLongWhy,
         beliefStatement: "You may believe shared memory should be tended by communities.",
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "The civic memory",
+            reason: "This source grounds the civic side of the pattern.",
+          },
+          {
+            inspirationId: candidateId,
+            role: "The ecological mirror",
+            reason: "This source grounds the ecological side of the pattern.",
+          },
+        ],
       }),
     );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
@@ -366,6 +582,23 @@ describe("GeminiWowJudgeClient", () => {
         title: "Shared Memory",
         why: longWhy,
         beliefStatement: "This might suggest you value memory held in common.",
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "The civic memory",
+            reason: "This source grounds the civic side of the pattern.",
+          },
+          {
+            inspirationId: candidateId,
+            role: "The ecological mirror",
+            reason: "This source grounds the ecological side of the pattern.",
+          },
+          {
+            inspirationId: secondCandidateId,
+            role: "The archive echo",
+            reason: "This source adds the archive echo to the pattern.",
+          },
+        ],
       }),
     );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
@@ -470,6 +703,18 @@ describe("GeminiWowJudgeClient", () => {
         why: "Both notes connect civic spaces with living memory systems.",
         beliefStatement: "You may believe shared memory should stay connected to civic life.",
         relatedInspirationIds: [triggerId, unsafeId],
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "The civic memory",
+            reason: "This source grounds the safe side of the pattern.",
+          },
+          {
+            inspirationId: unsafeId,
+            role: "The unsafe echo",
+            reason: "This source should be rejected by tenant safety checks.",
+          },
+        ],
       }),
     );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
@@ -520,6 +765,13 @@ describe("GeminiWowJudgeClient", () => {
           why: "Both notes connect civic spaces with living memory systems.",
           beliefStatement: "You may believe shared memory should stay connected to civic life.",
           relatedInspirationIds: [unsafeId],
+          sourceEvidence: [
+            {
+              inspirationId: unsafeId,
+              role: "The unsafe echo",
+              reason: "This source should be rejected by tenant safety checks.",
+            },
+          ],
         }),
       );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
@@ -594,25 +846,27 @@ describe("GeminiWowJudgeClient", () => {
   });
 
 
-  it("finalizes simple MAX_TOKENS true JSON prefixes with allowed ids", async () => {
+  it("does not finalize MAX_TOKENS true JSON prefixes without sourceEvidence", async () => {
     const triggerId = "00000000-0000-4000-8000-000000000061";
     const candidateId = "00000000-0000-4000-8000-000000000062";
     const truncatedTruePrefix =
       '{"isWowMoment":true,"kind":"bridge","title":"Shared Memory","why":"Both notes connect civic spaces with living memory systems.","beliefStatement":"You may believe shared memory should stay connected to civic life."';
-    const fetchMock = vi.fn().mockResolvedValue(geminiTextResponse(truncatedTruePrefix, "MAX_TOKENS"));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(geminiTextResponse(truncatedTruePrefix, "MAX_TOKENS"))
+      .mockResolvedValueOnce(
+        new Response("not-json", { status: 200, headers: { "Content-Type": "text/plain" } }),
+      );
     const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
 
     await expect(
       client.judgeWowMoment(wowJudgeInputWithCandidate(triggerId, candidateId)),
-    ).resolves.toEqual({
-      isWowMoment: true,
-      kind: "bridge",
-      title: "Shared Memory",
-      why: "Both notes connect civic spaces with living memory systems.",
-      beliefStatement: "You may believe shared memory should stay connected to civic life.",
-      relatedInspirationIds: [triggerId, candidateId],
+    ).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      parseFailureStage: "initial_non_json",
     });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns safe false when truncated true MAX_TOKENS retry is still bad", async () => {
@@ -857,13 +1111,20 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("ids belong only in");
     expect(requestText).toContain("values/beliefs/identity");
     expect(requestText).toContain("beliefStatement");
+    expect(requestText).toContain("sourceEvidence");
+    expect(requestText).toContain("product-facing role label");
+    expect(requestText).toContain("not primary/supporting/contrast/related");
     expect(requestText).toContain("You may");
     expect(JSON.stringify(request.generationConfig.responseSchema)).toContain("beliefStatement");
-    expect(request.generationConfig.responseSchema).toMatchObject({
-      properties: { beliefStatement: { type: "STRING" } },
-    });
-    expect(request.generationConfig.responseSchema).toMatchObject({
-      required: ["isWowMoment"],
+    expect(JSON.stringify(request.generationConfig.responseSchema)).toContain("sourceEvidence");
+    const schema = request.generationConfig.responseSchema as { anyOf?: Array<{ properties?: Record<string, unknown>; required?: string[] }> };
+    const trueSchema = schema.anyOf?.find((variant) => variant.properties?.sourceEvidence);
+    expect(trueSchema).toMatchObject({
+      properties: expect.objectContaining({
+        beliefStatement: { type: "STRING" },
+        sourceEvidence: expect.objectContaining({ type: "ARRAY" }),
+      }),
+      required: expect.arrayContaining(["sourceEvidence"]),
     });
     expect(request.generationConfig).toEqual(
       expect.objectContaining({
@@ -918,6 +1179,18 @@ describe("judgeWowMomentForInspiration", () => {
         why: "The trigger and candidate bridge civic and ecological memory systems.",
         beliefStatement: "This might suggest you value memory that communities can tend together.",
         relatedInspirationIds: [trigger.id, candidate.id],
+        sourceEvidence: [
+          {
+            inspirationId: trigger.id,
+            role: "The civic memory",
+            reason: "This source introduces libraries as neighborhood memory systems.",
+          },
+          {
+            inspirationId: candidate.id,
+            role: "The ecological parallel",
+            reason: "This source shows a parallel memory pattern in seed banks.",
+          },
+        ],
       }),
     };
 
@@ -936,6 +1209,18 @@ describe("judgeWowMomentForInspiration", () => {
       why: "The trigger and candidate bridge civic and ecological memory systems.",
       beliefStatement: "This might suggest you value memory that communities can tend together.",
       relatedInspirationIds: [trigger.id, candidate.id],
+      sourceEvidence: [
+        {
+          inspirationId: trigger.id,
+          role: "The civic memory",
+          reason: "This source introduces libraries as neighborhood memory systems.",
+        },
+        {
+          inspirationId: candidate.id,
+          role: "The ecological parallel",
+          reason: "This source shows a parallel memory pattern in seed banks.",
+        },
+      ],
     });
     expect(client.judgeWowMoment).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -987,7 +1272,20 @@ describe("judgeWowMomentForInspiration", () => {
         kind: "bridge",
         title: "Unsafe relation",
         why: "The model included an id outside the safe set.",
+        beliefStatement: "You may believe local-first systems should stay within trusted boundaries.",
         relatedInspirationIds: [trigger.id, bobInspiration.id],
+        sourceEvidence: [
+          {
+            inspirationId: trigger.id,
+            role: "The boundary signal",
+            reason: "This source provides the local-first boundary that should be respected.",
+          },
+          {
+            inspirationId: bobInspiration.id,
+            role: "The unsafe source",
+            reason: "This source should be rejected because it is outside the safe tenant set.",
+          },
+        ],
       }),
     };
 
@@ -1028,6 +1326,18 @@ describe("judgeWowMomentForInspiration", () => {
         why: longWhy,
         beliefStatement: "api_key=secret123456789 You may believe shared memory should remain humane and community-owned even when systems scale. " + "x".repeat(260),
         relatedInspirationIds: [candidate.id, candidate.id],
+        sourceEvidence: [
+          {
+            inspirationId: trigger.id,
+            role: "The atmosphere",
+            reason: "This source carries the civic feeling behind the pattern.",
+          },
+          {
+            inspirationId: candidate.id,
+            role: "The repeated signal",
+            reason: "This source repeats the memory-infrastructure signal in a different domain.",
+          },
+        ],
       },
     });
 
@@ -1045,8 +1355,18 @@ describe("judgeWowMomentForInspiration", () => {
       result.persisted ? result.wowMoment.id : "",
     );
     expect(links).toEqual([
-      { inspiration_id: trigger.id, role: "trigger", reason: "", sort_order: 0 },
-      { inspiration_id: candidate.id, role: "related", reason: "", sort_order: 1 },
+      {
+        inspiration_id: trigger.id,
+        role: "The atmosphere",
+        reason: "This source carries the civic feeling behind the pattern.",
+        sort_order: 0,
+      },
+      {
+        inspiration_id: candidate.id,
+        role: "The repeated signal",
+        reason: "This source repeats the memory-infrastructure signal in a different domain.",
+        sort_order: 1,
+      },
     ]);
   });
 
@@ -1113,6 +1433,13 @@ describe("judgeWowMomentForInspiration", () => {
         why: "This should not be persisted because the trigger is absent.",
         beliefStatement: "You may believe missing triggers should not create records.",
         relatedInspirationIds: [missingTriggerId],
+        sourceEvidence: [
+          {
+            inspirationId: missingTriggerId,
+            role: "The missing trigger",
+            reason: "This source would anchor the pattern if it existed.",
+          },
+        ],
       },
     });
 
@@ -1126,6 +1453,13 @@ describe("judgeWowMomentForInspiration", () => {
         why: "This should not be persisted because the trigger is absent.",
         beliefStatement: "You may believe missing triggers should not create records.",
         relatedInspirationIds: [missingTriggerId],
+        sourceEvidence: [
+          {
+            inspirationId: missingTriggerId,
+            role: "The missing trigger",
+            reason: "This source would anchor the pattern if it existed.",
+          },
+        ],
       },
     });
     expect(await countWowMoments(testDb)).toBe(0);
@@ -1161,6 +1495,23 @@ describe("judgeWowMomentForInspiration", () => {
           why: "The model included an id outside the safe set.",
           beliefStatement: "You may believe safe links should stay tenant-bounded.",
           relatedInspirationIds: [trigger.id, aliceCandidate.id, bobInspiration.id],
+          sourceEvidence: [
+            {
+              inspirationId: trigger.id,
+              role: "The boundary signal",
+              reason: "This source provides the tenant boundary for the pattern.",
+            },
+            {
+              inspirationId: aliceCandidate.id,
+              role: "The safe candidate",
+              reason: "This source is the same-tenant related note.",
+            },
+            {
+              inspirationId: bobInspiration.id,
+              role: "The unsafe tenant",
+              reason: "This source should be rejected because it belongs to another user.",
+            },
+          ],
         },
       }),
     ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
@@ -1185,6 +1536,18 @@ describe("judgeWowMomentForInspiration", () => {
       why: "A retry should return the existing moment.",
       beliefStatement: "You may believe repeated patterns should remain steady.",
       relatedInspirationIds: [trigger.id, candidate.id],
+      sourceEvidence: [
+        {
+          inspirationId: trigger.id,
+          role: "The retry trigger",
+          reason: "This source anchors the repeated pattern being retried.",
+        },
+        {
+          inspirationId: candidate.id,
+          role: "The retry mirror",
+          reason: "This source shows the related pattern should remain linked.",
+        },
+      ],
     };
 
     const first = await persistWowMomentForInspirationJudgment({
@@ -1228,6 +1591,18 @@ describe("judgeWowMomentForInspiration", () => {
       why: "Concurrent retries should resolve to a single durable idempotent moment.",
       beliefStatement: "You may believe durable patterns should survive retries.",
       relatedInspirationIds: [trigger.id, candidate.id],
+      sourceEvidence: [
+        {
+          inspirationId: trigger.id,
+          role: "The concurrent trigger",
+          reason: "This source anchors the durable pattern under concurrent retries.",
+        },
+        {
+          inspirationId: candidate.id,
+          role: "The concurrent mirror",
+          reason: "This source shows the related durable pattern for concurrency.",
+        },
+      ],
     };
 
     const [first, second] = await Promise.all([
@@ -1260,8 +1635,18 @@ describe("judgeWowMomentForInspiration", () => {
     expect(persistedMoments[0]?.idempotencyKey).toBe(first.wowMoment.idempotencyKey);
     const links = await listWowMomentLinks(testDb, first.wowMoment.id);
     expect(links).toEqual([
-      { inspiration_id: trigger.id, role: "trigger", reason: "", sort_order: 0 },
-      { inspiration_id: candidate.id, role: "related", reason: "", sort_order: 1 },
+      {
+        inspiration_id: trigger.id,
+        role: "The concurrent trigger",
+        reason: "This source anchors the durable pattern under concurrent retries.",
+        sort_order: 0,
+      },
+      {
+        inspiration_id: candidate.id,
+        role: "The concurrent mirror",
+        reason: "This source shows the related durable pattern for concurrency.",
+        sort_order: 1,
+      },
     ]);
   });
 
@@ -1303,6 +1688,23 @@ describe("judgeWowMomentForInspiration", () => {
           why: "Only retrieved bounded candidates may be linked.",
           beliefStatement: "You may believe bounded evidence should shape the mirror.",
           relatedInspirationIds: [trigger.id, topCandidate.id, extraCandidate.id],
+          sourceEvidence: [
+            {
+              inspirationId: trigger.id,
+              role: "The bounded trigger",
+              reason: "This source anchors the bounded candidate test.",
+            },
+            {
+              inspirationId: topCandidate.id,
+              role: "The top candidate",
+              reason: "This source is the retrieved candidate in the safe set.",
+            },
+            {
+              inspirationId: extraCandidate.id,
+              role: "The extra candidate",
+              reason: "This source should be rejected because it was outside the bounded retrieval.",
+            },
+          ],
         },
       }),
     ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);

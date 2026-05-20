@@ -218,6 +218,54 @@ describe("GET /api/wow-moments — list contract", () => {
     expect(tooLarge.status).toBe(400);
     expect(malformed.status).toBe(400);
   });
+
+  it("returns product-facing source roles and safe legacy fallbacks", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+    const sourceA = await createInspirationFixture(db, alice.user.id, {
+      text: "A quiet ritual note.",
+    });
+    const sourceB = await createInspirationFixture(db, alice.user.id, {
+      text: "A philosophy note.",
+    });
+    const moment = await insertWowMomentForUser(alice.user.id, {
+      title: "Ritual and philosophy",
+      createdAt: new Date(Date.UTC(2026, 4, 4, 12, 0, 0)),
+      wowScore: 99,
+      idempotencyKey: `test:wow-moments:source-roles:${alice.user.id}`,
+    });
+
+    await db.insert(wowMomentInspirations).values([
+      {
+        userId: alice.user.id,
+        wowMomentId: moment.id,
+        inspirationId: sourceA.id,
+        role: "The practice",
+        reason: "This source shows the behavior the pattern keeps returning to.",
+        sortOrder: 0,
+      },
+      {
+        userId: alice.user.id,
+        wowMomentId: moment.id,
+        inspirationId: sourceB.id,
+        role: "May 2024",
+        reason: "",
+        sortOrder: 1,
+      },
+    ] as unknown as Array<typeof wowMomentInspirations.$inferInsert>);
+
+    const res = await authedClient(alice).get<ListWowMomentsResponse>("/api/wow-moments?limit=1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.wowMoments[0]?.relatedInspirations.map(({ role, reason }) => ({ role, reason }))).toEqual([
+      {
+        role: "The practice",
+        reason: "This source shows the behavior the pattern keeps returning to.",
+      },
+      { role: "Source inspiration", reason: "Why this source matters" },
+    ]);
+  });
 });
 
 describe("GET /api/wow-moments — ownership", () => {
@@ -456,7 +504,19 @@ describe("POST /api/wow-moments/generate — manual generation", () => {
       why: "The trigger and candidate connect two useful frames.",
       beliefStatement: "You may believe useful progress comes from bridges between frames.",
       reflectionQuestion: "What would you try next?",
-      relatedInspirationIds: [candidate.id],
+      relatedInspirationIds: [trigger.id, candidate.id],
+      sourceEvidence: [
+        {
+          inspirationId: trigger.id,
+          role: "Starting frame",
+          reason: "This note supplies the starting frame in the bridge.",
+        },
+        {
+          inspirationId: candidate.id,
+          role: "Second frame",
+          reason: "This note supplies the second frame in the bridge.",
+        },
+      ],
     });
 
     const first = await authedClient(alice).json<any>("POST", "/api/wow-moments/generate", {
