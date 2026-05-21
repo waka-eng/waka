@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import type { ApiWowMoment } from "../lib/api";
 
@@ -245,8 +246,9 @@ export function WowMomentsSection({
   showDevInspection = false,
   onAddInspiration,
 }: WowMomentsSectionProps): JSX.Element {
-  const bestRecentMoments = [...moments].sort(compareBestRecentWowMoments);
-  const visibleMoments = bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const bestRecentMoments = useMemo(() => [...moments].sort(compareBestRecentWowMoments), [moments]);
+  const visibleMoments = useMemo(() => bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS), [bestRecentMoments]);
   const [selectedMoment, setSelectedMoment] = useState<ApiWowMoment | null>(null);
   const [selectedResonance, setSelectedResonance] = useState<ResonanceOption | null>(null);
   const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
@@ -260,10 +262,24 @@ export function WowMomentsSection({
     setMemoryBeliefText("");
   };
 
-  const closeMoment = () => {
+  const selectMomentDetail = (moment: ApiWowMoment) => {
+    setSelectedMoment(moment);
+    resetLocalReflectionState();
+    const firstSourceId = moment.relatedInspirations[0]?.inspirationId;
+    setExpandedSourceReasonIds(firstSourceId ? new Set([firstSourceId]) : new Set());
+  };
+
+  const clearSelectedMomentDetail = () => {
     setSelectedMoment(null);
     resetLocalReflectionState();
     setExpandedSourceReasonIds(new Set());
+  };
+
+  const closeMoment = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("wow");
+    setSearchParams(nextParams, { replace: true });
+    clearSelectedMomentDetail();
   };
 
   useEffect(() => {
@@ -293,19 +309,38 @@ export function WowMomentsSection({
   }, [allMomentsOpen]);
 
   useEffect(() => {
-    if (!selectedMoment) return;
-    if (!visibleMoments.some((moment) => moment.id === selectedMoment.id)) {
-      setSelectedMoment(null);
-      resetLocalReflectionState();
-      setExpandedSourceReasonIds(new Set());
+    const selectedWowId = searchParams.get("wow");
+
+    if (!selectedWowId) {
+      if (selectedMoment) {
+        clearSelectedMomentDetail();
+      }
+      return;
     }
-  }, [selectedMoment, visibleMoments]);
+
+    if (loading) return;
+
+    const querySelectedMoment = visibleMoments.find((moment) => moment.id === selectedWowId);
+    if (!querySelectedMoment) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("wow");
+      setSearchParams(nextParams, { replace: true });
+      if (selectedMoment) {
+        clearSelectedMomentDetail();
+      }
+      return;
+    }
+
+    if (selectedMoment?.id !== querySelectedMoment.id) {
+      selectMomentDetail(querySelectedMoment);
+    }
+  }, [loading, searchParams, selectedMoment, setSearchParams, visibleMoments]);
 
   const openMoment = (moment: ApiWowMoment) => {
-    setSelectedMoment(moment);
-    resetLocalReflectionState();
-    const firstSourceId = moment.relatedInspirations[0]?.inspirationId;
-    setExpandedSourceReasonIds(firstSourceId ? new Set([firstSourceId]) : new Set());
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("wow", moment.id);
+    setSearchParams(nextParams);
+    selectMomentDetail(moment);
   };
 
   const selectResonance = (resonance: ResonanceOption, beliefText: string) => {

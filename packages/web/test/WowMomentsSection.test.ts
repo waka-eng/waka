@@ -7,6 +7,7 @@ import * as React from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WowMomentsSection } from "../src/components/WowMomentsSection";
@@ -52,19 +53,32 @@ const componentSource = readFileSync(
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 function renderSection(props: Parameters<typeof WowMomentsSection>[0]): string {
-  return renderToStaticMarkup(React.createElement(WowMomentsSection, props));
+  return renderToStaticMarkup(
+    React.createElement(MemoryRouter, null, React.createElement(WowMomentsSection, props)),
+  );
 }
 
 let mountedRoot: ReturnType<typeof createRoot> | null = null;
 let mountedContainer: HTMLDivElement | null = null;
 
-function renderInteractiveSection(props: Parameters<typeof WowMomentsSection>[0]): HTMLDivElement {
+type RouterMode = "memory" | "browser";
+
+function renderInteractiveSection(
+  props: Parameters<typeof WowMomentsSection>[0],
+  routerMode: RouterMode = "memory",
+): HTMLDivElement {
   mountedContainer = document.createElement("div");
   document.body.appendChild(mountedContainer);
   mountedRoot = createRoot(mountedContainer);
 
+  const element = React.createElement(WowMomentsSection, props);
+  const routedElement =
+    routerMode === "browser"
+      ? React.createElement(BrowserRouter, null, element)
+      : React.createElement(MemoryRouter, null, element);
+
   act(() => {
-    mountedRoot?.render(React.createElement(WowMomentsSection, props));
+    mountedRoot?.render(routedElement);
   });
 
   return mountedContainer;
@@ -1035,6 +1049,132 @@ describe("WowMomentsSection", () => {
       "We’ll leave this one alone.",
     );
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("opens details with query-param routing and browser Back closes the in-grid detail", async () => {
+    window.history.replaceState(null, "", "/");
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null }, "browser");
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(window.location.pathname).toBe("/");
+    expect(window.location.search).toBe("?wow=moment-1");
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")?.textContent).toContain(
+      "Prototype idea keeps returning",
+    );
+
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        const finish = () => resolve();
+        window.addEventListener("popstate", finish, { once: true });
+        window.history.back();
+        window.setTimeout(finish, 25);
+      });
+    });
+
+    expect(window.location.pathname).toBe("/");
+    expect(window.location.search).toBe("");
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")).toBeNull();
+    expect(container.querySelectorAll(".wow-moment-card--interactive")).toHaveLength(1);
+  });
+
+  it("removes only the wow query param when the Back to grid button closes detail", () => {
+    window.history.replaceState(null, "", "/?view=home");
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null }, "browser");
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(window.location.search).toBe("?view=home&wow=moment-1");
+
+    const closeButton = container.querySelector<HTMLButtonElement>(".wow-moment-detail-close");
+    act(() => {
+      closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(window.location.pathname).toBe("/");
+    expect(window.location.search).toBe("?view=home");
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")).toBeNull();
+  });
+
+  it("reopens a query-selected visible moment on direct load and clears stale wow params", () => {
+    window.history.replaceState(null, "", "/?wow=moment-1&view=home");
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null }, "browser");
+
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")?.textContent).toContain(
+      "Prototype idea keeps returning",
+    );
+    expect(window.location.search).toBe("?wow=moment-1&view=home");
+
+    act(() => {
+      mountedRoot?.render(
+        React.createElement(
+          BrowserRouter,
+          null,
+          React.createElement(WowMomentsSection, { moments: [], loading: false, error: null }),
+        ),
+      );
+    });
+
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")).toBeNull();
+    expect(window.location.search).toBe("?view=home");
+  });
+
+  it("resets local reflection and source reason state when switching query-selected moments", () => {
+    const secondMoment: ApiWowMoment = {
+      ...sampleMoment,
+      id: "moment-2",
+      title: "Second pattern appears",
+      relatedInspirations: [
+        {
+          ...sampleMoment.relatedInspirations[0]!,
+          inspirationId: "source-2",
+          reason: "Second source reason.",
+          text: "A second source.",
+        },
+      ],
+    };
+    window.history.replaceState(null, "", "/");
+    const container = renderInteractiveSection(
+      { moments: [sampleMoment, secondMoment], loading: false, error: null },
+      "browser",
+    );
+    const firstCard = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      firstCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    const partlyButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "Partly");
+    act(() => {
+      partlyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "Save this as a future memory?",
+    );
+
+    act(() => {
+      window.history.pushState(null, "", "/?wow=moment-2");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(container.querySelector(".wow-moment-detail-panel--in-grid")?.textContent).toContain(
+      "Second pattern appears",
+    );
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")).toBeNull();
+    expect(
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button")).map((button) =>
+        button.getAttribute("aria-pressed"),
+      ),
+    ).toEqual(["false", "false", "false"]);
+    expect(
+      container.querySelector<HTMLButtonElement>(".wow-moment-source-reason-toggle")?.getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   it("opens details with keyboard activation and closes with the Back to grid button and Escape", () => {
