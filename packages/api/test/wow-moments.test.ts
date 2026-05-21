@@ -266,6 +266,44 @@ describe("GET /api/wow-moments — list contract", () => {
       { role: "Source inspiration", reason: "Why this source matters" },
     ]);
   });
+
+  it("returns at most three related inspirations for existing WOW moments", async () => {
+    const db = getDb();
+    const alice = await createUserFixture(db);
+    cleanup.trackUser(alice.user.id);
+    const sources = await Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        createInspirationFixture(db, alice.user.id, {
+          text: `Source ${index + 1} for capped API list.`,
+        }),
+      ),
+    );
+    const moment = await insertWowMomentForUser(alice.user.id, {
+      title: "Capped source list",
+      createdAt: new Date(Date.UTC(2026, 4, 5, 12, 0, 0)),
+      wowScore: 99,
+      idempotencyKey: `test:wow-moments:source-cap:${alice.user.id}`,
+    });
+
+    await db.insert(wowMomentInspirations).values(
+      sources.map((source, index) => ({
+        userId: alice.user.id,
+        wowMomentId: moment.id,
+        inspirationId: source.id,
+        role: `The source ${index + 1}`,
+        reason: `This source ${index + 1} explains the capped pattern.`,
+        sortOrder: index,
+      })) as unknown as Array<typeof wowMomentInspirations.$inferInsert>,
+    );
+
+    const res = await authedClient(alice).get<ListWowMomentsResponse>("/api/wow-moments?limit=1");
+
+    expect(res.status).toBe(200);
+    expect(res.body.wowMoments[0]?.relatedInspirations).toHaveLength(3);
+    expect(res.body.wowMoments[0]?.relatedInspirations.map((source) => source.inspirationId)).toEqual(
+      sources.slice(0, 3).map((source) => source.id),
+    );
+  });
 });
 
 describe("GET /api/wow-moments — ownership", () => {

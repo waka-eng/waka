@@ -842,6 +842,36 @@ describe("WowMomentsSection", () => {
     expect(globalCss).toContain(".wow-moment-memory-actions");
   });
 
+  it("documents the local WOW-detail QA path from grid to resonance, future memory, and Add Signal", () => {
+    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    expect(card).not.toBeNull();
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    expect(detail).not.toBeNull();
+    expect(detail?.textContent).toContain(sampleMoment.title);
+    expect(detail?.textContent).not.toContain("Show me examples");
+
+    const thatsMeButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
+    ).find((button) => button.textContent?.trim() === "That’s me");
+    expect(thatsMeButton).not.toBeUndefined();
+    act(() => {
+      thatsMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "Save this as a future memory?",
+    );
+    const signalPanel = container.querySelector<HTMLElement>(".wow-moment-add-signal");
+    expect(signalPanel?.textContent).toContain("Add more signal for this pattern");
+    expect(signalPanel?.textContent).not.toContain("Show me examples");
+  });
+
   it("shows an add-signal ending panel with count-aware prompts after resonance", () => {
     const momentWithThreeSources: ApiWowMoment = {
       ...sampleMoment,
