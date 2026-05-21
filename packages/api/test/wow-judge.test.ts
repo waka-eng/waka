@@ -8,6 +8,7 @@ import {
 import {
   GeminiWowJudgeClient,
   GeminiWowJudgeValidationError,
+  MAX_WOW_MOMENT_SOURCE_LINKS,
   buildWowGenerateContentUrl,
   buildWowJudgmentRequest,
   buildWowRepairJudgmentRequest,
@@ -1135,6 +1136,10 @@ describe("GeminiWowJudgeClient", () => {
     );
     expect(request.generationConfig.maxOutputTokens).toBeGreaterThan(0);
     expect(request.generationConfig.maxOutputTokens).toBe(1024);
+    expect(MAX_WOW_MOMENT_SOURCE_LINKS).toBe(3);
+    expect(requestText).toContain("2 to 3 inspirations total");
+    expect(requestText).toContain("trigger first");
+    expect(requestText).not.toContain("10-source");
     expect(wowFalseReasonValues).toContain("invalid_judge_json");
     expect(JSON.stringify(request.generationConfig.responseSchema)).not.toContain("invalid_judge_json");
     expect(requestText).not.toContain("FULL_ARCHIVE");
@@ -1368,6 +1373,106 @@ describe("judgeWowMomentForInspiration", () => {
         sort_order: 1,
       },
     ]);
+  });
+
+  it("does not persist a true judgment with fewer than two unique source inspirations", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: one lonely source should not become a WOW card.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      judgment: {
+        isWowMoment: true,
+        kind: "outlier",
+        title: "Too Few Sources",
+        why: "This should not be persisted because it only has one unique source.",
+        beliefStatement: "You may believe single-source cards should not be faked.",
+        relatedInspirationIds: [trigger.id],
+        sourceEvidence: [
+          {
+            inspirationId: trigger.id,
+            role: "The lone source",
+            reason: "This source is the only evidence available for the pattern.",
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual({
+      persisted: false,
+      reason: "not_wow_moment",
+      judgment: {
+        isWowMoment: false,
+        reason: "not_enough_candidates",
+        debugSummary: "WOW moments require at least two unique source inspirations.",
+      },
+    });
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
+  });
+
+  it("caps persisted WOW source links at trigger plus two strongest returned related sources", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: community memory in libraries.",
+    });
+    const candidateA = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate A: seed banks preserve ecological memory.",
+    });
+    const candidateB = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate B: tool libraries preserve shared agency.",
+    });
+    const candidateC = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate C: neighborhood archives preserve local context.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidateA, [1, 0]);
+    await createEmbedding(testDb, candidateB, [1, 0]);
+    await createEmbedding(testDb, candidateC, [1, 0]);
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      judgment: {
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Community Memory Infrastructure",
+        why: "The sources connect neighborhood, ecological, and tool memory.",
+        beliefStatement: "This might suggest you value memory systems communities can tend together.",
+        relatedInspirationIds: [candidateA.id, candidateB.id, candidateC.id],
+        sourceEvidence: [
+          { inspirationId: trigger.id, role: "The trigger signal", reason: "This source anchors the community-memory pattern." },
+          { inspirationId: candidateA.id, role: "The strongest mirror", reason: "This source is the first ordered related source returned by the judge." },
+          { inspirationId: candidateB.id, role: "The second mirror", reason: "This source is the second ordered related source returned by the judge." },
+          { inspirationId: candidateC.id, role: "The extra mirror", reason: "This source should be dropped from persisted links by the cap." },
+        ],
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.persisted && result.judgment.relatedInspirationIds).toEqual([
+      trigger.id,
+      candidateA.id,
+      candidateB.id,
+    ]);
+    expect(result.persisted && result.judgment.sourceEvidence.map((source) => source.inspirationId)).toEqual([
+      trigger.id,
+      candidateA.id,
+      candidateB.id,
+    ]);
+    expect(await countWowMoments(testDb)).toBe(1);
+    expect(await countWowMomentLinks(testDb)).toBe(3);
+    const links = await listWowMomentLinks(testDb, result.persisted ? result.wowMoment.id : "");
+    expect(links.map((link) => link.inspiration_id)).toEqual([trigger.id, candidateA.id, candidateB.id]);
+    expect(links.map((link) => link.sort_order)).toEqual([0, 1, 2]);
   });
 
   it("does not persist anything for a false judgment and returns a clear no-op", async () => {
