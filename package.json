@@ -26,7 +26,9 @@
     "e2e:smoke": "tsx tools/e2e/smoke.ts",
     "e2e:smoke:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/smoke.ts",
     "e2e:organic-wow": "tsx tools/e2e/organic-wow.ts",
-    "e2e:organic-wow:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/organic-wow.ts"
+    "e2e:organic-wow:boot": "tsx tools/dev-stack/boot-and-wait.ts -- pnpm tsx tools/e2e/organic-wow.ts",
+    "qa:wow-detail:signed-in": "tsx tools/e2e/wow-detail-signed-in.ts",
+    "qa:wow-detail:signed-in:boot": "tsx tools/dev-stack/boot-and-wait.ts --boot-cmd \"pnpm dev:local\" --api-url http://localhost:3010 --web-url http://localhost:3010 -- pnpm tsx tools/e2e/wow-detail-signed-in.ts"
   },
   "devDependencies": {
     "dotenv": "^16.4.5",
