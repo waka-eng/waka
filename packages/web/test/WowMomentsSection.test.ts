@@ -416,16 +416,17 @@ describe("WowMomentsSection", () => {
 
     const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
     expect(detail?.textContent).toContain("Reflection mode");
-    expect(detail?.textContent).toContain("First, the mirror");
-    expect(detail?.textContent).toContain("A mirror WAKA noticed");
-    expect(detail?.textContent).toContain("This may be a mirror for: Prototype idea keeps returning");
-    expect(detail?.textContent).toContain("Where WAKA saw it");
+    expect(detail?.textContent).toContain("Start here");
+    expect(detail?.textContent).toContain("The moment");
+    expect(detail?.textContent).toContain("This may be worth noticing: Prototype idea keeps returning");
+    expect(detail?.textContent).toContain("Where it came from");
     expect(detail?.textContent).toContain("Source trail");
     expect(detail?.textContent).toContain("The practice");
     expect(detail?.textContent).toContain("Source inspiration");
     expect(detail?.textContent).not.toContain("classifier rank id 2026-05-01");
     expect(detail?.textContent).not.toContain("runtimeCandidateScore");
     expect(detail?.textContent).toContain("What this may say about you");
+    expect(detail?.textContent?.match(/What this may say about you/g)).toHaveLength(1);
     expect(detail?.textContent).toContain("The belief underneath");
     expect(detail?.textContent).toContain("Ownership, not advice");
     expect(detail?.textContent).toContain("For reflection only; not saved.");
@@ -448,7 +449,7 @@ describe("WowMomentsSection", () => {
 
     expect(reasonButtons[1]?.getAttribute("aria-expanded")).toBe("true");
     expect(detail?.querySelector("#wow-source-reason-moment-1-source-closed")?.textContent).toContain(
-      "Why this source matters",
+      "Source note",
     );
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -503,7 +504,8 @@ describe("WowMomentsSection", () => {
     expect(detail?.textContent).toContain("Artifacts behind this reading");
     expect(detail?.textContent).toContain("1 source");
     expect(detail?.textContent).toContain("A field note about playful prototypes.");
-    expect(detail?.textContent).toContain("Why this source matters");
+    expect(detail?.textContent).toContain("Hide source note");
+    expect(detail?.textContent).toContain("Source note");
     expect(detail?.textContent).toContain("First signal in the bridge.");
   });
 
@@ -806,7 +808,7 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.textContent).not.toContain("Remember this about me?");
+    expect(container.textContent).not.toContain("Save this as a future memory?");
     const partlyButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
     ).find((button) => button.textContent?.trim() === "Partly");
@@ -817,22 +819,21 @@ describe("WowMomentsSection", () => {
 
     const endingPanel = container.querySelector<HTMLElement>(".wow-moment-memory-ending");
     expect(endingPanel).not.toBeNull();
-    expect(endingPanel?.textContent).toContain("Remember this about me?");
-    expect(endingPanel?.textContent).toContain("Coming soon: WAKA will remember confirmed beliefs.");
-    expect(endingPanel?.textContent).toContain("Remember this");
+    expect(endingPanel?.textContent).toContain("Save this as a future memory?");
+    expect(endingPanel?.textContent).toContain("Local preview only: nothing is saved yet.");
+    expect(endingPanel?.textContent).toContain("Mark locally");
     expect(endingPanel?.textContent).toContain("Edit first");
     expect(endingPanel?.textContent).toContain("Not for me");
-    expect(endingPanel?.textContent).not.toContain("saved");
 
     const rememberButton = Array.from(
       endingPanel?.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button") ?? [],
-    ).find((button) => button.textContent?.trim() === "Remember this");
+    ).find((button) => button.textContent?.trim() === "Mark locally");
 
     act(() => {
       rememberButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Noted for now");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Marked locally");
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
       "This is only marked locally in this reflection. Future memory is coming soon.",
     );
@@ -875,9 +876,9 @@ describe("WowMomentsSection", () => {
 
     const signalPanel = container.querySelector<HTMLElement>(".wow-moment-add-signal");
     expect(signalPanel).not.toBeNull();
-    expect(signalPanel?.textContent).toContain("Help WAKA understand this pattern better");
+    expect(signalPanel?.textContent).toContain("Add more signal for this pattern");
     expect(signalPanel?.textContent).toContain(
-      "This moment is based on 3 inspirations. Add more signal and WAKA can find sharper, more personal moments.",
+      "This moment is based on 3 inspirations. More signal can make future moments sharper and more personal.",
     );
     expect(signalPanel?.textContent).toContain("Try adding:");
     expect(signalPanel?.textContent).toContain("something you keep coming back to");
@@ -920,6 +921,7 @@ describe("WowMomentsSection", () => {
     const examples = container.querySelector<HTMLElement>(".wow-moment-signal-examples");
     expect(examples).not.toBeNull();
     expect(examplesButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(examplesButton?.textContent?.trim()).toBe("Hide examples");
     expect(examples?.textContent).toContain("A quote, tool, or article you keep reopening without knowing why.");
     expect(examples?.textContent).toContain("A product or side project that feels important even before it is useful.");
     expect(examples?.textContent).toContain("calm vs. ambition");
@@ -1000,7 +1002,7 @@ describe("WowMomentsSection", () => {
     expect(textarea).not.toBeNull();
     expect(textarea?.value).toContain("One possible reading");
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
-      "Shape the sentence locally before the future memory flow exists.",
+      "Shape the sentence locally first. It still will not be saved yet.",
     );
 
     act(() => {
@@ -1012,13 +1014,13 @@ describe("WowMomentsSection", () => {
 
     const editedRememberButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button"),
-    ).find((button) => button.textContent?.trim() === "Remember this");
+    ).find((button) => button.textContent?.trim() === "Mark locally");
 
     act(() => {
       editedRememberButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Noted for now");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Marked locally");
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
       "I believe small prototypes are worth protecting.",
     );

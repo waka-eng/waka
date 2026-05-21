@@ -374,15 +374,15 @@ export function WowMomentsSection({
       </div>
       <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
       <section className="wow-moment-detail-section wow-moment-detail-section--recognition">
-        <span className="wow-moment-step-label">First, the mirror</span>
-        <h4>A mirror WAKA noticed</h4>
-        <p>This may be a mirror for: {selectedMoment.title}</p>
+        <span className="wow-moment-step-label">Start here</span>
+        <h4>The moment</h4>
+        <p>This may be worth noticing: {selectedMoment.title}</p>
       </section>
       {selectedMoment.relatedInspirations.length > 0 ? (
         <section className="wow-moment-detail-section wow-moment-detail-section--evidence">
           <div className="wow-moment-detail-section-header">
             <div>
-              <span className="wow-moment-step-label">Where WAKA saw it</span>
+              <span className="wow-moment-step-label">Where it came from</span>
               <h4>Source trail</h4>
               <p className="wow-moment-section-caption">Artifacts behind this reading</p>
             </div>
@@ -407,11 +407,11 @@ export function WowMomentsSection({
                     onClick={() => toggleSourceReason(related.inspirationId)}
                     type="button"
                   >
-                    Why this source matters
+                    {isReasonExpanded ? "Hide source note" : "Why this source matters"}
                   </button>
                   {isReasonExpanded ? (
                     <p className="wow-moment-source-reason" id={reasonId}>
-                      <span>Why this source matters</span>
+                      <span>Source note</span>
                       {safeSourceReason(related.reason)}
                     </p>
                   ) : null}
@@ -422,7 +422,7 @@ export function WowMomentsSection({
         </section>
       ) : null}
       <section className="wow-moment-detail-section wow-moment-detail-section--pattern">
-        <span className="wow-moment-step-label">What this may say about you</span>
+        <span className="wow-moment-step-label">Reading</span>
         <h4>What this may say about you</h4>
         <p>
           Across these inspirations, you may be returning to a question that already
@@ -495,7 +495,7 @@ export function WowMomentsSection({
           <div className="wow-moment-memory-ending" aria-live="polite">
             {memoryEndingState === "remembered" ? (
               <>
-                <h5>Noted for now</h5>
+                <h5>Marked locally</h5>
                 <p>This is only marked locally in this reflection. Future memory is coming soon.</p>
                 <blockquote>{memoryBeliefText}</blockquote>
               </>
@@ -506,11 +506,11 @@ export function WowMomentsSection({
               </>
             ) : (
               <>
-                <h5>Remember this about me?</h5>
+                <h5>Save this as a future memory?</h5>
                 <p>
                   {memoryEndingState === "editing"
-                    ? "Shape the sentence locally before the future memory flow exists."
-                    : "Coming soon: WAKA will remember confirmed beliefs."}
+                    ? "Shape the sentence locally first. It still will not be saved yet."
+                    : "Local preview only: nothing is saved yet."}
                 </p>
                 {memoryEndingState === "editing" ? (
                   <label className="wow-moment-memory-edit">
@@ -525,7 +525,7 @@ export function WowMomentsSection({
                 ) : null}
                 <div className="wow-moment-memory-actions" aria-label="Local future-memory actions">
                   <button onClick={() => setMemoryEndingState("remembered")} type="button">
-                    Remember this
+                    Mark locally
                   </button>
                   <button onClick={() => setMemoryEndingState("editing")} type="button">
                     Edit first
@@ -537,10 +537,10 @@ export function WowMomentsSection({
               </>
             )}
             <aside className="wow-moment-add-signal" aria-labelledby="wow-moment-add-signal-title">
-              <h5 id="wow-moment-add-signal-title">Help WAKA understand this pattern better</h5>
+              <h5 id="wow-moment-add-signal-title">Add more signal for this pattern</h5>
               <p>
-                This moment is based on {selectedSignalCountLabel}. Add more signal and WAKA can find sharper,
-                more personal moments.
+                This moment is based on {selectedSignalCountLabel}. More signal can make future moments sharper
+                and more personal.
               </p>
               <div className="wow-moment-signal-prompts">
                 <span>Try adding:</span>
@@ -566,7 +566,7 @@ export function WowMomentsSection({
                   onClick={() => setSignalExamplesOpen((isOpen) => !isOpen)}
                   type="button"
                 >
-                  Show me examples
+                  {signalExamplesOpen ? "Hide examples" : "Show me examples"}
                 </button>
               </div>
             </aside>
