@@ -527,8 +527,9 @@ export function WowMomentsSection({
           <div className="wow-moment-memory-ending" aria-live="polite">
             {memoryEndingState === "remembered" ? (
               <>
-                <h5>Marked locally</h5>
-                <p>Marked locally only — WAKA has not remembered or saved this yet.</p>
+                <h5>Marked locally for now</h5>
+                <p>This is only a local preview. Future WAKA memory is coming soon.</p>
+                <p>Nothing has been saved yet.</p>
                 <blockquote>{memoryBeliefText}</blockquote>
               </>
             ) : memoryEndingState === "dismissed" ? (
@@ -553,6 +554,7 @@ export function WowMomentsSection({
                   <label className="wow-moment-memory-edit">
                     <span>Future memory wording</span>
                     <textarea
+                      aria-label="Edit future memory wording"
                       onChange={(event) => setMemoryBeliefText(event.currentTarget.value)}
                       onInput={(event) => setMemoryBeliefText(event.currentTarget.value)}
                       rows={3}
@@ -562,11 +564,17 @@ export function WowMomentsSection({
                 ) : null}
                 <div className="wow-moment-memory-actions" aria-label="Local future-memory actions">
                   <button onClick={() => setMemoryEndingState("remembered")} type="button">
-                    Mark locally
+                    Looks right
                   </button>
-                  <button onClick={() => setMemoryEndingState("editing")} type="button">
-                    Edit first
-                  </button>
+                  {memoryEndingState === "editing" ? (
+                    <button onClick={() => setMemoryEndingState("prompt")} type="button">
+                      Cancel edit
+                    </button>
+                  ) : (
+                    <button onClick={() => setMemoryEndingState("editing")} type="button">
+                      Edit wording
+                    </button>
+                  )}
                   <button onClick={() => setMemoryEndingState("dismissed")} type="button">
                     Not for me
                   </button>
