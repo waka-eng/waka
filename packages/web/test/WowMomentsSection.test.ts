@@ -812,7 +812,7 @@ describe("WowMomentsSection", () => {
     ]);
   });
 
-  it("shows a local future-memory ending panel after resonance without persisting", () => {
+  it("shows a local future-memory preview after resonance without persisting", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
@@ -822,7 +822,7 @@ describe("WowMomentsSection", () => {
       card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(container.textContent).not.toContain("Save this as a future memory?");
+    expect(container.textContent).not.toContain("Does this feel true enough to remember?");
     const partlyButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
     ).find((button) => button.textContent?.trim() === "Partly");
@@ -832,9 +832,13 @@ describe("WowMomentsSection", () => {
     });
 
     const endingPanel = container.querySelector<HTMLElement>(".wow-moment-memory-ending");
+    const preview = endingPanel?.querySelector<HTMLElement>(".wow-moment-memory-preview");
     expect(endingPanel).not.toBeNull();
-    expect(endingPanel?.textContent).toContain("Save this as a future memory?");
-    expect(endingPanel?.textContent).toContain("Local preview only: nothing is saved yet.");
+    expect(endingPanel?.textContent).toContain("Does this feel true enough to remember?");
+    expect(endingPanel?.textContent).toContain("Local preview only — not saved yet.");
+    expect(preview?.textContent).toContain("Future memory preview");
+    expect(preview?.textContent).toContain("WAKA might remember:");
+    expect(preview?.querySelector("blockquote")?.textContent).toContain("One possible reading");
     expect(endingPanel?.textContent).toContain("Mark locally");
     expect(endingPanel?.textContent).toContain("Edit first");
     expect(endingPanel?.textContent).toContain("Not for me");
@@ -849,10 +853,14 @@ describe("WowMomentsSection", () => {
 
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Marked locally");
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
-      "This is only marked locally in this reflection. Future memory is coming soon.",
+      "Marked locally only — WAKA has not remembered or saved this yet.",
+    );
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "One possible reading",
     );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(globalCss).toContain(".wow-moment-memory-ending");
+    expect(globalCss).toContain(".wow-moment-memory-preview");
     expect(globalCss).toContain(".wow-moment-memory-actions");
   });
 
@@ -879,7 +887,7 @@ describe("WowMomentsSection", () => {
     });
 
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
-      "Save this as a future memory?",
+      "Does this feel true enough to remember?",
     );
     const signalPanel = container.querySelector<HTMLElement>(".wow-moment-add-signal");
     expect(signalPanel?.textContent).toContain("Add more signal for this pattern");
@@ -980,7 +988,7 @@ describe("WowMomentsSection", () => {
     window.removeEventListener("waka:add-inspiration", eventSpy);
   });
 
-  it("lets the user locally edit or dismiss the future-memory ending state", () => {
+  it("lets the user locally edit the future-memory preview or dismiss the ending state", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
@@ -1009,8 +1017,11 @@ describe("WowMomentsSection", () => {
     const textarea = container.querySelector<HTMLTextAreaElement>(".wow-moment-memory-edit textarea");
     expect(textarea).not.toBeNull();
     expect(textarea?.value).toContain("One possible reading");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-edit")?.textContent).toContain(
+      "Future memory wording",
+    );
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
-      "Shape the sentence locally first. It still will not be saved yet.",
+      "Edit the memory preview locally first. It still will not be saved yet.",
     );
 
     act(() => {
@@ -1019,6 +1030,10 @@ describe("WowMomentsSection", () => {
         textarea.dispatchEvent(new Event("input", { bubbles: true }));
       }
     });
+
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-preview blockquote")?.textContent).toBe(
+      "I believe small prototypes are worth protecting.",
+    );
 
     const editedRememberButton = Array.from(
       container.querySelectorAll<HTMLButtonElement>(".wow-moment-memory-actions button"),
@@ -1029,6 +1044,9 @@ describe("WowMomentsSection", () => {
     });
 
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain("Marked locally");
+    expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
+      "Marked locally only — WAKA has not remembered or saved this yet.",
+    );
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
       "I believe small prototypes are worth protecting.",
     );
@@ -1155,7 +1173,7 @@ describe("WowMomentsSection", () => {
       partlyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(container.querySelector<HTMLElement>(".wow-moment-memory-ending")?.textContent).toContain(
-      "Save this as a future memory?",
+      "Does this feel true enough to remember?",
     );
 
     act(() => {

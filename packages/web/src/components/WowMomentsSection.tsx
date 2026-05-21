@@ -528,7 +528,7 @@ export function WowMomentsSection({
             {memoryEndingState === "remembered" ? (
               <>
                 <h5>Marked locally</h5>
-                <p>This is only marked locally in this reflection. Future memory is coming soon.</p>
+                <p>Marked locally only — WAKA has not remembered or saved this yet.</p>
                 <blockquote>{memoryBeliefText}</blockquote>
               </>
             ) : memoryEndingState === "dismissed" ? (
@@ -538,15 +538,20 @@ export function WowMomentsSection({
               </>
             ) : (
               <>
-                <h5>Save this as a future memory?</h5>
+                <h5>Does this feel true enough to remember?</h5>
                 <p>
                   {memoryEndingState === "editing"
-                    ? "Shape the sentence locally first. It still will not be saved yet."
-                    : "Local preview only: nothing is saved yet."}
+                    ? "Edit the memory preview locally first. It still will not be saved yet."
+                    : "Local preview only — not saved yet."}
                 </p>
+                <div className="wow-moment-memory-preview" aria-label="Future memory preview">
+                  <span>Future memory preview</span>
+                  <p>WAKA might remember:</p>
+                  <blockquote>{memoryBeliefText}</blockquote>
+                </div>
                 {memoryEndingState === "editing" ? (
                   <label className="wow-moment-memory-edit">
-                    <span>Local draft belief</span>
+                    <span>Future memory wording</span>
                     <textarea
                       onChange={(event) => setMemoryBeliefText(event.currentTarget.value)}
                       onInput={(event) => setMemoryBeliefText(event.currentTarget.value)}
