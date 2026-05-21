@@ -4100,6 +4100,36 @@ body.reflect-bg {
   overflow-wrap: anywhere;
 }
 
+.wow-moment-memory-preview {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(246, 242, 232, 0.5);
+}
+
+.wow-moment-memory-preview span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wow-moment-memory-preview p {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wow-moment-memory-preview blockquote {
+  margin-top: 0;
+  background: rgba(255, 253, 247, 0.58);
+}
+
 .wow-moment-memory-actions {
   display: flex;
   flex-wrap: wrap;
