@@ -251,7 +251,6 @@ export function WowMomentsSection({
   const [selectedResonance, setSelectedResonance] = useState<ResonanceOption | null>(null);
   const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
   const [memoryBeliefText, setMemoryBeliefText] = useState("");
-  const [signalExamplesOpen, setSignalExamplesOpen] = useState(false);
   const [expandedSourceReasonIds, setExpandedSourceReasonIds] = useState<Set<string>>(new Set());
   const [allMomentsOpen, setAllMomentsOpen] = useState(false);
 
@@ -259,7 +258,6 @@ export function WowMomentsSection({
     setSelectedResonance(null);
     setMemoryEndingState("prompt");
     setMemoryBeliefText("");
-    setSignalExamplesOpen(false);
   };
 
   const closeMoment = () => {
@@ -314,7 +312,6 @@ export function WowMomentsSection({
     setSelectedResonance(resonance);
     setMemoryEndingState("prompt");
     setMemoryBeliefText(beliefText);
-    setSignalExamplesOpen(false);
   };
 
   const handleAddInspirationSignal = () => {
@@ -550,23 +547,9 @@ export function WowMomentsSection({
                   <li>a tension you notice in your work or taste</li>
                 </ul>
               </div>
-              {signalExamplesOpen ? (
-                <ul className="wow-moment-signal-examples" aria-label="Example inspiration prompts">
-                  <li>A quote, tool, or article you keep reopening without knowing why.</li>
-                  <li>A product or side project that feels important even before it is useful.</li>
-                  <li>A taste tension like calm vs. ambition, polish vs. play, or solitude vs. signal.</li>
-                </ul>
-              ) : null}
               <div className="wow-moment-signal-actions">
                 <button onClick={handleAddInspirationSignal} type="button">
                   Add another inspiration
-                </button>
-                <button
-                  aria-expanded={signalExamplesOpen}
-                  onClick={() => setSignalExamplesOpen((isOpen) => !isOpen)}
-                  type="button"
-                >
-                  {signalExamplesOpen ? "Hide examples" : "Show me examples"}
                 </button>
               </div>
             </aside>

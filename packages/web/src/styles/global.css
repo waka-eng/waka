@@ -4155,8 +4155,7 @@ body.reflect-bg {
   text-transform: uppercase;
 }
 
-.wow-moment-signal-prompts ul,
-.wow-moment-signal-examples {
+.wow-moment-signal-prompts ul {
   display: grid;
   gap: 6px;
   margin: 0;
@@ -4164,10 +4163,6 @@ body.reflect-bg {
   color: var(--ink);
   font-size: 13px;
   line-height: 1.42;
-}
-
-.wow-moment-signal-examples {
-  color: var(--muted);
 }
 
 .wow-moment-signal-actions {
@@ -4191,8 +4186,7 @@ body.reflect-bg {
 }
 
 .wow-moment-signal-actions button:hover,
-.wow-moment-signal-actions button:focus-visible,
-.wow-moment-signal-actions button[aria-expanded="true"] {
+.wow-moment-signal-actions button:focus-visible {
   background: var(--ink);
   color: var(--cell);
   outline: none;
