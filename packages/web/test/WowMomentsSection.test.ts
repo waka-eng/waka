@@ -885,47 +885,11 @@ describe("WowMomentsSection", () => {
     expect(signalPanel?.textContent).toContain("a project or product that feels strangely important");
     expect(signalPanel?.textContent).toContain("a tension you notice in your work or taste");
     expect(signalPanel?.textContent).toContain("Add another inspiration");
-    expect(signalPanel?.textContent).toContain("Show me examples");
+    expect(signalPanel?.textContent).not.toContain("Show me examples");
+    expect(signalPanel?.textContent).not.toContain("Hide examples");
+    expect(container.querySelector(".wow-moment-signal-examples")).toBeNull();
     expect(globalCss).toContain(".wow-moment-add-signal");
     expect(globalCss).toContain(".wow-moment-signal-actions");
-  });
-
-  it("expands local add-signal examples without persistence", () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
-    const container = renderInteractiveSection({ moments: [sampleMoment], loading: false, error: null });
-    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
-
-    act(() => {
-      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const thatsMeButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".wow-moment-belief-actions button"),
-    ).find((button) => button.textContent?.trim() === "That’s me");
-
-    act(() => {
-      thatsMeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(container.querySelector(".wow-moment-signal-examples")).toBeNull();
-    const examplesButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".wow-moment-signal-actions button"),
-    ).find((button) => button.textContent?.trim() === "Show me examples");
-    expect(examplesButton?.getAttribute("aria-expanded")).toBe("false");
-
-    act(() => {
-      examplesButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    const examples = container.querySelector<HTMLElement>(".wow-moment-signal-examples");
-    expect(examples).not.toBeNull();
-    expect(examplesButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(examplesButton?.textContent?.trim()).toBe("Hide examples");
-    expect(examples?.textContent).toContain("A quote, tool, or article you keep reopening without knowing why.");
-    expect(examples?.textContent).toContain("A product or side project that feels important even before it is useful.");
-    expect(examples?.textContent).toContain("calm vs. ambition");
-    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("uses a local add-inspiration callback and named event affordance", () => {
