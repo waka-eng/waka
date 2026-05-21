@@ -20,7 +20,6 @@ import { resolveDemoUser, seedDemoRows } from "../seed-demo";
 import {
   buildSafeEvidence,
   resolveSignedInWowDetailConfig,
-  textMatcher,
 } from "./wow-detail-signed-in-helpers";
 
 loadDotenv({ path: ".env.local", override: false });
@@ -168,24 +167,59 @@ async function openWowDetail(page: Page, timeoutMs: number): Promise<{ momentTit
 
 async function verifyResonance(page: Page, timeoutMs: number): Promise<QaCheck[]> {
   const detail = page.locator(".wow-moment-detail-panel--in-grid");
-  await detail.getByRole("button", { name: /That’s me|Partly|Not quite/i }).first().click();
-  await detail.getByText(textMatcher(["Remember this about me?", "Save this as a future memory?"])).waitFor({ timeout: timeoutMs });
-
   const checks: QaCheck[] = [];
-  const labels = [
-    ["Remember this about me?", "Save this as a future memory?"],
-    ["Remember this", "Mark locally"],
-    ["Edit first"],
-    ["Not for me"],
-    ["Add more signal for this pattern"],
-    ["Add Signal", "Add another inspiration"],
+
+  await detail.getByRole("button", { name: /That’s me|Partly|Not quite/i }).first().click();
+  await detail.getByText("Does this feel true enough to remember?").waitFor({ timeout: timeoutMs });
+
+  const textLabels = [
+    "Does this feel true enough to remember?",
+    "Future memory preview",
+    "WAKA might remember:",
+    "Add more signal for this pattern",
+    "Add another inspiration",
   ];
-  for (const alternatives of labels) {
-    const matcher = textMatcher(alternatives);
-    const visible = await detail.getByText(matcher).first().isVisible().catch(() => false);
-    assert(visible, `Expected visible text matching ${alternatives.join(" or ")}`);
-    checks.push({ name: alternatives[0]!, passed: true });
+  for (const label of textLabels) {
+    const visible = await detail.getByText(label).first().isVisible().catch(() => false);
+    assert(visible, `Expected visible text "${label}"`);
+    checks.push({ name: label, passed: true });
   }
+
+  const actionLabels = ["Looks right", "Edit wording", "Not for me"];
+  for (const label of actionLabels) {
+    const visible = await detail.getByRole("button", { name: label }).isVisible().catch(() => false);
+    assert(visible, `Expected visible action "${label}"`);
+    checks.push({ name: `action: ${label}`, passed: true });
+  }
+
+  await detail.getByRole("button", { name: "Edit wording" }).click();
+  const textarea = detail.getByRole("textbox", { name: "Edit future memory wording" });
+  await textarea.waitFor({ state: "visible", timeout: timeoutMs });
+  assert(await textarea.isEditable(), "Expected future memory wording textarea to be editable");
+  checks.push({ name: "editable textarea: Edit future memory wording", passed: true });
+
+  await detail.getByRole("button", { name: "Cancel edit" }).click();
+  await detail.getByRole("button", { name: "Edit wording" }).waitFor({ state: "visible", timeout: timeoutMs });
+  assert(!(await textarea.isVisible().catch(() => false)), "Expected textarea to be hidden after Cancel edit");
+  checks.push({ name: "Cancel edit hides wording textarea", passed: true });
+
+  await detail.getByRole("button", { name: "Looks right" }).click();
+  const confirmationLabels = [
+    "Marked locally for now",
+    "This is only a local preview. Future WAKA memory is coming soon.",
+    "Nothing has been saved yet.",
+  ];
+  for (const label of confirmationLabels) {
+    const visible = await detail.getByText(label).first().isVisible().catch(() => false);
+    assert(visible, `Expected local-only confirmation text "${label}"`);
+    checks.push({ name: label, passed: true });
+  }
+
+  await detail.getByRole("button", { name: "Back to grid" }).click();
+  await detail.waitFor({ state: "hidden", timeout: timeoutMs });
+  assert(!new URL(page.url()).searchParams.has("wow"), "Expected Back to grid to remove wow query param");
+  checks.push({ name: "Back to grid removes wow query param", passed: true });
+
   return checks;
 }
 
