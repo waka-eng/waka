@@ -358,6 +358,34 @@ body.dragging .drop-overlay {
   width: 11px;
   height: 11px;
 }
+
+.locale-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.locale-setting select {
+  border: var(--border-hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+  padding: 6px 24px 6px 10px;
+}
+.locale-setting select:disabled {
+  color: var(--muted);
+}
+.locale-setting select:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
 @media (max-width: 720px) {
   .header-right {
     gap: 10px;
@@ -3982,6 +4010,53 @@ body.reflect-bg {
   border-radius: var(--radius-sm);
   padding: var(--space-4);
   background: rgba(246, 242, 232, 0.72);
+}
+
+.wow-moment-detail-section--reflection-guide {
+  border: 1px solid rgba(15, 15, 14, 0.14);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  background: linear-gradient(135deg, rgba(246, 242, 232, 0.82), rgba(255, 255, 255, 0.62));
+}
+
+.wow-moment-detail-section--reflection-guide p {
+  max-width: 42rem;
+}
+
+.wow-moment-reflection-guide-blocks {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+  max-width: 46rem;
+}
+
+.wow-moment-reflection-guide-block {
+  display: grid;
+  gap: var(--space-2);
+  border-left: 2px solid rgba(15, 15, 14, 0.18);
+  padding-left: var(--space-4);
+}
+
+.wow-moment-reflection-guide-block h5 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wow-moment-reflection-guide-questions {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.wow-moment-reflection-guide-questions li {
+  color: var(--ink);
+  font-size: clamp(15px, 1.7vw, 18px);
+  line-height: 1.45;
 }
 
 .wow-moment-detail-section--belief {

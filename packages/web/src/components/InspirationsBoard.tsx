@@ -108,6 +108,7 @@ import {
   type PersistedResult,
 } from "./capture";
 import type { ApiError } from "../lib/api";
+import { DEFAULT_LOCALE, type SupportedLocale } from "../lib/locales";
 import { InspirationCard, type InspirationCardData } from "./InspirationCard";
 import {
   AppShell,
@@ -243,6 +244,9 @@ export interface InspirationsBoardProps {
    * opened/focused immediately after the board mounts or re-renders.
    */
   autoFocusCaptureRequest?: number;
+
+  /** Locale used for localized capture labels. */
+  locale?: SupportedLocale;
 }
 
 export function InspirationsBoard({
@@ -260,6 +264,7 @@ export function InspirationsBoard({
   afterGridContent,
   captureFirst = false,
   autoFocusCaptureRequest,
+  locale = DEFAULT_LOCALE,
 }: InspirationsBoardProps): JSX.Element {
   // ---------------------------------------------------------------
   // Capture-cell local state
@@ -544,6 +549,7 @@ export function InspirationsBoard({
       onOptimisticAdd={onOptimisticAdd}
       onPersisted={handlePersisted}
       onPersistError={onPersistError}
+      locale={locale}
     />
   );
 

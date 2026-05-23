@@ -27,6 +27,7 @@ import { and, eq, gt } from "drizzle-orm";
 import { sessions, users } from "../db/index.js";
 import { SESSION_TTL_SECONDS } from "./auth.js";
 import { getDb } from "./db.js";
+import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
 
 /**
  * SHA-256 hex digest of an opaque string. Web Crypto is available in every
@@ -78,6 +79,7 @@ export interface AuthenticatedUser {
   email: string;
   name: string;
   avatarUrl: string | null;
+  preferredLocale: SupportedLocale;
 }
 
 /**
@@ -107,6 +109,7 @@ export async function lookupSessionUser(
       email: users.email,
       name: users.name,
       avatarUrl: users.avatarUrl,
+      preferredLocale: users.preferredLocale,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -131,6 +134,7 @@ export async function lookupSessionUser(
     email: row.email,
     name: row.name,
     avatarUrl: row.avatarUrl,
+    preferredLocale: normalizeSupportedLocale(row.preferredLocale),
   };
 }
 

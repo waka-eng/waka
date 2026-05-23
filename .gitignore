@@ -15,6 +15,9 @@ coverage
 # Logs
 *.log
 
+# Local Hermes orchestration artifacts (plans, QA screenshots, agent output)
+.hermes/
+
 # Generated Ouroboros artifacts (kept locally during execution; not part of repo)
 .ouroboros/
 

@@ -23,7 +23,10 @@
  *     connection URL; we don't need to override SSL options here.
  */
 
-import "dotenv/config";
+import { config as loadDotenv } from "dotenv";
+
+loadDotenv({ path: ".env.local", override: false });
+loadDotenv({ path: ".env", override: false });
 
 import { defineConfig } from "drizzle-kit";
 

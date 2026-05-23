@@ -193,11 +193,12 @@ describe("POST /api/auth/signup", () => {
     // 1. Status + envelope.
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
-      user: { id: string; email: string; name: string };
+      user: { id: string; email: string; name: string; preferredLocale: string };
       token: string;
     };
     expect(body.user.email).toBe(payload.email.toLowerCase());
     expect(body.user.name).toBe(payload.name);
+    expect(body.user.preferredLocale).toBe("en-US");
     expect(body.user.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(body.token).toBeTruthy();
     trackUser(body.user.id);
@@ -376,12 +377,13 @@ describe("POST /api/auth/login", () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      user: { id: string; email: string; name: string };
+      user: { id: string; email: string; name: string; preferredLocale: string };
       token: string;
     };
     expect(body.user.id).toBe(created.id);
     expect(body.user.email).toBe(payload.email.toLowerCase());
     expect(body.user.name).toBe(payload.name);
+    expect(body.user.preferredLocale).toBe("en-US");
     expect(body.token).toBeTruthy();
     // Login must mint a NEW token rather than echoing whatever the signup
     // round-trip handed back. Two distinct tokens means two distinct
@@ -538,6 +540,76 @@ describe("POST /api/auth/login", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/json/i);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Authenticated preferences
+// ---------------------------------------------------------------------------
+
+describe("GET /api/auth/me and PATCH /api/auth/me/preferences", () => {
+  it("returns the current user with the default locale", async () => {
+    const created = await signupUser(makeSignupPayload());
+
+    const res = await app.request("/api/auth/me", {
+      headers: { Authorization: `Bearer ${created.token}` },
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      user: { id: string; email: string; preferredLocale: string };
+    };
+    expect(body.user.id).toBe(created.id);
+    expect(body.user.email).toBe(created.email);
+    expect(body.user.preferredLocale).toBe("en-US");
+  });
+
+  it("persists a supported preferred locale and exposes it on the active session", async () => {
+    const created = await signupUser(makeSignupPayload());
+
+    const update = await app.request("/api/auth/me/preferences", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${created.token}`,
+      },
+      body: JSON.stringify({ preferredLocale: "ko-KR" }),
+    });
+
+    expect(update.status).toBe(200);
+    const updateBody = (await update.json()) as { user: { preferredLocale: string } };
+    expect(updateBody.user.preferredLocale).toBe("ko-KR");
+
+    const storedRows = await getDb()
+      .select({ preferredLocale: users.preferredLocale })
+      .from(users)
+      .where(eq(users.id, created.id));
+    expect(storedRows[0]?.preferredLocale).toBe("ko-KR");
+
+    const me = await app.request("/api/auth/me", {
+      headers: { Authorization: `Bearer ${created.token}` },
+    });
+    const meBody = (await me.json()) as { user: { preferredLocale: string } };
+    expect(meBody.user.preferredLocale).toBe("ko-KR");
+  });
+
+  it("rejects unsupported preferred locales", async () => {
+    const created = await signupUser(makeSignupPayload());
+
+    const res = await app.request("/api/auth/me/preferences", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${created.token}`,
+      },
+      body: JSON.stringify({ preferredLocale: "fr-FR" }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; details?: { preferredLocale?: string[] } };
+    expect(body.error).toMatch(/preferences/i);
+    expect(body.details?.preferredLocale?.[0]).toMatch(/locale/i);
   });
 });
 

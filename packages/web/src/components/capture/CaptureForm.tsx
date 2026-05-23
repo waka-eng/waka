@@ -63,6 +63,7 @@ import {
   type ApiInspiration,
   type CreateReflectionResponse,
 } from "../../lib/api";
+import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
 import {
   CaptureCell,
   type CaptureCellVisualState,
@@ -142,6 +143,8 @@ export interface CaptureFormProps {
   view?: CaptureView;
   /** Stacked visual modifiers — drag, focus, save flash. */
   visualState?: CaptureCellVisualState;
+  /** Locale used for user-facing capture and reflection copy. */
+  locale?: SupportedLocale;
 }
 
 /* ============================================================
@@ -157,8 +160,6 @@ export interface CaptureFormProps {
  */
 const URL_REGEX = /\bhttps?:\/\/[^\s]+/gi;
 const TRAILING_PUNCT = /[.,)\]>;'"]+$/;
-const REFLECTIVE_SAVE_QUESTION = "What about this is worth remembering?";
-
 export function extractUrlsFromText(text: string): string[] {
   const matches = text.match(URL_REGEX) ?? [];
   const out: string[] = [];
@@ -214,6 +215,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       onToggleFocus,
       view = "note",
       visualState,
+      locale = DEFAULT_LOCALE,
     },
     ref,
   ): JSX.Element {
@@ -405,7 +407,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const isReflectiveSave = options.reflectionAnswer !== undefined;
       const reflectiveAnswer = options.reflectionAnswer?.trim() ?? "";
       if (isReflectiveSave && reflectiveAnswer.length === 0) {
-        flashConfirm("Add a thought before reflective save", 2600);
+        flashConfirm(t(locale, "addThoughtBeforeReflectiveSave"), 2600);
         setActiveView("reflect");
         return;
       }
@@ -457,7 +459,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
         const reflection = isReflectiveSave
           ? await createReflection(inspiration.id, {
-              question: REFLECTIVE_SAVE_QUESTION,
+              question: t(locale, "reflectionQuestion"),
               answer: reflectiveAnswer,
               skipped: false,
             })
@@ -527,7 +529,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
             2400,
           );
         } else {
-          flashConfirm("Saved");
+          flashConfirm(t(locale, "saved"));
         }
       } catch (err) {
         const error =
@@ -546,6 +548,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setSaving(false);
       }
     }, [
+      locale,
       note,
       pending,
       saving,
@@ -597,6 +600,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         view={activeView}
         visualState={{ ...visualState, reflectGlow }}
         noteValue={note}
+        notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
         onNoteKeyDown={handleNoteKeyDown}
         saveVisible={saveVisible}
@@ -604,6 +608,13 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           void triggerSave();
         }}
         onReflectiveSave={handleStartReflectiveSave}
+        processSaveLabel={t(locale, "processThisInspiration")}
+        quickSaveLabel={t(locale, "quickSave")}
+        focusModeLabel={t(locale, "focusMode")}
+        enterFocusModeLabel={t(locale, "enterFocusMode")}
+        exitFocusModeLabel={t(locale, "exitFocusMode")}
+        doneLabel={t(locale, "done")}
+        continueLabel={t(locale, "continue")}
         focused={focused}
         onToggleFocus={onToggleFocus}
         onFileSelect={addFile}
@@ -611,19 +622,19 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         confirmMessage={confirmMessage}
         reflectQuestion={
           <>
-            <span className="reflect-kicker">Process this inspiration</span>
-            {REFLECTIVE_SAVE_QUESTION}
+            <span className="reflect-kicker">{t(locale, "processThisInspiration")}</span>
+            {t(locale, "reflectionQuestion")}
           </>
         }
         reflectValue={reflectionAnswer}
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
-        reflectPlaceholder="What question, connection, or signal should your future self keep?"
+        reflectPlaceholder={t(locale, "reflectionPlaceholder")}
         onReflectLater={() => setActiveView("note")}
         onReflectNext={() => {
           void triggerSave({ reflectionAnswer });
         }}
-        reflectComplete={reflectGlow ? "Saved with reflection" : null}
+        reflectComplete={reflectGlow ? t(locale, "savedWithReflection") : null}
         reflectCompleteVisible={reflectGlow}
         attachments={
           pending.length === 0

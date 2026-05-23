@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+
+import { users } from "../db/index.js";
 import {
   ensureInspirationEmbedding,
   type EnsureInspirationEmbeddingResult,
@@ -10,6 +13,7 @@ import {
   type PersistWowMomentForInspirationResult,
   type WowMomentJudgment,
 } from "./wow-judge.js";
+import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
 import { DEFAULT_WOW_GENERATION_LIMIT } from "./wow-generation-config.js";
 
 export type AutoWowGenerationStatus =
@@ -55,6 +59,20 @@ export interface AutoWowGenerationParams extends AutoWowGenerationDependencies {
   userId: string;
   inspirationId: string;
   limit?: number;
+  locale?: SupportedLocale;
+}
+
+async function loadUserPreferredLocale(
+  db: WakaDb,
+  userId: string,
+): Promise<SupportedLocale> {
+  const rows = await db
+    .select({ preferredLocale: users.preferredLocale })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  return normalizeSupportedLocale(rows[0]?.preferredLocale);
 }
 
 /**
@@ -110,11 +128,14 @@ export async function generateAutoWowMomentForInspiration(
       // result.
     }
 
+    const locale = params.locale ?? (await loadUserPreferredLocale(params.db, params.userId));
+
     const judgment = await judgeWowMoment({
       db: params.db,
       userId: params.userId,
       triggerInspirationId: params.inspirationId,
       limit,
+      locale,
     });
 
     if (judgment.isWowMoment === false) {
@@ -132,6 +153,7 @@ export async function generateAutoWowMomentForInspiration(
       triggerInspirationId: params.inspirationId,
       judgment,
       limit,
+      locale,
     });
 
     if (persisted.persisted === false) {

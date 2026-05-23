@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InspirationsBoard } from "../src/components/InspirationsBoard";
@@ -40,6 +41,7 @@ const mockAuthState = vi.hoisted(() => ({
       id: "user-1",
       email: "river@example.com",
       name: "River",
+      preferredLocale: "en-US" as "en-US" | "ko-KR",
     },
     isLoading: false,
     isAuthenticated: true,
@@ -47,11 +49,18 @@ const mockAuthState = vi.hoisted(() => ({
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),
     refresh: vi.fn(async () => null),
+    updatePreferredLocale: vi.fn(async () => ({
+      id: "user-1",
+      email: "river@example.com",
+      name: "River",
+      preferredLocale: "en-US" as "en-US" | "ko-KR",
+    })),
   },
 }));
 
 vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => mockAuthState.value,
+  useOptionalAuth: () => mockAuthState.value,
 }));
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -178,7 +187,9 @@ const sampleWowMoments: ApiWowMoment[] = [
     title: "Cities keep teaching through bridges",
     kind: "bridge",
     why: "Several saves connect architecture essays with walking routes and jazz history.",
+    beliefStatement: null,
     reflectionQuestion: "What bridge keeps reappearing?",
+    reflectionGuide: "Walk through the bridge image, name what it connects, then choose one next crossing.",
     wowScore: 9,
     createdAt: "2026-05-11T12:00:00.000Z",
     updatedAt: "2026-05-11T12:00:00.000Z",
@@ -199,7 +210,9 @@ const sampleWowMoments: ApiWowMoment[] = [
     title: "Memory tools are productive tensions",
     kind: "tension",
     why: "Your notes keep treating synthetic memory as both tool and crutch.",
+    beliefStatement: null,
     reflectionQuestion: null,
+    reflectionGuide: null,
     wowScore: 8,
     createdAt: "2026-05-10T12:00:00.000Z",
     updatedAt: "2026-05-10T12:00:00.000Z",
@@ -267,6 +280,7 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
+  mockAuthState.value.user.preferredLocale = "en-US";
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
@@ -280,7 +294,7 @@ async function renderHomePage(): Promise<HTMLDivElement> {
   mountedContainer = container;
 
   await act(async () => {
-    root.render(createElement(HomePage));
+    root.render(createElement(MemoryRouter, null, createElement(HomePage)));
   });
   await flushReactWork();
 
@@ -312,7 +326,9 @@ function getInspirationResultTexts(container: HTMLElement): string[] {
 async function switchToInspirationFirst(container: HTMLElement): Promise<void> {
   const inspirationButton = Array.from(
     container.querySelectorAll<HTMLButtonElement>(".home-view-switcher button"),
-  ).find((button) => button.textContent === "Inspiration First");
+  ).find((button) =>
+    ["Inspiration First", "영감 먼저"].includes(button.textContent ?? ""),
+  );
 
   await act(async () => {
     inspirationButton?.click();
@@ -418,6 +434,32 @@ describe("HomePage view model", () => {
     expect(container.textContent).toContain("Cities keep teaching through bridges");
     expect(container.querySelector(".grid.home-grid")).toBeNull();
     expect(container.querySelector("#capNote")).toBeNull();
+  });
+
+  it("renders representative Home chrome in Korean when the user prefers Korean", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("WAKA — 와우 순간");
+    expect(container.textContent).toContain("와우 순간 먼저");
+    expect(container.querySelector(".wow-first-home")?.getAttribute("aria-label")).toBe(
+      "와우 순간 먼저",
+    );
+    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")?.title).toBe(
+      "River 로그아웃",
+    );
+
+    await switchToInspirationFirst(container);
+    expect(container.textContent).toContain("영감 먼저");
+    expect(container.textContent).toContain("영감 찾기");
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="영감 검색"]')?.placeholder,
+    ).toBe("영감 아카이브 검색…");
+    expect(container.textContent).toContain("3개 중 3개 영감");
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label^="영감 텍스트로 정렬"]')).not.toBeNull();
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label^="저장 시간으로 정렬"]')).not.toBeNull();
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label^="WOW 점수로 정렬"]')).not.toBeNull();
   });
 
   it("switches from WOW Moment First to Inspiration First with the view switcher", async () => {

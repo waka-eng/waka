@@ -15,6 +15,8 @@
  * URL surface.
  */
 
+import type { SupportedLocale } from "./locales";
+
 // ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
@@ -23,6 +25,7 @@ export interface ApiUser {
   id: string;
   email: string;
   name: string;
+  preferredLocale: SupportedLocale;
 }
 
 /**
@@ -235,6 +238,31 @@ export async function fetchCurrentUser(): Promise<ApiUser | null> {
   if ("user" in payload && payload.user) return payload.user;
   if ("id" in payload && "email" in payload) return payload as ApiUser;
   return null;
+}
+
+export interface UpdateAuthPreferencesRequest {
+  preferredLocale: SupportedLocale;
+}
+
+export interface UpdateAuthPreferencesResponse {
+  user: ApiUser;
+}
+
+/**
+ * PATCH /auth/preferences
+ *
+ * Persists account-level preferences that should follow the user across
+ * devices. Today that is only preferredLocale, which also drives future
+ * AI-generated WOW copy server-side.
+ */
+export async function updateAuthPreferences(
+  input: UpdateAuthPreferencesRequest,
+): Promise<UpdateAuthPreferencesResponse> {
+  return patchJson<UpdateAuthPreferencesResponse>(
+    apiPath("/auth/me/preferences"),
+    input,
+    "Failed to update preferences",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -559,6 +587,7 @@ export interface ApiWowMoment {
   why: string;
   beliefStatement: string | null;
   reflectionQuestion: string | null;
+  reflectionGuide: string | null;
   wowScore: number;
   createdAt: string;
   updatedAt: string;

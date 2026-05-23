@@ -92,6 +92,7 @@ export const users = pgTable(
     // URL of the user's avatar image (e.g. Google profile picture).
     // Nullable: email/password signups won't have one until they link OAuth.
     avatarUrl: text("avatar_url"),
+    preferredLocale: text("preferred_locale").notNull().default("en-US"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
