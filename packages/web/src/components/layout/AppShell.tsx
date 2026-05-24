@@ -33,9 +33,11 @@
  *   - `onCaptureClick` (the parent owns the capture modal).
  *   - `historyContent` (parent renders the list once data is wired).
  */
+import type { ReactNode } from "react";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
+import type { SupportedLocale } from "../../lib/locales";
 import { AppHeader } from "./AppHeader";
 import { BackgroundField } from "./BackgroundField";
 import { DropOverlay } from "./DropOverlay";
@@ -68,6 +70,10 @@ export interface AppShellProps {
   historyDetail?: ReactNode;
   /** Main content slot — typically <ClusterGrid> + dialogs. */
   children?: ReactNode;
+  /** Current UI locale for shared shell copy. */
+  locale?: SupportedLocale;
+  /** Called when the shared header language selector changes. */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function AppShell({
@@ -78,6 +84,8 @@ export function AppShell({
   historyContent,
   historyDetail,
   children,
+  locale,
+  onLocaleChange,
 }: AppShellProps): JSX.Element {
   // Drawer open/close lives here because no sibling needs to read it. If a
   // future sub-AC needs the state externally (e.g. to suppress hotkeys when
@@ -117,6 +125,8 @@ export function AppShell({
           loading={loading}
           onCaptureClick={onCaptureClick}
           onMetaClick={() => setHistoryOpen(true)}
+          locale={locale}
+          onLocaleChange={onLocaleChange}
         />
         {children}
       </main>
