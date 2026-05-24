@@ -106,6 +106,13 @@
       "when": 1779580800000,
       "tag": "0014_add_inspiration_sparks",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1779667200000,
+      "tag": "0015_add_meaning_packets",
+      "breakpoints": true
     }
   ]
 }

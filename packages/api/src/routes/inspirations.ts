@@ -55,6 +55,7 @@ import {
   persistLocalInspirationScores,
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
+import { persistMeaningPacketForInspiration } from "../lib/meaning-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
 
@@ -389,6 +390,11 @@ routes.post("/", async (c) => {
       })),
     );
   }
+  await persistMeaningPacketForInspiration({
+    db,
+    userId: scoredInserted.userId,
+    inspirationId: scoredInserted.id,
+  });
 
   // 3. Enqueue a durable background classification job. The worker consumes
   //    `{ inspirationId }`, calls Gemini, and UPDATEs `cluster` /
@@ -551,6 +557,18 @@ routes.post("/:id/sparks", async (c) => {
 
   if (!parent) return c.json({ error: "Inspiration not found" }, 404);
 
+  if (parsed.data.isPrimary) {
+    await db
+      .update(inspirationSparks)
+      .set({ isPrimary: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(inspirationSparks.inspirationId, idCheck.data),
+          eq(inspirationSparks.userId, user.id),
+        ),
+      );
+  }
+
   const [spark] = await db
     .insert(inspirationSparks)
     .values({
@@ -567,6 +585,12 @@ routes.post("/:id/sparks", async (c) => {
     .returning();
 
   if (!spark) return c.json({ error: "Failed to create spark" }, 500);
+
+  await persistMeaningPacketForInspiration({
+    db,
+    userId: user.id,
+    inspirationId: idCheck.data,
+  });
 
   return c.json({
     spark: {

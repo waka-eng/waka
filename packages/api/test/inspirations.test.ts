@@ -54,9 +54,11 @@ import {
   inspirationRevisitEvents,
   inspirationSparks,
   inspirations,
+  meaningPackets,
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { calculateDisplayedInspirationScore } from "../src/lib/inspiration-scores.js";
+import { persistMeaningPacketForInspiration } from "../src/lib/meaning-packets.js";
 import { createUserFixture } from "./fixtures/users.js";
 import {
   apiRequest,
@@ -360,6 +362,21 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(rows[0]!.endOffset).toBe(end);
     expect(rows[0]!.confidence).toBe(100);
     expect(rows[0]!.isPrimary).toBe(true);
+
+    const packets = await getDb()
+      .select()
+      .from(meaningPackets)
+      .where(eq(meaningPackets.inspirationId, res.body.inspiration.id));
+
+    expect(packets).toHaveLength(1);
+    expect(packets[0]!.userId).toBe(fixture.user.id);
+    expect(packets[0]!.primarySparkId).toBe(rows[0]!.id);
+    expect(packets[0]!.sparkText).toBe(selectedText);
+    expect(packets[0]!.artifactExcerpt).toContain("The full essay gives context.");
+    expect(packets[0]!.packetText).toContain("SPARKS");
+    expect(packets[0]!.packetText).toContain(selectedText);
+    expect(packets[0]!.packetText.length).toBeLessThan(text.length + 500);
+    expect(packets[0]!.tokenEstimate).toBeLessThan(500);
   });
 
   it("treats a short standalone save as a user-written spark", async () => {
@@ -426,6 +443,16 @@ describe("Inspiration sparks", () => {
     expect(spark.body.spark.isPrimary).toBe(true);
     expect(spark.body.spark.note).toBe("This is the part I want to remember.");
 
+    const [packet] = await getDb()
+      .select()
+      .from(meaningPackets)
+      .where(eq(meaningPackets.inspirationId, inspirationId));
+
+    expect(packet).toBeTruthy();
+    expect(packet!.primarySparkId).toBe(spark.body.spark.id);
+    expect(packet!.sparkText).toBe("cities send subtle messages about ambition");
+    expect(packet!.packetText).toContain("This is the part I want to remember.");
+
     const list = await client.get<ListSparksResponse>(
       `/api/inspirations/${inspirationId}/sparks`,
     );
@@ -483,6 +510,110 @@ describe("Inspiration sparks", () => {
     expect(res.body.error).toMatch(/invalid spark payload/i);
     expect(res.body.details?.text?.[0]).toBeTruthy();
     expect(res.body.details?.confidence?.[0]).toBeTruthy();
+  });
+
+  it("keeps one idempotent meaning packet per inspiration when rebuilt", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      {
+        text: [
+          "The artifact can stay long because it is the context.",
+          "The spark is the sentence the graph should trust first.",
+          "More supporting context follows so the system understands why it mattered.",
+        ].join(" "),
+        selectedText: "The spark is the sentence the graph should trust first.",
+      },
+    );
+    expect(created.status).toBe(201);
+
+    const firstRows = await getDb()
+      .select()
+      .from(meaningPackets)
+      .where(eq(meaningPackets.inspirationId, created.body.inspiration.id));
+    expect(firstRows).toHaveLength(1);
+    const first = firstRows[0]!;
+
+    await persistMeaningPacketForInspiration({
+      db: getDb(),
+      userId: fixture.user.id,
+      inspirationId: created.body.inspiration.id,
+    });
+
+    const secondRows = await getDb()
+      .select()
+      .from(meaningPackets)
+      .where(eq(meaningPackets.inspirationId, created.body.inspiration.id));
+    expect(secondRows).toHaveLength(1);
+    expect(secondRows[0]!.id).toBe(first.id);
+    expect(secondRows[0]!.inputFingerprint).toBe(first.inputFingerprint);
+  });
+
+  it("does not build a meaning packet across tenant boundaries", async () => {
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    const created = await authedClient(alice).json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "alice private meaning packet source" },
+    );
+    expect(created.status).toBe(201);
+
+    const result = await persistMeaningPacketForInspiration({
+      db: getDb(),
+      userId: bob.user.id,
+      inspirationId: created.body.inspiration.id,
+    });
+
+    expect(result.status).toBe("missing_inspiration");
+  });
+
+  it("builds a packet from bounded context when a long save has no designated spark", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const text = [
+      "This is a full essay-style capture with no single sentence selected.",
+      "It still matters because the whole artifact is the thing the user wanted to keep.",
+      "The packet should preserve enough local context for later meaning work without pretending the user highlighted a spark.",
+      "Additional context repeats the same point so the test remains safely above the short spark-only heuristic.",
+    ].join(" ");
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text },
+    );
+    expect(created.status).toBe(201);
+
+    const sparks = await getDb()
+      .select()
+      .from(inspirationSparks)
+      .where(eq(inspirationSparks.inspirationId, created.body.inspiration.id));
+    expect(sparks).toHaveLength(0);
+
+    const packets = await getDb()
+      .select()
+      .from(meaningPackets)
+      .where(eq(meaningPackets.inspirationId, created.body.inspiration.id));
+
+    expect(packets).toHaveLength(1);
+    expect(packets[0]!.primarySparkId).toBeNull();
+    expect(packets[0]!.sparkText).toBe("");
+    expect(packets[0]!.artifactExcerpt).toContain("full essay-style capture");
+    expect(packets[0]!.packetText).toContain("SPARKS\nnone");
+    expect(packets[0]!.sourceMetadata).toMatchObject({
+      sparkCount: 0,
+      hasPrimarySpark: false,
+    });
   });
 });
 

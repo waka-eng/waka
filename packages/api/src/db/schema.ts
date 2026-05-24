@@ -247,6 +247,55 @@ export const inspirationSparks = pgTable(
 export type InspirationSpark = typeof inspirationSparks.$inferSelect;
 export type NewInspirationSpark = typeof inspirationSparks.$inferInsert;
 
+export const meaningPackets = pgTable(
+  "meaning_packets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    inspirationId: uuid("inspiration_id")
+      .notNull()
+      .references(() => inspirations.id, { onDelete: "cascade" }),
+    primarySparkId: uuid("primary_spark_id").references(
+      () => inspirationSparks.id,
+      { onDelete: "set null" },
+    ),
+    sparkText: text("spark_text").notNull().default(""),
+    artifactExcerpt: text("artifact_excerpt").notNull().default(""),
+    packetText: text("packet_text").notNull(),
+    sourceMetadata: jsonb("source_metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    classifierSnapshot: jsonb("classifier_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    inputFingerprint: text("input_fingerprint").notNull(),
+    tokenEstimate: integer("token_estimate").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userInspirationUnique: uniqueIndex("meaning_packets_user_inspiration_unique_idx").on(
+      table.userId,
+      table.inspirationId,
+    ),
+    userUpdatedIdx: index("meaning_packets_user_updated_idx").on(
+      table.userId,
+      table.updatedAt.desc(),
+    ),
+  }),
+);
+
+export type MeaningPacket = typeof meaningPackets.$inferSelect;
+export type NewMeaningPacket = typeof meaningPackets.$inferInsert;
+
 // ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
@@ -254,6 +303,7 @@ export type NewInspirationSpark = typeof inspirationSparks.$inferInsert;
 export const usersRelations = relations(users, ({ many }) => ({
   inspirations: many(inspirations),
   inspirationSparks: many(inspirationSparks),
+  meaningPackets: many(meaningPackets),
 }));
 
 export const inspirationsRelations = relations(inspirations, ({ one, many }) => ({
@@ -262,6 +312,10 @@ export const inspirationsRelations = relations(inspirations, ({ one, many }) => 
     references: [users.id],
   }),
   sparks: many(inspirationSparks),
+  meaningPacket: one(meaningPackets, {
+    fields: [inspirations.id],
+    references: [meaningPackets.inspirationId],
+  }),
 }));
 
 export const inspirationSparksRelations = relations(inspirationSparks, ({ one }) => ({
@@ -272,5 +326,20 @@ export const inspirationSparksRelations = relations(inspirationSparks, ({ one })
   inspiration: one(inspirations, {
     fields: [inspirationSparks.inspirationId],
     references: [inspirations.id],
+  }),
+}));
+
+export const meaningPacketsRelations = relations(meaningPackets, ({ one }) => ({
+  user: one(users, {
+    fields: [meaningPackets.userId],
+    references: [users.id],
+  }),
+  inspiration: one(inspirations, {
+    fields: [meaningPackets.inspirationId],
+    references: [inspirations.id],
+  }),
+  primarySpark: one(inspirationSparks, {
+    fields: [meaningPackets.primarySparkId],
+    references: [inspirationSparks.id],
   }),
 }));
