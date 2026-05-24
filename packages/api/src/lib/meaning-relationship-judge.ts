@@ -27,6 +27,8 @@ const MAX_PACKET_PROMPT_CHARS = 1800;
 const MAX_RELATIONSHIP_PROPOSALS = 5;
 const MAX_RELATIONSHIP_REASON_CHARS = 240;
 const MAX_EVIDENCE_LABEL_CHARS = 64;
+const MAX_FALLBACK_RELATIONSHIP_PROPOSALS = 3;
+const MIN_FALLBACK_CANDIDATE_SCORE = 35;
 
 export const meaningRelationshipKindValues = [
   "resonates_with",
@@ -508,6 +510,58 @@ function safeProposals(
   return proposals;
 }
 
+function clampConfidence(value: number): number {
+  return Math.max(35, Math.min(72, Math.round(value)));
+}
+
+function fallbackRelationshipKind(
+  trigger: MeaningRelationshipJudgePacket,
+  candidate: MeaningRelationshipJudgeCandidate,
+): MeaningRelationshipKind {
+  if (trigger.cluster && candidate.cluster && trigger.cluster === candidate.cluster) {
+    return "clarifies";
+  }
+  return "resonates_with";
+}
+
+function fallbackRelationshipProposals(
+  input: MeaningRelationshipJudgeInput,
+): MeaningRelationshipProposal[] {
+  return input.candidates
+    .filter(
+      (candidate) =>
+        candidate.scores.runtimeMeaningCandidateScore >= MIN_FALLBACK_CANDIDATE_SCORE,
+    )
+    .sort(
+      (a, b) =>
+        b.scores.runtimeMeaningCandidateScore -
+        a.scores.runtimeMeaningCandidateScore,
+    )
+    .slice(0, MAX_FALLBACK_RELATIONSHIP_PROPOSALS)
+    .map((candidate) => ({
+      kind: fallbackRelationshipKind(input.trigger, candidate),
+      fromInspirationId: input.trigger.inspirationId,
+      toInspirationId: candidate.inspirationId,
+      confidence: clampConfidence(candidate.scores.runtimeMeaningCandidateScore),
+      reason:
+        "Fallback relationship from bounded WAKA candidate signals while the LLM judge was unavailable.",
+      evidence: [
+        {
+          inspirationId: input.trigger.inspirationId,
+          label: "Trigger packet",
+          reason:
+            "The trigger was packetized into compact meaning evidence before relationship judgment.",
+        },
+        {
+          inspirationId: candidate.inspirationId,
+          label: "Retrieved candidate",
+          reason:
+            "The candidate was selected by existing WAKA scores, packet overlap, and embedding proximity.",
+        },
+      ],
+    }));
+}
+
 export async function judgeMeaningRelationshipsForInspiration(
   params: JudgeMeaningRelationshipsForInspirationParams,
 ): Promise<JudgeMeaningRelationshipsForInspirationResult> {
@@ -544,7 +598,29 @@ export async function judgeMeaningRelationshipsForInspiration(
   }
 
   const client = params.client ?? new GeminiMeaningRelationshipJudgeClient();
-  const judgment = await client.judgeMeaningRelationships(input);
+  let judgment: MeaningRelationshipJudgment;
+  try {
+    judgment = await client.judgeMeaningRelationships(input);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Relationship judge failed.";
+    const proposals = fallbackRelationshipProposals(input);
+    if (proposals.length > 0) {
+      return {
+        status: "judged",
+        candidateSet,
+        judgment: {
+          hasMeaningfulRelationships: true,
+          relationships: proposals,
+        },
+        proposals,
+      };
+    }
+    judgment = defaultFalseJudgment(
+      "unclear_pattern",
+      `Relationship judge unavailable and no fallback candidate passed threshold. ${message}`,
+    );
+  }
   const proposals = safeProposals(judgment, input);
 
   if (proposals === null) {

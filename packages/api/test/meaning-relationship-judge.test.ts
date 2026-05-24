@@ -265,6 +265,45 @@ describe("judgeMeaningRelationshipsForInspiration", () => {
       reason: "generic_similarity",
     });
   });
+
+  it("falls back to bounded WAKA relationship proposals when the judge is unavailable", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "AI makes building faster, but people still need judgment about what matters.",
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "A good environment helps people choose the work and peers that fit them.",
+    });
+    await createPacket(testDb, alice.user.id, trigger);
+    await createPacket(testDb, alice.user.id, candidate);
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidate, [1, 0]);
+
+    const client: MeaningRelationshipJudgeClient = {
+      judgeMeaningRelationships: vi.fn().mockRejectedValue(
+        new Error("HTTP 503 Service Unavailable providerCode=UNAVAILABLE"),
+      ),
+    };
+
+    const result = await judgeMeaningRelationshipsForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      client,
+    });
+
+    expect(result.status).toBe("judged");
+    expect(result.proposals).toHaveLength(1);
+    expect(result.proposals[0]).toMatchObject({
+      kind: "clarifies",
+      fromInspirationId: trigger.id,
+      toInspirationId: candidate.id,
+    });
+    expect(result.judgment).toMatchObject({
+      hasMeaningfulRelationships: true,
+    });
+    expect(result.proposals[0]!.reason).toContain("Fallback relationship");
+  });
 });
 
 describe("GeminiMeaningRelationshipJudgeClient", () => {
