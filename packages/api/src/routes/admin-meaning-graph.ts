@@ -6,7 +6,7 @@
  * meanings. This route is for debugging backend state, not user navigation.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 
 import {
@@ -17,6 +17,8 @@ import {
   meaningPackets,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { persistMeaningGraphForInspiration } from "../lib/meaning-graph-writer.js";
+import { persistMeaningPacketForInspiration } from "../lib/meaning-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 
 const DEFAULT_LIMIT = 120;
@@ -60,6 +62,45 @@ function truncatePreview(value: string, maxLength = MAX_PREVIEW_LENGTH): string 
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+async function rebuildMeaningGraphForUser(db: ReturnType<typeof getDb>, userId: string) {
+  const inspirationRows = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(eq(inspirations.userId, userId))
+    .orderBy(asc(inspirations.createdAt));
+
+  await db.delete(meaningEvidence).where(eq(meaningEvidence.userId, userId));
+  await db.delete(meaningEdges).where(eq(meaningEdges.userId, userId));
+  await db.delete(meaningNodes).where(eq(meaningNodes.userId, userId));
+
+  let nodesTouched = 0;
+  let evidenceTouched = 0;
+  let edgesTouched = 0;
+
+  for (const inspiration of inspirationRows) {
+    await persistMeaningPacketForInspiration({
+      db,
+      userId,
+      inspirationId: inspiration.id,
+    });
+    const result = await persistMeaningGraphForInspiration({
+      db,
+      userId,
+      triggerInspirationId: inspiration.id,
+    });
+    nodesTouched += result.nodes.length;
+    evidenceTouched += result.evidence.length;
+    edgesTouched += result.edges.length;
+  }
+
+  return {
+    inspirations: inspirationRows.length,
+    nodesTouched,
+    evidenceTouched,
+    edgesTouched,
+  };
+}
+
 export function createAdminMeaningGraphRoutes(
   deps: AdminMeaningGraphRouteDependencies = {},
 ): Hono<AuthEnv> {
@@ -72,7 +113,9 @@ export function createAdminMeaningGraphRoutes(
   routes.get("/", async (c) => {
     const userId = c.get("user").id;
     const limit = parseLimit(c.req.query("limit"));
+    const shouldRebuild = c.req.query("rebuild") === "1";
     const db = getDatabase();
+    const rebuild = shouldRebuild ? await rebuildMeaningGraphForUser(db, userId) : null;
 
     const nodeRows = await db
       .select()
@@ -194,6 +237,7 @@ export function createAdminMeaningGraphRoutes(
           edgeCount: edgeRows.length,
           evidenceCount: evidenceRows.length,
           limit,
+          ...(shouldRebuild ? { rebuilt: true, rebuild } : {}),
         },
       },
     });

@@ -901,11 +901,13 @@ export interface ApiMeaningGraph {
     edgeCount: number;
     evidenceCount: number;
     limit: number;
+    rebuilt?: boolean;
   };
 }
 
-export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
+export async function fetchMeaningGraph(limit = 120, rebuild = false): Promise<ApiMeaningGraph> {
   const params = new URLSearchParams({ limit: String(limit) });
+  if (rebuild) params.set("rebuild", "1");
   const body = await getJson<{ graph: ApiMeaningGraph }>(
     apiPath(`/admin/meaning-graph?${params.toString()}`),
     "Failed to load meaning graph",

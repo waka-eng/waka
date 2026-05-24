@@ -28,11 +28,6 @@ import {
   type ApiMeaningGraphNode,
 } from "../lib/api";
 
-interface GraphPoint {
-  x: number;
-  y: number;
-}
-
 interface SimNode extends SimulationNodeDatum {
   id: string;
   weight: number;
@@ -41,63 +36,105 @@ interface SimNode extends SimulationNodeDatum {
 interface MeaningNodeData {
   type: string;
   label: string;
+  description: string;
   weight: number;
   evidenceCount: number;
-  degree: number;
   isFocus: boolean;
   fade: boolean;
 }
 
 const NODE_WIDTH = 238;
-const NODE_HEIGHT = 104;
+const NODE_HEIGHT = 96;
+const MAX_VISIBLE_NODES = 34;
+const MAX_VISIBLE_EDGES = 72;
 
-const edgeTypes = { floating: FloatingEdge };
+const TYPE_ORDER = [
+  "question",
+  "life_direction",
+  "desire",
+  "value",
+  "tension",
+  "environment",
+  "person_archetype",
+];
 
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
+const TYPE_LABEL: Record<string, string> = {
+  value: "value",
+  question: "question",
+  desire: "desire",
+  tension: "tension",
+  life_direction: "life direction",
+  person_archetype: "person",
+  environment: "environment",
+};
 
-function formatTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  })}`;
+const EDGE_LABEL: Record<string, string> = {
+  supports: "supports",
+  challenges: "challenges",
+  points_to: "points to",
+  asks_for: "asks for",
+  reactivates: "reactivates",
+};
+
+function colorForType(type: string): string {
+  switch (type) {
+    case "question":
+      return "#111111";
+    case "life_direction":
+      return "#2f5e3d";
+    case "desire":
+      return "#725a24";
+    case "value":
+      return "#315f78";
+    case "tension":
+      return "#8a3f33";
+    case "environment":
+      return "#6b6f32";
+    case "person_archetype":
+      return "#5d4a75";
+    default:
+      return "#555555";
+  }
 }
 
 function edgeColor(kind: string): string {
   switch (kind) {
-    case "resonates_with":
     case "supports":
       return "#3f6a4c";
-    case "presses_against":
     case "challenges":
       return "#9a4a3d";
-    case "returns_to":
-    case "reactivates":
-      return "#725a24";
-    case "clarifies":
     case "points_to":
-      return "#315f78";
-    case "extends":
+      return "#365f7a";
     case "asks_for":
-      return "#5d4a75";
-    case "reframes":
-      return "#111111";
+      return "#796033";
+    case "reactivates":
+      return "#7052a1";
     default:
       return "#6f6a62";
   }
 }
 
-function edgeLabel(kind: string): string {
-  return kind.replace(/_/g, " ");
+function typeRank(type: string): number {
+  const index = TYPE_ORDER.indexOf(type);
+  return index === -1 ? TYPE_ORDER.length : index;
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recent";
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function shortPreview(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= 130) return normalized;
+  return `${normalized.slice(0, 127)}...`;
 }
 
 function runLayout(
   rawNodes: ApiMeaningGraphNode[],
   rawEdges: ApiMeaningGraphEdge[],
-): Map<string, GraphPoint> {
+): Map<string, { x: number; y: number }> {
   const simNodes: SimNode[] = rawNodes.map((node) => ({
     id: node.id,
     weight: Math.max(1, node.weight),
@@ -106,12 +143,13 @@ function runLayout(
     source: edge.sourceNodeId,
     target: edge.targetNodeId,
   }));
-  const confidenceByPair = new Map<string, number>();
+
+  const weightByPair = new Map<string, number>();
   for (const edge of rawEdges) {
-    confidenceByPair.set(`${edge.sourceNodeId}|${edge.targetNodeId}`, edge.confidence);
+    weightByPair.set(`${edge.sourceNodeId}|${edge.targetNodeId}`, edge.weight);
   }
 
-  const simulation = forceSimulation(simNodes)
+  const sim = forceSimulation(simNodes)
     .force(
       "link",
       forceLink<SimNode, SimulationLinkDatum<SimNode>>(simLinks)
@@ -119,22 +157,22 @@ function runLayout(
         .distance((link) => {
           const source = (link.source as SimNode).id;
           const target = (link.target as SimNode).id;
-          const confidence =
-            confidenceByPair.get(`${source}|${target}`) ??
-            confidenceByPair.get(`${target}|${source}`) ??
-            50;
-          return Math.max(145, 360 - confidence * 2.1);
+          const weight = weightByPair.get(`${source}|${target}`) ?? 80;
+          return Math.max(145, 340 - Math.sqrt(weight) * 10);
         })
         .strength(0.42),
     )
-    .force("charge", forceManyBody<SimNode>().strength(-760))
+    .force(
+      "charge",
+      forceManyBody<SimNode>().strength((node) => -520 - Math.sqrt(node.weight) * 26),
+    )
     .force("center", forceCenter(540, 330))
     .force("collide", forceCollide<SimNode>(150))
     .stop();
 
-  for (let index = 0; index < 420; index += 1) simulation.tick();
+  for (let index = 0; index < 420; index += 1) sim.tick();
 
-  const positions = new Map<string, GraphPoint>();
+  const positions = new Map<string, { x: number; y: number }>();
   for (const node of simNodes) {
     positions.set(node.id, { x: node.x ?? 0, y: node.y ?? 0 });
   }
@@ -146,22 +184,27 @@ const MeaningFlowNode = memo(({ data }: NodeProps<MeaningNodeData>) => (
     className="meaning-flow-node"
     data-focus={data.isFocus || undefined}
     data-fade={data.fade || undefined}
-    style={{ width: NODE_WIDTH, height: NODE_HEIGHT }}
+    style={{
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
+      borderColor: data.isFocus ? colorForType(data.type) : undefined,
+    }}
   >
     <Handle type="target" position={Position.Top} style={{ visibility: "hidden" }} />
     <Handle type="source" position={Position.Bottom} style={{ visibility: "hidden" }} />
-    <span className="meaning-flow-node-type">
-      {data.type.replace(/_/g, " ")}
+    <span className="meaning-flow-node-type" style={{ color: colorForType(data.type) }}>
+      {TYPE_LABEL[data.type] ?? data.type}
     </span>
     <p className="meaning-flow-node-label">{data.label}</p>
     <span className="meaning-flow-node-meta">
-      {data.degree} link{data.degree === 1 ? "" : "s"} · {data.evidenceCount} evidence · {data.weight} weight
+      {data.evidenceCount} evidence · {data.weight} weight
     </span>
   </div>
 ));
 MeaningFlowNode.displayName = "MeaningFlowNode";
 
 const nodeTypes = { meaning: MeaningFlowNode };
+const edgeTypes = { floating: FloatingEdge };
 
 export default function MeaningGraphPage(): JSX.Element {
   const [graph, setGraph] = useState<ApiMeaningGraph | null>(null);
@@ -170,55 +213,66 @@ export default function MeaningGraphPage(): JSX.Element {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
-  const [hideIsolates, setHideIsolates] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const [flowNodes, setFlowNodes, onNodesChange] =
     useNodesState<MeaningNodeData>([]);
 
-  const loadGraph = useCallback(async () => {
+  const loadGraph = useCallback(async (rebuild = false) => {
     setLoading(true);
     setError(null);
     try {
-      const next = await fetchMeaningGraph();
+      const next = await fetchMeaningGraph(120, rebuild);
       setGraph(next);
-      if (!selectedNodeId && next.nodes[0]) setSelectedNodeId(next.nodes[0].id);
+      setSelectedNodeId((current) => current ?? next.nodes[0]?.id ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load meaning graph");
     } finally {
       setLoading(false);
+      setRebuilding(false);
     }
-  }, [selectedNodeId]);
+  }, []);
 
   useEffect(() => {
-    void loadGraph();
+    void loadGraph(false);
   }, [loadGraph]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
 
-  const degreeById = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const edge of edges) {
-      map.set(edge.sourceNodeId, (map.get(edge.sourceNodeId) ?? 0) + 1);
-      map.set(edge.targetNodeId, (map.get(edge.targetNodeId) ?? 0) + 1);
-    }
-    return map;
-  }, [edges]);
+  const sortedNodes = useMemo(
+    () =>
+      [...nodes].sort(
+        (a, b) =>
+          b.evidenceCount - a.evidenceCount ||
+          b.weight - a.weight ||
+          typeRank(a.type) - typeRank(b.type),
+      ),
+    [nodes],
+  );
 
-  const visibleNodes = useMemo(
-    () => nodes.filter((node) => !hideIsolates || (degreeById.get(node.id) ?? 0) > 0),
-    [degreeById, hideIsolates, nodes],
+  const visibleMeaningNodes = useMemo(
+    () =>
+      sortedNodes
+        .filter((node, index) => node.evidenceCount > 1 || node.weight >= 160 || index < 24)
+        .slice(0, MAX_VISIBLE_NODES),
+    [sortedNodes],
   );
 
   const visibleNodeIds = useMemo(
-    () => new Set(visibleNodes.map((node) => node.id)),
-    [visibleNodes],
+    () => new Set(visibleMeaningNodes.map((node) => node.id)),
+    [visibleMeaningNodes],
   );
 
-  const visibleEdges = useMemo(
+  const visibleMeaningEdges = useMemo(
     () =>
-      edges.filter(
-        (edge) => visibleNodeIds.has(edge.sourceNodeId) && visibleNodeIds.has(edge.targetNodeId),
-      ),
+      edges
+        .filter(
+          (edge) =>
+            visibleNodeIds.has(edge.sourceNodeId) &&
+            visibleNodeIds.has(edge.targetNodeId),
+        )
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, MAX_VISIBLE_EDGES),
     [edges, visibleNodeIds],
   );
 
@@ -226,6 +280,7 @@ export default function MeaningGraphPage(): JSX.Element {
     () => new Map(nodes.map((node) => [node.id, node] as const)),
     [nodes],
   );
+
   const selectedNode = selectedNodeId ? nodeById.get(selectedNodeId) ?? null : null;
   const selectedEdge = selectedEdgeId
     ? edges.find((edge) => edge.id === selectedEdgeId) ?? null
@@ -233,14 +288,14 @@ export default function MeaningGraphPage(): JSX.Element {
 
   const neighborsByNode = useMemo(() => {
     const map = new Map<string, Set<string>>();
-    for (const edge of visibleEdges) {
+    for (const edge of visibleMeaningEdges) {
       if (!map.has(edge.sourceNodeId)) map.set(edge.sourceNodeId, new Set());
       if (!map.has(edge.targetNodeId)) map.set(edge.targetNodeId, new Set());
       map.get(edge.sourceNodeId)!.add(edge.targetNodeId);
       map.get(edge.targetNodeId)!.add(edge.sourceNodeId);
     }
     return map;
-  }, [visibleEdges]);
+  }, [visibleMeaningEdges]);
 
   useEffect(() => {
     if (!graph) {
@@ -248,9 +303,9 @@ export default function MeaningGraphPage(): JSX.Element {
       return;
     }
 
-    const positions = runLayout(visibleNodes, visibleEdges);
+    const positions = runLayout(visibleMeaningNodes, visibleMeaningEdges);
     setFlowNodes(
-      visibleNodes.map((node) => {
+      visibleMeaningNodes.map((node) => {
         const position = positions.get(node.id) ?? { x: 540, y: 330 };
         return {
           id: node.id,
@@ -262,9 +317,9 @@ export default function MeaningGraphPage(): JSX.Element {
           data: {
             type: node.type,
             label: node.label,
+            description: node.description,
             weight: node.weight,
             evidenceCount: node.evidenceCount,
-            degree: degreeById.get(node.id) ?? 0,
             isFocus: false,
             fade: false,
           },
@@ -272,7 +327,7 @@ export default function MeaningGraphPage(): JSX.Element {
         };
       }),
     );
-  }, [degreeById, graph, setFlowNodes, visibleEdges, visibleNodes]);
+  }, [graph, setFlowNodes, visibleMeaningEdges, visibleMeaningNodes]);
 
   const focusNodeId = hoverNodeId ?? selectedNodeId;
   const focusNeighbors = focusNodeId
@@ -290,246 +345,225 @@ export default function MeaningGraphPage(): JSX.Element {
             ...node.data,
             isFocus,
             fade: focusNodeId !== null && !isFocus && !isNeighbor,
-            degree: degreeById.get(node.id) ?? 0,
           },
         };
       }),
     );
-  }, [degreeById, focusNeighbors, focusNodeId, setFlowNodes]);
+  }, [focusNeighbors, focusNodeId, setFlowNodes]);
 
   const flowEdges: Edge[] = useMemo(
     () =>
-      visibleEdges.map((edge) => {
+      visibleMeaningEdges.map((edge) => {
         const isFocus =
           focusNodeId !== null &&
           (edge.sourceNodeId === focusNodeId || edge.targetNodeId === focusNodeId);
         const isSelected = selectedEdgeId === edge.id;
         const fade = focusNodeId !== null && !isFocus;
-        const normalized = Math.max(0.2, Math.min(1, edge.confidence / 100));
+        const normalized = Math.min(1, Math.max(0.15, edge.weight / 1000));
         return {
           id: edge.id,
           source: edge.sourceNodeId,
           target: edge.targetNodeId,
           type: "floating",
-          label: isFocus || isSelected ? edgeLabel(edge.kind) : undefined,
+          label: isFocus || isSelected ? EDGE_LABEL[edge.kind] ?? edge.kind : undefined,
           style: {
             stroke: edgeColor(edge.kind),
             strokeWidth: isSelected ? 3 : 0.8 + normalized * 2.8,
-            opacity: fade ? 0.08 : isFocus || isSelected ? 0.78 : 0.3,
+            opacity: fade ? 0.08 : isFocus || isSelected ? 0.78 : 0.28,
           },
           labelStyle: {
-            color: edgeColor(edge.kind),
             fontSize: 10,
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fill: edgeColor(edge.kind),
             letterSpacing: "0.06em",
             textTransform: "uppercase",
           },
           labelBgPadding: [5, 2] as [number, number],
           labelBgBorderRadius: 999,
           labelBgStyle: {
-            background: "rgba(251, 250, 247, 0.94)",
-            border: "1px solid rgba(15, 15, 14, 0.08)",
+            fill: "rgba(253, 251, 245, 0.94)",
+            stroke: "rgba(15, 15, 14, 0.08)",
           },
           labelShowBg: true,
         };
       }),
-    [focusNodeId, selectedEdgeId, visibleEdges],
+    [focusNodeId, selectedEdgeId, visibleMeaningEdges],
   );
+
+  const selectedEdgeSource = selectedEdge
+    ? nodeById.get(selectedEdge.sourceNodeId) ?? null
+    : null;
+  const selectedEdgeTarget = selectedEdge
+    ? nodeById.get(selectedEdge.targetNodeId) ?? null
+    : null;
 
   return (
     <main className="meaning-graph-page">
       <header className="meaning-graph-header">
         <div>
-          <span>Internal graph inspector</span>
-          <h1>Meaning graph</h1>
+          <span>meaning graph</span>
+          <h1>Meaning graph inspection</h1>
           <p>
-            Backend-only view of packetized inspirations and judged relationships.
-            Drag meaning nodes, click edges, and inspect which saves became evidence.
+            Drag the cards, click a node to inspect its evidence, or click an edge
+            to inspect the relationship.
           </p>
         </div>
-        <button type="button" onClick={loadGraph} disabled={loading}>
-          {loading ? "Refreshing" : "Refresh"}
-        </button>
+        <div className="meaning-graph-actions">
+          <button
+            type="button"
+            disabled={rebuilding || loading}
+            onClick={() => {
+              setRebuilding(true);
+              void loadGraph(true);
+            }}
+          >
+            {rebuilding ? "Rebuilding..." : "Rebuild graph"}
+          </button>
+          <button type="button" onClick={() => void loadGraph(false)} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </header>
 
-      {error ? <p className="meaning-graph-error">{error}</p> : null}
-
-      <section className="meaning-graph-shell meaning-graph-shell--flow">
-        <div className="meaning-graph-canvas-wrap meaning-graph-flow-shell">
-          <div className="meaning-graph-stats">
-            <span>{graph?.meta.nodeCount ?? 0} nodes</span>
-            <span>{visibleEdges.length} edges</span>
-            <span>{graph?.meta.evidenceCount ?? 0} evidence</span>
-            <label>
-              <input
-                type="checkbox"
-                checked={hideIsolates}
-                onChange={(event) => setHideIsolates(event.target.checked)}
-              />
-              hide isolates
-            </label>
+      {loading ? (
+        <p className="meaning-graph-status">Loading meaning graph...</p>
+      ) : error ? (
+        <p className="meaning-graph-status meaning-graph-status--error">{error}</p>
+      ) : (
+        <section className="meaning-graph-workbench meaning-graph-workbench--flow">
+          <div className="meaning-graph-summary">
+            <span>{graph?.meta.nodeCount ?? 0} meaning nodes</span>
+            <span>{graph?.meta.edgeCount ?? 0} meaning edges</span>
+            <span>showing {visibleMeaningNodes.length} draggable nodes</span>
+            <span>{visibleMeaningEdges.length} clickable edges</span>
+            <span>{graph?.meta.evidenceCount ?? 0} evidence rows</span>
           </div>
-          {nodes.length === 0 ? (
-            <div className="meaning-graph-empty">
-              <strong>No graph rows yet</strong>
-              <span>
-                Save/process inspirations through the meaning graph writer, then
-                refresh this inspector.
-              </span>
-            </div>
-          ) : (
-            <ReactFlow
-              nodes={flowNodes}
-              edges={flowEdges}
-              nodeTypes={nodeTypes}
-              edgeTypes={edgeTypes}
-              onNodesChange={onNodesChange}
-              fitView
-              fitViewOptions={{ padding: 0.25 }}
-              minZoom={0.22}
-              maxZoom={1.8}
-              nodesDraggable
-              nodesConnectable={false}
-              elementsSelectable
-              proOptions={{ hideAttribution: true }}
-              onNodeClick={(_, node) => {
-                setSelectedEdgeId(null);
-                setSelectedNodeId((current) => (current === node.id ? null : node.id));
-              }}
-              onEdgeClick={(_, edge) => {
-                setSelectedNodeId(null);
-                setSelectedEdgeId((current) => (current === edge.id ? null : edge.id));
-              }}
-              onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
-              onNodeMouseLeave={() => setHoverNodeId(null)}
-              onPaneClick={() => {
-                setSelectedNodeId(null);
-                setSelectedEdgeId(null);
-              }}
-            >
-              <Background gap={26} color="#E5E1D8" />
-              <Controls showInteractive={false} />
-              <MiniMap pannable zoomable maskColor="rgba(251, 250, 247, 0.72)" />
-            </ReactFlow>
-          )}
-        </div>
 
-        <aside className="meaning-graph-detail">
-          {selectedEdge ? (
-            <EdgeDetail edge={selectedEdge} nodeById={nodeById} />
-          ) : selectedNode ? (
-            <NodeDetail node={selectedNode} />
-          ) : (
-            <div className="meaning-graph-detail-empty">
-              <strong>Select a node or edge</strong>
-              <span>Click the graph to inspect the persisted backend row.</span>
-            </div>
-          )}
-        </aside>
-      </section>
+          <div className="meaning-graph-flow-shell">
+            {nodes.length === 0 ? (
+              <div className="meaning-graph-empty">
+                <strong>No graph rows yet</strong>
+                <span>Click rebuild after saving inspirations locally.</span>
+              </div>
+            ) : (
+              <ReactFlow
+                nodes={flowNodes}
+                edges={flowEdges}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                onNodesChange={onNodesChange}
+                fitView
+                fitViewOptions={{ padding: 0.25 }}
+                minZoom={0.22}
+                maxZoom={1.8}
+                nodesDraggable
+                nodesConnectable={false}
+                elementsSelectable
+                proOptions={{ hideAttribution: true }}
+                onNodeClick={(_, node) => {
+                  setSelectedEdgeId(null);
+                  setSelectedNodeId((current) => (current === node.id ? null : node.id));
+                }}
+                onEdgeClick={(_, edge) => {
+                  setSelectedNodeId(null);
+                  setSelectedEdgeId((current) => (current === edge.id ? null : edge.id));
+                }}
+                onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
+                onNodeMouseLeave={() => setHoverNodeId(null)}
+                onPaneClick={() => {
+                  setSelectedNodeId(null);
+                  setSelectedEdgeId(null);
+                }}
+              >
+                <Background gap={26} color="#E5E1D8" />
+                <Controls showInteractive={false} />
+                <MiniMap pannable zoomable maskColor="rgba(253, 251, 245, 0.72)" />
+              </ReactFlow>
+            )}
+          </div>
+
+          <aside className="meaning-graph-detail">
+            {selectedEdge ? (
+              <>
+                <span>{EDGE_LABEL[selectedEdge.kind] ?? selectedEdge.kind}</span>
+                <h2>Relationship</h2>
+                <p>
+                  {selectedEdgeSource?.label ?? "Unknown"}{" "}
+                  {EDGE_LABEL[selectedEdge.kind] ?? selectedEdge.kind}{" "}
+                  {selectedEdgeTarget?.label ?? "unknown"}.
+                </p>
+                <dl>
+                  <div>
+                    <dt>weight</dt>
+                    <dd>{selectedEdge.weight}</dd>
+                  </div>
+                  <div>
+                    <dt>confidence</dt>
+                    <dd>{selectedEdge.confidence}</dd>
+                  </div>
+                  <div>
+                    <dt>evidence</dt>
+                    <dd>{selectedEdge.evidenceCount}</dd>
+                  </div>
+                  <div>
+                    <dt>updated</dt>
+                    <dd>{formatDate(selectedEdge.lastReinforcedAt)}</dd>
+                  </div>
+                </dl>
+                <div className="meaning-graph-evidence-list">
+                  <h3>Endpoints</h3>
+                  <article>
+                    <time>{selectedEdgeSource ? TYPE_LABEL[selectedEdgeSource.type] : "source"}</time>
+                    <blockquote>{selectedEdgeSource?.label ?? "Unknown source"}</blockquote>
+                  </article>
+                  <article>
+                    <time>{selectedEdgeTarget ? TYPE_LABEL[selectedEdgeTarget.type] : "target"}</time>
+                    <blockquote>{selectedEdgeTarget?.label ?? "Unknown target"}</blockquote>
+                  </article>
+                </div>
+              </>
+            ) : selectedNode ? (
+              <>
+                <span>{TYPE_LABEL[selectedNode.type] ?? selectedNode.type}</span>
+                <h2>{selectedNode.label}</h2>
+                <p>{selectedNode.description || "No description yet."}</p>
+                <dl>
+                  <div>
+                    <dt>weight</dt>
+                    <dd>{selectedNode.weight}</dd>
+                  </div>
+                  <div>
+                    <dt>confidence</dt>
+                    <dd>{selectedNode.confidence}</dd>
+                  </div>
+                  <div>
+                    <dt>evidence</dt>
+                    <dd>{selectedNode.evidenceCount}</dd>
+                  </div>
+                  <div>
+                    <dt>updated</dt>
+                    <dd>{formatDate(selectedNode.lastReinforcedAt)}</dd>
+                  </div>
+                </dl>
+                <div className="meaning-graph-evidence-list">
+                  <h3>Evidence behind this</h3>
+                  {selectedNode.evidence.slice(0, 6).map((evidence) => (
+                    <article key={`${selectedNode.id}-${evidence.inspirationId}-${evidence.packetId}`}>
+                      <time>{formatDate(evidence.createdAt)}</time>
+                      <blockquote>
+                        {shortPreview(evidence.preview || evidence.packetPreview)}
+                      </blockquote>
+                      <p>{evidence.reason}</p>
+                    </article>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p>Select a node or edge.</p>
+            )}
+          </aside>
+        </section>
+      )}
     </main>
-  );
-}
-
-function NodeDetail({ node }: { node: ApiMeaningGraphNode }): JSX.Element {
-  return (
-    <div className="meaning-graph-detail-card">
-      <span>Node {shortId(node.id)}</span>
-      <h2>{node.label}</h2>
-      <dl>
-        <div>
-          <dt>Evidence</dt>
-          <dd>{node.evidenceCount}</dd>
-        </div>
-        <div>
-          <dt>Type</dt>
-          <dd>{node.type}</dd>
-        </div>
-        <div>
-          <dt>Weight</dt>
-          <dd>{node.weight}</dd>
-        </div>
-        <div>
-          <dt>Confidence</dt>
-          <dd>{node.confidence}</dd>
-        </div>
-        <div>
-          <dt>Last reinforced</dt>
-          <dd>{formatTime(node.lastReinforcedAt)}</dd>
-        </div>
-      </dl>
-      <section>
-        <h3>Description</h3>
-        <p>{node.description || "No description."}</p>
-      </section>
-      <section>
-        <h3>Evidence</h3>
-        {node.evidence.length === 0 ? (
-          <p>No evidence rows loaded.</p>
-        ) : (
-          <ul>
-            {node.evidence.map((evidence) => (
-              <li key={`${node.id}-${evidence.inspirationId}`}>
-                <strong>{evidence.preview}</strong>
-                <span> {evidence.reason}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function EdgeDetail({
-  edge,
-  nodeById,
-}: {
-  edge: ApiMeaningGraphEdge;
-  nodeById: Map<string, ApiMeaningGraphNode>;
-}): JSX.Element {
-  const from = nodeById.get(edge.sourceNodeId);
-  const to = nodeById.get(edge.targetNodeId);
-  return (
-    <div className="meaning-graph-detail-card">
-      <span>Edge {shortId(edge.id)}</span>
-      <h2>{edge.kind}</h2>
-      <dl>
-        <div>
-          <dt>Weight</dt>
-          <dd>{edge.weight}</dd>
-        </div>
-        <div>
-          <dt>Confidence</dt>
-          <dd>{edge.confidence}</dd>
-        </div>
-        <div>
-          <dt>From</dt>
-          <dd>{from?.label ?? shortId(edge.sourceNodeId)}</dd>
-        </div>
-        <div>
-          <dt>To</dt>
-          <dd>{to?.label ?? shortId(edge.targetNodeId)}</dd>
-        </div>
-        <div>
-          <dt>Last reinforced</dt>
-          <dd>{formatTime(edge.lastReinforcedAt)}</dd>
-        </div>
-      </dl>
-      <section>
-        <h3>Relationship</h3>
-        <p>
-          {from?.label ?? "Unknown source"} {edgeLabel(edge.kind)} {to?.label ?? "unknown target"}.
-        </p>
-      </section>
-      <section>
-        <h3>Evidence</h3>
-        <ul>
-          {edge.evidenceInspirationIds.map((inspirationId) => (
-            <li key={`${edge.id}-${inspirationId}`}>{shortId(inspirationId)}</li>
-          ))}
-        </ul>
-      </section>
-    </div>
   );
 }
