@@ -52,6 +52,7 @@ import { count, eq } from "drizzle-orm";
 import {
   backgroundJobs,
   inspirationRevisitEvents,
+  inspirationSparks,
   inspirations,
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
@@ -115,6 +116,29 @@ interface CreateInspirationResponse {
 
 interface ListInspirationsResponse {
   inspirations: ApiInspiration[];
+}
+
+interface ApiInspirationSpark {
+  id: string;
+  userId: string;
+  inspirationId: string;
+  text: string;
+  source: string;
+  startOffset: number | null;
+  endOffset: number | null;
+  confidence: number;
+  isPrimary: boolean;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ListSparksResponse {
+  sparks: ApiInspirationSpark[];
+}
+
+interface CreateSparkResponse {
+  spark: ApiInspirationSpark;
 }
 
 interface ValidationErrorResponse {
@@ -296,6 +320,169 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(res.body.inspiration.userId).not.toBe(
       "00000000-0000-0000-0000-000000000000",
     );
+  });
+
+  it("persists selected text as the primary spark alongside the full artifact", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const text =
+      "The full essay gives context. The sentence that moved me is here. More context follows.";
+    const selectedText = "The sentence that moved me is here.";
+    const start = text.indexOf(selectedText);
+    const end = start + selectedText.length;
+
+    const res = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      {
+        text,
+        selectedText,
+        selectionStart: start,
+        selectionEnd: end,
+      },
+    );
+
+    expect(res.status).toBe(201);
+    expect(res.body.inspiration.text).toBe(text);
+
+    const rows = await getDb()
+      .select()
+      .from(inspirationSparks)
+      .where(eq(inspirationSparks.inspirationId, res.body.inspiration.id));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.userId).toBe(fixture.user.id);
+    expect(rows[0]!.text).toBe(selectedText);
+    expect(rows[0]!.source).toBe("user_selected");
+    expect(rows[0]!.startOffset).toBe(start);
+    expect(rows[0]!.endOffset).toBe(end);
+    expect(rows[0]!.confidence).toBe(100);
+    expect(rows[0]!.isPrimary).toBe(true);
+  });
+
+  it("treats a short standalone save as a user-written spark", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "Build around people who make ambition feel less lonely." },
+    );
+
+    expect(res.status).toBe(201);
+
+    const rows = await getDb()
+      .select()
+      .from(inspirationSparks)
+      .where(eq(inspirationSparks.inspirationId, res.body.inspiration.id));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.text).toBe("Build around people who make ambition feel less lonely.");
+    expect(rows[0]!.source).toBe("user_written");
+    expect(rows[0]!.isPrimary).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Inspiration sparks — first-class evidence on top of saved artifacts
+// ---------------------------------------------------------------------------
+
+describe("Inspiration sparks", () => {
+  it("lists and creates sparks for the caller's own inspiration", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "A long article about cities, peers, ambition, and taste." },
+    );
+    expect(created.status).toBe(201);
+    const inspirationId = created.body.inspiration.id;
+
+    const spark = await client.json<CreateSparkResponse>(
+      "POST",
+      `/api/inspirations/${inspirationId}/sparks`,
+      {
+        text: "cities send subtle messages about ambition",
+        source: "user_added_later",
+        confidence: 92,
+        isPrimary: true,
+        note: "This is the part I want to remember.",
+      },
+    );
+
+    expect(spark.status).toBe(201);
+    expect(spark.body.spark.inspirationId).toBe(inspirationId);
+    expect(spark.body.spark.userId).toBe(fixture.user.id);
+    expect(spark.body.spark.text).toBe("cities send subtle messages about ambition");
+    expect(spark.body.spark.source).toBe("user_added_later");
+    expect(spark.body.spark.confidence).toBe(92);
+    expect(spark.body.spark.isPrimary).toBe(true);
+    expect(spark.body.spark.note).toBe("This is the part I want to remember.");
+
+    const list = await client.get<ListSparksResponse>(
+      `/api/inspirations/${inspirationId}/sparks`,
+    );
+
+    expect(list.status).toBe(200);
+    expect(list.body.sparks.map((row) => row.id)).toContain(spark.body.spark.id);
+  });
+
+  it("does not let another user list or create sparks on a private inspiration", async () => {
+    const alice = await createUserFixture(getDb());
+    const bob = await createUserFixture(getDb());
+    cleanup.trackUser(alice.user.id);
+    cleanup.trackUser(bob.user.id);
+
+    const aliceCreate = await authedClient(alice).json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "alice private artifact" },
+    );
+    expect(aliceCreate.status).toBe(201);
+    const aliceInspirationId = aliceCreate.body.inspiration.id;
+
+    const bobList = await authedClient(bob).get<{ error: string }>(
+      `/api/inspirations/${aliceInspirationId}/sparks`,
+    );
+    expect(bobList.status).toBe(404);
+
+    const bobCreate = await authedClient(bob).json<{ error: string }>(
+      "POST",
+      `/api/inspirations/${aliceInspirationId}/sparks`,
+      { text: "try to annotate alice's save" },
+    );
+    expect(bobCreate.status).toBe(404);
+  });
+
+  it("rejects invalid spark payloads", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "parent save for invalid spark" },
+    );
+    expect(created.status).toBe(201);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      `/api/inspirations/${created.body.inspiration.id}/sparks`,
+      { text: "", confidence: 101 },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/invalid spark payload/i);
+    expect(res.body.details?.text?.[0]).toBeTruthy();
+    expect(res.body.details?.confidence?.[0]).toBeTruthy();
   });
 });
 

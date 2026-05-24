@@ -43,6 +43,7 @@ import {
   attachments,
   inspirationRevisitEvents,
   inspirationRevisitEventTypeValues,
+  inspirationSparks,
   inspirations,
   reflections,
   type InspirationRevisitEventType,
@@ -99,9 +100,45 @@ const createInspirationSchema = z.object({
     .min(0, "Category must be non-negative")
     .max(2_147_483_647, "Category is too large")
     .optional(),
+  selectedText: z
+    .string()
+    .trim()
+    .max(4096, "Selected spark is too long")
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  selectionStart: z.number().int().min(0).optional(),
+  selectionEnd: z.number().int().min(0).optional(),
+  sparks: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1, "Spark text is required").max(4096, "Spark text is too long"),
+        source: z
+          .enum(["user_selected", "user_written", "user_added_later", "auto_detected", "confirmed_auto"])
+          .optional(),
+        startOffset: z.number().int().min(0).optional(),
+        endOffset: z.number().int().min(0).optional(),
+        confidence: z.number().int().min(0).max(100).optional(),
+        isPrimary: z.boolean().optional(),
+        note: z.string().trim().max(2048, "Spark note is too long").optional(),
+      }),
+    )
+    .max(12, "Too many sparks for one inspiration")
+    .optional(),
 });
 
 export type CreateInspirationInput = z.infer<typeof createInspirationSchema>;
+
+const createSparkSchema = z.object({
+  text: z.string().trim().min(1, "Spark text is required").max(4096, "Spark text is too long"),
+  source: z
+    .enum(["user_selected", "user_written", "user_added_later", "auto_detected", "confirmed_auto"])
+    .optional(),
+  startOffset: z.number().int().min(0).optional(),
+  endOffset: z.number().int().min(0).optional(),
+  confidence: z.number().int().min(0).max(100).optional(),
+  isPrimary: z.boolean().optional(),
+  note: z.string().trim().max(2048, "Spark note is too long").optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Router
@@ -128,6 +165,58 @@ type InspirationResponseRow = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+type SparkInput = z.infer<typeof createSparkSchema>;
+
+function isLikelySparkOnly(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length > 360) return false;
+  const paragraphCount = trimmed.split(/\n\s*\n/).filter(Boolean).length;
+  if (paragraphCount > 1) return false;
+  return true;
+}
+
+function normalizeSparkInputs(input: CreateInspirationInput): SparkInput[] {
+  const sparks: SparkInput[] = [];
+  const seen = new Set<string>();
+  const push = (spark: SparkInput) => {
+    const text = spark.text.trim();
+    if (!text) return;
+    const key = text.toLocaleLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    sparks.push({ ...spark, text });
+  };
+
+  if (input.selectedText) {
+    push({
+      text: input.selectedText,
+      source: "user_selected",
+      startOffset: input.selectionStart,
+      endOffset: input.selectionEnd,
+      confidence: 100,
+      isPrimary: true,
+    });
+  }
+
+  for (const spark of input.sparks ?? []) {
+    push(spark);
+  }
+
+  if (sparks.length === 0 && isLikelySparkOnly(input.text)) {
+    push({
+      text: input.text,
+      source: "user_written",
+      confidence: 100,
+      isPrimary: true,
+    });
+  }
+
+  return sparks.slice(0, 12).map((spark, index) => ({
+    ...spark,
+    isPrimary: spark.isPrimary ?? index === 0,
+  }));
+}
 
 function withDisplayedWowScore<T extends InspirationResponseRow>(
   row: T,
@@ -284,6 +373,22 @@ routes.post("/", async (c) => {
 
   const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };
+  const sparkInputs = normalizeSparkInputs(parsed.data);
+  if (sparkInputs.length > 0) {
+    await db.insert(inspirationSparks).values(
+      sparkInputs.map((spark) => ({
+        userId: user.id,
+        inspirationId: scoredInserted.id,
+        text: spark.text,
+        source: spark.source ?? "user_selected",
+        startOffset: spark.startOffset ?? null,
+        endOffset: spark.endOffset ?? null,
+        confidence: spark.confidence ?? 100,
+        isPrimary: spark.isPrimary ?? false,
+        note: spark.note ?? null,
+      })),
+    );
+  }
 
   // 3. Enqueue a durable background classification job. The worker consumes
   //    `{ inspirationId }`, calls Gemini, and UPDATEs `cluster` /
@@ -377,6 +482,99 @@ routes.get("/", async (c) => {
 
   const now = new Date();
   return c.json({ inspirations: rows.map((row) => withDisplayedWowScore(row, now)) }, 200);
+});
+
+routes.get("/:id/sparks", async (c) => {
+  const inspirationId = c.req.param("id");
+  const idCheck = z.string().uuid().safeParse(inspirationId);
+  if (!idCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const [parent] = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.userId, user.id)))
+    .limit(1);
+
+  if (!parent) return c.json({ error: "Inspiration not found" }, 404);
+
+  const sparks = await db
+    .select()
+    .from(inspirationSparks)
+    .where(and(eq(inspirationSparks.inspirationId, idCheck.data), eq(inspirationSparks.userId, user.id)))
+    .orderBy(desc(inspirationSparks.isPrimary), desc(inspirationSparks.confidence), asc(inspirationSparks.createdAt));
+
+  return c.json({
+    sparks: sparks.map((spark) => ({
+      ...spark,
+      createdAt: spark.createdAt.toISOString(),
+      updatedAt: spark.updatedAt.toISOString(),
+    })),
+  }, 200);
+});
+
+routes.post("/:id/sparks", async (c) => {
+  const inspirationId = c.req.param("id");
+  const idCheck = z.string().uuid().safeParse(inspirationId);
+  if (!idCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "Request body must be valid JSON" }, 400);
+  }
+
+  const parsed = createSparkSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "Invalid spark payload",
+        details: parsed.error.flatten().fieldErrors,
+      },
+      400,
+    );
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const [parent] = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(and(eq(inspirations.id, idCheck.data), eq(inspirations.userId, user.id)))
+    .limit(1);
+
+  if (!parent) return c.json({ error: "Inspiration not found" }, 404);
+
+  const [spark] = await db
+    .insert(inspirationSparks)
+    .values({
+      userId: user.id,
+      inspirationId: idCheck.data,
+      text: parsed.data.text,
+      source: parsed.data.source ?? "user_added_later",
+      startOffset: parsed.data.startOffset ?? null,
+      endOffset: parsed.data.endOffset ?? null,
+      confidence: parsed.data.confidence ?? 100,
+      isPrimary: parsed.data.isPrimary ?? false,
+      note: parsed.data.note ?? null,
+    })
+    .returning();
+
+  if (!spark) return c.json({ error: "Failed to create spark" }, 500);
+
+  return c.json({
+    spark: {
+      ...spark,
+      createdAt: spark.createdAt.toISOString(),
+      updatedAt: spark.updatedAt.toISOString(),
+    },
+  }, 201);
 });
 
 // ---------------------------------------------------------------------------

@@ -361,10 +361,50 @@ export interface CreateInspirationRequest {
   text: string;
   kind?: string;
   category?: number;
+  selectedText?: string;
+  selectionStart?: number;
+  selectionEnd?: number;
+  sparks?: Array<{
+    text: string;
+    source?: ApiInspirationSparkSource;
+    startOffset?: number;
+    endOffset?: number;
+    confidence?: number;
+    isPrimary?: boolean;
+    note?: string;
+  }>;
 }
 
 export interface UpdateInspirationRequest {
   text: string;
+}
+
+export type ApiInspirationSparkSource =
+  | "user_selected"
+  | "user_written"
+  | "user_added_later"
+  | "auto_detected"
+  | "confirmed_auto";
+
+export interface ApiInspirationSpark {
+  id: string;
+  userId: string;
+  inspirationId: string;
+  text: string;
+  source: ApiInspirationSparkSource;
+  startOffset: number | null;
+  endOffset: number | null;
+  confidence: number;
+  isPrimary: boolean;
+  note: string | null;
+  whatMovedUser: string | null;
+  impliedValues: string[];
+  worldviewClaims: string[];
+  tensions: string[];
+  decisionRelevance: string[];
+  emotionalCharge: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateInspirationResponse {
@@ -446,6 +486,36 @@ export async function recordInspirationRevisit(
     { eventType },
     "Failed to record inspiration revisit",
   );
+}
+
+export async function fetchInspirationSparks(
+  inspirationId: string,
+): Promise<ApiInspirationSpark[]> {
+  const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
+    "Failed to load inspiration sparks",
+  );
+  return Array.isArray(body.sparks) ? body.sparks : [];
+}
+
+export async function createInspirationSpark(
+  inspirationId: string,
+  input: {
+    text: string;
+    source?: ApiInspirationSparkSource;
+    startOffset?: number;
+    endOffset?: number;
+    confidence?: number;
+    isPrimary?: boolean;
+    note?: string;
+  },
+): Promise<ApiInspirationSpark> {
+  const body = await postJson<{ spark: ApiInspirationSpark }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
+    input,
+    "Failed to save spark",
+  );
+  return body.spark;
 }
 
 export async function fetchInspirationScoreBreakdown(

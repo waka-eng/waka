@@ -23,12 +23,14 @@ import { relations, sql } from "drizzle-orm";
 import {
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
+  boolean,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -185,17 +187,90 @@ export const inspirations = pgTable(
 export type Inspiration = typeof inspirations.$inferSelect;
 export type NewInspiration = typeof inspirations.$inferInsert;
 
+export const inspirationSparks = pgTable(
+  "inspiration_sparks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    inspirationId: uuid("inspiration_id")
+      .notNull()
+      .references(() => inspirations.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    source: text("source").notNull().default("user_selected"),
+    startOffset: integer("start_offset"),
+    endOffset: integer("end_offset"),
+    confidence: integer("confidence").notNull().default(100),
+    isPrimary: boolean("is_primary").notNull().default(false),
+    note: text("note"),
+    whatMovedUser: text("what_moved_user"),
+    impliedValues: jsonb("implied_values")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    worldviewClaims: jsonb("worldview_claims")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    tensions: jsonb("tensions")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    decisionRelevance: jsonb("decision_relevance")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    emotionalCharge: jsonb("emotional_charge")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userInspirationIdx: index("inspiration_sparks_user_inspiration_idx").on(
+      table.userId,
+      table.inspirationId,
+    ),
+    inspirationCreatedIdx: index("inspiration_sparks_inspiration_created_idx").on(
+      table.inspirationId,
+      table.createdAt.desc(),
+    ),
+  }),
+);
+
+export type InspirationSpark = typeof inspirationSparks.$inferSelect;
+export type NewInspirationSpark = typeof inspirationSparks.$inferInsert;
+
 // ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
 export const usersRelations = relations(users, ({ many }) => ({
   inspirations: many(inspirations),
+  inspirationSparks: many(inspirationSparks),
 }));
 
-export const inspirationsRelations = relations(inspirations, ({ one }) => ({
+export const inspirationsRelations = relations(inspirations, ({ one, many }) => ({
   user: one(users, {
     fields: [inspirations.userId],
     references: [users.id],
+  }),
+  sparks: many(inspirationSparks),
+}));
+
+export const inspirationSparksRelations = relations(inspirationSparks, ({ one }) => ({
+  user: one(users, {
+    fields: [inspirationSparks.userId],
+    references: [users.id],
+  }),
+  inspiration: one(inspirations, {
+    fields: [inspirationSparks.inspirationId],
+    references: [inspirations.id],
   }),
 }));
