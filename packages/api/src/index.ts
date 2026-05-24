@@ -13,6 +13,7 @@ import { handle } from "hono/aws-lambda";
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
+import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
 import { wowStatusRoutes } from "./routes/wow-status.js";
@@ -32,6 +33,10 @@ app.route("/api/auth", authRoutes);
 // applies both env-gate and requireAuth so the namespace stays hidden by
 // default while returning 401 for unauthenticated requests when explicitly on.
 app.route("/api/admin/background-jobs", adminBackgroundJobsRoutes);
+
+// Internal/dev-only meaning graph inspection. This stays under /api/admin so
+// graph state is available for reviewers without becoming a user-facing API.
+app.route("/api/admin/meaning-graph", adminMeaningGraphRoutes);
 
 // Inspirations routes (create, list, ...) live under /api/inspirations.
 // Every handler in this router requires a valid session — the router

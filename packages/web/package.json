@@ -12,11 +12,14 @@
     "qa:wow-detail": "vitest run test/WowMomentsSection.test.ts -t \"documents the local WOW-detail QA path\""
   },
   "dependencies": {
+    "d3-force": "^3.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
+    "@types/d3-force": "^3.0.10",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",

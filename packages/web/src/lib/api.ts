@@ -848,6 +848,73 @@ export async function fetchBackgroundJobs(
   return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
+export interface ApiMeaningGraphNode {
+  id: string;
+  type: string;
+  label: string;
+  description: string;
+  status: string;
+  source: string;
+  weight: number;
+  confidence: number;
+  evidenceCount: number;
+  firstSeenAt: string;
+  lastReinforcedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  evidence: Array<{
+    inspirationId: string;
+    packetId: string;
+    reason: string;
+    weight: number;
+    confidence: number;
+    source: string;
+    preview: string;
+    packetPreview: string;
+    tokenEstimate: number;
+    inspirationCreatedAt: string;
+    createdAt: string;
+  }>;
+}
+
+export interface ApiMeaningGraphEdge {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  kind: string;
+  weight: number;
+  confidence: number;
+  evidenceCount: number;
+  evidenceInspirationIds: string[];
+  status: string;
+  source: string;
+  lastReinforcedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiMeaningGraph {
+  nodes: ApiMeaningGraphNode[];
+  edges: ApiMeaningGraphEdge[];
+  meta: {
+    nodeCount: number;
+    edgeCount: number;
+    evidenceCount: number;
+    limit: number;
+    rebuilt?: boolean;
+  };
+}
+
+export async function fetchMeaningGraph(limit = 120, rebuild = false): Promise<ApiMeaningGraph> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (rebuild) params.set("rebuild", "1");
+  const body = await getJson<{ graph: ApiMeaningGraph }>(
+    apiPath(`/admin/meaning-graph?${params.toString()}`),
+    "Failed to load meaning graph",
+  );
+  return body.graph ?? { nodes: [], edges: [], meta: { nodeCount: 0, edgeCount: 0, evidenceCount: 0, limit } };
+}
+
 // ---------------------------------------------------------------------------
 // Attachments
 // ---------------------------------------------------------------------------
