@@ -57,9 +57,40 @@ import {
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { t, type SupportedLocale } from "../lib/locales";
+import {
+  DEFAULT_LOCALE,
+  formatResultsCount,
+  normalizeSupportedLocale,
+  t,
+  type SupportedLocale,
+} from "../lib/locales";
 
 const WOW_MOMENTS_INSPECT_LIMIT = 100;
+const LOCALE_STORAGE_KEY = "waka.ui.locale";
+
+function readInitialLocale(): SupportedLocale {
+  if (typeof window === "undefined") return DEFAULT_LOCALE;
+
+  try {
+    const storedLocale = window.localStorage?.getItem?.(LOCALE_STORAGE_KEY);
+    if (storedLocale) return normalizeSupportedLocale(storedLocale);
+  } catch {
+    // Tests and privacy-mode browsers can expose localStorage but throw or stub
+    // incomplete methods. Fall back to the browser language in those cases.
+  }
+
+  return normalizeSupportedLocale(window.navigator.language);
+}
+
+function writeLocalePreference(locale: SupportedLocale): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage?.setItem?.(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Preference persistence is best-effort; the selected locale still applies
+    // for the current render through React state.
+  }
+}
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -417,12 +448,7 @@ function InspirationDiscoveryPanel({
     return filters.sort.direction === "asc" ? "↑" : "↓";
   };
 
-  const resultLabel =
-    locale === "ko-KR"
-      ? `${entries.length}개 중 ${filteredEntries.length}개 ${t(locale, "resultsLabelPlural")}`
-      : `${filteredEntries.length} of ${entries.length} ${
-          entries.length === 1 ? t(locale, "resultsLabelSingular") : t(locale, "resultsLabelPlural")
-        }`;
+  const resultLabel = formatResultsCount(locale, entries.length, filteredEntries.length);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
 
   const buildMetaText = (entry: InspirationListEntry): string => {
@@ -625,7 +651,7 @@ function InspirationDiscoveryPanel({
 }
 
 export function HomePage(): JSX.Element {
-  const { user, logout } = useAuth();
+  const { user, logout, updatePreferredLocale } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -645,6 +671,7 @@ export function HomePage(): JSX.Element {
   const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
   const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("wow");
+  const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
@@ -675,6 +702,22 @@ export function HomePage(): JSX.Element {
   const loadedForUserIdRef = useRef<string | null>(null);
   const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
   const wowMomentsRequestIdRef = useRef(0);
+
+  const handleLocaleChange = useCallback(
+    (nextLocale: SupportedLocale) => {
+      setLocale(nextLocale);
+      writeLocalePreference(nextLocale);
+      void updatePreferredLocale(nextLocale);
+    },
+    [updatePreferredLocale],
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    const preferredLocale = normalizeSupportedLocale(user.preferredLocale);
+    setLocale(preferredLocale);
+    writeLocalePreference(preferredLocale);
+  }, [user?.preferredLocale, user?.id]);
 
   useEffect(() => {
     if (!user) {
@@ -1113,7 +1156,6 @@ export function HomePage(): JSX.Element {
     );
   }
 
-  const locale = user.preferredLocale;
   const showAdminEntry = shouldShowAdminEntry(import.meta.env);
   const viewSwitcher = (
     <HomeViewToggle
@@ -1147,6 +1189,8 @@ export function HomePage(): JSX.Element {
         onCaptureClick={handleWowHeaderCapture}
         historyContent={historyContent}
         historyDetail={historyDetail}
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
       >
         {viewSwitcher}
         <section className="wow-first-home" aria-label={t(locale, "wowMomentFirst")}>
@@ -1189,6 +1233,7 @@ export function HomePage(): JSX.Element {
           autoFocusCaptureRequest > 0 ? autoFocusCaptureRequest : undefined
         }
         locale={locale}
+        onLocaleChange={handleLocaleChange}
       />
     );
 
