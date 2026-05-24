@@ -250,6 +250,47 @@ describe("persistMeaningGraphForInspiration", () => {
     expect(persistedEdges.length).toBeGreaterThanOrEqual(1);
   }, 30000);
 
+  it("keeps deterministic edges when preferred endpoints collapse to the same durable node", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "AI makes writing and building faster, but choosing what to build still matters more than speed.",
+      importanceScore: 72,
+      wowScore: 78,
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "AI agents make prototypes cheap, so the harder question is why this product should exist.",
+      importanceScore: 69,
+      wowScore: 75,
+    });
+    await createPacket(testDb, alice.user.id, trigger);
+    await createPacket(testDb, alice.user.id, candidate);
+
+    const client: MeaningRelationshipJudgeClient = {
+      judgeMeaningRelationships: vi.fn().mockResolvedValue({
+        hasMeaningfulRelationships: false,
+        reason: "weak_relationship",
+        debugSummary: "The model declined to label the relationship.",
+      }),
+    };
+
+    const result = await persistMeaningGraphForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      client,
+    });
+
+    expect(result.edges.length).toBeGreaterThanOrEqual(1);
+    expect(result.edges[0]!.sourceNodeId).not.toBe(result.edges[0]!.targetNodeId);
+
+    const persistedEdges = await testDb.db
+      .select()
+      .from(meaningEdges)
+      .where(eq(meaningEdges.userId, alice.user.id));
+    expect(persistedEdges.length).toBeGreaterThanOrEqual(1);
+    expect(persistedEdges[0]!.sourceNodeId).not.toBe(persistedEdges[0]!.targetNodeId);
+  }, 30000);
+
   it("writes no meaning graph rows when the trigger has no meaning packet", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {

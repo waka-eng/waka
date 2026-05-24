@@ -303,16 +303,55 @@ function chooseEdgeSource(signals: MeaningSignal[]): MeaningSignal | null {
   );
 }
 
-function chooseEdgeTarget(signals: MeaningSignal[]): MeaningSignal | null {
-  return (
-    signals.find((signal) => signal.type === "life_direction") ??
-    signals.find((signal) => signal.type === "environment") ??
-    signals.find((signal) => signal.type === "desire") ??
-    signals.find((signal) => signal.type === "question") ??
-    signals.find((signal) => signal.type === "claim") ??
-    signals[0] ??
-    null
-  );
+function durableSignalKey(signal: MeaningSignal): string {
+  return `${signal.type}:${signal.label}`;
+}
+
+function chooseDistinctEdgePair(
+  sourceSignals: MeaningSignal[],
+  targetSignals: MeaningSignal[],
+): { source: MeaningSignal; target: MeaningSignal } | null {
+  const sourcePreference = [
+    "life_direction",
+    "desire",
+    "question",
+    "claim",
+    "value",
+    "tension",
+    "environment",
+    "person_archetype",
+  ];
+  const targetPreference = [
+    "life_direction",
+    "environment",
+    "desire",
+    "question",
+    "claim",
+    "value",
+    "tension",
+    "person_archetype",
+  ];
+  const orderedSources = [
+    ...sourcePreference.flatMap((type) =>
+      sourceSignals.filter((signal) => signal.type === type),
+    ),
+    ...sourceSignals,
+  ];
+  const orderedTargets = [
+    ...targetPreference.flatMap((type) =>
+      targetSignals.filter((signal) => signal.type === type),
+    ),
+    ...targetSignals,
+  ];
+
+  for (const source of orderedSources) {
+    for (const target of orderedTargets) {
+      if (durableSignalKey(source) !== durableSignalKey(target)) {
+        return { source, target };
+      }
+    }
+  }
+  return null;
 }
 
 function deterministicEdgeKind(triggerRow: PacketRow, candidate: CandidateRow): MeaningEdgeKind {
@@ -338,8 +377,7 @@ function deterministicEdgesFromCandidates(
   if (!triggerRow) return { signals: [], edges: [] };
 
   const triggerSignals = buildMeaningSignals(triggerRow);
-  const source = chooseEdgeSource(triggerSignals);
-  if (!source) return { signals: triggerSignals, edges: [] };
+  if (!chooseEdgeSource(triggerSignals)) return { signals: triggerSignals, edges: [] };
 
   const signals: MeaningSignal[] = [...triggerSignals];
   const edges: PendingMeaningEdge[] = [];
@@ -368,12 +406,12 @@ function deterministicEdgesFromCandidates(
       relationshipKind: "resonates_with",
       relationshipConfidence: confidence,
     });
-    const target = chooseEdgeTarget(targetSignals);
-    if (!target) continue;
+    const pair = chooseDistinctEdgePair(triggerSignals, targetSignals);
+    if (!pair) continue;
     signals.push(...targetSignals);
     edges.push({
-      source,
-      target,
+      source: pair.source,
+      target: pair.target,
       kind: deterministicEdgeKind(triggerRow, candidate),
       weight: confidence,
       confidence,
@@ -568,16 +606,15 @@ function signalsForProposal(
     relationshipKind: proposal.kind,
     relationshipConfidence: proposal.confidence,
   });
-  const source = chooseEdgeSource(fromSignals);
-  const target = chooseEdgeTarget(toSignals);
+  const pair = chooseDistinctEdgePair(fromSignals, toSignals);
 
   return {
     signals: [...fromSignals, ...toSignals],
     edge:
-      source && target
+      pair
         ? {
-            source,
-            target,
+            source: pair.source,
+            target: pair.target,
             kind: proposalToEdgeKind(proposal.kind),
             weight: proposal.confidence,
             confidence: proposal.confidence,
