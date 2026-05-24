@@ -119,4 +119,3 @@ export function FloatingEdge(props: EdgeProps): JSX.Element | null {
     </>
   );
 }
-
