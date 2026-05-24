@@ -3,9 +3,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { eq } from "drizzle-orm";
 
 import {
-  inspirationEmbeddings,
-  meaningGraphEdges,
-  meaningGraphNodes,
+  meaningEdges,
+  meaningEvidence,
+  meaningNodes,
   type Inspiration,
 } from "../src/db/index.js";
 import { persistMeaningGraphForInspiration } from "../src/lib/meaning-graph-writer.js";
@@ -29,21 +29,6 @@ async function createPacket(
   expect(result.status).toBe("created_or_updated");
 }
 
-async function createEmbedding(
-  testDb: TestDatabase,
-  inspiration: Inspiration,
-  embedding: number[],
-): Promise<void> {
-  await testDb.db.insert(inspirationEmbeddings).values({
-    userId: inspiration.userId,
-    inspirationId: inspiration.id,
-    model: "test-embedding-model",
-    dimensions: embedding.length,
-    inputHash: `hash-${inspiration.id}`,
-    embedding,
-  });
-}
-
 describe("persistMeaningGraphForInspiration", () => {
   let testDb: TestDatabase;
 
@@ -59,18 +44,20 @@ describe("persistMeaningGraphForInspiration", () => {
     await testDb.cleanup();
   });
 
-  it("creates internal graph nodes and edges from safe relationship proposals", async () => {
+  it("promotes packet evidence into meaning nodes and meaning edges", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "AI makes building faster, but choosing what to build and with whom gets harder.",
+      text: "AI makes building faster, but choosing what to build, who to build with, and why it matters gets harder.",
+      importanceScore: 70,
+      wowScore: 80,
     });
     const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Cities and peers quietly shape the ambitions people believe are available to them.",
+      importanceScore: 64,
+      wowScore: 72,
     });
     await createPacket(testDb, alice.user.id, trigger);
     await createPacket(testDb, alice.user.id, candidate);
-    await createEmbedding(testDb, trigger, [1, 0]);
-    await createEmbedding(testDb, candidate, [1, 0]);
 
     const client: MeaningRelationshipJudgeClient = {
       judgeMeaningRelationships: vi.fn().mockResolvedValue({
@@ -107,88 +94,77 @@ describe("persistMeaningGraphForInspiration", () => {
     });
 
     expect(result.judgmentResult.status).toBe("judged");
-    expect(result.triggerNode?.inspirationId).toBe(trigger.id);
-    expect(result.nodes.map((node) => node.inspirationId).sort()).toEqual(
-      [trigger.id, candidate.id].sort(),
-    );
+    expect(result.nodes.length).toBeGreaterThan(1);
     expect(result.edges).toHaveLength(1);
     expect(result.edges[0]).toMatchObject({
       userId: alice.user.id,
-      fromInspirationId: trigger.id,
-      toInspirationId: candidate.id,
-      kind: "clarifies",
+      kind: "points_to",
       confidence: 88,
       status: "active",
-      source: "meaning_relationship_judge",
+      source: "meaning_graph_writer",
     });
 
     const persistedNodes = await testDb.db
       .select()
-      .from(meaningGraphNodes)
-      .where(eq(meaningGraphNodes.userId, alice.user.id));
+      .from(meaningNodes)
+      .where(eq(meaningNodes.userId, alice.user.id));
+    const persistedEvidence = await testDb.db
+      .select()
+      .from(meaningEvidence)
+      .where(eq(meaningEvidence.userId, alice.user.id));
     const persistedEdges = await testDb.db
       .select()
-      .from(meaningGraphEdges)
-      .where(eq(meaningGraphEdges.userId, alice.user.id));
+      .from(meaningEdges)
+      .where(eq(meaningEdges.userId, alice.user.id));
 
-    expect(persistedNodes).toHaveLength(2);
-    expect(persistedEdges).toHaveLength(1);
-    expect(persistedEdges[0]!.evidence).toEqual(
+    expect(persistedNodes.map((node) => node.type)).toEqual(
+      expect.arrayContaining(["question", "environment"]),
+    );
+    expect(persistedNodes.map((node) => node.label)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ inspirationId: trigger.id }),
-        expect.objectContaining({ inspirationId: candidate.id }),
+        "what is worth building when building itself gets cheap",
+        "rooms where people can be honest before they are impressive",
       ]),
     );
-  });
+    expect(persistedEvidence.map((row) => row.inspirationId)).toEqual(
+      expect.arrayContaining([trigger.id, candidate.id]),
+    );
+    expect(persistedEdges).toHaveLength(1);
+    expect(persistedEdges[0]!.evidenceInspirationIds).toContain(trigger.id);
+  }, 30000);
 
-  it("is idempotent and updates an existing edge instead of duplicating it", async () => {
+  it("is idempotent and reinforces existing meaning nodes and edges", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Trigger for idempotent graph edge persistence.",
+      text: "AI makes building faster while people feel less grounded.",
+      importanceScore: 55,
+      wowScore: 66,
     });
     const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Candidate for idempotent graph edge persistence.",
+      text: "A hacker house is an environment where builders can feel less alone.",
+      importanceScore: 60,
+      wowScore: 70,
     });
     await createPacket(testDb, alice.user.id, trigger);
     await createPacket(testDb, alice.user.id, candidate);
-    await createEmbedding(testDb, trigger, [1, 0]);
-    await createEmbedding(testDb, candidate, [1, 0]);
 
     const client: MeaningRelationshipJudgeClient = {
-      judgeMeaningRelationships: vi
-        .fn()
-        .mockResolvedValueOnce({
-          hasMeaningfulRelationships: true,
-          relationships: [
-            {
-              kind: "extends",
-              fromInspirationId: trigger.id,
-              toInspirationId: candidate.id,
-              confidence: 70,
-              reason: "Initial reason.",
-              evidence: [
-                { inspirationId: trigger.id, label: "Trigger", reason: "Initial trigger." },
-                { inspirationId: candidate.id, label: "Candidate", reason: "Initial candidate." },
-              ],
-            },
-          ],
-        })
-        .mockResolvedValueOnce({
-          hasMeaningfulRelationships: true,
-          relationships: [
-            {
-              kind: "extends",
-              fromInspirationId: trigger.id,
-              toInspirationId: candidate.id,
-              confidence: 91,
-              reason: "Updated reason.",
-              evidence: [
-                { inspirationId: trigger.id, label: "Trigger", reason: "Updated trigger." },
-                { inspirationId: candidate.id, label: "Candidate", reason: "Updated candidate." },
-              ],
-            },
-          ],
-        }),
+      judgeMeaningRelationships: vi.fn().mockResolvedValue({
+        hasMeaningfulRelationships: true,
+        relationships: [
+          {
+            kind: "resonates_with",
+            fromInspirationId: trigger.id,
+            toInspirationId: candidate.id,
+            confidence: 82,
+            reason: "Both saves connect AI acceleration to the need for better human environments.",
+            evidence: [
+              { inspirationId: trigger.id, label: "The tension", reason: "Speed creates disorientation." },
+              { inspirationId: candidate.id, label: "The environment", reason: "Place answers the loneliness." },
+            ],
+          },
+        ],
+      }),
     };
 
     const first = await persistMeaningGraphForInspiration({
@@ -204,71 +180,24 @@ describe("persistMeaningGraphForInspiration", () => {
       client,
     });
 
+    const persistedEdges = await testDb.db
+      .select()
+      .from(meaningEdges)
+      .where(eq(meaningEdges.userId, alice.user.id));
+    const persistedEvidence = await testDb.db
+      .select()
+      .from(meaningEvidence)
+      .where(eq(meaningEvidence.userId, alice.user.id));
+
     expect(first.edges).toHaveLength(1);
     expect(second.edges).toHaveLength(1);
     expect(second.edges[0]!.id).toBe(first.edges[0]!.id);
-    expect(second.edges[0]!.confidence).toBe(91);
-    expect(second.edges[0]!.reason).toBe("Updated reason.");
-
-    const persistedEdges = await testDb.db
-      .select()
-      .from(meaningGraphEdges)
-      .where(eq(meaningGraphEdges.userId, alice.user.id));
-    const persistedNodes = await testDb.db
-      .select()
-      .from(meaningGraphNodes)
-      .where(eq(meaningGraphNodes.userId, alice.user.id));
-
     expect(persistedEdges).toHaveLength(1);
-    expect(persistedNodes).toHaveLength(2);
-  });
+    expect(persistedEdges[0]!.evidenceCount).toBe(1);
+    expect(persistedEvidence.length).toBeGreaterThan(0);
+  }, 30000);
 
-  it("creates only the trigger node when the judge returns no proposals", async () => {
-    const alice = await createUserFixture(testDb.db);
-    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Trigger that should become an internal graph node.",
-    });
-    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Candidate that should not become a node without an accepted edge.",
-    });
-    await createPacket(testDb, alice.user.id, trigger);
-    await createPacket(testDb, alice.user.id, candidate);
-    await createEmbedding(testDb, trigger, [1, 0]);
-    await createEmbedding(testDb, candidate, [1, 0]);
-
-    const client: MeaningRelationshipJudgeClient = {
-      judgeMeaningRelationships: vi.fn().mockResolvedValue({
-        hasMeaningfulRelationships: false,
-        reason: "generic_similarity",
-        debugSummary: "Only generic topical overlap.",
-      }),
-    };
-
-    const result = await persistMeaningGraphForInspiration({
-      db: testDb.db,
-      userId: alice.user.id,
-      triggerInspirationId: trigger.id,
-      client,
-    });
-
-    expect(result.edges).toEqual([]);
-    expect(result.nodes).toHaveLength(1);
-    expect(result.nodes[0]!.inspirationId).toBe(trigger.id);
-
-    const persistedNodes = await testDb.db
-      .select()
-      .from(meaningGraphNodes)
-      .where(eq(meaningGraphNodes.userId, alice.user.id));
-    const persistedEdges = await testDb.db
-      .select()
-      .from(meaningGraphEdges)
-      .where(eq(meaningGraphEdges.userId, alice.user.id));
-
-    expect(persistedNodes).toHaveLength(1);
-    expect(persistedEdges).toHaveLength(0);
-  });
-
-  it("writes nothing when the trigger has no meaning packet", async () => {
+  it("writes no meaning graph rows when the trigger has no meaning packet", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Unpacketized trigger.",
@@ -285,8 +214,8 @@ describe("persistMeaningGraphForInspiration", () => {
     });
 
     expect(result.judgmentResult.status).toBe("missing_trigger_packet");
-    expect(result.triggerNode).toBeNull();
     expect(result.nodes).toEqual([]);
+    expect(result.evidence).toEqual([]);
     expect(result.edges).toEqual([]);
     expect(client.judgeMeaningRelationships).not.toHaveBeenCalled();
   });

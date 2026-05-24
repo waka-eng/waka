@@ -296,76 +296,121 @@ export const meaningPackets = pgTable(
 export type MeaningPacket = typeof meaningPackets.$inferSelect;
 export type NewMeaningPacket = typeof meaningPackets.$inferInsert;
 
-export const meaningGraphNodes = pgTable(
-  "meaning_graph_nodes",
+export const meaningNodes = pgTable(
+  "meaning_nodes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    label: text("label").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status").notNull().default("active"),
+    source: text("source").notNull().default("meaning_graph_writer"),
+    weight: integer("weight").notNull().default(0),
+    confidence: integer("confidence").notNull().default(0),
+    evidenceCount: integer("evidence_count").notNull().default(0),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    lastReinforcedAt: timestamp("last_reinforced_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    userTypeLabelUnique: uniqueIndex("meaning_nodes_user_type_label_unique_idx").on(
+      table.userId,
+      table.type,
+      table.label,
+    ),
+    userStatusIdx: index("meaning_nodes_user_status_idx").on(
+      table.userId,
+      table.status,
+    ),
+    userWeightIdx: index("meaning_nodes_user_weight_idx").on(
+      table.userId,
+      table.weight.desc(),
+    ),
+  }),
+);
+
+export type MeaningNode = typeof meaningNodes.$inferSelect;
+export type NewMeaningNode = typeof meaningNodes.$inferInsert;
+
+export const meaningEvidence = pgTable(
+  "meaning_evidence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    meaningNodeId: uuid("meaning_node_id")
+      .notNull()
+      .references(() => meaningNodes.id, { onDelete: "cascade" }),
     inspirationId: uuid("inspiration_id")
       .notNull()
       .references(() => inspirations.id, { onDelete: "cascade" }),
     packetId: uuid("packet_id")
       .notNull()
       .references(() => meaningPackets.id, { onDelete: "cascade" }),
-    nodeType: text("node_type").notNull().default("inspiration"),
-    status: text("status").notNull().default("active"),
+    reason: text("reason").notNull().default(""),
+    weight: integer("weight").notNull().default(0),
+    confidence: integer("confidence").notNull().default(0),
     source: text("source").notNull().default("meaning_graph_writer"),
-    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => ({
-    userInspirationUnique: uniqueIndex("meaning_graph_nodes_user_inspiration_unique_idx").on(
-      table.userId,
+    nodeInspirationUnique: uniqueIndex("meaning_evidence_node_inspiration_unique_idx").on(
+      table.meaningNodeId,
       table.inspirationId,
     ),
-    userStatusIdx: index("meaning_graph_nodes_user_status_idx").on(
+    userNodeIdx: index("meaning_evidence_user_node_idx").on(
       table.userId,
-      table.status,
+      table.meaningNodeId,
+    ),
+    userInspirationIdx: index("meaning_evidence_user_inspiration_idx").on(
+      table.userId,
+      table.inspirationId,
     ),
   }),
 );
 
-export type MeaningGraphNode = typeof meaningGraphNodes.$inferSelect;
-export type NewMeaningGraphNode = typeof meaningGraphNodes.$inferInsert;
+export type MeaningEvidence = typeof meaningEvidence.$inferSelect;
+export type NewMeaningEvidence = typeof meaningEvidence.$inferInsert;
 
-export const meaningGraphEdges = pgTable(
-  "meaning_graph_edges",
+export const meaningEdges = pgTable(
+  "meaning_edges",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    fromNodeId: uuid("from_node_id")
+    sourceNodeId: uuid("source_node_id")
       .notNull()
-      .references(() => meaningGraphNodes.id, { onDelete: "cascade" }),
-    toNodeId: uuid("to_node_id")
+      .references(() => meaningNodes.id, { onDelete: "cascade" }),
+    targetNodeId: uuid("target_node_id")
       .notNull()
-      .references(() => meaningGraphNodes.id, { onDelete: "cascade" }),
-    fromInspirationId: uuid("from_inspiration_id")
-      .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
-    toInspirationId: uuid("to_inspiration_id")
-      .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => meaningNodes.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
+    weight: integer("weight").notNull().default(0),
     confidence: integer("confidence").notNull().default(0),
-    reason: text("reason").notNull().default(""),
-    evidence: jsonb("evidence")
-      .$type<Array<Record<string, unknown>>>()
+    evidenceCount: integer("evidence_count").notNull().default(0),
+    evidenceInspirationIds: jsonb("evidence_inspiration_ids")
+      .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
     status: text("status").notNull().default("active"),
-    source: text("source").notNull().default("meaning_relationship_judge"),
-    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+    source: text("source").notNull().default("meaning_graph_writer"),
+    lastReinforcedAt: timestamp("last_reinforced_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -376,23 +421,23 @@ export const meaningGraphEdges = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    userEdgeUnique: uniqueIndex("meaning_graph_edges_user_from_to_kind_unique_idx").on(
+    userEdgeUnique: uniqueIndex("meaning_edges_user_source_target_kind_unique_idx").on(
       table.userId,
-      table.fromInspirationId,
-      table.toInspirationId,
+      table.sourceNodeId,
+      table.targetNodeId,
       table.kind,
     ),
-    userStatusIdx: index("meaning_graph_edges_user_status_idx").on(
+    userStatusIdx: index("meaning_edges_user_status_idx").on(
       table.userId,
       table.status,
     ),
-    fromNodeIdx: index("meaning_graph_edges_from_node_idx").on(table.fromNodeId),
-    toNodeIdx: index("meaning_graph_edges_to_node_idx").on(table.toNodeId),
+    sourceNodeIdx: index("meaning_edges_source_node_idx").on(table.sourceNodeId),
+    targetNodeIdx: index("meaning_edges_target_node_idx").on(table.targetNodeId),
   }),
 );
 
-export type MeaningGraphEdge = typeof meaningGraphEdges.$inferSelect;
-export type NewMeaningGraphEdge = typeof meaningGraphEdges.$inferInsert;
+export type MeaningEdge = typeof meaningEdges.$inferSelect;
+export type NewMeaningEdge = typeof meaningEdges.$inferInsert;
 
 // ---------------------------------------------------------------------------
 // Relations
@@ -402,8 +447,9 @@ export const usersRelations = relations(users, ({ many }) => ({
   inspirations: many(inspirations),
   inspirationSparks: many(inspirationSparks),
   meaningPackets: many(meaningPackets),
-  meaningGraphNodes: many(meaningGraphNodes),
-  meaningGraphEdges: many(meaningGraphEdges),
+  meaningNodes: many(meaningNodes),
+  meaningEvidence: many(meaningEvidence),
+  meaningEdges: many(meaningEdges),
 }));
 
 export const inspirationsRelations = relations(inspirations, ({ one, many }) => ({
@@ -416,10 +462,7 @@ export const inspirationsRelations = relations(inspirations, ({ one, many }) => 
     fields: [inspirations.id],
     references: [meaningPackets.inspirationId],
   }),
-  meaningGraphNode: one(meaningGraphNodes, {
-    fields: [inspirations.id],
-    references: [meaningGraphNodes.inspirationId],
-  }),
+  meaningEvidence: many(meaningEvidence),
 }));
 
 export const inspirationSparksRelations = relations(inspirationSparks, ({ one }) => ({
@@ -433,7 +476,7 @@ export const inspirationSparksRelations = relations(inspirationSparks, ({ one })
   }),
 }));
 
-export const meaningPacketsRelations = relations(meaningPackets, ({ one }) => ({
+export const meaningPacketsRelations = relations(meaningPackets, ({ one, many }) => ({
   user: one(users, {
     fields: [meaningPackets.userId],
     references: [users.id],
@@ -446,50 +489,51 @@ export const meaningPacketsRelations = relations(meaningPackets, ({ one }) => ({
     fields: [meaningPackets.primarySparkId],
     references: [inspirationSparks.id],
   }),
-  graphNode: one(meaningGraphNodes, {
-    fields: [meaningPackets.id],
-    references: [meaningGraphNodes.packetId],
-  }),
+  meaningEvidence: many(meaningEvidence),
 }));
 
-export const meaningGraphNodesRelations = relations(meaningGraphNodes, ({ one, many }) => ({
+export const meaningNodesRelations = relations(meaningNodes, ({ one, many }) => ({
   user: one(users, {
-    fields: [meaningGraphNodes.userId],
+    fields: [meaningNodes.userId],
     references: [users.id],
   }),
+  evidence: many(meaningEvidence),
+  outgoingEdges: many(meaningEdges, { relationName: "meaning_outgoing_edges" }),
+  incomingEdges: many(meaningEdges, { relationName: "meaning_incoming_edges" }),
+}));
+
+export const meaningEvidenceRelations = relations(meaningEvidence, ({ one }) => ({
+  user: one(users, {
+    fields: [meaningEvidence.userId],
+    references: [users.id],
+  }),
+  meaningNode: one(meaningNodes, {
+    fields: [meaningEvidence.meaningNodeId],
+    references: [meaningNodes.id],
+  }),
   inspiration: one(inspirations, {
-    fields: [meaningGraphNodes.inspirationId],
+    fields: [meaningEvidence.inspirationId],
     references: [inspirations.id],
   }),
   packet: one(meaningPackets, {
-    fields: [meaningGraphNodes.packetId],
+    fields: [meaningEvidence.packetId],
     references: [meaningPackets.id],
   }),
-  outgoingEdges: many(meaningGraphEdges, { relationName: "meaning_graph_outgoing_edges" }),
-  incomingEdges: many(meaningGraphEdges, { relationName: "meaning_graph_incoming_edges" }),
 }));
 
-export const meaningGraphEdgesRelations = relations(meaningGraphEdges, ({ one }) => ({
+export const meaningEdgesRelations = relations(meaningEdges, ({ one }) => ({
   user: one(users, {
-    fields: [meaningGraphEdges.userId],
+    fields: [meaningEdges.userId],
     references: [users.id],
   }),
-  fromNode: one(meaningGraphNodes, {
-    fields: [meaningGraphEdges.fromNodeId],
-    references: [meaningGraphNodes.id],
-    relationName: "meaning_graph_outgoing_edges",
+  sourceNode: one(meaningNodes, {
+    fields: [meaningEdges.sourceNodeId],
+    references: [meaningNodes.id],
+    relationName: "meaning_outgoing_edges",
   }),
-  toNode: one(meaningGraphNodes, {
-    fields: [meaningGraphEdges.toNodeId],
-    references: [meaningGraphNodes.id],
-    relationName: "meaning_graph_incoming_edges",
-  }),
-  fromInspiration: one(inspirations, {
-    fields: [meaningGraphEdges.fromInspirationId],
-    references: [inspirations.id],
-  }),
-  toInspiration: one(inspirations, {
-    fields: [meaningGraphEdges.toInspirationId],
-    references: [inspirations.id],
+  targetNode: one(meaningNodes, {
+    fields: [meaningEdges.targetNodeId],
+    references: [meaningNodes.id],
+    relationName: "meaning_incoming_edges",
   }),
 }));
