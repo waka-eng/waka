@@ -28,6 +28,7 @@ import {
   useState,
   type ChangeEvent,
 } from "react";
+import { Link } from "react-router-dom";
 
 import { InspirationsBoard } from "../components/InspirationsBoard";
 import {
@@ -59,6 +60,15 @@ import { useAuth } from "../lib/auth-context";
 import { t, type SupportedLocale } from "../lib/locales";
 
 const WOW_MOMENTS_INSPECT_LIMIT = 100;
+
+interface InternalEntryEnv {
+  DEV?: boolean;
+  VITE_SHOW_INTERNAL_STATUS?: string;
+}
+
+function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
+  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true";
+}
 
 /**
  * Internal state shape for the inspirations list. We track three bits the
@@ -1104,6 +1114,7 @@ export function HomePage(): JSX.Element {
   }
 
   const locale = user.preferredLocale;
+  const showAdminEntry = shouldShowAdminEntry(import.meta.env);
   const viewSwitcher = (
     <HomeViewToggle
       activeView={activeView}
@@ -1246,6 +1257,16 @@ export function HomePage(): JSX.Element {
       >
         {t(locale, "signOut")}
       </button>
+      {showAdminEntry ? (
+        <Link
+          to="/admin"
+          className="admin-entry-pill"
+          aria-label="Open admin inspection tools"
+          title="Admin inspection"
+        >
+          Admin
+        </Link>
+      ) : null}
     </>
   );
 }

@@ -293,6 +293,31 @@
   white-space: pre-wrap;
 }
 
+.admin-entry-pill {
+  position: fixed;
+  bottom: 10px;
+  left: 90px;
+  z-index: 300;
+  border: 1px solid rgba(15, 15, 14, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.52);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  opacity: 0.72;
+  padding: 4px 9px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.admin-entry-pill:hover,
+.admin-entry-pill:focus-visible {
+  color: var(--ink);
+  opacity: 1;
+  outline: none;
+}
+
 .meaning-graph-header {
   display: flex;
   align-items: flex-start;
