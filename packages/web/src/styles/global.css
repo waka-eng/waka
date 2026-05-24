@@ -105,6 +105,271 @@
 }
 
 /* -----------------------------------------------------------------------
+ * Internal meaning graph inspector
+ * ---------------------------------------------------------------------*/
+
+.meaning-graph-page {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  padding: var(--space-7);
+}
+
+.meaning-graph-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin: 0 auto var(--space-6);
+  max-width: 1440px;
+}
+
+.meaning-graph-header span,
+.meaning-graph-detail-card > span {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meaning-graph-header h1,
+.meaning-graph-detail-card h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.meaning-graph-header h1 {
+  font-size: clamp(48px, 8vw, 104px);
+  line-height: 0.9;
+}
+
+.meaning-graph-header p {
+  max-width: 720px;
+  margin: var(--space-4) 0 0;
+  color: #494641;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.meaning-graph-header button {
+  border: var(--border-hairline);
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: var(--space-3) var(--space-5);
+}
+
+.meaning-graph-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: var(--space-5);
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.meaning-graph-canvas-wrap,
+.meaning-graph-detail {
+  min-height: 720px;
+  border: var(--border-hairline);
+  background: rgba(251, 250, 247, 0.8);
+}
+
+.meaning-graph-canvas-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.meaning-graph-stats {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: 2;
+  display: flex;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.meaning-graph-stats span,
+.meaning-graph-stats label {
+  border: var(--border-hairline);
+  background: rgba(251, 250, 247, 0.9);
+  padding: var(--space-2) var(--space-3);
+}
+
+.meaning-graph-stats label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.meaning-graph-flow-shell {
+  height: 720px;
+}
+
+.meaning-graph-flow-shell .react-flow__pane {
+  cursor: grab;
+}
+
+.meaning-graph-flow-shell .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.meaning-flow-node {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  border: 1px solid rgba(15, 15, 14, 0.18);
+  background: rgba(251, 250, 247, 0.94);
+  box-shadow: 0 18px 42px rgba(15, 15, 14, 0.08);
+  padding: var(--space-3);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+
+.react-flow__node.dragging .meaning-flow-node {
+  transform: scale(1.02);
+}
+
+.meaning-flow-node[data-focus] {
+  border-color: rgba(15, 15, 14, 0.74);
+  box-shadow:
+    0 0 0 2px rgba(15, 15, 14, 0.07),
+    0 22px 54px rgba(15, 15, 14, 0.12);
+}
+
+.meaning-flow-node[data-fade] {
+  opacity: 0.18;
+}
+
+.meaning-flow-node-type,
+.meaning-flow-node-meta {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meaning-flow-node-label {
+  margin: 0;
+  color: var(--ink);
+  display: -webkit-box;
+  font-size: 15px;
+  line-height: 1.12;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.floating-edge-label {
+  box-shadow: 0 6px 20px rgba(15, 15, 14, 0.08);
+}
+
+.meaning-graph-detail {
+  overflow: auto;
+}
+
+.meaning-graph-detail-card,
+.meaning-graph-detail-empty,
+.meaning-graph-empty {
+  padding: var(--space-6);
+}
+
+.meaning-graph-detail-card h2 {
+  font-size: 34px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.meaning-graph-detail-card dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-2);
+  margin: var(--space-5) 0;
+}
+
+.meaning-graph-detail-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-top: var(--border-hairline);
+  padding-top: var(--space-2);
+}
+
+.meaning-graph-detail-card dt {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.meaning-graph-detail-card dd {
+  margin: 0;
+  text-align: right;
+}
+
+.meaning-graph-detail-card section {
+  border-top: var(--border-hairline);
+  padding-top: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.meaning-graph-detail-card h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+}
+
+.meaning-graph-detail-card p,
+.meaning-graph-detail-card li,
+.meaning-graph-detail-empty,
+.meaning-graph-empty {
+  color: #494641;
+  line-height: 1.45;
+}
+
+.meaning-graph-error {
+  max-width: 1440px;
+  margin: 0 auto var(--space-4);
+  color: var(--error);
+}
+
+.meaning-graph-empty {
+  display: grid;
+  min-height: 720px;
+  place-content: center;
+  text-align: center;
+}
+
+@media (max-width: 960px) {
+  .meaning-graph-page {
+    padding: var(--space-4);
+  }
+
+  .meaning-graph-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .meaning-graph-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .meaning-graph-detail {
+    min-height: 0;
+  }
+}
+
+/* -----------------------------------------------------------------------
  * Reset + global baseline
  *
  * Box-sizing the universe matches the prototype's behavior. The body
