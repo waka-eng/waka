@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InspirationsBoard } from "../src/components/InspirationsBoard";
@@ -280,7 +281,7 @@ async function renderHomePage(): Promise<HTMLDivElement> {
   mountedContainer = container;
 
   await act(async () => {
-    root.render(createElement(HomePage));
+    root.render(createElement(MemoryRouter, null, createElement(HomePage)));
   });
   await flushReactWork();
 
