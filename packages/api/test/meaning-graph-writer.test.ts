@@ -197,6 +197,59 @@ describe("persistMeaningGraphForInspiration", () => {
     expect(persistedEvidence.length).toBeGreaterThan(0);
   }, 30000);
 
+  it("creates conservative graph edges from WAKA candidates when the relationship judge returns no proposal", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "AI makes building faster, but choosing what to build and why it matters still feels harder.",
+      importanceScore: 76,
+      wowScore: 82,
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Good rooms and peers shape which ambitions people can honestly hold.",
+      importanceScore: 68,
+      wowScore: 74,
+    });
+    await createPacket(testDb, alice.user.id, trigger);
+    await createPacket(testDb, alice.user.id, candidate);
+
+    const client: MeaningRelationshipJudgeClient = {
+      judgeMeaningRelationships: vi.fn().mockResolvedValue({
+        hasMeaningfulRelationships: false,
+        reason: "weak_relationship",
+        debugSummary: "The model declined to label the relationship.",
+      }),
+    };
+
+    const result = await persistMeaningGraphForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      client,
+    });
+
+    expect(result.judgmentResult.status).toBe("judged");
+    expect(result.judgmentResult.proposals).toEqual([]);
+    expect(result.edges.length).toBeGreaterThanOrEqual(1);
+    expect(result.edges[0]).toMatchObject({
+      userId: alice.user.id,
+      kind: "supports",
+      status: "active",
+      source: "meaning_graph_writer",
+    });
+
+    const persistedNodes = await testDb.db
+      .select()
+      .from(meaningNodes)
+      .where(eq(meaningNodes.userId, alice.user.id));
+    const persistedEdges = await testDb.db
+      .select()
+      .from(meaningEdges)
+      .where(eq(meaningEdges.userId, alice.user.id));
+
+    expect(persistedNodes.map((node) => node.type)).toContain("claim");
+    expect(persistedEdges.length).toBeGreaterThanOrEqual(1);
+  }, 30000);
+
   it("writes no meaning graph rows when the trigger has no meaning packet", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {

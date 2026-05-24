@@ -295,7 +295,7 @@ describe("judgeMeaningRelationshipsForInspiration", () => {
     expect(result.status).toBe("judged");
     expect(result.proposals).toHaveLength(1);
     expect(result.proposals[0]).toMatchObject({
-      kind: "clarifies",
+      kind: "resonates_with",
       fromInspirationId: trigger.id,
       toInspirationId: candidate.id,
     });
