@@ -3,6 +3,13 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { ApiWowMoment } from "../lib/api";
+import {
+  DEFAULT_LOCALE,
+  formatBestRecentMirrorMoments,
+  formatGeneratedFieldCounts,
+  t,
+  type SupportedLocale,
+} from "../lib/locales";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
 const MAX_BELIEF_EXCERPT_LENGTH = 72;
@@ -48,6 +55,61 @@ function normalizeReportText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
+type ReflectionGuideBlock = {
+  heading: string;
+  body: string[];
+  questions: string[];
+};
+
+function normalizeReflectionGuideLine(value: string): string {
+  return value.replace(/[\t ]+/g, " ").trim();
+}
+
+function isReflectionGuideHeading(line: string): boolean {
+  const normalized = line.replace(/[:：]+$/u, "").trim();
+  if (!normalized || normalized.length > 72) return false;
+  if (/^[\-•*]\s/u.test(line)) return false;
+  if (/[.!?。！？]$/u.test(normalized)) return false;
+  return true;
+}
+
+function isReflectionGuideQuestion(line: string): boolean {
+  return /^[\-•*]\s/u.test(line) || /[?？]$/u.test(line);
+}
+
+function parseReflectionGuide(value: string | null | undefined): ReflectionGuideBlock[] {
+  const lines = (value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map(normalizeReflectionGuideLine)
+    .filter(Boolean);
+
+  const blocks: ReflectionGuideBlock[] = [];
+  let current: ReflectionGuideBlock | null = null;
+
+  lines.forEach((line) => {
+    if (isReflectionGuideHeading(line)) {
+      current = { heading: line.replace(/[:：]+$/u, "").trim(), body: [], questions: [] };
+      blocks.push(current);
+      return;
+    }
+
+    if (!current) {
+      current = { heading: "", body: [], questions: [] };
+      blocks.push(current);
+    }
+
+    const cleaned = line.replace(/^[\-•*]\s*/u, "").trim();
+    if (isReflectionGuideQuestion(line)) {
+      current.questions.push(cleaned);
+    } else {
+      current.body.push(cleaned);
+    }
+  });
+
+  return blocks.filter((block) => block.heading || block.body.length > 0 || block.questions.length > 0);
+}
+
 function isDateLookingSourceRoleLabel(value: string): boolean {
   return (
     /\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i.test(value) ||
@@ -57,12 +119,12 @@ function isDateLookingSourceRoleLabel(value: string): boolean {
   );
 }
 
-function safeSourceRoleLabel(value: string | null | undefined): string {
+function safeSourceRoleLabel(value: string | null | undefined, fallback = SOURCE_FALLBACK_LABEL): string {
   const normalized = normalizeReportText(value);
   const canonical = normalized.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  if (!normalized || INTERNAL_SOURCE_ROLE_LABELS.has(canonical)) return SOURCE_FALLBACK_LABEL;
-  if (/\b(score|uuid|classifier|candidate|embedding|similarity|rank|id)\b/i.test(normalized)) return SOURCE_FALLBACK_LABEL;
-  if (isDateLookingSourceRoleLabel(normalized)) return SOURCE_FALLBACK_LABEL;
+  if (!normalized || INTERNAL_SOURCE_ROLE_LABELS.has(canonical)) return fallback;
+  if (/\b(score|uuid|classifier|candidate|embedding|similarity|rank|id)\b/i.test(normalized)) return fallback;
+  if (isDateLookingSourceRoleLabel(normalized)) return fallback;
   return normalized;
 }
 
@@ -72,11 +134,11 @@ function unsafeSourceTextPattern(value: string): boolean {
   );
 }
 
-function safeSourceReason(value: string | null | undefined): string {
+function safeSourceReason(value: string | null | undefined, fallback = SOURCE_FALLBACK_REASON): string {
   const normalized = normalizeReportText(value);
-  if (!normalized) return SOURCE_FALLBACK_REASON;
-  if (unsafeSourceTextPattern(normalized)) return SOURCE_FALLBACK_REASON;
-  if (isDateLookingSourceRoleLabel(normalized)) return SOURCE_FALLBACK_REASON;
+  if (!normalized) return fallback;
+  if (unsafeSourceTextPattern(normalized)) return fallback;
+  if (isDateLookingSourceRoleLabel(normalized)) return fallback;
   return normalized;
 }
 
@@ -165,10 +227,18 @@ function boundedInspectionPreview(value: string | null | undefined, fallback = "
   return `${preview}…`;
 }
 
+function getReflectionGuide(moment: ApiWowMoment): string | null | undefined {
+  return (moment as ApiWowMoment & { reflectionGuide?: string | null }).reflectionGuide;
+}
+
 function inspectionFieldCount(moment: ApiWowMoment): number {
-  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion].filter(
+  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion, getReflectionGuide(moment)].filter(
     (value) => normalizeReportText(value).length > 0,
   ).length;
+}
+
+function devInspectButtonLabel(locale: SupportedLocale, count: number): string {
+  return `${t(locale, "devWowInspectButton")} (${count})`;
 }
 
 function lowerFirstLetter(value: string): string {
@@ -237,6 +307,7 @@ interface WowMomentsSectionProps {
   error: string | null;
   showDevInspection?: boolean;
   onAddInspiration?: () => void;
+  locale?: SupportedLocale;
 }
 
 export function WowMomentsSection({
@@ -245,6 +316,7 @@ export function WowMomentsSection({
   error,
   showDevInspection = false,
   onAddInspiration,
+  locale = DEFAULT_LOCALE,
 }: WowMomentsSectionProps): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const bestRecentMoments = useMemo(() => [...moments].sort(compareBestRecentWowMoments), [moments]);
@@ -387,6 +459,9 @@ export function WowMomentsSection({
   const selectedBeliefStatement = selectedMoment ? buildBeliefStatement(selectedMoment) : "";
   const selectedSignalCount = selectedMoment?.relatedInspirations.length ?? 0;
   const selectedSignalCountLabel = `${selectedSignalCount} inspiration${selectedSignalCount === 1 ? "" : "s"}`;
+  const selectedReflectionGuideBlocks = selectedMoment
+    ? parseReflectionGuide(getReflectionGuide(selectedMoment))
+    : [];
 
 
   const selectedMomentDetail = selectedMoment ? (
@@ -489,6 +564,34 @@ export function WowMomentsSection({
         <section className="wow-moment-detail-section wow-moment-detail-section--reflection">
           <h4>Reflection question</h4>
           <p>{selectedMoment.reflectionQuestion}</p>
+        </section>
+      ) : null}
+      {getReflectionGuide(selectedMoment) ? (
+        <section className="wow-moment-detail-section wow-moment-detail-section--reflection-guide">
+          <span className="wow-moment-step-label">{t(locale, "wowReflectionGuideCaption")}</span>
+          <h4>{t(locale, "wowReflectionGuideTitle")}</h4>
+          <div className="wow-moment-reflection-guide-blocks">
+            {selectedReflectionGuideBlocks.map((block, blockIndex) => (
+              <section
+                className="wow-moment-reflection-guide-block"
+                key={`${selectedMoment.id}-reflection-guide-${block.heading || blockIndex}`}
+              >
+                {block.heading ? <h5>{block.heading}</h5> : null}
+                {block.body.map((line, lineIndex) => (
+                  <p key={`${selectedMoment.id}-reflection-guide-body-${blockIndex}-${lineIndex}`}>{line}</p>
+                ))}
+                {block.questions.length > 0 ? (
+                  <ul className="wow-moment-reflection-guide-questions">
+                    {block.questions.map((question, questionIndex) => (
+                      <li key={`${selectedMoment.id}-reflection-guide-question-${blockIndex}-${questionIndex}`}>
+                        {question}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ))}
+          </div>
         </section>
       ) : null}
       <section className="wow-moment-detail-section wow-moment-detail-section--belief">
@@ -609,11 +712,13 @@ export function WowMomentsSection({
   return (
     <section className="wow-moments-section" aria-labelledby="wow-moments-title">
       <div className="wow-moments-heading">
-        <h2 id="wow-moments-title">What WAKA noticed</h2>
+        <h2 id="wow-moments-title">{t(locale, "wowMomentsHeading")}</h2>
       </div>
       {!error && !loading && moments.length > 0 ? (
         <div className="wow-moments-actions">
-          <p>{visibleMoments.length} best-recent mirror moments shown.</p>
+          <p>
+            {formatBestRecentMirrorMoments(locale, visibleMoments.length)}
+          </p>
           {showDevInspection ? (
             <button
               aria-controls="dev-wow-inspection-panel"
@@ -622,19 +727,19 @@ export function WowMomentsSection({
               onClick={() => setAllMomentsOpen(true)}
               type="button"
             >
-              Dev-only inspect WOW fields ({bestRecentMoments.length})
+              {devInspectButtonLabel(locale, bestRecentMoments.length)}
             </button>
           ) : null}
         </div>
       ) : null}
       {error ? (
         <div className="wow-moments-state" role="status">
-          <strong>Couldn’t load WOW moments.</strong>
+          <strong>{t(locale, "wowMomentsLoadError")}</strong>
           <span>{error}</span>
         </div>
       ) : loading ? (
         <div className="wow-moments-grid" aria-busy="true" aria-live="polite" role="status">
-          <span className="sr-only">Loading WOW moments…</span>
+          <span className="sr-only">{t(locale, "wowMomentsLoading")}</span>
           {[0, 1].map((index) => (
             <article className="wow-moment-card wow-moment-card--loading" key={index}>
               <div className="wow-moment-skeleton wow-moment-skeleton--short" />
@@ -646,8 +751,8 @@ export function WowMomentsSection({
         </div>
       ) : moments.length === 0 ? (
         <div className="wow-moments-state">
-          <strong>No WOW moments yet.</strong>
-          <span>Keep saving inspirations; patterns will appear here.</span>
+          <strong>{t(locale, "wowMomentsEmptyTitle")}</strong>
+          <span>{t(locale, "wowMomentsEmptyHint")}</span>
         </div>
       ) : (
         <div
@@ -681,7 +786,7 @@ export function WowMomentsSection({
                     <ol className="wow-moment-related" aria-label="Inspirations behind this">
                       {relatedSources.map((related) => (
                         <li key={`${moment.id}-${related.inspirationId}`}>
-                          <span className="wow-moment-related-label">Source inspiration</span>
+                          <span className="wow-moment-related-label">{t(locale, "savedInspiration")}</span>
                           <blockquote>{related.text}</blockquote>
                         </li>
                       ))}
@@ -704,50 +809,48 @@ export function WowMomentsSection({
             role="dialog"
           >
             <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">Temporary internal inspection</p>
+              <p className="wow-moment-detail-kicker">{t(locale, "devWowInspectionKicker")}</p>
               <button
                 className="wow-moment-detail-close"
                 onClick={() => setAllMomentsOpen(false)}
                 type="button"
               >
-                Close
+                {t(locale, "devWowInspectionClose")}
               </button>
             </div>
-            <h3 id="dev-wow-inspection-title">Generated field previews</h3>
-            <p className="wow-moments-dev-inspection-note">
-              Safe, bounded previews of generated fields for live internal testing. This panel is only
-              shown behind the internal development gate.
-            </p>
+            <h3 id="dev-wow-inspection-title">{t(locale, "devWowInspectionTitle")}</h3>
+            <p className="wow-moments-dev-inspection-note">{t(locale, "devWowInspectionNote")}</p>
             <ol className="wow-moments-all-list">
               {bestRecentMoments.map((moment) => (
                 <li className="wow-moments-all-item" key={`all-${moment.id}`}>
                   <div className="wow-moments-all-item-header">
-                    <strong>{boundedInspectionPreview(moment.title, "Untitled WOW moment")}</strong>
+                    <strong>{boundedInspectionPreview(moment.title, t(locale, "devWowUntitledMoment"))}</strong>
                   </div>
                   <dl className="wow-moments-dev-fields">
                     <div>
-                      <dt>Title / headline</dt>
-                      <dd>{boundedInspectionPreview(moment.title, "Untitled WOW moment")}</dd>
+                      <dt>{t(locale, "devWowFieldTitle")}</dt>
+                      <dd>{boundedInspectionPreview(moment.title, t(locale, "devWowUntitledMoment"))}</dd>
                     </div>
                     <div>
-                      <dt>Why / meaning copy</dt>
-                      <dd>{boundedInspectionPreview(moment.why)}</dd>
+                      <dt>{t(locale, "devWowFieldWhy")}</dt>
+                      <dd>{boundedInspectionPreview(moment.why, t(locale, "devWowFieldNotGenerated"))}</dd>
                     </div>
                     <div>
-                      <dt>Belief statement</dt>
-                      <dd>{boundedInspectionPreview(moment.beliefStatement)}</dd>
+                      <dt>{t(locale, "devWowFieldBelief")}</dt>
+                      <dd>{boundedInspectionPreview(moment.beliefStatement, t(locale, "devWowFieldNotGenerated"))}</dd>
                     </div>
                     <div>
-                      <dt>Reflection prompt</dt>
-                      <dd>{boundedInspectionPreview(moment.reflectionQuestion)}</dd>
+                      <dt>{t(locale, "devWowFieldReflection")}</dt>
+                      <dd>{boundedInspectionPreview(moment.reflectionQuestion, t(locale, "devWowFieldNotGenerated"))}</dd>
                     </div>
                     <div>
-                      <dt>Compact counts</dt>
+                      <dt>{t(locale, "devWowFieldReflectionGuide")}</dt>
+                      <dd>{boundedInspectionPreview(getReflectionGuide(moment), t(locale, "devWowFieldNotGenerated"))}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(locale, "devWowFieldCompactCounts")}</dt>
                       <dd>
-                        {moment.relatedInspirations.length} source
-                        {moment.relatedInspirations.length === 1 ? "" : "s"}; {inspectionFieldCount(moment)}
-                        {" "}generated field
-                        {inspectionFieldCount(moment) === 1 ? "" : "s"} present
+                        {formatGeneratedFieldCounts(locale, moment.relatedInspirations.length, inspectionFieldCount(moment))}
                       </dd>
                     </div>
                   </dl>
@@ -755,11 +858,19 @@ export function WowMomentsSection({
                     <ol className="wow-moments-all-sources">
                       {moment.relatedInspirations.map((related) => (
                         <li key={`all-${moment.id}-${related.inspirationId}`}>
-                          <span>Source role / reason</span>
-                          <blockquote>{boundedInspectionPreview(related.text)}</blockquote>
+                          <span>{t(locale, "devWowSourceRoleReason")}</span>
+                          <blockquote>{boundedInspectionPreview(related.text, t(locale, "devWowFieldNotGenerated"))}</blockquote>
                           <p className="wow-moment-source-reason">
-                            <span>{boundedInspectionPreview(safeSourceRoleLabel(related.role), SOURCE_FALLBACK_LABEL)}</span>
-                            {boundedInspectionPreview(safeSourceReason(related.reason), SOURCE_FALLBACK_REASON)}
+                            <span>
+                              {boundedInspectionPreview(
+                                safeSourceRoleLabel(related.role, t(locale, "devWowSourceFallbackLabel")),
+                                t(locale, "devWowSourceFallbackLabel"),
+                              )}
+                            </span>
+                            {boundedInspectionPreview(
+                              safeSourceReason(related.reason, t(locale, "devWowSourceFallbackReason")),
+                              t(locale, "devWowSourceFallbackReason"),
+                            )}
                           </p>
                         </li>
                       ))}

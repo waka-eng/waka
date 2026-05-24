@@ -29,6 +29,9 @@
  * of truth here.
  */
 
+import { DEFAULT_LOCALE, formatSavedCount, supportedLocales, t } from "../../lib/locales";
+import type { SupportedLocale } from "../../lib/locales";
+
 export interface AppHeaderProps {
   /** Total saved inspirations to surface in the meta counter. */
   count: number;
@@ -45,6 +48,10 @@ export interface AppHeaderProps {
   onCaptureClick: () => void;
   /** Fires when the user clicks the meta counter (opens history drawer). */
   onMetaClick: () => void;
+  /** Current UI locale. */
+  locale?: SupportedLocale;
+  /** Persists a user-selected UI locale in the parent. */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function AppHeader({
@@ -53,26 +60,32 @@ export function AppHeader({
   loading = false,
   onCaptureClick,
   onMetaClick,
+  locale = DEFAULT_LOCALE,
+  onLocaleChange,
 }: AppHeaderProps): JSX.Element {
+  const localizedTagline = tagline === "your inspirations" ? t(locale, "tagline") : tagline;
   // Single-source pluralization. Matches the prototype's copy verbatim
   // ("50 inspirations saved") while staying honest at count=1. While
   // `loading`, swap to a placeholder so the page doesn't read
   // "0 inspirations saved" before the server has answered.
-  const metaLabel = loading
-    ? "loading inspirations…"
-    : `${count} ${count === 1 ? "inspiration" : "inspirations"} saved`;
+  const metaLabel = loading ? t(locale, "loadingInspirations") : formatSavedCount(locale, count);
+
+  const handleLocaleChange = (nextLocale: SupportedLocale): void => {
+    if (nextLocale === locale) return;
+    onLocaleChange?.(nextLocale);
+  };
 
   return (
     <header>
       <h1>
-        WAKA <em>— {tagline}</em>
+        WAKA <em>— {localizedTagline}</em>
       </h1>
       <div className="header-right">
         <button
           type="button"
           className="capture-trigger"
           id="captureTrigger"
-          aria-label="Capture a new inspiration"
+          aria-label={t(locale, "captureAria")}
           onClick={onCaptureClick}
         >
           {/*
@@ -91,8 +104,22 @@ export function AppHeader({
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          <span className="capture-trigger-label">Capture</span>
+          <span className="capture-trigger-label">{t(locale, "capture")}</span>
         </button>
+        <label className="locale-setting">
+          <span>{t(locale, "languageLabel")}</span>
+          <select
+            value={locale}
+            aria-label={t(locale, "languageLabel")}
+            onChange={(event) => handleLocaleChange(event.currentTarget.value as SupportedLocale)}
+          >
+            {supportedLocales.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.nativeLabel}
+              </option>
+            ))}
+          </select>
+        </label>
         <div
           className="meta"
           id="metaCount"

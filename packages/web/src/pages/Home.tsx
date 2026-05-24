@@ -60,8 +60,40 @@ import {
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import {
+  DEFAULT_LOCALE,
+  formatResultsCount,
+  normalizeSupportedLocale,
+  t,
+  type SupportedLocale,
+} from "../lib/locales";
 
 const WOW_MOMENTS_INSPECT_LIMIT = 100;
+const LOCALE_STORAGE_KEY = "waka.ui.locale";
+
+function readInitialLocale(): SupportedLocale {
+  if (typeof window === "undefined") return DEFAULT_LOCALE;
+
+  try {
+    const storedLocale = window.localStorage?.getItem?.(LOCALE_STORAGE_KEY);
+    if (storedLocale) return normalizeSupportedLocale(storedLocale);
+  } catch {
+    // Tests and privacy-mode browsers can expose localStorage but throw or stub
+    // incomplete methods. Fall back to the browser language in those cases.
+  }
+
+  return normalizeSupportedLocale(window.navigator.language);
+}
+
+function writeLocalePreference(locale: SupportedLocale): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage?.setItem?.(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Preference persistence is best-effort; the selected locale still applies
+    // for the current render through React state.
+  }
+}
 
 /**
  * Internal state shape for the inspirations list. We track three bits the
@@ -279,35 +311,37 @@ function shortId(id: string): string {
 
 function InternalWowStatusPanel({
   status,
+  locale,
 }: {
   status: InternalWowStatusState;
+  locale: SupportedLocale;
 }): JSX.Element {
   const jobText = status.adminUnavailable
-    ? "Admin job details unavailable; WOW refresh still polling."
+    ? t(locale, "adminJobDetailsUnavailable")
     : status.jobStatus === "checking"
-      ? "Background classification job checking"
-      : `Background classification job ${status.jobStatus}`;
+      ? t(locale, "backgroundJobChecking")
+      : `${t(locale, "backgroundJobStatus")} ${status.jobStatus}`;
   const wowText =
     status.wowPhase === "found"
-      ? "New WOW moment found"
+      ? t(locale, "newWowMomentFound")
       : status.wowPhase === "none"
-        ? "No new WOW yet"
-        : "WOW refresh checking";
+        ? t(locale, "noNewWowYet")
+        : t(locale, "wowRefreshChecking");
 
   return (
     <aside
       className="internal-wow-status"
-      aria-label="Internal/demo-only WOW pipeline status"
+      aria-label={t(locale, "internalWowStatusAria")}
       role="status"
       aria-live="polite"
     >
       <div className="internal-wow-status-heading">
-        <span>Internal/demo-only WOW pipeline status</span>
-        <strong>Latest WOW count {status.latestWowCount}</strong>
+        <span>{t(locale, "internalWowStatusAria")}</span>
+        <strong>{t(locale, "latestWowCount")} {status.latestWowCount}</strong>
       </div>
       <ol className="internal-wow-status-steps">
         <li>
-          <span>Saved inspiration {shortId(status.inspirationId)}</span>
+          <span>{t(locale, "savedInspiration")} {shortId(status.inspirationId)}</span>
           <time dateTime={status.savedAt}>{formatTimestamp(status.savedAt)}</time>
         </li>
         <li>
@@ -347,18 +381,20 @@ function InternalWowStatusTable({
   loading,
   error,
   onRefresh,
+  locale,
 }: {
   rows: ApiWowStatusRow[];
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  locale: SupportedLocale;
 }): JSX.Element {
   return (
-    <section className="internal-wow-status internal-wow-status-table" aria-label="Development WOW status table">
+    <section className="internal-wow-status internal-wow-status-table" aria-label={`${t(locale, "developmentWowStatus")} table`}>
       <div className="internal-wow-status-heading">
-        <span>Development WOW status</span>
+        <span>{t(locale, "developmentWowStatus")}</span>
         <button type="button" onClick={onRefresh} disabled={loading}>
-          {loading ? "Refreshing" : "Refresh"}
+          {loading ? t(locale, "refreshing") : t(locale, "refresh")}
         </button>
       </div>
       {error ? <p className="internal-wow-status-error">{error}</p> : null}
@@ -366,18 +402,18 @@ function InternalWowStatusTable({
         <table>
           <thead>
             <tr>
-              <th>Inspiration</th>
-              <th>Job</th>
-              <th>Embedded</th>
-              <th>Generated WOW</th>
-              <th>Why no WOW?</th>
-              <th>Raw judge log</th>
+              <th>{t(locale, "inspiration")}</th>
+              <th>{t(locale, "job")}</th>
+              <th>{t(locale, "embedded")}</th>
+              <th>{t(locale, "generatedWow")}</th>
+              <th>{t(locale, "whyNoWow")}</th>
+              <th>{t(locale, "rawJudgeLog")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6}>{loading ? "Loading WOW pipeline status…" : "No recent inspirations."}</td>
+                <td colSpan={6}>{loading ? t(locale, "loadingWowPipelineStatus") : t(locale, "noRecentInspirations")}</td>
               </tr>
             ) : (
               rows.map((row) => {
@@ -396,16 +432,16 @@ function InternalWowStatusTable({
                           <span>{row.job.attempts}/{row.job.maxAttempts}</span>
                         </>
                       ) : (
-                        "none"
+                        t(locale, "none")
                       )}
                     </td>
-                    <td>{row.embedded ? "yes" : "no"}</td>
+                    <td>{row.embedded ? t(locale, "yes") : t(locale, "no")}</td>
                     <td>
                       <strong>{row.generatedWowMomentCount}</strong>
                       <span>{row.debugReason.label}</span>
                     </td>
                     <td>
-                      <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : "ready"}</strong>
+                      <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : t(locale, "ready")}</strong>
                       <span>{row.debugReason.detail}</span>
                     </td>
                     <td>
@@ -430,56 +466,55 @@ function InternalWowStatusDevPanel({
   loading,
   error,
   onRefresh,
+  locale,
 }: {
   liveStatus: InternalWowStatusState | null;
   rows: ApiWowStatusRow[];
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
+  locale: SupportedLocale;
 }): JSX.Element {
   return (
     <section className="internal-wow-status-dev-panel" aria-labelledby="internal-wow-status-title">
       <div className="internal-wow-status-dev-heading">
-        <span>Temporary development surface</span>
-        <h2 id="internal-wow-status-title">WOW pipeline status</h2>
-        <p>
-          This tab is for development verification only and will be removed before the
-          product experience is finalized. It shows recent saves moving through the WOW
-          pipeline without exposing secrets or changing API/auth boundaries.
-        </p>
+        <span>{t(locale, "temporaryDevelopmentSurface")}</span>
+        <h2 id="internal-wow-status-title">{t(locale, "wowPipelineStatus")}</h2>
+        <p>{t(locale, "wowStatusExplainer")}</p>
       </div>
       <div className="internal-wow-status-explainer" aria-label="WOW status column guide">
         <section>
-          <h3>Inspiration</h3>
-          <p>The saved inspiration id, save time, and text preview being checked.</p>
+          <h3>{t(locale, "inspiration")}</h3>
+          <p>{t(locale, "savedInspirationGuide")}</p>
         </section>
         <section>
-          <h3>Job</h3>
-          <p>Whether the background classification/processing job is queued, running, done, or missing.</p>
+          <h3>{t(locale, "job")}</h3>
+          <p>{t(locale, "jobGuide")}</p>
         </section>
         <section>
-          <h3>Embedded</h3>
-          <p>Whether a retrieval embedding exists for relationship matching.</p>
+          <h3>{t(locale, "embedded")}</h3>
+          <p>{t(locale, "embeddedGuide")}</p>
         </section>
         <section>
-          <h3>Generated WOW</h3>
-          <p>The generated/linked WOW count visible to the current tenant.</p>
+          <h3>{t(locale, "generatedWow")}</h3>
+          <p>{t(locale, "generatedWowGuide")}</p>
         </section>
         <section>
-          <h3>Why no WOW?</h3>
-          <p>The likely debug reason when generated WOW is 0: waiting for job, missing embedding, failed job, or no WOW generated.</p>
+          <h3>{t(locale, "whyNoWow")}</h3>
+          <p>{t(locale, "whyNoWowGuide")}</p>
         </section>
         <section>
-          <h3>Raw judge log</h3>
-          <p>Gemini raw preview and schema/finish diagnostics when present.</p>
+          <h3>{t(locale, "rawJudgeLog")}</h3>
+          <p>{t(locale, "rawJudgeLogGuide")}</p>
         </section>
       </div>
-      {liveStatus ? <InternalWowStatusPanel status={liveStatus} /> : null}
+      {liveStatus ? <InternalWowStatusPanel status={liveStatus} locale={locale} /> : null}
       <InternalWowStatusTable
         rows={rows}
         loading={loading}
         error={error}
         onRefresh={onRefresh}
+        locale={locale}
       />
     </section>
   );
@@ -488,18 +523,20 @@ function InternalWowStatusDevPanel({
 interface HomeViewToggleProps {
   activeView: HomeView;
   onChange: (view: HomeView) => void;
+  locale: SupportedLocale;
   showInternalStatusTab?: boolean;
 }
 
 export function HomeViewToggle({
   activeView,
   onChange,
+  locale,
   showInternalStatusTab = false,
 }: HomeViewToggleProps): JSX.Element {
   return (
     <nav
       className="home-view-switcher"
-      aria-label="Home view"
+      aria-label={t(locale, "homeView")}
       data-active-view={activeView}
     >
       <button
@@ -508,7 +545,7 @@ export function HomeViewToggle({
         aria-pressed={activeView === "wow"}
         onClick={() => onChange("wow")}
       >
-        Wow Moment First
+        {t(locale, "wowMomentFirst")}
       </button>
       <button
         type="button"
@@ -516,7 +553,7 @@ export function HomeViewToggle({
         aria-pressed={activeView === "inspiration"}
         onClick={() => onChange("inspiration")}
       >
-        Inspiration First
+        {t(locale, "inspirationFirst")}
       </button>
       {showInternalStatusTab ? (
         <button
@@ -525,7 +562,7 @@ export function HomeViewToggle({
           aria-pressed={activeView === "wow-status"}
           onClick={() => onChange("wow-status")}
         >
-          WOW STATUS
+          {t(locale, "wowStatus")}
         </button>
       ) : null}
     </nav>
@@ -613,6 +650,7 @@ interface InspirationDiscoveryPanelProps {
   entries: InspirationListEntry[];
   filteredEntries: InspirationListEntry[];
   filters: InspirationDiscoveryFilters;
+  locale: SupportedLocale;
   onFiltersChange: (filters: InspirationDiscoveryFilters) => void;
   onSelectInspiration: (id: string) => void;
 }
@@ -621,6 +659,7 @@ function InspirationDiscoveryPanel({
   entries,
   filteredEntries,
   filters,
+  locale,
   onFiltersChange,
   onSelectInspiration,
 }: InspirationDiscoveryPanelProps): JSX.Element {
@@ -643,8 +682,8 @@ function InspirationDiscoveryPanel({
   };
 
   const sortLabel = (column: InspirationSortColumn): string => {
-    if (filters.sort?.column !== column) return "not sorted";
-    return filters.sort.direction === "asc" ? "ascending" : "descending";
+    if (filters.sort?.column !== column) return t(locale, "notSorted");
+    return filters.sort.direction === "asc" ? t(locale, "ascending") : t(locale, "descending");
   };
 
   const sortIndicator = (column: InspirationSortColumn): string => {
@@ -652,14 +691,12 @@ function InspirationDiscoveryPanel({
     return filters.sort.direction === "asc" ? "↑" : "↓";
   };
 
-  const resultLabel = `${filteredEntries.length} of ${entries.length} inspiration${
-    entries.length === 1 ? "" : "s"
-  }`;
+  const resultLabel = formatResultsCount(locale, entries.length, filteredEntries.length);
   const [scoreExplainerOpen, setScoreExplainerOpen] = useState(false);
 
   const buildMetaText = (entry: InspirationListEntry): string => {
     const parts = [
-      entry.status === "saved" ? "saved" : entry.status,
+      entry.status === "saved" ? t(locale, "savedStatus") : entry.status,
       entry.timestamp,
     ];
     if (entry.wowScore !== null) parts.push(`WOW ${entry.wowScore}`);
@@ -670,8 +707,8 @@ function InspirationDiscoveryPanel({
     <section className="inspiration-discovery-panel" aria-labelledby="inspiration-discovery-title">
       <div className="inspiration-discovery-heading">
         <div>
-          <span>Find inspirations</span>
-          <h2 id="inspiration-discovery-title">Search the raw material</h2>
+          <span>{t(locale, "findInspirationsEyebrow")}</span>
+          <h2 id="inspiration-discovery-title">{t(locale, "searchRawMaterial")}</h2>
         </div>
         <div className="inspiration-discovery-actions">
           <button
@@ -681,7 +718,7 @@ function InspirationDiscoveryPanel({
             aria-controls="inspiration-score-explainer"
             onClick={() => setScoreExplainerOpen((open) => !open)}
           >
-            How scoring works
+            {t(locale, "howScoringWorks")}
           </button>
           <strong aria-live="polite">{resultLabel}</strong>
         </div>
@@ -779,14 +816,14 @@ function InspirationDiscoveryPanel({
         </div>
       ) : null}
 
-      <div className="inspiration-filter-bar" role="search" aria-label="Inspiration filters">
+      <div className="inspiration-filter-bar" role="search" aria-label={t(locale, "inspirationFilters")}>
         <label className="inspiration-search-field">
-          <span>Search</span>
+          <span>{t(locale, "search")}</span>
           <input
-            aria-label="Search inspirations"
+            aria-label={t(locale, "searchInspirations")}
             type="search"
             value={filters.search}
-            placeholder="Search your inspiration archive…"
+            placeholder={t(locale, "searchPlaceholder")}
             onChange={(event: ChangeEvent<HTMLInputElement>) =>
               updateFilter("search", event.target.value)
             }
@@ -796,41 +833,41 @@ function InspirationDiscoveryPanel({
 
       {filteredEntries.length === 0 ? (
         <div className="inspiration-results-empty" role="status">
-          <strong>No inspirations match those filters.</strong>
-          <span>Try a broader search or clear the text query.</span>
+          <strong>{t(locale, "noInspirationsMatch")}</strong>
+          <span>{t(locale, "broaderSearchHint")}</span>
         </div>
       ) : (
         <div className="inspiration-results-shell">
-          <div className="inspiration-results-header" aria-label="Sort inspirations">
+          <div className="inspiration-results-header" aria-label={t(locale, "sortInspirations")}>
             <button
               type="button"
               className="inspiration-sort-button inspiration-sort-button--text"
-              aria-label={`Sort by inspiration text, ${sortLabel("text")}`}
+              aria-label={`${t(locale, "sortByInspirationText")}, ${sortLabel("text")}`}
               aria-pressed={filters.sort?.column === "text"}
               onClick={() => toggleSort("text")}
             >
-              <span>Inspiration text</span>
+              <span>{t(locale, "inspirationText")}</span>
               <span aria-hidden="true">{sortIndicator("text")}</span>
             </button>
             <div className="inspiration-sort-meta-group">
               <button
                 type="button"
                 className="inspiration-sort-button"
-                aria-label={`Sort by saved time, ${sortLabel("saved")}`}
+                aria-label={`${t(locale, "sortBySavedTime")}, ${sortLabel("saved")}`}
                 aria-pressed={filters.sort?.column === "saved"}
                 onClick={() => toggleSort("saved")}
               >
-                <span>Saved/time</span>
+                <span>{t(locale, "savedTime")}</span>
                 <span aria-hidden="true">{sortIndicator("saved")}</span>
               </button>
               <button
                 type="button"
                 className="inspiration-sort-button"
-                aria-label={`Sort by WOW score, ${sortLabel("wow")}`}
+                aria-label={`${t(locale, "sortByWowScore")}, ${sortLabel("wow")}`}
                 aria-pressed={filters.sort?.column === "wow"}
                 onClick={() => toggleSort("wow")}
               >
-                <span>WOW score</span>
+                <span>{t(locale, "wowScore")}</span>
                 <span aria-hidden="true">{sortIndicator("wow")}</span>
               </button>
             </div>
@@ -877,6 +914,7 @@ export function HomePage(): JSX.Element {
   const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
   const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<HomeView>("wow");
+  const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
@@ -913,6 +951,11 @@ export function HomePage(): JSX.Element {
   const loadedForUserIdRef = useRef<string | null>(null);
   const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
   const wowMomentsRequestIdRef = useRef(0);
+
+  const handleLocaleChange = useCallback((nextLocale: SupportedLocale) => {
+    setLocale(nextLocale);
+    writeLocalePreference(nextLocale);
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -1466,6 +1509,7 @@ export function HomePage(): JSX.Element {
     <HomeViewToggle
       activeView={activeView}
       onChange={setActiveView}
+      locale={locale}
       showInternalStatusTab={internalStatusEnabled}
     />
   );
@@ -1489,11 +1533,13 @@ export function HomePage(): JSX.Element {
     activeView === "wow-status" && internalStatusEnabled ? (
       <AppShell
         count={entries.length}
-        headerTagline="development status"
+        headerTagline={t(locale, "developmentStatus")}
         loading={initialLoading}
         onCaptureClick={handleWowHeaderCapture}
         historyContent={historyContent}
         historyDetail={historyDetail}
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
       >
         {viewSwitcher}
         <InternalWowStatusDevPanel
@@ -1504,25 +1550,29 @@ export function HomePage(): JSX.Element {
           onRefresh={() => {
             void refreshInternalWowStatusRows();
           }}
+          locale={locale}
         />
       </AppShell>
     ) : activeView === "wow" ? (
       <AppShell
         count={entries.length}
-        headerTagline="wow moments"
+        headerTagline={t(locale, "wowMoments")}
         loading={initialLoading}
         onCaptureClick={handleWowHeaderCapture}
         historyContent={historyContent}
         historyDetail={historyDetail}
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
       >
         {viewSwitcher}
-        <section className="wow-first-home" aria-label="Wow Moment First">
+        <section className="wow-first-home" aria-label={t(locale, "wowMomentFirst")}>
           <WowMomentsSection
             moments={wowMoments}
             loading={wowMomentsLoading}
             error={wowMomentsError}
             showDevInspection={internalStatusEnabled}
             onAddInspiration={handleWowHeaderCapture}
+            locale={locale}
           />
         </section>
       </AppShell>
@@ -1544,6 +1594,7 @@ export function HomePage(): JSX.Element {
               entries={entries}
               filteredEntries={filteredEntries}
               filters={inspirationFilters}
+              locale={locale}
               onFiltersChange={setInspirationFilters}
               onSelectInspiration={handleSelectInspiration}
             />
@@ -1553,6 +1604,8 @@ export function HomePage(): JSX.Element {
         autoFocusCaptureRequest={
           autoFocusCaptureRequest > 0 ? autoFocusCaptureRequest : undefined
         }
+        locale={locale}
+        onLocaleChange={handleLocaleChange}
       />
     );
 
@@ -1616,10 +1669,10 @@ export function HomePage(): JSX.Element {
           opacity: 0.72,
           cursor: "pointer",
         }}
-        aria-label={`Sign out ${user.email}`}
-        title={`Sign out ${user.name}`}
+        aria-label={`${t(locale, "signOut")} ${user.email}`}
+        title={`${user.name} ${t(locale, "signOutPerson")}`}
       >
-        Sign out
+        {t(locale, "signOut")}
       </button>
     </>
   );
