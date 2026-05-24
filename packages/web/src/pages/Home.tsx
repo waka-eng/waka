@@ -894,7 +894,7 @@ function InspirationDiscoveryPanel({
 }
 
 export function HomePage(): JSX.Element {
-  const { user, logout } = useAuth();
+  const { user, logout, updatePreferredLocale } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -952,10 +952,21 @@ export function HomePage(): JSX.Element {
   const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
   const wowMomentsRequestIdRef = useRef(0);
 
-  const handleLocaleChange = useCallback((nextLocale: SupportedLocale) => {
-    setLocale(nextLocale);
-    writeLocalePreference(nextLocale);
-  }, []);
+  const handleLocaleChange = useCallback(
+    (nextLocale: SupportedLocale) => {
+      setLocale(nextLocale);
+      writeLocalePreference(nextLocale);
+      void updatePreferredLocale(nextLocale);
+    },
+    [updatePreferredLocale],
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    const preferredLocale = normalizeSupportedLocale(user.preferredLocale);
+    setLocale(preferredLocale);
+    writeLocalePreference(preferredLocale);
+  }, [user?.preferredLocale, user?.id]);
 
   useEffect(() => {
     if (!user) {
