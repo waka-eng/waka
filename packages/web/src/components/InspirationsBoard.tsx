@@ -108,7 +108,7 @@ import {
   type PersistedResult,
 } from "./capture";
 import type { ApiError } from "../lib/api";
-import { DEFAULT_LOCALE, type SupportedLocale } from "../lib/locales";
+import type { SupportedLocale } from "../lib/locales";
 import { InspirationCard, type InspirationCardData } from "./InspirationCard";
 import {
   AppShell,
@@ -245,8 +245,10 @@ export interface InspirationsBoardProps {
    */
   autoFocusCaptureRequest?: number;
 
-  /** Locale used for localized capture labels. */
+  /** Current UI locale for shared shell copy. */
   locale?: SupportedLocale;
+  /** Called when the shared header language selector changes. */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function InspirationsBoard({
@@ -264,7 +266,8 @@ export function InspirationsBoard({
   afterGridContent,
   captureFirst = false,
   autoFocusCaptureRequest,
-  locale = DEFAULT_LOCALE,
+  locale,
+  onLocaleChange,
 }: InspirationsBoardProps): JSX.Element {
   // ---------------------------------------------------------------
   // Capture-cell local state
@@ -564,6 +567,8 @@ export function InspirationsBoard({
       onCaptureClick={handleHeaderCapture}
       historyContent={historyContent}
       historyDetail={historyDetail}
+      locale={locale}
+      onLocaleChange={onLocaleChange}
     >
       {captureFirst ? (
         <div className="inspiration-first-capture">{captureForm}</div>

@@ -29,10 +29,7 @@
  * of truth here.
  */
 
-import { useState } from "react";
-
-import { useOptionalAuth } from "../../lib/auth-context";
-import { DEFAULT_LOCALE, supportedLocales, t } from "../../lib/locales";
+import { DEFAULT_LOCALE, formatSavedCount, supportedLocales, t } from "../../lib/locales";
 import type { SupportedLocale } from "../../lib/locales";
 
 export interface AppHeaderProps {
@@ -51,6 +48,10 @@ export interface AppHeaderProps {
   onCaptureClick: () => void;
   /** Fires when the user clicks the meta counter (opens history drawer). */
   onMetaClick: () => void;
+  /** Current UI locale. */
+  locale?: SupportedLocale;
+  /** Persists a user-selected UI locale in the parent. */
+  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function AppHeader({
@@ -59,30 +60,20 @@ export function AppHeader({
   loading = false,
   onCaptureClick,
   onMetaClick,
+  locale = DEFAULT_LOCALE,
+  onLocaleChange,
 }: AppHeaderProps): JSX.Element {
-  const auth = useOptionalAuth();
-  const user = auth?.user ?? null;
-  const [localeSaving, setLocaleSaving] = useState(false);
-  const locale = user?.preferredLocale ?? DEFAULT_LOCALE;
+
   const localizedTagline = tagline === "your inspirations" ? t(locale, "tagline") : tagline;
   // Single-source pluralization. Matches the prototype's copy verbatim
   // ("50 inspirations saved") while staying honest at count=1. While
   // `loading`, swap to a placeholder so the page doesn't read
   // "0 inspirations saved" before the server has answered.
-  const metaLabel = loading
-    ? t(locale, "loadingInspirations")
-    : locale === "ko-KR"
-      ? `${count}${t(locale, count === 1 ? "inspirationSaved" : "inspirationsSaved")}`
-      : `${count} ${t(locale, count === 1 ? "inspirationSaved" : "inspirationsSaved")}`;
+  const metaLabel = loading ? t(locale, "loadingInspirations") : formatSavedCount(locale, count);
 
-  const handleLocaleChange = async (nextLocale: SupportedLocale): Promise<void> => {
-    if (!user || nextLocale === user.preferredLocale) return;
-    setLocaleSaving(true);
-    try {
-      await auth?.updatePreferredLocale(nextLocale);
-    } finally {
-      setLocaleSaving(false);
-    }
+  const handleLocaleChange = (nextLocale: SupportedLocale): void => {
+    if (nextLocale === locale) return;
+    onLocaleChange?.(nextLocale);
   };
 
   return (
@@ -116,26 +107,20 @@ export function AppHeader({
           </svg>
           <span className="capture-trigger-label">{t(locale, "capture")}</span>
         </button>
-        {user ? (
-          <label className="locale-setting">
-            <span>{t(locale, "languageLabel")}</span>
-            <select
-              value={locale}
-              aria-label={t(locale, "languageLabel")}
-              disabled={localeSaving}
-              onChange={(event) => {
-                void handleLocaleChange(event.currentTarget.value as SupportedLocale);
-              }}
-            >
-              {supportedLocales.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.nativeLabel}
-                </option>
-              ))}
-            </select>
-            {localeSaving ? <span className="sr-only">{t(locale, "languageSaving")}</span> : null}
-          </label>
-        ) : null}
+        <label className="locale-setting">
+          <span>{t(locale, "languageLabel")}</span>
+          <select
+            value={locale}
+            aria-label={t(locale, "languageLabel")}
+            onChange={(event) => handleLocaleChange(event.currentTarget.value as SupportedLocale)}
+          >
+            {supportedLocales.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.nativeLabel}
+              </option>
+            ))}
+          </select>
+        </label>
         <div
           className="meta"
           id="metaCount"

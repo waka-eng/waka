@@ -3,7 +3,13 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { ApiWowMoment } from "../lib/api";
-import { DEFAULT_LOCALE, t, type SupportedLocale } from "../lib/locales";
+import {
+  DEFAULT_LOCALE,
+  formatBestRecentMirrorMoments,
+  formatGeneratedFieldCounts,
+  t,
+  type SupportedLocale,
+} from "../lib/locales";
 
 const MAX_VISIBLE_WOW_MOMENTS = 9;
 const MAX_BELIEF_EXCERPT_LENGTH = 72;
@@ -221,27 +227,16 @@ function boundedInspectionPreview(value: string | null | undefined, fallback = "
   return `${preview}…`;
 }
 
+function getReflectionGuide(moment: ApiWowMoment): string | null | undefined {
+  return (moment as ApiWowMoment & { reflectionGuide?: string | null }).reflectionGuide;
+}
+
 function inspectionFieldCount(moment: ApiWowMoment): number {
-  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion, moment.reflectionGuide].filter(
+  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion, getReflectionGuide(moment)].filter(
     (value) => normalizeReportText(value).length > 0,
   ).length;
 }
 
-function bestRecentMirrorMomentsLabel(locale: SupportedLocale, visibleCount: number): string {
-  return locale === "ko-KR"
-    ? `${visibleCount}${t(locale, "bestRecentMirrorMomentsShown")}`
-    : `${visibleCount} ${t(locale, "bestRecentMirrorMomentsShown")}`;
-}
-
-function generatedFieldCountsLabel(locale: SupportedLocale, sourceCount: number, fieldCount: number): string {
-  if (locale === "ko-KR") {
-    return `${sourceCount}개 출처; 생성 필드 ${fieldCount}개 있음`;
-  }
-
-  return `${sourceCount} source${sourceCount === 1 ? "" : "s"}; ${fieldCount} generated field${
-    fieldCount === 1 ? "" : "s"
-  } present`;
-}
 
 function devInspectButtonLabel(locale: SupportedLocale, count: number): string {
   return `${t(locale, "devWowInspectButton")} (${count})`;
@@ -466,7 +461,7 @@ export function WowMomentsSection({
   const selectedSignalCount = selectedMoment?.relatedInspirations.length ?? 0;
   const selectedSignalCountLabel = `${selectedSignalCount} inspiration${selectedSignalCount === 1 ? "" : "s"}`;
   const selectedReflectionGuideBlocks = selectedMoment
-    ? parseReflectionGuide(selectedMoment.reflectionGuide)
+    ? parseReflectionGuide(getReflectionGuide(selectedMoment))
     : [];
 
 
@@ -572,7 +567,7 @@ export function WowMomentsSection({
           <p>{selectedMoment.reflectionQuestion}</p>
         </section>
       ) : null}
-      {selectedMoment.reflectionGuide ? (
+      {getReflectionGuide(selectedMoment) ? (
         <section className="wow-moment-detail-section wow-moment-detail-section--reflection-guide">
           <span className="wow-moment-step-label">{t(locale, "wowReflectionGuideCaption")}</span>
           <h4>{t(locale, "wowReflectionGuideTitle")}</h4>
@@ -723,7 +718,7 @@ export function WowMomentsSection({
       {!error && !loading && moments.length > 0 ? (
         <div className="wow-moments-actions">
           <p>
-            {bestRecentMirrorMomentsLabel(locale, visibleMoments.length)}
+            {formatBestRecentMirrorMoments(locale, visibleMoments.length)}
           </p>
           {showDevInspection ? (
             <button
@@ -851,12 +846,12 @@ export function WowMomentsSection({
                     </div>
                     <div>
                       <dt>{t(locale, "devWowFieldReflectionGuide")}</dt>
-                      <dd>{boundedInspectionPreview(moment.reflectionGuide, t(locale, "devWowFieldNotGenerated"))}</dd>
+                      <dd>{boundedInspectionPreview(getReflectionGuide(moment), t(locale, "devWowFieldNotGenerated"))}</dd>
                     </div>
                     <div>
                       <dt>{t(locale, "devWowFieldCompactCounts")}</dt>
                       <dd>
-                        {generatedFieldCountsLabel(locale, moment.relatedInspirations.length, inspectionFieldCount(moment))}
+                        {formatGeneratedFieldCounts(locale, moment.relatedInspirations.length, inspectionFieldCount(moment))}
                       </dd>
                     </div>
                   </dl>
