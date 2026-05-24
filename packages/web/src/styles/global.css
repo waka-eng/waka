@@ -125,7 +125,6 @@
 }
 
 .meaning-graph-header span,
-.meaning-graph-summary span,
 .meaning-graph-detail > span,
 .meaning-graph-detail dt,
 .meaning-graph-evidence-list h3,
@@ -198,19 +197,6 @@
   grid-template-columns: minmax(0, 1fr) minmax(330px, 0.32fr);
   gap: 18px;
   align-items: start;
-}
-
-.meaning-graph-summary {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.meaning-graph-summary span {
-  border: 1px solid rgba(17, 17, 17, 0.1);
-  border-radius: 999px;
-  padding: 7px 10px;
 }
 
 .meaning-graph-detail,

@@ -431,14 +431,6 @@ export default function MeaningGraphPage(): JSX.Element {
         <p className="meaning-graph-status meaning-graph-status--error">{error}</p>
       ) : (
         <section className="meaning-graph-workbench meaning-graph-workbench--flow">
-          <div className="meaning-graph-summary">
-            <span>{graph?.meta.nodeCount ?? 0} meaning nodes</span>
-            <span>{graph?.meta.edgeCount ?? 0} meaning edges</span>
-            <span>showing {visibleMeaningNodes.length} draggable nodes</span>
-            <span>{visibleMeaningEdges.length} clickable edges</span>
-            <span>{graph?.meta.evidenceCount ?? 0} evidence rows</span>
-          </div>
-
           <div className="meaning-graph-flow-shell">
             {nodes.length === 0 ? (
               <div className="meaning-graph-empty">
