@@ -46,17 +46,13 @@ import {
 } from "../components/history";
 import {
   type ApiAttachment,
-  type ApiBackgroundJob,
   type ApiError,
   type ApiInspiration,
   type ApiInspirationScorePatch,
   type ApiWowMoment,
-  type ApiWowStatusRow,
   type ClusterKind,
-  fetchBackgroundJobs,
   fetchInspirations,
   fetchWowMoments,
-  fetchWowStatus,
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -236,7 +232,7 @@ function applyUpdatedInspiration(
   };
 }
 
-type HomeView = "wow" | "inspiration" | "wow-status";
+type HomeView = "wow" | "inspiration";
 
 export interface HomeCaptureHandoffState {
   activeView: HomeView;
@@ -252,255 +248,16 @@ export function nextHomeCaptureHandoffState(
   };
 }
 
-interface InternalStatusEnv {
-  DEV?: boolean;
-  VITE_SHOW_INTERNAL_STATUS?: string;
-}
-
-export function shouldShowInternalStatus(env: InternalStatusEnv): boolean {
-  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true";
-}
-
-type InternalWowPipelinePhase = "checking" | "found" | "none";
-
-interface InternalWowStatusState {
-  inspirationId: string;
-  savedAt: string;
-  latestWowCount: number;
-  initialWowCount: number;
-  wowPhase: InternalWowPipelinePhase;
-  jobStatus: ApiBackgroundJob["status"] | "checking" | "unavailable";
-  jobUpdatedAt?: string;
-  adminUnavailable: boolean;
-}
-
-function shortId(id: string): string {
-  return id.slice(0, 8);
-}
-
-function InternalWowStatusPanel({
-  status,
-  locale,
-}: {
-  status: InternalWowStatusState;
-  locale: SupportedLocale;
-}): JSX.Element {
-  const jobText = status.adminUnavailable
-    ? t(locale, "adminJobDetailsUnavailable")
-    : status.jobStatus === "checking"
-      ? t(locale, "backgroundJobChecking")
-      : `${t(locale, "backgroundJobStatus")} ${status.jobStatus}`;
-  const wowText =
-    status.wowPhase === "found"
-      ? t(locale, "newWowMomentFound")
-      : status.wowPhase === "none"
-        ? t(locale, "noNewWowYet")
-        : t(locale, "wowRefreshChecking");
-
-  return (
-    <aside
-      className="internal-wow-status"
-      aria-label={t(locale, "internalWowStatusAria")}
-      role="status"
-      aria-live="polite"
-    >
-      <div className="internal-wow-status-heading">
-        <span>{t(locale, "internalWowStatusAria")}</span>
-        <strong>{t(locale, "latestWowCount")} {status.latestWowCount}</strong>
-      </div>
-      <ol className="internal-wow-status-steps">
-        <li>
-          <span>{t(locale, "savedInspiration")} {shortId(status.inspirationId)}</span>
-          <time dateTime={status.savedAt}>{formatTimestamp(status.savedAt)}</time>
-        </li>
-        <li>
-          <span>{jobText}</span>
-          {status.jobUpdatedAt ? (
-            <time dateTime={status.jobUpdatedAt}>{formatTimestamp(status.jobUpdatedAt)}</time>
-          ) : null}
-        </li>
-        <li>
-          <span>{wowText}</span>
-          <strong>{status.latestWowCount}</strong>
-        </li>
-      </ol>
-    </aside>
-  );
-}
-
-function buildRawJudgeLog(row: ApiWowStatusRow): string[] {
-  const log: string[] = [];
-  if (row.debugReason.rawGeminiPreview) {
-    log.push(`raw: ${row.debugReason.rawGeminiPreview}`);
-  }
-  if (row.debugReason.parseFailureStage) {
-    log.push(`stage: ${row.debugReason.parseFailureStage}`);
-  }
-  if (row.debugReason.finishReason) {
-    log.push(`finish: ${row.debugReason.finishReason}`);
-  }
-  if (row.debugReason.schemaIssueSummary) {
-    log.push(`schema: ${row.debugReason.schemaIssueSummary}`);
-  }
-  return log;
-}
-
-function InternalWowStatusTable({
-  rows,
-  loading,
-  error,
-  onRefresh,
-  locale,
-}: {
-  rows: ApiWowStatusRow[];
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-  locale: SupportedLocale;
-}): JSX.Element {
-  return (
-    <section className="internal-wow-status internal-wow-status-table" aria-label={`${t(locale, "developmentWowStatus")} table`}>
-      <div className="internal-wow-status-heading">
-        <span>{t(locale, "developmentWowStatus")}</span>
-        <button type="button" onClick={onRefresh} disabled={loading}>
-          {loading ? t(locale, "refreshing") : t(locale, "refresh")}
-        </button>
-      </div>
-      {error ? <p className="internal-wow-status-error">{error}</p> : null}
-      <div className="internal-wow-status-table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>{t(locale, "inspiration")}</th>
-              <th>{t(locale, "job")}</th>
-              <th>{t(locale, "embedded")}</th>
-              <th>{t(locale, "generatedWow")}</th>
-              <th>{t(locale, "whyNoWow")}</th>
-              <th>{t(locale, "rawJudgeLog")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={6}>{loading ? t(locale, "loadingWowPipelineStatus") : t(locale, "noRecentInspirations")}</td>
-              </tr>
-            ) : (
-              rows.map((row) => {
-                const rawJudgeLog = buildRawJudgeLog(row);
-                return (
-                  <tr key={row.inspiration.id}>
-                    <td>
-                      <strong>{shortId(row.inspiration.id)}</strong>
-                      <span>{row.inspiration.textPreview}</span>
-                      <time dateTime={row.inspiration.createdAt}>{formatTimestamp(row.inspiration.createdAt)}</time>
-                    </td>
-                    <td>
-                      {row.job ? (
-                        <>
-                          <strong>{row.job.status}</strong>
-                          <span>{row.job.attempts}/{row.job.maxAttempts}</span>
-                        </>
-                      ) : (
-                        t(locale, "none")
-                      )}
-                    </td>
-                    <td>{row.embedded ? t(locale, "yes") : t(locale, "no")}</td>
-                    <td>
-                      <strong>{row.generatedWowMomentCount}</strong>
-                      <span>{row.debugReason.label}</span>
-                    </td>
-                    <td>
-                      <strong>{row.generatedWowMomentCount === 0 ? row.debugReason.label : t(locale, "ready")}</strong>
-                      <span>{row.debugReason.detail}</span>
-                    </td>
-                    <td>
-                      {rawJudgeLog.length > 0
-                        ? rawJudgeLog.map((entry) => <span key={entry}>{entry}</span>)
-                        : "—"}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function InternalWowStatusDevPanel({
-  liveStatus,
-  rows,
-  loading,
-  error,
-  onRefresh,
-  locale,
-}: {
-  liveStatus: InternalWowStatusState | null;
-  rows: ApiWowStatusRow[];
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-  locale: SupportedLocale;
-}): JSX.Element {
-  return (
-    <section className="internal-wow-status-dev-panel" aria-labelledby="internal-wow-status-title">
-      <div className="internal-wow-status-dev-heading">
-        <span>{t(locale, "temporaryDevelopmentSurface")}</span>
-        <h2 id="internal-wow-status-title">{t(locale, "wowPipelineStatus")}</h2>
-        <p>{t(locale, "wowStatusExplainer")}</p>
-      </div>
-      <div className="internal-wow-status-explainer" aria-label="WOW status column guide">
-        <section>
-          <h3>{t(locale, "inspiration")}</h3>
-          <p>{t(locale, "savedInspirationGuide")}</p>
-        </section>
-        <section>
-          <h3>{t(locale, "job")}</h3>
-          <p>{t(locale, "jobGuide")}</p>
-        </section>
-        <section>
-          <h3>{t(locale, "embedded")}</h3>
-          <p>{t(locale, "embeddedGuide")}</p>
-        </section>
-        <section>
-          <h3>{t(locale, "generatedWow")}</h3>
-          <p>{t(locale, "generatedWowGuide")}</p>
-        </section>
-        <section>
-          <h3>{t(locale, "whyNoWow")}</h3>
-          <p>{t(locale, "whyNoWowGuide")}</p>
-        </section>
-        <section>
-          <h3>{t(locale, "rawJudgeLog")}</h3>
-          <p>{t(locale, "rawJudgeLogGuide")}</p>
-        </section>
-      </div>
-      {liveStatus ? <InternalWowStatusPanel status={liveStatus} locale={locale} /> : null}
-      <InternalWowStatusTable
-        rows={rows}
-        loading={loading}
-        error={error}
-        onRefresh={onRefresh}
-        locale={locale}
-      />
-    </section>
-  );
-}
-
 interface HomeViewToggleProps {
   activeView: HomeView;
   onChange: (view: HomeView) => void;
   locale: SupportedLocale;
-  showInternalStatusTab?: boolean;
 }
 
 export function HomeViewToggle({
   activeView,
   onChange,
   locale,
-  showInternalStatusTab = false,
 }: HomeViewToggleProps): JSX.Element {
   return (
     <nav
@@ -524,16 +281,6 @@ export function HomeViewToggle({
       >
         {t(locale, "inspirationFirst")}
       </button>
-      {showInternalStatusTab ? (
-        <button
-          type="button"
-          className={activeView === "wow-status" ? "active" : undefined}
-          aria-pressed={activeView === "wow-status"}
-          onClick={() => onChange("wow-status")}
-        >
-          {t(locale, "wowStatus")}
-        </button>
-      ) : null}
     </nav>
   );
 }
@@ -891,12 +638,6 @@ export function HomePage(): JSX.Element {
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
-  const [internalWowStatus, setInternalWowStatus] =
-    useState<InternalWowStatusState | null>(null);
-  const [internalWowStatusRows, setInternalWowStatusRows] = useState<ApiWowStatusRow[]>([]);
-  const [internalWowStatusRowsLoading, setInternalWowStatusRowsLoading] = useState(false);
-  const [internalWowStatusRowsError, setInternalWowStatusRowsError] = useState<string | null>(null);
-  const internalStatusEnabled = shouldShowInternalStatus(import.meta.env);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -934,9 +675,6 @@ export function HomePage(): JSX.Element {
       wowMomentsRequestIdRef.current += 1;
       setEntries([]);
       setWowMoments([]);
-      setInternalWowStatus(null);
-      setInternalWowStatusRows([]);
-      setInternalWowStatusRowsError(null);
       setWowMomentsLoading(false);
       setWowMomentsError(null);
       return;
@@ -1050,32 +788,6 @@ export function HomePage(): JSX.Element {
     [user],
   );
 
-  const refreshInternalWowStatusRows = useCallback(async () => {
-    if (!user || !internalStatusEnabled) return;
-    setInternalWowStatusRowsLoading(true);
-    setInternalWowStatusRowsError(null);
-    try {
-      setInternalWowStatusRows(await fetchWowStatus(12));
-    } catch (err) {
-      setInternalWowStatusRowsError(
-        err instanceof Error ? err.message : "Failed to load WOW pipeline status",
-      );
-    } finally {
-      setInternalWowStatusRowsLoading(false);
-    }
-  }, [internalStatusEnabled, user]);
-
-  useEffect(() => {
-    if (!internalStatusEnabled && activeView === "wow-status") {
-      setActiveView("wow");
-    }
-  }, [activeView, internalStatusEnabled]);
-
-  useEffect(() => {
-    if (!user || !internalStatusEnabled) return;
-    void refreshInternalWowStatusRows();
-  }, [internalStatusEnabled, refreshInternalWowStatusRows, user]);
-
   useEffect(() => {
     if (!user) return;
     if (wowMomentsLoadedForUserIdRef.current === user.id) return;
@@ -1097,58 +809,6 @@ export function HomePage(): JSX.Element {
   const handleOptimisticAdd = useCallback((pending: PendingInspiration) => {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
   }, []);
-
-  const updateInternalWowCount = useCallback((rows: ApiWowMoment[] | null) => {
-    if (!rows) return;
-    setInternalWowStatus((prev) => {
-      if (!prev) return prev;
-      const nextPhase: InternalWowPipelinePhase =
-        rows.length > prev.initialWowCount ? "found" : "none";
-      return {
-        ...prev,
-        latestWowCount: rows.length,
-        wowPhase: nextPhase,
-      };
-    });
-  }, []);
-
-  const refreshInternalBackgroundJob = useCallback(
-    (inspirationId: string) => {
-      void (async () => {
-        try {
-          const jobs = await fetchBackgroundJobs({
-            type: "process_inspiration",
-            limit: 10,
-          });
-          const matchingJob =
-            jobs.find((job) => job.payloadSummary?.inspirationId === inspirationId) ??
-            jobs[0];
-          setInternalWowStatus((prev) => {
-            if (!prev || prev.inspirationId !== inspirationId) return prev;
-            if (!matchingJob) {
-              return { ...prev, jobStatus: "checking", adminUnavailable: false };
-            }
-            return {
-              ...prev,
-              jobStatus: matchingJob.status,
-              jobUpdatedAt: matchingJob.updatedAt,
-              adminUnavailable: false,
-            };
-          });
-        } catch {
-          setInternalWowStatus((prev) => {
-            if (!prev || prev.inspirationId !== inspirationId) return prev;
-            return {
-              ...prev,
-              jobStatus: "unavailable",
-              adminUnavailable: true,
-            };
-          });
-        }
-      })();
-    },
-    [],
-  );
 
   const handlePersisted = useCallback(
     (tempId: string, result: PersistedResult) => {
@@ -1182,31 +842,7 @@ export function HomePage(): JSX.Element {
       );
 
       const targetId = result.inspiration.id;
-      if (internalStatusEnabled) {
-        setInternalWowStatus({
-          inspirationId: targetId,
-          savedAt: result.inspiration.createdAt,
-          latestWowCount: wowMoments.length,
-          initialWowCount: wowMoments.length,
-          wowPhase: "checking",
-          jobStatus: "checking",
-          adminUnavailable: false,
-        });
-        refreshInternalBackgroundJob(targetId);
-        void refreshInternalWowStatusRows();
-        void refreshWowMoments({ showLoading: false, surfaceErrors: true }).then(
-          (rows) => {
-            if (!rows) return;
-            setInternalWowStatus((prev) =>
-              prev && prev.inspirationId === targetId
-                ? { ...prev, latestWowCount: rows.length }
-                : prev,
-            );
-          },
-        );
-      } else {
-        void refreshWowMoments({ showLoading: false, surfaceErrors: true });
-      }
+      void refreshWowMoments({ showLoading: false, surfaceErrors: true });
 
       // The classifier worker (or the dev-mode inline fallback) writes
       // `cluster` asynchronously after the row is persisted. Without a
@@ -1249,8 +885,7 @@ export function HomePage(): JSX.Element {
                 void refreshWowMoments({
                   showLoading: false,
                   surfaceErrors: false,
-                }).then(updateInternalWowCount);
-                if (internalStatusEnabled) refreshInternalBackgroundJob(targetId);
+                });
               }
             } catch {
               // Silent — the user will pick up the classification on
@@ -1263,12 +898,7 @@ export function HomePage(): JSX.Element {
       }
     },
     [
-      internalStatusEnabled,
-      refreshInternalBackgroundJob,
-      refreshInternalWowStatusRows,
       refreshWowMoments,
-      updateInternalWowCount,
-      wowMoments.length,
     ],
   );
 
@@ -1479,7 +1109,6 @@ export function HomePage(): JSX.Element {
       activeView={activeView}
       onChange={setActiveView}
       locale={locale}
-      showInternalStatusTab={internalStatusEnabled}
     />
   );
 
@@ -1499,28 +1128,7 @@ export function HomePage(): JSX.Element {
   ) : undefined;
 
   const primaryContent =
-    activeView === "wow-status" && internalStatusEnabled ? (
-      <AppShell
-        count={entries.length}
-        headerTagline={t(locale, "developmentStatus")}
-        loading={initialLoading}
-        onCaptureClick={handleWowHeaderCapture}
-        historyContent={historyContent}
-        historyDetail={historyDetail}
-      >
-        {viewSwitcher}
-        <InternalWowStatusDevPanel
-          liveStatus={internalWowStatus}
-          rows={internalWowStatusRows}
-          loading={internalWowStatusRowsLoading}
-          error={internalWowStatusRowsError}
-          onRefresh={() => {
-            void refreshInternalWowStatusRows();
-          }}
-          locale={locale}
-        />
-      </AppShell>
-    ) : activeView === "wow" ? (
+    activeView === "wow" ? (
       <AppShell
         count={entries.length}
         headerTagline={t(locale, "wowMoments")}
@@ -1535,7 +1143,7 @@ export function HomePage(): JSX.Element {
             moments={wowMoments}
             loading={wowMomentsLoading}
             error={wowMomentsError}
-            showDevInspection={internalStatusEnabled}
+            showDevInspection={false}
             onAddInspiration={handleWowHeaderCapture}
             locale={locale}
           />
