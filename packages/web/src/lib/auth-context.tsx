@@ -41,8 +41,11 @@ import {
   login as apiLogin,
   logout as apiLogout,
   signup as apiSignup,
+  updateAuthPreferences,
 } from "./api";
 import type { ApiUser, LoginRequest, SignupRequest } from "./api";
+import { normalizeSupportedLocale } from "./locales";
+import type { SupportedLocale } from "./locales";
 
 // ---------------------------------------------------------------------------
 // Storage helpers
@@ -72,7 +75,12 @@ function readCachedUser(): ApiUser | null {
       typeof parsed.email === "string" &&
       typeof parsed.name === "string"
     ) {
-      return { id: parsed.id, email: parsed.email, name: parsed.name };
+      return {
+        id: parsed.id,
+        email: parsed.email,
+        name: parsed.name,
+        preferredLocale: normalizeSupportedLocale(parsed.preferredLocale),
+      };
     }
     return null;
   } catch {
@@ -133,6 +141,8 @@ export interface AuthContextValue {
    * profile mutations elsewhere in the app (e.g. updating display name).
    */
   refresh: () => Promise<ApiUser | null>;
+  /** Persist and apply the account language used by UI and AI-generated copy. */
+  updatePreferredLocale: (preferredLocale: SupportedLocale) => Promise<ApiUser>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -253,6 +263,15 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     return fresh;
   }, [applyUser]);
 
+  const updatePreferredLocale = useCallback(
+    async (preferredLocale: SupportedLocale): Promise<ApiUser> => {
+      const { user: updated } = await updateAuthPreferences({ preferredLocale });
+      applyUser(updated);
+      return updated;
+    },
+    [applyUser],
+  );
+
   /**
    * Memoised so consumers using `useAuth()` only re-render when something
    * meaningful actually changes, not on every parent re-render.
@@ -266,8 +285,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       signup,
       logout,
       refresh,
+      updatePreferredLocale,
     }),
-    [user, isLoading, login, signup, logout, refresh],
+    [user, isLoading, login, signup, logout, refresh, updatePreferredLocale],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -282,8 +302,12 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
  * `<AuthProvider>` — that's a programmer bug, not a runtime condition, so a
  * loud error beats a silent `null` that crashes deeper in the tree.
  */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}
+
 export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
+  const ctx = useOptionalAuth();
   if (!ctx) {
     throw new Error(
       "useAuth() called outside <AuthProvider>. Wrap your router in <AuthProvider>.",

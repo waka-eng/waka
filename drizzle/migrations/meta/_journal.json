@@ -85,6 +85,20 @@
       "when": 1779239700993,
       "tag": "0011_chief_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779501432295,
+      "tag": "0012_locale_preferences",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779515284756,
+      "tag": "0013_silly_swarm",
+      "breakpoints": true
     }
   ]
 }

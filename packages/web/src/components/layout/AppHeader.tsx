@@ -63,6 +63,7 @@ export function AppHeader({
   locale = DEFAULT_LOCALE,
   onLocaleChange,
 }: AppHeaderProps): JSX.Element {
+
   const localizedTagline = tagline === "your inspirations" ? t(locale, "tagline") : tagline;
   // Single-source pluralization. Matches the prototype's copy verbatim
   // ("50 inspirations saved") while staying honest at count=1. While

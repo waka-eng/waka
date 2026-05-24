@@ -51,6 +51,8 @@ export const wowMoments = pgTable(
     why: text("why").notNull(),
     beliefStatement: text("belief_statement"),
     reflectionQuestion: text("reflection_question"),
+    reflectionGuide: text("reflection_guide"),
+    locale: text("locale").notNull().default("en-US"),
     wowScore: integer("wow_score").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

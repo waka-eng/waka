@@ -18,6 +18,13 @@ The stack is:
 The original 4282-line monolith lives at `index.html` for visual reference. The
 shipped UI is the React decomposition under `packages/web/src/`.
 
+Team A agents working this repository should follow the
+[`Team A Kanban Workflow Policy`](docs/team-a-kanban-workflow-policy.md): only
+true external/user-input, approval, credentials, destructive/product/deploy/merge/security,
+or non-recoverable-context issues are `REAL_BLOCKED`; routine review/QA/finalization
+handoffs and recoverable board/session stalls should be promoted, recovered,
+reassigned, archived, decomposed, or completed without asking the user.
+
 ---
 
 ## Local dev runbook

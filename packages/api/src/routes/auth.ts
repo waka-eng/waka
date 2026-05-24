@@ -28,6 +28,7 @@ import {
   verifyPassword,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import { DEFAULT_LOCALE, normalizeSupportedLocale, supportedLocaleSchema } from "../lib/locales.js";
 import {
   type AuthEnv,
   requireAuth,
@@ -104,6 +105,14 @@ const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
+const preferencesSchema = z
+  .object({
+    preferredLocale: supportedLocaleSchema,
+  })
+  .strict();
+
+export type PreferencesInput = z.infer<typeof preferencesSchema>;
+
 // ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
@@ -177,7 +186,7 @@ authRoutes.post("/signup", async (c) => {
   // 4. Insert. We rely on the unique index to catch the rare race where two
   //    concurrent signups slip past the SELECT above; Postgres throws
   //    `23505` (unique_violation) which we map to the same 409.
-  let inserted: { id: string; email: string; name: string };
+  let inserted: { id: string; email: string; name: string; preferredLocale: string };
   try {
     const rows = await db
       .insert(users)
@@ -190,6 +199,7 @@ authRoutes.post("/signup", async (c) => {
         id: users.id,
         email: users.email,
         name: users.name,
+        preferredLocale: users.preferredLocale,
       });
     inserted = rows[0]!;
   } catch (err) {
@@ -226,6 +236,7 @@ authRoutes.post("/signup", async (c) => {
         id: inserted.id,
         email: inserted.email,
         name: inserted.name,
+        preferredLocale: normalizeSupportedLocale(inserted.preferredLocale),
       },
       token,
     },
@@ -288,6 +299,7 @@ authRoutes.post("/login", async (c) => {
       id: users.id,
       email: users.email,
       name: users.name,
+      preferredLocale: users.preferredLocale,
       passwordHash: users.passwordHash,
     })
     .from(users)
@@ -326,6 +338,7 @@ authRoutes.post("/login", async (c) => {
         id: candidate.id,
         email: candidate.email,
         name: candidate.name,
+        preferredLocale: normalizeSupportedLocale(candidate.preferredLocale),
       },
       token,
     },
@@ -352,6 +365,54 @@ authRoutes.get("/me", requireAuth, (c) => {
       email: user.email,
       name: user.name,
       avatarUrl: user.avatarUrl,
+      preferredLocale: user.preferredLocale,
+    },
+  });
+});
+
+authRoutes.patch("/me/preferences", requireAuth, async (c) => {
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "Request body must be valid JSON" }, 400);
+  }
+
+  const parsed = preferencesSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "Invalid preferences payload",
+        details: parsed.error.flatten().fieldErrors,
+      },
+      400,
+    );
+  }
+
+  const currentUser = c.get("user");
+  const [updated] = await getDb()
+    .update(users)
+    .set({
+      preferredLocale: parsed.data.preferredLocale,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, currentUser.id))
+    .returning({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      avatarUrl: users.avatarUrl,
+      preferredLocale: users.preferredLocale,
+    });
+
+  const user = updated ?? { ...currentUser, preferredLocale: DEFAULT_LOCALE };
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      preferredLocale: normalizeSupportedLocale(user.preferredLocale),
     },
   });
 });

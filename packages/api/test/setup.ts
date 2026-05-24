@@ -58,8 +58,10 @@ function findRepoEnvFile(): string | null {
   const here = dirname(fileURLToPath(import.meta.url));
   let cursor = here;
   for (let i = 0; i < 8; i++) {
-    const candidate = resolve(cursor, ".env");
-    if (existsSync(candidate)) return candidate;
+    const envCandidate = resolve(cursor, ".env");
+    if (existsSync(envCandidate)) return envCandidate;
+    const localEnvCandidate = resolve(cursor, ".env.local");
+    if (existsSync(localEnvCandidate)) return localEnvCandidate;
     const parent = dirname(cursor);
     if (parent === cursor) break;
     cursor = parent;
@@ -91,7 +93,7 @@ for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(
       `[test/setup] Required env var ${key} is not set. ` +
-        `Configure it in .env at the repo root before running the test suite.`,
+        `Configure it in .env or .env.local at the repo root before running the test suite.`,
     );
   }
 }
@@ -191,4 +193,35 @@ async function ensureRevisitEventSchema(): Promise<void> {
   }
 }
 
+async function ensureLocalePreferenceSchema(): Promise<void> {
+  const connectionString = process.env.DB_CONNECTION_URL;
+  if (!connectionString) return;
+
+  const sql = postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    onnotice: () => {},
+  });
+
+  try {
+    await sql.unsafe(
+      `SELECT pg_advisory_lock(hashtext('waka_test_locale_preference_schema'))`,
+    );
+    await sql.unsafe(`
+      ALTER TABLE "public"."users"
+        ADD COLUMN IF NOT EXISTS "preferred_locale" text NOT NULL DEFAULT 'en-US';
+    `);
+    await sql.unsafe(`
+      ALTER TABLE "public"."wow_moments"
+        ADD COLUMN IF NOT EXISTS "locale" text NOT NULL DEFAULT 'en-US';
+    `);
+  } finally {
+    await sql
+      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_locale_preference_schema'))`)
+      .catch(() => {});
+    await sql.end({ timeout: 5 }).catch(() => {});
+  }
+}
+
 await ensureRevisitEventSchema();
+await ensureLocalePreferenceSchema();

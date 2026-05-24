@@ -125,6 +125,13 @@ export interface CaptureCellProps {
   onNoteKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   /** Placeholder copy for the note textarea. Defaults to the prototype's. */
   notePlaceholder?: string;
+  processSaveLabel?: string;
+  quickSaveLabel?: string;
+  focusModeLabel?: string;
+  enterFocusModeLabel?: string;
+  exitFocusModeLabel?: string;
+  doneLabel?: string;
+  continueLabel?: string;
 
   /**
    * Whether the save pill is in the "ready" state (visible + clickable).
@@ -234,6 +241,13 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       onNoteChange,
       onNoteKeyDown,
       notePlaceholder = "A link, a note, an image — whatever's inspiring you right now…",
+      processSaveLabel = "Process this inspiration",
+      quickSaveLabel = "Quick save",
+      focusModeLabel = "Focus mode",
+      enterFocusModeLabel = "Enter focus mode",
+      exitFocusModeLabel = "Exit focus mode",
+      doneLabel = "Done",
+      continueLabel = "Continue",
       saveVisible = false,
       onSave,
       onReflectiveSave,
@@ -376,7 +390,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             onClick={onReflectiveSave}
             disabled={!saveVisible}
           >
-            Process this inspiration
+            {processSaveLabel}
           </button>
           <button
             type="button"
@@ -389,14 +403,14 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             // semantics (not just visual-only disabling).
             disabled={!saveVisible}
           >
-            Quick save
+            {quickSaveLabel}
           </button>
           <button
             type="button"
             className="cap-expand"
             id="capExpand"
-            title={focused ? "Exit focus mode" : "Focus mode"}
-            aria-label={focused ? "Exit focus mode" : "Enter focus mode"}
+            title={focused ? exitFocusModeLabel : focusModeLabel}
+            aria-label={focused ? exitFocusModeLabel : enterFocusModeLabel}
             aria-pressed={focused}
             onClick={() => onToggleFocus?.(!focused)}
           >
@@ -450,7 +464,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             id="reflectLater"
             onClick={onReflectLater}
           >
-            Done
+            {doneLabel}
           </button>
           <button
             type="button"
@@ -458,7 +472,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             id="reflectNext"
             onClick={onReflectNext}
           >
-            Continue
+            {continueLabel}
           </button>
         </div>
       </div>

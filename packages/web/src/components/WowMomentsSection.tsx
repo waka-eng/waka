@@ -237,6 +237,7 @@ function inspectionFieldCount(moment: ApiWowMoment): number {
   ).length;
 }
 
+
 function devInspectButtonLabel(locale: SupportedLocale, count: number): string {
   return `${t(locale, "devWowInspectButton")} (${count})`;
 }

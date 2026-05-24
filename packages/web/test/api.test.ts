@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, fetchWowMoments, type ListWowMomentsResponse } from "../src/lib/api";
+import {
+  ApiError,
+  fetchWowMoments,
+  updateAuthPreferences,
+  type ListWowMomentsResponse,
+} from "../src/lib/api";
 
 const emptySuccess: ListWowMomentsResponse = { wowMoments: [] };
 
@@ -22,7 +27,9 @@ describe("fetchWowMoments", () => {
           title: "Recurring signal",
           kind: "recurrence",
           why: "Three saved inspirations rhyme.",
+          beliefStatement: null,
           reflectionQuestion: null,
+          reflectionGuide: "Choose the one rhyme that feels most alive, then write a small next question.",
           wowScore: 91,
           createdAt: "2026-05-01T00:00:00.000Z",
           updatedAt: "2026-05-01T00:00:00.000Z",
@@ -84,5 +91,31 @@ describe("fetchWowMoments", () => {
     stubFetch(Response.json(emptySuccess));
 
     await expect(fetchWowMoments()).resolves.toEqual([]);
+  });
+});
+
+describe("updateAuthPreferences", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("PATCHes the preferred locale and returns the updated user", async () => {
+    const body = {
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        name: "User",
+        preferredLocale: "ko-KR" as const,
+      },
+    };
+    stubFetch(Response.json(body));
+
+    await expect(updateAuthPreferences({ preferredLocale: "ko-KR" })).resolves.toEqual(body);
+    expect(fetch).toHaveBeenCalledWith("/api/auth/me/preferences", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferredLocale: "ko-KR" }),
+    });
   });
 });

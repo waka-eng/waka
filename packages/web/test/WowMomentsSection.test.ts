@@ -21,6 +21,8 @@ const sampleMoment: ApiWowMoment = {
   why: "Connects a mobile note with a design sketch.",
   beliefStatement: null,
   reflectionQuestion: "What would make this bridge testable this week?",
+  reflectionGuide:
+    "Start here\nNotice the mobile note and design sketch without rushing to turn them into a task.\n\nWhat this might be touching\nThis might suggest a value around playful prototypes that protect small tests.\n\nQuestions to sit with\n- What would make this bridge feel true?\n- Which value does the prototype protect?",
   wowScore: 87,
   createdAt: "2026-05-01T00:00:00.000Z",
   updatedAt: "2026-05-01T00:00:00.000Z",
@@ -503,6 +505,17 @@ describe("WowMomentsSection", () => {
     expect(detail?.textContent).toContain("Treat this as a mirror, not a recommendation.");
     expect(detail?.textContent).toContain("Reflection question");
     expect(detail?.textContent).toContain("What would make this bridge testable this week?");
+    expect(detail?.textContent).toContain("A gentle way to reflect");
+    expect(detail?.textContent).toContain("Use this as a loose path, not homework.");
+    expect(detail?.textContent).toContain("Start here");
+    expect(detail?.textContent).toContain(
+      "Notice the mobile note and design sketch without rushing to turn them into a task.",
+    );
+    expect(detail?.textContent).toContain("What this might be touching");
+    expect(detail?.textContent).toContain("Questions to sit with");
+    expect(detail?.textContent).toContain("What would make this bridge feel true?");
+    expect(detail?.querySelectorAll(".wow-moment-reflection-guide-block")).toHaveLength(3);
+    expect(detail?.querySelectorAll(".wow-moment-reflection-guide-questions li")).toHaveLength(2);
     expect(detail?.textContent).toContain("A belief this may point to");
     expect(detail?.textContent).toContain(
       "One possible reading: because “Connects a mobile note with a design sketch”, this may point to a belief that “Prototype idea keeps returning” is worth exploring rather than treating as a one-off spark.",
@@ -521,6 +534,27 @@ describe("WowMomentsSection", () => {
     expect(detail?.textContent).toContain("Hide source note");
     expect(detail?.textContent).toContain("Source note");
     expect(detail?.textContent).toContain("First signal in the bridge.");
+  });
+
+  it("localizes the reflection guide in Korean detail mode", () => {
+    const container = renderInteractiveSection({
+      moments: [sampleMoment],
+      loading: false,
+      error: null,
+      locale: "ko-KR",
+    });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const detailText = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid")?.textContent ?? "";
+    expect(detailText).toContain("부드럽게 돌아보는 방법");
+    expect(detailText).toContain("숙제가 아니라 느슨한 길잡이로 사용하세요.");
+    expect(detailText).toContain("Start here");
+    expect(detailText).toContain("What this might be touching");
+    expect(detailText).toContain("Questions to sit with");
   });
 
   it("uses product-facing source role labels in the detail report with safe legacy fallbacks", () => {
@@ -744,6 +778,9 @@ describe("WowMomentsSection", () => {
       /\.wow-moment-belief-pullquote blockquote\s*\{[\s\S]*?max-width:\s*38rem;[\s\S]*?margin:\s*0 auto;[\s\S]*?font-style:\s*italic;/,
     );
     expect(globalCss).toContain(".wow-moment-belief-pullquote figcaption");
+    expect(globalCss).toMatch(
+      /\.wow-moment-detail-section--reflection-guide\s*\{[\s\S]*?border:\s*1px solid rgba\(15, 15, 14, 0\.14\);[\s\S]*?background:\s*linear-gradient/,
+    );
   });
 
   it("keeps belief resonance buttons local, selected, and explicitly unsaved", () => {
@@ -1310,8 +1347,8 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("Reflection prompt");
   });
 
-  it("opens a dev-only inspection panel with bounded allowlisted generated fields", () => {
-    const moments = Array.from({ length: 10 }, (_, index) => ({
+  function devInspectionMoments(): ApiWowMoment[] {
+    return Array.from({ length: 10 }, (_, index) => ({
       ...sampleMoment,
       id: `moment-${index + 1}`,
       title: `WOW card ${index + 1}`,
@@ -1331,6 +1368,10 @@ describe("WowMomentsSection", () => {
         },
       ],
     }));
+  }
+
+  it("opens a dev-only inspection panel with bounded allowlisted generated fields", () => {
+    const moments = devInspectionMoments();
     const container = renderInteractiveSection({
       moments,
       loading: false,
@@ -1366,7 +1407,7 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("Reflection prompt");
     expect(dialog?.textContent).toContain("What would make this bridge testable this week?");
     expect(dialog?.textContent).toContain("Compact counts");
-    expect(dialog?.textContent).toContain("1 source");
+    expect(dialog?.textContent).toContain("1 source; 4 generated fields present");
     expect(dialog?.textContent).not.toContain("DEV WOW score 81");
     expect(dialog?.textContent).not.toContain("DEV WOW score");
     expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
@@ -1385,5 +1426,55 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).not.toContain("inspiration-10");
     expect(dialog?.textContent).not.toContain("moment-10");
     expect(inspectButton?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("localizes the dev-only inspection surface for Korean without translating generated content", () => {
+    const moments = devInspectionMoments();
+    const container = renderInteractiveSection({
+      moments,
+      loading: false,
+      error: null,
+      showDevInspection: true,
+      locale: "ko-KR",
+    });
+
+    expect(container.textContent).toContain("9개의 최근 핵심 미러 순간이 표시됨.");
+    expect(container.textContent).toContain("개발 전용 WOW 필드 점검 (10)");
+    expect(container.textContent).toContain("WOW card 9");
+    expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
+    expect(container.textContent).not.toContain("Generated field previews");
+    expect(container.textContent).not.toContain("WOW card 10");
+
+    const inspectButton = container.querySelector<HTMLButtonElement>(".wow-moments-inspect-button");
+    expect(inspectButton).not.toBeNull();
+
+    act(() => {
+      inspectButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialog = container.querySelector<HTMLElement>("#dev-wow-inspection-panel[role='dialog']");
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain("임시 내부 점검");
+    expect(dialog?.textContent).toContain("생성 필드 미리보기");
+    expect(dialog?.textContent).toContain("실시간 내부 테스트를 위한 안전하고 제한된 생성 필드 미리보기입니다.");
+    expect(dialog?.textContent).toContain("제목 / 헤드라인");
+    expect(dialog?.textContent).toContain("의미 / 설명 문구");
+    expect(dialog?.textContent).toContain("믿음 문장");
+    expect(dialog?.textContent).toContain("회고 질문");
+    expect(dialog?.textContent).toContain("간단 집계");
+    expect(dialog?.textContent).toContain("1개 출처; 생성 필드 4개 있음");
+    expect(dialog?.textContent).toContain("출처 역할 / 이유");
+    expect(dialog?.textContent).toContain("출처 영감");
+    expect(dialog?.textContent).toContain("이 출처가 중요한 이유");
+    expect(dialog?.textContent).toContain("WOW card 10");
+    expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
+    expect(dialog?.textContent).toContain("You may believe small tests make ideas safer to approach.");
+    expect(dialog?.textContent).toContain("Related inspiration evidence 10");
+    expect(dialog?.textContent).not.toContain("Temporary internal inspection");
+    expect(dialog?.textContent).not.toContain("Title / headline");
+    expect(dialog?.textContent).not.toContain("Source inspiration");
+    expect(dialog?.textContent).not.toContain("Why this source matters");
+    expect(dialog?.textContent).not.toContain("classifier score uuid rank 2026-05-01");
+    expect(dialog?.textContent).not.toContain("runtimeCandidateScore");
   });
 });

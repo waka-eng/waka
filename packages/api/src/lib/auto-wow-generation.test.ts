@@ -51,12 +51,16 @@ describe("generateAutoWowMomentForInspiration", () => {
       ensureEmbedding,
       judgeWowMoment,
       persistJudgment,
+      locale: "ko-KR",
     });
 
     expect(result.status).toBe("generated");
     expect(result.generated).toBe(true);
+    expect(judgeWowMoment).toHaveBeenCalledWith(
+      expect.objectContaining({ db, userId, triggerInspirationId: inspirationId, limit: 10, locale: "ko-KR" }),
+    );
     expect(persistJudgment).toHaveBeenCalledWith(
-      expect.objectContaining({ db, userId, triggerInspirationId: inspirationId, judgment, limit: 10 }),
+      expect.objectContaining({ db, userId, triggerInspirationId: inspirationId, judgment, limit: 10, locale: "ko-KR" }),
     );
   });
 
@@ -82,6 +86,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       inspirationId,
       ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
       judgeWowMoment: vi.fn().mockResolvedValue(judgment),
+      locale: "en-US",
       persistJudgment: vi.fn().mockResolvedValue({
         persisted: true,
         status: "existing",
@@ -106,6 +111,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
       judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." }),
       persistJudgment,
+      locale: "en-US",
     });
 
     expect(result).toMatchObject({
@@ -126,6 +132,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       ensureEmbedding: vi.fn().mockResolvedValue(unchangedEmbeddingResult()),
       judgeWowMoment: vi.fn().mockResolvedValue({ isWowMoment: false, reason: "generic_similarity", debugSummary: "Only a generic topical overlap was found." }),
       persistJudgment,
+      locale: "en-US",
     });
 
     expect(result.status).toBe("not_wow");

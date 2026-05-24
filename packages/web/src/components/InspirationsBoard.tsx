@@ -244,6 +244,7 @@ export interface InspirationsBoardProps {
    * opened/focused immediately after the board mounts or re-renders.
    */
   autoFocusCaptureRequest?: number;
+
   /** Current UI locale for shared shell copy. */
   locale?: SupportedLocale;
   /** Called when the shared header language selector changes. */
@@ -551,6 +552,7 @@ export function InspirationsBoard({
       onOptimisticAdd={onOptimisticAdd}
       onPersisted={handlePersisted}
       onPersistError={onPersistError}
+      locale={locale}
     />
   );
 

@@ -131,6 +131,7 @@ describe("GeminiWowJudgeClient", () => {
         why: "Both notes point at shared memory infrastructure in physical places.",
         beliefStatement: "You may believe shared memory should live in community places.",
         reflectionQuestion: "What other civic spaces behave like memory systems?",
+        reflectionGuide: "Start here\nNotice the civic place and the ecological place without rushing to make them useful.\n\nWhat this might be touching\nYou may be drawn to memory that communities can tend together.\n\nQuestions to sit with\n- Where does shared memory feel most alive for you?",
         relatedInspirationIds: [triggerId, candidateId],
         sourceEvidence: [
           {
@@ -177,6 +178,7 @@ describe("GeminiWowJudgeClient", () => {
       why: "Both notes point at shared memory infrastructure in physical places.",
       beliefStatement: "You may believe shared memory should live in community places.",
       reflectionQuestion: "What other civic spaces behave like memory systems?",
+      reflectionGuide: "Start here\nNotice the civic place and the ecological place without rushing to make them useful.\n\nWhat this might be touching\nYou may be drawn to memory that communities can tend together.\n\nQuestions to sit with\n- Where does shared memory feel most alive for you?",
       relatedInspirationIds: [triggerId, candidateId],
       sourceEvidence: [
         {
@@ -669,6 +671,79 @@ describe("GeminiWowJudgeClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("accepts natural Korean soft belief statements for Korean judgments", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000061";
+    const candidateId = "00000000-0000-4000-8000-000000000062";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "공동의 기억",
+        why: "두 노트 모두 장소와 공동체 기억을 연결합니다.",
+        beliefStatement: "당신은 공동체가 함께 돌보는 기억을 중요하게 여기는 듯합니다.",
+        relatedInspirationIds: [triggerId, candidateId],
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "장소의 기억",
+            reason: "동네 기억을 살리는 공간을 보여줍니다.",
+          },
+          {
+            inspirationId: candidateId,
+            role: "공동체의 보존",
+            reason: "공동체가 생태 기억을 지키는 방식을 보탭니다.",
+          },
+        ],
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment({ ...wowJudgeInputWithCandidate(triggerId, candidateId), locale: "ko-KR" }),
+    ).resolves.toMatchObject({
+      isWowMoment: true,
+      beliefStatement: "당신은 공동체가 함께 돌보는 기억을 중요하게 여기는 듯합니다.",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects Korean belief statements that make hard direct claims", async () => {
+    const triggerId = "00000000-0000-4000-8000-000000000061";
+    const candidateId = "00000000-0000-4000-8000-000000000062";
+    const fetchMock = vi.fn().mockResolvedValue(
+      geminiJsonResponse({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "공동의 기억",
+        why: "두 노트 모두 장소와 공동체 기억을 연결합니다.",
+        beliefStatement: "당신은 공동체 기억을 반드시 지키는 사람입니다.",
+        relatedInspirationIds: [triggerId, candidateId],
+        sourceEvidence: [
+          {
+            inspirationId: triggerId,
+            role: "장소의 기억",
+            reason: "동네 기억을 살리는 공간을 보여줍니다.",
+          },
+          {
+            inspirationId: candidateId,
+            role: "공동체의 보존",
+            reason: "공동체가 생태 기억을 지키는 방식을 보탭니다.",
+          },
+        ],
+      }),
+    );
+    const client = new GeminiWowJudgeClient({ apiKey: "test-key", fetchFn: fetchMock });
+
+    await expect(
+      client.judgeWowMoment({ ...wowJudgeInputWithCandidate(triggerId, candidateId), locale: "ko-KR" }),
+    ).resolves.toMatchObject({
+      isWowMoment: false,
+      reason: "invalid_judge_json",
+      schemaIssueSummary: expect.stringContaining("beliefStatement"),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects fallback true judgments with UUID-containing belief statements", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       geminiJsonResponse({
@@ -1031,14 +1106,14 @@ describe("GeminiWowJudgeClient", () => {
     });
   });
 
-  it("uses Gemini 2.5 Flash, disables thinking, main 1024 tokens, and repair 512 tokens", () => {
+  it("uses Gemini 2.5 Flash, disables thinking, main 1536 tokens, and repair 512 tokens", () => {
     expect(buildWowGenerateContentUrl()).toContain("gemini-2.5-flash");
     const mainRequest = buildWowJudgmentRequest(minimalWowJudgeInput());
     const repairRequest = buildWowRepairJudgmentRequest("malformed");
 
     expect(mainRequest.generationConfig).toMatchObject({
       temperature: 0,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 1536,
       thinkingConfig: { thinkingBudget: 0 },
     });
     expect(repairRequest.generationConfig).toMatchObject({
@@ -1103,6 +1178,7 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("TRIGGER_TEXT_INCLUDED");
     expect(requestText).toContain("TOP_CANDIDATE_INCLUDED");
     expect(requestText).toContain("Return raw JSON only");
+    expect(userPrompt.locale).toMatchObject({ requestedLocale: "en-US" });
     expect(requestText).toContain("no markdown fences");
     expect(requestText).toContain("12 words or fewer");
     expect(requestText).toContain("why should explain the connection without ids");
@@ -1112,6 +1188,10 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("ids belong only in");
     expect(requestText).toContain("values/beliefs/identity");
     expect(requestText).toContain("beliefStatement");
+    expect(requestText).toContain("one plain-text JSON string");
+    expect(requestText).toContain("3-4 short sections");
+    expect(requestText).toContain("Questions to sit with");
+    expect(requestText).toContain("천천히 머물 질문");
     expect(requestText).toContain("sourceEvidence");
     expect(requestText).toContain("product-facing role label");
     expect(requestText).toContain("not primary/supporting/contrast/related");
@@ -1123,6 +1203,7 @@ describe("GeminiWowJudgeClient", () => {
     expect(trueSchema).toMatchObject({
       properties: expect.objectContaining({
         beliefStatement: { type: "STRING" },
+        reflectionGuide: { type: "STRING" },
         sourceEvidence: expect.objectContaining({ type: "ARRAY" }),
       }),
       required: expect.arrayContaining(["sourceEvidence"]),
@@ -1135,7 +1216,7 @@ describe("GeminiWowJudgeClient", () => {
       }),
     );
     expect(request.generationConfig.maxOutputTokens).toBeGreaterThan(0);
-    expect(request.generationConfig.maxOutputTokens).toBe(1024);
+    expect(request.generationConfig.maxOutputTokens).toBe(1536);
     expect(MAX_WOW_MOMENT_SOURCE_LINKS).toBe(3);
     expect(requestText).toContain("2 to 3 inspirations total");
     expect(requestText).toContain("trigger first");
@@ -1147,6 +1228,23 @@ describe("GeminiWowJudgeClient", () => {
     expect(userPrompt.candidates[0].untrustedUserContent).toBe(
       delimiterLikeUserContent,
     );
+  });
+
+  it("threads the requested locale into main and repair prompts", () => {
+    const input = { ...wowJudgeInputWithCandidate(), locale: "ko-KR" as const };
+    const mainRequest = buildWowJudgmentRequest(input);
+    const repairRequest = buildWowRepairJudgmentRequest("{bad json", input);
+    const mainPrompt = JSON.parse(mainRequest.contents[0]?.parts[0]?.text ?? "{}");
+    const repairPrompt = JSON.parse(repairRequest.contents[0]?.parts[0]?.text ?? "{}");
+
+    expect(mainPrompt.locale).toMatchObject({
+      requestedLocale: "ko-KR",
+      instruction: expect.stringContaining("natural Korean"),
+    });
+    expect(repairPrompt.locale).toMatchObject({
+      requestedLocale: "ko-KR",
+      instruction: expect.stringContaining("natural Korean"),
+    });
   });
 });
 
@@ -1205,8 +1303,10 @@ describe("judgeWowMomentForInspiration", () => {
       triggerInspirationId: trigger.id,
       limit: 5,
       client,
+      locale: "ko-KR",
     });
 
+    expect(client.judgeWowMoment).toHaveBeenCalledWith(expect.objectContaining({ locale: "ko-KR" }));
     expect(result).toEqual({
       isWowMoment: true,
       kind: "surprise_bridge",
@@ -1231,6 +1331,7 @@ describe("judgeWowMomentForInspiration", () => {
       expect.objectContaining({
         trigger: expect.objectContaining({ id: trigger.id }),
         candidates: [expect.objectContaining({ id: candidate.id })],
+        locale: "ko-KR",
       }),
     );
     expect(await countWowMoments(testDb)).toBe(0);
@@ -1324,12 +1425,14 @@ describe("judgeWowMomentForInspiration", () => {
       userId: alice.user.id,
       triggerInspirationId: trigger.id,
       limit: 5,
+      locale: "ko-KR",
       judgment: {
         isWowMoment: true,
         kind: "bridge",
         title: "Community Memory Infrastructure",
         why: longWhy,
         beliefStatement: "api_key=secret123456789 You may believe shared memory should remain humane and community-owned even when systems scale. " + "x".repeat(260),
+        reflectionGuide: "Start here\r\n  Notice the civic example and ecological one.   \n\n\nQuestions to sit with\n- What feels worth protecting? token=secret987654321",
         relatedInspirationIds: [candidate.id, candidate.id],
         sourceEvidence: [
           {
@@ -1348,10 +1451,14 @@ describe("judgeWowMomentForInspiration", () => {
 
     expect(result.persisted).toBe(true);
     expect(result.persisted && result.status).toBe("created");
+    expect(result.persisted && result.wowMoment.locale).toBe("ko-KR");
     expect(result.persisted && result.wowMoment.why).toBe(longWhy);
     expect(result.persisted && result.wowMoment.why.endsWith("…")).toBe(false);
     expect(result.persisted && result.wowMoment.beliefStatement).toBe(
       "api_key=[REDACTED] You may believe shared memory should remain humane and community-owned even when systems scale.",
+    );
+    expect(result.persisted && result.wowMoment.reflectionGuide).toBe(
+      "Start here\nNotice the civic example and ecological one.\n\nQuestions to sit with\n- What feels worth protecting? token=[REDACTED]",
     );
     expect(await countWowMoments(testDb)).toBe(1);
     expect(await countWowMomentLinks(testDb)).toBe(2);

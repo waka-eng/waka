@@ -53,6 +53,7 @@ interface ApiWowMoment {
   why: string;
   beliefStatement: string | null;
   reflectionQuestion: string | null;
+  reflectionGuide: string | null;
   wowScore: number;
   createdAt: string;
   updatedAt: string;
@@ -79,6 +80,7 @@ async function insertWowMomentForUser(
     wowScore?: number;
     idempotencyKey: string;
     beliefStatement?: string | null;
+    reflectionGuide?: string | null;
   },
 ): Promise<{ id: string }> {
   const [moment] = await getDb()
@@ -90,6 +92,7 @@ async function insertWowMomentForUser(
       why: `${input.title} why`,
       beliefStatement: input.beliefStatement ?? null,
       reflectionQuestion: null,
+      reflectionGuide: input.reflectionGuide ?? null,
       wowScore: input.wowScore ?? 50,
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
@@ -149,7 +152,7 @@ describe("GET /api/wow-moments — list contract", () => {
   });
 
 
-  it("returns persisted belief statements and safely includes null for legacy rows", async () => {
+  it("returns persisted belief statements and reflection guides while safely including null for legacy rows", async () => {
     const db = getDb();
     const alice = await createUserFixture(db);
     cleanup.trackUser(alice.user.id);
@@ -160,6 +163,7 @@ describe("GET /api/wow-moments — list contract", () => {
       wowScore: 90,
       idempotencyKey: `test:wow-moments:belief:${alice.user.id}:new`,
       beliefStatement: "You may believe progress should feel humane, not pressurized.",
+      reflectionGuide: "Name the humane part, then choose one small next experiment.",
     });
     await insertWowMomentForUser(alice.user.id, {
       title: "Legacy WOW",
@@ -174,9 +178,19 @@ describe("GET /api/wow-moments — list contract", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.body.wowMoments.map((moment) => ({ title: moment.title, beliefStatement: moment.beliefStatement }))).toEqual([
-      { title: "Belief-backed WOW", beliefStatement: "You may believe progress should feel humane, not pressurized." },
-      { title: "Legacy WOW", beliefStatement: null },
+    expect(
+      res.body.wowMoments.map((moment) => ({
+        title: moment.title,
+        beliefStatement: moment.beliefStatement,
+        reflectionGuide: moment.reflectionGuide,
+      })),
+    ).toEqual([
+      {
+        title: "Belief-backed WOW",
+        beliefStatement: "You may believe progress should feel humane, not pressurized.",
+        reflectionGuide: "Name the humane part, then choose one small next experiment.",
+      },
+      { title: "Legacy WOW", beliefStatement: null, reflectionGuide: null },
     ]);
   });
 

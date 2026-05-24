@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequireAuth } from "../src/components/RequireAuth";
-import { fetchCurrentUser, login } from "../src/lib/api";
+import { fetchCurrentUser, login, updateAuthPreferences } from "../src/lib/api";
 import {
   AuthProvider,
   useAuth,
@@ -22,6 +22,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     login: vi.fn(),
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),
+    updateAuthPreferences: vi.fn(),
   };
 });
 
@@ -34,6 +35,7 @@ const cachedUser = {
   id: "cached-user",
   email: "cached@example.com",
   name: "Cached User",
+  preferredLocale: "en-US" as const,
 };
 
 let mountedRoot: Root | null = null;
@@ -61,6 +63,7 @@ beforeEach(() => {
   installMemoryLocalStorage();
   vi.mocked(fetchCurrentUser).mockReset();
   vi.mocked(login).mockReset();
+  vi.mocked(updateAuthPreferences).mockReset();
   latestAuth = null;
 });
 
@@ -188,6 +191,7 @@ describe("auth boundary", () => {
         id: "fresh-user",
         email: "fresh@example.com",
         name: "Fresh User",
+        preferredLocale: "en-US",
       },
     });
 
@@ -213,6 +217,38 @@ describe("auth boundary", () => {
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}")).toMatchObject({
       id: "fresh-user",
       email: "fresh@example.com",
+    });
+  });
+
+  it("persists locale preference updates through auth state and localStorage", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue({
+      id: "fresh-user",
+      email: "fresh@example.com",
+      name: "Fresh User",
+      preferredLocale: "en-US",
+    });
+    vi.mocked(updateAuthPreferences).mockResolvedValue({
+      user: {
+        id: "fresh-user",
+        email: "fresh@example.com",
+        name: "Fresh User",
+        preferredLocale: "ko-KR",
+      },
+    });
+
+    await renderAuthRoutes({
+      initialPath: "/login",
+      loginElement: createElement(LoginActionProbe),
+    });
+    if (!latestAuth) throw new Error("LoginActionProbe did not capture auth context");
+    await act(async () => {
+      await latestAuth.updatePreferredLocale("ko-KR");
+    });
+
+    expect(updateAuthPreferences).toHaveBeenCalledWith({ preferredLocale: "ko-KR" });
+    expect(latestAuth.user?.preferredLocale).toBe("ko-KR");
+    expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}")).toMatchObject({
+      preferredLocale: "ko-KR",
     });
   });
 });
