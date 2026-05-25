@@ -16,6 +16,7 @@ import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
 import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { topOfMindRoutes } from "./routes/top-of-mind.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
 import { wowStatusRoutes } from "./routes/wow-status.js";
 
@@ -47,6 +48,9 @@ app.route("/api/admin/top-of-mind-preview", adminTopOfMindPreviewRoutes);
 // Every handler in this router requires a valid session — the router
 // applies `requireAuth` at the mount point.
 app.route("/api/inspirations", inspirationsRoutes);
+
+// User-facing reading of the current meaning graph.
+app.route("/api/top-of-mind", topOfMindRoutes);
 
 // Attachments routes (presigned uploads, ...) live under /api/attachments.
 // The router applies `requireAuth` at the mount point, so no anonymous

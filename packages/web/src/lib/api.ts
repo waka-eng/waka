@@ -978,6 +978,56 @@ export async function rebuildMeaningGraph(): Promise<{
   return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to rebuild meaning graph");
 }
 
+export interface ApiTopOfMindSupportingInspiration {
+  id: string;
+  preview: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface ApiTopOfMindSignal {
+  nodeId: string;
+  label: string;
+  type: string;
+  reason: string;
+  evidenceCount: number;
+  lastReinforcedAt: string;
+  supportingInspirations: ApiTopOfMindSupportingInspiration[];
+}
+
+export interface ApiTopOfMindRelationshipSignal {
+  edgeId: string;
+  kind: string;
+  sourceNodeId: string;
+  sourceLabel: string;
+  targetNodeId: string;
+  targetLabel: string;
+  reason: string;
+  evidenceCount: number;
+  lastReinforcedAt: string;
+}
+
+export interface ApiTopOfMind {
+  generatedAt: string;
+  headline: string;
+  activeThemes: ApiTopOfMindSignal[];
+  activeQuestions: ApiTopOfMindSignal[];
+  relationshipSignals: ApiTopOfMindRelationshipSignal[];
+  summary: {
+    inspirationCount: number;
+    meaningNoteCount: number;
+    relationshipEdgeCount: number;
+  };
+}
+
+export async function fetchTopOfMind(): Promise<ApiTopOfMind> {
+  const body = await getJson<{ topOfMind: ApiTopOfMind }>(
+    apiPath("/top-of-mind"),
+    "Failed to load top of mind",
+  );
+  return body.topOfMind;
+}
+
 // ---------------------------------------------------------------------------
 // Attachments
 // ---------------------------------------------------------------------------
