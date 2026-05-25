@@ -98,7 +98,10 @@ interface InternalEntryEnv {
 }
 
 function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
-  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true";
+  const hostname =
+    typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true" || isLocalhost;
 }
 
 /**
