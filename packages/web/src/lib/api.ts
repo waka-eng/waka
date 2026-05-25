@@ -893,26 +893,87 @@ export interface ApiMeaningGraphEdge {
   updatedAt: string;
 }
 
+export interface ApiMeaningGraphRecentInspiration {
+  id: string;
+  preview: string;
+  cluster: ClusterKind | null;
+  createdAt: string;
+  packetCreatedAt: string | null;
+  meaningNotes: Array<{
+    id: string;
+    label: string;
+    type: string;
+    reason: string;
+  }>;
+  relationshipEdges: Array<{
+    id: string;
+    kind: string;
+    sourceNodeId: string;
+    sourceLabel: string;
+    targetNodeId: string;
+    targetLabel: string;
+  }>;
+}
+
+export type ApiMeaningGraphHealthStatus =
+  | "no_data"
+  | "writer_failed"
+  | "sparse"
+  | "stale"
+  | "healthy";
+
+export interface ApiMeaningGraphHealthWarning {
+  type: ApiMeaningGraphHealthStatus | "no_packets";
+  message: string;
+}
+
+export interface ApiMeaningGraphHealth {
+  inspirationCount: number;
+  packetCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  evidenceCount: number;
+  inspirationsWithoutPackets: number;
+  nodesWithoutEvidence: number;
+  edgeDensity: number;
+  status: ApiMeaningGraphHealthStatus;
+  warnings: ApiMeaningGraphHealthWarning[];
+}
+
 export interface ApiMeaningGraph {
   nodes: ApiMeaningGraphNode[];
   edges: ApiMeaningGraphEdge[];
+  recentInspirations: ApiMeaningGraphRecentInspiration[];
   meta: {
     nodeCount: number;
     edgeCount: number;
     evidenceCount: number;
     limit: number;
-    rebuilt?: boolean;
+    health: ApiMeaningGraphHealth;
   };
 }
 
-export async function fetchMeaningGraph(limit = 120, rebuild = false): Promise<ApiMeaningGraph> {
+export interface ApiMeaningGraphRebuildResult {
+  inspirations: number;
+  nodesTouched: number;
+  evidenceTouched: number;
+  edgesTouched: number;
+}
+
+export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
   const params = new URLSearchParams({ limit: String(limit) });
-  if (rebuild) params.set("rebuild", "1");
   const body = await getJson<{ graph: ApiMeaningGraph }>(
     apiPath(`/admin/meaning-graph?${params.toString()}`),
     "Failed to load meaning graph",
   );
-  return body.graph ?? { nodes: [], edges: [], meta: { nodeCount: 0, edgeCount: 0, evidenceCount: 0, limit } };
+  return body.graph;
+}
+
+export async function rebuildMeaningGraph(): Promise<{
+  rebuild: ApiMeaningGraphRebuildResult;
+  health: ApiMeaningGraphHealth;
+}> {
+  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to rebuild meaning graph");
 }
 
 // ---------------------------------------------------------------------------

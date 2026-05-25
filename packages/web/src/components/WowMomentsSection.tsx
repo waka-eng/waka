@@ -6,7 +6,6 @@ import type { ApiWowMoment } from "../lib/api";
 import {
   DEFAULT_LOCALE,
   formatBestRecentMirrorMoments,
-  formatGeneratedFieldCounts,
   t,
   type SupportedLocale,
 } from "../lib/locales";
@@ -15,7 +14,6 @@ const MAX_VISIBLE_WOW_MOMENTS = 9;
 const MAX_BELIEF_EXCERPT_LENGTH = 72;
 const MAX_WOW_LEAD_LENGTH = 180;
 const MAX_PATTERN_CHUNK_LENGTH = 240;
-const MAX_DEV_INSPECTION_PREVIEW_LENGTH = 180;
 const SOURCE_FALLBACK_LABEL = "Source inspiration";
 const SOURCE_FALLBACK_REASON = "Why this source matters";
 const SOURCE_FALLBACK_TEXT = "a source inspiration";
@@ -213,33 +211,8 @@ function buildPatternReport(value: string | null | undefined): { lead: string; b
   return { lead: "", bodyChunks: buildPatternChunks(normalized) };
 }
 
-function boundedInspectionPreview(value: string | null | undefined, fallback = "Not generated"): string {
-  const normalized = normalizeReportText(value);
-  if (!normalized) return fallback;
-  if (/\b(prompt|secret|token|provider payload|db_connection_url|connection string|embedding)\b/i.test(normalized)) {
-    return "[redacted internal value]";
-  }
-  if (normalized.length <= MAX_DEV_INSPECTION_PREVIEW_LENGTH) return normalized;
-
-  const clipped = normalized.slice(0, MAX_DEV_INSPECTION_PREVIEW_LENGTH + 1);
-  const lastSpaceIndex = clipped.lastIndexOf(" ");
-  const preview = (lastSpaceIndex > 80 ? clipped.slice(0, lastSpaceIndex) : normalized.slice(0, MAX_DEV_INSPECTION_PREVIEW_LENGTH)).trim();
-  return `${preview}…`;
-}
-
 function getReflectionGuide(moment: ApiWowMoment): string | null | undefined {
   return (moment as ApiWowMoment & { reflectionGuide?: string | null }).reflectionGuide;
-}
-
-function inspectionFieldCount(moment: ApiWowMoment): number {
-  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion, getReflectionGuide(moment)].filter(
-    (value) => normalizeReportText(value).length > 0,
-  ).length;
-}
-
-
-function devInspectButtonLabel(locale: SupportedLocale, count: number): string {
-  return `${t(locale, "devWowInspectButton")} (${count})`;
 }
 
 function lowerFirstLetter(value: string): string {
@@ -306,7 +279,6 @@ interface WowMomentsSectionProps {
   moments: ApiWowMoment[];
   loading: boolean;
   error: string | null;
-  showDevInspection?: boolean;
   onAddInspiration?: () => void;
   locale?: SupportedLocale;
 }
@@ -315,7 +287,6 @@ export function WowMomentsSection({
   moments,
   loading,
   error,
-  showDevInspection = false,
   onAddInspiration,
   locale = DEFAULT_LOCALE,
 }: WowMomentsSectionProps): JSX.Element {
@@ -327,7 +298,6 @@ export function WowMomentsSection({
   const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
   const [memoryBeliefText, setMemoryBeliefText] = useState("");
   const [expandedSourceReasonIds, setExpandedSourceReasonIds] = useState<Set<string>>(new Set());
-  const [allMomentsOpen, setAllMomentsOpen] = useState(false);
 
   const resetLocalReflectionState = () => {
     setSelectedResonance(null);
@@ -367,19 +337,6 @@ export function WowMomentsSection({
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [selectedMoment]);
-
-  useEffect(() => {
-    if (!allMomentsOpen) return undefined;
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setAllMomentsOpen(false);
-      }
-    };
-
-    document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
-  }, [allMomentsOpen]);
 
   useEffect(() => {
     const selectedWowId = searchParams.get("wow");
@@ -720,17 +677,6 @@ export function WowMomentsSection({
           <p>
             {formatBestRecentMirrorMoments(locale, visibleMoments.length)}
           </p>
-          {showDevInspection ? (
-            <button
-              aria-controls="dev-wow-inspection-panel"
-              aria-expanded={allMomentsOpen}
-              className="wow-moments-inspect-button"
-              onClick={() => setAllMomentsOpen(true)}
-              type="button"
-            >
-              {devInspectButtonLabel(locale, bestRecentMoments.length)}
-            </button>
-          ) : null}
         </div>
       ) : null}
       {error ? (
@@ -798,91 +744,6 @@ export function WowMomentsSection({
             })}
         </div>
       )}
-
-
-      {showDevInspection && allMomentsOpen ? (
-        <div className="wow-moment-detail-backdrop" role="presentation">
-          <aside
-            aria-labelledby="dev-wow-inspection-title"
-            aria-modal="true"
-            className="wow-moment-detail-panel wow-moments-all-panel wow-moments-dev-inspection-panel"
-            id="dev-wow-inspection-panel"
-            role="dialog"
-          >
-            <div className="wow-moment-detail-header">
-              <p className="wow-moment-detail-kicker">{t(locale, "devWowInspectionKicker")}</p>
-              <button
-                className="wow-moment-detail-close"
-                onClick={() => setAllMomentsOpen(false)}
-                type="button"
-              >
-                {t(locale, "devWowInspectionClose")}
-              </button>
-            </div>
-            <h3 id="dev-wow-inspection-title">{t(locale, "devWowInspectionTitle")}</h3>
-            <p className="wow-moments-dev-inspection-note">{t(locale, "devWowInspectionNote")}</p>
-            <ol className="wow-moments-all-list">
-              {bestRecentMoments.map((moment) => (
-                <li className="wow-moments-all-item" key={`all-${moment.id}`}>
-                  <div className="wow-moments-all-item-header">
-                    <strong>{boundedInspectionPreview(moment.title, t(locale, "devWowUntitledMoment"))}</strong>
-                  </div>
-                  <dl className="wow-moments-dev-fields">
-                    <div>
-                      <dt>{t(locale, "devWowFieldTitle")}</dt>
-                      <dd>{boundedInspectionPreview(moment.title, t(locale, "devWowUntitledMoment"))}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(locale, "devWowFieldWhy")}</dt>
-                      <dd>{boundedInspectionPreview(moment.why, t(locale, "devWowFieldNotGenerated"))}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(locale, "devWowFieldBelief")}</dt>
-                      <dd>{boundedInspectionPreview(moment.beliefStatement, t(locale, "devWowFieldNotGenerated"))}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(locale, "devWowFieldReflection")}</dt>
-                      <dd>{boundedInspectionPreview(moment.reflectionQuestion, t(locale, "devWowFieldNotGenerated"))}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(locale, "devWowFieldReflectionGuide")}</dt>
-                      <dd>{boundedInspectionPreview(getReflectionGuide(moment), t(locale, "devWowFieldNotGenerated"))}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(locale, "devWowFieldCompactCounts")}</dt>
-                      <dd>
-                        {formatGeneratedFieldCounts(locale, moment.relatedInspirations.length, inspectionFieldCount(moment))}
-                      </dd>
-                    </div>
-                  </dl>
-                  {moment.relatedInspirations.length > 0 ? (
-                    <ol className="wow-moments-all-sources">
-                      {moment.relatedInspirations.map((related) => (
-                        <li key={`all-${moment.id}-${related.inspirationId}`}>
-                          <span>{t(locale, "devWowSourceRoleReason")}</span>
-                          <blockquote>{boundedInspectionPreview(related.text, t(locale, "devWowFieldNotGenerated"))}</blockquote>
-                          <p className="wow-moment-source-reason">
-                            <span>
-                              {boundedInspectionPreview(
-                                safeSourceRoleLabel(related.role, t(locale, "devWowSourceFallbackLabel")),
-                                t(locale, "devWowSourceFallbackLabel"),
-                              )}
-                            </span>
-                            {boundedInspectionPreview(
-                              safeSourceReason(related.reason, t(locale, "devWowSourceFallbackReason")),
-                              t(locale, "devWowSourceFallbackReason"),
-                            )}
-                          </p>
-                        </li>
-                      ))}
-                    </ol>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          </aside>
-        </div>
-      ) : null}
     </section>
   );
 }

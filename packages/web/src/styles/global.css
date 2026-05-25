@@ -110,9 +110,10 @@
 
 .meaning-graph-page {
   min-height: 100svh;
-  background: #fbfaf7;
-  color: #111;
-  padding: clamp(22px, 4vw, 54px);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  padding: 36px var(--space-8) var(--space-9);
 }
 
 .admin-page {
@@ -320,11 +321,13 @@
 
 .meaning-graph-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 28px;
-  margin: 0 auto 28px;
-  max-width: 1240px;
+  gap: var(--space-6);
+  margin: 0 auto var(--space-7);
+  max-width: 1480px;
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-hairline);
 }
 
 .meaning-graph-header span,
@@ -332,7 +335,7 @@
 .meaning-graph-detail dt,
 .meaning-graph-evidence-list h3,
 .meaning-graph-evidence-list time {
-  color: rgba(17, 17, 17, 0.48);
+  color: var(--muted);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -340,42 +343,51 @@
 }
 
 .meaning-graph-header h1 {
-  max-width: 760px;
-  margin: 8px 0 10px;
-  color: #111;
-  font-size: clamp(42px, 6vw, 84px);
-  font-weight: 500;
-  letter-spacing: -0.055em;
-  line-height: 0.92;
+  max-width: 720px;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 44px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.02;
 }
 
 .meaning-graph-header p {
   max-width: 680px;
-  margin: 0;
-  color: rgba(17, 17, 17, 0.58);
-  font-size: 17px;
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: 15px;
   line-height: 1.45;
 }
 
 .meaning-graph-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   justify-content: flex-end;
 }
 
 .meaning-graph-actions button {
   appearance: none;
-  border: 1px solid rgba(17, 17, 17, 0.14);
+  border: var(--border-hairline);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.5);
-  color: #111;
+  background: transparent;
+  color: var(--muted);
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10px;
-  letter-spacing: 0.1em;
-  padding: 9px 13px;
+  letter-spacing: 0.12em;
+  padding: 7px 14px;
   text-transform: uppercase;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.meaning-graph-actions button:hover:not(:disabled) {
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 .meaning-graph-actions button:disabled {
@@ -384,9 +396,9 @@
 }
 
 .meaning-graph-status {
-  max-width: 1240px;
+  max-width: 1480px;
   margin: 0 auto;
-  color: rgba(17, 17, 17, 0.56);
+  color: var(--muted);
 }
 
 .meaning-graph-status--error {
@@ -394,27 +406,216 @@
 }
 
 .meaning-graph-workbench {
-  max-width: 1240px;
+  max-width: 1480px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(330px, 0.32fr);
-  gap: 18px;
+  gap: var(--space-3);
   align-items: start;
+}
+
+.meaning-graph-health {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1fr);
+  gap: 1px;
+  max-width: 1480px;
+  margin: 0 auto var(--space-7);
+  border: var(--border-hairline);
+  background: var(--line);
+}
+
+.meaning-graph-health-head,
+.meaning-graph-health-grid,
+.meaning-graph-health-warnings {
+  background: var(--cell);
+}
+
+.meaning-graph-health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 74px;
+  padding: var(--space-4) var(--space-5);
+}
+
+.meaning-graph-health-head div {
+  display: grid;
+  gap: 3px;
+}
+
+.meaning-graph-health-head span,
+.meaning-graph-health-grid span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.meaning-graph-health-head strong {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.meaning-graph-health-head p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meaning-graph-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.meaning-graph-health-grid span {
+  display: grid;
+  gap: 5px;
+  min-height: 74px;
+  align-content: center;
+  padding: var(--space-4) var(--space-5);
+  border-left: var(--border-hairline);
+}
+
+.meaning-graph-health-grid strong {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.meaning-graph-health-warnings {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border-hairline);
+}
+
+.meaning-graph-health-warnings p {
+  margin: 0;
+  color: #9f2d20;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.meaning-graph-workbench--flow {
+  grid-template-columns: 1fr;
+}
+
+.meaning-dashboard-section-heading {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-hairline);
+  border-bottom: 0;
+  background: var(--cell);
+}
+
+.meaning-dashboard-section-heading span,
+.meaning-recent-inspiration time,
+.meaning-recent-inspiration-meta span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.meaning-dashboard-section-heading h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+}
+
+.meaning-dashboard-section-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.meaning-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+  gap: 1px;
+  margin: var(--space-7) auto 0;
+  max-width: 1480px;
+  border: var(--border-hairline);
+  background: var(--line);
+}
+
+.meaning-dashboard-graph-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  gap: 1px;
+  max-width: 1480px;
+  margin: 0 auto;
+  border: var(--border-hairline);
+  background: var(--line);
+}
+
+.meaning-dashboard-graph-row .meaning-graph-workbench {
+  max-width: none;
+  margin: 0;
+  background: var(--cell);
+}
+
+.meaning-dashboard-graph-row .meaning-graph-flow-shell {
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.meaning-dashboard-graph-row .meaning-graph-detail {
+  border: 0;
+}
+
+.meaning-dashboard-grid--recent {
+  display: block;
+  grid-template-columns: none;
+}
+
+.meaning-dashboard-panel {
+  border: 0;
+  border-radius: 0;
+  background: var(--cell);
+  box-shadow: none;
+  padding: var(--space-5);
 }
 
 .meaning-graph-detail,
 .meaning-graph-flow-shell {
-  border: 1px solid rgba(17, 17, 17, 0.1);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.48);
-  box-shadow: 0 18px 54px rgba(17, 17, 17, 0.04);
+  border: var(--border-hairline);
+  border-radius: 0;
+  background: var(--cell);
+  box-shadow: none;
 }
 
 .meaning-graph-flow-shell {
-  height: min(72vh, 760px);
-  min-height: 620px;
+  height: min(58vh, 620px);
+  min-height: 460px;
   overflow: hidden;
-  background: #fafaf7;
+  background: var(--cell);
+}
+
+.meaning-graph-flow-shell .react-flow {
+  background: var(--cell);
+}
+
+.meaning-graph-flow-shell .react-flow__pane {
+  background: #fff;
 }
 
 .meaning-graph-flow-shell .react-flow__pane {
@@ -431,12 +632,10 @@
   flex-direction: column;
   justify-content: space-between;
   gap: 6px;
-  border: 1px solid rgba(17, 17, 17, 0.16);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 1px 0 rgba(17, 17, 17, 0.04),
-    0 9px 24px rgba(17, 17, 17, 0.07);
+  border: var(--border-hairline);
+  border-radius: 0;
+  background: #fffdf7;
+  box-shadow: none;
   cursor: grab;
   padding: 11px 13px;
   transition:
@@ -451,15 +650,14 @@
 
 .react-flow__node.dragging .meaning-flow-node {
   box-shadow:
-    0 0 0 4px rgba(17, 17, 17, 0.08),
-    0 16px 34px rgba(17, 17, 17, 0.14);
+    0 0 0 3px rgba(15, 15, 14, 0.08),
+    0 12px 26px rgba(15, 15, 14, 0.12);
 }
 
 .meaning-flow-node[data-focus] {
-  border-width: 2px;
-  box-shadow:
-    0 0 0 4px rgba(17, 17, 17, 0.06),
-    0 12px 28px rgba(17, 17, 17, 0.1);
+  border-color: var(--ink);
+  border-width: 1px;
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
 .meaning-flow-node[data-fade] {
@@ -478,11 +676,12 @@
 .meaning-flow-node-label {
   display: -webkit-box;
   margin: 0;
-  color: #111;
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  line-height: 1.16;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.12;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -493,29 +692,29 @@
 }
 
 .floating-edge-label {
-  box-shadow: 0 6px 20px rgba(15, 15, 14, 0.08);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .meaning-graph-detail {
-  position: sticky;
-  top: 18px;
   display: grid;
-  gap: 16px;
-  padding: 18px;
+  gap: var(--space-4);
 }
 
 .meaning-graph-detail h2 {
   margin: 0;
-  color: #111;
-  font-size: clamp(26px, 3vw, 38px);
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  line-height: 1;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 25px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
 }
 
 .meaning-graph-detail p {
   margin: 0;
-  color: rgba(17, 17, 17, 0.62);
+  color: rgba(15, 15, 14, 0.72);
+  font-size: 14px;
   line-height: 1.45;
 }
 
@@ -527,19 +726,21 @@
 }
 
 .meaning-graph-detail dl div {
-  border-top: 1px solid rgba(17, 17, 17, 0.1);
-  padding-top: 8px;
+  border-top: var(--border-hairline);
+  padding-top: var(--space-2);
 }
 
 .meaning-graph-detail dd {
   margin: 4px 0 0;
-  color: #111;
+  color: var(--ink);
   font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 
 .meaning-graph-evidence-list {
   display: grid;
-  gap: 10px;
+  gap: var(--space-3);
 }
 
 .meaning-graph-evidence-list h3 {
@@ -548,21 +749,23 @@
 
 .meaning-graph-evidence-list article {
   display: grid;
-  gap: 7px;
-  border-top: 1px solid rgba(17, 17, 17, 0.1);
-  padding-top: 12px;
+  gap: var(--space-2);
+  border-top: var(--border-hairline);
+  padding-top: var(--space-3);
 }
 
 .meaning-graph-evidence-list blockquote {
   margin: 0;
-  color: #111;
-  font-family: var(--font-serif, Georgia, "Times New Roman", serif);
-  font-size: 18px;
-  line-height: 1.25;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.32;
 }
 
 .meaning-graph-evidence-list p {
-  font-size: 12px;
+  color: rgba(17, 17, 17, 0.66);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .meaning-graph-empty {
@@ -576,22 +779,574 @@
   color: rgba(17, 17, 17, 0.56);
 }
 
+.meaning-recent-feed {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.meaning-recent-feed .meaning-dashboard-section-heading {
+  margin: calc(var(--space-5) * -1) calc(var(--space-5) * -1) 0;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+}
+
+.meaning-recent-inspiration-list {
+  display: grid;
+  gap: 1px;
+  max-height: 520px;
+  overflow: auto;
+  background: var(--line);
+  border: var(--border-hairline);
+  padding-right: 0;
+}
+
+.meaning-recent-inspiration {
+  display: grid;
+  gap: var(--space-2);
+  border-top: 0;
+  background: var(--cell);
+  padding: var(--space-3) var(--space-4);
+}
+
+.meaning-recent-inspiration:first-child {
+  padding-top: var(--space-3);
+}
+
+.meaning-recent-inspiration blockquote {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.meaning-recent-inspiration-meta {
+  display: grid;
+  gap: 5px;
+}
+
+.meaning-recent-inspiration-meta span {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+}
+
 @media (max-width: 860px) {
-  .meaning-graph-header,
-  .meaning-graph-workbench {
-    grid-template-columns: 1fr;
+  .meaning-graph-page {
+    padding: var(--space-5) var(--space-4) var(--space-8);
   }
+
+.meaning-graph-header,
+.meaning-graph-workbench,
+.meaning-dashboard-graph-row,
+.meaning-dashboard-grid {
+  grid-template-columns: 1fr;
+}
 
   .meaning-graph-header {
     display: grid;
+    margin-bottom: var(--space-5);
+  }
+
+  .meaning-graph-health,
+  .meaning-graph-health-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .meaning-graph-health {
+    margin-bottom: var(--space-5);
+  }
+
+  .meaning-graph-health-grid span {
+    border-left: 0;
+    border-top: var(--border-hairline);
   }
 
   .meaning-graph-actions {
     justify-content: flex-start;
   }
 
-  .meaning-graph-detail {
-    position: static;
+  .meaning-recent-inspiration-list {
+    max-height: none;
+  }
+}
+
+/* Stark admin dashboard system: black/white, sans-serif, no product flourish. */
+.meaning-graph-page {
+  background: #fff;
+  color: #000;
+  font-family: var(--font-sans);
+  padding: 28px 32px 40px;
+}
+
+.meaning-graph-header {
+  gap: 24px;
+  margin: 0 auto 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #000;
+  width: 100%;
+}
+
+.meaning-graph-header span,
+.meaning-graph-detail > span,
+.meaning-graph-detail dt,
+.meaning-graph-evidence-list h3,
+.meaning-graph-evidence-list time,
+.meaning-dashboard-section-heading span,
+.meaning-recent-inspiration time,
+.meaning-recent-inspiration-meta span,
+.meaning-graph-health-head span,
+.meaning-graph-health-grid span {
+  color: #000;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meaning-graph-header h1,
+.meaning-dashboard-section-heading h2,
+.meaning-graph-detail h2,
+.meaning-flow-node-label,
+.meaning-graph-evidence-list blockquote,
+.meaning-recent-inspiration blockquote,
+.meaning-graph-health-head strong,
+.meaning-graph-health-grid strong {
+  color: #000;
+  font-family: var(--font-sans);
+  font-style: normal;
+  letter-spacing: 0;
+}
+
+.meaning-graph-header h1 {
+  font-size: 38px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.meaning-graph-header p,
+.meaning-dashboard-section-heading p,
+.meaning-graph-detail p,
+.meaning-graph-evidence-list p {
+  color: #333;
+}
+
+.meaning-graph-actions button {
+  border: 1px solid #000;
+  border-radius: 0;
+  color: #000;
+  letter-spacing: 0.08em;
+  padding: 7px 10px;
+}
+
+.meaning-graph-actions button:hover:not(:disabled) {
+  background: #000;
+  border-color: #000;
+  color: #fff;
+}
+
+.meaning-graph-health,
+.meaning-dashboard-graph-row,
+.meaning-dashboard-grid,
+.meaning-recent-inspiration-list {
+  border: 1px solid #000;
+  background: #000;
+}
+
+.meaning-graph-health {
+  margin-bottom: 20px;
+}
+
+.meaning-graph-health-head,
+.meaning-graph-health-grid,
+.meaning-graph-health-warnings,
+.meaning-dashboard-panel,
+.meaning-dashboard-section-heading,
+.meaning-graph-detail,
+.meaning-graph-flow-shell,
+.meaning-recent-inspiration {
+  background: #fff;
+}
+
+.meaning-graph-health-head {
+  min-height: 64px;
+  padding: 12px 14px;
+}
+
+.meaning-graph-health-head strong {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.meaning-graph-health-grid span {
+  min-height: 64px;
+  padding: 12px 14px;
+  border-left: 1px solid #000;
+}
+
+.meaning-graph-health-grid strong {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.meaning-graph-health-warnings {
+  border-top: 1px solid #000;
+  padding: 10px 14px;
+}
+
+.meaning-graph-workbench {
+  gap: 0;
+}
+
+.meaning-dashboard-section-heading {
+  padding: 12px 14px;
+  border: 1px solid #000;
+  border-bottom: 0;
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.meaning-dashboard-section-heading h2 {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.12;
+}
+
+.meaning-dashboard-section-heading p {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.meaning-dashboard-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 430px;
+}
+
+.meaning-dashboard-inline-meta span {
+  border: 1px solid #000;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.meaning-dashboard-compact-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid #000;
+  padding: 6px 14px;
+  color: #333;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.meaning-dashboard-grid {
+  margin-top: 20px;
+}
+
+.meaning-dashboard-graph-row .meaning-graph-workbench {
+  background: #fff;
+}
+
+.meaning-dashboard-graph-row .meaning-dashboard-section-heading {
+  border: 0;
+  border-bottom: 1px solid #000;
+}
+
+.meaning-dashboard-graph-row .meaning-graph-flow-shell,
+.meaning-dashboard-graph-row .meaning-graph-detail {
+  border: 0;
+}
+
+.meaning-dashboard-grid--recent {
+  display: block;
+  grid-template-columns: none;
+}
+
+.meaning-dashboard-panel {
+  padding: 14px;
+}
+
+.meaning-graph-flow-shell {
+  border: 1px solid #000;
+  background: #fff;
+  height: clamp(300px, 42vh, 430px);
+  min-height: 300px;
+}
+
+.meaning-graph-flow-shell .react-flow,
+.meaning-graph-flow-shell .react-flow__pane {
+  background-color: #fff;
+}
+
+.meaning-graph-flow-shell .react-flow__pane {
+  background-image: none;
+}
+
+.meaning-flow-node {
+  border: 1px solid #000;
+  background: #fff;
+}
+
+.meaning-flow-node[data-focus] {
+  border-color: #000;
+  box-shadow: inset 0 0 0 1px #000;
+}
+
+.meaning-flow-node-label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.meaning-flow-node-meta {
+  color: #555;
+}
+
+.meaning-graph-detail {
+  gap: 14px;
+  max-height: calc(clamp(300px, 42vh, 430px) + 62px);
+  overflow: auto;
+}
+
+.meaning-graph-detail h2 {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.meaning-graph-detail dl div,
+.meaning-graph-evidence-list article {
+  border-top: 1px solid #000;
+}
+
+.meaning-graph-detail dd {
+  color: #000;
+}
+
+.meaning-graph-evidence-list blockquote,
+.meaning-recent-inspiration blockquote {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.meaning-recent-feed .meaning-dashboard-section-heading {
+  margin: -14px -14px 0;
+}
+
+.meaning-recent-inspiration-list {
+  gap: 1px;
+  max-height: clamp(120px, 20vh, 190px);
+}
+
+.meaning-recent-inspiration {
+  padding: 10px 12px;
+}
+
+.meaning-recent-inspiration:first-child {
+  padding-top: 10px;
+}
+
+.meaning-recent-inspiration-meta span {
+  color: #444;
+  letter-spacing: 0.06em;
+}
+
+/* Fit the admin dashboard into one viewport; panels scroll internally. */
+.meaning-graph-page {
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 18px 24px;
+}
+
+.meaning-graph-header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+
+.meaning-graph-header h1 {
+  font-size: 30px;
+}
+
+.meaning-graph-header p {
+  display: none;
+}
+
+.meaning-dashboard-graph-row {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  flex: 0 0 clamp(360px, 52vh, 480px);
+  min-height: 0;
+  width: 100%;
+}
+
+.meaning-dashboard-grid {
+  flex: 1 1 auto;
+  margin-top: 12px;
+  min-height: 0;
+  width: 100%;
+}
+
+.meaning-dashboard-grid--recent .meaning-dashboard-panel,
+.meaning-dashboard-graph-row .meaning-graph-workbench {
+  height: 100%;
+  min-height: 0;
+}
+
+.meaning-dashboard-graph-row .meaning-graph-workbench {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.meaning-graph-flow-shell {
+  height: 100%;
+  min-height: 0;
+}
+
+.meaning-graph-detail {
+  min-width: 0;
+  max-height: none;
+  overflow: auto;
+  overflow-x: hidden;
+}
+
+.meaning-dashboard-section-heading {
+  padding: 8px 10px;
+}
+
+.meaning-dashboard-section-heading h2 {
+  font-size: 16px;
+}
+
+.meaning-dashboard-section-heading p {
+  font-size: 12px;
+}
+
+.meaning-dashboard-panel {
+  padding: 10px;
+}
+
+.meaning-recent-feed .meaning-dashboard-section-heading {
+  margin: -10px -10px 0;
+}
+
+.meaning-recent-feed {
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.meaning-recent-inspiration-list {
+  max-height: none;
+  min-height: 0;
+  overflow: auto;
+  overflow-x: hidden;
+}
+
+.meaning-recent-inspiration {
+  padding: 8px 10px;
+}
+
+.meaning-graph-evidence-list,
+.meaning-graph-evidence-list article,
+.meaning-recent-inspiration,
+.meaning-recent-inspiration blockquote {
+  min-width: 0;
+}
+
+.meaning-graph-evidence-list blockquote,
+.meaning-graph-evidence-list p,
+.meaning-recent-inspiration blockquote,
+.meaning-recent-inspiration-meta span {
+  overflow-wrap: anywhere;
+}
+
+/* Readability pass: dashboard labels use normal sans-serif, not all-caps mono. */
+.meaning-graph-header span,
+.meaning-graph-detail > span,
+.meaning-graph-detail dt,
+.meaning-graph-evidence-list h3,
+.meaning-graph-evidence-list time,
+.meaning-dashboard-section-heading span,
+.meaning-recent-inspiration time,
+.meaning-recent-inspiration-meta span,
+.meaning-graph-health-head span,
+.meaning-graph-health-grid span,
+.meaning-flow-node-type,
+.meaning-flow-node-meta {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.meaning-flow-node-type,
+.meaning-flow-node-meta,
+.meaning-recent-inspiration-meta span {
+  color: #444;
+}
+
+.meaning-graph-actions button {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.meaning-dashboard-inline-meta span {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.meaning-dashboard-compact-status {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.meaning-graph-detail dd {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+@media (max-width: 860px) {
+  .meaning-graph-page {
+    height: auto;
+    min-height: 100svh;
+    overflow: auto;
+    padding: 20px 16px 32px;
+  }
+
+  .meaning-dashboard-section-heading {
+    display: grid;
+  }
+
+  .meaning-dashboard-inline-meta {
+    justify-content: flex-start;
+    max-width: none;
+  }
+
+  .meaning-graph-flow-shell,
+  .meaning-graph-detail,
+  .meaning-recent-inspiration-list {
+    max-height: none;
   }
 }
 
