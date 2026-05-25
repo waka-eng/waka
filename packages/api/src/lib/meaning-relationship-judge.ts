@@ -28,7 +28,7 @@ const MAX_RELATIONSHIP_PROPOSALS = 5;
 const MAX_RELATIONSHIP_REASON_CHARS = 240;
 const MAX_EVIDENCE_LABEL_CHARS = 64;
 const MAX_FALLBACK_RELATIONSHIP_PROPOSALS = 3;
-const MIN_FALLBACK_CANDIDATE_SCORE = 35;
+const MIN_FALLBACK_CANDIDATE_SCORE = 0.2;
 
 export const meaningRelationshipKindValues = [
   "resonates_with",
@@ -511,7 +511,7 @@ function safeProposals(
 }
 
 function clampConfidence(value: number): number {
-  return Math.max(35, Math.min(72, Math.round(value)));
+  return Math.max(35, Math.min(72, Math.round(value * 100)));
 }
 
 function fallbackRelationshipKind(

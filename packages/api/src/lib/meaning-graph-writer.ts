@@ -32,6 +32,7 @@ import {
 } from "./meaning-relationship-judge.js";
 
 export const meaningNodeTypeValues = [
+  "claim",
   "value",
   "question",
   "desire",
@@ -84,6 +85,11 @@ interface PendingMeaningEdge {
   confidence: number;
   evidenceInspirationId: string;
 }
+
+type CandidateRow = JudgeMeaningRelationshipsForInspirationResult["candidateSet"]["candidates"][number];
+
+const MAX_DETERMINISTIC_EDGES = 4;
+const MIN_DETERMINISTIC_EDGE_SCORE = 0.2;
 
 function clampInt(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
@@ -152,6 +158,27 @@ function buildMeaningSignals(
     weight,
     confidence,
   };
+  const sparkSource = row.packet.sparkText.trim();
+  const shouldKeepSpecificClaim =
+    sparkSource.length > 0 ||
+    row.inspiration.wowScore >= 65 ||
+    row.inspiration.importanceScore >= 65;
+
+  if (shouldKeepSpecificClaim) {
+    const source = sparkSource || row.packet.artifactExcerpt || row.packet.packetText;
+    addSignal(signals, {
+      ...common,
+      type: "claim",
+      label: shortText(source, 92),
+      description:
+        "A specific saved claim or spark preserved so the graph keeps texture instead of only broad themes.",
+      reason: sparkSource
+        ? "The user-designated spark is preserved as first-class meaning evidence."
+        : "Strong WAKA score promoted this compact claim alongside broader meaning nodes.",
+      weight: clampInt(weight + (sparkSource ? 6 : -8), 20, 100),
+      confidence: clampInt(confidence + (sparkSource ? 4 : -8), 45, 95),
+    });
+  }
 
   if (includesAny(text, ["ai", "agent", "prototype", "build", "builder", "building", "tools", "만들"])) {
     addSignal(signals, {
@@ -246,7 +273,7 @@ function buildMeaningSignals(
     });
   }
 
-  return signals.slice(0, 6);
+  return signals.slice(0, 7);
 }
 
 function proposalToEdgeKind(kind: MeaningRelationshipKind): MeaningEdgeKind {
@@ -266,16 +293,133 @@ function proposalToEdgeKind(kind: MeaningRelationshipKind): MeaningEdgeKind {
 }
 
 function chooseEdgeSource(signals: MeaningSignal[]): MeaningSignal | null {
-  return signals.find((signal) => signal.type === "question") ?? signals[0] ?? null;
-}
-
-function chooseEdgeTarget(signals: MeaningSignal[]): MeaningSignal | null {
   return (
     signals.find((signal) => signal.type === "life_direction") ??
-    signals.find((signal) => signal.type === "environment") ??
+    signals.find((signal) => signal.type === "desire") ??
+    signals.find((signal) => signal.type === "question") ??
+    signals.find((signal) => signal.type === "claim") ??
     signals[0] ??
     null
   );
+}
+
+function durableSignalKey(signal: MeaningSignal): string {
+  return `${signal.type}:${signal.label}`;
+}
+
+function chooseDistinctEdgePair(
+  sourceSignals: MeaningSignal[],
+  targetSignals: MeaningSignal[],
+): { source: MeaningSignal; target: MeaningSignal } | null {
+  const sourcePreference = [
+    "life_direction",
+    "desire",
+    "question",
+    "claim",
+    "value",
+    "tension",
+    "environment",
+    "person_archetype",
+  ];
+  const targetPreference = [
+    "life_direction",
+    "environment",
+    "desire",
+    "question",
+    "claim",
+    "value",
+    "tension",
+    "person_archetype",
+  ];
+  const orderedSources = [
+    ...sourcePreference.flatMap((type) =>
+      sourceSignals.filter((signal) => signal.type === type),
+    ),
+    ...sourceSignals,
+  ];
+  const orderedTargets = [
+    ...targetPreference.flatMap((type) =>
+      targetSignals.filter((signal) => signal.type === type),
+    ),
+    ...targetSignals,
+  ];
+
+  for (const source of orderedSources) {
+    for (const target of orderedTargets) {
+      if (durableSignalKey(source) !== durableSignalKey(target)) {
+        return { source, target };
+      }
+    }
+  }
+  return null;
+}
+
+function deterministicEdgeKind(triggerRow: PacketRow, candidate: CandidateRow): MeaningEdgeKind {
+  if (
+    triggerRow.inspiration.cluster &&
+    candidate.inspiration.cluster &&
+    triggerRow.inspiration.cluster === candidate.inspiration.cluster
+  ) {
+    return "points_to";
+  }
+  return "supports";
+}
+
+function deterministicConfidence(score: number): number {
+  return clampInt(42 + score * 36, 42, 78);
+}
+
+function deterministicEdgesFromCandidates(
+  judgmentResult: JudgeMeaningRelationshipsForInspirationResult,
+  excludedCandidateIds: Set<string> = new Set(),
+): { signals: MeaningSignal[]; edges: PendingMeaningEdge[] } {
+  const triggerRow = judgmentResult.candidateSet.trigger;
+  if (!triggerRow) return { signals: [], edges: [] };
+
+  const triggerSignals = buildMeaningSignals(triggerRow);
+  if (!chooseEdgeSource(triggerSignals)) return { signals: triggerSignals, edges: [] };
+
+  const signals: MeaningSignal[] = [...triggerSignals];
+  const edges: PendingMeaningEdge[] = [];
+  const sortedCandidates = [...judgmentResult.candidateSet.candidates]
+    .filter(
+      (candidate) =>
+        !excludedCandidateIds.has(candidate.inspiration.id) &&
+        candidate.scores.runtimeMeaningCandidateScore >= MIN_DETERMINISTIC_EDGE_SCORE,
+    )
+    .sort(
+      (a, b) =>
+        b.scores.runtimeMeaningCandidateScore -
+        a.scores.runtimeMeaningCandidateScore,
+    )
+    .slice(0, MAX_DETERMINISTIC_EDGES);
+
+  for (const candidate of sortedCandidates) {
+    const confidence = deterministicConfidence(
+      candidate.scores.runtimeMeaningCandidateScore,
+    );
+    const candidateRow = {
+      inspiration: candidate.inspiration,
+      packet: candidate.packet,
+    };
+    const targetSignals = buildMeaningSignals(candidateRow, {
+      relationshipKind: "resonates_with",
+      relationshipConfidence: confidence,
+    });
+    const pair = chooseDistinctEdgePair(triggerSignals, targetSignals);
+    if (!pair) continue;
+    signals.push(...targetSignals);
+    edges.push({
+      source: pair.source,
+      target: pair.target,
+      kind: deterministicEdgeKind(triggerRow, candidate),
+      weight: confidence,
+      confidence,
+      evidenceInspirationId: triggerRow.inspiration.id,
+    });
+  }
+
+  return { signals, edges };
 }
 
 function appendUnique(values: string[], value: string): string[] {
@@ -462,23 +606,38 @@ function signalsForProposal(
     relationshipKind: proposal.kind,
     relationshipConfidence: proposal.confidence,
   });
-  const source = chooseEdgeSource(fromSignals);
-  const target = chooseEdgeTarget(toSignals);
+  const pair = chooseDistinctEdgePair(fromSignals, toSignals);
 
   return {
     signals: [...fromSignals, ...toSignals],
     edge:
-      source && target
+      pair
         ? {
-            source,
-            target,
+            source: pair.source,
+            target: pair.target,
             kind: proposalToEdgeKind(proposal.kind),
             weight: proposal.confidence,
             confidence: proposal.confidence,
             evidenceInspirationId: proposal.fromInspirationId,
           }
-        : null,
+      : null,
   };
+}
+
+function signalKey(signal: MeaningSignal): string {
+  return `${signal.type}:${signal.label}:${signal.inspirationId}`;
+}
+
+function pendingEdgeKey(edge: PendingMeaningEdge): string {
+  return `${signalKey(edge.source)}:${edge.kind}:${signalKey(edge.target)}`;
+}
+
+function addPendingEdge(edgesByKey: Map<string, PendingMeaningEdge>, edge: PendingMeaningEdge): void {
+  const key = pendingEdgeKey(edge);
+  const existing = edgesByKey.get(key);
+  if (!existing || edge.confidence > existing.confidence || edge.weight > existing.weight) {
+    edgesByKey.set(key, edge);
+  }
 }
 
 export async function persistMeaningGraphForInspiration(
@@ -496,18 +655,25 @@ export async function persistMeaningGraphForInspiration(
 
   const rowsByInspirationId = packetRowsByInspirationId(judgmentResult);
   const signalsByKey = new Map<string, MeaningSignal>();
-  const pendingEdges: PendingMeaningEdge[] = [];
+  const pendingEdgesByKey = new Map<string, PendingMeaningEdge>();
+  const proposalTargetIds = new Set(
+    judgmentResult.proposals.map((proposal) => proposal.toInspirationId),
+  );
 
-  for (const signal of buildMeaningSignals(judgmentResult.candidateSet.trigger)) {
-    signalsByKey.set(`${signal.type}:${signal.label}:${signal.inspirationId}`, signal);
+  const deterministic = deterministicEdgesFromCandidates(judgmentResult, proposalTargetIds);
+  for (const signal of deterministic.signals) {
+    signalsByKey.set(signalKey(signal), signal);
+  }
+  for (const edge of deterministic.edges) {
+    addPendingEdge(pendingEdgesByKey, edge);
   }
 
   for (const proposal of judgmentResult.proposals) {
     const result = signalsForProposal(proposal, rowsByInspirationId);
     for (const signal of result.signals) {
-      signalsByKey.set(`${signal.type}:${signal.label}:${signal.inspirationId}`, signal);
+      signalsByKey.set(signalKey(signal), signal);
     }
-    if (result.edge) pendingEdges.push(result.edge);
+    if (result.edge) addPendingEdge(pendingEdgesByKey, result.edge);
   }
 
   const nodesBySignalKey = new Map<string, MeaningNode>();
@@ -526,13 +692,9 @@ export async function persistMeaningGraphForInspiration(
 
   const nodes = [...new Map([...nodesBySignalKey.values()].map((node) => [node.id, node])).values()];
   const edges: MeaningEdge[] = [];
-  for (const pendingEdge of pendingEdges) {
-    const sourceNode = nodesBySignalKey.get(
-      `${pendingEdge.source.type}:${pendingEdge.source.label}:${pendingEdge.source.inspirationId}`,
-    );
-    const targetNode = nodesBySignalKey.get(
-      `${pendingEdge.target.type}:${pendingEdge.target.label}:${pendingEdge.target.inspirationId}`,
-    );
+  for (const pendingEdge of pendingEdgesByKey.values()) {
+    const sourceNode = nodesBySignalKey.get(signalKey(pendingEdge.source));
+    const targetNode = nodesBySignalKey.get(signalKey(pendingEdge.target));
     if (!sourceNode || !targetNode || sourceNode.id === targetNode.id) continue;
     edges.push(
       await upsertMeaningEdge({
