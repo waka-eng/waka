@@ -223,5 +223,83 @@ async function ensureLocalePreferenceSchema(): Promise<void> {
   }
 }
 
+async function ensureMeaningPacketSchema(): Promise<void> {
+  const connectionString = process.env.DB_CONNECTION_URL;
+  if (!connectionString) return;
+
+  const sql = postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    onnotice: () => {},
+  });
+
+  try {
+    await sql.unsafe(
+      `SELECT pg_advisory_lock(hashtext('waka_test_meaning_packet_schema'))`,
+    );
+    await sql.unsafe(`
+      CREATE TABLE IF NOT EXISTS "public"."meaning_packets" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "user_id" uuid NOT NULL,
+        "inspiration_id" uuid NOT NULL,
+        "primary_spark_id" uuid,
+        "spark_text" text DEFAULT '' NOT NULL,
+        "artifact_excerpt" text DEFAULT '' NOT NULL,
+        "packet_text" text NOT NULL,
+        "source_metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "classifier_snapshot" jsonb DEFAULT '{}'::jsonb NOT NULL,
+        "input_fingerprint" text NOT NULL,
+        "token_estimate" integer DEFAULT 0 NOT NULL,
+        "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+        "updated_at" timestamp with time zone DEFAULT now() NOT NULL
+      );
+    `);
+    await sql.unsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "public"."meaning_packets"
+          ADD CONSTRAINT "meaning_packets_user_id_users_id_fk"
+          FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
+          ON DELETE cascade ON UPDATE no action;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await sql.unsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "public"."meaning_packets"
+          ADD CONSTRAINT "meaning_packets_inspiration_id_inspirations_id_fk"
+          FOREIGN KEY ("inspiration_id") REFERENCES "public"."inspirations"("id")
+          ON DELETE cascade ON UPDATE no action;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await sql.unsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "public"."meaning_packets"
+          ADD CONSTRAINT "meaning_packets_primary_spark_id_inspiration_sparks_id_fk"
+          FOREIGN KEY ("primary_spark_id") REFERENCES "public"."inspiration_sparks"("id")
+          ON DELETE set null ON UPDATE no action;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await sql.unsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "meaning_packets_user_inspiration_unique_idx"
+        ON "public"."meaning_packets" ("user_id", "inspiration_id");
+    `);
+    await sql.unsafe(`
+      CREATE INDEX IF NOT EXISTS "meaning_packets_user_updated_idx"
+        ON "public"."meaning_packets" ("user_id", "updated_at" DESC);
+    `);
+  } finally {
+    await sql
+      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_meaning_packet_schema'))`)
+      .catch(() => {});
+    await sql.end({ timeout: 5 }).catch(() => {});
+  }
+}
+
 await ensureRevisitEventSchema();
 await ensureLocalePreferenceSchema();
+await ensureMeaningPacketSchema();

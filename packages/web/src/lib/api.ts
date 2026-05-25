@@ -361,10 +361,50 @@ export interface CreateInspirationRequest {
   text: string;
   kind?: string;
   category?: number;
+  selectedText?: string;
+  selectionStart?: number;
+  selectionEnd?: number;
+  sparks?: Array<{
+    text: string;
+    source?: ApiInspirationSparkSource;
+    startOffset?: number;
+    endOffset?: number;
+    confidence?: number;
+    isPrimary?: boolean;
+    note?: string;
+  }>;
 }
 
 export interface UpdateInspirationRequest {
   text: string;
+}
+
+export type ApiInspirationSparkSource =
+  | "user_selected"
+  | "user_written"
+  | "user_added_later"
+  | "auto_detected"
+  | "confirmed_auto";
+
+export interface ApiInspirationSpark {
+  id: string;
+  userId: string;
+  inspirationId: string;
+  text: string;
+  source: ApiInspirationSparkSource;
+  startOffset: number | null;
+  endOffset: number | null;
+  confidence: number;
+  isPrimary: boolean;
+  note: string | null;
+  whatMovedUser: string | null;
+  impliedValues: string[];
+  worldviewClaims: string[];
+  tensions: string[];
+  decisionRelevance: string[];
+  emotionalCharge: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CreateInspirationResponse {
@@ -446,6 +486,36 @@ export async function recordInspirationRevisit(
     { eventType },
     "Failed to record inspiration revisit",
   );
+}
+
+export async function fetchInspirationSparks(
+  inspirationId: string,
+): Promise<ApiInspirationSpark[]> {
+  const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
+    "Failed to load inspiration sparks",
+  );
+  return Array.isArray(body.sparks) ? body.sparks : [];
+}
+
+export async function createInspirationSpark(
+  inspirationId: string,
+  input: {
+    text: string;
+    source?: ApiInspirationSparkSource;
+    startOffset?: number;
+    endOffset?: number;
+    confidence?: number;
+    isPrimary?: boolean;
+    note?: string;
+  },
+): Promise<ApiInspirationSpark> {
+  const body = await postJson<{ spark: ApiInspirationSpark }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
+    input,
+    "Failed to save spark",
+  );
+  return body.spark;
 }
 
 export async function fetchInspirationScoreBreakdown(
@@ -776,6 +846,134 @@ export async function fetchBackgroundJobs(
 
   const payload = (body ?? {}) as Partial<ListBackgroundJobsResponse>;
   return Array.isArray(payload.jobs) ? payload.jobs : [];
+}
+
+export interface ApiMeaningGraphNode {
+  id: string;
+  type: string;
+  label: string;
+  description: string;
+  status: string;
+  source: string;
+  weight: number;
+  confidence: number;
+  evidenceCount: number;
+  firstSeenAt: string;
+  lastReinforcedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  evidence: Array<{
+    inspirationId: string;
+    packetId: string;
+    reason: string;
+    weight: number;
+    confidence: number;
+    source: string;
+    preview: string;
+    packetPreview: string;
+    tokenEstimate: number;
+    inspirationCreatedAt: string;
+    createdAt: string;
+  }>;
+}
+
+export interface ApiMeaningGraphEdge {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  kind: string;
+  weight: number;
+  confidence: number;
+  evidenceCount: number;
+  evidenceInspirationIds: string[];
+  status: string;
+  source: string;
+  lastReinforcedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiMeaningGraphRecentInspiration {
+  id: string;
+  preview: string;
+  cluster: ClusterKind | null;
+  createdAt: string;
+  packetCreatedAt: string | null;
+  meaningNotes: Array<{
+    id: string;
+    label: string;
+    type: string;
+    reason: string;
+  }>;
+  relationshipEdges: Array<{
+    id: string;
+    kind: string;
+    sourceNodeId: string;
+    sourceLabel: string;
+    targetNodeId: string;
+    targetLabel: string;
+  }>;
+}
+
+export type ApiMeaningGraphHealthStatus =
+  | "no_data"
+  | "writer_failed"
+  | "sparse"
+  | "stale"
+  | "healthy";
+
+export interface ApiMeaningGraphHealthWarning {
+  type: ApiMeaningGraphHealthStatus | "no_packets";
+  message: string;
+}
+
+export interface ApiMeaningGraphHealth {
+  inspirationCount: number;
+  packetCount: number;
+  nodeCount: number;
+  edgeCount: number;
+  evidenceCount: number;
+  inspirationsWithoutPackets: number;
+  nodesWithoutEvidence: number;
+  edgeDensity: number;
+  status: ApiMeaningGraphHealthStatus;
+  warnings: ApiMeaningGraphHealthWarning[];
+}
+
+export interface ApiMeaningGraph {
+  nodes: ApiMeaningGraphNode[];
+  edges: ApiMeaningGraphEdge[];
+  recentInspirations: ApiMeaningGraphRecentInspiration[];
+  meta: {
+    nodeCount: number;
+    edgeCount: number;
+    evidenceCount: number;
+    limit: number;
+    health: ApiMeaningGraphHealth;
+  };
+}
+
+export interface ApiMeaningGraphRebuildResult {
+  inspirations: number;
+  nodesTouched: number;
+  evidenceTouched: number;
+  edgesTouched: number;
+}
+
+export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const body = await getJson<{ graph: ApiMeaningGraph }>(
+    apiPath(`/admin/meaning-graph?${params.toString()}`),
+    "Failed to load meaning graph",
+  );
+  return body.graph;
+}
+
+export async function rebuildMeaningGraph(): Promise<{
+  rebuild: ApiMeaningGraphRebuildResult;
+  health: ApiMeaningGraphHealth;
+}> {
+  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to rebuild meaning graph");
 }
 
 // ---------------------------------------------------------------------------

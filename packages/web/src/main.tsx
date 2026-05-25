@@ -30,8 +30,10 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./lib/auth-context";
+import AdminWowStatusPage from "./pages/AdminWowStatus";
 import HomePage from "./pages/Home";
 import LoginPage from "./pages/Login";
+import MeaningGraphPage from "./pages/MeaningGraph";
 import "./styles/global.css";
 
 const root = document.getElementById("root");
@@ -63,6 +65,30 @@ ReactDOM.createRoot(root).render(
             element={
               <RequireAuth>
                 <HomePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <RequireAuth>
+                <MeaningGraphPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/wow-status"
+            element={
+              <RequireAuth>
+                <AdminWowStatusPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/meaning-graph"
+            element={
+              <RequireAuth>
+                <MeaningGraphPage />
               </RequireAuth>
             }
           />
