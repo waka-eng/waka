@@ -25,6 +25,8 @@ function createSelect<T>(terminal: T) {
   query.where = vi.fn(() => query);
   query.orderBy = vi.fn(() => query);
   query.limit = vi.fn(async () => terminal);
+  query.then = (resolve: (value: T) => unknown, reject: (reason: unknown) => unknown) =>
+    Promise.resolve(terminal).then(resolve, reject);
   return query;
 }
 
@@ -105,7 +107,14 @@ describe("GET /api/admin/meaning-graph", () => {
         .fn()
         .mockReturnValueOnce(createSelect(nodes))
         .mockReturnValueOnce(createSelect(edges))
-        .mockReturnValueOnce(createSelect(evidence)),
+        .mockReturnValueOnce(createSelect(evidence))
+        .mockReturnValueOnce(createSelect([{ count: 12 }]))
+        .mockReturnValueOnce(createSelect([{ count: 11 }]))
+        .mockReturnValueOnce(createSelect([{ count: 2 }]))
+        .mockReturnValueOnce(createSelect([{ count: 1 }]))
+        .mockReturnValueOnce(createSelect([{ count: 1 }]))
+        .mockReturnValueOnce(createSelect([{ count: 1 }]))
+        .mockReturnValueOnce(createSelect([{ count: 0 }])),
     };
     const app = new Hono();
     app.route(
@@ -122,12 +131,48 @@ describe("GET /api/admin/meaning-graph", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       graph: {
-        meta: { nodeCount: number; edgeCount: number; evidenceCount: number; limit: number };
+        meta: {
+          nodeCount: number;
+          edgeCount: number;
+          evidenceCount: number;
+          limit: number;
+          health: {
+            inspirationCount: number;
+            packetCount: number;
+            nodeCount: number;
+            edgeCount: number;
+            evidenceCount: number;
+            inspirationsWithoutPackets: number;
+            nodesWithoutEvidence: number;
+            edgeDensity: number;
+            status: string;
+            warnings: Array<{ type: string; message: string }>;
+          };
+        };
         nodes: Array<Record<string, any>>;
         edges: Array<Record<string, unknown>>;
       };
     };
-    expect(body.graph.meta).toEqual({ nodeCount: 2, edgeCount: 1, evidenceCount: 1, limit: 2 });
+    expect(body.graph.meta).toMatchObject({
+      nodeCount: 2,
+      edgeCount: 1,
+      evidenceCount: 1,
+      limit: 2,
+      health: {
+        inspirationCount: 12,
+        packetCount: 11,
+        nodeCount: 2,
+        edgeCount: 1,
+        evidenceCount: 1,
+        inspirationsWithoutPackets: 1,
+        nodesWithoutEvidence: 0,
+        edgeDensity: 0.5,
+        status: "stale",
+      },
+    });
+    expect(body.graph.meta.health.warnings).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "stale" })]),
+    );
     expect(body.graph.nodes[0]).toMatchObject({
       id: "node-1",
       type: "question",

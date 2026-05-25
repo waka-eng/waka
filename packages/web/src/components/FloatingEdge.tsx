@@ -91,6 +91,12 @@ export function FloatingEdge(props: EdgeProps): JSX.Element | null {
     targetX: targetEntry.x,
     targetY: targetEntry.y,
   });
+  const dx = targetEntry.x - sourceExit.x;
+  const dy = targetEntry.y - sourceExit.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const labelOffset = 14;
+  const offsetX = (-dy / length) * labelOffset;
+  const offsetY = (dx / length) * labelOffset;
 
   return (
     <>
@@ -101,8 +107,8 @@ export function FloatingEdge(props: EdgeProps): JSX.Element | null {
             className="floating-edge-label"
             style={{
               position: "absolute",
-              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
-              pointerEvents: "all",
+              transform: `translate(-50%, -50%) translate(${labelX + offsetX}px, ${labelY + offsetY}px)`,
+              pointerEvents: "none",
               padding:
                 Array.isArray(labelBgPadding) && labelBgPadding.length === 2
                   ? `${labelBgPadding[1]}px ${labelBgPadding[0]}px`

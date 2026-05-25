@@ -9,10 +9,7 @@ import {
 } from "d3-force";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ReactFlow, {
-  Background,
-  Controls,
   Handle,
-  MiniMap,
   Position,
   useNodesState,
   type Edge,
@@ -23,9 +20,12 @@ import "reactflow/dist/style.css";
 import { FloatingEdge } from "../components/FloatingEdge";
 import {
   fetchMeaningGraph,
+  rebuildMeaningGraph,
   type ApiMeaningGraph,
   type ApiMeaningGraphEdge,
   type ApiMeaningGraphNode,
+  type ApiMeaningGraphRecentInspiration,
+  type ApiMeaningGraphRebuildResult,
 } from "../lib/api";
 
 interface SimNode extends SimulationNodeDatum {
@@ -131,6 +131,32 @@ function shortPreview(value: string): string {
   return `${normalized.slice(0, 127)}...`;
 }
 
+function relationshipLabel(edge: Pick<ApiMeaningGraphEdge, "kind">): string {
+  return EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ");
+}
+
+function relationshipSummary(edge: {
+  kind: string;
+  sourceLabel: string;
+  targetLabel: string;
+}): string {
+  return `${edge.sourceLabel} ${EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ")} ${edge.targetLabel}`;
+}
+
+function readableGraphWarning(type: string): string | null {
+  switch (type) {
+    case "no_data":
+      return "No inspirations have been saved for this user yet.";
+    case "no_packets":
+    case "stale":
+      return "Some saves have not been processed into the graph yet. Rebuild should fix this.";
+    case "writer_failed":
+      return "The graph writer did not finish cleanly. Rebuild, then check the server logs if this remains.";
+    default:
+      return null;
+  }
+}
+
 function runLayout(
   rawNodes: ApiMeaningGraphNode[],
   rawEdges: ApiMeaningGraphEdge[],
@@ -196,9 +222,6 @@ const MeaningFlowNode = memo(({ data }: NodeProps<MeaningNodeData>) => (
       {TYPE_LABEL[data.type] ?? data.type}
     </span>
     <p className="meaning-flow-node-label">{data.label}</p>
-    <span className="meaning-flow-node-meta">
-      {data.evidenceCount} evidence · {data.weight} weight
-    </span>
   </div>
 ));
 MeaningFlowNode.displayName = "MeaningFlowNode";
@@ -214,14 +237,15 @@ export default function MeaningGraphPage(): JSX.Element {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
+  const [lastRebuild, setLastRebuild] = useState<ApiMeaningGraphRebuildResult | null>(null);
   const [flowNodes, setFlowNodes, onNodesChange] =
     useNodesState<MeaningNodeData>([]);
 
-  const loadGraph = useCallback(async (rebuild = false) => {
+  const loadGraph = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const next = await fetchMeaningGraph(120, rebuild);
+      const next = await fetchMeaningGraph(120);
       setGraph(next);
       setSelectedNodeId((current) => current ?? next.nodes[0]?.id ?? null);
     } catch (err) {
@@ -233,11 +257,34 @@ export default function MeaningGraphPage(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    void loadGraph(false);
+    void loadGraph();
+  }, [loadGraph]);
+
+  const handleRebuild = useCallback(async () => {
+    setRebuilding(true);
+    setError(null);
+    try {
+      const result = await rebuildMeaningGraph();
+      setLastRebuild(result.rebuild);
+      await loadGraph();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to rebuild meaning graph");
+    } finally {
+      setRebuilding(false);
+    }
   }, [loadGraph]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
+  const recentInspirations = graph?.recentInspirations ?? [];
+  const health = graph?.meta.health ?? null;
+  const visibleHealthWarnings = useMemo(
+    () =>
+      (health?.warnings ?? [])
+        .map((warning) => readableGraphWarning(warning.type))
+        .filter((message): message is string => Boolean(message)),
+    [health],
+  );
 
   const sortedNodes = useMemo(
     () =>
@@ -329,7 +376,8 @@ export default function MeaningGraphPage(): JSX.Element {
     );
   }, [graph, setFlowNodes, visibleMeaningEdges, visibleMeaningNodes]);
 
-  const focusNodeId = hoverNodeId ?? selectedNodeId;
+  const focusNodeId = hoverNodeId;
+  const selectedOrHoverNodeId = hoverNodeId ?? selectedNodeId;
   const focusNeighbors = focusNodeId
     ? neighborsByNode.get(focusNodeId) ?? new Set<string>()
     : null;
@@ -337,19 +385,19 @@ export default function MeaningGraphPage(): JSX.Element {
   useEffect(() => {
     setFlowNodes((previous) =>
       previous.map((node) => {
-        const isFocus = focusNodeId === node.id;
+        const isFocus = selectedOrHoverNodeId === node.id;
         const isNeighbor = focusNeighbors?.has(node.id) ?? false;
         return {
           ...node,
           data: {
             ...node.data,
             isFocus,
-            fade: focusNodeId !== null && !isFocus && !isNeighbor,
+            fade: hoverNodeId !== null && !isFocus && !isNeighbor,
           },
         };
       }),
     );
-  }, [focusNeighbors, focusNodeId, setFlowNodes]);
+  }, [focusNeighbors, hoverNodeId, selectedOrHoverNodeId, setFlowNodes]);
 
   const flowEdges: Edge[] = useMemo(
     () =>
@@ -365,29 +413,29 @@ export default function MeaningGraphPage(): JSX.Element {
           source: edge.sourceNodeId,
           target: edge.targetNodeId,
           type: "floating",
-          label: isFocus || isSelected ? EDGE_LABEL[edge.kind] ?? edge.kind : undefined,
+          label: EDGE_LABEL[edge.kind] ?? edge.kind,
           style: {
             stroke: edgeColor(edge.kind),
             strokeWidth: isSelected ? 3 : 0.8 + normalized * 2.8,
-            opacity: fade ? 0.08 : isFocus || isSelected ? 0.78 : 0.28,
+            opacity: hoverNodeId !== null && fade ? 0.08 : isFocus || isSelected ? 0.78 : 0.28,
           },
           labelStyle: {
             fontSize: 10,
             fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            fill: edgeColor(edge.kind),
-            letterSpacing: "0.06em",
+            color: edgeColor(edge.kind),
+            letterSpacing: "0.04em",
             textTransform: "uppercase",
           },
-          labelBgPadding: [5, 2] as [number, number],
+          labelBgPadding: [7, 4] as [number, number],
           labelBgBorderRadius: 999,
           labelBgStyle: {
-            fill: "rgba(253, 251, 245, 0.94)",
-            stroke: "rgba(15, 15, 14, 0.08)",
+            backgroundColor: "rgba(253, 251, 245, 0.98)",
+            border: "1px solid rgba(15, 15, 14, 0.12)",
           },
           labelShowBg: true,
         };
       }),
-    [focusNodeId, selectedEdgeId, visibleMeaningEdges],
+    [focusNodeId, hoverNodeId, selectedEdgeId, visibleMeaningEdges],
   );
 
   const selectedEdgeSource = selectedEdge
@@ -396,30 +444,78 @@ export default function MeaningGraphPage(): JSX.Element {
   const selectedEdgeTarget = selectedEdge
     ? nodeById.get(selectedEdge.targetNodeId) ?? null
     : null;
+  const selectedEdgeEvidence = selectedEdge
+    ? recentInspirations.filter((inspiration) =>
+        inspiration.relationshipEdges.some((edge) => edge.id === selectedEdge.id),
+      )
+    : [];
+
+  const evidenceHeading = selectedEdge
+    ? "Relationship evidence"
+    : selectedNode
+      ? "Meaning note evidence"
+      : "Graph evidence";
+
+  const evidenceIntro = selectedEdge
+    ? `${selectedEdgeSource?.label ?? "Unknown source"} ${relationshipLabel(selectedEdge)} ${
+        selectedEdgeTarget?.label ?? "unknown target"
+      }`
+    : selectedNode
+      ? selectedNode.label
+      : "Select a meaning note or relationship edge in the graph.";
+
+  const renderRecentInspiration = (
+    inspiration: ApiMeaningGraphRecentInspiration,
+  ): JSX.Element => {
+    const hasMeaningNotes = inspiration.meaningNotes.length > 0;
+    const hasRelationships = inspiration.relationshipEdges.length > 0;
+    const status = inspiration.packetCreatedAt
+      ? hasMeaningNotes
+        ? "Entered graph"
+        : "Processed, no meaning note yet"
+      : "Processing";
+
+    return (
+      <article className="meaning-recent-inspiration" key={inspiration.id}>
+        <time dateTime={inspiration.createdAt}>{formatDate(inspiration.createdAt)}</time>
+        <blockquote>{shortPreview(inspiration.preview)}</blockquote>
+        <div className="meaning-recent-inspiration-meta">
+          <span>{status}</span>
+          {hasMeaningNotes ? (
+            <span>
+              Entered as: {inspiration.meaningNotes.map((note) => note.label).join(", ")}
+            </span>
+          ) : null}
+          <span>
+            Relationships:{" "}
+            {hasRelationships
+              ? inspiration.relationshipEdges.map(relationshipSummary).join("; ")
+              : "none"}
+          </span>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <main className="meaning-graph-page">
       <header className="meaning-graph-header">
         <div>
-          <span>meaning graph</span>
-          <h1>Meaning graph inspection</h1>
+          <span>admin meaning dashboard</span>
+          <h1>Meaning dashboard</h1>
           <p>
-            Drag the cards, click a node to inspect its evidence, or click an edge
-            to inspect the relationship.
+            Monitor how saved inspirations become meaning notes and relationship edges.
           </p>
         </div>
         <div className="meaning-graph-actions">
           <button
             type="button"
             disabled={rebuilding || loading}
-            onClick={() => {
-              setRebuilding(true);
-              void loadGraph(true);
-            }}
+            onClick={() => void handleRebuild()}
           >
             {rebuilding ? "Rebuilding..." : "Rebuild graph"}
           </button>
-          <button type="button" onClick={() => void loadGraph(false)} disabled={loading}>
+          <button type="button" onClick={() => void loadGraph()} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
@@ -430,71 +526,84 @@ export default function MeaningGraphPage(): JSX.Element {
       ) : error ? (
         <p className="meaning-graph-status meaning-graph-status--error">{error}</p>
       ) : (
-        <section className="meaning-graph-workbench meaning-graph-workbench--flow">
-          <div className="meaning-graph-flow-shell">
-            {nodes.length === 0 ? (
-              <div className="meaning-graph-empty">
-                <strong>No graph rows yet</strong>
-                <span>Click rebuild after saving inspirations locally.</span>
+        <>
+          <section className="meaning-dashboard-graph-row">
+            <section className="meaning-graph-workbench meaning-graph-workbench--flow">
+              <div className="meaning-dashboard-section-heading">
+                <div>
+                  <span>meaning graph</span>
+                  <h2>Graph</h2>
+                  <p>Click a meaning note or relationship edge to update the evidence section.</p>
+                </div>
+                {health ? (
+                  <div className="meaning-dashboard-inline-meta" aria-label="Meaning graph snapshot">
+                    <span>{health.inspirationCount} inspirations</span>
+                    <span>{health.nodeCount} meaning notes</span>
+                    <span>{health.edgeCount} relationship edges</span>
+                  </div>
+                ) : null}
               </div>
-            ) : (
-              <ReactFlow
-                nodes={flowNodes}
-                edges={flowEdges}
-                nodeTypes={nodeTypes}
-                edgeTypes={edgeTypes}
-                onNodesChange={onNodesChange}
-                fitView
-                fitViewOptions={{ padding: 0.25 }}
-                minZoom={0.22}
-                maxZoom={1.8}
-                nodesDraggable
-                nodesConnectable={false}
-                elementsSelectable
-                proOptions={{ hideAttribution: true }}
-                onNodeClick={(_, node) => {
-                  setSelectedEdgeId(null);
-                  setSelectedNodeId((current) => (current === node.id ? null : node.id));
-                }}
-                onEdgeClick={(_, edge) => {
-                  setSelectedNodeId(null);
-                  setSelectedEdgeId((current) => (current === edge.id ? null : edge.id));
-                }}
-                onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
-                onNodeMouseLeave={() => setHoverNodeId(null)}
-                onPaneClick={() => {
-                  setSelectedNodeId(null);
-                  setSelectedEdgeId(null);
-                }}
-              >
-                <Background gap={26} color="#E5E1D8" />
-                <Controls showInteractive={false} />
-                <MiniMap pannable zoomable maskColor="rgba(253, 251, 245, 0.72)" />
-              </ReactFlow>
-            )}
-          </div>
+              {visibleHealthWarnings.length > 0 || lastRebuild ? (
+                <div className="meaning-dashboard-compact-status">
+                  {lastRebuild ? (
+                    <span>
+                      Rebuilt {lastRebuild.inspirations} inspirations / {lastRebuild.nodesTouched} notes /{" "}
+                      {lastRebuild.edgesTouched} edges
+                    </span>
+                  ) : null}
+                  {visibleHealthWarnings.map((message) => (
+                    <span key={message}>{message}</span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="meaning-graph-flow-shell">
+                {nodes.length === 0 ? (
+                  <div className="meaning-graph-empty">
+                    <strong>No graph rows yet</strong>
+                    <span>Click rebuild after saving inspirations locally.</span>
+                  </div>
+                ) : (
+                  <ReactFlow
+                    nodes={flowNodes}
+                    edges={flowEdges}
+                    nodeTypes={nodeTypes}
+                    edgeTypes={edgeTypes}
+                    onNodesChange={onNodesChange}
+                    fitView
+                    fitViewOptions={{ padding: 0.25 }}
+                    minZoom={0.22}
+                    maxZoom={1.8}
+                    nodesDraggable
+                    nodesConnectable={false}
+                    elementsSelectable
+                    proOptions={{ hideAttribution: true }}
+                    onNodeClick={(_, node) => {
+                      setSelectedEdgeId(null);
+                      setSelectedNodeId((current) => (current === node.id ? null : node.id));
+                    }}
+                    onEdgeClick={(_, edge) => {
+                      setSelectedNodeId(null);
+                      setSelectedEdgeId((current) => (current === edge.id ? null : edge.id));
+                    }}
+                    onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
+                    onNodeMouseLeave={() => setHoverNodeId(null)}
+                    onPaneClick={() => {
+                      setSelectedNodeId(null);
+                      setSelectedEdgeId(null);
+                    }}
+                  />
+                )}
+              </div>
+            </section>
 
-          <aside className="meaning-graph-detail">
+            <section className="meaning-dashboard-panel meaning-graph-detail" aria-labelledby="graph-evidence-title">
+              <span>{evidenceHeading}</span>
+              <h2 id="graph-evidence-title">{evidenceIntro}</h2>
             {selectedEdge ? (
               <>
-                <span>{EDGE_LABEL[selectedEdge.kind] ?? selectedEdge.kind}</span>
-                <h2>Relationship</h2>
-                <p>
-                  {selectedEdgeSource?.label ?? "Unknown"}{" "}
-                  {EDGE_LABEL[selectedEdge.kind] ?? selectedEdge.kind}{" "}
-                  {selectedEdgeTarget?.label ?? "unknown"}.
-                </p>
                 <dl>
                   <div>
-                    <dt>weight</dt>
-                    <dd>{selectedEdge.weight}</dd>
-                  </div>
-                  <div>
-                    <dt>confidence</dt>
-                    <dd>{selectedEdge.confidence}</dd>
-                  </div>
-                  <div>
-                    <dt>evidence</dt>
+                    <dt>evidence inspirations</dt>
                     <dd>{selectedEdge.evidenceCount}</dd>
                   </div>
                   <div>
@@ -503,33 +612,25 @@ export default function MeaningGraphPage(): JSX.Element {
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Endpoints</h3>
-                  <article>
-                    <time>{selectedEdgeSource ? TYPE_LABEL[selectedEdgeSource.type] : "source"}</time>
-                    <blockquote>{selectedEdgeSource?.label ?? "Unknown source"}</blockquote>
-                  </article>
-                  <article>
-                    <time>{selectedEdgeTarget ? TYPE_LABEL[selectedEdgeTarget.type] : "target"}</time>
-                    <blockquote>{selectedEdgeTarget?.label ?? "Unknown target"}</blockquote>
-                  </article>
+                  <h3>Evidence inspirations</h3>
+                  {selectedEdgeEvidence.length > 0 ? (
+                    selectedEdgeEvidence.map((inspiration) => (
+                      <article key={`${selectedEdge.id}-${inspiration.id}`}>
+                        <time dateTime={inspiration.createdAt}>{formatDate(inspiration.createdAt)}</time>
+                        <blockquote>{shortPreview(inspiration.preview)}</blockquote>
+                      </article>
+                    ))
+                  ) : (
+                    <p>This relationship has stored evidence ids, but no recent matching inspiration is in the current feed.</p>
+                  )}
                 </div>
               </>
             ) : selectedNode ? (
               <>
-                <span>{TYPE_LABEL[selectedNode.type] ?? selectedNode.type}</span>
-                <h2>{selectedNode.label}</h2>
                 <p>{selectedNode.description || "No description yet."}</p>
                 <dl>
                   <div>
-                    <dt>weight</dt>
-                    <dd>{selectedNode.weight}</dd>
-                  </div>
-                  <div>
-                    <dt>confidence</dt>
-                    <dd>{selectedNode.confidence}</dd>
-                  </div>
-                  <div>
-                    <dt>evidence</dt>
+                    <dt>evidence inspirations</dt>
                     <dd>{selectedNode.evidenceCount}</dd>
                   </div>
                   <div>
@@ -538,7 +639,7 @@ export default function MeaningGraphPage(): JSX.Element {
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Evidence behind this</h3>
+                  <h3>Evidence inspirations</h3>
                   {selectedNode.evidence.slice(0, 6).map((evidence) => (
                     <article key={`${selectedNode.id}-${evidence.inspirationId}-${evidence.packetId}`}>
                       <time>{formatDate(evidence.createdAt)}</time>
@@ -551,10 +652,28 @@ export default function MeaningGraphPage(): JSX.Element {
                 </div>
               </>
             ) : (
-              <p>Select a node or edge.</p>
+              <p>The graph above is the current meaning structure. Select a meaning note to see the inspirations behind it, or select a relationship edge to see what supports that connection.</p>
             )}
-          </aside>
-        </section>
+            </section>
+          </section>
+
+          <section className="meaning-dashboard-grid meaning-dashboard-grid--recent">
+            <section className="meaning-dashboard-panel meaning-recent-feed" aria-labelledby="recent-inspirations-title">
+              <div className="meaning-dashboard-section-heading">
+                <span>recent inspirations entering</span>
+                <h2 id="recent-inspirations-title">Recent Inspirations Entering</h2>
+                <p>Newest saves and how they currently appear in the meaning graph.</p>
+              </div>
+              <div className="meaning-recent-inspiration-list">
+                {recentInspirations.length > 0 ? (
+                  recentInspirations.map(renderRecentInspiration)
+                ) : (
+                  <p>No recent inspirations found.</p>
+                )}
+              </div>
+            </section>
+          </section>
+        </>
       )}
     </main>
   );
