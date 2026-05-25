@@ -22,6 +22,7 @@ function createSelect<T>(terminal: T) {
   const query: Record<string, any> = {};
   query.from = vi.fn(() => query);
   query.innerJoin = vi.fn(() => query);
+  query.leftJoin = vi.fn(() => query);
   query.where = vi.fn(() => query);
   query.orderBy = vi.fn(() => query);
   query.limit = vi.fn(async () => terminal);
@@ -101,6 +102,31 @@ describe("GET /api/admin/meaning-graph", () => {
         packetText: "waka.meaning_packet.v1\nSPARKS\nchoosing what to build gets harder",
         tokenEstimate: 24,
       },
+      {
+        meaningNodeId: "node-2",
+        inspirationId: "insp-1",
+        packetId: "packet-1",
+        reason: "The same save points to environments where judgment can be discussed honestly.",
+        weight: 72,
+        confidence: 82,
+        source: "meaning_graph_writer",
+        createdAt: now,
+        inspirationText: "AI makes building faster, but choosing what to build gets harder.",
+        inspirationCreatedAt: now,
+        sparkText: "choosing what to build gets harder",
+        packetText: "waka.meaning_packet.v1\nSPARKS\nchoosing what to build gets harder",
+        tokenEstimate: 24,
+      },
+    ];
+    const recentInspirations = [
+      {
+        id: "insp-1",
+        text: "AI makes building faster, but choosing what to build gets harder.",
+        cluster: null,
+        createdAt: now,
+        packetId: "packet-1",
+        packetCreatedAt: now,
+      },
     ];
     const db = {
       select: vi
@@ -108,6 +134,7 @@ describe("GET /api/admin/meaning-graph", () => {
         .mockReturnValueOnce(createSelect(nodes))
         .mockReturnValueOnce(createSelect(edges))
         .mockReturnValueOnce(createSelect(evidence))
+        .mockReturnValueOnce(createSelect(recentInspirations))
         .mockReturnValueOnce(createSelect([{ count: 12 }]))
         .mockReturnValueOnce(createSelect([{ count: 11 }]))
         .mockReturnValueOnce(createSelect([{ count: 2 }]))
@@ -151,12 +178,13 @@ describe("GET /api/admin/meaning-graph", () => {
         };
         nodes: Array<Record<string, any>>;
         edges: Array<Record<string, unknown>>;
+        recentInspirations: Array<Record<string, any>>;
       };
     };
     expect(body.graph.meta).toMatchObject({
       nodeCount: 2,
       edgeCount: 1,
-      evidenceCount: 1,
+      evidenceCount: 2,
       limit: 2,
       health: {
         inspirationCount: 12,
@@ -194,5 +222,26 @@ describe("GET /api/admin/meaning-graph", () => {
         confidence: 88,
       }),
     ]);
+    expect(body.graph.recentInspirations[0]).toMatchObject({
+      id: "insp-1",
+      meaningNotes: [
+        expect.objectContaining({
+          id: "node-1",
+          reason: "WAKA building/AI signals promoted this as a live question.",
+        }),
+        expect.objectContaining({
+          id: "node-2",
+          reason: "The same save points to environments where judgment can be discussed honestly.",
+        }),
+      ],
+      relationshipEdges: [
+        expect.objectContaining({
+          id: "edge-1",
+          sourceReason: "WAKA building/AI signals promoted this as a live question.",
+          targetReason:
+            "The same save points to environments where judgment can be discussed honestly.",
+        }),
+      ],
+    });
   });
 });
