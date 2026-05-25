@@ -291,6 +291,100 @@ describe("persistMeaningGraphForInspiration", () => {
     expect(persistedEdges[0]!.sourceNodeId).not.toBe(persistedEdges[0]!.targetNodeId);
   }, 30000);
 
+  it("keeps one relationship edge per meaning-note pair and prefers a specific judge kind", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "AI makes building faster, but choosing what to build and why it matters still feels harder.",
+      importanceScore: 76,
+      wowScore: 82,
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Good rooms and peers shape which ambitions people can honestly hold.",
+      importanceScore: 68,
+      wowScore: 74,
+    });
+    await createPacket(testDb, alice.user.id, trigger);
+    await createPacket(testDb, alice.user.id, candidate);
+
+    const client: MeaningRelationshipJudgeClient = {
+      judgeMeaningRelationships: vi.fn().mockResolvedValue({
+        hasMeaningfulRelationships: true,
+        relationships: [
+          {
+            kind: "clarifies",
+            fromInspirationId: trigger.id,
+            toInspirationId: candidate.id,
+            confidence: 88,
+            reason: "The environment clarifies why faster building still needs judgment.",
+            evidence: [
+              {
+                inspirationId: trigger.id,
+                label: "The question",
+                reason: "The trigger asks what remains worth building.",
+              },
+              {
+                inspirationId: candidate.id,
+                label: "The room",
+                reason: "The candidate shows where judgment can be held honestly.",
+              },
+            ],
+          },
+        ],
+      }),
+    };
+
+    const result = await persistMeaningGraphForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      client,
+    });
+
+    const persistedEdges = await testDb.db
+      .select()
+      .from(meaningEdges)
+      .where(eq(meaningEdges.userId, alice.user.id));
+
+    expect(result.edges).toHaveLength(1);
+    expect(persistedEdges).toHaveLength(1);
+    expect(persistedEdges[0]).toMatchObject({
+      kind: "points_to",
+      confidence: 88,
+    });
+  }, 30000);
+
+  it("does not create one-off claim nodes for ordinary high-scoring artifacts without a spark", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "AI makes writing faster, but deciding what is worth saying still depends on human judgment.",
+      importanceScore: 70,
+      wowScore: 72,
+    });
+    await createPacket(testDb, alice.user.id, trigger);
+
+    const client: MeaningRelationshipJudgeClient = {
+      judgeMeaningRelationships: vi.fn(),
+    };
+
+    const result = await persistMeaningGraphForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      client,
+    });
+
+    const persistedNodes = await testDb.db
+      .select()
+      .from(meaningNodes)
+      .where(eq(meaningNodes.userId, alice.user.id));
+
+    expect(result.judgmentResult.status).toBe("not_enough_candidates");
+    expect(persistedNodes.map((node) => node.type)).not.toContain("claim");
+    expect(persistedNodes.map((node) => node.type)).toEqual(
+      expect.arrayContaining(["question", "value"]),
+    );
+  }, 30000);
+
   it("writes no meaning graph rows when the trigger has no meaning packet", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
