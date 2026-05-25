@@ -143,6 +143,13 @@ function relationshipSummary(edge: {
   return `${edge.sourceLabel} ${EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ")} ${edge.targetLabel}`;
 }
 
+function compactReason(reason: string): string {
+  const normalized = reason.replace(/\s+/g, " ").trim();
+  if (!normalized) return "No reason stored yet.";
+  if (normalized.length <= 150) return normalized;
+  return `${normalized.slice(0, 147).trimEnd()}...`;
+}
+
 function readableGraphWarning(type: string): string | null {
   switch (type) {
     case "no_data":
@@ -285,6 +292,34 @@ export default function MeaningGraphPage(): JSX.Element {
         .filter((message): message is string => Boolean(message)),
     [health],
   );
+
+  const recentReviewStats = useMemo(() => {
+    let enteredGraph = 0;
+    let withRelationships = 0;
+    let processedWithoutNotes = 0;
+    let processing = 0;
+
+    for (const inspiration of recentInspirations) {
+      if (!inspiration.packetCreatedAt) {
+        processing += 1;
+      } else if (inspiration.meaningNotes.length === 0) {
+        processedWithoutNotes += 1;
+      } else {
+        enteredGraph += 1;
+      }
+
+      if (inspiration.relationshipEdges.length > 0) {
+        withRelationships += 1;
+      }
+    }
+
+    return {
+      enteredGraph,
+      withRelationships,
+      processedWithoutNotes,
+      processing,
+    };
+  }, [recentInspirations]);
 
   const sortedNodes = useMemo(
     () =>
@@ -469,29 +504,73 @@ export default function MeaningGraphPage(): JSX.Element {
   ): JSX.Element => {
     const hasMeaningNotes = inspiration.meaningNotes.length > 0;
     const hasRelationships = inspiration.relationshipEdges.length > 0;
-    const status = inspiration.packetCreatedAt
-      ? hasMeaningNotes
-        ? "Entered graph"
-        : "Processed, no meaning note yet"
-      : "Processing";
+    const status = !inspiration.packetCreatedAt
+      ? "Processing"
+      : hasMeaningNotes
+        ? hasRelationships
+          ? "Added notes and relationships"
+          : "Added meaning notes"
+        : "Not added to graph";
 
     return (
       <article className="meaning-recent-inspiration" key={inspiration.id}>
-        <time dateTime={inspiration.createdAt}>{formatDate(inspiration.createdAt)}</time>
-        <blockquote>{shortPreview(inspiration.preview)}</blockquote>
-        <div className="meaning-recent-inspiration-meta">
-          <span>{status}</span>
-          {hasMeaningNotes ? (
-            <span>
-              Entered as: {inspiration.meaningNotes.map((note) => note.label).join(", ")}
-            </span>
-          ) : null}
-          <span>
-            Relationships:{" "}
-            {hasRelationships
-              ? inspiration.relationshipEdges.map(relationshipSummary).join("; ")
-              : "none"}
+        <div className="meaning-recent-inspiration-head">
+          <time dateTime={inspiration.createdAt}>{formatDate(inspiration.createdAt)}</time>
+          <span data-state={hasMeaningNotes ? "entered" : inspiration.packetCreatedAt ? "not-added" : "processing"}>
+            {status}
           </span>
+        </div>
+        <blockquote>{shortPreview(inspiration.preview)}</blockquote>
+        <div className="meaning-recent-outcomes">
+          <section>
+            <h3>Meaning notes</h3>
+            {hasMeaningNotes ? (
+              <ul>
+                {inspiration.meaningNotes.map((note) => (
+                  <li key={`${inspiration.id}-${note.id}`}>
+                    <strong>{note.label}</strong>
+                    <span>{TYPE_LABEL[note.type] ?? note.type}</span>
+                    <p>{compactReason(note.reason)}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>
+                {inspiration.packetCreatedAt
+                  ? "No meaning note was created or reinforced from this save."
+                  : "This save has not finished processing yet."}
+              </p>
+            )}
+          </section>
+          <section>
+            <h3>Relationship edges</h3>
+            {hasRelationships ? (
+              <ul>
+                {inspiration.relationshipEdges.map((edge) => (
+                  <li key={`${inspiration.id}-${edge.id}`}>
+                    <strong>{relationshipSummary(edge)}</strong>
+                    <span>{relationshipLabel(edge)}</span>
+                    {edge.sourceReason || edge.targetReason ? (
+                      <p>
+                        {[edge.sourceReason, edge.targetReason]
+                          .filter(Boolean)
+                          .map(compactReason)
+                          .join(" ")}
+                      </p>
+                    ) : (
+                      <p>This save is stored as evidence for the relationship.</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>
+                {hasMeaningNotes
+                  ? "No relationship edge was created from this save."
+                  : "No relationship edge yet."}
+              </p>
+            )}
+          </section>
         </div>
       </article>
     );
@@ -660,9 +739,19 @@ export default function MeaningGraphPage(): JSX.Element {
           <section className="meaning-dashboard-grid meaning-dashboard-grid--recent">
             <section className="meaning-dashboard-panel meaning-recent-feed" aria-labelledby="recent-inspirations-title">
               <div className="meaning-dashboard-section-heading">
-                <span>recent inspirations entering</span>
-                <h2 id="recent-inspirations-title">Recent Inspirations Entering</h2>
-                <p>Newest saves and how they currently appear in the meaning graph.</p>
+                <div>
+                  <span>recent inspirations</span>
+                  <h2 id="recent-inspirations-title">Graph entry review</h2>
+                  <p>Newest saves and what they added to the meaning graph.</p>
+                </div>
+                <div className="meaning-dashboard-inline-meta" aria-label="Recent graph entry summary">
+                  <span>{recentReviewStats.enteredGraph} added notes</span>
+                  <span>{recentReviewStats.withRelationships} added relationships</span>
+                  <span>{recentReviewStats.processedWithoutNotes} not added</span>
+                  {recentReviewStats.processing > 0 ? (
+                    <span>{recentReviewStats.processing} processing</span>
+                  ) : null}
+                </div>
               </div>
               <div className="meaning-recent-inspiration-list">
                 {recentInspirations.length > 0 ? (

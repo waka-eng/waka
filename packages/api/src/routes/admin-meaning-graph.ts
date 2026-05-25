@@ -379,6 +379,7 @@ export function createAdminMeaningGraphRoutes(
 
     const evidenceByNodeId = new Map<string, typeof evidenceRows>();
     const evidenceByInspirationId = new Map<string, typeof evidenceRows>();
+    const evidenceByInspirationAndNodeId = new Map<string, (typeof evidenceRows)[number]>();
     for (const row of evidenceRows) {
       const rows = evidenceByNodeId.get(row.meaningNodeId) ?? [];
       rows.push(row);
@@ -387,6 +388,12 @@ export function createAdminMeaningGraphRoutes(
       const inspirationRows = evidenceByInspirationId.get(row.inspirationId) ?? [];
       inspirationRows.push(row);
       evidenceByInspirationId.set(row.inspirationId, inspirationRows);
+
+      const evidenceKey = `${row.inspirationId}|${row.meaningNodeId}`;
+      const existingEvidence = evidenceByInspirationAndNodeId.get(evidenceKey);
+      if (!existingEvidence || row.weight > existingEvidence.weight) {
+        evidenceByInspirationAndNodeId.set(evidenceKey, row);
+      }
     }
 
     const recentInspirationRows = await db
@@ -477,14 +484,24 @@ export function createAdminMeaningGraphRoutes(
             relationshipEdges: edgeRows
               .filter((edge) => edge.evidenceInspirationIds.includes(inspiration.id))
               .slice(0, 6)
-              .map((edge) => ({
-                id: edge.id,
-                kind: edge.kind,
-                sourceNodeId: edge.sourceNodeId,
-                sourceLabel: nodeById.get(edge.sourceNodeId)?.label ?? "Unknown source",
-                targetNodeId: edge.targetNodeId,
-                targetLabel: nodeById.get(edge.targetNodeId)?.label ?? "Unknown target",
-              })),
+              .map((edge) => {
+                const sourceEvidence = evidenceByInspirationAndNodeId.get(
+                  `${inspiration.id}|${edge.sourceNodeId}`,
+                );
+                const targetEvidence = evidenceByInspirationAndNodeId.get(
+                  `${inspiration.id}|${edge.targetNodeId}`,
+                );
+                return {
+                  id: edge.id,
+                  kind: edge.kind,
+                  sourceNodeId: edge.sourceNodeId,
+                  sourceLabel: nodeById.get(edge.sourceNodeId)?.label ?? "Unknown source",
+                  sourceReason: sourceEvidence?.reason ?? "",
+                  targetNodeId: edge.targetNodeId,
+                  targetLabel: nodeById.get(edge.targetNodeId)?.label ?? "Unknown target",
+                  targetReason: targetEvidence?.reason ?? "",
+                };
+              }),
           };
         }),
         meta: {

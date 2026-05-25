@@ -910,8 +910,10 @@ export interface ApiMeaningGraphRecentInspiration {
     kind: string;
     sourceNodeId: string;
     sourceLabel: string;
+    sourceReason: string;
     targetNodeId: string;
     targetLabel: string;
+    targetReason: string;
   }>;
 }
 
