@@ -161,8 +161,8 @@ function buildMeaningSignals(
   const sparkSource = row.packet.sparkText.trim();
   const shouldKeepSpecificClaim =
     sparkSource.length > 0 ||
-    row.inspiration.wowScore >= 65 ||
-    row.inspiration.importanceScore >= 65;
+    row.inspiration.wowScore >= 82 ||
+    row.inspiration.importanceScore >= 82;
 
   if (shouldKeepSpecificClaim) {
     const source = sparkSource || row.packet.artifactExcerpt || row.packet.packetText;
@@ -524,7 +524,6 @@ async function upsertMeaningEdge(input: {
         eq(meaningEdges.userId, input.userId),
         eq(meaningEdges.sourceNodeId, input.sourceNode.id),
         eq(meaningEdges.targetNodeId, input.targetNode.id),
-        eq(meaningEdges.kind, input.edge.kind),
       ),
     )
     .limit(1);
@@ -538,6 +537,10 @@ async function upsertMeaningEdge(input: {
       .update(meaningEdges)
       .set({
         status: "active",
+        kind:
+          edgeKindPriority(input.edge.kind) > edgeKindPriority(existing.kind as MeaningEdgeKind)
+            ? input.edge.kind
+            : existing.kind,
         weight: Math.min(1000, existing.weight + input.edge.weight),
         confidence: Math.max(existing.confidence, input.edge.confidence),
         evidenceCount: evidenceInspirationIds.length,
@@ -629,13 +632,31 @@ function signalKey(signal: MeaningSignal): string {
 }
 
 function pendingEdgeKey(edge: PendingMeaningEdge): string {
-  return `${signalKey(edge.source)}:${edge.kind}:${signalKey(edge.target)}`;
+  return `${durableSignalKey(edge.source)}:${durableSignalKey(edge.target)}`;
+}
+
+function edgeKindPriority(kind: MeaningEdgeKind): number {
+  switch (kind) {
+    case "challenges":
+    case "points_to":
+    case "asks_for":
+    case "reactivates":
+      return 2;
+    case "supports":
+    default:
+      return 1;
+  }
 }
 
 function addPendingEdge(edgesByKey: Map<string, PendingMeaningEdge>, edge: PendingMeaningEdge): void {
   const key = pendingEdgeKey(edge);
   const existing = edgesByKey.get(key);
-  if (!existing || edge.confidence > existing.confidence || edge.weight > existing.weight) {
+  if (
+    !existing ||
+    edgeKindPriority(edge.kind) > edgeKindPriority(existing.kind) ||
+    edge.confidence > existing.confidence ||
+    edge.weight > existing.weight
+  ) {
     edgesByKey.set(key, edge);
   }
 }

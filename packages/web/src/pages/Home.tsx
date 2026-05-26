@@ -27,16 +27,15 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { Link } from "react-router-dom";
 
-import { InspirationsBoard } from "../components/InspirationsBoard";
 import {
   InspirationCard,
   type InspirationCardData,
 } from "../components/InspirationCard";
-import { WowMomentsSection } from "../components/WowMomentsSection";
-import { AppShell } from "../components/layout";
+import { CaptureForm, type CaptureView } from "../components/capture";
 import type {
   PendingInspiration,
   PersistedResult,
@@ -45,27 +44,27 @@ import {
   InspirationDetail,
   type InspirationDetailData,
 } from "../components/history";
+import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
   type ApiError,
   type ApiInspiration,
   type ApiInspirationScorePatch,
-  type ApiWowMoment,
+  type ApiTopOfMind,
+  type ApiTopOfMindSignal,
   type ClusterKind,
   fetchInspirations,
-  fetchWowMoments,
+  fetchTopOfMind,
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
   DEFAULT_LOCALE,
-  formatResultsCount,
   normalizeSupportedLocale,
   t,
   type SupportedLocale,
 } from "../lib/locales";
 
-const WOW_MOMENTS_INSPECT_LIMIT = 100;
 const LOCALE_STORAGE_KEY = "waka.ui.locale";
 
 function readInitialLocale(): SupportedLocale {
@@ -98,7 +97,10 @@ interface InternalEntryEnv {
 }
 
 function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
-  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true";
+  const hostname =
+    typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
+  const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true" || isLocalhost;
 }
 
 /**
@@ -110,6 +112,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  * online).
  */
 type InspirationStatus = "saving" | "saved" | "error";
+type ReactionKind = "neat" | "partial" | "off";
 
 interface InspirationListEntry {
   /** Server-assigned id once persisted; equals `tempId` while saving. */
@@ -273,83 +276,12 @@ function applyUpdatedInspiration(
   };
 }
 
-type HomeView = "wow" | "inspiration";
-
-export interface HomeCaptureHandoffState {
-  activeView: HomeView;
-  autoFocusCaptureRequest: number;
-}
-
-export function nextHomeCaptureHandoffState(
-  previousAutoFocusCaptureRequest: number,
-): HomeCaptureHandoffState {
-  return {
-    activeView: "inspiration",
-    autoFocusCaptureRequest: previousAutoFocusCaptureRequest + 1,
-  };
-}
-
-interface HomeViewToggleProps {
-  activeView: HomeView;
-  onChange: (view: HomeView) => void;
-  locale: SupportedLocale;
-}
-
-export function HomeViewToggle({
-  activeView,
-  onChange,
-  locale,
-}: HomeViewToggleProps): JSX.Element {
-  return (
-    <nav
-      className="home-view-switcher"
-      aria-label={t(locale, "homeView")}
-      data-active-view={activeView}
-    >
-      <button
-        type="button"
-        className={activeView === "wow" ? "active" : undefined}
-        aria-pressed={activeView === "wow"}
-        onClick={() => onChange("wow")}
-      >
-        {t(locale, "wowMomentFirst")}
-      </button>
-      <button
-        type="button"
-        className={activeView === "inspiration" ? "active" : undefined}
-        aria-pressed={activeView === "inspiration"}
-        onClick={() => onChange("inspiration")}
-      >
-        {t(locale, "inspirationFirst")}
-      </button>
-    </nav>
-  );
-}
-
-type InspirationSortColumn = "text" | "saved";
-type InspirationSortDirection = "asc" | "desc";
-
-interface InspirationSortState {
-  column: InspirationSortColumn;
-  direction: InspirationSortDirection;
-}
-
 interface InspirationDiscoveryFilters {
   search: string;
-  sort: InspirationSortState | null;
 }
 
 const DEFAULT_INSPIRATION_FILTERS: InspirationDiscoveryFilters = {
   search: "",
-  sort: null,
-};
-
-const DEFAULT_SORT_DIRECTIONS: Record<
-  InspirationSortColumn,
-  InspirationSortDirection
-> = {
-  text: "asc",
-  saved: "desc",
 };
 
 function createdAtMs(entry: InspirationListEntry): number {
@@ -367,156 +299,194 @@ function filterAndSortInspirationEntries(
     return !query || haystack.includes(query);
   });
 
-  return [...filtered].sort((a, b) => {
-    const sort = filters.sort;
-    if (!sort) return createdAtMs(b) - createdAtMs(a);
-
-    let comparison = 0;
-    if (sort.column === "text") {
-      comparison = a.text.localeCompare(b.text, undefined, {
-        sensitivity: "base",
-        numeric: true,
-      });
-    } else if (sort.column === "saved") {
-      comparison = createdAtMs(a) - createdAtMs(b);
-    }
-
-    if (comparison === 0) comparison = createdAtMs(b) - createdAtMs(a);
-    return sort.direction === "asc" ? comparison : -comparison;
-  });
+  return [...filtered].sort((a, b) => createdAtMs(b) - createdAtMs(a));
 }
 
-interface InspirationDiscoveryPanelProps {
-  entries: InspirationListEntry[];
-  filteredEntries: InspirationListEntry[];
-  filters: InspirationDiscoveryFilters;
-  locale: SupportedLocale;
-  onFiltersChange: (filters: InspirationDiscoveryFilters) => void;
-  onSelectInspiration: (id: string) => void;
+function shortText(value: string, maxLength = 220): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function InspirationDiscoveryPanel({
-  entries,
-  filteredEntries,
-  filters,
-  locale,
-  onFiltersChange,
-  onSelectInspiration,
-}: InspirationDiscoveryPanelProps): JSX.Element {
-  const updateFilter = <K extends keyof InspirationDiscoveryFilters>(
-    key: K,
-    value: InspirationDiscoveryFilters[K],
-  ) => {
-    onFiltersChange({ ...filters, [key]: value });
-  };
-
-  const toggleSort = (column: InspirationSortColumn) => {
-    const current = filters.sort;
-    const direction: InspirationSortDirection =
-      current?.column === column
-        ? current.direction === "asc"
-          ? "desc"
-          : "asc"
-        : DEFAULT_SORT_DIRECTIONS[column];
-    onFiltersChange({ ...filters, sort: { column, direction } });
-  };
-
-  const sortLabel = (column: InspirationSortColumn): string => {
-    if (filters.sort?.column !== column) return t(locale, "notSorted");
-    return filters.sort.direction === "asc" ? t(locale, "ascending") : t(locale, "descending");
-  };
-
-  const sortIndicator = (column: InspirationSortColumn): string => {
-    if (filters.sort?.column !== column) return "↕";
-    return filters.sort.direction === "asc" ? "↑" : "↓";
-  };
-
-  const resultLabel = formatResultsCount(locale, entries.length, filteredEntries.length);
-
-  const buildMetaText = (entry: InspirationListEntry): string => {
-    const parts = [
-      entry.status === "saved" ? t(locale, "savedStatus") : entry.status,
-      entry.timestamp,
-    ];
-    return parts.join(" · ");
-  };
-
-  return (
-    <section className="inspiration-discovery-panel" aria-labelledby="inspiration-discovery-title">
-      <div className="inspiration-discovery-heading">
-        <div>
-          <span>{t(locale, "findInspirationsEyebrow")}</span>
-          <h2 id="inspiration-discovery-title">{t(locale, "searchRawMaterial")}</h2>
-        </div>
-        <div className="inspiration-discovery-actions">
-          <strong aria-live="polite">{resultLabel}</strong>
-        </div>
-      </div>
-
-      <div className="inspiration-filter-bar" role="search" aria-label={t(locale, "inspirationFilters")}>
-        <label className="inspiration-search-field">
-          <span>{t(locale, "search")}</span>
-          <input
-            aria-label={t(locale, "searchInspirations")}
-            type="search"
-            value={filters.search}
-            placeholder={t(locale, "searchPlaceholder")}
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              updateFilter("search", event.target.value)
-            }
-          />
-        </label>
-      </div>
-
-      {filteredEntries.length === 0 ? (
-        <div className="inspiration-results-empty" role="status">
-          <strong>{t(locale, "noInspirationsMatch")}</strong>
-          <span>{t(locale, "broaderSearchHint")}</span>
-        </div>
-      ) : (
-        <div className="inspiration-results-shell">
-          <div className="inspiration-results-header" aria-label={t(locale, "sortInspirations")}>
-            <button
-              type="button"
-              className="inspiration-sort-button inspiration-sort-button--text"
-              aria-label={`${t(locale, "sortByInspirationText")}, ${sortLabel("text")}`}
-              aria-pressed={filters.sort?.column === "text"}
-              onClick={() => toggleSort("text")}
-            >
-              <span>{t(locale, "inspirationText")}</span>
-              <span aria-hidden="true">{sortIndicator("text")}</span>
-            </button>
-            <button
-              type="button"
-              className="inspiration-sort-button"
-              aria-label={`${t(locale, "sortBySavedTime")}, ${sortLabel("saved")}`}
-              aria-pressed={filters.sort?.column === "saved"}
-              onClick={() => toggleSort("saved")}
-            >
-              <span>{t(locale, "savedTime")}</span>
-              <span aria-hidden="true">{sortIndicator("saved")}</span>
-            </button>
-          </div>
-          <div className="inspiration-results-grid" aria-label={resultLabel}>
-          {filteredEntries.map((entry) => (
-            <button
-              type="button"
-              className="inspiration-result-card"
-              key={entry.id}
-              onClick={() => onSelectInspiration(entry.id)}
-            >
-              <span className="inspiration-result-meta">
-                {buildMetaText(entry)}
-              </span>
-              <span className="inspiration-result-text">{entry.text}</span>
-            </button>
-          ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
+function meaningTypeLabel(type: string): string {
+  return type.replace(/_/g, " ");
 }
+
+const MEANING_NOTE_LABEL_TRANSLATIONS: Record<string, string> = {
+  "what kind of life would make this work worth it": "이 일을 가치 있게 만드는 삶",
+  "rooms where people can be honest before they are impressive": "인상적이기 전에 솔직할 수 있는 방",
+  "to build around people who make ambition feel less lonely": "야망이 덜 외롭게 느껴지는 사람들 곁에서 만들기",
+  "what is worth building when building itself gets cheap": "만드는 일이 쉬워질 때에도 만들 가치가 있는 것",
+  "human judgment over pure speed": "순수한 속도보다 인간의 판단",
+  "taste over speed": "속도보다 취향",
+  "people who keep asking why": "계속 왜인지 묻는 사람들",
+};
+
+function normalizeMeaningLabel(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function localizedMeaningLabel(signal: ApiTopOfMindSignal, locale: SupportedLocale): string {
+  if (locale === "en-US") return signal.label;
+  return MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label;
+}
+
+const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
+  { top: "24px", left: "calc(50% - 200px)", tilt: -1.4, w: "400px" },
+  { top: "74px", left: "calc(50% - 520px)", tilt: -2.2, w: "260px" },
+  { top: "270px", left: "calc(50% + 80px)", tilt: 1.8, w: "280px" },
+  { top: "268px", left: "calc(50% - 470px)", tilt: 1.2, w: "260px" },
+];
+
+const NOTE_COLORS = [
+  { hue: "#ece4cb", ink: "#4a3e1f" },
+  { hue: "#e8d4ce", ink: "#6b3c34" },
+  { hue: "#d8ddc6", ink: "#3f4a2a" },
+  { hue: "#cdd3df", ink: "#3a4456" },
+];
+
+const HOME_COPY = {
+  "ko-KR": {
+    thoughtTab: "top of mind",
+    savesTab: "all inspirations",
+    room: "내 방",
+    titleLineOne: (name: string) => (
+      <>
+        <span className="nc-title-name">{name}'s</span> top of mind
+      </>
+    ),
+    titleLineTwo: "",
+    titleSuffix: "",
+    tagline: (
+      <>
+        떠오른 생각은 자주 사라집니다.
+        <br />
+        이 사람은 사라지기 전에 붙잡아 두었습니다.
+        <br />
+        그렇게 모인 조각들이 천천히 한 방향을 만들기 시작합니다.
+        <br />
+        누구와 생각하고 싶은지. 어디에 머물고 싶은지. 무엇을 만들고 싶은지.
+        <br />
+        <span className="nc-tagline-en">
+          — she did not write any of this. she caught what almost slipped away. the rest found its shape.
+        </span>
+      </>
+    ),
+    lifecycleHint: "not final. changes as new inspirations arrive.",
+    noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
+    evidenceLabel: "여기서 시작됨",
+    reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
+    reactionGroup: "How does this land",
+    loadingThoughts: "생각이 모이는 중...",
+    emptyThoughts: "저장본이 쌓이면 여기에 생각이 나타납니다.",
+    footnote: (name: string) => (
+      <>
+        ※ 본 페이지는 {name} 본인이 쓴 글이 아닙니다.
+        <br />
+        저장한 것들이 모여 자기 멋대로 변합니다.
+        <br />
+        매주 바뀝니다. 어쩔 수 없음.
+      </>
+    ),
+    footnoteCredit: "— Ⓒ WAKA, 2026, 생각의 서랍",
+    savesTitle: "all inspirations",
+    searchLabel: "search",
+    searchPlaceholder: "저장본 검색",
+    loadingSaves: "저장본을 불러오는 중...",
+    emptySaves: "아직 저장본이 없습니다.",
+    captureAria: "capture inspiration",
+    captureCta: "capture inspiration",
+    captureHint: () => "",
+    captureDialog: "capture inspiration",
+    close: "close",
+  },
+  "en-US": {
+    thoughtTab: "top of mind",
+    savesTab: "all inspirations",
+    room: "my room",
+    titleLineOne: (name: string) => (
+      <>
+        <span className="nc-title-name">{name}'s</span> top of mind
+      </>
+    ),
+    titleLineTwo: "",
+    titleSuffix: "",
+    tagline: (
+      <>
+        Most inspiration disappears.
+        <br />
+        This person caught it before it vanished.
+        <br />
+        And slowly, the things they saved began to take shape.
+        <br />
+        Who they want to think with. Where they want to be. What they might be here to build.
+        <br />
+        <span className="nc-tagline-en">
+          — they did not write any of this. they only saved what almost slipped away. the rest emerged.
+        </span>
+      </>
+    ),
+    lifecycleHint: "not final. changes as new inspirations arrive.",
+    noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
+    evidenceLabel: "where it began",
+    reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
+    reactionGroup: "How does this land",
+    loadingThoughts: "gathering what is top of mind...",
+    emptyThoughts: "When saved ideas gather, a shape will appear here.",
+    footnote: (name: string) => (
+      <>
+        This page was not written by {name}.
+        <br />
+        It was made from the things they saved.
+        <br />
+        They gathered, changed shape, and started speaking back.
+        <br />
+        It changes every week. It cannot help itself.
+      </>
+    ),
+    footnoteCredit: "— Ⓒ WAKA, 2026, for minds that wander",
+    savesTitle: "saved",
+    searchLabel: "search",
+    searchPlaceholder: "search saved ideas",
+    loadingSaves: "loading saved ideas...",
+    emptySaves: "nothing saved yet.",
+    captureAria: "capture inspiration",
+    captureCta: "capture inspiration",
+    captureHint: () => "",
+    captureDialog: "capture inspiration",
+    close: "close",
+  },
+} satisfies Record<
+  SupportedLocale,
+  {
+    thoughtTab: string;
+    savesTab: string;
+    room: string;
+    titleLineOne: (name: string) => JSX.Element;
+    titleLineTwo: string;
+    titleSuffix: string;
+    tagline: JSX.Element;
+    lifecycleHint: string;
+    noteShifted: string[];
+    evidenceLabel: string;
+    reactionLabels: Record<ReactionKind, string>;
+    reactionGroup: string;
+    loadingThoughts: string;
+    emptyThoughts: string;
+    footnote: (name: string) => JSX.Element;
+    footnoteCredit: string;
+    savesTitle: string;
+    searchLabel: string;
+    searchPlaceholder: string;
+    loadingSaves: string;
+    emptySaves: string;
+    captureAria: string;
+    captureCta: string;
+    captureHint: (count: number) => string;
+    captureDialog: string;
+    close: string;
+  }
+>;
 
 export function HomePage(): JSX.Element {
   const { user, logout, updatePreferredLocale } = useAuth();
@@ -535,14 +505,22 @@ export function HomePage(): JSX.Element {
   // seed's `data_isolation` evaluation rule calls for.
   const [entries, setEntries] = useState<InspirationListEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [wowMoments, setWowMoments] = useState<ApiWowMoment[]>([]);
-  const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
-  const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<HomeView>("wow");
+  const [topOfMind, setTopOfMind] = useState<ApiTopOfMind | null>(null);
+  const [topOfMindLoading, setTopOfMindLoading] = useState(true);
+  const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
-  const [autoFocusCaptureRequest, setAutoFocusCaptureRequest] = useState(0);
+  const [captureFocused, setCaptureFocused] = useState(false);
+  const [captureSaveFlash, setCaptureSaveFlash] = useState(false);
+  const [captureView] = useState<CaptureView>("note");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [homeMode, setHomeMode] = useState<"thought" | "saves">("thought");
+  const [captureOpen, setCaptureOpen] = useState(false);
+  const [reactions, setReactions] = useState<Record<number, ReactionKind | null>>({});
+  const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -568,8 +546,11 @@ export function HomePage(): JSX.Element {
    * before the next fetch resolves.
    */
   const loadedForUserIdRef = useRef<string | null>(null);
-  const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
-  const wowMomentsRequestIdRef = useRef(0);
+  const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
+  const topOfMindRequestIdRef = useRef(0);
+  const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
+  const dragMovedRef = useRef(false);
+  const captureSaveFlashTimerRef = useRef<number | null>(null);
 
   const handleLocaleChange = useCallback(
     (nextLocale: SupportedLocale) => {
@@ -588,16 +569,24 @@ export function HomePage(): JSX.Element {
   }, [user?.preferredLocale, user?.id]);
 
   useEffect(() => {
+    return () => {
+      if (captureSaveFlashTimerRef.current !== null) {
+        window.clearTimeout(captureSaveFlashTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!user) {
       // Guard regression — the route should have already redirected to
       // /login. Wipe local state defensively just in case.
       loadedForUserIdRef.current = null;
-      wowMomentsLoadedForUserIdRef.current = null;
-      wowMomentsRequestIdRef.current += 1;
+      topOfMindLoadedForUserIdRef.current = null;
+      topOfMindRequestIdRef.current += 1;
       setEntries([]);
-      setWowMoments([]);
-      setWowMomentsLoading(false);
-      setWowMomentsError(null);
+      setTopOfMind(null);
+      setTopOfMindLoading(false);
+      setTopOfMindError(null);
       return;
     }
 
@@ -669,40 +658,36 @@ export function HomePage(): JSX.Element {
     };
   }, [user]);
 
-  const refreshWowMoments = useCallback(
+  const refreshTopOfMind = useCallback(
     async (options?: {
       showLoading?: boolean;
       surfaceErrors?: boolean;
-    }): Promise<ApiWowMoment[] | null> => {
+    }): Promise<ApiTopOfMind | null> => {
       if (!user) return null;
 
       const requestUserId = user.id;
-      const requestId = wowMomentsRequestIdRef.current + 1;
-      wowMomentsRequestIdRef.current = requestId;
+      const requestId = topOfMindRequestIdRef.current + 1;
+      topOfMindRequestIdRef.current = requestId;
 
-      if (options?.showLoading) setWowMomentsLoading(true);
-      if (options?.surfaceErrors ?? true) setWowMomentsError(null);
+      if (options?.showLoading) setTopOfMindLoading(true);
+      if (options?.surfaceErrors ?? true) setTopOfMindError(null);
 
       try {
-        const rows = await fetchWowMoments({ limit: WOW_MOMENTS_INSPECT_LIMIT });
-        if (wowMomentsRequestIdRef.current !== requestId) return null;
-        // Match the inspirations load's defence-in-depth tenant guard: the
-        // route is scoped by session, but the page still refuses to render any
-        // row whose user id does not match the current auth context.
-        const ownRows = rows.filter((row) => row.userId === requestUserId);
-        setWowMoments(ownRows);
-        wowMomentsLoadedForUserIdRef.current = requestUserId;
-        setWowMomentsLoading(false);
-        setWowMomentsError(null);
-        return ownRows;
+        const next = await fetchTopOfMind();
+        if (topOfMindRequestIdRef.current !== requestId) return null;
+        topOfMindLoadedForUserIdRef.current = requestUserId;
+        setTopOfMind(next);
+        setTopOfMindLoading(false);
+        setTopOfMindError(null);
+        return next;
       } catch (err) {
-        if (wowMomentsRequestIdRef.current !== requestId) return null;
+        if (topOfMindRequestIdRef.current !== requestId) return null;
         if (options?.surfaceErrors ?? true) {
           const message =
-            err instanceof Error ? err.message : "Failed to load WOW moments";
-          setWowMomentsError(message);
+            err instanceof Error ? err.message : "Failed to load 생각";
+          setTopOfMindError(message);
         }
-        setWowMomentsLoading(false);
+        setTopOfMindLoading(false);
         return null;
       }
     },
@@ -711,21 +696,21 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     if (!user) return;
-    if (wowMomentsLoadedForUserIdRef.current === user.id) return;
+    if (topOfMindLoadedForUserIdRef.current === user.id) return;
 
     if (
-      wowMomentsLoadedForUserIdRef.current &&
-      wowMomentsLoadedForUserIdRef.current !== user.id
+      topOfMindLoadedForUserIdRef.current &&
+      topOfMindLoadedForUserIdRef.current !== user.id
     ) {
-      setWowMoments([]);
+      setTopOfMind(null);
     }
 
-    void refreshWowMoments({ showLoading: true, surfaceErrors: true });
+    void refreshTopOfMind({ showLoading: true, surfaceErrors: true });
 
     return () => {
-      wowMomentsRequestIdRef.current += 1;
+      topOfMindRequestIdRef.current += 1;
     };
-  }, [refreshWowMoments, user]);
+  }, [refreshTopOfMind, user]);
 
   const handleOptimisticAdd = useCallback((pending: PendingInspiration) => {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
@@ -763,7 +748,7 @@ export function HomePage(): JSX.Element {
       );
 
       const targetId = result.inspiration.id;
-      void refreshWowMoments({ showLoading: false, surfaceErrors: true });
+      void refreshTopOfMind({ showLoading: false, surfaceErrors: true });
 
       // The classifier worker (or the dev-mode inline fallback) writes
       // `cluster` asynchronously after the row is persisted. Without a
@@ -803,7 +788,7 @@ export function HomePage(): JSX.Element {
               if (!target.cluster) return;
               if (!classifiedRefreshRequested) {
                 classifiedRefreshRequested = true;
-                void refreshWowMoments({
+                void refreshTopOfMind({
                   showLoading: false,
                   surfaceErrors: false,
                 });
@@ -819,7 +804,7 @@ export function HomePage(): JSX.Element {
       }
     },
     [
-      refreshWowMoments,
+      refreshTopOfMind,
     ],
   );
 
@@ -865,6 +850,7 @@ export function HomePage(): JSX.Element {
       // GET endpoint on mount; this page only needs to track the
       // selected id so the panel knows which inspiration to render.
       setSelectedId(id);
+      setHistoryOpen(true);
       recordRevisit(id, "detail_opened");
     },
     [recordRevisit],
@@ -957,12 +943,6 @@ export function HomePage(): JSX.Element {
     return filterAndSortInspirationEntries(entries, inspirationFilters);
   }, [entries, inspirationFilters]);
 
-  const filteredCardItems = useMemo<InspirationCardData[]>(() => {
-    return [...filteredEntries].reverse().map(entryToCardData);
-  }, [filteredEntries]);
-
-
-
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
     return [...cardItems].reverse().map((item) => (
@@ -974,13 +954,21 @@ export function HomePage(): JSX.Element {
     ));
   }, [cardItems, handleSelectInspiration]);
 
-
-
-  const handleWowHeaderCapture = useCallback(() => {
-    const next = nextHomeCaptureHandoffState(autoFocusCaptureRequest);
-    setActiveView(next.activeView);
-    setAutoFocusCaptureRequest(next.autoFocusCaptureRequest);
-  }, [autoFocusCaptureRequest]);
+  const handleCapturePersisted = useCallback(
+    (tempId: string, result: PersistedResult) => {
+      setCaptureSaveFlash(true);
+      if (captureSaveFlashTimerRef.current !== null) {
+        window.clearTimeout(captureSaveFlashTimerRef.current);
+      }
+      captureSaveFlashTimerRef.current = window.setTimeout(() => {
+        setCaptureSaveFlash(false);
+        captureSaveFlashTimerRef.current = null;
+      }, 700);
+      handlePersisted(tempId, result);
+      setCaptureOpen(false);
+    },
+    [handlePersisted],
+  );
 
   // The guard guarantees `user` is non-null at this point. The defensive
   // check below converts a guard regression from "blank screen + console
@@ -1025,13 +1013,6 @@ export function HomePage(): JSX.Element {
   }
 
   const showAdminEntry = shouldShowAdminEntry(import.meta.env);
-  const viewSwitcher = (
-    <HomeViewToggle
-      activeView={activeView}
-      onChange={setActiveView}
-      locale={locale}
-    />
-  );
 
   const historyDetail = detailData ? (
     <InspirationDetail
@@ -1048,65 +1029,387 @@ export function HomePage(): JSX.Element {
     />
   ) : undefined;
 
-  const primaryContent =
-    activeView === "wow" ? (
-      <AppShell
-        count={entries.length}
-        headerTagline={t(locale, "wowMoments")}
-        loading={initialLoading}
-        onCaptureClick={handleWowHeaderCapture}
-        historyContent={historyContent}
-        historyDetail={historyDetail}
-        locale={locale}
-        onLocaleChange={handleLocaleChange}
-      >
-        {viewSwitcher}
-        <section className="wow-first-home" aria-label={t(locale, "wowMomentFirst")}>
-          <WowMomentsSection
-            moments={wowMoments}
-            loading={wowMomentsLoading}
-            error={wowMomentsError}
-            onAddInspiration={handleWowHeaderCapture}
-            locale={locale}
-          />
-        </section>
-      </AppShell>
-    ) : (
-      <InspirationsBoard
-        inspirations={filteredCardItems}
-        homeCards={[]}
-        totalInspirations={entries.length}
-        loading={initialLoading}
-        onOptimisticAdd={handleOptimisticAdd}
-        onPersisted={handlePersisted}
-        onPersistError={handlePersistError}
-        onSelectInspiration={handleSelectInspiration}
-        captureFirst
-        beforeGridContent={
-          <>
-            {viewSwitcher}
-            <InspirationDiscoveryPanel
-              entries={entries}
-              filteredEntries={filteredEntries}
-              filters={inspirationFilters}
-              locale={locale}
-              onFiltersChange={setInspirationFilters}
-              onSelectInspiration={handleSelectInspiration}
-            />
-          </>
-        }
-        historyDetail={historyDetail}
-        autoFocusCaptureRequest={
-          autoFocusCaptureRequest > 0 ? autoFocusCaptureRequest : undefined
-        }
-        locale={locale}
-        onLocaleChange={handleLocaleChange}
-      />
+  const thoughtCards = [
+    ...(topOfMind?.activeQuestions ?? []),
+    ...(topOfMind?.activeThemes ?? []),
+  ].slice(0, 4);
+  const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
+  const displayHandle = displayName.toLowerCase();
+  const dateLabel = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const copy = HOME_COPY[locale];
+
+  const setReaction = (index: number, kind: ReactionKind) => {
+    setReactions((prev) => ({ ...prev, [index]: prev[index] === kind ? null : kind }));
+  };
+
+  const relatedMeaningLabels = (signal: ApiTopOfMindSignal): string[] => {
+    if (!topOfMind) return [];
+    const labels = new Set<string>();
+    for (const edge of topOfMind.relationshipSignals) {
+      if (edge.sourceNodeId === signal.nodeId) labels.add(edge.targetLabel);
+      if (edge.targetNodeId === signal.nodeId) labels.add(edge.sourceLabel);
+    }
+    return [...labels].slice(0, 3).map((label) =>
+      locale === "en-US"
+        ? label
+        : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(label)] ?? label,
     );
+  };
+
+  useEffect(() => {
+    if (draggingIndex === null) return undefined;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMovedRef.current = true;
+      setDrags((prev) => ({
+        ...prev,
+        [start.index]: {
+          x: start.baseX + dx,
+          y: start.baseY + dy,
+        },
+      }));
+    };
+
+    const handlePointerUp = () => {
+      dragStartRef.current = null;
+      setDraggingIndex(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggingIndex]);
+
+  const onNotePointerDown = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea")) return;
+    if (expandedNoteIndex === index) return;
+    const base = drags[index] ?? { x: 0, y: 0 };
+    dragStartRef.current = {
+      index,
+      x: event.clientX,
+      y: event.clientY,
+      baseX: base.x,
+      baseY: base.y,
+    };
+    dragMovedRef.current = false;
+    setDraggingIndex(index);
+  };
+
+  const onNoteClick = (index: number) => () => {
+    if (dragMovedRef.current) {
+      dragMovedRef.current = false;
+      return;
+    }
+    setExpandedNoteIndex((current) => (current === index ? current : index));
+  };
+
+  const closeExpandedNoteOnBackdrop = () => {
+    setExpandedNoteIndex(null);
+  };
+
+  const renderThoughtCard = (signal: ApiTopOfMindSignal, index: number): JSX.Element => {
+    const source = signal.supportingInspirations[0];
+    const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
+    const drag = drags[index] ?? { x: 0, y: 0 };
+    return (
+    <article
+      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
+      key={signal.nodeId}
+      style={{
+        ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
+        ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
+        ["--tilt" as string]: `${position.tilt}deg`,
+        ["--w" as string]: position.w,
+        ["--top" as string]: position.top,
+        ["--left" as string]: position.left,
+        ["--dx" as string]: `${drag.x}px`,
+        ["--dy" as string]: `${drag.y}px`,
+        ["--decay" as string]: String(1 - index * 0.08),
+      }}
+      onPointerDown={onNotePointerDown(index)}
+      onClick={onNoteClick(index)}
+    >
+      <header className="nc-note-head">
+        <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
+        <span className="nc-note-shifted">
+          {copy.noteShifted[index] ?? copy.noteShifted[copy.noteShifted.length - 1]}
+        </span>
+      </header>
+
+      <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
+
+      <div className="nc-note-reveal">
+        <div className="nc-note-evidence">
+          <span className="nc-note-evidence-label">why it stuck</span>
+          <p className="nc-note-evidence-quote">
+            "{shortText(source?.preview || signal.reason, 120)}"
+          </p>
+          <span className="nc-note-evidence-source">— {meaningTypeLabel(signal.type)}</span>
+        </div>
+        <div className="nc-note-reactions" role="group" aria-label={copy.reactionGroup}>
+          {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
+            const label = copy.reactionLabels[kind];
+            const active = reactions[index] === kind;
+            return (
+              <button
+                key={kind}
+                type="button"
+                className={`nc-note-reaction${active ? " nc-note-reaction--active" : ""}`}
+                aria-pressed={active}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setReaction(index, kind);
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </article>
+  );
+  };
+
+  const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
+    const signal = thoughtCards[index];
+    if (!signal) return null;
+    const relatedLabels = relatedMeaningLabels(signal);
+    const source = signal.supportingInspirations[0];
+    return (
+      <article
+        className="nc-note-modal"
+        style={{
+          ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
+          ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="nc-note-head">
+          <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
+          <span className="nc-note-shifted">
+            {copy.noteShifted[index] ?? copy.noteShifted[copy.noteShifted.length - 1]}
+          </span>
+        </header>
+
+        <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
+
+        <div className="nc-note-expanded-content">
+          <section className="nc-note-reading">
+            <p>{signal.reason}</p>
+          </section>
+
+          <section className="nc-note-source-section">
+            <span>it began here</span>
+            <blockquote className="nc-note-source">
+              “{shortText(source?.preview || signal.reason, 190)}”
+            </blockquote>
+          </section>
+
+          {relatedLabels.length > 0 ? (
+            <section className="nc-note-nearby-section">
+              <span>nearby thought</span>
+              <p className="nc-note-related-line">{relatedLabels[0]}</p>
+            </section>
+          ) : null}
+
+          <footer className="nc-note-expanded-foot">
+            <div className="nc-note-reactions nc-note-reactions--expanded" role="group" aria-label={copy.reactionGroup}>
+              {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
+                const active = reactions[index] === kind;
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    className={`nc-note-reaction${active ? " nc-note-reaction--active" : ""}`}
+                    aria-pressed={active}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setReaction(index, kind);
+                    }}
+                  >
+                    {copy.reactionLabels[kind]}
+                  </button>
+                );
+              })}
+            </div>
+            <span>not final</span>
+          </footer>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <>
-      {primaryContent}
+      <BackgroundField />
+      <DropOverlay />
+      <HistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        title="all inspirations"
+        detail={historyDetail}
+      >
+        {historyContent}
+      </HistoryPanel>
+      {expandedNoteIndex !== null ? (
+        <div className="nc-note-overlay" onClick={closeExpandedNoteOnBackdrop}>
+          {renderExpandedThoughtCard(expandedNoteIndex)}
+        </div>
+      ) : null}
+      <main className="nc-canvas">
+        <header className="nc-topbar">
+          <div className="nc-topleft">
+            <div className="nc-mode" role="tablist" aria-label="home mode">
+            <button
+              type="button"
+              className={`nc-mode-btn${homeMode === "thought" ? " nc-mode-btn--active" : ""}`}
+              onClick={() => setHomeMode("thought")}
+            >
+              {copy.thoughtTab}
+            </button>
+            <button
+              type="button"
+              className={`nc-mode-btn${homeMode === "saves" ? " nc-mode-btn--active" : ""}`}
+              onClick={() => setHomeMode("saves")}
+            >
+              {copy.savesTab} ({entries.length})
+            </button>
+            </div>
+          </div>
+          <span className="nc-meta">{dateLabel}</span>
+          <div className="nc-topright">
+            <div className="nc-lang" aria-label="language">
+            <button
+              type="button"
+              className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
+              onClick={() => handleLocaleChange("ko-KR")}
+            >
+              한
+            </button>
+            <button
+              type="button"
+              className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
+              onClick={() => handleLocaleChange("en-US")}
+            >
+              en
+            </button>
+            </div>
+          </div>
+        </header>
+
+        {homeMode === "thought" ? (
+          <>
+            <section className="nc-titlecard">
+              <h1 className="nc-title">
+                {copy.titleLineOne(displayHandle)}
+                {copy.titleLineTwo ? (
+                  <>
+                    <br />
+                    {copy.titleLineTwo}
+                  </>
+                ) : null}
+                {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
+              </h1>
+              <p className="nc-tagline">{copy.tagline}</p>
+              <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p>
+            </section>
+
+            <section className="nc-stage" aria-label="generated thoughts">
+              {topOfMindLoading ? (
+                <p className="nc-loading">{copy.loadingThoughts}</p>
+              ) : topOfMindError ? (
+                <p className="nc-loading">{topOfMindError}</p>
+              ) : thoughtCards.length > 0 ? (
+                thoughtCards.map(renderThoughtCard)
+              ) : (
+                <p className="nc-loading">{copy.emptyThoughts}</p>
+              )}
+            </section>
+
+            <footer className="nc-footnote">
+              <p>{copy.footnote(displayHandle)}</p>
+              <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
+            </footer>
+          </>
+        ) : (
+          <section className="reference-saves-page" aria-label={copy.savesTitle}>
+            <header>
+              <label>
+                <input
+                  type="search"
+                  value={inspirationFilters.search}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                    setInspirationFilters({ search: event.target.value })
+                  }
+                  placeholder={copy.searchPlaceholder}
+                />
+              </label>
+            </header>
+            <div className="reference-save-list">
+              {filteredEntries.length > 0 ? (
+                filteredEntries.map((entry) => (
+                  <button
+                    type="button"
+                    key={entry.id}
+                    onClick={() => handleSelectInspiration(entry.id)}
+                    className="reference-save"
+                  >
+                    <span>{entry.status === "saved" ? entry.timestamp : entry.status}</span>
+                    <strong>{shortText(entry.text, 420)}</strong>
+                  </button>
+                ))
+              ) : (
+                <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+              )}
+            </div>
+          </section>
+        )}
+      </main>
+
+      {expandedNoteIndex === null ? (
+        <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>
+          <span className="nc-save-cta">{copy.captureCta}</span>
+        </button>
+      ) : null}
+
+      {captureOpen ? (
+        <div className="reference-capture-modal" role="dialog" aria-modal="true" aria-label={copy.captureDialog}>
+          <button type="button" className="reference-capture-close" onClick={() => setCaptureOpen(false)}>
+            {copy.close}
+          </button>
+          <div className="reference-capture-shell">
+            <div className="reference-capture-kicker">capture inspiration</div>
+          <CaptureForm
+            view={captureView}
+            visualState={{
+              focused: captureFocused,
+              saveFlash: captureSaveFlash,
+            }}
+            focused={captureFocused}
+            onToggleFocus={setCaptureFocused}
+            onOptimisticAdd={handleOptimisticAdd}
+            onPersisted={handleCapturePersisted}
+            onPersistError={handlePersistError}
+            locale={locale}
+          />
+          </div>
+        </div>
+      ) : null}
       {/*
         Temporary sign-out affordance. The prototype has no auth concept,
         so there's no in-design slot for this control yet. We render it
@@ -1150,7 +1453,7 @@ export function HomePage(): JSX.Element {
         style={{
           position: "fixed",
           bottom: 10,
-          left: 10,
+          right: 10,
           zIndex: 300,
           background: "rgba(255, 253, 247, 0.52)",
           border: "1px solid rgba(15, 15, 14, 0.12)",

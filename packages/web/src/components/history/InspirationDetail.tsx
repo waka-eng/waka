@@ -41,12 +41,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
   deleteInspiration,
-  fetchInspirationScoreBreakdown,
   fetchReflections,
   updateInspiration,
   type ApiAttachment,
   type ApiInspiration,
-  type ApiInspirationScoreBreakdown,
   type ApiInspirationScorePatch,
   type ApiReflection,
   type CreateReflectionResponse,
@@ -120,158 +118,6 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; reflections: ApiReflection[] };
 
-type ScoreBreakdownState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; breakdown: ApiInspirationScoreBreakdown };
-
-function formatScore(score: number | null): string {
-  return score === null ? "—" : String(score);
-}
-
-function formatCount(value: number, singular: string, plural = `${singular}s`): string {
-  return `${value} ${value === 1 ? singular : plural}`;
-}
-
-function formatRevisitFactors(
-  revisit: ApiInspirationScoreBreakdown["factors"]["revisit"],
-): string {
-  return `${formatCount(revisit.uniqueRevisitDays, "unique day")} · ${formatCount(revisit.totalRevisitCount, "total revisit")} · ${formatCount(revisit.recentRevisitCount, "recent revisit")} · signals: ${revisit.uniqueRevisitDaysScore} unique-day, ${revisit.totalRevisitCountScore} total-revisit, ${revisit.revisitedInLast7DaysScore} recent`;
-}
-
-function ScoreRow({ label, value }: { label: string; value: string | number }): JSX.Element {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-      <dt style={{ color: "var(--muted)" }}>{label}</dt>
-      <dd style={{ margin: 0, textAlign: "right" }}>{value}</dd>
-    </div>
-  );
-}
-
-function ScoreBreakdownPanel({ state }: { state: ScoreBreakdownState }): JSX.Element {
-  return (
-    <section
-      aria-labelledby="score-breakdown-title"
-      style={{
-        marginTop: 18,
-        border: "1px solid var(--line)",
-        borderRadius: 18,
-        padding: 16,
-        background: "rgba(255,255,255,0.5)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 12,
-        }}
-      >
-        <h3
-          id="score-breakdown-title"
-          style={{
-            margin: 0,
-            fontFamily: "var(--font-mono)",
-            fontSize: 10,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-          }}
-        >
-          WOW score breakdown
-        </h3>
-        {state.status === "ready" ? (
-          <strong style={{ fontFamily: "var(--font-serif)", fontSize: 24 }}>
-            WOW {state.breakdown.displayedWowScore}
-          </strong>
-        ) : null}
-      </div>
-
-      {state.status === "loading" ? (
-        <p role="status" aria-live="polite" style={{ margin: 0, color: "var(--muted)" }}>
-          Loading score breakdown…
-        </p>
-      ) : null}
-
-      {state.status === "error" ? (
-        <p role="alert" aria-live="polite" style={{ margin: 0, color: "var(--muted)" }}>
-          {state.message}
-        </p>
-      ) : null}
-
-      {state.status === "ready" ? (
-        <>
-          <p style={{ margin: "0 0 12px", color: "var(--muted)", lineHeight: 1.5 }}>
-            Displayed WOW includes a read-time freshness adjustment. Stored scores below are
-            persisted snapshots; viewing this panel does not run provider calls or generate
-            embeddings.
-          </p>
-          <dl style={{ display: "grid", gap: 8, margin: 0, fontSize: 13 }}>
-            <ScoreRow label="Displayed WOW" value={state.breakdown.displayedWowScore} />
-            <ScoreRow label="Stored/core WOW" value={state.breakdown.persistedCoreWowScore} />
-            <ScoreRow label="Stored importance" value={state.breakdown.importanceScore} />
-            <ScoreRow
-              label="Freshness adjustment"
-              value={`${state.breakdown.freshnessAdjustment.displayedMinusCore >= 0 ? "+" : ""}${state.breakdown.freshnessAdjustment.displayedMinusCore}`}
-            />
-            <ScoreRow
-              label="Freshness score"
-              value={`${state.breakdown.freshnessAdjustment.freshnessScore} (${state.breakdown.freshnessAdjustment.ageDays.toFixed(1)} days old)`}
-            />
-            <ScoreRow label="Content/text/context" value={state.breakdown.factors.content.score} />
-            <ScoreRow label="Text depth" value={state.breakdown.factors.content.textDepthScore} />
-            <ScoreRow label="Context" value={state.breakdown.factors.content.contextScore} />
-            <ScoreRow
-              label="Context counts"
-              value={`${state.breakdown.factors.content.meaningfulLinkCount} links · ${state.breakdown.factors.content.nonLinkAttachmentCount} attachments · ${state.breakdown.factors.content.reflectionTextChars} reflection chars`}
-            />
-            <ScoreRow
-              label="Processing/reflection"
-              value={`${state.breakdown.factors.processing.score} (${state.breakdown.factors.processing.hasReflection ? "has reflection" : "no reflection"})`}
-            />
-            <ScoreRow label="Revisit" value={state.breakdown.factors.revisit.score} />
-            <ScoreRow
-              label="Revisit factors"
-              value={formatRevisitFactors(state.breakdown.factors.revisit)}
-            />
-            <ScoreRow
-              label="Relationship"
-              value={
-                state.breakdown.factors.relationship.available
-                  ? formatScore(state.breakdown.factors.relationship.score)
-                  : "not available"
-              }
-            />
-            {state.breakdown.factors.relationship.available ? (
-              <ScoreRow
-                label="Relationship signals"
-                value={`${formatScore(state.breakdown.factors.relationship.topSimilaritySignal)} similarity · ${formatScore(state.breakdown.factors.relationship.topSurpriseSimilaritySignal)} surprise · ${formatScore(state.breakdown.factors.relationship.timeDistanceSignal)} time distance`}
-              />
-            ) : null}
-          </dl>
-          <p style={{ margin: "12px 0 0", color: "var(--muted)", fontSize: 12, lineHeight: 1.45 }}>
-            {state.breakdown.factors.relationship.note}
-          </p>
-          <details style={{ marginTop: 10 }}>
-            <summary style={{ cursor: "pointer", color: "var(--muted)", fontSize: 12 }}>
-              Current formulas
-            </summary>
-            <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, lineHeight: 1.5 }}>
-              <li>{state.breakdown.formulas.importance}</li>
-              <li>{state.breakdown.formulas.coreWow}</li>
-              <li>{state.breakdown.formulas.displayedWow}</li>
-              {state.breakdown.formulas.relationship ? (
-                <li>{state.breakdown.formulas.relationship}</li>
-              ) : null}
-            </ul>
-          </details>
-        </>
-      ) : null}
-    </section>
-  );
-}
-
 export function InspirationDetail({
   inspiration,
   onBack,
@@ -281,10 +127,7 @@ export function InspirationDetail({
   onInspirationUpdated,
 }: InspirationDetailProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
-  const [scoreBreakdownState, setScoreBreakdownState] =
-    useState<ScoreBreakdownState>({ status: "loading" });
   const reflectionsRef = useRef<ApiReflection[]>([]);
-  const scoreBreakdownRequestRef = useRef(0);
   const [reflecting, setReflecting] = useState(false);
   const [detailsText, setDetailsText] = useState(inspiration.text);
   const [saveState, setSaveState] = useState<
@@ -324,28 +167,6 @@ export function InspirationDetail({
    */
   const [threadOpen, setThreadOpen] = useState(false);
 
-  const loadScoreBreakdown = useCallback(() => {
-    const requestId = scoreBreakdownRequestRef.current + 1;
-    scoreBreakdownRequestRef.current = requestId;
-    setScoreBreakdownState({ status: "loading" });
-    void (async () => {
-      try {
-        const breakdown = await fetchInspirationScoreBreakdown(inspiration.id);
-        if (scoreBreakdownRequestRef.current !== requestId) return;
-        setScoreBreakdownState({ status: "ready", breakdown });
-      } catch (caught) {
-        if (scoreBreakdownRequestRef.current !== requestId) return;
-        const message =
-          caught instanceof ApiError
-            ? caught.message
-            : caught instanceof Error
-              ? caught.message
-              : "Failed to load score breakdown.";
-        setScoreBreakdownState({ status: "error", message });
-      }
-    })();
-  }, [inspiration.id]);
-
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
@@ -358,7 +179,6 @@ export function InspirationDetail({
     setDeleteState({ status: "idle" });
     setDetailsText(inspiration.text);
     setSaveState({ status: "idle" });
-    loadScoreBreakdown();
 
     void (async () => {
       try {
@@ -381,9 +201,8 @@ export function InspirationDetail({
 
     return () => {
       cancelled = true;
-      scoreBreakdownRequestRef.current += 1;
     };
-  }, [inspiration.id, loadScoreBreakdown, onReflectionCountChanged]);
+  }, [inspiration.id, onReflectionCountChanged]);
 
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
@@ -399,7 +218,6 @@ export function InspirationDetail({
         setDetailsText(updated.text);
         setSaveState({ status: "saved" });
         onInspirationUpdated?.(updated);
-        loadScoreBreakdown();
       } catch (caught) {
         const message =
           caught instanceof ApiError
@@ -410,7 +228,7 @@ export function InspirationDetail({
         setSaveState({ status: "error", message });
       }
     })();
-  }, [detailsText, inspiration.id, loadScoreBreakdown, onInspirationUpdated, saveState.status]);
+  }, [detailsText, inspiration.id, onInspirationUpdated, saveState.status]);
 
   // ----- Delete handlers ---------------------------------------------------
 
@@ -491,11 +309,9 @@ export function InspirationDetail({
       setThreadOpen(true);
       onReflectionCountChanged?.(inspiration.id, nextReflections.length);
       if (server.inspiration) onInspirationScoresChanged?.(server.inspiration);
-      loadScoreBreakdown();
     },
     [
       inspiration.id,
-      loadScoreBreakdown,
       onInspirationScoresChanged,
       onReflectionCountChanged,
     ],
@@ -566,7 +382,7 @@ export function InspirationDetail({
                 aria-label="Delete this inspiration"
                 style={{
                   background: "transparent",
-                  border: "1px solid var(--line)",
+                  border: "1px solid rgba(0,0,0,0.08)",
                   borderRadius: 999,
                   padding: "6px 14px",
                   color: "var(--muted)",
@@ -674,9 +490,9 @@ export function InspirationDetail({
             htmlFor="inspirationDetailText"
             style={{
               color: "var(--muted)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 10,
-              letterSpacing: "0.12em",
+              fontFamily: "JetBrains Mono, ui-monospace, monospace",
+              fontSize: 9,
+              letterSpacing: "0.18em",
               textTransform: "uppercase",
             }}
           >
@@ -694,14 +510,16 @@ export function InspirationDetail({
             style={{
               width: "100%",
               resize: "vertical",
-              border: "1px solid var(--line)",
-              borderRadius: 16,
-              background: "rgba(255,255,255,0.72)",
+              border: "1px solid rgba(0,0,0,0.08)",
+              borderRadius: 2,
+              background: "#fffefb",
               color: "var(--ink)",
-              fontFamily: "var(--font-serif)",
-              fontSize: 18,
-              lineHeight: 1.5,
-              padding: 16,
+              fontFamily: "Fraunces, Times New Roman, serif",
+              fontSize: 20,
+              fontStyle: "italic",
+              fontWeight: 300,
+              lineHeight: 1.42,
+              padding: 18,
               boxSizing: "border-box",
             }}
           />
@@ -718,11 +536,11 @@ export function InspirationDetail({
                   !detailsChanged || detailsEmpty || saveState.status === "saving"
                     ? "not-allowed"
                     : "pointer",
-                fontFamily: "var(--font-mono)",
-                fontSize: 10,
-                letterSpacing: "0.12em",
-                padding: "8px 16px",
-                textTransform: "uppercase",
+                fontFamily: "Inter Tight, Helvetica Neue, Helvetica, Arial, sans-serif",
+                fontSize: 12,
+                letterSpacing: "0.02em",
+                padding: "8px 15px",
+                textTransform: "lowercase",
                 opacity:
                   !detailsChanged || detailsEmpty || saveState.status === "saving" ? 0.5 : 1,
               }}
@@ -741,8 +559,6 @@ export function InspirationDetail({
             ) : null}
           </div>
         </form>
-
-        <ScoreBreakdownPanel state={scoreBreakdownState} />
 
         {state.status === "ready" ? (
           <div style={{ marginTop: 18 }}>
