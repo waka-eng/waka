@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import type { ApiWowMoment } from "../lib/api";
@@ -14,6 +14,8 @@ const MAX_VISIBLE_WOW_MOMENTS = 9;
 const MAX_BELIEF_EXCERPT_LENGTH = 72;
 const MAX_WOW_LEAD_LENGTH = 180;
 const MAX_PATTERN_CHUNK_LENGTH = 240;
+const STICKY_NOTE_COLORS = ["#fff4a8", "#ffd7a8", "#d7f3c4", "#cfe8ff", "#f5d2f0"];
+const STICKY_NOTE_ROTATIONS = [-2.4, 1.6, -1.1, 2.2, -1.8, 1.1, -2, 2.6, -0.8];
 const SOURCE_FALLBACK_LABEL = "Source inspiration";
 const SOURCE_FALLBACK_REASON = "Why this source matters";
 const SOURCE_FALLBACK_TEXT = "a source inspiration";
@@ -28,8 +30,26 @@ const INTERNAL_SOURCE_ROLE_LABELS = new Set([
   "candidate",
   "source",
 ]);
+
 type ResonanceOption = "thats-me" | "partly" | "not-quite";
 type MemoryEndingState = "prompt" | "editing" | "remembered" | "dismissed";
+
+function countGeneratedFields(moment: ApiWowMoment): number {
+  return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion, moment.reflectionGuide].filter(
+    (value) => Boolean(value && value.trim()),
+  ).length;
+}
+
+function formatDevCompactCounts(locale: SupportedLocale, moment: ApiWowMoment): string {
+  const sourceCount = moment.relatedInspirations.length;
+  const generatedFieldCount = countGeneratedFields(moment);
+  if (locale === "ko-KR") {
+    return `${sourceCount}개 출처; 생성 필드 ${generatedFieldCount}개 있음`;
+  }
+  return `${sourceCount} source${sourceCount === 1 ? "" : "s"}; ${generatedFieldCount} generated field${
+    generatedFieldCount === 1 ? "" : "s"
+  } present`;
+}
 
 function cleanBeliefSourceText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
@@ -281,6 +301,7 @@ interface WowMomentsSectionProps {
   error: string | null;
   onAddInspiration?: () => void;
   locale?: SupportedLocale;
+  showDevInspection?: boolean;
 }
 
 export function WowMomentsSection({
@@ -289,6 +310,7 @@ export function WowMomentsSection({
   error,
   onAddInspiration,
   locale = DEFAULT_LOCALE,
+  showDevInspection = false,
 }: WowMomentsSectionProps): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const bestRecentMoments = useMemo(() => [...moments].sort(compareBestRecentWowMoments), [moments]);
@@ -298,6 +320,7 @@ export function WowMomentsSection({
   const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
   const [memoryBeliefText, setMemoryBeliefText] = useState("");
   const [expandedSourceReasonIds, setExpandedSourceReasonIds] = useState<Set<string>>(new Set());
+  const [devInspectionOpen, setDevInspectionOpen] = useState(false);
 
   const resetLocalReflectionState = () => {
     setSelectedResonance(null);
@@ -412,6 +435,12 @@ export function WowMomentsSection({
     }
   };
 
+  const stickyNoteStyle = (index: number): CSSProperties =>
+    ({
+      "--wow-note-color": STICKY_NOTE_COLORS[index % STICKY_NOTE_COLORS.length],
+      "--wow-note-rotation": `${STICKY_NOTE_ROTATIONS[index % STICKY_NOTE_ROTATIONS.length]}deg`,
+    }) as CSSProperties;
+
   const selectedPatternReport = selectedMoment ? buildPatternReport(selectedMoment.why) : { lead: "", bodyChunks: [] };
   const selectedPatternVisible = Boolean(selectedPatternReport.lead || selectedPatternReport.bodyChunks.length > 0);
   const selectedBeliefStatement = selectedMoment ? buildBeliefStatement(selectedMoment) : "";
@@ -420,6 +449,58 @@ export function WowMomentsSection({
   const selectedReflectionGuideBlocks = selectedMoment
     ? parseReflectionGuide(getReflectionGuide(selectedMoment))
     : [];
+
+  const devInspectionPanel = showDevInspection && devInspectionOpen ? (
+    <aside
+      aria-labelledby="dev-wow-inspection-title"
+      className="dev-wow-inspection-panel"
+      id="dev-wow-inspection-panel"
+      role="dialog"
+    >
+      <div className="dev-wow-inspection-header">
+        <p>{t(locale, "devWowInspectionKicker")}</p>
+        <button onClick={() => setDevInspectionOpen(false)} type="button">
+          {t(locale, "devWowInspectionClose")}
+        </button>
+      </div>
+      <h3 id="dev-wow-inspection-title">{t(locale, "devWowInspectionTitle")}</h3>
+      <p>{t(locale, "devWowInspectionNote")}</p>
+      <ol className="dev-wow-inspection-list">
+        {bestRecentMoments.map((moment) => (
+          <li key={`dev-inspect-${moment.id}`}>
+            <h4>{moment.title || t(locale, "devWowUntitledMoment")}</h4>
+            <dl>
+              <dt>{t(locale, "devWowFieldTitle")}</dt>
+              <dd>{moment.title || t(locale, "devWowFieldNotGenerated")}</dd>
+              <dt>{t(locale, "devWowFieldWhy")}</dt>
+              <dd>{moment.why || t(locale, "devWowFieldNotGenerated")}</dd>
+              <dt>{t(locale, "devWowFieldBelief")}</dt>
+              <dd>{moment.beliefStatement || t(locale, "devWowFieldNotGenerated")}</dd>
+              <dt>{t(locale, "devWowFieldReflection")}</dt>
+              <dd>{moment.reflectionQuestion || t(locale, "devWowFieldNotGenerated")}</dd>
+              <dt>{t(locale, "devWowFieldReflectionGuide")}</dt>
+              <dd>{moment.reflectionGuide || t(locale, "devWowFieldNotGenerated")}</dd>
+              <dt>{t(locale, "devWowFieldCompactCounts")}</dt>
+              <dd>{formatDevCompactCounts(locale, moment)}</dd>
+              <dt>{t(locale, "devWowSourceRoleReason")}</dt>
+              <dd>{t(locale, "devWowSourceFallbackLabel")}</dd>
+            </dl>
+            {moment.relatedInspirations.length > 0 ? (
+              <ol>
+                {moment.relatedInspirations.map((related, index) => (
+                  <li key={`dev-inspect-source-${moment.id}-${index}`}>
+                    <span>{t(locale, "devWowSourceFallbackLabel")}</span>
+                    <blockquote>{related.text}</blockquote>
+                    <p>{t(locale, "devWowSourceFallbackReason")}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </aside>
+  ) : null;
 
 
   const selectedMomentDetail = selectedMoment ? (
@@ -677,6 +758,17 @@ export function WowMomentsSection({
           <p>
             {formatBestRecentMirrorMoments(locale, visibleMoments.length)}
           </p>
+          {showDevInspection ? (
+            <button
+              aria-controls="dev-wow-inspection-panel"
+              aria-expanded={devInspectionOpen}
+              className="wow-moments-inspect-button"
+              onClick={() => setDevInspectionOpen((isOpen) => !isOpen)}
+              type="button"
+            >
+              {t(locale, "devWowInspectButton")} ({bestRecentMoments.length})
+            </button>
+          ) : null}
         </div>
       ) : null}
       {error ? (
@@ -706,19 +798,22 @@ export function WowMomentsSection({
           className={`wow-moments-grid wow-moments-grid--populated${selectedMoment ? " wow-moments-grid--expanded" : ""}`}
         >
           {selectedMomentDetail ??
-            visibleMoments.map((moment) => {
+            visibleMoments.map((moment, index) => {
               const relatedSources = moment.relatedInspirations;
 
               return (
                 <article
                   aria-label={`Open mirror moment report: ${moment.title}`}
-                  className="wow-moment-card wow-moment-card--interactive"
+                  className="wow-moment-card wow-moment-card--interactive wow-moment-card--sticky"
                   key={moment.id}
                   onClick={() => openMoment(moment)}
                   onKeyDown={(event) => handleCardKeyDown(event, moment)}
                   role="button"
+                  style={stickyNoteStyle(index)}
                   tabIndex={0}
                 >
+                  <span className="wow-moment-sticky-tape" aria-hidden="true" />
+                  <span className="wow-moment-sticky-pin" aria-hidden="true" />
                   <h3>{moment.title}</h3>
                   <span className="wow-moment-open-cue" aria-hidden="true">
                     See why this matters
@@ -744,6 +839,7 @@ export function WowMomentsSection({
             })}
         </div>
       )}
+      {devInspectionPanel}
     </section>
   );
 }
