@@ -45,6 +45,7 @@ import {
   type InspirationDetailData,
 } from "../components/history";
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
+import { WowMomentsSection } from "../components/WowMomentsSection";
 import {
   type ApiAttachment,
   type ApiError,
@@ -52,9 +53,11 @@ import {
   type ApiInspirationScorePatch,
   type ApiTopOfMind,
   type ApiTopOfMindSignal,
+  type ApiWowMoment,
   type ClusterKind,
   fetchInspirations,
   fetchTopOfMind,
+  fetchWowMoments,
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -508,6 +511,9 @@ export function HomePage(): JSX.Element {
   const [topOfMind, setTopOfMind] = useState<ApiTopOfMind | null>(null);
   const [topOfMindLoading, setTopOfMindLoading] = useState(true);
   const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
+  const [wowMoments, setWowMoments] = useState<ApiWowMoment[]>([]);
+  const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
+  const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
@@ -547,7 +553,9 @@ export function HomePage(): JSX.Element {
    */
   const loadedForUserIdRef = useRef<string | null>(null);
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
+  const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
+  const wowMomentsRequestIdRef = useRef(0);
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
@@ -582,11 +590,16 @@ export function HomePage(): JSX.Element {
       // /login. Wipe local state defensively just in case.
       loadedForUserIdRef.current = null;
       topOfMindLoadedForUserIdRef.current = null;
+      wowMomentsLoadedForUserIdRef.current = null;
       topOfMindRequestIdRef.current += 1;
+      wowMomentsRequestIdRef.current += 1;
       setEntries([]);
       setTopOfMind(null);
       setTopOfMindLoading(false);
       setTopOfMindError(null);
+      setWowMoments([]);
+      setWowMomentsLoading(false);
+      setWowMomentsError(null);
       return;
     }
 
@@ -694,6 +707,43 @@ export function HomePage(): JSX.Element {
     [user],
   );
 
+  const refreshWowMoments = useCallback(
+    async (options?: {
+      showLoading?: boolean;
+      surfaceErrors?: boolean;
+    }): Promise<ApiWowMoment[] | null> => {
+      if (!user) return null;
+
+      const requestUserId = user.id;
+      const requestId = wowMomentsRequestIdRef.current + 1;
+      wowMomentsRequestIdRef.current = requestId;
+
+      if (options?.showLoading) setWowMomentsLoading(true);
+      if (options?.surfaceErrors ?? true) setWowMomentsError(null);
+
+      try {
+        const moments = await fetchWowMoments({ limit: 10 });
+        if (wowMomentsRequestIdRef.current !== requestId) return null;
+        const ownMoments = moments.filter((moment) => moment.userId === requestUserId);
+        wowMomentsLoadedForUserIdRef.current = requestUserId;
+        setWowMoments(ownMoments);
+        setWowMomentsLoading(false);
+        setWowMomentsError(null);
+        return ownMoments;
+      } catch (err) {
+        if (wowMomentsRequestIdRef.current !== requestId) return null;
+        if (options?.surfaceErrors ?? true) {
+          const message =
+            err instanceof Error ? err.message : "Failed to load WOW moments";
+          setWowMomentsError(message);
+        }
+        setWowMomentsLoading(false);
+        return null;
+      }
+    },
+    [user],
+  );
+
   useEffect(() => {
     if (!user) return;
     if (topOfMindLoadedForUserIdRef.current === user.id) return;
@@ -711,6 +761,25 @@ export function HomePage(): JSX.Element {
       topOfMindRequestIdRef.current += 1;
     };
   }, [refreshTopOfMind, user]);
+
+
+  useEffect(() => {
+    if (!user) return;
+    if (wowMomentsLoadedForUserIdRef.current === user.id) return;
+
+    if (
+      wowMomentsLoadedForUserIdRef.current &&
+      wowMomentsLoadedForUserIdRef.current !== user.id
+    ) {
+      setWowMoments([]);
+    }
+
+    void refreshWowMoments({ showLoading: true, surfaceErrors: true });
+
+    return () => {
+      wowMomentsRequestIdRef.current += 1;
+    };
+  }, [refreshWowMoments, user]);
 
   const handleOptimisticAdd = useCallback((pending: PendingInspiration) => {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
@@ -749,6 +818,7 @@ export function HomePage(): JSX.Element {
 
       const targetId = result.inspiration.id;
       void refreshTopOfMind({ showLoading: false, surfaceErrors: true });
+      void refreshWowMoments({ showLoading: false, surfaceErrors: false });
 
       // The classifier worker (or the dev-mode inline fallback) writes
       // `cluster` asynchronously after the row is persisted. Without a
@@ -792,6 +862,10 @@ export function HomePage(): JSX.Element {
                   showLoading: false,
                   surfaceErrors: false,
                 });
+                void refreshWowMoments({
+                  showLoading: false,
+                  surfaceErrors: false,
+                });
               }
             } catch {
               // Silent — the user will pick up the classification on
@@ -805,6 +879,7 @@ export function HomePage(): JSX.Element {
     },
     [
       refreshTopOfMind,
+      refreshWowMoments,
     ],
   );
 
@@ -1330,7 +1405,16 @@ export function HomePage(): JSX.Element {
             </section>
 
             <section className="nc-stage" aria-label="generated thoughts">
-              {topOfMindLoading ? (
+              {wowMomentsLoading || wowMomentsError || wowMoments.length > 0 ? (
+                <WowMomentsSection
+                  error={wowMomentsError}
+                  loading={wowMomentsLoading}
+                  locale={locale}
+                  moments={wowMoments}
+                  onAddInspiration={() => setCaptureOpen(true)}
+                  showDevInspection={showAdminEntry}
+                />
+              ) : topOfMindLoading ? (
                 <p className="nc-loading">{copy.loadingThoughts}</p>
               ) : topOfMindError ? (
                 <p className="nc-loading">{topOfMindError}</p>
