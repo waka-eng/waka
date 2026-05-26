@@ -1377,14 +1377,15 @@
   min-width: 1080px;
 }
 
-.nc-note-backdrop {
+.nc-note-overlay {
   position: fixed;
   inset: 0;
   z-index: 55;
-  border: 0;
-  background: rgba(250, 249, 246, 0.34);
-  backdrop-filter: blur(3px);
+  background: rgba(250, 249, 246, 0.58);
   cursor: default;
+  display: grid;
+  place-items: center;
+  padding: 48px 32px;
 }
 
 .nc-loading {
@@ -1481,6 +1482,45 @@
   box-shadow: 0 28px 54px -34px rgba(0, 0, 0, 0.3);
   animation: nc-note-open 140ms ease-out both;
   cursor: default;
+  transition: none;
+}
+
+.nc-note-modal {
+  width: min(680px, calc(100vw - 64px));
+  max-height: min(680px, calc(100dvh - 96px));
+  padding: 38px 44px 42px;
+  background: var(--bg);
+  background-image:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
+    linear-gradient(rgba(0, 0, 0, 0.018), rgba(0, 0, 0, 0.018));
+  color: var(--ink);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+  box-shadow: 0 28px 54px -34px rgba(0, 0, 0, 0.3);
+  overflow-y: auto;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: nc-note-modal-open 120ms ease-out both;
+}
+
+.nc-note-modal .nc-note-body {
+  font-size: 40px;
+  font-weight: 420;
+  line-height: 1.04;
+  letter-spacing: -0.018em;
+}
+
+@keyframes nc-note-modal-open {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .nc-note--expanded:hover,
@@ -1636,6 +1676,13 @@
   max-height: 620px;
   opacity: 1;
   pointer-events: auto;
+}
+
+.nc-note-modal .nc-note-expanded-content {
+  max-height: none;
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
 }
 
 .nc-note-expanded-content section {

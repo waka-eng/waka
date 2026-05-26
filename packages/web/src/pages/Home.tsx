@@ -338,13 +338,6 @@ const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string
   { top: "268px", left: "calc(50% - 470px)", tilt: 1.2, w: "260px" },
 ];
 
-const NOTE_EXPANDED_POSITION = {
-  top: "20px",
-  left: "calc(50% - min(340px, calc((100vw - 64px) / 2)))",
-  tilt: 0,
-  w: "min(680px, calc(100vw - 64px))",
-};
-
 const NOTE_COLORS = [
   { hue: "#ece4cb", ink: "#4a3e1f" },
   { hue: "#e8d4ce", ink: "#6b3c34" },
@@ -1121,7 +1114,7 @@ export function HomePage(): JSX.Element {
       dragMovedRef.current = false;
       return;
     }
-    setExpandedNoteIndex((current) => (current === index ? null : index));
+    setExpandedNoteIndex((current) => (current === index ? current : index));
   };
 
   const closeExpandedNoteOnBackdrop = () => {
@@ -1129,16 +1122,12 @@ export function HomePage(): JSX.Element {
   };
 
   const renderThoughtCard = (signal: ApiTopOfMindSignal, index: number): JSX.Element => {
-    const relatedLabels = relatedMeaningLabels(signal);
     const source = signal.supportingInspirations[0];
-    const expanded = expandedNoteIndex === index;
-    const position = expanded
-      ? NOTE_EXPANDED_POSITION
-      : NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
-    const drag = expanded ? { x: 0, y: 0 } : drags[index] ?? { x: 0, y: 0 };
+    const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
+    const drag = drags[index] ?? { x: 0, y: 0 };
     return (
     <article
-      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${expanded ? " nc-note--expanded" : ""}`}
+      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
       key={signal.nodeId}
       style={{
         ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
@@ -1163,7 +1152,6 @@ export function HomePage(): JSX.Element {
 
       <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
 
-      {!expanded ? (
       <div className="nc-note-reveal">
         <div className="nc-note-evidence">
           <span className="nc-note-evidence-label">why it stuck</span>
@@ -1193,52 +1181,77 @@ export function HomePage(): JSX.Element {
           })}
         </div>
       </div>
-      ) : null}
-
-      <div className="nc-note-expanded-content" aria-hidden={!expanded}>
-        <section className="nc-note-reading">
-          <p>{signal.reason}</p>
-        </section>
-
-        <section className="nc-note-source-section">
-          <span>it began here</span>
-          <blockquote className="nc-note-source">
-            “{shortText(source?.preview || signal.reason, 190)}”
-          </blockquote>
-        </section>
-
-        {relatedLabels.length > 0 ? (
-          <section className="nc-note-nearby-section">
-            <span>nearby thought</span>
-            <p className="nc-note-related-line">{relatedLabels[0]}</p>
-          </section>
-        ) : null}
-
-        <footer className="nc-note-expanded-foot">
-          <div className="nc-note-reactions nc-note-reactions--expanded" role="group" aria-label={copy.reactionGroup}>
-            {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
-              const active = reactions[index] === kind;
-              return (
-                <button
-                  key={kind}
-                  type="button"
-                  className={`nc-note-reaction${active ? " nc-note-reaction--active" : ""}`}
-                  aria-pressed={active}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setReaction(index, kind);
-                  }}
-                >
-                  {copy.reactionLabels[kind]}
-                </button>
-              );
-            })}
-          </div>
-          <span>not final</span>
-        </footer>
-      </div>
     </article>
   );
+  };
+
+  const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
+    const signal = thoughtCards[index];
+    if (!signal) return null;
+    const relatedLabels = relatedMeaningLabels(signal);
+    const source = signal.supportingInspirations[0];
+    return (
+      <article
+        className="nc-note-modal"
+        style={{
+          ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
+          ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
+        }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="nc-note-head">
+          <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
+          <span className="nc-note-shifted">
+            {copy.noteShifted[index] ?? copy.noteShifted[copy.noteShifted.length - 1]}
+          </span>
+        </header>
+
+        <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
+
+        <div className="nc-note-expanded-content">
+          <section className="nc-note-reading">
+            <p>{signal.reason}</p>
+          </section>
+
+          <section className="nc-note-source-section">
+            <span>it began here</span>
+            <blockquote className="nc-note-source">
+              “{shortText(source?.preview || signal.reason, 190)}”
+            </blockquote>
+          </section>
+
+          {relatedLabels.length > 0 ? (
+            <section className="nc-note-nearby-section">
+              <span>nearby thought</span>
+              <p className="nc-note-related-line">{relatedLabels[0]}</p>
+            </section>
+          ) : null}
+
+          <footer className="nc-note-expanded-foot">
+            <div className="nc-note-reactions nc-note-reactions--expanded" role="group" aria-label={copy.reactionGroup}>
+              {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
+                const active = reactions[index] === kind;
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    className={`nc-note-reaction${active ? " nc-note-reaction--active" : ""}`}
+                    aria-pressed={active}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setReaction(index, kind);
+                    }}
+                  >
+                    {copy.reactionLabels[kind]}
+                  </button>
+                );
+              })}
+            </div>
+            <span>not final</span>
+          </footer>
+        </div>
+      </article>
+    );
   };
 
   return (
@@ -1254,12 +1267,9 @@ export function HomePage(): JSX.Element {
         {historyContent}
       </HistoryPanel>
       {expandedNoteIndex !== null ? (
-        <button
-          type="button"
-          className="nc-note-backdrop"
-          aria-label="close expanded note"
-          onClick={closeExpandedNoteOnBackdrop}
-        />
+        <div className="nc-note-overlay" onClick={closeExpandedNoteOnBackdrop}>
+          {renderExpandedThoughtCard(expandedNoteIndex)}
+        </div>
       ) : null}
       <main className="nc-canvas">
         <header className="nc-topbar">
@@ -1371,9 +1381,11 @@ export function HomePage(): JSX.Element {
         )}
       </main>
 
-      <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>
-        <span className="nc-save-cta">{copy.captureCta}</span>
-      </button>
+      {expandedNoteIndex === null ? (
+        <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>
+          <span className="nc-save-cta">{copy.captureCta}</span>
+        </button>
+      ) : null}
 
       {captureOpen ? (
         <div className="reference-capture-modal" role="dialog" aria-modal="true" aria-label={copy.captureDialog}>
