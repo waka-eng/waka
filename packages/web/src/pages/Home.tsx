@@ -1116,6 +1116,7 @@ export function HomePage(): JSX.Element {
     day: "numeric",
   });
   const copy = HOME_COPY[locale];
+  const hasWowPanel = wowMomentsLoading || Boolean(wowMomentsError) || wowMoments.length > 0;
 
   const setReaction = (index: number, kind: ReactionKind) => {
     setReactions((prev) => ({ ...prev, [index]: prev[index] === kind ? null : kind }));
@@ -1346,7 +1347,7 @@ export function HomePage(): JSX.Element {
           {renderExpandedThoughtCard(expandedNoteIndex)}
         </div>
       ) : null}
-      <main className="nc-canvas">
+      <main className={`nc-canvas${homeMode === "thought" && hasWowPanel ? " nc-canvas--wow" : ""}`}>
         <header className="nc-topbar">
           <div className="nc-topleft">
             <div className="nc-mode" role="tablist" aria-label="home mode">
@@ -1404,8 +1405,8 @@ export function HomePage(): JSX.Element {
               <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p>
             </section>
 
-            <section className="nc-stage" aria-label="generated thoughts">
-              {wowMomentsLoading || wowMomentsError || wowMoments.length > 0 ? (
+            <section className={`nc-stage${hasWowPanel ? " nc-stage--wow" : ""}`} aria-label="generated thoughts">
+              {hasWowPanel ? (
                 <WowMomentsSection
                   error={wowMomentsError}
                   loading={wowMomentsLoading}
