@@ -133,11 +133,11 @@ function isActiveRebuildJob(job: ApiMeaningGraphRebuildJob | null): boolean {
   return job?.status === "pending" || job?.status === "running";
 }
 
-function rebuildJobResult(job: ApiMeaningGraphRebuildJob | null): ApiMeaningGraphRebuildResult | null {
+export function rebuildJobResult(job: ApiMeaningGraphRebuildJob | null): ApiMeaningGraphRebuildResult | null {
   if (!job || job.status !== "succeeded") return null;
   const payload = job.payload;
   return {
-    inspirations: payload.inspirations ?? 0,
+    inspirations: payload.inspirations ?? payload.processedInspirations ?? payload.totalInspirations ?? 0,
     nodesTouched: payload.nodesTouched ?? 0,
     evidenceTouched: payload.evidenceTouched ?? 0,
     edgesTouched: payload.edgesTouched ?? 0,
