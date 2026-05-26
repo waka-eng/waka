@@ -35,7 +35,7 @@ export const backgroundJobStatusEnum = pgEnum(
   backgroundJobStatusValues,
 );
 
-export const backgroundJobTypeValues = ["process_inspiration"] as const;
+export const backgroundJobTypeValues = ["process_inspiration", "meaning_graph_rebuild"] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum(
   "background_job_type",
@@ -59,6 +59,20 @@ export interface ProcessInspirationPayload {
   };
 }
 
+export interface MeaningGraphRebuildPayload {
+  requestedByUserId: string;
+  phase: "queued" | "counting" | "clearing" | "processing" | "completed";
+  totalInspirations: number;
+  processedInspirations: number;
+  nodesTouched: number;
+  evidenceTouched: number;
+  edgesTouched: number;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export type BackgroundJobPayload = ProcessInspirationPayload | MeaningGraphRebuildPayload;
+
 export const backgroundJobs = pgTable(
   "background_jobs",
   {
@@ -67,7 +81,7 @@ export const backgroundJobs = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     type: backgroundJobTypeEnum("type").notNull(),
-    payload: jsonb("payload").$type<ProcessInspirationPayload>().notNull(),
+    payload: jsonb("payload").$type<BackgroundJobPayload>().notNull(),
     status: backgroundJobStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
@@ -89,6 +103,13 @@ export const backgroundJobs = pgTable(
     idempotencyUnique: uniqueIndex("background_jobs_idempotency_key_unique_idx")
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    activeMeaningGraphRebuildUnique: uniqueIndex(
+      "background_jobs_active_meaning_graph_rebuild_user_idx",
+    )
+      .on(table.userId, table.type)
+      .where(
+        sql`${table.type}::text = 'meaning_graph_rebuild' AND ${table.status}::text IN ('pending', 'running')`,
+      ),
   }),
 );
 

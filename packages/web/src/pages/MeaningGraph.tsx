@@ -20,12 +20,14 @@ import "reactflow/dist/style.css";
 import { FloatingEdge } from "../components/FloatingEdge";
 import {
   fetchMeaningGraph,
+  fetchMeaningGraphRebuildJob,
   formatMeaningGraphRebuildError,
   rebuildMeaningGraph,
   type ApiMeaningGraph,
   type ApiMeaningGraphEdge,
   type ApiMeaningGraphNode,
   type ApiMeaningGraphRecentInspiration,
+  type ApiMeaningGraphRebuildJob,
   type ApiMeaningGraphRebuildResult,
 } from "../lib/api";
 
@@ -48,6 +50,7 @@ const NODE_WIDTH = 238;
 const NODE_HEIGHT = 96;
 const MAX_VISIBLE_NODES = 34;
 const MAX_VISIBLE_EDGES = 72;
+const REBUILD_POLL_MS = 2_500;
 
 const TYPE_ORDER = [
   "question",
@@ -124,6 +127,38 @@ function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "recent";
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function isActiveRebuildJob(job: ApiMeaningGraphRebuildJob | null): boolean {
+  return job?.status === "pending" || job?.status === "running";
+}
+
+function rebuildJobResult(job: ApiMeaningGraphRebuildJob | null): ApiMeaningGraphRebuildResult | null {
+  if (!job || job.status !== "succeeded") return null;
+  const payload = job.payload;
+  return {
+    inspirations: payload.inspirations ?? 0,
+    nodesTouched: payload.nodesTouched ?? 0,
+    evidenceTouched: payload.evidenceTouched ?? 0,
+    edgesTouched: payload.edgesTouched ?? 0,
+  };
+}
+
+function formatRebuildJobStatus(job: ApiMeaningGraphRebuildJob | null): string | null {
+  if (!job) return null;
+  if (job.status === "pending") return "Rebuild queued. The worker will start shortly.";
+  if (job.status === "running") {
+    const phase = job.payload.phase?.replace(/_/g, " ") ?? "processing";
+    const current = job.payload.processedInspirations;
+    const total = job.payload.totalInspirations;
+    const count = typeof current === "number" && typeof total === "number" && total > 0
+      ? ` (${Math.min(current, total)} / ${total})`
+      : "";
+    return `Rebuild running: ${phase}${count}. This page will refresh when it finishes.`;
+  }
+  if (job.status === "succeeded") return "Rebuild finished. Dashboard refreshed.";
+  if (job.status === "failed") return `Rebuild failed: ${job.lastError ?? "check server logs"}`;
+  return null;
 }
 
 function shortPreview(value: string): string {
@@ -247,7 +282,9 @@ export default function MeaningGraphPage(): JSX.Element {
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [confirmingRebuild, setConfirmingRebuild] = useState(false);
-  const [lastRebuild, setLastRebuild] = useState<ApiMeaningGraphRebuildResult | null>(null);
+  const [rebuildJob, setRebuildJob] = useState<ApiMeaningGraphRebuildJob | null>(null);
+  const lastRebuild = rebuildJobResult(rebuildJob);
+  const rebuildStatusMessage = formatRebuildJobStatus(rebuildJob);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -260,7 +297,6 @@ export default function MeaningGraphPage(): JSX.Element {
       setError(err instanceof Error ? err.message : "Failed to load meaning graph");
     } finally {
       setLoading(false);
-      setRebuilding(false);
     }
   }, []);
 
@@ -283,14 +319,67 @@ export default function MeaningGraphPage(): JSX.Element {
     setError(null);
     try {
       const result = await rebuildMeaningGraph();
-      setLastRebuild(result.rebuild);
-      await loadGraph();
+      setRebuildJob(result.job);
+      setRebuilding(isActiveRebuildJob(result.job));
     } catch (err) {
       setError(formatMeaningGraphRebuildError(err));
-    } finally {
       setRebuilding(false);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLatestJob(): Promise<void> {
+      try {
+        const { job } = await fetchMeaningGraphRebuildJob();
+        if (cancelled || !job) return;
+        setRebuildJob(job);
+        setRebuilding(isActiveRebuildJob(job));
+        if (job.status === "succeeded") {
+          await loadGraph();
+        }
+      } catch {
+        // The graph itself is the primary view; status polling errors are
+        // surfaced only after a user explicitly starts a rebuild.
+      }
+    }
+
+    void loadLatestJob();
+    return () => {
+      cancelled = true;
+    };
   }, [loadGraph]);
+
+  useEffect(() => {
+    if (!rebuildJob || !isActiveRebuildJob(rebuildJob)) return;
+    const jobId = rebuildJob.id;
+    let cancelled = false;
+
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const { job } = await fetchMeaningGraphRebuildJob(jobId);
+          if (cancelled || !job) return;
+          setRebuildJob(job);
+          const stillActive = isActiveRebuildJob(job);
+          setRebuilding(stillActive);
+          if (!stillActive && job.status === "succeeded") {
+            await loadGraph();
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(formatMeaningGraphRebuildError(err));
+          }
+        }
+      })();
+    }, REBUILD_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadGraph, rebuildJob]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
@@ -619,8 +708,8 @@ export default function MeaningGraphPage(): JSX.Element {
             <p>
               Rebuild rereads your saved inspirations, regenerates missing meaning packets, clears the current
               meaning graph rows for this account, then rebuilds meaning notes, evidence, and relationship edges.
-              It can take a minute or more on remote dev. If the browser reports a 502 or timeout, the server may
-              still be finishing — refresh the dashboard after a short wait before clicking rebuild again.
+              It now runs as a background job, so the dashboard will poll progress and refresh itself when the job
+              finishes. Starting another rebuild while one is active will return the existing job.
             </p>
           </div>
           <div className="meaning-graph-rebuild-alert-actions">
@@ -634,9 +723,12 @@ export default function MeaningGraphPage(): JSX.Element {
         </section>
       ) : null}
 
-      {rebuilding ? (
-        <p className="meaning-graph-status meaning-graph-status--running" aria-live="polite">
-          Rebuild is running. This can take a minute or more on remote dev; please keep this tab open.
+      {rebuilding || rebuildStatusMessage ? (
+        <p
+          className={`meaning-graph-status${rebuildJob?.status === "failed" ? " meaning-graph-status--error" : " meaning-graph-status--running"}`}
+          aria-live="polite"
+        >
+          {rebuildStatusMessage ?? "Rebuild queued. This page will poll for progress."}
         </p>
       ) : null}
 

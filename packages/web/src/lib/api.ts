@@ -962,6 +962,31 @@ export interface ApiMeaningGraphRebuildResult {
   edgesTouched: number;
 }
 
+export type ApiBackgroundJobStatus = "pending" | "running" | "succeeded" | "failed";
+
+export interface ApiMeaningGraphRebuildPayload extends Partial<ApiMeaningGraphRebuildResult> {
+  requestedByUserId?: string;
+  phase?: "queued" | "counting" | "clearing" | "processing" | "completed";
+  totalInspirations?: number;
+  processedInspirations?: number;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface ApiMeaningGraphRebuildJob {
+  id: string;
+  type: "meaning_graph_rebuild";
+  status: ApiBackgroundJobStatus;
+  payload: ApiMeaningGraphRebuildPayload;
+  attempts: number;
+  maxAttempts: number;
+  runAfter: string | null;
+  lockedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
   const params = new URLSearchParams({ limit: String(limit) });
   const body = await getJson<{ graph: ApiMeaningGraph }>(
@@ -972,16 +997,25 @@ export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
 }
 
 export async function rebuildMeaningGraph(): Promise<{
-  rebuild: ApiMeaningGraphRebuildResult;
-  health: ApiMeaningGraphHealth;
+  job: ApiMeaningGraphRebuildJob;
+  statusUrl?: string;
 }> {
-  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to rebuild meaning graph");
+  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to enqueue meaning graph rebuild");
+}
+
+export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
+  job: ApiMeaningGraphRebuildJob | null;
+}> {
+  const path = jobId
+    ? `/admin/meaning-graph/rebuild/${encodeURIComponent(jobId)}`
+    : "/admin/meaning-graph/rebuild";
+  return getJson(apiPath(path), "Failed to load meaning graph rebuild status");
 }
 
 export function formatMeaningGraphRebuildError(err: unknown): string {
   const timeoutMessage =
-    "The rebuild request timed out or the remote proxy returned HTTP 502/504. " +
-    "Rebuild may still be running server-side. Wait a minute, then click Refresh to check the graph before starting another rebuild.";
+    "The rebuild status request timed out or the remote proxy returned HTTP 502/504. " +
+    "The rebuild job may still be running server-side. Wait a minute, then click Refresh to check the graph before starting another rebuild.";
 
   if (err instanceof ApiError && [0, 502, 504].includes(err.status)) {
     return timeoutMessage;
