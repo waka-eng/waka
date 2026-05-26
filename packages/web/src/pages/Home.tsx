@@ -379,9 +379,10 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    noteShifted: ["두 시간째 이 생각", "어제부터 이 생각", "3일째 이 생각", "지난주부터 이 생각"],
+    lifecycleHint: "not final. changes as new inspirations arrive.",
+    noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
     evidenceLabel: "여기서 시작됨",
-    reactionLabels: { neat: "yes", partial: "partly", off: "not quite" },
+    reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
     reactionGroup: "How does this land",
     loadingThoughts: "생각이 모이는 중...",
     emptyThoughts: "저장본이 쌓이면 여기에 생각이 나타납니다.",
@@ -432,9 +433,10 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    noteShifted: ["two hours on this", "since yesterday", "three days on this", "since last week"],
+    lifecycleHint: "not final. changes as new inspirations arrive.",
+    noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
     evidenceLabel: "where it began",
-    reactionLabels: { neat: "yes", partial: "partly", off: "not quite" },
+    reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
     reactionGroup: "How does this land",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "When saved ideas gather, a shape will appear here.",
@@ -471,6 +473,7 @@ const HOME_COPY = {
     titleLineTwo: string;
     titleSuffix: string;
     tagline: JSX.Element;
+    lifecycleHint: string;
     noteShifted: string[];
     evidenceLabel: string;
     reactionLabels: Record<ReactionKind, string>;
@@ -1127,6 +1130,7 @@ export function HomePage(): JSX.Element {
 
   const renderThoughtCard = (signal: ApiTopOfMindSignal, index: number): JSX.Element => {
     const relatedLabels = relatedMeaningLabels(signal);
+    const source = signal.supportingInspirations[0];
     const expanded = expandedNoteIndex === index;
     const position = expanded
       ? NOTE_EXPANDED_POSITION
@@ -1159,11 +1163,12 @@ export function HomePage(): JSX.Element {
 
       <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
 
+      {!expanded ? (
       <div className="nc-note-reveal">
         <div className="nc-note-evidence">
-          <span className="nc-note-evidence-label">{copy.evidenceLabel}</span>
+          <span className="nc-note-evidence-label">why it stuck</span>
           <p className="nc-note-evidence-quote">
-            "{shortText(signal.supportingInspirations[0]?.preview || signal.reason, 120)}"
+            "{shortText(source?.preview || signal.reason, 120)}"
           </p>
           <span className="nc-note-evidence-source">— {meaningTypeLabel(signal.type)}</span>
         </div>
@@ -1188,45 +1193,28 @@ export function HomePage(): JSX.Element {
           })}
         </div>
       </div>
+      ) : null}
 
       <div className="nc-note-expanded-content" aria-hidden={!expanded}>
-        <section>
-          <span>why this is here</span>
+        <section className="nc-note-reading">
           <p>{signal.reason}</p>
         </section>
 
-        <section>
-          <span>where it began</span>
-          <div className="nc-note-sources">
-            {signal.supportingInspirations.slice(0, 3).map((source) => (
-              <blockquote key={source.id}>
-                “{shortText(source.preview, 180)}”
-              </blockquote>
-            ))}
-          </div>
+        <section className="nc-note-source-section">
+          <span>it began here</span>
+          <blockquote className="nc-note-source">
+            “{shortText(source?.preview || signal.reason, 190)}”
+          </blockquote>
         </section>
 
         {relatedLabels.length > 0 ? (
-          <section>
-            <span>related thoughts</span>
-            <div className="nc-note-related">
-              {relatedLabels.map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+          <section className="nc-note-nearby-section">
+            <span>nearby thought</span>
+            <p className="nc-note-related-line">{relatedLabels[0]}</p>
           </section>
         ) : null}
 
-        <section>
-          <span>teach top of mind</span>
+        <footer className="nc-note-expanded-foot">
           <div className="nc-note-reactions nc-note-reactions--expanded" role="group" aria-label={copy.reactionGroup}>
             {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
               const active = reactions[index] === kind;
@@ -1246,7 +1234,8 @@ export function HomePage(): JSX.Element {
               );
             })}
           </div>
-        </section>
+          <span>not final</span>
+        </footer>
       </div>
     </article>
   );
@@ -1327,6 +1316,7 @@ export function HomePage(): JSX.Element {
                 {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
               </h1>
               <p className="nc-tagline">{copy.tagline}</p>
+              <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p>
             </section>
 
             <section className="nc-stage" aria-label="generated thoughts">
