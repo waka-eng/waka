@@ -978,6 +978,23 @@ export async function rebuildMeaningGraph(): Promise<{
   return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to rebuild meaning graph");
 }
 
+export function formatMeaningGraphRebuildError(err: unknown): string {
+  const timeoutMessage =
+    "The rebuild request timed out or the remote proxy returned HTTP 502/504. " +
+    "Rebuild may still be running server-side. Wait a minute, then click Refresh to check the graph before starting another rebuild.";
+
+  if (err instanceof ApiError && [0, 502, 504].includes(err.status)) {
+    return timeoutMessage;
+  }
+
+  if (err instanceof TypeError) {
+    return timeoutMessage;
+  }
+
+  const message = err instanceof Error ? err.message : "Failed to rebuild meaning graph";
+  return `Rebuild failed: ${message}`;
+}
+
 export interface ApiTopOfMindSupportingInspiration {
   id: string;
   preview: string;

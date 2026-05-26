@@ -11,8 +11,8 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Handle,
   Position,
-  useNodesState,
   type Edge,
+  type Node,
   type NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -20,6 +20,7 @@ import "reactflow/dist/style.css";
 import { FloatingEdge } from "../components/FloatingEdge";
 import {
   fetchMeaningGraph,
+  formatMeaningGraphRebuildError,
   rebuildMeaningGraph,
   type ApiMeaningGraph,
   type ApiMeaningGraphEdge,
@@ -235,6 +236,7 @@ MeaningFlowNode.displayName = "MeaningFlowNode";
 
 const nodeTypes = { meaning: MeaningFlowNode };
 const edgeTypes = { floating: FloatingEdge };
+const EMPTY_NEIGHBORS = new Set<string>();
 
 export default function MeaningGraphPage(): JSX.Element {
   const [graph, setGraph] = useState<ApiMeaningGraph | null>(null);
@@ -244,9 +246,8 @@ export default function MeaningGraphPage(): JSX.Element {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
+  const [confirmingRebuild, setConfirmingRebuild] = useState(false);
   const [lastRebuild, setLastRebuild] = useState<ApiMeaningGraphRebuildResult | null>(null);
-  const [flowNodes, setFlowNodes, onNodesChange] =
-    useNodesState<MeaningNodeData>([]);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -267,15 +268,25 @@ export default function MeaningGraphPage(): JSX.Element {
     void loadGraph();
   }, [loadGraph]);
 
+  const handleRequestRebuild = useCallback(() => {
+    setError(null);
+    setConfirmingRebuild(true);
+  }, []);
+
+  const handleCancelRebuild = useCallback(() => {
+    setConfirmingRebuild(false);
+  }, []);
+
   const handleRebuild = useCallback(async () => {
     setRebuilding(true);
+    setConfirmingRebuild(false);
     setError(null);
     try {
       const result = await rebuildMeaningGraph();
       setLastRebuild(result.rebuild);
       await loadGraph();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rebuild meaning graph");
+      setError(formatMeaningGraphRebuildError(err));
     } finally {
       setRebuilding(false);
     }
@@ -379,60 +390,61 @@ export default function MeaningGraphPage(): JSX.Element {
     return map;
   }, [visibleMeaningEdges]);
 
-  useEffect(() => {
-    if (!graph) {
-      setFlowNodes([]);
-      return;
-    }
+  const baseFlowNodes = useMemo<Node<MeaningNodeData>[]>(() => {
+    if (!graph) return [];
 
     const positions = runLayout(visibleMeaningNodes, visibleMeaningEdges);
-    setFlowNodes(
-      visibleMeaningNodes.map((node) => {
-        const position = positions.get(node.id) ?? { x: 540, y: 330 };
-        return {
-          id: node.id,
-          type: "meaning",
-          position: {
-            x: position.x - NODE_WIDTH / 2,
-            y: position.y - NODE_HEIGHT / 2,
-          },
-          data: {
-            type: node.type,
-            label: node.label,
-            description: node.description,
-            weight: node.weight,
-            evidenceCount: node.evidenceCount,
-            isFocus: false,
-            fade: false,
-          },
-          style: { width: NODE_WIDTH, height: NODE_HEIGHT },
-        };
-      }),
-    );
-  }, [graph, setFlowNodes, visibleMeaningEdges, visibleMeaningNodes]);
+    return visibleMeaningNodes.map((node) => {
+      const position = positions.get(node.id) ?? { x: 540, y: 330 };
+      return {
+        id: node.id,
+        type: "meaning",
+        position: {
+          x: position.x - NODE_WIDTH / 2,
+          y: position.y - NODE_HEIGHT / 2,
+        },
+        data: {
+          type: node.type,
+          label: node.label,
+          description: node.description,
+          weight: node.weight,
+          evidenceCount: node.evidenceCount,
+          isFocus: false,
+          fade: false,
+        },
+        style: { width: NODE_WIDTH, height: NODE_HEIGHT },
+      };
+    });
+  }, [graph, visibleMeaningEdges, visibleMeaningNodes]);
 
   const focusNodeId = hoverNodeId;
   const selectedOrHoverNodeId = hoverNodeId ?? selectedNodeId;
   const focusNeighbors = focusNodeId
-    ? neighborsByNode.get(focusNodeId) ?? new Set<string>()
+    ? neighborsByNode.get(focusNodeId) ?? EMPTY_NEIGHBORS
     : null;
 
-  useEffect(() => {
-    setFlowNodes((previous) =>
-      previous.map((node) => {
+  const flowNodes = useMemo(
+    () =>
+      baseFlowNodes.map((node) => {
         const isFocus = selectedOrHoverNodeId === node.id;
         const isNeighbor = focusNeighbors?.has(node.id) ?? false;
+        const fade = hoverNodeId !== null && !isFocus && !isNeighbor;
+
+        if (node.data.isFocus === isFocus && node.data.fade === fade) {
+          return node;
+        }
+
         return {
           ...node,
           data: {
             ...node.data,
             isFocus,
-            fade: hoverNodeId !== null && !isFocus && !isNeighbor,
+            fade,
           },
         };
       }),
-    );
-  }, [focusNeighbors, hoverNodeId, selectedOrHoverNodeId, setFlowNodes]);
+    [baseFlowNodes, focusNeighbors, hoverNodeId, selectedOrHoverNodeId],
+  );
 
   const flowEdges: Edge[] = useMemo(
     () =>
@@ -590,15 +602,43 @@ export default function MeaningGraphPage(): JSX.Element {
           <button
             type="button"
             disabled={rebuilding || loading}
-            onClick={() => void handleRebuild()}
+            onClick={handleRequestRebuild}
           >
-            {rebuilding ? "Rebuilding..." : "Rebuild graph"}
+            {rebuilding ? "Rebuilding graph..." : "Rebuild graph"}
           </button>
-          <button type="button" onClick={() => void loadGraph()} disabled={loading}>
+          <button type="button" onClick={() => void loadGraph()} disabled={loading || rebuilding}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </header>
+
+      {confirmingRebuild ? (
+        <section className="meaning-graph-rebuild-alert" role="alert" aria-live="polite">
+          <div>
+            <strong>Before you rebuild the meaning graph</strong>
+            <p>
+              Rebuild rereads your saved inspirations, regenerates missing meaning packets, clears the current
+              meaning graph rows for this account, then rebuilds meaning notes, evidence, and relationship edges.
+              It can take a minute or more on remote dev. If the browser reports a 502 or timeout, the server may
+              still be finishing — refresh the dashboard after a short wait before clicking rebuild again.
+            </p>
+          </div>
+          <div className="meaning-graph-rebuild-alert-actions">
+            <button type="button" onClick={() => void handleRebuild()} disabled={rebuilding}>
+              Start rebuild
+            </button>
+            <button type="button" onClick={handleCancelRebuild} disabled={rebuilding}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {rebuilding ? (
+        <p className="meaning-graph-status meaning-graph-status--running" aria-live="polite">
+          Rebuild is running. This can take a minute or more on remote dev; please keep this tab open.
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="meaning-graph-status">Loading meaning graph...</p>
@@ -626,8 +666,8 @@ export default function MeaningGraphPage(): JSX.Element {
                 <div className="meaning-dashboard-compact-status">
                   {lastRebuild ? (
                     <span>
-                      Rebuilt {lastRebuild.inspirations} inspirations / {lastRebuild.nodesTouched} notes /{" "}
-                      {lastRebuild.edgesTouched} edges
+                      Rebuild finished: {lastRebuild.inspirations} inspirations / {lastRebuild.nodesTouched} notes /{" "}
+                      {lastRebuild.edgesTouched} edges. Dashboard refreshed.
                     </span>
                   ) : null}
                   {visibleHealthWarnings.map((message) => (
@@ -647,7 +687,6 @@ export default function MeaningGraphPage(): JSX.Element {
                     edges={flowEdges}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
-                    onNodesChange={onNodesChange}
                     fitView
                     fitViewOptions={{ padding: 0.25 }}
                     minZoom={0.22}

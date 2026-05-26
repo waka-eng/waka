@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   fetchWowMoments,
+  formatMeaningGraphRebuildError,
   updateAuthPreferences,
   type ListWowMomentsResponse,
 } from "../src/lib/api";
@@ -117,5 +118,23 @@ describe("updateAuthPreferences", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ preferredLocale: "ko-KR" }),
     });
+  });
+});
+
+describe("formatMeaningGraphRebuildError", () => {
+  it("explains ambiguous remote timeout and proxy failures", () => {
+    const message = formatMeaningGraphRebuildError(
+      new ApiError({ status: 502, message: "Bad Gateway" }),
+    );
+
+    expect(message).toContain("timed out or the remote proxy returned HTTP 502/504");
+    expect(message).toContain("may still be running server-side");
+    expect(message).toContain("click Refresh");
+  });
+
+  it("adds rebuild context to ordinary API failures", () => {
+    expect(
+      formatMeaningGraphRebuildError(new ApiError({ status: 500, message: "Gemini quota exhausted" })),
+    ).toBe("Rebuild failed: Gemini quota exhausted");
   });
 });
