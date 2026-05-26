@@ -100,27 +100,26 @@ afterEach(() => {
 });
 
 describe("WowMomentsSection", () => {
-  it("keeps the populated WOW grid three columns with no gap in the mobile override", () => {
+  it("renders the populated WOW grid as spaced sticky notes, including the mobile override", () => {
     const mobileCss = globalCss.match(/@media \(max-width: 640px\) \{[\s\S]*\}\s*$/)?.[0] ?? "";
 
-    expect(mobileCss).toMatch(
-      /\.wow-moments-grid--populated\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[\s\S]*?gap:\s*0;/,
-    );
-    expect(mobileCss).toMatch(
-      /\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{[\s\S]*?margin-left:\s*-1px;/,
-    );
-    expect(mobileCss).toMatch(
-      /\.wow-moments-grid--populated \.wow-moment-card:nth-child\(3n \+ 1\)\s*\{[\s\S]*?margin-left:\s*0;/,
-    );
-    expect(mobileCss).toMatch(
-      /\.wow-moments-grid--populated \.wow-moment-card:nth-child\(n \+ 4\)\s*\{[\s\S]*?margin-top:\s*-1px;/,
-    );
-    expect(mobileCss).not.toMatch(
-      /\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{[^}]*margin-top:\s*-1px;/,
+    expect(globalCss).toMatch(
+      /\.wow-moments-grid--populated\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[\s\S]*?grid-auto-rows:\s*minmax\(220px, auto\);[\s\S]*?gap:\s*clamp\(14px, 2vw, 24px\);/,
     );
     expect(globalCss).toMatch(
-      /\.wow-moments-grid--populated\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);[\s\S]*?grid-auto-rows:\s*minmax\(190px, auto\);[\s\S]*?gap:\s*0;/,
+      /\.wow-moments-grid--populated \.wow-moment-card--sticky\s*\{[\s\S]*?background:[\s\S]*?var\(--wow-note-color\);[\s\S]*?transform:\s*rotate\(var\(--wow-note-rotation\)\);/,
     );
+    expect(globalCss).toMatch(/\.wow-moment-sticky-tape\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*-9px;/);
+    expect(globalCss).toMatch(/\.wow-moment-sticky-pin\s*\{[\s\S]*?border-radius:\s*999px;/);
+    expect(mobileCss).toMatch(
+      /\.wow-moments-grid--populated\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?gap:\s*var\(--space-3\);/,
+    );
+    expect(mobileCss).toMatch(
+      /\.wow-moments-grid--populated \.wow-moment-card--sticky\s*\{[\s\S]*?min-height:\s*200px;/,
+    );
+    expect(globalCss).not.toMatch(/\.wow-moments-grid--populated \.wow-moment-card \+ \.wow-moment-card\s*\{/);
+    expect(globalCss).not.toMatch(/\.wow-moments-grid--populated \.wow-moment-card:nth-child\(3n \+ 1\)/);
+    expect(globalCss).not.toMatch(/\.wow-moments-grid--populated \.wow-moment-card:nth-child\(n \+ 4\)/);
     expect(globalCss).toMatch(
       /\.wow-moment-related\s*\{[\s\S]*?grid-auto-rows:\s*auto;[\s\S]*?align-content:\s*start;/,
     );
@@ -291,9 +290,16 @@ describe("WowMomentsSection", () => {
     expect(componentSource).not.toMatch(/SOURCE_SNIPPET|getSourceSnippet|substring\(/);
   });
 
-  it("adds a visually quiet open-detail cue to each populated WOW card", () => {
+  it("adds sticky-note chrome and a visually quiet open-detail cue to each populated WOW card", () => {
     const html = renderSection({ moments: [sampleMoment], loading: false, error: null });
 
+    expect(html).toContain("wow-moment-card--sticky");
+    expect(html).toContain("wow-moment-sticky-tape");
+    expect(html).toContain("wow-moment-sticky-pin");
+    expect(html).toContain("--wow-note-color:#fff4a8");
+    expect(html).toContain("--wow-note-rotation:-2.4deg");
+    expect(componentSource).toContain("STICKY_NOTE_COLORS");
+    expect(componentSource).toContain("STICKY_NOTE_ROTATIONS");
     expect(html).toContain("wow-moment-open-cue");
     expect(html).toContain("See why this matters");
     expect(html).toContain("aria-hidden=\"true\"");
@@ -1313,7 +1319,7 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("Inspect all WOW moments (11)");
     expect(html).not.toContain("Dev-only inspect WOW fields");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
-    expect(html.match(/class=\"wow-moment-card wow-moment-card--interactive\"/g)).toHaveLength(9);
+    expect(html.match(/class=\"wow-moment-card wow-moment-card--interactive wow-moment-card--sticky\"/g)).toHaveLength(9);
     expect(html).toContain("WOW card 9");
     expect(html).toContain("Related inspiration evidence 9");
     expect(html).not.toContain("Evidence reason 9");
