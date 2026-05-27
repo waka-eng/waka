@@ -229,6 +229,7 @@ export default $config({
           ? {
               WAKA_ENABLE_ADMIN_ROUTES: "true",
               WAKA_SHOW_INTERNAL_STATUS: "true",
+              WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",
             }
           : {}),
       },
