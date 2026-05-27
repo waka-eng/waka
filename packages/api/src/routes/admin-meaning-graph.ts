@@ -6,7 +6,7 @@
  * meanings. This route is for debugging backend state, not user navigation.
  */
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 
 import {
@@ -17,9 +17,14 @@ import {
   meaningPackets,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { persistMeaningGraphForInspiration } from "../lib/meaning-graph-writer.js";
-import { persistMeaningPacketForInspiration } from "../lib/meaning-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import {
+  enqueueMeaningGraphRebuild,
+  type BackgroundJobSummary,
+  getMeaningGraphRebuildJob,
+  getLatestMeaningGraphRebuildJob,
+  scheduleBackgroundJobDrain,
+} from "../lib/queue.js";
 
 const DEFAULT_LIMIT = 120;
 const MAX_LIMIT = 300;
@@ -82,42 +87,24 @@ function truncatePreview(value: string, maxLength = MAX_PREVIEW_LENGTH): string 
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-async function rebuildMeaningGraphForUser(db: ReturnType<typeof getDb>, userId: string) {
-  const inspirationRows = await db
-    .select({ id: inspirations.id })
-    .from(inspirations)
-    .where(eq(inspirations.userId, userId))
-    .orderBy(asc(inspirations.createdAt));
+function serializeJobDate(value: Date | string | null): string | null {
+  if (value === null) return null;
+  return value instanceof Date ? value.toISOString() : value;
+}
 
-  await db.delete(meaningEvidence).where(eq(meaningEvidence.userId, userId));
-  await db.delete(meaningEdges).where(eq(meaningEdges.userId, userId));
-  await db.delete(meaningNodes).where(eq(meaningNodes.userId, userId));
-
-  let nodesTouched = 0;
-  let evidenceTouched = 0;
-  let edgesTouched = 0;
-
-  for (const inspiration of inspirationRows) {
-    await persistMeaningPacketForInspiration({
-      db,
-      userId,
-      inspirationId: inspiration.id,
-    });
-    const result = await persistMeaningGraphForInspiration({
-      db,
-      userId,
-      triggerInspirationId: inspiration.id,
-    });
-    nodesTouched += result.nodes.length;
-    evidenceTouched += result.evidence.length;
-    edgesTouched += result.edges.length;
-  }
-
+function serializeBackgroundJob(job: BackgroundJobSummary) {
   return {
-    inspirations: inspirationRows.length,
-    nodesTouched,
-    evidenceTouched,
-    edgesTouched,
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    payload: job.payload,
+    attempts: job.attempts,
+    maxAttempts: job.maxAttempts,
+    runAfter: serializeJobDate(job.runAfter),
+    lockedAt: serializeJobDate(job.lockedAt),
+    lastError: job.lastError,
+    createdAt: serializeJobDate(job.createdAt),
+    updatedAt: serializeJobDate(job.updatedAt),
   };
 }
 
@@ -303,10 +290,35 @@ export function createAdminMeaningGraphRoutes(
 
   routes.post("/rebuild", async (c) => {
     const userId = c.get("user").id;
-    const db = getDatabase();
-    const rebuild = await rebuildMeaningGraphForUser(db, userId);
-    const health = await getMeaningGraphHealth(db, userId);
-    return c.json({ rebuild, health });
+    const { job } = await enqueueMeaningGraphRebuild(userId);
+    return c.json(
+      {
+        job: serializeBackgroundJob(job),
+        statusUrl: `/api/admin/meaning-graph/rebuild/${job.id}`,
+      },
+      202,
+    );
+  });
+
+  routes.get("/rebuild", async (c) => {
+    const userId = c.get("user").id;
+    const job = await getLatestMeaningGraphRebuildJob(userId);
+    if (job?.status === "pending" || job?.status === "running") {
+      scheduleBackgroundJobDrain();
+    }
+    return c.json({ job: job ? serializeBackgroundJob(job) : null });
+  });
+
+  routes.get("/rebuild/:jobId", async (c) => {
+    const userId = c.get("user").id;
+    const job = await getMeaningGraphRebuildJob(userId, c.req.param("jobId"));
+    if (!job) {
+      return c.json({ error: "Meaning graph rebuild job not found" }, 404);
+    }
+    if (job.status === "pending" || job.status === "running") {
+      scheduleBackgroundJobDrain();
+    }
+    return c.json({ job: serializeBackgroundJob(job) });
   });
 
   routes.get("/", async (c) => {

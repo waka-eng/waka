@@ -11,8 +11,8 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Handle,
   Position,
-  useNodesState,
   type Edge,
+  type Node,
   type NodeProps,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -20,11 +20,14 @@ import "reactflow/dist/style.css";
 import { FloatingEdge } from "../components/FloatingEdge";
 import {
   fetchMeaningGraph,
+  fetchMeaningGraphRebuildJob,
+  formatMeaningGraphRebuildError,
   rebuildMeaningGraph,
   type ApiMeaningGraph,
   type ApiMeaningGraphEdge,
   type ApiMeaningGraphNode,
   type ApiMeaningGraphRecentInspiration,
+  type ApiMeaningGraphRebuildJob,
   type ApiMeaningGraphRebuildResult,
 } from "../lib/api";
 
@@ -47,6 +50,7 @@ const NODE_WIDTH = 238;
 const NODE_HEIGHT = 96;
 const MAX_VISIBLE_NODES = 34;
 const MAX_VISIBLE_EDGES = 72;
+const REBUILD_POLL_MS = 2_500;
 
 const TYPE_ORDER = [
   "question",
@@ -123,6 +127,38 @@ function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "recent";
   return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function isActiveRebuildJob(job: ApiMeaningGraphRebuildJob | null): boolean {
+  return job?.status === "pending" || job?.status === "running";
+}
+
+export function rebuildJobResult(job: ApiMeaningGraphRebuildJob | null): ApiMeaningGraphRebuildResult | null {
+  if (!job || job.status !== "succeeded") return null;
+  const payload = job.payload;
+  return {
+    inspirations: payload.inspirations ?? payload.processedInspirations ?? payload.totalInspirations ?? 0,
+    nodesTouched: payload.nodesTouched ?? 0,
+    evidenceTouched: payload.evidenceTouched ?? 0,
+    edgesTouched: payload.edgesTouched ?? 0,
+  };
+}
+
+function formatRebuildJobStatus(job: ApiMeaningGraphRebuildJob | null): string | null {
+  if (!job) return null;
+  if (job.status === "pending") return "Rebuild queued. The worker will start shortly.";
+  if (job.status === "running") {
+    const phase = job.payload.phase?.replace(/_/g, " ") ?? "processing";
+    const current = job.payload.processedInspirations;
+    const total = job.payload.totalInspirations;
+    const count = typeof current === "number" && typeof total === "number" && total > 0
+      ? ` (${Math.min(current, total)} / ${total})`
+      : "";
+    return `Rebuild running: ${phase}${count}. This page will refresh when it finishes.`;
+  }
+  if (job.status === "succeeded") return "Rebuild finished. Dashboard refreshed.";
+  if (job.status === "failed") return `Rebuild failed: ${job.lastError ?? "check server logs"}`;
+  return null;
 }
 
 function shortPreview(value: string): string {
@@ -235,6 +271,7 @@ MeaningFlowNode.displayName = "MeaningFlowNode";
 
 const nodeTypes = { meaning: MeaningFlowNode };
 const edgeTypes = { floating: FloatingEdge };
+const EMPTY_NEIGHBORS = new Set<string>();
 
 export default function MeaningGraphPage(): JSX.Element {
   const [graph, setGraph] = useState<ApiMeaningGraph | null>(null);
@@ -244,9 +281,10 @@ export default function MeaningGraphPage(): JSX.Element {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
-  const [lastRebuild, setLastRebuild] = useState<ApiMeaningGraphRebuildResult | null>(null);
-  const [flowNodes, setFlowNodes, onNodesChange] =
-    useNodesState<MeaningNodeData>([]);
+  const [confirmingRebuild, setConfirmingRebuild] = useState(false);
+  const [rebuildJob, setRebuildJob] = useState<ApiMeaningGraphRebuildJob | null>(null);
+  const lastRebuild = rebuildJobResult(rebuildJob);
+  const rebuildStatusMessage = formatRebuildJobStatus(rebuildJob);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -259,7 +297,6 @@ export default function MeaningGraphPage(): JSX.Element {
       setError(err instanceof Error ? err.message : "Failed to load meaning graph");
     } finally {
       setLoading(false);
-      setRebuilding(false);
     }
   }, []);
 
@@ -267,19 +304,82 @@ export default function MeaningGraphPage(): JSX.Element {
     void loadGraph();
   }, [loadGraph]);
 
+  const handleRequestRebuild = useCallback(() => {
+    setError(null);
+    setConfirmingRebuild(true);
+  }, []);
+
+  const handleCancelRebuild = useCallback(() => {
+    setConfirmingRebuild(false);
+  }, []);
+
   const handleRebuild = useCallback(async () => {
     setRebuilding(true);
+    setConfirmingRebuild(false);
     setError(null);
     try {
       const result = await rebuildMeaningGraph();
-      setLastRebuild(result.rebuild);
-      await loadGraph();
+      setRebuildJob(result.job);
+      setRebuilding(isActiveRebuildJob(result.job));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to rebuild meaning graph");
-    } finally {
+      setError(formatMeaningGraphRebuildError(err));
       setRebuilding(false);
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLatestJob(): Promise<void> {
+      try {
+        const { job } = await fetchMeaningGraphRebuildJob();
+        if (cancelled || !job) return;
+        setRebuildJob(job);
+        setRebuilding(isActiveRebuildJob(job));
+        if (job.status === "succeeded") {
+          await loadGraph();
+        }
+      } catch {
+        // The graph itself is the primary view; status polling errors are
+        // surfaced only after a user explicitly starts a rebuild.
+      }
+    }
+
+    void loadLatestJob();
+    return () => {
+      cancelled = true;
+    };
   }, [loadGraph]);
+
+  useEffect(() => {
+    if (!rebuildJob || !isActiveRebuildJob(rebuildJob)) return;
+    const jobId = rebuildJob.id;
+    let cancelled = false;
+
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const { job } = await fetchMeaningGraphRebuildJob(jobId);
+          if (cancelled || !job) return;
+          setRebuildJob(job);
+          const stillActive = isActiveRebuildJob(job);
+          setRebuilding(stillActive);
+          if (!stillActive && job.status === "succeeded") {
+            await loadGraph();
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setError(formatMeaningGraphRebuildError(err));
+          }
+        }
+      })();
+    }, REBUILD_POLL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loadGraph, rebuildJob]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
@@ -379,60 +479,61 @@ export default function MeaningGraphPage(): JSX.Element {
     return map;
   }, [visibleMeaningEdges]);
 
-  useEffect(() => {
-    if (!graph) {
-      setFlowNodes([]);
-      return;
-    }
+  const baseFlowNodes = useMemo<Node<MeaningNodeData>[]>(() => {
+    if (!graph) return [];
 
     const positions = runLayout(visibleMeaningNodes, visibleMeaningEdges);
-    setFlowNodes(
-      visibleMeaningNodes.map((node) => {
-        const position = positions.get(node.id) ?? { x: 540, y: 330 };
-        return {
-          id: node.id,
-          type: "meaning",
-          position: {
-            x: position.x - NODE_WIDTH / 2,
-            y: position.y - NODE_HEIGHT / 2,
-          },
-          data: {
-            type: node.type,
-            label: node.label,
-            description: node.description,
-            weight: node.weight,
-            evidenceCount: node.evidenceCount,
-            isFocus: false,
-            fade: false,
-          },
-          style: { width: NODE_WIDTH, height: NODE_HEIGHT },
-        };
-      }),
-    );
-  }, [graph, setFlowNodes, visibleMeaningEdges, visibleMeaningNodes]);
+    return visibleMeaningNodes.map((node) => {
+      const position = positions.get(node.id) ?? { x: 540, y: 330 };
+      return {
+        id: node.id,
+        type: "meaning",
+        position: {
+          x: position.x - NODE_WIDTH / 2,
+          y: position.y - NODE_HEIGHT / 2,
+        },
+        data: {
+          type: node.type,
+          label: node.label,
+          description: node.description,
+          weight: node.weight,
+          evidenceCount: node.evidenceCount,
+          isFocus: false,
+          fade: false,
+        },
+        style: { width: NODE_WIDTH, height: NODE_HEIGHT },
+      };
+    });
+  }, [graph, visibleMeaningEdges, visibleMeaningNodes]);
 
   const focusNodeId = hoverNodeId;
   const selectedOrHoverNodeId = hoverNodeId ?? selectedNodeId;
   const focusNeighbors = focusNodeId
-    ? neighborsByNode.get(focusNodeId) ?? new Set<string>()
+    ? neighborsByNode.get(focusNodeId) ?? EMPTY_NEIGHBORS
     : null;
 
-  useEffect(() => {
-    setFlowNodes((previous) =>
-      previous.map((node) => {
+  const flowNodes = useMemo(
+    () =>
+      baseFlowNodes.map((node) => {
         const isFocus = selectedOrHoverNodeId === node.id;
         const isNeighbor = focusNeighbors?.has(node.id) ?? false;
+        const fade = hoverNodeId !== null && !isFocus && !isNeighbor;
+
+        if (node.data.isFocus === isFocus && node.data.fade === fade) {
+          return node;
+        }
+
         return {
           ...node,
           data: {
             ...node.data,
             isFocus,
-            fade: hoverNodeId !== null && !isFocus && !isNeighbor,
+            fade,
           },
         };
       }),
-    );
-  }, [focusNeighbors, hoverNodeId, selectedOrHoverNodeId, setFlowNodes]);
+    [baseFlowNodes, focusNeighbors, hoverNodeId, selectedOrHoverNodeId],
+  );
 
   const flowEdges: Edge[] = useMemo(
     () =>
@@ -590,15 +691,46 @@ export default function MeaningGraphPage(): JSX.Element {
           <button
             type="button"
             disabled={rebuilding || loading}
-            onClick={() => void handleRebuild()}
+            onClick={handleRequestRebuild}
           >
-            {rebuilding ? "Rebuilding..." : "Rebuild graph"}
+            {rebuilding ? "Rebuilding graph..." : "Rebuild graph"}
           </button>
-          <button type="button" onClick={() => void loadGraph()} disabled={loading}>
+          <button type="button" onClick={() => void loadGraph()} disabled={loading || rebuilding}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
       </header>
+
+      {confirmingRebuild ? (
+        <section className="meaning-graph-rebuild-alert" role="alert" aria-live="polite">
+          <div>
+            <strong>Before you rebuild the meaning graph</strong>
+            <p>
+              Rebuild rereads your saved inspirations, regenerates missing meaning packets, clears the current
+              meaning graph rows for this account, then rebuilds meaning notes, evidence, and relationship edges.
+              It now runs as a background job, so the dashboard will poll progress and refresh itself when the job
+              finishes. Starting another rebuild while one is active will return the existing job.
+            </p>
+          </div>
+          <div className="meaning-graph-rebuild-alert-actions">
+            <button type="button" onClick={() => void handleRebuild()} disabled={rebuilding}>
+              Start rebuild
+            </button>
+            <button type="button" onClick={handleCancelRebuild} disabled={rebuilding}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {rebuilding || rebuildStatusMessage ? (
+        <p
+          className={`meaning-graph-status${rebuildJob?.status === "failed" ? " meaning-graph-status--error" : " meaning-graph-status--running"}`}
+          aria-live="polite"
+        >
+          {rebuildStatusMessage ?? "Rebuild queued. This page will poll for progress."}
+        </p>
+      ) : null}
 
       {loading ? (
         <p className="meaning-graph-status">Loading meaning graph...</p>
@@ -626,8 +758,8 @@ export default function MeaningGraphPage(): JSX.Element {
                 <div className="meaning-dashboard-compact-status">
                   {lastRebuild ? (
                     <span>
-                      Rebuilt {lastRebuild.inspirations} inspirations / {lastRebuild.nodesTouched} notes /{" "}
-                      {lastRebuild.edgesTouched} edges
+                      Rebuild finished: {lastRebuild.inspirations} inspirations / {lastRebuild.nodesTouched} notes /{" "}
+                      {lastRebuild.edgesTouched} edges. Dashboard refreshed.
                     </span>
                   ) : null}
                   {visibleHealthWarnings.map((message) => (
@@ -647,7 +779,6 @@ export default function MeaningGraphPage(): JSX.Element {
                     edges={flowEdges}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
-                    onNodesChange={onNodesChange}
                     fitView
                     fitViewOptions={{ padding: 0.25 }}
                     minZoom={0.22}

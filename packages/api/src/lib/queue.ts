@@ -8,16 +8,21 @@
  * be drained manually or by future cron via `drainBackgroundJobs`.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
   backgroundJobs,
   type BackgroundJobStatus,
+  type MeaningGraphRebuildPayload,
   type ProcessInspirationPayload,
 } from "../db/index.js";
 import { runClassificationJob } from "../queue/classifier.js";
 import { getDb } from "./db.js";
+import {
+  createInitialMeaningGraphRebuildPayload,
+  rebuildMeaningGraphForUser,
+} from "./meaning-graph-rebuild.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const MAX_ERROR_LENGTH = 1_000;
@@ -25,8 +30,27 @@ const STALE_LOCK_SECONDS = 15 * 60;
 
 let drainScheduled = false;
 
+export interface BackgroundJobSummary {
+  id: string;
+  type: BackgroundJob["type"];
+  status: BackgroundJobStatus;
+  payload: BackgroundJob["payload"];
+  attempts: number;
+  maxAttempts: number;
+  runAfter: Date | string;
+  lockedAt: Date | string | null;
+  lastError: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
 export interface EnqueueClassificationResult {
   jobId: string;
+}
+
+export interface EnqueueMeaningGraphRebuildResult {
+  jobId: string;
+  job: BackgroundJobSummary;
 }
 
 export interface EnqueueClassificationOptions {
@@ -61,28 +85,128 @@ export async function enqueueClassification(
   const idempotencyKey = options.idempotencyScope
     ? `process_inspiration:${inspirationId}:${options.idempotencyScope}`
     : `process_inspiration:${inspirationId}`;
-  const [job] = await db
-    .insert(backgroundJobs)
-    .values({
-      userId,
-      type: "process_inspiration",
-      payload: { inspirationId },
-      maxAttempts: DEFAULT_MAX_ATTEMPTS,
-      idempotencyKey,
-    })
-    .onConflictDoUpdate({
-      target: backgroundJobs.idempotencyKey,
-      targetWhere: sql`${backgroundJobs.idempotencyKey} IS NOT NULL`,
-      set: {
-        updatedAt: new Date(),
-      },
-    })
-    .returning({ id: backgroundJobs.id });
+  const rows = await db.execute(sql<{ id: string }>`
+    INSERT INTO background_jobs (user_id, type, payload, max_attempts, idempotency_key)
+    VALUES (
+      ${userId}::uuid,
+      'process_inspiration'::background_job_type,
+      ${JSON.stringify({ inspirationId })}::jsonb,
+      ${DEFAULT_MAX_ATTEMPTS},
+      ${idempotencyKey}
+    )
+    ON CONFLICT (idempotency_key)
+    WHERE idempotency_key IS NOT NULL
+    DO UPDATE SET updated_at = now()
+    RETURNING id
+  `);
+  const [job] = rows as unknown as Array<{ id: string }>;
 
   if (shouldAutoDrainBackgroundJobs()) {
     scheduleBackgroundJobDrain();
   }
   return { jobId: job!.id };
+}
+
+export async function enqueueMeaningGraphRebuild(
+  userId: string,
+): Promise<EnqueueMeaningGraphRebuildResult> {
+  const payload = createInitialMeaningGraphRebuildPayload(userId);
+  const [job] = await upsertMeaningGraphRebuildJob(userId, payload);
+  if (!job) {
+    throw new Error("Failed to enqueue meaning graph rebuild job");
+  }
+
+  if (shouldAutoDrainBackgroundJobs()) {
+    scheduleBackgroundJobDrain();
+  }
+
+  return { jobId: job.id, job: summarizeBackgroundJob(job) };
+}
+
+export async function getLatestMeaningGraphRebuildJob(
+  userId: string,
+): Promise<BackgroundJobSummary | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(backgroundJobs)
+    .where(and(eq(backgroundJobs.userId, userId), eq(backgroundJobs.type, "meaning_graph_rebuild")))
+    .orderBy(desc(backgroundJobs.createdAt))
+    .limit(1);
+  const job = rows[0];
+  return job ? summarizeBackgroundJob(job) : null;
+}
+
+export async function getMeaningGraphRebuildJob(
+  userId: string,
+  jobId: string,
+): Promise<BackgroundJobSummary | null> {
+  const rows = await getDb()
+    .select()
+    .from(backgroundJobs)
+    .where(
+      and(
+        eq(backgroundJobs.userId, userId),
+        eq(backgroundJobs.id, jobId),
+        eq(backgroundJobs.type, "meaning_graph_rebuild"),
+      ),
+    )
+    .limit(1);
+  const job = rows[0];
+  return job ? summarizeBackgroundJob(job) : null;
+}
+
+async function upsertMeaningGraphRebuildJob(
+  userId: string,
+  payload: MeaningGraphRebuildPayload,
+): Promise<BackgroundJob[]> {
+  const payloadJson = JSON.stringify(payload);
+  const rows = await getDb().execute(sql<BackgroundJob>`
+    INSERT INTO background_jobs (user_id, type, payload, max_attempts, idempotency_key)
+    VALUES (
+      ${userId}::uuid,
+      'meaning_graph_rebuild'::background_job_type,
+      ${payloadJson}::jsonb,
+      1,
+      NULL
+    )
+    ON CONFLICT (user_id, type)
+    WHERE type::text = 'meaning_graph_rebuild'
+      AND status::text IN ('pending', 'running')
+    DO UPDATE SET
+      updated_at = now()
+    RETURNING
+      id,
+      user_id AS "userId",
+      type,
+      payload,
+      status,
+      attempts,
+      max_attempts AS "maxAttempts",
+      run_after AS "runAfter",
+      locked_at AS "lockedAt",
+      last_error AS "lastError",
+      idempotency_key AS "idempotencyKey",
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+  `);
+  return rows as unknown as BackgroundJob[];
+}
+
+function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {
+  return {
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    payload: job.payload,
+    attempts: job.attempts,
+    maxAttempts: job.maxAttempts,
+    runAfter: job.runAfter,
+    lockedAt: job.lockedAt,
+    lastError: job.lastError,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
 }
 
 function shouldAutoDrainBackgroundJobs(): boolean {
@@ -142,21 +266,43 @@ export async function runBackgroundJobWorker(
 }
 
 async function processBackgroundJob(job: BackgroundJob): Promise<void> {
-  if (job.type !== "process_inspiration") {
-    throw new Error(`Unsupported background job type: ${job.type}`);
+  if (job.type === "process_inspiration") {
+    const payload = parseProcessInspirationPayload(job.payload);
+    if (!payload) {
+      // Permanent poison payload: do not throw/retry. Mark as succeeded so the
+      // queue does not loop forever; the sanitized warning stays in logs.
+      console.warn("[background-jobs] dropping malformed process_inspiration job", {
+        jobId: job.id,
+      });
+      return;
+    }
+
+    await runClassificationJob(payload.inspirationId, { userId: job.userId, backgroundJobId: job.id });
+    return;
   }
 
-  const payload = parseProcessInspirationPayload(job.payload);
-  if (!payload) {
-    // Permanent poison payload: do not throw/retry. Mark as succeeded so the
-    // queue does not loop forever; the sanitized warning stays in logs.
-    console.warn("[background-jobs] dropping malformed process_inspiration job", {
-      jobId: job.id,
+  if (job.type === "meaning_graph_rebuild") {
+    await rebuildMeaningGraphForUser({
+      userId: job.userId,
+      initialPayload: job.payload,
+      onProgress: (progress) => updateMeaningGraphRebuildProgress(job.id, progress),
     });
     return;
   }
 
-  await runClassificationJob(payload.inspirationId, { userId: job.userId, backgroundJobId: job.id });
+  throw new Error(`Unsupported background job type: ${job.type}`);
+}
+
+async function updateMeaningGraphRebuildProgress(
+  jobId: string,
+  payload: MeaningGraphRebuildPayload,
+): Promise<void> {
+  await getDb().execute(sql`
+    UPDATE background_jobs
+    SET payload = ${JSON.stringify(payload)}::jsonb,
+        updated_at = now()
+    WHERE id = ${jobId}::uuid
+  `);
 }
 
 function parseProcessInspirationPayload(
@@ -221,16 +367,14 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
 }
 
 async function markJobSucceeded(jobId: string): Promise<void> {
-  const now = new Date();
-  await getDb()
-    .update(backgroundJobs)
-    .set({
-      status: "succeeded",
-      lockedAt: null,
-      lastError: null,
-      updatedAt: now,
-    })
-    .where(eq(backgroundJobs.id, jobId));
+  await getDb().execute(sql`
+    UPDATE background_jobs
+    SET status = 'succeeded'::background_job_status,
+        locked_at = NULL,
+        last_error = NULL,
+        updated_at = now()
+    WHERE id = ${jobId}::uuid
+  `);
 }
 
 async function markJobFailedOrPending(
@@ -240,16 +384,18 @@ async function markJobFailedOrPending(
   now: Date,
 ): Promise<void> {
   const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
-  await getDb()
-    .update(backgroundJobs)
-    .set({
-      status,
-      lockedAt: exhausted ? coerceNullableDate(job.lockedAt) : null,
-      runAfter: exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now),
-      lastError: sanitizeError(err),
-      updatedAt: now,
-    })
-    .where(eq(backgroundJobs.id, job.id));
+  const lockedAt = exhausted ? coerceNullableDate(job.lockedAt)?.toISOString() ?? null : null;
+  const runAfter = (exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now)).toISOString();
+  const updatedAt = now.toISOString();
+  await getDb().execute(sql`
+    UPDATE background_jobs
+    SET status = ${status}::background_job_status,
+        locked_at = ${lockedAt}::timestamptz,
+        run_after = ${runAfter}::timestamptz,
+        last_error = ${sanitizeError(err)},
+        updated_at = ${updatedAt}::timestamptz
+    WHERE id = ${job.id}::uuid
+  `);
 }
 
 function coerceDate(value: Date | string): Date {

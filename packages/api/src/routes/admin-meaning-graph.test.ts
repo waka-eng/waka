@@ -1,5 +1,14 @@
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const queueMocks = vi.hoisted(() => ({
+  enqueueMeaningGraphRebuild: vi.fn(),
+  getLatestMeaningGraphRebuildJob: vi.fn(),
+  getMeaningGraphRebuildJob: vi.fn(),
+  scheduleBackgroundJobDrain: vi.fn(),
+}));
+
+vi.mock("../lib/queue.js", () => queueMocks);
 
 import { createAdminMeaningGraphRoutes } from "./admin-meaning-graph.js";
 
@@ -30,6 +39,90 @@ function createSelect<T>(terminal: T) {
     Promise.resolve(terminal).then(resolve, reject);
   return query;
 }
+
+function createApp(db: any = { select: vi.fn() }) {
+  const app = new Hono();
+  app.route(
+    "/api/admin/meaning-graph",
+    createAdminMeaningGraphRoutes({
+      getDatabase: () => db,
+      authMiddleware: authMiddleware(),
+      adminGate: gateMiddleware(),
+    }),
+  );
+  return app;
+}
+
+function makeJob(overrides: Record<string, any> = {}) {
+  const now = new Date("2026-05-24T12:00:00.000Z");
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    type: "meaning_graph_rebuild",
+    status: "pending",
+    payload: {
+      requestedByUserId: user.id,
+      phase: "queued",
+      totalInspirations: 0,
+      processedInspirations: 0,
+      nodesTouched: 0,
+      evidenceTouched: 0,
+      edgesTouched: 0,
+    },
+    attempts: 0,
+    maxAttempts: 1,
+    runAfter: now,
+    lockedAt: null,
+    lastError: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("POST /api/admin/meaning-graph/rebuild", () => {
+  it("enqueues a rebuild job and returns status metadata", async () => {
+    queueMocks.enqueueMeaningGraphRebuild.mockResolvedValue({ jobId: "job-1", job: makeJob() });
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(202);
+    expect(queueMocks.enqueueMeaningGraphRebuild).toHaveBeenCalledWith(user.id);
+    const body = (await response.json()) as { job: Record<string, any>; statusUrl: string };
+    expect(body.statusUrl).toBe(`/api/admin/meaning-graph/rebuild/${body.job.id}`);
+    expect(body.job).toMatchObject({
+      id: "11111111-1111-4111-8111-111111111111",
+      type: "meaning_graph_rebuild",
+      status: "pending",
+      payload: expect.objectContaining({ phase: "queued" }),
+      attempts: 0,
+      maxAttempts: 1,
+      lastError: null,
+    });
+    expect(body.job.createdAt).toBe("2026-05-24T12:00:00.000Z");
+  });
+});
+
+describe("GET /api/admin/meaning-graph/rebuild", () => {
+  it("returns the latest job and nudges the worker for active jobs", async () => {
+    queueMocks.getLatestMeaningGraphRebuildJob.mockResolvedValue(
+      makeJob({ status: "running", payload: { ...makeJob().payload, phase: "processing" } }),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild");
+
+    expect(response.status).toBe(200);
+    expect(queueMocks.getLatestMeaningGraphRebuildJob).toHaveBeenCalledWith(user.id);
+    expect(queueMocks.scheduleBackgroundJobDrain).toHaveBeenCalledTimes(1);
+    const body = (await response.json()) as { job: Record<string, any> };
+    expect(body.job).toMatchObject({ status: "running", payload: expect.objectContaining({ phase: "processing" }) });
+  });
+});
 
 describe("GET /api/admin/meaning-graph", () => {
   it("returns active meaning nodes, meaning edges, and evidence", async () => {
