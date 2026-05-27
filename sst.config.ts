@@ -225,6 +225,13 @@ export default $config({
         ATTACHMENTS_REGION: AWS_REGION,
         ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
         ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
+        ...(isDevelopmentDomain
+          ? {
+              WAKA_ENABLE_ADMIN_ROUTES: "true",
+              WAKA_SHOW_INTERNAL_STATUS: "true",
+              WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",
+            }
+          : {}),
       },
     });
 
