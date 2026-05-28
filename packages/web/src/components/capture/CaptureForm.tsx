@@ -113,6 +113,8 @@ export interface PendingInspiration {
   /** Pending attachments (image / file / link). For UI only; the API call
    *  flow uses these to drive the per-attachment finalize loop. */
   attachments: PendingAttachment[];
+  /** Primary capture type inferred at save time for optimistic UI parity. */
+  kind: "note" | "link" | "image" | "file";
   /** ISO timestamp of when the user clicked Save. */
   createdAt: string;
 }
@@ -199,6 +201,15 @@ function makeLocalId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 10)}`;
+}
+
+function primaryCaptureKind(
+  attachments: PendingAttachment[],
+): "note" | "link" | "image" | "file" {
+  if (attachments.some((att) => att.kind === "image")) return "image";
+  if (attachments.some((att) => att.kind === "file")) return "file";
+  if (attachments.some((att) => att.kind === "link")) return "link";
+  return "note";
 }
 
 /* ============================================================
@@ -433,6 +444,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         });
       }
       const persistList: PendingAttachment[] = [...pending, ...liftedLinks];
+      const kind = primaryCaptureKind(persistList);
+      const inspirationText =
+        trimmed.length > 0 ? trimmed : "(attachment-only inspiration)";
 
       const tempId = makeLocalId("insp");
       const links = persistList
@@ -440,9 +454,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         .map((p) => p.url as string);
       const optimistic: PendingInspiration = {
         tempId,
-        text: trimmed,
+        text: inspirationText,
         links,
         attachments: persistList.map((p) => ({ ...p })),
+        kind,
         createdAt: new Date().toISOString(),
       };
 
@@ -454,7 +469,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         // 2. Persist the inspiration row first. Until this resolves we have
         //    no inspirationId to attach attachments to.
         const inspiration = await createInspiration({
-          text: trimmed.length > 0 ? trimmed : "(attachment-only inspiration)",
+          text: inspirationText,
+          kind,
         });
 
         const reflection = isReflectiveSave

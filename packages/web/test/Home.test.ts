@@ -7,14 +7,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createInspiration,
+  finalizeAttachment,
   fetchInspirations,
   fetchReflections,
   fetchTopOfMind,
   fetchWowMoments,
+  presignAttachment,
   recordInspirationRevisit,
   updateInspiration,
+  uploadToPresignedUrl,
 } from "../src/lib/api";
 import type {
+  ApiAttachment,
   ApiInspiration,
   ApiReflection,
   ApiTopOfMind,
@@ -62,6 +66,13 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     createInspiration: vi.fn(async () => {
       throw new Error("createInspiration mock not configured");
     }),
+    finalizeAttachment: vi.fn(async () => {
+      throw new Error("finalizeAttachment mock not configured");
+    }),
+    presignAttachment: vi.fn(async () => {
+      throw new Error("presignAttachment mock not configured");
+    }),
+    uploadToPresignedUrl: vi.fn(async () => undefined),
     createReflection: vi.fn(async () => {
       throw new Error("createReflection mock not configured");
     }),
@@ -278,6 +289,21 @@ function persistedInspiration(overrides: Partial<ApiInspiration> = {}): ApiInspi
     classifiedAt: null,
     createdAt: "2026-05-14T16:30:00.000Z",
     updatedAt: "2026-05-14T16:30:00.000Z",
+    ...overrides,
+  };
+}
+
+function persistedAttachment(overrides: Partial<ApiAttachment> = {}): ApiAttachment {
+  return {
+    id: "att-new-1234567890",
+    inspirationId: "insp-new-1234567890",
+    type: "link",
+    url: "https://example.com/article",
+    name: "example.com/article",
+    s3Key: null,
+    contentType: null,
+    size: null,
+    createdAt: "2026-05-14T16:30:01.000Z",
     ...overrides,
   };
 }
@@ -587,6 +613,7 @@ describe("HomePage current home experience", () => {
 
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Fast save without reflective friction",
+      kind: "note",
     });
   });
 
@@ -628,6 +655,222 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 3);
 
     expect(container.textContent).toContain("Fast save without reflective friction");
+  });
+
+  it("persists a typed URL as a link attachment and shows it in all inspirations", async () => {
+    setApiFixtures();
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({
+        id: "insp-link-save",
+        text: "Read https://example.com/article before the next salon",
+        kind: "link",
+      }),
+    );
+    vi.mocked(finalizeAttachment).mockResolvedValue(
+      persistedAttachment({
+        id: "att-link-save",
+        inspirationId: "insp-link-save",
+        url: "https://example.com/article",
+        name: "example.com/article",
+      }),
+    );
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    await act(async () => {
+      setInputValue(
+        container.querySelector<HTMLTextAreaElement>("#capNote")!,
+        "Read https://example.com/article before the next salon",
+      );
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
+    });
+    await flushReactWork();
+    await clickSavesTab(container, 3);
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "Read https://example.com/article before the next salon",
+      kind: "link",
+    });
+    expect(finalizeAttachment).toHaveBeenCalledWith({
+      type: "link",
+      inspirationId: "insp-link-save",
+      url: "https://example.com/article",
+      name: "example.com/article",
+    });
+    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    expect(newSave?.textContent).toContain("Read https://example.com/article before the next salon");
+    expect(newSave?.textContent).toContain("link");
+    expect(newSave?.textContent).toContain("https://example.com/article");
+  });
+
+  it("uploads an image attachment through the presign pipeline and shows the saved image", async () => {
+    setApiFixtures();
+    const objectUrl = vi.fn(() => "blob:waka-photo-preview");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: objectUrl,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({
+        id: "insp-image-save",
+        text: "(attachment-only inspiration)",
+        kind: "image",
+      }),
+    );
+    vi.mocked(presignAttachment).mockResolvedValue({
+      uploadUrl: "https://uploads.example.com/photo.png",
+      key: "users/user-1/photo.png",
+      expiresAt: "2026-05-14T16:45:00.000Z",
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": "5",
+      },
+    });
+    vi.mocked(finalizeAttachment).mockResolvedValue(
+      persistedAttachment({
+        id: "att-image-save",
+        inspirationId: "insp-image-save",
+        type: "image",
+        url: "",
+        name: "photo.png",
+        s3Key: "users/user-1/photo.png",
+        contentType: "image/png",
+        size: 5,
+      }),
+    );
+    const container = await renderHomePage();
+    const file = new File(["image"], "photo.png", { type: "image/png" });
+
+    await openCaptureModal(container);
+    const fileInput = container.querySelector<HTMLInputElement>("#capFile");
+    expect(fileInput).not.toBeNull();
+    await act(async () => {
+      Object.defineProperty(fileInput!, "files", {
+        configurable: true,
+        value: [file],
+      });
+      fileInput!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
+    });
+    await flushReactWork();
+    await clickSavesTab(container, 3);
+
+    expect(objectUrl).toHaveBeenCalledWith(file);
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "(attachment-only inspiration)",
+      kind: "image",
+    });
+    expect(presignAttachment).toHaveBeenCalledWith({
+      filename: "photo.png",
+      contentType: "image/png",
+      size: 5,
+    });
+    expect(uploadToPresignedUrl).toHaveBeenCalledWith(
+      "https://uploads.example.com/photo.png",
+      file,
+      {
+        "Content-Type": "image/png",
+        "Content-Length": "5",
+      },
+    );
+    expect(finalizeAttachment).toHaveBeenCalledWith({
+      type: "image",
+      inspirationId: "insp-image-save",
+      key: "users/user-1/photo.png",
+      name: "photo.png",
+      contentType: "image/png",
+      size: 5,
+    });
+    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    expect(newSave?.textContent).toContain("(attachment-only inspiration)");
+    expect(newSave?.textContent).toContain("image");
+    expect(newSave?.textContent).toContain("photo.png");
+  });
+
+  it("keeps an image quick-save entry saved when attachment finalization fails gracefully", async () => {
+    setApiFixtures();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: vi.fn(() => "blob:waka-photo-preview"),
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({
+        id: "insp-image-save-no-attachment",
+        text: "Image with local upload trouble",
+        kind: "image",
+      }),
+    );
+    vi.mocked(presignAttachment).mockResolvedValue({
+      uploadUrl: "https://uploads.example.com/photo.png",
+      key: "users/user-1/photo.png",
+      expiresAt: "2026-05-14T16:45:00.000Z",
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": "5",
+      },
+    });
+    vi.mocked(finalizeAttachment).mockRejectedValue(
+      new Error("S3 object not found at the supplied key"),
+    );
+    const container = await renderHomePage();
+    const file = new File(["image"], "photo.png", { type: "image/png" });
+
+    await openCaptureModal(container);
+    const noteInput = container.querySelector<HTMLTextAreaElement>("#capNote");
+    const fileInput = container.querySelector<HTMLInputElement>("#capFile");
+    expect(noteInput).not.toBeNull();
+    expect(fileInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(noteInput!, "Image with local upload trouble");
+      Object.defineProperty(fileInput!, "files", {
+        configurable: true,
+        value: [file],
+      });
+      fileInput!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
+    });
+    await flushReactWork();
+
+    const historyCard = Array.from(container.querySelectorAll<HTMLElement>(".history-item")).find(
+      (card) => card.textContent?.includes("Image with local upload trouble"),
+    );
+    expect(historyCard).not.toBeNull();
+    expect(historyCard?.textContent).toContain("IMAGE");
+    expect(historyCard?.textContent).toContain("1 attachment failed to upload.");
+    expect(historyCard?.textContent?.toLowerCase()).not.toContain("error");
+    expect(historyCard?.textContent).not.toContain("save failed");
+
+    await act(async () => {
+      historyCard?.click();
+    });
+    await flushReactWork();
+    const detail = container.querySelector<HTMLElement>(".detail-view");
+    expect(detail?.textContent).toContain("1 attachment failed to upload.");
+    expect(detail?.textContent?.toLowerCase()).not.toContain("error");
+    expect(detail?.textContent).not.toContain("save failed");
+
+    await clickSavesTab(container, 3);
+
+    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    expect(newSave?.textContent).toContain("Image with local upload trouble");
+    expect(newSave?.textContent).toContain("image");
+    expect(newSave?.textContent).toContain("1 attachment failed to upload.");
+    expect(newSave?.textContent?.toLowerCase()).not.toContain("error");
+    expect(newSave?.textContent).not.toContain("save failed");
   });
 
   it("keeps admin inspection as a gated route entry", async () => {

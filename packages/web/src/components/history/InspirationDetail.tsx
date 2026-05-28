@@ -76,6 +76,8 @@ export interface InspirationDetailData {
   timestamp: string;
   /** Optional transient save status copy retained for compatibility. */
   kind?: string | null;
+  /** Optional non-blocking warning copy for saved rows with partial attachment loss. */
+  warningMessage?: string | null;
 }
 
 export interface InspirationDetailProps {
@@ -559,6 +561,12 @@ export function InspirationDetail({
             ) : null}
           </div>
         </form>
+
+        {inspiration.warningMessage ? (
+          <div className="detail-warning" role="status" aria-live="polite">
+            {inspiration.warningMessage}
+          </div>
+        ) : null}
 
         {state.status === "ready" ? (
           <div style={{ marginTop: 18 }}>

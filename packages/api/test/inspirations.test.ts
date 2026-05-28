@@ -298,6 +298,42 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(res.body.inspiration.userId).toBe(fixture.user.id);
   });
 
+  it("persists and lists capture kinds for note, link, and image inputs", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const captures = [
+      { text: "kind note payload", kind: "note" },
+      { text: "https://example.com/kind-link", kind: "link" },
+      { text: "(attachment-only inspiration)", kind: "image" },
+    ];
+
+    for (const capture of captures) {
+      const res = await client.json<CreateInspirationResponse>(
+        "POST",
+        "/api/inspirations",
+        capture,
+      );
+      expect(res.status).toBe(201);
+      expect(res.body.inspiration.text).toBe(capture.text);
+      expect(res.body.inspiration.kind).toBe(capture.kind);
+      expect(res.body.inspiration.userId).toBe(fixture.user.id);
+    }
+
+    const listed = await client.json<ListInspirationsResponse>(
+      "GET",
+      "/api/inspirations",
+    );
+    expect(listed.status).toBe(200);
+    const kindByText = new Map(
+      listed.body.inspirations.map((row) => [row.text, row.kind]),
+    );
+    expect(kindByText.get("kind note payload")).toBe("note");
+    expect(kindByText.get("https://example.com/kind-link")).toBe("link");
+    expect(kindByText.get("(attachment-only inspiration)")).toBe("image");
+  });
+
   it("ignores a forged userId in the request body — auth context wins", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);

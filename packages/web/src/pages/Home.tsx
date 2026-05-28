@@ -123,10 +123,10 @@ interface InspirationListEntry {
   tempId: string;
   status: InspirationStatus;
   text: string;
+  kind: string | null;
   links: string[];
-  /** Per-attachment label (image / file). Surfaces nothing visually today
-   *  but kept on the entry so a future detail-view sub-AC can render it
-   *  without re-fetching. */
+  /** Per-attachment label (image / file) retained so saved multi-input rows
+   *  can show which uploaded files/images belong to the persisted inspiration. */
   attachments: ApiAttachment[];
   cluster: ClusterKind | null;
   /** Backend-calculated WOW score; absent while optimistic saves are in flight. */
@@ -136,22 +136,27 @@ interface InspirationListEntry {
   createdAt: string;
   /** Best-effort timestamp string for the meta row. */
   timestamp: string;
-  /** Last error message, if `status === "error"`. */
+  /** Durable warning/error message for failed saves or partial attachment saves. */
   errorMessage?: string;
 }
 
 function entryToCardData(entry: InspirationListEntry): InspirationCardData {
-  // Product UI no longer exposes backend inspiration kind or cluster labels.
-  // Keep only transient save status as a user-useful state cue in the meta row.
+  // Keep transient save status as the primary cue, and otherwise surface a
+  // small capture-type label for non-note inputs so link/image/file saves stay
+  // understandable in history without reintroducing cluster/category labels.
   let statusLabel: string | null = null;
   if (entry.status === "saving") statusLabel = "saving";
   else if (entry.status === "error") statusLabel = "save failed";
+  const kindLabel =
+    !statusLabel && entry.kind && entry.kind !== "note" ? entry.kind : null;
   return {
     id: entry.id,
     text: entry.text || null,
     links: entry.links.length > 0 ? entry.links : null,
     timestamp: entry.timestamp,
-    kind: statusLabel,
+    kind: statusLabel ?? kindLabel,
+    warningMessage:
+      entry.status === "saved" && entry.errorMessage ? entry.errorMessage : undefined,
     reflectionsAnswered: entry.reflectionsAnswered,
     reflectionsTotal: entry.reflectionsTotal,
   };
@@ -196,6 +201,7 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
     tempId: row.id,
     status: "saved",
     text: row.text,
+    kind: row.kind,
     links: [],
     attachments: [],
     cluster: row.cluster,
@@ -215,6 +221,7 @@ function buildOptimisticEntry(
     tempId: pending.tempId,
     status: "saving",
     text: pending.text,
+    kind: pending.kind,
     links: pending.links,
     attachments: [],
     cluster: null,
@@ -236,8 +243,12 @@ function applyPersisted(
   return {
     ...entry,
     id: inspiration.id,
-    status: failedCount > 0 ? "error" : "saved",
+    // The inspiration row is durable once POST /inspirations succeeds. Treat
+    // attachment finalize/upload failures as a graceful partial save instead
+    // of rendering the whole saved inspiration as a broken ERROR entry.
+    status: "saved",
     text: inspiration.text,
+    kind: inspiration.kind,
     cluster: inspiration.cluster,
     wowScore: inspiration.wowScore,
     reflectionsAnswered: entry.reflectionsAnswered + reflectionCount,
@@ -271,6 +282,7 @@ function applyUpdatedInspiration(
     ...entry,
     id: inspiration.id,
     text: inspiration.text,
+    kind: inspiration.kind,
     cluster: inspiration.cluster,
     wowScore: inspiration.wowScore,
     status: "saved",
@@ -1000,6 +1012,10 @@ export function HomePage(): JSX.Element {
       links: selectedEntry.links,
       attachments: selectedEntry.attachments,
       timestamp: selectedEntry.timestamp,
+      warningMessage:
+        selectedEntry.status === "saved" && selectedEntry.errorMessage
+          ? selectedEntry.errorMessage
+          : undefined,
     };
   }, [selectedEntry]);
 
@@ -1456,6 +1472,24 @@ export function HomePage(): JSX.Element {
                   >
                     <span>{entry.status === "saved" ? entry.timestamp : entry.status}</span>
                     <strong>{shortText(entry.text, 420)}</strong>
+                    {entry.kind && entry.kind !== "note" ? (
+                      <span className="reference-save-kind">{entry.kind}</span>
+                    ) : null}
+                    {entry.links.map((link) => (
+                      <span key={link} className="reference-save-link">
+                        {link}
+                      </span>
+                    ))}
+                    {entry.attachments
+                      .filter((attachment) => attachment.type !== "link")
+                      .map((attachment) => (
+                        <span key={attachment.id} className="reference-save-attachment">
+                          {attachment.name ?? attachment.type}
+                        </span>
+                      ))}
+                    {entry.status === "saved" && entry.errorMessage ? (
+                      <span className="reference-save-warning">{entry.errorMessage}</span>
+                    ) : null}
                   </button>
                 ))
               ) : (

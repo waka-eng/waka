@@ -1148,6 +1148,23 @@
   text-transform: uppercase;
 }
 
+.reference-save .reference-save-warning {
+  color: #9d5f16;
+}
+
+.history-item-warning,
+.detail-warning {
+  color: #9d5f16;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.detail-warning {
+  margin-top: 12px;
+}
+
 @media (max-width: 900px) {
   .reference-nav {
     grid-template-columns: auto 1fr auto;

@@ -59,6 +59,8 @@ export interface InspirationCardData {
   timestamp?: string | null;
   /** Optional transient save status label (e.g. "saving", "save failed"). */
   kind?: string | null;
+  /** Optional non-blocking warning copy for saved rows with partial attachment loss. */
+  warningMessage?: string | null;
   /** Number of reflections that have been answered (i.e. `!skipped`). */
   reflectionsAnswered?: number;
   /** Total reflections attached to this inspiration. */
@@ -99,6 +101,7 @@ export function InspirationCard({
     links,
     timestamp,
     kind,
+    warningMessage,
     reflectionsAnswered = 0,
     reflectionsTotal = 0,
   } = item;
@@ -179,6 +182,12 @@ export function InspirationCard({
 
       {metaText ? (
         <div className="history-item-meta">{metaText}</div>
+      ) : null}
+
+      {warningMessage ? (
+        <div className="history-item-warning" role="status" aria-live="polite">
+          {warningMessage}
+        </div>
       ) : null}
 
       {hasReflections ? (
