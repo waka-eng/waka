@@ -691,7 +691,7 @@ describe("HomePage current home experience", () => {
 
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Read https://example.com/article before the next salon",
-      kind: "link",
+      kind: "mixed",
     });
     expect(finalizeAttachment).toHaveBeenCalledWith({
       type: "link",
@@ -719,7 +719,7 @@ describe("HomePage current home experience", () => {
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({
         id: "insp-image-save",
-        text: "(attachment-only inspiration)",
+        text: "Image inspiration",
         kind: "image",
       }),
     );
@@ -765,7 +765,7 @@ describe("HomePage current home experience", () => {
 
     expect(objectUrl).toHaveBeenCalledWith(file);
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "(attachment-only inspiration)",
+      text: "Image inspiration",
       kind: "image",
     });
     expect(presignAttachment).toHaveBeenCalledWith({
@@ -790,7 +790,8 @@ describe("HomePage current home experience", () => {
       size: 5,
     });
     const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
-    expect(newSave?.textContent).toContain("(attachment-only inspiration)");
+    expect(newSave?.textContent).toContain("Image inspiration");
+    expect(newSave?.textContent).not.toContain("(attachment-only inspiration)");
     expect(newSave?.textContent).toContain("image");
     expect(newSave?.textContent).toContain("photo.png");
   });

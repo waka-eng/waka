@@ -180,7 +180,7 @@ describe("CaptureForm multi-input quick capture", () => {
 
   it("quick saves an attachment-only image as kind image through the existing upload/finalize path", async () => {
     vi.mocked(createInspiration).mockResolvedValue(
-      inspiration({ kind: "image", text: "(attachment-only inspiration)" }),
+      inspiration({ kind: "image", text: "Image inspiration" }),
     );
     vi.mocked(finalizeAttachment).mockResolvedValue({
       id: "att-image",
@@ -205,7 +205,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
 
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "(attachment-only inspiration)",
+      text: "Image inspiration",
       kind: "image",
     });
     expect(presignAttachment).toHaveBeenCalledWith({
@@ -224,6 +224,30 @@ describe("CaptureForm multi-input quick capture", () => {
       name: "photo.png",
       contentType: "image/png",
       size: 4,
+    });
+    expect(createReflection).not.toHaveBeenCalled();
+  });
+
+  it("quick saves mixed note and URL input as kind mixed while finalizing the link", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(
+      inspiration({ kind: "mixed", text: "Remember this https://example.com/image.png" }),
+    );
+    await renderCaptureForm();
+    await act(async () => {
+      setText("Remember this https://example.com/image.png");
+    });
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "Remember this https://example.com/image.png",
+      kind: "mixed",
+    });
+    expect(finalizeAttachment).toHaveBeenCalledWith({
+      type: "link",
+      inspirationId: "insp-new",
+      url: "https://example.com/image.png",
+      name: "example.com/image.png",
     });
     expect(createReflection).not.toHaveBeenCalled();
   });

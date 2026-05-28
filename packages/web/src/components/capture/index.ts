@@ -16,6 +16,7 @@ export type { CloseConfirmModalProps } from "./CloseConfirmModal";
 export { CaptureForm, extractUrlsFromText } from "./CaptureForm";
 export type {
   CaptureFormProps,
+  CaptureInputKind,
   PendingAttachment,
   PendingInspiration,
   PersistedResult,

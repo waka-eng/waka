@@ -298,7 +298,7 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(res.body.inspiration.userId).toBe(fixture.user.id);
   });
 
-  it("persists and lists capture kinds for note, link, and image inputs", async () => {
+  it("persists and lists bounded MVP capture kinds for note, link, image, and mixed inputs", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
@@ -306,7 +306,8 @@ describe("POST /api/inspirations — successful creation", () => {
     const captures = [
       { text: "kind note payload", kind: "note" },
       { text: "https://example.com/kind-link", kind: "link" },
-      { text: "(attachment-only inspiration)", kind: "image" },
+      { text: "Image inspiration", kind: "image" },
+      { text: "Mixed inspiration", kind: "mixed" },
     ];
 
     for (const capture of captures) {
@@ -331,7 +332,24 @@ describe("POST /api/inspirations — successful creation", () => {
     );
     expect(kindByText.get("kind note payload")).toBe("note");
     expect(kindByText.get("https://example.com/kind-link")).toBe("link");
-    expect(kindByText.get("(attachment-only inspiration)")).toBe("image");
+    expect(kindByText.get("Image inspiration")).toBe("image");
+    expect(kindByText.get("Mixed inspiration")).toBe("mixed");
+  });
+
+  it("rejects non-MVP capture kinds", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const res = await client.json<ValidationErrorResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "bad kind", kind: "bookmark" },
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Invalid inspiration payload");
+    expect(res.body.details?.kind?.[0]).toBe("Kind must be note, link, image, or mixed");
   });
 
   it("ignores a forged userId in the request body — auth context wins", async () => {

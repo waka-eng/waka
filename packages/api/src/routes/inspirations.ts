@@ -69,10 +69,10 @@ import { enqueueClassification } from "../lib/queue.js";
  *   - `text`     : required, trimmed, non-empty after trim. Capped at 8 KB so
  *                  a single row stays reasonable to render and to ship to
  *                  Gemini for classification.
- *   - `kind`     : optional free-form metadata carried over from the original
- *                  single-file UI (e.g. "note", "link", "image"). Trimmed,
- *                  empty becomes undefined so we don't store empty strings
- *                  next to NULLs and have to handle both downstream.
+ *   - `kind`     : optional bounded MVP input metadata (`note`, `link`,
+ *                  `image`, `mixed`). Trimmed, empty becomes undefined so we
+ *                  don't store empty strings next to NULLs and have to handle
+ *                  both downstream.
  *   - `category` : optional non-negative integer bucket. Matches the
  *                  `integer` column in `inspirations.category`.
  *
@@ -83,18 +83,20 @@ import { enqueueClassification } from "../lib/queue.js";
  *     client. Allowing it would be a tenant-isolation footgun.
  *   - `id` — generated server-side via `defaultRandom()`.
  */
+const captureInputKindValues = ["note", "link", "image", "mixed"] as const;
+
 const createInspirationSchema = z.object({
   text: z
     .string()
     .trim()
     .min(1, "Inspiration text is required")
     .max(8192, "Inspiration text is too long"),
-  kind: z
-    .string()
-    .trim()
-    .max(64, "Kind is too long")
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  kind: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim() || undefined : v),
+    z.enum(captureInputKindValues, {
+      errorMap: () => ({ message: "Kind must be note, link, image, or mixed" }),
+    }).optional(),
+  ),
   category: z
     .number()
     .int("Category must be an integer")
@@ -725,11 +727,12 @@ const updateInspirationSchema = z
     // to NULLs and have to handle both downstream.
     kind: z
       .union([
-        z
-          .string()
-          .trim()
-          .max(64, "Kind is too long")
-          .transform((v) => (v.length > 0 ? v : null)),
+        z.preprocess(
+          (v) => (typeof v === "string" ? v.trim() || null : v),
+          z.enum(captureInputKindValues, {
+            errorMap: () => ({ message: "Kind must be note, link, image, or mixed" }),
+          }),
+        ),
         z.null(),
       ])
       .optional(),
