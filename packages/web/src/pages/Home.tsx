@@ -154,6 +154,22 @@ function displayTextForEntry(entry: Pick<InspirationListEntry, "text" | "kind">)
   return entry.text;
 }
 
+function attachmentContextLabel(attachment: ApiAttachment, locale: SupportedLocale): string {
+  const enrichment = attachment.enrichment;
+  if (attachment.type === "link") {
+    const host = enrichment?.link?.hostname;
+    const title = enrichment?.link?.title?.trim();
+    if (enrichment?.status === "ready") return title || host || attachment.url || t(locale, "attachmentPreviewUnavailable");
+    if (enrichment?.status === "pending") return t(locale, "attachmentPreviewPending");
+    return host || t(locale, "attachmentPreviewUnavailable");
+  }
+
+  const filename = enrichment?.image?.filename ?? attachment.name ?? attachment.type;
+  const size = enrichment?.image?.size ?? attachment.size;
+  const sizeLabel = typeof size === "number" && size > 0 ? ` · ${Math.ceil(size / 1024)} KB` : "";
+  return `${filename}${sizeLabel}`;
+}
+
 function entryToCardData(entry: InspirationListEntry): InspirationCardData {
   // Keep transient save status as the primary cue, and otherwise surface a
   // small capture-type label for non-note inputs so link/image/file saves stay
@@ -216,8 +232,11 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
     status: "saved",
     text: row.text,
     kind: row.kind,
-    links: [],
-    attachments: [],
+    links: (row.attachments ?? [])
+      .filter((attachment) => attachment.type === "link")
+      .map((attachment) => attachment.enrichment?.link?.finalUrl ?? attachment.url)
+      .filter((url): url is string => typeof url === "string" && url.length > 0),
+    attachments: row.attachments ?? [],
     cluster: row.cluster,
     wowScore: row.wowScore,
     reflectionsAnswered: 0,
@@ -1131,6 +1150,7 @@ export function HomePage(): JSX.Element {
       onReflectionCountChanged={handleDetailReflectionCountChanged}
       onInspirationScoresChanged={handleInspirationScoresChanged}
       onInspirationUpdated={handleInspirationUpdated}
+      locale={locale}
     />
   ) : undefined;
 
@@ -1489,18 +1509,21 @@ export function HomePage(): JSX.Element {
                     {entry.kind && entry.kind !== "note" ? (
                       <span className="reference-save-kind">{entry.kind}</span>
                     ) : null}
-                    {entry.links.map((link) => (
-                      <span key={link} className="reference-save-link">
-                        {link}
+                    {entry.attachments.map((attachment) => (
+                      <span
+                        key={attachment.id}
+                        className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
+                      >
+                        {attachmentContextLabel(attachment, locale)}
                       </span>
                     ))}
-                    {entry.attachments
-                      .filter((attachment) => attachment.type !== "link")
-                      .map((attachment) => (
-                        <span key={attachment.id} className="reference-save-attachment">
-                          {attachment.name ?? attachment.type}
-                        </span>
-                      ))}
+                    {entry.attachments.length === 0
+                      ? entry.links.map((link) => (
+                          <span key={link} className="reference-save-link">
+                            {link}
+                          </span>
+                        ))
+                      : null}
                     {entry.status === "saved" && entry.errorMessage ? (
                       <span className="reference-save-warning">{entry.errorMessage}</span>
                     ) : null}

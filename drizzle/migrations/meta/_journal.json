@@ -120,6 +120,13 @@
       "when": 1779753600000,
       "tag": "0016_add_meaning_graph",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780001200000,
+      "tag": "0018_attachment_enrichment",
+      "breakpoints": true
     }
   ]
 }

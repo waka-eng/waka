@@ -2134,7 +2134,7 @@
 
 .meaning-graph-rebuild-alert-actions button:hover:not(:disabled) {
   border-color: var(--ink);
-  background: var(--paper);
+  background: var(--cell);
 }
 
 .meaning-graph-workbench {
@@ -5147,10 +5147,59 @@ a.att span.att-url {
 }
 
 .detail-attachments {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 14px;
+}
+
+.detail-attachment-heading {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 14px;
+}
+
+.detail-attachment-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: var(--border-hairline);
+}
+
+.detail-attachment-image {
+  width: 54px;
+  height: 54px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(15, 15, 14, 0.04);
+}
+
+.detail-attachment-title {
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.detail-attachment-meta {
+  margin-top: 3px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detail-attachment-description {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .detail-meta {

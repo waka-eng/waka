@@ -305,6 +305,8 @@ export interface ApiInspiration {
   classifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Populated by GET /inspirations; omitted on older create/update responses. */
+  attachments?: ApiAttachment[];
 }
 
 export interface ApiInspirationScoreBreakdown {
@@ -1087,22 +1089,49 @@ export async function fetchTopOfMind(): Promise<ApiTopOfMind> {
 
 /** Attachment kinds — mirrors the Postgres `attachment_type` enum. */
 export type AttachmentType = "link" | "image" | "file";
+export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
+
+export interface ApiAttachmentEnrichment {
+  status: AttachmentEnrichmentStatus;
+  source: string | null;
+  sourceUrl: string | null;
+  errorReason: string | null;
+  checkedAt: string | null;
+  link: {
+    originalUrl: string;
+    finalUrl: string | null;
+    hostname: string | null;
+    title: string | null;
+    description: string | null;
+    siteName: string | null;
+    previewImageUrl: string | null;
+  } | null;
+  image: {
+    filename: string | null;
+    contentType: string | null;
+    size: number | null;
+    width: number | null;
+    height: number | null;
+  } | null;
+}
 
 /**
- * Canonical attachment row as the API returns it from POST /attachments.
- * Includes the `s3Key` so the SPA can later mint presigned GET URLs without
- * having to rebuild the key locally.
+ * Canonical attachment row. POST /attachments returns `url` and `s3Key` for
+ * the finalize flow, but refreshed inspiration list/detail payloads only expose
+ * safe, renderable fields: link rows keep their public URL; private S3-backed
+ * image/file rows omit raw keys and canonical bucket URLs.
  */
 export interface ApiAttachment {
   id: string;
   inspirationId: string;
   type: AttachmentType;
-  url: string;
+  url?: string;
   name: string | null;
-  s3Key: string | null;
+  s3Key?: string | null;
   contentType: string | null;
   size: number | null;
   createdAt: string;
+  enrichment?: ApiAttachmentEnrichment;
 }
 
 /**

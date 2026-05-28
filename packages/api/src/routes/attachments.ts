@@ -359,6 +359,117 @@ const finalizeRequestSchema = z.discriminatedUnion("type", [
 
 export type FinalizeAttachmentRequest = z.infer<typeof finalizeRequestSchema>;
 
+
+type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
+
+function boundedNullable(value: string | null | undefined, max = 2048): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
+}
+
+function safeLinkFacts(rawUrl: string): {
+  enrichmentStatus: AttachmentEnrichmentStatus;
+  enrichmentSource: string;
+  enrichmentSourceUrl: string;
+  finalUrl: string;
+  hostname: string | null;
+  enrichmentErrorReason: string | null;
+} {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return {
+        enrichmentStatus: "unavailable",
+        enrichmentSource: "url",
+        enrichmentSourceUrl: rawUrl,
+        finalUrl: rawUrl,
+        hostname: null,
+        enrichmentErrorReason: "unsupported_protocol",
+      };
+    }
+    return {
+      enrichmentStatus: "ready",
+      enrichmentSource: "url",
+      enrichmentSourceUrl: rawUrl,
+      finalUrl: parsed.toString(),
+      hostname: parsed.hostname,
+      enrichmentErrorReason: null,
+    };
+  } catch {
+    return {
+      enrichmentStatus: "unavailable",
+      enrichmentSource: "url",
+      enrichmentSourceUrl: rawUrl,
+      finalUrl: rawUrl,
+      hostname: null,
+      enrichmentErrorReason: "invalid_url",
+    };
+  }
+}
+
+function attachmentResponse(row: {
+  id: string;
+  inspirationId: string;
+  type: (typeof attachmentTypeEnumValues)[number];
+  url: string;
+  name: string | null;
+  s3Key: string | null;
+  contentType: string | null;
+  size: number | null;
+  enrichmentStatus: AttachmentEnrichmentStatus | null;
+  enrichmentSource: string | null;
+  enrichmentSourceUrl: string | null;
+  enrichmentErrorReason: string | null;
+  enrichmentUpdatedAt: Date | null;
+  finalUrl: string | null;
+  hostname: string | null;
+  title: string | null;
+  description: string | null;
+  siteName: string | null;
+  previewImageUrl: string | null;
+  imageWidth: number | null;
+  imageHeight: number | null;
+  createdAt: Date;
+}) {
+  const fallbackStatus: AttachmentEnrichmentStatus = row.type === "link" ? "unavailable" : "ready";
+  return {
+    id: row.id,
+    inspirationId: row.inspirationId,
+    type: row.type,
+    url: row.url,
+    name: row.name,
+    s3Key: row.s3Key,
+    contentType: row.contentType,
+    size: row.size,
+    createdAt: row.createdAt,
+    enrichment: {
+      status: row.enrichmentStatus ?? fallbackStatus,
+      source: row.enrichmentSource,
+      sourceUrl: row.enrichmentSourceUrl,
+      errorReason: row.enrichmentErrorReason,
+      checkedAt: row.enrichmentUpdatedAt,
+      link: row.type === "link" ? {
+        originalUrl: row.url,
+        finalUrl: row.finalUrl,
+        hostname: row.hostname,
+        title: row.title,
+        description: row.description,
+        siteName: row.siteName,
+        previewImageUrl: row.previewImageUrl,
+      } : null,
+      image: row.type === "image" ? {
+        filename: row.name,
+        contentType: row.contentType,
+        size: row.size,
+        width: row.imageWidth,
+        height: row.imageHeight,
+      } : null,
+    },
+  };
+}
+
 /**
  * Build the canonical https URL for an S3 object so the row's `url` column
  * always has a renderable value. The frontend may still mint a presigned GET
@@ -453,9 +564,23 @@ attachmentsRoutes.post("/", async (c) => {
     s3Key: string | null;
     contentType: string | null;
     size: number | null;
+    enrichmentStatus: AttachmentEnrichmentStatus;
+    enrichmentSource: string;
+    enrichmentSourceUrl: string | null;
+    enrichmentErrorReason: string | null;
+    enrichmentUpdatedAt: Date | null;
+    finalUrl: string | null;
+    hostname: string | null;
+    title: string | null;
+    description: string | null;
+    siteName: string | null;
+    previewImageUrl: string | null;
+    imageWidth: number | null;
+    imageHeight: number | null;
   };
 
   if (parsed.data.type === "link") {
+    const linkFacts = safeLinkFacts(parsed.data.url);
     rowToInsert = {
       inspirationId: parsed.data.inspirationId,
       type: "link",
@@ -464,6 +589,19 @@ attachmentsRoutes.post("/", async (c) => {
       s3Key: null,
       contentType: null,
       size: null,
+      enrichmentStatus: linkFacts.enrichmentStatus,
+      enrichmentSource: linkFacts.enrichmentSource,
+      enrichmentSourceUrl: boundedNullable(linkFacts.enrichmentSourceUrl),
+      enrichmentErrorReason: linkFacts.enrichmentErrorReason,
+      enrichmentUpdatedAt: new Date(),
+      finalUrl: boundedNullable(linkFacts.finalUrl),
+      hostname: boundedNullable(linkFacts.hostname, 255),
+      title: null,
+      description: null,
+      siteName: null,
+      previewImageUrl: null,
+      imageWidth: null,
+      imageHeight: null,
     };
   } else {
     const { key, type, name, contentType, size } = parsed.data;
@@ -508,6 +646,19 @@ attachmentsRoutes.post("/", async (c) => {
       s3Key: key,
       contentType: contentType ?? null,
       size: size ?? null,
+      enrichmentStatus: type === "image" ? "ready" : "unavailable",
+      enrichmentSource: type === "image" ? "user_upload" : "attachment",
+      enrichmentSourceUrl: null,
+      enrichmentErrorReason: null,
+      enrichmentUpdatedAt: new Date(),
+      finalUrl: null,
+      hostname: null,
+      title: null,
+      description: null,
+      siteName: null,
+      previewImageUrl: null,
+      imageWidth: null,
+      imageHeight: null,
     };
   }
 
@@ -525,6 +676,19 @@ attachmentsRoutes.post("/", async (c) => {
       s3Key: attachments.s3Key,
       contentType: attachments.contentType,
       size: attachments.size,
+      enrichmentStatus: attachments.enrichmentStatus,
+      enrichmentSource: attachments.enrichmentSource,
+      enrichmentSourceUrl: attachments.enrichmentSourceUrl,
+      enrichmentErrorReason: attachments.enrichmentErrorReason,
+      enrichmentUpdatedAt: attachments.enrichmentUpdatedAt,
+      finalUrl: attachments.finalUrl,
+      hostname: attachments.hostname,
+      title: attachments.title,
+      description: attachments.description,
+      siteName: attachments.siteName,
+      previewImageUrl: attachments.previewImageUrl,
+      imageWidth: attachments.imageWidth,
+      imageHeight: attachments.imageHeight,
       createdAt: attachments.createdAt,
     });
 
@@ -541,7 +705,7 @@ attachmentsRoutes.post("/", async (c) => {
     console.warn("[attachments] failed to refresh inspiration scores:", err);
   }
 
-  return c.json({ attachment: inserted }, 201);
+  return c.json({ attachment: attachmentResponse(inserted) }, 201);
 });
 
 attachmentsRoutes.post("/presign", async (c) => {

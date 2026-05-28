@@ -49,6 +49,7 @@ import {
   type ApiReflection,
   type CreateReflectionResponse,
 } from "../../lib/api";
+import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
 import { ReflectionForm, type PendingReflection } from "./ReflectionForm";
 import { ReflectionThread, type ReflectionEntry } from "./ReflectionThread";
 
@@ -109,6 +110,8 @@ export interface InspirationDetailProps {
   onInspirationScoresChanged?: (scores: ApiInspirationScorePatch) => void;
   /** Fires after editing details returns the canonical inspiration row. */
   onInspirationUpdated?: (inspiration: ApiInspiration) => void;
+  /** Locale for user-visible attachment status copy. */
+  locale?: SupportedLocale;
 }
 
 /* ============================================================
@@ -120,6 +123,32 @@ type LoadState =
   | { status: "error"; message: string }
   | { status: "ready"; reflections: ApiReflection[] };
 
+function attachmentTitle(attachment: ApiAttachment): string {
+  const link = attachment.enrichment?.link;
+  if (attachment.type === "link") {
+    const title = link?.title?.trim();
+    return title || link?.hostname || attachment.url || "Link attachment";
+  }
+  return attachment.enrichment?.image?.filename ?? attachment.name ?? attachment.type;
+}
+
+function attachmentMeta(attachment: ApiAttachment, locale: SupportedLocale): string {
+  const enrichment = attachment.enrichment;
+  if (!enrichment) return t(locale, "attachmentPreviewUnavailable");
+  if (enrichment.status === "pending") return t(locale, "attachmentPreviewPending");
+  if (enrichment.status === "failed" || enrichment.status === "unavailable") return t(locale, "attachmentPreviewUnavailable");
+  if (attachment.type === "link") {
+    const host = enrichment.link?.hostname;
+    const source = enrichment.source === "url" ? t(locale, "attachmentSourceUrl") : enrichment.source;
+    return [host, source].filter(Boolean).join(" · ") || t(locale, "attachmentSourceUrl");
+  }
+  const image = enrichment.image;
+  const size = image?.size ?? attachment.size;
+  const sizeLabel = typeof size === "number" && size > 0 ? `${Math.ceil(size / 1024)} KB` : null;
+  const source = enrichment.source === "user_upload" ? t(locale, "attachmentSourceUserUpload") : enrichment.source;
+  return [attachment.contentType, sizeLabel, source].filter(Boolean).join(" · ") || t(locale, "attachmentSourceUserUpload");
+}
+
 export function InspirationDetail({
   inspiration,
   onBack,
@@ -127,6 +156,7 @@ export function InspirationDetail({
   onReflectionCountChanged,
   onInspirationScoresChanged,
   onInspirationUpdated,
+  locale = DEFAULT_LOCALE,
 }: InspirationDetailProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const reflectionsRef = useRef<ApiReflection[]>([]);
@@ -566,6 +596,23 @@ export function InspirationDetail({
           <div className="detail-warning" role="status" aria-live="polite">
             {inspiration.warningMessage}
           </div>
+        ) : null}
+
+        {inspiration.attachments && inspiration.attachments.length > 0 ? (
+          <section className="detail-attachments" aria-label={t(locale, "attachmentContext")}>
+            <div className="detail-attachment-heading">{t(locale, "attachmentContext")}</div>
+            {inspiration.attachments.map((attachment) => (
+              <article key={attachment.id} className="detail-attachment-card">
+                <div>
+                  <div className="detail-attachment-title">{attachmentTitle(attachment)}</div>
+                  <div className="detail-attachment-meta">{attachmentMeta(attachment, locale)}</div>
+                  {attachment.type === "link" && attachment.enrichment?.link?.description ? (
+                    <p className="detail-attachment-description">{attachment.enrichment.link.description}</p>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </section>
         ) : null}
 
         {state.status === "ready" ? (
