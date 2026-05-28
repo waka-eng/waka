@@ -1,39 +1,26 @@
 // @vitest-environment jsdom
 
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { InspirationsBoard } from "../src/components/InspirationsBoard";
 import {
   createInspiration,
-  createReflection,
-  fetchBackgroundJobs,
-  fetchInspirationScoreBreakdown,
   fetchInspirations,
   fetchReflections,
+  fetchTopOfMind,
   fetchWowMoments,
-  fetchWowStatus,
+  recordInspirationRevisit,
   updateInspiration,
 } from "../src/lib/api";
 import type {
-  ApiBackgroundJob,
   ApiInspiration,
   ApiReflection,
+  ApiTopOfMind,
   ApiWowMoment,
-  ApiWowStatusRow,
 } from "../src/lib/api";
-import {
-  HomePage,
-  HomeViewToggle,
-  nextHomeCaptureHandoffState,
-  shouldShowInternalStatus,
-} from "../src/pages/Home";
+import { HomePage } from "../src/pages/Home";
 
 const mockAuthState = vi.hoisted(() => ({
   value: {
@@ -68,72 +55,32 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   return {
     ...actual,
     fetchInspirations: vi.fn(async () => []),
-    fetchInspirationScoreBreakdown: vi.fn(async () => ({
-      inspirationId: "insp-1",
-      displayedWowScore: 12,
-      persistedCoreWowScore: 7,
-      importanceScore: 9,
-      freshnessAdjustment: {
-        ageDays: 2,
-        freshnessScore: 95,
-        displayedMinusCore: 5,
-        source: "read_time",
-      },
-      stored: { importanceScore: 9, coreWowScore: 7 },
-      factors: {
-        content: {
-          score: 18,
-          textDepthScore: 14,
-          contextScore: 27,
-          meaningfulLinkCount: 1,
-          nonLinkAttachmentCount: 0,
-          reflectionTextChars: 44,
-        },
-        processing: { score: 100, hasReflection: true },
-        revisit: {
-          score: 21,
-          uniqueRevisitDays: 1,
-          totalRevisitCount: 1,
-          recentRevisitCount: 1,
-          uniqueRevisitDaysScore: 33,
-          totalRevisitCountScore: 20,
-          revisitedInLast7DaysScore: 100,
-        },
-        relationship: {
-          available: false,
-          score: null,
-          topSimilaritySignal: null,
-          topSurpriseSimilaritySignal: null,
-          timeDistanceSignal: null,
-          relatedCandidateCount: 0,
-          note: "No stored embedding for this inspiration, so no relationship score is shown; viewing does not generate embeddings.",
-        },
-      },
-      formulas: {
-        importance: "ImportanceScore = 40% ContentDepth + 25% Processing + 25% Revisit + 10% TimeSignal",
-        coreWow: "CoreWowScore = 55% ImportanceScore + 45% RelationshipScore",
-        displayedWow: "DisplayedScore = 90% CoreWowScore + 10% FreshnessDecay",
-      },
-    })),
-    fetchReflections: vi.fn(async () => []),
+    fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
     fetchWowMoments: vi.fn(async () => []),
-    fetchWowStatus: vi.fn(async () => []),
-    createReflection: vi.fn(async () => {
-      throw new Error("createReflection mock not configured");
-    }),
+    fetchReflections: vi.fn(async () => []),
+    fetchInspirationScoreBreakdown: vi.fn(async () => null),
     createInspiration: vi.fn(async () => {
       throw new Error("createInspiration mock not configured");
+    }),
+    createReflection: vi.fn(async () => {
+      throw new Error("createReflection mock not configured");
     }),
     updateInspiration: vi.fn(async () => {
       throw new Error("updateInspiration mock not configured");
     }),
-    fetchBackgroundJobs: vi.fn(async () => []),
+    deleteInspiration: vi.fn(async () => undefined),
+    recordInspirationRevisit: vi.fn(async () => ({
+      revisit: {
+        id: "revisit-1",
+        eventType: "detail_opened",
+        createdAt: "2026-05-14T16:32:00.000Z",
+      },
+      inspiration: null,
+    })),
   };
 });
 
-(
-  globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 let mountedRoot: Root | null = null;
 let mountedContainer: HTMLDivElement | null = null;
@@ -166,12 +113,12 @@ const sampleInspirations: ApiInspiration[] = [
     updatedAt: "2026-05-09T12:00:00.000Z",
   },
   {
-    id: "insp-3",
-    userId: "user-1",
-    text: "Unclassified cooking image idea",
-    kind: "image",
+    id: "insp-other-user",
+    userId: "user-2",
+    text: "Other user save should never render",
+    kind: "note",
     category: null,
-    importanceScore: 2,
+    importanceScore: 1,
     wowScore: 1,
     cluster: null,
     classifiedAt: null,
@@ -187,9 +134,9 @@ const sampleWowMoments: ApiWowMoment[] = [
     title: "Cities keep teaching through bridges",
     kind: "bridge",
     why: "Several saves connect architecture essays with walking routes and jazz history.",
-    beliefStatement: null,
+    beliefStatement: "I keep learning through places I cross repeatedly.",
     reflectionQuestion: "What bridge keeps reappearing?",
-    reflectionGuide: "Walk through the bridge image, name what it connects, then choose one next crossing.",
+    reflectionGuide: "Name what it connects, then choose one next crossing.",
     wowScore: 9,
     createdAt: "2026-05-11T12:00:00.000Z",
     updatedAt: "2026-05-11T12:00:00.000Z",
@@ -201,74 +148,63 @@ const sampleWowMoments: ApiWowMoment[] = [
         text: "Architecture essay about bridge rhythms in city walks",
         kind: "note",
         createdAt: "2026-05-10T12:00:00.000Z",
+        wowScore: 4,
       },
     ],
   },
-  {
-    id: "wow-2",
-    userId: "user-1",
-    title: "Memory tools are productive tensions",
-    kind: "tension",
-    why: "Your notes keep treating synthetic memory as both tool and crutch.",
-    beliefStatement: null,
-    reflectionQuestion: null,
-    reflectionGuide: null,
-    wowScore: 8,
-    createdAt: "2026-05-10T12:00:00.000Z",
-    updatedAt: "2026-05-10T12:00:00.000Z",
-    relatedInspirations: [],
-  },
 ];
 
-const sampleWowStatusRows: ApiWowStatusRow[] = [
-  {
-    inspiration: {
-      id: "insp-1",
-      textPreview: "Architecture essay about bridge rhythms in city walks",
-      kind: "note",
-      category: null,
-      cluster: "bridge",
-      classifiedAt: "2026-05-10T12:05:00.000Z",
-      importanceScore: 7,
-      wowScore: 4,
-      createdAt: "2026-05-10T12:00:00.000Z",
-      updatedAt: "2026-05-10T12:05:00.000Z",
+const sampleTopOfMind: ApiTopOfMind = {
+  generatedAt: "2026-05-12T12:00:00.000Z",
+  headline: "Bridge ideas keep returning",
+  activeThemes: [
+    {
+      nodeId: "theme-1",
+      label: "rooms where people can be honest before they are impressive",
+      type: "theme",
+      reason: "A theme from saved architecture and collaboration notes.",
+      evidenceCount: 2,
+      lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+      supportingInspirations: [
+        {
+          id: "insp-1",
+          preview: "Architecture essay about bridge rhythms in city walks",
+          reason: "It names the pattern.",
+          createdAt: "2026-05-10T12:00:00.000Z",
+        },
+      ],
     },
-    job: {
-      id: "job-process-1",
-      status: "succeeded",
-      attempts: 1,
-      maxAttempts: 3,
-      updatedAt: "2026-05-10T12:05:00.000Z",
-      lastError: null,
-    },
-    embedded: true,
-    generatedWowMomentCount: 1,
-    debugReason: {
-      code: "linked_wow_ready",
-      label: "generated 1",
-      detail: "1 linked WOW moment found for this inspiration.",
-      rawGeminiPreview: "```json { invalid judge payload preview",
-      parseFailureStage: "repair_schema_invalid",
-      finishReason: "STOP",
-      schemaIssueSummary: "debugSummary: Required; root: Unrecognized key(s) in object: 'why'",
-    },
+  ],
+  activeQuestions: [],
+  relationshipSignals: [],
+  summary: {
+    inspirationCount: 2,
+    meaningNoteCount: 1,
+    relationshipEdgeCount: 0,
   },
-];
+};
 
 function setApiFixtures({
   inspirations = sampleInspirations,
+  topOfMind = sampleTopOfMind,
   wowMoments = sampleWowMoments,
-  wowStatusRows = sampleWowStatusRows,
 }: {
   inspirations?: ApiInspiration[];
+  topOfMind?: ApiTopOfMind;
   wowMoments?: ApiWowMoment[];
-  wowStatusRows?: ApiWowStatusRow[];
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
-  vi.mocked(fetchReflections).mockResolvedValue([]);
+  vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
   vi.mocked(fetchWowMoments).mockResolvedValue(wowMoments);
-  vi.mocked(fetchWowStatus).mockResolvedValue(wowStatusRows);
+  vi.mocked(fetchReflections).mockResolvedValue([]);
+  vi.mocked(recordInspirationRevisit).mockResolvedValue({
+    revisit: {
+      id: "revisit-1",
+      eventType: "detail_opened",
+      createdAt: "2026-05-14T16:32:00.000Z",
+    },
+    inspiration: null,
+  });
 }
 
 afterEach(() => {
@@ -281,7 +217,9 @@ afterEach(() => {
   mountedContainer?.remove();
   mountedContainer = null;
   mockAuthState.value.user.preferredLocale = "en-US";
-  vi.useRealTimers();
+  if (typeof window.localStorage.clear === "function") {
+    window.localStorage.clear();
+  }
   vi.clearAllMocks();
   vi.unstubAllEnvs();
 });
@@ -296,6 +234,7 @@ async function renderHomePage(): Promise<HTMLDivElement> {
   await act(async () => {
     root.render(createElement(MemoryRouter, null, createElement(HomePage)));
   });
+  await flushReactWork();
   await flushReactWork();
 
   return container;
@@ -317,52 +256,11 @@ function setInputValue(input: HTMLInputElement | HTMLTextAreaElement, value: str
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-function getInspirationResultTexts(container: HTMLElement): string[] {
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(".inspiration-result-text"),
-  ).map((node) => node.textContent ?? "");
-}
-
-async function switchToInspirationFirst(container: HTMLElement): Promise<void> {
-  const inspirationButton = Array.from(
-    container.querySelectorAll<HTMLButtonElement>(".home-view-switcher button"),
-  ).find((button) =>
-    ["Inspiration First", "영감 먼저"].includes(button.textContent ?? ""),
-  );
-
+async function openCaptureModal(container: HTMLElement): Promise<void> {
+  const captureButton = container.querySelector<HTMLButtonElement>(".nc-save");
+  expect(captureButton).not.toBeNull();
   await act(async () => {
-    inspirationButton?.click();
-  });
-  await flushReactWork();
-}
-
-async function switchToWowStatus(container: HTMLElement): Promise<void> {
-  const statusButton = Array.from(
-    container.querySelectorAll<HTMLButtonElement>(".home-view-switcher button"),
-  ).find((button) => button.textContent === "WOW STATUS");
-
-  await act(async () => {
-    statusButton?.click();
-  });
-  await flushReactWork();
-}
-
-async function saveInspirationFromCapture(
-  container: HTMLElement,
-  text: string,
-): Promise<void> {
-  const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
-  expect(textarea).not.toBeNull();
-
-  await act(async () => {
-    setInputValue(textarea!, text);
-  });
-
-  const saveButton = container.querySelector<HTMLButtonElement>("#capSave");
-  expect(saveButton).not.toBeNull();
-
-  await act(async () => {
-    saveButton?.click();
+    captureButton?.click();
   });
   await flushReactWork();
 }
@@ -397,457 +295,224 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
   };
 }
 
-const sampleBackgroundJobs: ApiBackgroundJob[] = [
-  {
-    id: "job-process-1",
-    type: "process_inspiration",
-    status: "running",
-    createdAt: "2026-05-14T16:30:01.000Z",
-    updatedAt: "2026-05-14T16:30:02.000Z",
-  },
-];
+describe("HomePage current home experience", () => {
+  async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
+    const savesTab = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-mode-btn")).find(
+      (button) => button.textContent === `all inspirations (${count})`,
+    );
+    expect(savesTab).not.toBeNull();
+    await act(async () => {
+      savesTab?.click();
+    });
+    await flushReactWork();
+  }
 
-const packageCssPath = resolve(process.cwd(), "src/styles/global.css");
-const workspaceCssPath = resolve(process.cwd(), "packages/web/src/styles/global.css");
-const globalCss = readFileSync(
-  existsSync(packageCssPath) ? packageCssPath : workspaceCssPath,
-  "utf8",
-);
+  async function openBridgeDetail(container: HTMLElement): Promise<HTMLElement> {
+    await clickSavesTab(container);
+    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    expect(search).not.toBeNull();
+    await act(async () => {
+      setInputValue(search!, "bridge");
+    });
+    const bridgeSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    expect(bridgeSave).not.toBeNull();
+    expect(bridgeSave?.textContent).toContain("Architecture essay about bridge rhythms");
+    await act(async () => {
+      bridgeSave?.click();
+    });
+    await flushReactWork();
+    const detail = container.querySelector<HTMLElement>(".detail-view");
+    expect(detail).not.toBeNull();
+    return detail!;
+  }
 
-describe("HomePage view model", () => {
-  it("defaults to Wow Moment First as a primary grid of WOW moment cards", async () => {
+  it("loads current Home data from inspirations, top-of-mind, and WOW endpoints", async () => {
+    setApiFixtures();
+    await renderHomePage();
+
+    expect(fetchInspirations).toHaveBeenCalledTimes(1);
+    expect(fetchTopOfMind).toHaveBeenCalledTimes(1);
+    expect(fetchWowMoments).toHaveBeenCalledWith({ limit: 10 });
+  });
+
+  it("renders the current top-of-mind canvas and hero copy", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(
-      container.querySelector<HTMLElement>(".home-view-switcher")?.dataset
-        .activeView,
-    ).toBe("wow");
-    expect(container.textContent).toContain("WAKA — wow moments");
-    expect(container.textContent).toContain("Wow Moment First");
-    expect(container.textContent).toContain("What WAKA noticed");
-    expect(container.textContent).toContain("Dev-only inspect WOW fields (2)");
-    expect(container.textContent).not.toContain("WOW moment dashboard");
-    expect(container.textContent).not.toContain("Start with the durable patterns");
-    expect(container.querySelector(".wow-moments-grid")).not.toBeNull();
-    expect(container.querySelectorAll(".wow-moment-card")).toHaveLength(2);
-    expect(container.textContent).toContain("Cities keep teaching through bridges");
-    expect(container.querySelector(".grid.home-grid")).toBeNull();
-    expect(container.querySelector("#capNote")).toBeNull();
+    expect(container.querySelector(".nc-canvas")).not.toBeNull();
+    expect(container.textContent).toContain("river's top of mind");
+    expect(container.textContent).toContain("Most inspiration disappears.");
+    expect(container.textContent).toContain("not final. changes as new inspirations arrive.");
   });
 
-  it("renders representative Home chrome in Korean when the user prefers Korean", async () => {
+  it("uses the WOW panel variant when current WOW moments are available", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".nc-stage--wow")).not.toBeNull();
+    expect(container.textContent).toContain("What WAKA noticed");
+    expect(container.textContent).toContain("Dev-only inspect WOW fields (1)");
+  });
+
+  it("renders WOW moments as the primary noticed panel", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("What WAKA noticed");
+    expect(container.textContent).toContain("Cities keep teaching through bridges");
+    expect(container.textContent).toContain("Several saves connect architecture essays");
+  });
+
+  it("renders the Home authorship footnote for the signed-in user", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("This page was not written by river.");
+    expect(container.textContent).toContain("— Ⓒ WAKA, 2026, for minds that wander");
+  });
+
+  it("filters server-returned inspirations down to the authenticated user", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("all inspirations (2)");
+    expect(container.textContent).not.toContain("Other user save should never render");
+  });
+
+  it("keeps the capture form closed and legacy Home switcher absent on first paint", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".home-view-switcher")).toBeNull();
+    expect(container.querySelector("#capNote")).toBeNull();
+    expect(container.querySelector(".reference-capture-modal")).toBeNull();
+  });
+
+  it("renders representative Korean home copy from the user locale", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("WAKA — 와우 순간");
-    expect(container.textContent).toContain("와우 순간 먼저");
-    expect(container.querySelector(".wow-first-home")?.getAttribute("aria-label")).toBe(
-      "와우 순간 먼저",
-    );
+    expect(container.textContent).toContain("river's top of mind");
+    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).toContain("WAKA가 포착한 것");
+  });
+
+  it("localizes the logout affordance in Korean", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures();
+    const container = await renderHomePage();
+
     expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")?.title).toBe(
       "River 로그아웃",
     );
-
-    await switchToInspirationFirst(container);
-    expect(container.textContent).toContain("영감 먼저");
-    expect(container.textContent).toContain("영감 찾기");
-    expect(
-      container.querySelector<HTMLInputElement>('input[aria-label="영감 검색"]')?.placeholder,
-    ).toBe("영감 아카이브 검색…");
-    expect(container.textContent).toContain("3개 중 3개 영감");
-    expect(container.querySelector<HTMLButtonElement>('button[aria-label^="영감 텍스트로 정렬"]')).not.toBeNull();
-    expect(container.querySelector<HTMLButtonElement>('button[aria-label^="저장 시간으로 정렬"]')).not.toBeNull();
-    expect(container.querySelector<HTMLButtonElement>('button[aria-label^="WOW 점수로 정렬"]')).not.toBeNull();
   });
 
-  it("switches from WOW Moment First to Inspiration First with the view switcher", async () => {
+  it("lets the language buttons persist a Korean locale preference", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const koreanButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-lang-btn")).find(
+      (button) => button.textContent === "한",
+    );
+
+    expect(koreanButton).not.toBeNull();
+    await act(async () => {
+      koreanButton?.click();
+    });
+    expect(mockAuthState.value.updatePreferredLocale).toHaveBeenCalledWith("ko-KR");
+    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
+  });
+
+  it("switches to the all-inspirations page from the top mode tabs", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    const inspirationButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(
-        ".home-view-switcher button",
-      ),
-    ).find((button) => button.textContent === "Inspiration First");
+    await clickSavesTab(container);
 
-    await act(async () => {
-      inspirationButton?.click();
-    });
-    await flushReactWork();
-
-    const nextInspirationButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(
-        ".home-view-switcher button",
-      ),
-    ).find((button) => button.textContent === "Inspiration First");
-
-    expect(
-      container.querySelector<HTMLElement>(".home-view-switcher")?.dataset
-        .activeView,
-    ).toBe("inspiration");
-    expect(nextInspirationButton?.getAttribute("aria-pressed")).toBe("true");
-    expect(container.textContent).toContain("WAKA — your inspirations");
-    expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
-    expect(container.querySelector(".inspiration-first-capture #capture")).not.toBeNull();
-    expect(container.querySelector(".grid.home-grid")).toBeNull();
-
-    const captureCell = container.querySelector<HTMLElement>("#capture");
-    const switcher = container.querySelector<HTMLElement>(".home-view-switcher");
-    const discoveryPanel = container.querySelector<HTMLElement>(
-      ".inspiration-discovery-panel",
-    );
-    expect(
-      Boolean(captureCell?.compareDocumentPosition(switcher!) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
-    expect(
-      Boolean(captureCell?.compareDocumentPosition(discoveryPanel!) & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
+    expect(container.querySelector(".reference-saves-page")).not.toBeNull();
+    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("all inspirations (2)");
   });
 
-  it("renders Inspiration First as a simple list without cluster or kind controls/cards", async () => {
+  it("lists the authenticated user's saved inspirations newest first", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    const inspirationButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(
-        ".home-view-switcher button",
-      ),
-    ).find((button) => button.textContent === "Inspiration First");
-    await act(async () => {
-      inspirationButton?.click();
-    });
-    await flushReactWork();
+    await clickSavesTab(container);
 
-    const panel = container.querySelector<HTMLElement>(
-      ".inspiration-discovery-panel",
-    );
-    expect(panel?.textContent).toContain("3 of 3 inspirations");
-    expect(container.querySelector(".inspiration-results-grid")).not.toBeNull();
-    expect(container.querySelector(".inspiration-results-header")).not.toBeNull();
-    expect(container.querySelectorAll(".inspiration-result-card")).toHaveLength(3);
-    expect(container.querySelector('select[aria-label="Filter by status"]')).toBeNull();
-    expect(container.querySelector('select[aria-label="Filter by date"]')).toBeNull();
-    expect(container.querySelector('select[aria-label="Sort inspirations"]')).toBeNull();
-    expect(
-      container.querySelector<HTMLButtonElement>(
-        'button[aria-label^="Sort by inspiration text"]',
-      ),
-    ).not.toBeNull();
-    expect(
-      container.querySelector<HTMLButtonElement>('button[aria-label^="Sort by saved time"]'),
-    ).not.toBeNull();
-    expect(
-      container.querySelector<HTMLButtonElement>('button[aria-label^="Sort by WOW score"]'),
-    ).not.toBeNull();
-    const resultMetaText = Array.from(
-      container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
-    ).map((node) => node.textContent ?? "");
-    expect(resultMetaText).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("WOW 4"),
-        expect.stringContaining("WOW 8"),
-        expect.stringContaining("WOW 1"),
-      ]),
-    );
-    expect(resultMetaText.some((text) => /\b(NOTE|QUOTE|IMAGE)\b/.test(text))).toBe(false);
-    expect(resultMetaText.some((text) => /\b(BRIDGE|TENSION)\b/.test(text))).toBe(false);
-    expect(container.querySelector('select[aria-label="Filter by cluster"]')).toBeNull();
-    expect(container.querySelector('select[aria-label="Filter by kind"]')).toBeNull();
-    expect(container.textContent).not.toContain("All statuses");
-    expect(container.textContent).not.toContain("Any date");
-    expect(container.textContent).not.toContain("Newest first");
-    expect(container.textContent).not.toContain("Oldest first");
-    expect(container.querySelectorAll(".grid.home-grid .wm-card")).toHaveLength(0);
-    expect(globalCss).toMatch(
-      /\.inspiration-result-text\s*\{[\s\S]*?font-size:\s*clamp\(14px, 1\.25vw, 18px\);[\s\S]*?line-height:\s*1\.28;/,
-    );
+    const savesPage = container.querySelector<HTMLElement>(".reference-saves-page");
+    expect(savesPage?.textContent).toContain("Architecture essay about bridge rhythms");
+    expect(savesPage?.textContent).toContain("Synthetic memory note");
+    expect(savesPage?.textContent).not.toContain("Other user save should never render");
+  });
 
-    const search = container.querySelector<HTMLInputElement>(
-      'input[aria-label="Search inspirations"]',
-    );
+  it("searches the current all-inspirations list", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    await clickSavesTab(container);
+
+    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
     expect(search).not.toBeNull();
-
     await act(async () => {
       setInputValue(search!, "synthetic");
     });
-    const searchedPanel = container.querySelector<HTMLElement>(
-      ".inspiration-discovery-panel",
-    );
-    expect(searchedPanel?.textContent).toContain("1 of 3 inspirations");
-    expect(searchedPanel?.textContent).toContain("Synthetic memory note");
-    expect(searchedPanel?.textContent).not.toContain("Architecture essay");
+    const savesPageAfterSearch = container.querySelector<HTMLElement>(".reference-saves-page");
+    expect(savesPageAfterSearch?.textContent).toContain("Synthetic memory note");
+    expect(savesPageAfterSearch?.textContent).not.toContain("Architecture essay about bridge rhythms");
   });
 
-  it("explains WAKA scoring from an accessible Inspiration First disclosure", async () => {
+  it("updates search results as the query changes", async () => {
     setApiFixtures();
     const container = await renderHomePage();
-    await switchToInspirationFirst(container);
+    await clickSavesTab(container);
 
-    const explainerButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-controls="inspiration-score-explainer"]',
-    );
-    expect(explainerButton).not.toBeNull();
-    expect(explainerButton?.textContent).toContain("How scoring works");
-    expect(explainerButton?.getAttribute("aria-expanded")).toBe("false");
-    expect(container.querySelector("#inspiration-score-explainer")).toBeNull();
-
+    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    expect(search).not.toBeNull();
     await act(async () => {
-      explainerButton?.click();
+      setInputValue(search!, "bridge");
     });
-    await flushReactWork();
-
-    const explainer = container.querySelector<HTMLElement>(
-      "#inspiration-score-explainer",
-    );
-    expect(explainerButton?.getAttribute("aria-expanded")).toBe("true");
-    expect(explainer).not.toBeNull();
-    const explainerText = (explainer?.textContent ?? "").replace(/\s+/g, " ").trim();
-    expect(explainerText).toContain("deterministic and bounded");
-    expect(explainerText).toContain("0–100 WOW score");
-    expect(explainerText).toContain("does not ask an LLM to calculate scores");
-    expect(explainerText).toContain("What raises a WOW score");
-    expect(explainerText).toContain("Bare URL spam does not earn extra depth credit");
-    expect(explainerText).toContain("Reflections count as a clear processing signal");
-    expect(explainerText).toContain("Meaningful returns");
-    expect(explainerText).toContain("Stored embeddings help WAKA find similar, surprising, or time-distant connections");
-    expect(explainerText).toContain("without sending the full history to an LLM");
-    expect(explainerText).toContain("Why different inspirations can find different candidates");
-    expect(explainerText).toContain("selection happens in stages");
-    expect(explainerText).toContain("starts with the new or trigger inspiration");
-    expect(explainerText).toContain("excludes that trigger");
-    expect(explainerText).toContain("stays inside your own archive");
-    expect(explainerText).toContain("stored embeddings and enough data for bounded retrieval");
-    expect(explainerText).toContain("50% the candidate’s existing WOW score");
-    expect(explainerText).toContain("25% similarity to the trigger");
-    expect(explainerText).toContain("20% surprise or bridge similarity");
-    expect(explainerText).toContain("5% time distance from the trigger");
-    expect(explainerText).toContain("top bounded candidates");
-    expect(explainerText).toContain("only that selected set goes to the AI judge");
-    expect(explainerText).toContain("AI judge only evaluates and writes WOW moments from this bounded candidate set");
-    expect(explainerText).toContain("LLM does not choose candidates by scanning your whole archive");
-    expect(explainerText).toContain("calculate the numeric scores");
-    expect(explainerText).toContain("trigger inspiration plus up to three related inspirations");
-    expect(explainerText).toContain("best-recent 9 moments");
-    expect(explainerText).toContain("inspect panel can show a larger bounded set");
-    expect(explainerText).toContain("save, edit, reflection, meaningful revisit");
-    expect(explainerText).toContain("embedding refresh");
-    expect(explainerText).toContain("new related inspiration");
-    expect(explainerText).toContain("WOW generation");
-    expect(explainerText).toContain("without rescoring the whole archive");
-    expect(explainerText).not.toMatch(/cluster|kind|Filter by/i);
+    const savesPageAfterSearch = container.querySelector<HTMLElement>(".reference-saves-page");
+    expect(savesPageAfterSearch?.textContent).toContain("Architecture essay about bridge rhythms");
+    expect(savesPageAfterSearch?.textContent).not.toContain("Synthetic memory note");
   });
 
-  it("sorts Inspiration First rows through accessible column headers", async () => {
+  it("opens a saved inspiration detail and records a revisit", async () => {
+    setApiFixtures();
+    vi.mocked(fetchReflections).mockResolvedValue([
+      persistedReflection({ id: "reflection-existing", answer: "This already helped once." }),
+    ]);
+    const container = await renderHomePage();
+
+    await openBridgeDetail(container);
+
+    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
+  });
+
+  it("shows existing reflections in the inspiration detail", async () => {
+    setApiFixtures();
+    vi.mocked(fetchReflections).mockResolvedValue([
+      persistedReflection({ id: "reflection-existing", answer: "This already helped once." }),
+    ]);
+    const container = await renderHomePage();
+
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.textContent).toContain("Inspiration details");
+    expect(detail.textContent).toContain("This already helped once.");
+  });
+
+  it("opens saved inspirations as editable detail text instead of a static preview", async () => {
     setApiFixtures();
     const container = await renderHomePage();
-    await switchToInspirationFirst(container);
 
-    expect(getInspirationResultTexts(container)).toEqual([
-      "Architecture essay about bridge rhythms in city walks",
-      "Synthetic memory note for rereading old journals",
-      "Unclassified cooking image idea",
-    ]);
+    const detail = await openBridgeDetail(container);
+    const detailsTextarea = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inspiration details"]');
 
-    const wowSort = container.querySelector<HTMLButtonElement>(
-      'button[aria-label^="Sort by WOW score"]',
-    );
-    expect(wowSort).not.toBeNull();
-
-    await act(async () => {
-      wowSort?.click();
-    });
-    await flushReactWork();
-
-    expect(wowSort?.getAttribute("aria-pressed")).toBe("true");
-    expect(wowSort?.getAttribute("aria-label")).toContain("descending");
-    expect(getInspirationResultTexts(container)).toEqual([
-      "Synthetic memory note for rereading old journals",
-      "Architecture essay about bridge rhythms in city walks",
-      "Unclassified cooking image idea",
-    ]);
-
-    await act(async () => {
-      wowSort?.click();
-    });
-    await flushReactWork();
-
-    expect(wowSort?.getAttribute("aria-label")).toContain("ascending");
-    expect(getInspirationResultTexts(container)).toEqual([
-      "Unclassified cooking image idea",
-      "Architecture essay about bridge rhythms in city walks",
-      "Synthetic memory note for rereading old journals",
-    ]);
+    expect(detailsTextarea).not.toBeNull();
+    expect(detailsTextarea?.value).toBe("Architecture essay about bridge rhythms in city walks");
   });
 
-  it("quick save still creates only the inspiration and preserves fast capture behavior", async () => {
-    setApiFixtures({ inspirations: [] });
-    vi.mocked(createInspiration).mockResolvedValue(
-      persistedInspiration({
-        id: "insp-quick-save",
-        text: "Fast save without reflective friction",
-      }),
-    );
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-    await saveInspirationFromCapture(container, "Fast save without reflective friction");
-
-    expect(createInspiration).toHaveBeenCalledTimes(1);
-    expect(createInspiration).toHaveBeenCalledWith({
-      text: "Fast save without reflective friction",
-    });
-    expect(createReflection).not.toHaveBeenCalled();
-    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
-    expect(container.querySelector(".capture--reflect")).toBeNull();
-  });
-
-  it("reflective save creates the inspiration before attaching the guided reflection", async () => {
-    setApiFixtures({ inspirations: [] });
-    vi.mocked(createInspiration).mockResolvedValue(
-      persistedInspiration({
-        id: "insp-reflective-save",
-        text: "A passage about small rituals compounding",
-      }),
-    );
-    vi.mocked(createReflection).mockResolvedValue({
-      reflection: {
-        id: "reflection-1",
-        inspirationId: "insp-reflective-save",
-        userId: "user-1",
-        question: "What about this is worth remembering?",
-        answer: "It names the quiet system behind the ritual.",
-        skipped: false,
-        createdAt: "2026-05-14T16:31:00.000Z",
-      },
-      inspiration: {
-        id: "insp-reflective-save",
-        importanceScore: 3,
-        wowScore: 7,
-      },
-    });
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
-    expect(textarea).not.toBeNull();
-    await act(async () => {
-      setInputValue(textarea!, "A passage about small rituals compounding");
-    });
-
-    const reflectiveButton = container.querySelector<HTMLButtonElement>("#capReflectiveSave");
-    expect(reflectiveButton).not.toBeNull();
-    await act(async () => {
-      reflectiveButton?.click();
-    });
-    await flushReactWork();
-
-    expect(container.querySelector(".capture--reflect")).not.toBeNull();
-    expect(container.textContent).toContain("Process this inspiration");
-    expect(container.textContent).toContain("What about this is worth remembering?");
-
-    const reflectionAnswer = container.querySelector<HTMLTextAreaElement>("#reflectAns");
-    expect(reflectionAnswer).not.toBeNull();
-    await act(async () => {
-      setInputValue(reflectionAnswer!, "It names the quiet system behind the ritual.");
-    });
-
-    const continueButton = container.querySelector<HTMLButtonElement>("#reflectNext");
-    await act(async () => {
-      continueButton?.click();
-    });
-    await flushReactWork();
-
-    expect(createInspiration).toHaveBeenCalledTimes(1);
-    expect(createReflection).toHaveBeenCalledTimes(1);
-    expect(createReflection).toHaveBeenCalledWith("insp-reflective-save", {
-      question: "What about this is worth remembering?",
-      answer: "It names the quiet system behind the ritual.",
-      skipped: false,
-    });
-    expect(vi.mocked(createInspiration).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(createReflection).mock.invocationCallOrder[0],
-    );
-    expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
-      "1 of 1 reflected",
-    );
-    expect(container.querySelector(".inspiration-result-meta")?.textContent).toContain(
-      "WOW 7",
-    );
-  });
-
-  it("keeps reflective mode open and explains that a reflection answer is needed", async () => {
-    setApiFixtures({ inspirations: [] });
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
-    expect(textarea).not.toBeNull();
-    await act(async () => {
-      setInputValue(textarea!, "Save only after I process this");
-    });
-
-    const reflectiveButton = container.querySelector<HTMLButtonElement>("#capReflectiveSave");
-    await act(async () => {
-      reflectiveButton?.click();
-    });
-    await flushReactWork();
-
-    const continueButton = container.querySelector<HTMLButtonElement>("#reflectNext");
-    await act(async () => {
-      continueButton?.click();
-    });
-    await flushReactWork();
-
-    expect(createInspiration).not.toHaveBeenCalled();
-    expect(createReflection).not.toHaveBeenCalled();
-    expect(container.querySelector(".capture--reflect")).not.toBeNull();
-    expect(container.textContent).toContain("Add a thought before reflective save");
-    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
-      "Save only after I process this",
-    );
-  });
-
-  it("shows a selected inspiration WOW score breakdown in the detail panel", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const firstResult = container.querySelector<HTMLButtonElement>(
-      ".inspiration-result-card",
-    );
-    expect(firstResult).not.toBeNull();
-    await act(async () => {
-      firstResult?.click();
-    });
-    await flushReactWork();
-
-    expect(fetchInspirationScoreBreakdown).toHaveBeenCalledWith("insp-1");
-    const detail = container.querySelector<HTMLElement>(".detail-view");
-    expect(detail?.textContent).toContain("WOW score breakdown");
-    expect(detail?.textContent).toContain("WOW 12");
-    expect(detail?.textContent).toContain("Displayed WOW");
-    expect(detail?.textContent).toContain("Stored/core WOW");
-    expect(detail?.textContent).toContain("Freshness adjustment");
-    expect(detail?.textContent).toContain("Content/text/context");
-    expect(detail?.textContent).toContain("Processing/reflection");
-    expect(detail?.textContent).toContain("Revisit");
-    expect(detail?.textContent).toContain(
-      "1 unique day · 1 total revisit · 1 recent revisit",
-    );
-    expect(detail?.textContent).toContain(
-      "signals: 33 unique-day, 20 total-revisit, 100 recent",
-    );
-    expect(detail?.textContent).not.toContain("33 unique days");
-    expect(detail?.textContent).toContain("Relationship");
-    expect(detail?.textContent).toContain("viewing this panel does not run provider calls or generate embeddings");
-    expect(detail?.textContent).toContain("No stored embedding");
-  });
-
-  it("opens saved inspirations as editable details without a static preview and saves edits", async () => {
+  it("saves detail edits through updateInspiration", async () => {
     setApiFixtures();
     vi.mocked(updateInspiration).mockResolvedValue(
       persistedInspiration({
@@ -858,45 +523,16 @@ describe("HomePage view model", () => {
         updatedAt: "2026-05-15T12:00:00.000Z",
       }),
     );
-
     const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const firstResult = container.querySelector<HTMLButtonElement>(
-      ".inspiration-result-card",
-    );
-    expect(firstResult).not.toBeNull();
-    await act(async () => {
-      firstResult?.click();
-    });
-    await flushReactWork();
-
-    const detail = container.querySelector<HTMLElement>(".detail-view");
-    expect(detail).not.toBeNull();
-    expect(detail?.textContent).toContain("Inspiration details");
-    expect(detail?.querySelector(".detail-text")).toBeNull();
-    expect(detail?.querySelector(".detail-links")).toBeNull();
-    expect(detail?.querySelector(".detail-attachments")).toBeNull();
-    expect(detail?.querySelector(".detail-meta")).toBeNull();
-    const detailsTextarea = detail?.querySelector<HTMLTextAreaElement>(
-      'textarea[aria-label="Inspiration details"]',
-    );
-    expect(detailsTextarea?.value).toBe(
-      "Architecture essay about bridge rhythms in city walks",
-    );
-    expect(
-      detail?.querySelector<HTMLButtonElement>(
-        'button[aria-label="Process this inspiration with a reflection"]',
-      ),
-    ).not.toBeNull();
+    const detail = await openBridgeDetail(container);
+    const detailsTextarea = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inspiration details"]');
 
     await act(async () => {
       setInputValue(detailsTextarea!, "Edited bridge rhythm note for the next walk");
     });
-    const saveButton = Array.from(
-      detail?.querySelectorAll<HTMLButtonElement>("button") ?? [],
-    ).find((button) => button.textContent === "Save details");
-    expect(saveButton).not.toBeUndefined();
+    const saveButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "Save details",
+    );
     await act(async () => {
       saveButton?.click();
     });
@@ -906,629 +542,127 @@ describe("HomePage view model", () => {
       text: "Edited bridge rhythm note for the next walk",
     });
     expect(detailsTextarea?.value).toBe("Edited bridge rhythm note for the next walk");
-    expect(getInspirationResultTexts(container)[0]).toContain(
-      "Edited bridge rhythm note for the next walk",
-    );
-    expect(
-      Array.from(container.querySelectorAll<HTMLElement>(".inspiration-result-meta")).some(
-        (node) => node.textContent?.includes("WOW 6"),
-      ),
-    ).toBe(true);
   });
 
-  it("adds a later reflection from an existing inspiration detail without refreshing", async () => {
-    setApiFixtures();
-    vi.mocked(fetchReflections).mockResolvedValue([
-      persistedReflection({
-        id: "reflection-existing",
-        answer: "This already helped once.",
-      }),
-    ]);
-    vi.mocked(createReflection).mockResolvedValue({
-      reflection: persistedReflection({
-        id: "reflection-later",
-        answer: "It turns a quick save into something I can use.",
-      }),
-      inspiration: {
-        id: "insp-1",
-        importanceScore: 9,
-        wowScore: 10,
-      },
-    });
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const firstResult = container.querySelector<HTMLButtonElement>(
-      ".inspiration-result-card",
-    );
-    expect(firstResult).not.toBeNull();
-    await act(async () => {
-      firstResult?.click();
-    });
-    await flushReactWork();
-
-    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
-    expect(container.textContent).toContain("This already helped once.");
-
-    const processButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Process this inspiration with a reflection"]',
-    );
-    expect(processButton).not.toBeNull();
-    await act(async () => {
-      processButton?.click();
-    });
-    await flushReactWork();
-
-    const detailAnswer = container.querySelector<HTMLTextAreaElement>(
-      '.detail-view .reflect-area textarea[placeholder^="Sit with it"]',
-    );
-    expect(detailAnswer).not.toBeNull();
-    await act(async () => {
-      setInputValue(detailAnswer!, "It turns a quick save into something I can use.");
-    });
-
-    const saveReflectionButton = container.querySelector<HTMLButtonElement>(
-      '.detail-view .reflect-area button[aria-label="Save reflection"]',
-    );
-    await act(async () => {
-      saveReflectionButton?.click();
-    });
-    await flushReactWork();
-
-    expect(createReflection).toHaveBeenCalledTimes(1);
-    expect(createReflection).toHaveBeenCalledWith("insp-1", {
-      question: "What about this is worth remembering?",
-      answer: "It turns a quick save into something I can use.",
-    });
-    expect(container.textContent).toContain("This already helped once.");
-    expect(container.textContent).toContain(
-      "It turns a quick save into something I can use.",
-    );
-    expect(container.textContent).toContain("Hide reflection · 2 notes");
-    expect(container.querySelector(".history-list")).toBeNull();
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#detailBack")?.click();
-    });
-    await flushReactWork();
-
-    expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
-      "2 of 2 reflected",
-    );
-    expect(
-      Array.from(container.querySelectorAll<HTMLElement>(".inspiration-result-meta")).some(
-        (node) => node.textContent?.includes("WOW 10"),
-      ),
-    ).toBe(true);
-  });
-
-  it("keeps the detail reflection entry point hidden until existing reflections are ready", async () => {
-    setApiFixtures();
-    let resolveFetchReflections: (rows: ApiReflection[]) => void = () => undefined;
-    const fetchReflectionsPromise = new Promise<ApiReflection[]>((resolve) => {
-      resolveFetchReflections = resolve;
-    });
-    vi.mocked(fetchReflections).mockReturnValue(fetchReflectionsPromise);
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const firstResult = container.querySelector<HTMLButtonElement>(
-      ".inspiration-result-card",
-    );
-    await act(async () => {
-      firstResult?.click();
-    });
-    await flushReactWork();
-
-    expect(container.textContent).toContain("Loading reflections…");
-    expect(
-      container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Process this inspiration with a reflection"]',
-      ),
-    ).toBeNull();
-
-    await act(async () => {
-      resolveFetchReflections([
-        persistedReflection({
-          id: "reflection-existing",
-          answer: "Ready reflections can be extended safely.",
-        }),
-      ]);
-      await fetchReflectionsPromise;
-    });
-    await flushReactWork();
-
-    expect(container.textContent).toContain("Ready reflections can be extended safely.");
-    expect(
-      container.querySelector<HTMLButtonElement>(
-        'button[aria-label="Process this inspiration with a reflection"]',
-      ),
-    ).not.toBeNull();
-    expect(container.querySelector(".history-list")).toBeNull();
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#detailBack")?.click();
-    });
-    await flushReactWork();
-
-    expect(container.querySelector(".history-item-reflections")?.textContent).toContain(
-      "1 of 1 reflected",
-    );
-  });
-
-  it("does not post an empty later reflection from the inspiration detail", async () => {
-    setApiFixtures();
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const firstResult = container.querySelector<HTMLButtonElement>(
-      ".inspiration-result-card",
-    );
-    await act(async () => {
-      firstResult?.click();
-    });
-    await flushReactWork();
-
-    const processButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Process this inspiration with a reflection"]',
-    );
-    await act(async () => {
-      processButton?.click();
-    });
-    await flushReactWork();
-
-    const saveReflectionButton = container.querySelector<HTMLButtonElement>(
-      '.detail-view .reflect-area button[aria-label="Save reflection"]',
-    );
-    await act(async () => {
-      saveReflectionButton?.click();
-    });
-    await flushReactWork();
-
-    expect(createReflection).not.toHaveBeenCalled();
-    expect(container.textContent).toContain(
-      "Add a thought before saving this reflection.",
-    );
-    expect(container.querySelector(".detail-view .reflect-area")).not.toBeNull();
-  });
-
-  it("keeps optimistic Inspiration First saves simple, then shows returned WOW score after persistence", async () => {
-    setApiFixtures({ inspirations: [] });
-    let resolveCreate: (value: ApiInspiration) => void = () => undefined;
-    const createPromise = new Promise<ApiInspiration>((resolve) => {
-      resolveCreate = resolve;
-    });
-    vi.mocked(createInspiration).mockReturnValue(createPromise);
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-    await saveInspirationFromCapture(
-      container,
-      "Fresh note with a server-scored surprise",
-    );
-
-    const optimisticMeta = Array.from(
-      container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
-    ).map((node) => node.textContent ?? "");
-    expect(optimisticMeta).toHaveLength(1);
-    expect(optimisticMeta[0]).toContain("saving");
-    expect(optimisticMeta[0]).not.toContain("WOW");
-
-    await act(async () => {
-      resolveCreate(
-        persistedInspiration({
-          id: "insp-wow-after-save",
-          text: "Fresh note with a server-scored surprise",
-          wowScore: 8,
-        }),
-      );
-      await createPromise;
-    });
-    await flushReactWork();
-
-    const persistedMeta = Array.from(
-      container.querySelectorAll<HTMLElement>(".inspiration-result-meta"),
-    ).map((node) => node.textContent ?? "");
-    expect(persistedMeta).toHaveLength(1);
-    expect(persistedMeta[0]).toContain("saved");
-    expect(persistedMeta[0]).toContain("WOW 8");
-    expect(persistedMeta[0]).not.toMatch(/\b(NOTE|QUOTE|IMAGE|BRIDGE|TENSION)\b/);
-  });
-
-  it("does not render backend kind or cluster metadata in Inspiration First history or detail", async () => {
+  it("opens capture from the floating action", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    const inspirationButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(
-        ".home-view-switcher button",
-      ),
-    ).find((button) => button.textContent === "Inspiration First");
-    await act(async () => {
-      inspirationButton?.click();
-    });
-    await flushReactWork();
+    await openCaptureModal(container);
 
-    await act(async () => {
-      container.querySelector<HTMLElement>("#metaCount")?.click();
-    });
-    await flushReactWork();
-
-    const historyPanel = container.querySelector<HTMLElement>(".history-overlay");
-    expect(historyPanel?.classList.contains("visible")).toBe(true);
-    expect(historyPanel?.querySelectorAll(".history-item")).toHaveLength(3);
-    expect(historyPanel?.querySelector(".history-item-cluster")).toBeNull();
-
-    const historyMetaText = Array.from(
-      historyPanel?.querySelectorAll<HTMLElement>(".history-item-meta") ?? [],
-    ).map((node) => node.textContent ?? "");
-    expect(historyMetaText.some((text) => /\b(NOTE|QUOTE|IMAGE)\b/.test(text))).toBe(false);
-    expect(historyPanel?.textContent).not.toContain(
-      "architecture essays and jazz history",
-    );
-    expect(historyPanel?.textContent).not.toContain(
-      "synthetic memory: tool or crutch",
-    );
-
-    const bridgeCard = Array.from(
-      historyPanel?.querySelectorAll<HTMLElement>(".history-item") ?? [],
-    ).find((card) =>
-      card.textContent?.includes("Architecture essay about bridge rhythms"),
-    );
-    expect(bridgeCard).not.toBeUndefined();
-
-    await act(async () => {
-      bridgeCard?.click();
-    });
-    await flushReactWork();
-    await flushReactWork();
-
-    const detail = container.querySelector<HTMLElement>(".detail-view.visible");
-    expect(detail?.textContent).toContain("Inspiration details");
-    expect(
-      detail?.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Inspiration details"]',
-      )?.value,
-    ).toBe("Architecture essay about bridge rhythms in city walks");
-    expect(detail?.querySelector(".detail-text")).toBeNull();
-    expect(detail?.querySelector(".detail-links")).toBeNull();
-    expect(detail?.querySelector(".detail-attachments")).toBeNull();
-    expect(detail?.querySelector(".detail-meta")).toBeNull();
-    expect(historyPanel?.querySelector(".history-list")).toBeNull();
-    expect(historyPanel?.querySelector(".history-item")).toBeNull();
-    expect(vi.mocked(fetchReflections)).toHaveBeenCalledWith("insp-1");
-
-    await act(async () => {
-      detail?.querySelector<HTMLButtonElement>("#detailBack")?.click();
-    });
-    await flushReactWork();
-
-    expect(container.querySelector(".detail-view.visible")).toBeNull();
-    expect(historyPanel?.querySelectorAll(".history-item")).toHaveLength(3);
-    expect(
-      Array.from(historyPanel?.querySelectorAll<HTMLElement>(".history-item") ?? []).some(
-        (card) => card.textContent?.includes("Architecture essay about bridge rhythms"),
-      ),
-    ).toBe(true);
+    expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
+    expect(container.querySelector("#capNote")).not.toBeNull();
+    expect(container.querySelector("#capSave")).not.toBeNull();
   });
 
-  it("clicking the Wow header Capture button switches to Inspiration First and focuses capture", async () => {
+  it("closes the capture modal without saving", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    const initialSwitcher = container.querySelector<HTMLElement>(
-      ".home-view-switcher",
-    );
-    expect(initialSwitcher?.dataset.activeView).toBe("wow");
-    expect(container.textContent).toContain("WAKA — wow moments");
-    expect(container.querySelector("#capNote")).toBeNull();
-
-    const captureButton = container.querySelector<HTMLButtonElement>(
-      "#captureTrigger",
-    );
-    expect(captureButton).not.toBeNull();
-
+    await openCaptureModal(container);
     await act(async () => {
-      captureButton?.click();
+      container.querySelector<HTMLButtonElement>(".reference-capture-close")?.click();
     });
-    await flushReactWork();
 
-    const nextSwitcher = container.querySelector<HTMLElement>(
-      ".home-view-switcher",
-    );
-    const inspirationButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(
-        ".home-view-switcher button",
-      ),
-    ).find((button) => button.textContent === "Inspiration First");
-    const captureCell = container.querySelector<HTMLDivElement>("#capture");
-    const captureTextarea = container.querySelector<HTMLTextAreaElement>(
-      '#capNote[placeholder="A link, a note, an image — whatever\'s inspiring you right now…"]',
-    );
-
-    expect(nextSwitcher?.dataset.activeView).toBe("inspiration");
-    expect(inspirationButton?.getAttribute("aria-pressed")).toBe("true");
-    expect(captureTextarea).not.toBeNull();
-    expect(captureCell?.classList.contains("focused")).toBe(true);
-    expect(document.activeElement).toBe(captureTextarea);
-  });
-
-  it("Escape shrinks expanded Inspiration First capture without discarding draft or attachments", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-
-    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
-    const fileInput = container.querySelector<HTMLInputElement>("#capFile");
-    const expandButton = container.querySelector<HTMLButtonElement>("#capExpand");
-    expect(textarea).not.toBeNull();
-    expect(fileInput).not.toBeNull();
-    expect(expandButton).not.toBeNull();
-
-    await act(async () => {
-      setInputValue(textarea!, "Draft that must survive Escape");
-      const file = new File(["notes"], "notes.txt", { type: "text/plain" });
-      Object.defineProperty(fileInput!, "files", {
-        value: [file],
-        configurable: true,
-      });
-      fileInput!.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await flushReactWork();
-
-    await act(async () => {
-      expandButton?.click();
-    });
-    await flushReactWork();
-
-    const focusedCaptureCell = container.querySelector<HTMLElement>("#capture");
-    expect(focusedCaptureCell?.classList.contains("focused")).toBe(true);
-    expect(container.querySelector("#capStrip")?.textContent).toContain("notes.txt");
-
-    await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    });
-    await flushReactWork();
-
-    const shrunkCaptureCell = container.querySelector<HTMLElement>("#capture");
-    expect(shrunkCaptureCell?.classList.contains("focused")).toBe(false);
-    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
-      "Draft that must survive Escape",
-    );
-    expect(container.querySelector("#capStrip")?.textContent).toContain("notes.txt");
-    expect(container.querySelector<HTMLButtonElement>("#capSave")?.disabled).toBe(false);
-    expect(createInspiration).not.toHaveBeenCalled();
-
-    await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    });
-    await flushReactWork();
-
-    const stillSmallCaptureCell = container.querySelector<HTMLElement>("#capture");
-    expect(stillSmallCaptureCell?.classList.contains("focused")).toBe(false);
-    expect(container.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
-      "Draft that must survive Escape",
-    );
-    expect(container.querySelector("#capStrip")?.textContent).toContain("notes.txt");
+    expect(container.querySelector(".reference-capture-modal")).toBeNull();
     expect(createInspiration).not.toHaveBeenCalled();
   });
 
-  it("can render the switcher in Inspiration First state", () => {
-    const html = renderToStaticMarkup(
-      createElement(HomeViewToggle, {
-        activeView: "inspiration",
-        onChange: () => undefined,
-      }),
-    );
-
-    expect(html).toContain("data-active-view=\"inspiration\"");
-    expect(html).toContain("Wow Moment First");
-    expect(html).toContain("Inspiration First");
-    expect(html).not.toContain("WOW STATUS");
-    expect(html).toContain("aria-pressed=\"true\">Inspiration First</button>");
-  });
-
-  it("can render the dev-only WOW STATUS switcher tab", () => {
-    const html = renderToStaticMarkup(
-      createElement(HomeViewToggle, {
-        activeView: "wow-status",
-        onChange: () => undefined,
-        showInternalStatusTab: true,
-      }),
-    );
-
-    expect(html).toContain("data-active-view=\"wow-status\"");
-    expect(html).toContain("WOW STATUS");
-    expect(html).toContain("aria-pressed=\"true\">WOW STATUS</button>");
-  });
-
-  it("hands off Wow header Capture to Inspiration First with a focus request", () => {
-    expect(nextHomeCaptureHandoffState(0)).toEqual({
-      activeView: "inspiration",
-      autoFocusCaptureRequest: 1,
-    });
-    expect(nextHomeCaptureHandoffState(7)).toEqual({
-      activeView: "inspiration",
-      autoFocusCaptureRequest: 8,
-    });
-  });
-
-  it("keeps the inspiration tagline for the Inspiration First board", () => {
-    const html = renderToStaticMarkup(createElement(InspirationsBoard));
-
-    expect(html).toContain("WAKA <em>— your inspirations</em>");
-  });
-
-  it("gates the internal WOW status affordance to dev/demo environments", async () => {
-    expect(
-      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: undefined }),
-    ).toBe(false);
-    expect(
-      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "false" }),
-    ).toBe(false);
-    expect(
-      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "TRUE" }),
-    ).toBe(false);
-    expect(
-      shouldShowInternalStatus({ DEV: false, VITE_SHOW_INTERNAL_STATUS: "true" }),
-    ).toBe(true);
-    expect(
-      shouldShowInternalStatus({ DEV: true, VITE_SHOW_INTERNAL_STATUS: undefined }),
-    ).toBe(true);
-  });
-
-  it("renders the development WOW status table from the status endpoint on a dev-only tab", async () => {
-    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
-    setApiFixtures();
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-    expect(container.querySelector(".internal-wow-status-table")).toBeNull();
-    expect(container.textContent).not.toContain("Raw judge log");
-    expect(container.querySelector(".inspiration-discovery-panel")).not.toBeNull();
-
-    await switchToWowStatus(container);
-    await flushReactWork();
-
-    expect(
-      container.querySelector<HTMLElement>(".home-view-switcher")?.dataset
-        .activeView,
-    ).toBe("wow-status");
-    expect(container.textContent).toContain("Temporary development surface");
-    expect(container.textContent).toContain("will be removed before the product experience is finalized");
-    expect(container.textContent).toContain("Inspiration");
-    expect(container.textContent).toContain("saved inspiration id, save time, and text preview");
-    expect(container.textContent).toContain("Job");
-    expect(container.textContent).toContain("background classification/processing job");
-    expect(container.textContent).toContain("Embedded");
-    expect(container.textContent).toContain("retrieval embedding");
-    expect(container.textContent).toContain("Generated WOW");
-    expect(container.textContent).toContain("generated/linked WOW count");
-    expect(container.textContent).toContain("Why no WOW?");
-    expect(container.textContent).toContain("waiting for job, missing embedding, failed job, or no WOW generated");
-    expect(container.textContent).toContain("Raw judge log");
-    expect(container.textContent).toContain("Gemini raw preview and schema/finish diagnostics when present");
-
-    const table = container.querySelector<HTMLElement>(
-      '.internal-wow-status-table[aria-label="Development WOW status table"]',
-    );
-    expect(table).not.toBeNull();
-    expect(fetchWowStatus).toHaveBeenCalledWith(12);
-    expect(table?.textContent).toContain("Development WOW status");
-    expect(table?.textContent).toContain("insp-1");
-    expect(table?.textContent).toContain("Architecture essay about bridge rhythms");
-    expect(table?.textContent).toContain("succeeded");
-    expect(table?.textContent).toContain("1/3");
-    expect(table?.textContent).toContain("yes");
-    expect(table?.textContent).toContain("generated 1");
-    expect(table?.textContent).toContain("ready");
-    expect(table?.textContent).toContain("1 linked WOW moment found for this inspiration.");
-    expect(table?.textContent).toContain("Raw judge log");
-    expect(table?.textContent).toContain("raw: ```json { invalid judge payload preview");
-    expect(table?.textContent).toContain("stage: repair_schema_invalid");
-    expect(table?.textContent).toContain("finish: STOP");
-    expect(table?.textContent).toContain("schema: debugSummary: Required; root: Unrecognized key(s) in object: 'why'");
-  });
-
-  it("does not render the internal WOW status UI when the dev/demo gate is disabled", async () => {
-    vi.stubEnv("DEV", false);
-    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "false");
+  it("persists a quick note capture through the current capture contract", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
-      persistedInspiration({ id: "insp-gated-off" }),
+      persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
     );
-
     const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-    await saveInspirationFromCapture(container, "Gated-off internal status save");
 
-    expect(container.querySelector(".internal-wow-status")).toBeNull();
-    expect(fetchBackgroundJobs).not.toHaveBeenCalled();
-  });
-
-  it("shows an internal demo-only pipeline status after a successful save and poll path", async () => {
-    vi.useFakeTimers();
-    setApiFixtures();
-    vi.mocked(fetchBackgroundJobs).mockResolvedValue(sampleBackgroundJobs);
-    vi.mocked(createInspiration).mockResolvedValue(persistedInspiration());
-    vi.mocked(fetchInspirations)
-      .mockResolvedValueOnce(sampleInspirations)
-      .mockResolvedValueOnce([
-        persistedInspiration({ cluster: "bridge", classifiedAt: "2026-05-14T16:30:03.000Z" }),
-        ...sampleInspirations,
-      ]);
-    vi.mocked(fetchWowMoments)
-      .mockResolvedValueOnce(sampleWowMoments)
-      .mockResolvedValueOnce(sampleWowMoments)
-      .mockResolvedValueOnce([
-        {
-          ...sampleWowMoments[0],
-          id: "wow-3",
-          title: "Library rituals keep becoming prompts",
-          createdAt: "2026-05-14T16:30:04.000Z",
-        },
-        ...sampleWowMoments,
-      ]);
-
-    const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-    await saveInspirationFromCapture(
-      container,
-      "New demo inspiration about recurring library rituals",
-    );
-
-    expect(container.querySelector(".internal-wow-status")).toBeNull();
-
-    await switchToWowStatus(container);
-
-    const panel = container.querySelector<HTMLElement>(".internal-wow-status");
-    expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain("Internal/demo-only WOW pipeline status");
-    expect(panel?.textContent).toContain("Saved inspiration insp-new");
-    expect(panel?.textContent).toContain("Saved inspiration");
-    expect(panel?.textContent).toContain("Background classification job running");
-    expect(panel?.textContent).toContain("WOW refresh checking");
-    expect(panel?.textContent).toContain("Latest WOW count 2");
-
+    await openCaptureModal(container);
+    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      setInputValue(textarea!, "Fast save without reflective friction");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
     });
     await flushReactWork();
 
-    expect(panel?.textContent).toContain("New WOW moment found");
-    expect(panel?.textContent).toContain("Latest WOW count 3");
-    expect(fetchBackgroundJobs).toHaveBeenCalledWith({
-      type: "process_inspiration",
-      limit: 10,
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "Fast save without reflective friction",
     });
   });
 
-  it("degrades gracefully when admin background-job details are unavailable", async () => {
+  it("closes capture and increments the all-inspirations count after a quick save", async () => {
     setApiFixtures();
-    vi.mocked(fetchBackgroundJobs).mockRejectedValue(
-      new Error("Failed to load background jobs (HTTP 403)."),
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
     );
-    vi.mocked(createInspiration).mockResolvedValue(persistedInspiration());
-
     const container = await renderHomePage();
-    await switchToInspirationFirst(container);
-    await saveInspirationFromCapture(
-      container,
-      "Demo save with admin endpoint unavailable",
+
+    await openCaptureModal(container);
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLTextAreaElement>("#capNote")!, "Fast save without reflective friction");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".reference-capture-modal")).toBeNull();
+    expect(container.textContent).toContain("all inspirations (3)");
+  });
+
+  it("shows a newly persisted quick save in the all-inspirations list", async () => {
+    setApiFixtures();
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
     );
+    const container = await renderHomePage();
 
-    expect(container.querySelector(".internal-wow-status")).toBeNull();
+    await openCaptureModal(container);
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLTextAreaElement>("#capNote")!, "Fast save without reflective friction");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
+    });
+    await flushReactWork();
+    await clickSavesTab(container, 3);
 
-    await switchToWowStatus(container);
+    expect(container.textContent).toContain("Fast save without reflective friction");
+  });
 
-    const panel = container.querySelector<HTMLElement>(".internal-wow-status");
-    expect(panel).not.toBeNull();
-    expect(panel?.textContent).toContain(
-      "Admin job details unavailable; WOW refresh still polling.",
-    );
-    expect(panel?.textContent).toContain("WOW refresh checking");
+  it("keeps admin inspection as a gated route entry", async () => {
+    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const adminEntry = container.querySelector<HTMLAnchorElement>(".admin-entry-pill");
+    expect(adminEntry).not.toBeNull();
+    expect(adminEntry?.getAttribute("href")).toBe("/admin");
+  });
+
+  it("does not reintroduce the old internal WOW STATUS Home tab", async () => {
+    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".internal-wow-status-table")).toBeNull();
+    expect(container.textContent).not.toContain("WOW STATUS");
+  });
+
+  it("does not render the old multi-view Home switcher", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".home-view-switcher")).toBeNull();
+    expect(container.querySelector(".inspiration-discovery-panel")).toBeNull();
+  });
+
+  it("renders all current Home assertions without relying on the removed named exports", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(HomePage).toBeTypeOf("function");
+    expect(container.querySelector(".nc-mode")).not.toBeNull();
+    expect(container.textContent).toContain("capture inspiration");
   });
 });

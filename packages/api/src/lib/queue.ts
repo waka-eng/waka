@@ -171,8 +171,8 @@ async function upsertMeaningGraphRebuildJob(
       NULL
     )
     ON CONFLICT (user_id, type)
-    WHERE type::text = 'meaning_graph_rebuild'
-      AND status::text IN ('pending', 'running')
+    WHERE type = 'meaning_graph_rebuild'::background_job_type
+      AND status IN ('pending'::background_job_status, 'running'::background_job_status)
     DO UPDATE SET
       updated_at = now()
     RETURNING
