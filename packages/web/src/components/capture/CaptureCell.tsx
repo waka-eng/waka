@@ -429,10 +429,11 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           </button>
           <button
             type="button"
-            className={`cap-save${saveVisible ? " visible" : ""}`}
+            className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
             id="capSave"
             onClick={onSave}
             title={quickSaveTitle}
+            aria-label={quickSaveTitle}
             // The prototype's `pointer-events: none` on the hidden state
             // prevents accidental clicks during the fade-in transition.
             // We also gate via `disabled` so AT users get the right

@@ -3984,10 +3984,14 @@ body.dragging .drop-overlay {
   padding: 0 14px;
   font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   transition:
     opacity var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
     transform var(--duration-fast) var(--ease-standard);
   opacity: 0;
   pointer-events: none;
@@ -4001,13 +4005,40 @@ body.dragging .drop-overlay {
 .cap-save:disabled {
   cursor: not-allowed;
 }
+.cap-save:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
 .cap-save:hover:not(:disabled) {
   opacity: 0.85;
+}
+.cap-save--quick {
+  height: 34px;
+  min-width: 112px;
+  padding: 0 18px;
+  border-width: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  box-shadow: 0 8px 24px rgba(34, 34, 34, 0.16);
+}
+.cap-save--quick.visible {
+  transform: scale(1.03);
+}
+.cap-save--quick:hover:not(:disabled) {
+  opacity: 1;
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 12px 30px rgba(34, 34, 34, 0.22);
+}
+.cap-save--quick:active:not(:disabled) {
+  transform: translateY(0) scale(1.01);
+  box-shadow: 0 6px 18px rgba(34, 34, 34, 0.18);
 }
 .cap-save--reflect {
   border-color: rgba(34, 34, 34, 0.28);
   background: transparent;
   color: var(--ink);
+  font-weight: 500;
 }
 .cap-save--reflect:hover:not(:disabled) {
   border-color: var(--ink);
