@@ -48,6 +48,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
 } from "react";
@@ -63,7 +64,7 @@ import {
   type ApiInspiration,
   type CreateReflectionResponse,
 } from "../../lib/api";
-import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
+import { DEFAULT_LOCALE, formatMessage, t, type SupportedLocale } from "../../lib/locales";
 import {
   CaptureCell,
   type CaptureCellVisualState,
@@ -162,6 +163,7 @@ export interface CaptureFormProps {
  */
 const URL_REGEX = /\bhttps?:\/\/[^\s]+/gi;
 const TRAILING_PUNCT = /[.,)\]>;'"]+$/;
+const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 export function extractUrlsFromText(text: string): string[] {
   const matches = text.match(URL_REGEX) ?? [];
   const out: string[] = [];
@@ -308,22 +310,25 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
      * -------------------------------------------------------- */
 
     const addFile = useCallback((file: File): void => {
-      // Image vs generic file matches the prototype's `handleFile` policy:
-      // anything starting with `image/` becomes a thumbnail, everything else
-      // is rendered as a name-only chip.
-      const isImage = file.type.startsWith("image/");
-      const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
+      // The current product slice supports image upload/drop only. Keep the
+      // file picker at image/* and defensively reject scripted/dragged
+      // non-images or over-limit blobs before creating any pending row.
+      if (!file.type.startsWith("image/") || file.size > MAX_IMAGE_BYTES) {
+        flashConfirm(t(locale, "unsupportedImage"), 2600);
+        return;
+      }
+      const previewUrl = URL.createObjectURL(file);
       setPending((prev) => [
         ...prev,
         {
           localId: makeLocalId("att"),
-          kind: isImage ? "image" : "file",
+          kind: "image",
           file,
           name: file.name,
           previewUrl,
         },
       ]);
-    }, []);
+    }, [flashConfirm, locale]);
 
     const removeAttachment = useCallback((localId: string): void => {
       setPending((prev) => {
@@ -345,6 +350,27 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const handleNoteChange = useCallback((next: string): void => {
       setNote(next);
     }, []);
+
+    const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
+      const pasted = event.clipboardData.getData("text/plain") || event.clipboardData.getData("text");
+      const urls = extractUrlsFromText(pasted);
+      if (urls.length !== 1 || pasted.trim() !== urls[0]) return;
+
+      event.preventDefault();
+      const url = urls[0];
+      setPending((prev) => {
+        if (prev.some((p) => p.kind === "link" && p.url === url)) return prev;
+        return [
+          ...prev,
+          {
+            localId: makeLocalId("att"),
+            kind: "link",
+            url,
+            name: `${t(locale, "linkChipPrefix")} · ${linkLabel(url)}`,
+          },
+        ];
+      });
+    }, [locale]);
 
     /**
      * Cmd/Ctrl+Enter saves; Esc collapses focus mode. Mirrors the prototype.
@@ -433,7 +459,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const triggerSave = useCallback(async (options: { reflectionAnswer?: string } = {}): Promise<void> => {
       if (saving) return;
       const trimmed = note.trim();
-      if (trimmed.length === 0 && pending.length === 0) return;
+      if (trimmed.length === 0 && pending.length === 0) {
+        flashConfirm(t(locale, "emptyCapturePrompt"), 2200);
+        return;
+      }
 
       const isReflectiveSave = options.reflectionAnswer !== undefined;
       const reflectiveAnswer = options.reflectionAnswer?.trim() ?? "";
@@ -558,12 +587,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }
         setPending([]);
         if (failed.length > 0) {
-          flashConfirm(
-            `Saved — ${failed.length} attachment${
-              failed.length === 1 ? "" : "s"
-            } failed`,
-            2400,
-          );
+          flashConfirm(formatMessage(locale, "partialAttachmentFailure", { count: failed.length }), 2800);
         } else {
           flashConfirm(t(locale, "saved"));
         }
@@ -638,6 +662,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         noteValue={note}
         notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
+        onNotePaste={handleNotePaste}
         onNoteKeyDown={handleNoteKeyDown}
         saveVisible={saveVisible}
         onSave={() => {
@@ -645,7 +670,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }}
         onReflectiveSave={handleStartReflectiveSave}
         processSaveLabel={t(locale, "processThisInspiration")}
+        processSaveTitle={t(locale, "processSaveTitle")}
         quickSaveLabel={t(locale, "quickSave")}
+        quickSaveTitle={t(locale, "quickSaveTitle")}
         focusModeLabel={t(locale, "focusMode")}
         enterFocusModeLabel={t(locale, "enterFocusMode")}
         exitFocusModeLabel={t(locale, "exitFocusMode")}
@@ -679,6 +706,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 <AttachmentChip
                   key={att.localId}
                   attachment={att}
+                  removeLabel={t(locale, "removeAttachment")}
                   onRemove={() => removeAttachment(att.localId)}
                 />
               ))
@@ -697,11 +725,13 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
 interface AttachmentChipProps {
   attachment: PendingAttachment;
+  removeLabel: string;
   onRemove: () => void;
 }
 
 function AttachmentChip({
   attachment,
+  removeLabel,
   onRemove,
 }: AttachmentChipProps): JSX.Element {
   // The prototype renders link chips as `<a>` and image / file chips as
@@ -728,7 +758,7 @@ function AttachmentChip({
         <button
           type="button"
           className="att-x"
-          aria-label="Remove attachment"
+          aria-label={removeLabel}
           onClick={handleRemove}
         >
           ×
@@ -750,7 +780,7 @@ function AttachmentChip({
       <button
         type="button"
         className="att-x"
-        aria-label="Remove attachment"
+        aria-label={removeLabel}
         onClick={handleRemove}
       >
         ×

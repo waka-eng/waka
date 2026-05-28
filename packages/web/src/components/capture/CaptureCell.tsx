@@ -63,9 +63,12 @@
 
 import {
   type ChangeEvent,
+  type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
   type ReactNode,
   forwardRef,
+  useState,
 } from "react";
 
 /**
@@ -116,6 +119,8 @@ export interface CaptureCellProps {
   noteValue?: string;
   /** Fires on every textarea keystroke. */
   onNoteChange?: (value: string) => void;
+  /** Fires when text is pasted into the universal composer. */
+  onNotePaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   /**
    * Optional textarea keydown — used by the prototype to (a) submit on
    * Cmd/Ctrl+Enter and (b) discard with Escape. We forward the event
@@ -126,7 +131,9 @@ export interface CaptureCellProps {
   /** Placeholder copy for the note textarea. Defaults to the prototype's. */
   notePlaceholder?: string;
   processSaveLabel?: string;
+  processSaveTitle?: string;
   quickSaveLabel?: string;
+  quickSaveTitle?: string;
   focusModeLabel?: string;
   enterFocusModeLabel?: string;
   exitFocusModeLabel?: string;
@@ -239,10 +246,13 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       visualState = {},
       noteValue,
       onNoteChange,
+      onNotePaste,
       onNoteKeyDown,
       notePlaceholder = "A link, a note, an image — whatever's inspiring you right now…",
       processSaveLabel = "Process this inspiration",
+      processSaveTitle = "Add one context note before saving",
       quickSaveLabel = "Quick save",
+      quickSaveTitle = "Save now without adding context",
       focusModeLabel = "Focus mode",
       enterFocusModeLabel = "Enter focus mode",
       exitFocusModeLabel = "Exit focus mode",
@@ -269,6 +279,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
     },
     ref,
   ): JSX.Element {
+    const [dragActive, setDragActive] = useState(false);
     const handleNoteChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
       onNoteChange?.(event.target.value);
     };
@@ -293,14 +304,36 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       event.target.value = "";
     };
 
+    const handleDragOver = (event: DragEvent<HTMLDivElement>): void => {
+      if (!onFileSelect) return;
+      event.preventDefault();
+      setDragActive(true);
+    };
+
+    const handleDragLeave = (event: DragEvent<HTMLDivElement>): void => {
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+      setDragActive(false);
+    };
+
+    const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
+      if (!onFileSelect) return;
+      event.preventDefault();
+      setDragActive(false);
+      const file = event.dataTransfer.files?.[0];
+      if (file) onFileSelect(file);
+    };
+
     const isReflectView = view === "reflect";
 
     return (
       <div
         ref={ref}
-        className={rootClassName(view, visualState)}
+        className={rootClassName(view, { ...visualState, dragover: visualState.dragover || dragActive })}
         id="capture"
         tabIndex={0}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {/* --- Save confirmation overlay (absolutely positioned over body) --- */}
         <div
@@ -335,6 +368,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             spellCheck={false}
             value={noteValue ?? ""}
             onChange={handleNoteChange}
+            onPaste={onNotePaste}
             onKeyDown={onNoteKeyDown}
           />
           <div className="cap-strip" id="capStrip">
@@ -388,6 +422,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}`}
             id="capReflectiveSave"
             onClick={onReflectiveSave}
+            title={processSaveTitle}
             disabled={!saveVisible}
           >
             {processSaveLabel}
@@ -397,6 +432,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             className={`cap-save${saveVisible ? " visible" : ""}`}
             id="capSave"
             onClick={onSave}
+            title={quickSaveTitle}
             // The prototype's `pointer-events: none` on the hidden state
             // prevents accidental clicks during the fade-in transition.
             // We also gate via `disabled` so AT users get the right

@@ -159,9 +159,18 @@ function attachmentContextLabel(attachment: ApiAttachment, locale: SupportedLoca
   if (attachment.type === "link") {
     const host = enrichment?.link?.hostname;
     const title = enrichment?.link?.title?.trim();
-    if (enrichment?.status === "ready") return title || host || attachment.url || t(locale, "attachmentPreviewUnavailable");
+    let urlHost: string | null = null;
+    if (attachment.url) {
+      try {
+        urlHost = new URL(attachment.url).hostname;
+      } catch {
+        urlHost = null;
+      }
+    }
+    const fallbackLabel = host || urlHost || attachment.name || attachment.url || t(locale, "attachmentPreviewUnavailable");
+    if (enrichment?.status === "ready") return title || fallbackLabel;
     if (enrichment?.status === "pending") return t(locale, "attachmentPreviewPending");
-    return host || t(locale, "attachmentPreviewUnavailable");
+    return fallbackLabel;
   }
 
   const filename = enrichment?.image?.filename ?? attachment.name ?? attachment.type;
@@ -171,20 +180,19 @@ function attachmentContextLabel(attachment: ApiAttachment, locale: SupportedLoca
 }
 
 function entryToCardData(entry: InspirationListEntry): InspirationCardData {
-  // Keep transient save status as the primary cue, and otherwise surface a
-  // small capture-type label for non-note inputs so link/image/file saves stay
-  // understandable in history without reintroducing cluster/category labels.
+  // Keep transient save status as the only label in the meta row. Saved
+  // link/image/mixed context is rendered from attachments below, not from the
+  // backend capture kind, so history/detail never exposes implementation terms.
   let statusLabel: string | null = null;
   if (entry.status === "saving") statusLabel = "saving";
   else if (entry.status === "error") statusLabel = "save failed";
-  const kindLabel =
-    !statusLabel && entry.kind && entry.kind !== "note" ? entry.kind : null;
   return {
     id: entry.id,
     text: displayTextForEntry(entry) || null,
     links: entry.links.length > 0 ? entry.links : null,
+    attachments: entry.attachments.length > 0 ? entry.attachments : null,
     timestamp: entry.timestamp,
-    kind: statusLabel ?? kindLabel,
+    kind: statusLabel ?? entry.kind,
     warningMessage:
       entry.status === "saved" && entry.errorMessage ? entry.errorMessage : undefined,
     reflectionsAnswered: entry.reflectionsAnswered,
@@ -249,6 +257,34 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
 function buildOptimisticEntry(
   pending: PendingInspiration,
 ): InspirationListEntry {
+  const pendingAttachmentRows: ApiAttachment[] = pending.attachments.map((attachment) => ({
+    id: attachment.localId,
+    inspirationId: pending.tempId,
+    type: attachment.kind,
+    url: attachment.url,
+    name: attachment.name ?? attachment.file?.name ?? null,
+    contentType: attachment.file?.type ?? null,
+    size: attachment.file?.size ?? null,
+    createdAt: pending.createdAt,
+    enrichment:
+      attachment.kind === "image"
+        ? {
+            status: "unavailable",
+            source: "user_upload",
+            sourceUrl: null,
+            errorReason: null,
+            checkedAt: null,
+            link: null,
+            image: {
+              filename: attachment.name ?? attachment.file?.name ?? null,
+              contentType: attachment.file?.type ?? null,
+              size: attachment.file?.size ?? null,
+              width: null,
+              height: null,
+            },
+          }
+        : undefined,
+  }));
   return {
     id: pending.tempId,
     tempId: pending.tempId,
@@ -256,7 +292,7 @@ function buildOptimisticEntry(
     text: pending.text,
     kind: pending.kind,
     links: pending.links,
-    attachments: [],
+    attachments: pendingAttachmentRows,
     cluster: null,
     wowScore: null,
     reflectionsAnswered: 0,
@@ -273,6 +309,8 @@ function applyPersisted(
   failedCount: number,
   reflectionCount = 0,
 ): InspirationListEntry {
+  const persistedIds = new Set(attachments.map((attachment) => attachment.id));
+  const failedContext = failedCount > 0 ? entry.attachments.filter((attachment) => !persistedIds.has(attachment.id)) : [];
   return {
     ...entry,
     id: inspiration.id,
@@ -286,7 +324,7 @@ function applyPersisted(
     wowScore: inspiration.wowScore,
     reflectionsAnswered: entry.reflectionsAnswered + reflectionCount,
     reflectionsTotal: entry.reflectionsTotal + reflectionCount,
-    attachments,
+    attachments: [...attachments, ...failedContext],
     errorMessage:
       failedCount > 0
         ? `${failedCount} attachment${failedCount === 1 ? "" : "s"} failed to upload.`
@@ -1073,6 +1111,7 @@ export function HomePage(): JSX.Element {
       <InspirationCard
         key={item.id}
         item={item}
+        locale={locale}
         onSelect={handleSelectInspiration}
       />
     ));
@@ -1506,9 +1545,6 @@ export function HomePage(): JSX.Element {
                   >
                     <span>{entry.status === "saved" ? entry.timestamp : entry.status}</span>
                     <strong>{shortText(displayTextForEntry(entry), 420)}</strong>
-                    {entry.kind && entry.kind !== "note" ? (
-                      <span className="reference-save-kind">{entry.kind}</span>
-                    ) : null}
                     {entry.attachments.map((attachment) => (
                       <span
                         key={attachment.id}

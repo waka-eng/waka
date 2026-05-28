@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, createElement } from "react";
+import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,7 @@ import {
   createInspiration,
   createReflection,
   finalizeAttachment,
+  ApiError,
   presignAttachment,
   uploadToPresignedUrl,
   type ApiInspiration,
@@ -54,12 +55,12 @@ async function flushReactWork(): Promise<void> {
   });
 }
 
-async function renderCaptureForm(): Promise<HTMLDivElement> {
+async function renderCaptureForm(props: ComponentProps<typeof CaptureForm> = {}): Promise<HTMLDivElement> {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root?.render(createElement(CaptureForm));
+    root?.render(createElement(CaptureForm, props));
   });
   return container;
 }
@@ -70,6 +71,30 @@ function setText(value: string): void {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
   setter?.call(textarea, value);
   textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+
+async function pressMetaEnter(): Promise<void> {
+  const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+  expect(textarea).not.toBeNull();
+  await act(async () => {
+    textarea?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }),
+    );
+  });
+  await flushReactWork();
+}
+
+async function pasteText(value: string): Promise<void> {
+  const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+  expect(textarea).not.toBeNull();
+  const event = new Event("paste", { bubbles: true, cancelable: true }) as Event & {
+    clipboardData: { getData: (type: string) => string };
+  };
+  event.clipboardData = { getData: (type: string) => (type === "text" || type === "text/plain" ? value : "") };
+  await act(async () => {
+    textarea?.dispatchEvent(event);
+  });
 }
 
 async function clickQuickSave(): Promise<void> {
@@ -89,7 +114,7 @@ beforeEach(() => {
       id: "reflection-1",
       inspirationId: "insp-new",
       userId: "user-1",
-      question: "What about this is worth remembering?",
+      question: "What caught your attention here?",
       answer: "It matters.",
       skipped: false,
       createdAt: "2026-05-27T12:01:00.000Z",
@@ -140,6 +165,36 @@ afterEach(() => {
 });
 
 describe("CaptureForm multi-input quick capture", () => {
+  it("gently prompts instead of saving when the empty composer is invoked from the keyboard", async () => {
+    await renderCaptureForm();
+
+    await pressMetaEnter();
+
+    expect(createInspiration).not.toHaveBeenCalled();
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Add a note, link, or image to save.");
+  });
+
+  it("turns a pasted URL-only input into a removable link chip without duplicating raw text", async () => {
+    await renderCaptureForm();
+
+    await pasteText("https://example.com/article");
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
+    expect(container?.querySelector(".att-url")?.textContent).toBe("Link · example.com/article");
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.disabled).toBe(false);
+  });
+
+  it("localizes capture action tooltips and removable chip labels in Korean", async () => {
+    await renderCaptureForm({ locale: "ko-KR" });
+    await pasteText("https://example.com/article");
+
+    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
+      "저장하기 전에 맥락 메모 하나 추가",
+    );
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("맥락을 추가하지 않고 지금 저장");
+    expect(container?.querySelector<HTMLButtonElement>(".att-x")?.getAttribute("aria-label")).toBe("첨부 제거");
+  });
+
   it("quick saves a plain note as kind note without opening reflection", async () => {
     await renderCaptureForm();
     await act(async () => {
@@ -176,6 +231,31 @@ describe("CaptureForm multi-input quick capture", () => {
       name: "example.com/article",
     });
     expect(createReflection).not.toHaveBeenCalled();
+  });
+
+  it("dedupes a pasted link chip against the same typed note URL at save time", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(
+      inspiration({ kind: "mixed", text: "Remember this https://example.com/article" }),
+    );
+    await renderCaptureForm();
+    await pasteText("https://example.com/article");
+    await act(async () => {
+      setText("Remember this https://example.com/article");
+    });
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "Remember this https://example.com/article",
+      kind: "mixed",
+    });
+    expect(finalizeAttachment).toHaveBeenCalledTimes(1);
+    expect(finalizeAttachment).toHaveBeenCalledWith({
+      type: "link",
+      inspirationId: "insp-new",
+      url: "https://example.com/article",
+      name: "Link · example.com/article",
+    });
   });
 
   it("quick saves an attachment-only image as kind image through the existing upload/finalize path", async () => {
@@ -226,6 +306,40 @@ describe("CaptureForm multi-input quick capture", () => {
       size: 4,
     });
     expect(createReflection).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported files with friendly copy before creating rows", async () => {
+    await renderCaptureForm();
+    const input = container?.querySelector<HTMLInputElement>("#capFile");
+    expect(input).not.toBeNull();
+    const file = new File(["data"], "notes.pdf", { type: "application/pdf" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+
+    await act(async () => {
+      input?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await clickQuickSave();
+
+    expect(createInspiration).not.toHaveBeenCalled();
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain("This image is too large or not supported.");
+  });
+
+  it("keeps the saved inspiration and reports recovery copy when attachment finalization partially fails", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(inspiration({ kind: "link", text: "Link inspiration" }));
+    vi.mocked(finalizeAttachment).mockRejectedValueOnce(new ApiError({ status: 500, message: "upload failed" }));
+    const onPersisted = vi.fn();
+    await renderCaptureForm({ onPersisted });
+    await pasteText("https://example.com/article");
+
+    await clickQuickSave();
+
+    expect(onPersisted).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ failedAttachments: [expect.objectContaining({ localId: expect.any(String) })] }),
+    );
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
+      "Saved — 1 attachment failed. Your inspiration is still in history.",
+    );
   });
 
   it("quick saves mixed note and URL input as kind mixed while finalizing the link", async () => {
@@ -289,9 +403,10 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "What about this is worth remembering?",
+      question: "What caught your attention here?",
       answer: "It connects to the next project.",
       skipped: false,
     });
   });
 });
+

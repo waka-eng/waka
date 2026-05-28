@@ -3684,6 +3684,36 @@ body.dragging .drop-overlay {
   border-color: var(--ink);
 }
 
+.history-attachments {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.history-attachment {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: var(--border-hairline);
+  border-radius: 10px;
+  background: rgba(255, 254, 251, 0.72);
+}
+
+.history-attachment-title {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.history-attachment-meta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .history-item-reflections {
   font-family: var(--font-mono);
   font-size: 9px;
