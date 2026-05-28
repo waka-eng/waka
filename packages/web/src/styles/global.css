@@ -1048,6 +1048,7 @@
 .reference-capture-modal .cap-bar {
   justify-content: flex-end;
   margin-top: 12px;
+  padding-inline: 0;
 }
 
 .reference-capture-modal .cap-bar .cap-file-btn,
@@ -3920,10 +3921,11 @@ body.dragging .drop-overlay {
 .cap-bar {
   position: relative;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   margin-top: 6px;
+  padding-inline: 36px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -3987,6 +3989,7 @@ body.dragging .drop-overlay {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
   transition:
     opacity var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
@@ -4013,14 +4016,14 @@ body.dragging .drop-overlay {
   opacity: 0.85;
 }
 .cap-save--quick {
-  height: 34px;
-  min-width: 112px;
-  padding: 0 18px;
+  height: 42px;
+  min-width: 144px;
+  padding: 0 24px;
   border-width: 2px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  box-shadow: 0 8px 24px rgba(34, 34, 34, 0.16);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  box-shadow: 0 10px 28px rgba(34, 34, 34, 0.2);
 }
 .cap-save--quick.visible {
   transform: scale(1.03);
@@ -4035,6 +4038,11 @@ body.dragging .drop-overlay {
   box-shadow: 0 6px 18px rgba(34, 34, 34, 0.18);
 }
 .cap-save--reflect {
+  max-width: min(44vw, 210px);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
   border-color: rgba(34, 34, 34, 0.28);
   background: transparent;
   color: var(--ink);
