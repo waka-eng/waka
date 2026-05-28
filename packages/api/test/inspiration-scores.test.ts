@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { inArray } from "drizzle-orm";
 
@@ -197,14 +197,18 @@ describe("persistLocalInspirationScores relationship signals", () => {
   let testDb: TestDatabase;
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
     testDb = await createTestDatabase();
   });
 
   beforeEach(async () => {
+    vi.setSystemTime(NOW);
     await testDb.truncateAll();
   });
 
   afterAll(async () => {
+    vi.useRealTimers();
     await testDb.cleanup();
   });
 

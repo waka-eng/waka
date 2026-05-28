@@ -92,6 +92,7 @@ vi.mock("@aws-sdk/s3-request-presigner", async () => {
 });
 
 import { getDb } from "../src/lib/db.js";
+import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
 import {
   apiRequest,
@@ -863,5 +864,139 @@ describe("POST /attachments/presign — body validation", () => {
     );
     expect(res.status).toBe(200);
     expect(res.body.headers["Content-Length"]).toBe(String(exactly));
+  });
+});
+
+
+describe("POST /attachments — enrichment provenance", () => {
+  it("records source-grounded link URL facts without fetching the remote page", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const inspiration = await createInspirationFixture(getDb(), fixture.user.id, {
+      text: "A link worth saving",
+      kind: "link",
+    });
+    const client = authedClient(fixture);
+
+    const res = await client.json<{
+      attachment: {
+        type: "link";
+        url: string;
+        s3Key: null;
+        enrichment: {
+          status: "ready" | "unavailable";
+          source: string | null;
+          sourceUrl: string | null;
+          errorReason: string | null;
+          link: {
+            originalUrl: string;
+            finalUrl: string | null;
+            hostname: string | null;
+            title: string | null;
+            description: string | null;
+            previewImageUrl: string | null;
+          } | null;
+          image: null;
+        };
+      };
+    }>("POST", "/api/attachments", {
+      type: "link",
+      inspirationId: inspiration.id,
+      url: "https://example.com/articles/inspiration?utm_source=test",
+      name: "Example article",
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.attachment.s3Key).toBeNull();
+    expect(res.body.attachment.enrichment).toMatchObject({
+      status: "ready",
+      source: "url",
+      sourceUrl: "https://example.com/articles/inspiration?utm_source=test",
+      errorReason: null,
+      link: {
+        originalUrl: "https://example.com/articles/inspiration?utm_source=test",
+        finalUrl: "https://example.com/articles/inspiration?utm_source=test",
+        hostname: "example.com",
+        title: null,
+        description: null,
+        previewImageUrl: null,
+      },
+      image: null,
+    });
+    expect(s3MockState.calls.send).toHaveLength(0);
+  });
+
+  it("records image upload provenance from finalized attachment facts", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const inspiration = await createInspirationFixture(getDb(), fixture.user.id, {
+      text: "A photo worth saving",
+      kind: "image",
+    });
+    const client = authedClient(fixture);
+    const key = `users/${fixture.user.id}/attachments/provenance.png`;
+
+    const res = await client.json<{
+      attachment: {
+        type: "image";
+        name: string | null;
+        contentType: string | null;
+        size: number | null;
+        enrichment: {
+          status: "ready";
+          source: string | null;
+          link: null;
+          image: {
+            filename: string | null;
+            contentType: string | null;
+            size: number | null;
+            width: number | null;
+            height: number | null;
+          } | null;
+        };
+      };
+    }>("POST", "/api/attachments", {
+      type: "image",
+      inspirationId: inspiration.id,
+      key,
+      name: "provenance.png",
+      contentType: "image/png",
+      size: 2048,
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.attachment.enrichment).toMatchObject({
+      status: "ready",
+      source: "user_upload",
+      link: null,
+      image: {
+        filename: "provenance.png",
+        contentType: "image/png",
+        size: 2048,
+        width: null,
+        height: null,
+      },
+    });
+  });
+
+  it("keeps attachment finalize scoped to the authenticated inspiration owner", async () => {
+    const owner = await createUserFixture(getDb());
+    const other = await createUserFixture(getDb());
+    cleanup.trackUser(owner.user.id);
+    cleanup.trackUser(other.user.id);
+    const inspiration = await createInspirationFixture(getDb(), owner.user.id, {
+      text: "Owner-only link",
+      kind: "link",
+    });
+    const client = authedClient(other);
+
+    const res = await client.json<ValidationErrorBody>("POST", "/api/attachments", {
+      type: "link",
+      inspirationId: inspiration.id,
+      url: "https://example.com/not-yours",
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("Inspiration not found");
   });
 });

@@ -111,5 +111,10 @@
   "savedCount": "영감 {count}개 저장됨",
   "resultsCount": "전체 {totalCount}개 중 {filteredCount}개 영감",
   "bestRecentMirrorMomentsShownCount": "{count}개의 최근 핵심 미러 순간이 표시됨.",
-  "generatedFieldCounts": "{sourceCount}개 출처; 생성 필드 {fieldCount}개 있음"
+  "generatedFieldCounts": "{sourceCount}개 출처; 생성 필드 {fieldCount}개 있음",
+  "attachmentContext": "첨부 맥락",
+  "attachmentPreviewPending": "첨부 미리보기를 확인 중입니다",
+  "attachmentPreviewUnavailable": "미리보기를 사용할 수 없습니다",
+  "attachmentSourceUrl": "URL 출처",
+  "attachmentSourceUserUpload": "사용자가 업로드한 첨부"
 }

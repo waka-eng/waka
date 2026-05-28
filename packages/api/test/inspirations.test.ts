@@ -50,6 +50,7 @@ import {
 import { count, eq } from "drizzle-orm";
 
 import {
+  attachments,
   backgroundJobs,
   inspirationRevisitEvents,
   inspirationSparks,
@@ -110,6 +111,21 @@ interface ApiInspiration {
   classifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  attachments?: Array<{
+    id: string;
+    type: string;
+    url?: string;
+    name: string | null;
+    s3Key?: string | null;
+    enrichment: {
+      status: string;
+      source: string | null;
+      sourceUrl: string | null;
+      errorReason: string | null;
+      link: { hostname: string | null; finalUrl: string | null } | null;
+      image: { filename: string | null; contentType: string | null; size: number | null } | null;
+    };
+  }>;
 }
 
 interface CreateInspirationResponse {
@@ -334,6 +350,84 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(kindByText.get("https://example.com/kind-link")).toBe("link");
     expect(kindByText.get("Image inspiration")).toBe("image");
     expect(kindByText.get("Mixed inspiration")).toBe("mixed");
+  });
+
+
+
+  it("lists attachments with enrichment metadata while keeping old rows neutral", async () => {
+    const fixture = await createUserFixture(getDb());
+    cleanup.trackUser(fixture.user.id);
+    const client = authedClient(fixture);
+
+    const created = await client.json<CreateInspirationResponse>(
+      "POST",
+      "/api/inspirations",
+      { text: "link with enrichment", kind: "link" },
+    );
+    expect(created.status).toBe(201);
+
+    await getDb().insert(attachments).values({
+      inspirationId: created.body.inspiration.id,
+      type: "link",
+      url: "https://example.com/list-preview",
+      name: "Example list preview",
+      s3Key: null,
+      contentType: null,
+      size: null,
+      enrichmentStatus: "ready",
+      enrichmentSource: "url",
+      enrichmentSourceUrl: "https://example.com/list-preview",
+      enrichmentErrorReason: null,
+      finalUrl: "https://example.com/list-preview",
+      hostname: "example.com",
+      title: null,
+      description: null,
+      siteName: null,
+      previewImageUrl: null,
+      imageWidth: null,
+      imageHeight: null,
+    });
+
+    await getDb().insert(attachments).values({
+      inspirationId: created.body.inspiration.id,
+      type: "file",
+      url: "https://bucket.example.com/legacy.pdf",
+      name: "legacy.pdf",
+      s3Key: "users/test/attachments/legacy.pdf",
+      contentType: "application/pdf",
+      size: 100,
+      enrichmentSourceUrl: "https://bucket.example.com/legacy.pdf",
+    });
+
+    const listed = await client.json<ListInspirationsResponse>(
+      "GET",
+      "/api/inspirations",
+    );
+    expect(listed.status).toBe(200);
+    const row = listed.body.inspirations.find((item) => item.id === created.body.inspiration.id);
+    expect(row?.attachments).toHaveLength(2);
+    const responseJson = JSON.stringify(row?.attachments);
+    expect(responseJson).not.toContain("users/test/attachments/legacy.pdf");
+    expect(responseJson).not.toContain("https://bucket.example.com/legacy.pdf");
+    expect(row?.attachments?.find((att) => att.type === "link")?.enrichment).toMatchObject({
+      status: "ready",
+      source: "url",
+      errorReason: null,
+      link: {
+        hostname: "example.com",
+        finalUrl: "https://example.com/list-preview",
+      },
+      image: null,
+    });
+    const fileAttachment = row?.attachments?.find((att) => att.type === "file");
+    expect(fileAttachment).not.toHaveProperty("url");
+    expect(fileAttachment).not.toHaveProperty("s3Key");
+    expect(fileAttachment?.enrichment.sourceUrl).toBeNull();
+    expect(fileAttachment?.enrichment).toMatchObject({
+      status: "ready",
+      link: null,
+      image: null,
+    });
   });
 
   it("rejects non-MVP capture kinds", async () => {

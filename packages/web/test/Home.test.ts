@@ -361,6 +361,89 @@ describe("HomePage current home experience", () => {
     expect(fetchWowMoments).toHaveBeenCalledWith({ limit: 10 });
   });
 
+
+
+  it("renders source-grounded attachment context from refreshed inspirations", async () => {
+    setApiFixtures({
+      inspirations: [
+        {
+          ...sampleInspirations[0],
+          attachments: [
+            persistedAttachment({
+              id: "att-link-ready",
+              inspirationId: "insp-1",
+              type: "link",
+              url: "https://example.com/article",
+              name: "Example",
+              enrichment: {
+                status: "ready",
+                source: "url",
+                sourceUrl: "https://example.com/article",
+                errorReason: null,
+                checkedAt: "2026-05-14T16:30:02.000Z",
+                link: {
+                  originalUrl: "https://example.com/article",
+                  finalUrl: "https://example.com/article",
+                  hostname: "example.com",
+                  title: "<script>alert(1)</script> Source title",
+                  description: "A source-grounded preview from metadata.",
+                  siteName: null,
+                  previewImageUrl: null,
+                },
+                image: null,
+              },
+            }),
+            persistedAttachment({
+              id: "att-image-ready",
+              inspirationId: "insp-1",
+              type: "image",
+              url: "https://private-bucket.s3.us-east-1.amazonaws.com/users/user-1/image.png",
+              s3Key: "users/user-1/image.png",
+              name: "image.png",
+              contentType: "image/png",
+              size: 4096,
+              enrichment: {
+                status: "ready",
+                source: "user_upload",
+                sourceUrl: null,
+                errorReason: null,
+                checkedAt: "2026-05-14T16:30:03.000Z",
+                link: null,
+                image: {
+                  filename: "image.png",
+                  contentType: "image/png",
+                  size: 4096,
+                  width: null,
+                  height: null,
+                },
+              },
+            }),
+          ],
+        },
+      ],
+      wowMoments: [],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container, 1);
+    expect(container.textContent).toContain("<script>alert(1)</script> Source title");
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.textContent).toContain("image.png · 4 KB");
+
+    const save = container.querySelector<HTMLButtonElement>(".reference-save");
+    await act(async () => {
+      save?.click();
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("Attachment context");
+    expect(container.textContent).toContain("example.com · URL source");
+    expect(container.textContent).toContain("image/png · 4 KB · User-uploaded attachment");
+    expect(container.querySelector(".detail-attachment-image")).toBeNull();
+    expect(container.innerHTML).not.toContain("private-bucket.s3.us-east-1.amazonaws.com");
+    expect(container.innerHTML).not.toContain("users/user-1/image.png");
+  });
+
   it("renders the current top-of-mind canvas and hero copy", async () => {
     setApiFixtures();
     const container = await renderHomePage();

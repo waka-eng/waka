@@ -26,6 +26,7 @@ import { relations } from "drizzle-orm";
 import {
   bigint,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -53,6 +54,21 @@ export type AttachmentType = (typeof attachmentTypeEnumValues)[number];
 export const attachmentTypeEnum = pgEnum(
   "attachment_type",
   attachmentTypeEnumValues,
+);
+
+export const attachmentEnrichmentStatusValues = [
+  "pending",
+  "ready",
+  "failed",
+  "unavailable",
+] as const;
+
+export type AttachmentEnrichmentStatus =
+  (typeof attachmentEnrichmentStatusValues)[number];
+
+export const attachmentEnrichmentStatusEnum = pgEnum(
+  "attachment_enrichment_status",
+  attachmentEnrichmentStatusValues,
 );
 
 // ---------------------------------------------------------------------------
@@ -99,6 +115,24 @@ export const attachments = pgTable(
     // JS numbers in the typical < 2^53 range — application code that needs
     // larger files can switch to "bigint" mode without a schema migration.
     size: bigint("size", { mode: "number" }),
+
+    // Source-grounded enrichment/provenance. These fields describe facts
+    // directly available from the URL string or uploaded object metadata; they
+    // never contain generated captions, OCR, or inferred meaning. Existing
+    // rows may be NULL and should render as a neutral unavailable state.
+    enrichmentStatus: attachmentEnrichmentStatusEnum("enrichment_status"),
+    enrichmentSource: text("enrichment_source"),
+    enrichmentSourceUrl: text("enrichment_source_url"),
+    enrichmentErrorReason: text("enrichment_error_reason"),
+    enrichmentUpdatedAt: timestamp("enrichment_updated_at", { withTimezone: true }),
+    finalUrl: text("final_url"),
+    hostname: text("hostname"),
+    title: text("title"),
+    description: text("description"),
+    siteName: text("site_name"),
+    previewImageUrl: text("preview_image_url"),
+    imageWidth: integer("image_width"),
+    imageHeight: integer("image_height"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

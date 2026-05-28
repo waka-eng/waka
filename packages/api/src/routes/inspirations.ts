@@ -35,7 +35,7 @@ import {
   S3Client,
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
-import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
@@ -458,6 +458,50 @@ routes.post("/", async (c) => {
  * but small enough that the response stays under 1 MB even if every row is
  * close to the 8 KB text cap. Tunable in a future paginated revision.
  */
+type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
+
+function serializeAttachment(row: {
+  id: string; inspirationId: string; type: "link" | "image" | "file"; url: string; name: string | null; contentType: string | null; size: number | null;
+  enrichmentStatus: AttachmentEnrichmentStatus | null; enrichmentSource: string | null; enrichmentSourceUrl: string | null; enrichmentErrorReason: string | null;
+  enrichmentUpdatedAt: Date | null;
+  finalUrl: string | null; hostname: string | null; title: string | null; description: string | null; siteName: string | null; previewImageUrl: string | null; imageWidth: number | null; imageHeight: number | null; createdAt: Date;
+}) {
+  const fallbackStatus: AttachmentEnrichmentStatus = row.type === "link" ? "unavailable" : "ready";
+  return {
+    id: row.id,
+    inspirationId: row.inspirationId,
+    type: row.type,
+    name: row.name,
+    contentType: row.contentType,
+    size: row.size,
+    createdAt: row.createdAt,
+    ...(row.type === "link" ? { url: row.url } : {}),
+    enrichment: {
+      status: row.enrichmentStatus ?? fallbackStatus,
+      source: row.enrichmentSource,
+      sourceUrl: row.type === "link" ? row.enrichmentSourceUrl : null,
+      errorReason: row.enrichmentErrorReason,
+      checkedAt: row.enrichmentUpdatedAt,
+      link: row.type === "link" ? {
+        originalUrl: row.url,
+        finalUrl: row.finalUrl,
+        hostname: row.hostname,
+        title: row.title,
+        description: row.description,
+        siteName: row.siteName,
+        previewImageUrl: row.previewImageUrl,
+      } : null,
+      image: row.type === "image" ? {
+        filename: row.name,
+        contentType: row.contentType,
+        size: row.size,
+        width: row.imageWidth,
+        height: row.imageHeight,
+      } : null,
+    },
+  };
+}
+
 const MAX_LIST_LIMIT = 500;
 
 routes.get("/", async (c) => {
@@ -488,8 +532,51 @@ routes.get("/", async (c) => {
     .orderBy(desc(inspirations.createdAt))
     .limit(MAX_LIST_LIMIT);
 
+  const ids = rows.map((row) => row.id);
+  const attachmentRows = ids.length > 0
+    ? await db
+        .select({
+          id: attachments.id,
+          inspirationId: attachments.inspirationId,
+          type: attachments.type,
+          url: attachments.url,
+          name: attachments.name,
+          contentType: attachments.contentType,
+          size: attachments.size,
+          enrichmentStatus: attachments.enrichmentStatus,
+          enrichmentSource: attachments.enrichmentSource,
+          enrichmentSourceUrl: attachments.enrichmentSourceUrl,
+          enrichmentErrorReason: attachments.enrichmentErrorReason,
+          enrichmentUpdatedAt: attachments.enrichmentUpdatedAt,
+          finalUrl: attachments.finalUrl,
+          hostname: attachments.hostname,
+          title: attachments.title,
+          description: attachments.description,
+          siteName: attachments.siteName,
+          previewImageUrl: attachments.previewImageUrl,
+          imageWidth: attachments.imageWidth,
+          imageHeight: attachments.imageHeight,
+          createdAt: attachments.createdAt,
+        })
+        .from(attachments)
+        .where(inArray(attachments.inspirationId, ids))
+    : [];
+
+  const attachmentsByInspiration = new Map<string, ReturnType<typeof serializeAttachment>[]>();
+  for (const attachment of attachmentRows) {
+    const serialized = serializeAttachment(attachment);
+    const bucket = attachmentsByInspiration.get(attachment.inspirationId) ?? [];
+    bucket.push(serialized);
+    attachmentsByInspiration.set(attachment.inspirationId, bucket);
+  }
+
   const now = new Date();
-  return c.json({ inspirations: rows.map((row) => withDisplayedWowScore(row, now)) }, 200);
+  return c.json({
+    inspirations: rows.map((row) => ({
+      ...withDisplayedWowScore(row, now),
+      attachments: attachmentsByInspiration.get(row.id) ?? [],
+    })),
+  }, 200);
 });
 
 routes.get("/:id/sparks", async (c) => {

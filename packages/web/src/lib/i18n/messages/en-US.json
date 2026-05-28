@@ -111,5 +111,10 @@
   "savedCount": "{count} {count, plural, one {inspiration saved} other {inspirations saved}}",
   "resultsCount": "{filteredCount} of {totalCount} {totalCount, plural, one {inspiration} other {inspirations}}",
   "bestRecentMirrorMomentsShownCount": "{count} best-recent mirror moments shown.",
-  "generatedFieldCounts": "{sourceCount} {sourceCount, plural, one {source} other {sources}}; {fieldCount} generated {fieldCount, plural, one {field} other {fields}} present"
+  "generatedFieldCounts": "{sourceCount} {sourceCount, plural, one {source} other {sources}}; {fieldCount} generated {fieldCount, plural, one {field} other {fields}} present",
+  "attachmentContext": "Attachment context",
+  "attachmentPreviewPending": "Still checking this attachment",
+  "attachmentPreviewUnavailable": "Preview unavailable",
+  "attachmentSourceUrl": "URL source",
+  "attachmentSourceUserUpload": "User-uploaded attachment"
 }
