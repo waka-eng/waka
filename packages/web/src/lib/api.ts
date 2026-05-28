@@ -291,11 +291,13 @@ export type ClusterKind =
  * the UI can render the just-saved row without a follow-up GET, satisfying
  * the seed's optimistic-save contract.
  */
+export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
+
 export interface ApiInspiration {
   id: string;
   userId: string;
   text: string;
-  kind: string | null;
+  kind: ApiInspirationKind | null;
   category: number | null;
   importanceScore: number;
   wowScore: number;
@@ -359,7 +361,7 @@ export interface ApiInspirationScoreBreakdown {
 
 export interface CreateInspirationRequest {
   text: string;
-  kind?: string;
+  kind?: ApiInspirationKind;
   category?: number;
   selectedText?: string;
   selectionStart?: number;

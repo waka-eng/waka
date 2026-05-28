@@ -113,8 +113,8 @@ export interface PendingInspiration {
   /** Pending attachments (image / file / link). For UI only; the API call
    *  flow uses these to drive the per-attachment finalize loop. */
   attachments: PendingAttachment[];
-  /** Primary capture type inferred at save time for optimistic UI parity. */
-  kind: "note" | "link" | "image" | "file";
+  /** Bounded MVP input type inferred at save time for optimistic UI parity. */
+  kind: CaptureInputKind;
   /** ISO timestamp of when the user clicked Save. */
   createdAt: string;
 }
@@ -203,13 +203,33 @@ function makeLocalId(prefix: string): string {
     .slice(2, 10)}`;
 }
 
+export type CaptureInputKind = "note" | "link" | "image" | "mixed";
+
+function removeUrlsFromText(text: string): string {
+  let remainder = text;
+  for (const url of extractUrlsFromText(text)) {
+    remainder = remainder.replace(url, " ");
+  }
+  return remainder.replace(/\s+/g, " ").trim();
+}
+
 function primaryCaptureKind(
+  text: string,
   attachments: PendingAttachment[],
-): "note" | "link" | "image" | "file" {
-  if (attachments.some((att) => att.kind === "image")) return "image";
-  if (attachments.some((att) => att.kind === "file")) return "file";
-  if (attachments.some((att) => att.kind === "link")) return "link";
-  return "note";
+): CaptureInputKind {
+  if (attachments.length === 0) return "note";
+  const kinds = new Set(attachments.map((att) => att.kind));
+  const hasUserNoteText = removeUrlsFromText(text).length > 0;
+  if (hasUserNoteText || kinds.size > 1 || kinds.has("file")) return "mixed";
+  if (kinds.has("image")) return "image";
+  return "link";
+}
+
+function fallbackTextForCaptureKind(kind: CaptureInputKind): string {
+  if (kind === "image") return "Image inspiration";
+  if (kind === "link") return "Link inspiration";
+  if (kind === "mixed") return "Mixed inspiration";
+  return "Untitled inspiration";
 }
 
 /* ============================================================
@@ -444,9 +464,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         });
       }
       const persistList: PendingAttachment[] = [...pending, ...liftedLinks];
-      const kind = primaryCaptureKind(persistList);
+      const kind = primaryCaptureKind(trimmed, persistList);
       const inspirationText =
-        trimmed.length > 0 ? trimmed : "(attachment-only inspiration)";
+        trimmed.length > 0 ? trimmed : fallbackTextForCaptureKind(kind);
 
       const tempId = makeLocalId("insp");
       const links = persistList

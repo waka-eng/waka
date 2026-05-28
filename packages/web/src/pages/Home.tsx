@@ -69,6 +69,7 @@ import {
 } from "../lib/locales";
 
 const LOCALE_STORAGE_KEY = "waka.ui.locale";
+const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
 
 function readInitialLocale(): SupportedLocale {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
@@ -140,6 +141,19 @@ interface InspirationListEntry {
   errorMessage?: string;
 }
 
+function fallbackTextForEntryKind(kind: string | null): string {
+  if (kind === "image") return "Image inspiration";
+  if (kind === "link") return "Link inspiration";
+  if (kind === "mixed") return "Mixed inspiration";
+  return "Untitled inspiration";
+}
+
+function displayTextForEntry(entry: Pick<InspirationListEntry, "text" | "kind">): string {
+  const trimmed = entry.text.trim();
+  if (trimmed === ATTACHMENT_ONLY_SENTINEL) return fallbackTextForEntryKind(entry.kind);
+  return entry.text;
+}
+
 function entryToCardData(entry: InspirationListEntry): InspirationCardData {
   // Keep transient save status as the primary cue, and otherwise surface a
   // small capture-type label for non-note inputs so link/image/file saves stay
@@ -151,7 +165,7 @@ function entryToCardData(entry: InspirationListEntry): InspirationCardData {
     !statusLabel && entry.kind && entry.kind !== "note" ? entry.kind : null;
   return {
     id: entry.id,
-    text: entry.text || null,
+    text: displayTextForEntry(entry) || null,
     links: entry.links.length > 0 ? entry.links : null,
     timestamp: entry.timestamp,
     kind: statusLabel ?? kindLabel,
@@ -310,7 +324,7 @@ function filterAndSortInspirationEntries(
 ): InspirationListEntry[] {
   const query = filters.search.trim().toLowerCase();
   const filtered = entries.filter((entry) => {
-    const haystack = entry.text.toLowerCase();
+    const haystack = displayTextForEntry(entry).toLowerCase();
     return !query || haystack.includes(query);
   });
 
@@ -1008,7 +1022,7 @@ export function HomePage(): JSX.Element {
     if (!selectedEntry) return null;
     return {
       id: selectedEntry.id,
-      text: selectedEntry.text,
+      text: displayTextForEntry(selectedEntry),
       links: selectedEntry.links,
       attachments: selectedEntry.attachments,
       timestamp: selectedEntry.timestamp,
@@ -1471,7 +1485,7 @@ export function HomePage(): JSX.Element {
                     className="reference-save"
                   >
                     <span>{entry.status === "saved" ? entry.timestamp : entry.status}</span>
-                    <strong>{shortText(entry.text, 420)}</strong>
+                    <strong>{shortText(displayTextForEntry(entry), 420)}</strong>
                     {entry.kind && entry.kind !== "note" ? (
                       <span className="reference-save-kind">{entry.kind}</span>
                     ) : null}
