@@ -108,7 +108,7 @@ export const backgroundJobs = pgTable(
     )
       .on(table.userId, table.type)
       .where(
-        sql`${table.type}::text = 'meaning_graph_rebuild' AND ${table.status}::text IN ('pending', 'running')`,
+        sql`${table.type} = 'meaning_graph_rebuild'::background_job_type AND ${table.status} IN ('pending'::background_job_status, 'running'::background_job_status)`,
       ),
   }),
 );
