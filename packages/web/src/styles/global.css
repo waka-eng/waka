@@ -1412,6 +1412,17 @@
   margin-top: clamp(12px, 2vh, 24px);
 }
 
+.nc-wow-panel {
+  position: relative;
+  z-index: 3;
+  width: min(1180px, calc(100vw - 48px));
+  margin: clamp(16px, 2.5vh, 28px) auto clamp(24px, 4vh, 48px);
+}
+
+.nc-wow-panel .wow-moments-section {
+  margin-top: 0;
+}
+
 .nc-note-overlay {
   position: fixed;
   inset: 0;

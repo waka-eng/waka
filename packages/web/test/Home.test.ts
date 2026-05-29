@@ -564,19 +564,22 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("not final. changes as new inspirations arrive.");
   });
 
-  it("uses the WOW panel variant when current WOW moments are available", async () => {
+  it("keeps meaning-graph top-of-mind primary when current WOW moments are available", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.querySelector(".nc-stage--wow")).not.toBeNull();
+    expect(container.querySelector(".nc-stage")).not.toBeNull();
+    expect(container.querySelector(".nc-wow-panel")).not.toBeNull();
+    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).toContain("What WAKA noticed");
     expect(container.textContent).toContain("Dev-only inspect WOW fields (1)");
   });
 
-  it("renders WOW moments as the primary noticed panel", async () => {
+  it("renders WOW moments without replacing top-of-mind notes", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
+    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).toContain("What WAKA noticed");
     expect(container.textContent).toContain("Cities keep teaching through bridges");
     expect(container.textContent).toContain("Several saves connect architecture essays");
