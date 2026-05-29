@@ -1048,6 +1048,7 @@
 .reference-capture-modal .cap-bar {
   justify-content: flex-end;
   margin-top: 12px;
+  padding-inline: 0;
 }
 
 .reference-capture-modal .cap-bar .cap-file-btn,
@@ -3684,6 +3685,36 @@ body.dragging .drop-overlay {
   border-color: var(--ink);
 }
 
+.history-attachments {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.history-attachment {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: var(--border-hairline);
+  border-radius: 10px;
+  background: rgba(255, 254, 251, 0.72);
+}
+
+.history-attachment-title {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.history-attachment-meta {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .history-item-reflections {
   font-family: var(--font-mono);
   font-size: 9px;
@@ -3890,10 +3921,11 @@ body.dragging .drop-overlay {
 .cap-bar {
   position: relative;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   margin-top: 6px;
+  padding-inline: 36px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -3954,16 +3986,22 @@ body.dragging .drop-overlay {
   padding: 0 14px;
   font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  white-space: nowrap;
   transition:
     opacity var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
     transform var(--duration-fast) var(--ease-standard);
   opacity: 0;
   pointer-events: none;
   transform: scale(0.95);
 }
-.cap-save.visible {
+.cap-save.visible,
+.reference-capture-modal .cap-save.visible {
   opacity: 1;
   pointer-events: auto;
   transform: scale(1);
@@ -3971,13 +4009,45 @@ body.dragging .drop-overlay {
 .cap-save:disabled {
   cursor: not-allowed;
 }
+.cap-save:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
 .cap-save:hover:not(:disabled) {
   opacity: 0.85;
 }
+.cap-save--quick {
+  height: 42px;
+  min-width: 144px;
+  padding: 0 24px;
+  border-width: 2px;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.11em;
+  box-shadow: 0 10px 28px rgba(34, 34, 34, 0.2);
+}
+.cap-save--quick.visible {
+  transform: scale(1.03);
+}
+.cap-save--quick:hover:not(:disabled) {
+  opacity: 1;
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 12px 30px rgba(34, 34, 34, 0.22);
+}
+.cap-save--quick:active:not(:disabled) {
+  transform: translateY(0) scale(1.01);
+  box-shadow: 0 6px 18px rgba(34, 34, 34, 0.18);
+}
 .cap-save--reflect {
+  max-width: min(44vw, 210px);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
   border-color: rgba(34, 34, 34, 0.28);
   background: transparent;
   color: var(--ink);
+  font-weight: 500;
 }
 .cap-save--reflect:hover:not(:disabled) {
   border-color: var(--ink);

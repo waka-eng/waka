@@ -42,6 +42,9 @@
 
 import { useCallback, useMemo, type KeyboardEvent, type MouseEvent } from "react";
 
+import type { ApiAttachment } from "../lib/api";
+import { DEFAULT_LOCALE, t, type SupportedLocale } from "../lib/locales";
+
 /**
  * Shape of a single inspiration as the card consumes it. Mirrors the
  * prototype's `savedItems` entry — fields that aren't present on a given
@@ -55,6 +58,8 @@ export interface InspirationCardData {
   text?: string | null;
   /** Attached link URLs. Rendered as hostname chips in `.history-item-links`. */
   links?: string[] | null;
+  /** Attached link/image/file context for attachment-first card previews. */
+  attachments?: ApiAttachment[] | null;
   /** Human-readable timestamp (e.g. "2 days ago"). Joined into the meta row. */
   timestamp?: string | null;
   /** Optional transient save status label (e.g. "saving", "save failed"). */
@@ -70,6 +75,8 @@ export interface InspirationCardData {
 export interface InspirationCardProps {
   /** Inspiration record to render. */
   item: InspirationCardData;
+  /** Current UI locale for user/AT-facing copy. */
+  locale?: SupportedLocale;
   /**
    * Fires when the user activates the card (click, Enter, or Space).
    * Receives the card's id so the parent doesn't need to close over it.
@@ -91,14 +98,43 @@ function hostnameOf(url: string): string {
   }
 }
 
+function isSystemFallbackText(text: string | null | undefined, kind: string | null | undefined): boolean {
+  const trimmed = text?.trim();
+  if (!trimmed) return false;
+  if (trimmed === "(attachment-only inspiration)") return true;
+  if (kind === "link" && trimmed === "Link inspiration") return true;
+  if (kind === "image" && trimmed === "Image inspiration") return true;
+  if (kind === "mixed" && trimmed === "Mixed inspiration") return true;
+  return false;
+}
+
+function attachmentTitle(attachment: ApiAttachment): string {
+  if (attachment.type === "link") {
+    const link = attachment.enrichment?.link;
+    return link?.title?.trim() || link?.hostname || attachment.url || attachment.name || "Link";
+  }
+  return attachment.enrichment?.image?.filename ?? attachment.name ?? "Image";
+}
+
+function attachmentMeta(attachment: ApiAttachment): string | null {
+  if (attachment.type === "link") {
+    return attachment.enrichment?.link?.hostname ?? (attachment.url ? hostnameOf(attachment.url) : null);
+  }
+  const size = attachment.enrichment?.image?.size ?? attachment.size;
+  const sizeLabel = typeof size === "number" && size > 0 ? `${Math.ceil(size / 1024)} KB` : null;
+  return [attachment.contentType, sizeLabel].filter(Boolean).join(" · ") || null;
+}
+
 export function InspirationCard({
   item,
+  locale = DEFAULT_LOCALE,
   onSelect,
 }: InspirationCardProps): JSX.Element {
   const {
     id,
     text,
     links,
+    attachments,
     timestamp,
     kind,
     warningMessage,
@@ -113,7 +149,7 @@ export function InspirationCard({
    */
   const metaText = useMemo(() => {
     const parts: string[] = [];
-    if (kind) parts.push(kind.toUpperCase());
+    if (kind && !["note", "link", "image", "mixed"].includes(kind)) parts.push(kind);
     if (timestamp) parts.push(timestamp);
     return parts.join(" · ");
   }, [kind, timestamp]);
@@ -151,6 +187,9 @@ export function InspirationCard({
   );
 
   const hasLinks = Array.isArray(links) && links.length > 0;
+  const visibleAttachments = Array.isArray(attachments) ? attachments : [];
+  const hasAttachmentContext = visibleAttachments.length > 0;
+  const showText = Boolean(text && !(hasAttachmentContext && isSystemFallbackText(text, kind)));
   const hasReflections = reflectionsTotal > 0;
 
   return (
@@ -162,7 +201,21 @@ export function InspirationCard({
       onClick={handleActivate}
       onKeyDown={handleKeyDown}
     >
-      {text ? <div className="history-item-text">{text}</div> : null}
+      {showText ? <div className="history-item-text">{text}</div> : null}
+
+      {hasAttachmentContext ? (
+        <div className="history-attachments" aria-label={t(locale, "attachmentContext")}>
+          {visibleAttachments.map((attachment) => {
+            const meta = attachmentMeta(attachment);
+            return (
+              <div key={attachment.id} className="history-attachment">
+                <span className="history-attachment-title">{attachmentTitle(attachment)}</span>
+                {meta ? <span className="history-attachment-meta">{meta}</span> : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {hasLinks ? (
         <div className="history-item-links">

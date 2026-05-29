@@ -444,6 +444,116 @@ describe("HomePage current home experience", () => {
     expect(container.innerHTML).not.toContain("users/user-1/image.png");
   });
 
+  it("renders saved link, note plus URL, image-only, and mixed history without backend kind labels", async () => {
+    const readyLinkEnrichment = (url: string) => ({
+      status: "ready" as const,
+      source: "url" as const,
+      sourceUrl: url,
+      errorReason: null,
+      checkedAt: "2026-05-14T16:30:02.000Z",
+      link: {
+        originalUrl: url,
+        finalUrl: url,
+        hostname: "example.com",
+        title: null,
+        description: null,
+        siteName: null,
+        previewImageUrl: null,
+      },
+      image: null,
+    });
+    setApiFixtures({
+      inspirations: [
+        persistedInspiration({
+          id: "insp-link-only",
+          text: "Link inspiration",
+          kind: "link",
+          createdAt: "2026-05-14T16:33:00.000Z",
+          updatedAt: "2026-05-14T16:33:00.000Z",
+          attachments: [
+            persistedAttachment({
+              id: "att-link-only",
+              inspirationId: "insp-link-only",
+              type: "link",
+              url: "https://example.com/tokyo-guide",
+              name: "example.com/tokyo-guide",
+              enrichment: readyLinkEnrichment("https://example.com/tokyo-guide"),
+            }),
+          ],
+        }),
+        persistedInspiration({
+          id: "insp-note-url",
+          text: "Kyoto ramen note https://example.com/kyoto-guide",
+          kind: "mixed",
+          createdAt: "2026-05-14T16:32:00.000Z",
+          updatedAt: "2026-05-14T16:32:00.000Z",
+          attachments: [
+            persistedAttachment({
+              id: "att-note-url",
+              inspirationId: "insp-note-url",
+              type: "link",
+              url: "https://example.com/kyoto-guide",
+              name: "example.com/kyoto-guide",
+              enrichment: readyLinkEnrichment("https://example.com/kyoto-guide"),
+            }),
+          ],
+        }),
+        persistedInspiration({
+          id: "insp-image-only",
+          text: "Image inspiration",
+          kind: "image",
+          createdAt: "2026-05-14T16:31:00.000Z",
+          updatedAt: "2026-05-14T16:31:00.000Z",
+          attachments: [
+            persistedAttachment({
+              id: "att-image-only",
+              inspirationId: "insp-image-only",
+              type: "image",
+              url: "",
+              name: "pixel.png",
+              contentType: "image/png",
+              size: 1024,
+            }),
+          ],
+        }),
+        persistedInspiration({
+          id: "insp-mixed",
+          text: "Mixed capture about Osaka",
+          kind: "mixed",
+          createdAt: "2026-05-14T16:30:00.000Z",
+          updatedAt: "2026-05-14T16:30:00.000Z",
+          attachments: [
+            persistedAttachment({
+              id: "att-mixed",
+              inspirationId: "insp-mixed",
+              type: "link",
+              url: "https://example.com/osaka-guide",
+              name: "example.com/osaka-guide",
+              enrichment: readyLinkEnrichment("https://example.com/osaka-guide"),
+            }),
+          ],
+        }),
+      ],
+      wowMoments: [],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container, 4);
+    expect(container.querySelector(".reference-save-kind")).toBeNull();
+    const historyText = container.querySelector(".reference-saves-page")?.textContent ?? "";
+    expect(historyText).toContain("Link inspiration");
+    expect(historyText).toContain("Kyoto ramen note https://example.com/kyoto-guide");
+    expect(historyText).toContain("Image inspiration");
+    expect(historyText).toContain("Mixed capture about Osaka");
+    expect(historyText).toContain("example.com");
+    expect(historyText).toContain("pixel.png · 1 KB");
+    expect(historyText).not.toContain("LINK");
+    expect(historyText).not.toContain("MIXED");
+    expect(historyText).not.toContain("IMAGE");
+    expect(historyText).not.toContain("FILE");
+    expect(historyText).not.toContain("(attachment-only inspiration)");
+  });
+
   it("renders the current top-of-mind canvas and hero copy", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -784,8 +894,9 @@ describe("HomePage current home experience", () => {
     });
     const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
     expect(newSave?.textContent).toContain("Read https://example.com/article before the next salon");
-    expect(newSave?.textContent).toContain("link");
-    expect(newSave?.textContent).toContain("https://example.com/article");
+    expect(newSave?.textContent).toContain("example.com");
+    expect(newSave?.textContent).not.toContain("MIXED");
+    expect(newSave?.textContent).not.toContain("LINK");
   });
 
   it("uploads an image attachment through the presign pipeline and shows the saved image", async () => {
@@ -875,8 +986,8 @@ describe("HomePage current home experience", () => {
     const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
     expect(newSave?.textContent).toContain("Image inspiration");
     expect(newSave?.textContent).not.toContain("(attachment-only inspiration)");
-    expect(newSave?.textContent).toContain("image");
     expect(newSave?.textContent).toContain("photo.png");
+    expect(newSave?.textContent).not.toContain("IMAGE");
   });
 
   it("keeps an image quick-save entry saved when attachment finalization fails gracefully", async () => {
@@ -933,7 +1044,8 @@ describe("HomePage current home experience", () => {
       (card) => card.textContent?.includes("Image with local upload trouble"),
     );
     expect(historyCard).not.toBeNull();
-    expect(historyCard?.textContent).toContain("IMAGE");
+    expect(historyCard?.textContent).toContain("photo.png");
+    expect(historyCard?.textContent).not.toContain("IMAGE");
     expect(historyCard?.textContent).toContain("1 attachment failed to upload.");
     expect(historyCard?.textContent?.toLowerCase()).not.toContain("error");
     expect(historyCard?.textContent).not.toContain("save failed");
@@ -951,7 +1063,8 @@ describe("HomePage current home experience", () => {
 
     const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
     expect(newSave?.textContent).toContain("Image with local upload trouble");
-    expect(newSave?.textContent).toContain("image");
+    expect(newSave?.textContent).toContain("photo.png");
+    expect(newSave?.textContent).not.toContain("IMAGE");
     expect(newSave?.textContent).toContain("1 attachment failed to upload.");
     expect(newSave?.textContent?.toLowerCase()).not.toContain("error");
     expect(newSave?.textContent).not.toContain("save failed");

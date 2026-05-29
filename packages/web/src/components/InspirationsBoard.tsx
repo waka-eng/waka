@@ -446,6 +446,7 @@ export function InspirationsBoard({
       <InspirationCard
         key={item.id}
         item={item}
+        locale={locale}
         onSelect={onSelectInspiration}
       />
     ));
