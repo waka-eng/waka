@@ -4000,7 +4000,8 @@ body.dragging .drop-overlay {
   pointer-events: none;
   transform: scale(0.95);
 }
-.cap-save.visible {
+.cap-save.visible,
+.reference-capture-modal .cap-save.visible {
   opacity: 1;
   pointer-events: auto;
   transform: scale(1);

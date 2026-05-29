@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -162,6 +163,17 @@ afterEach(() => {
   container = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
+});
+
+describe("CaptureForm responsive CTA CSS", () => {
+  it("keeps modal quick-save CTAs visible when the populated state adds visible", () => {
+    const css = readFileSync("src/styles/global.css", "utf8");
+
+    expect(css).toMatch(/\.cap-save\s*\{[\s\S]*?opacity:\s*0;/);
+    expect(css).toMatch(
+      /\.cap-save\.visible,\s*\.reference-capture-modal \.cap-save\.visible\s*\{[\s\S]*?opacity:\s*1;[\s\S]*?pointer-events:\s*auto;/,
+    );
+  });
 });
 
 describe("CaptureForm multi-input quick capture", () => {
