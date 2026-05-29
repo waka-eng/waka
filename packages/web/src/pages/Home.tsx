@@ -1494,17 +1494,8 @@ export function HomePage(): JSX.Element {
               <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p>
             </section>
 
-            <section className={`nc-stage${hasWowPanel ? " nc-stage--wow" : ""}`} aria-label="generated thoughts">
-              {hasWowPanel ? (
-                <WowMomentsSection
-                  error={wowMomentsError}
-                  loading={wowMomentsLoading}
-                  locale={locale}
-                  moments={wowMoments}
-                  onAddInspiration={() => setCaptureOpen(true)}
-                  showDevInspection={showAdminEntry}
-                />
-              ) : topOfMindLoading ? (
+            <section className="nc-stage" aria-label="generated thoughts">
+              {topOfMindLoading ? (
                 <p className="nc-loading">{copy.loadingThoughts}</p>
               ) : topOfMindError ? (
                 <p className="nc-loading">{topOfMindError}</p>
@@ -1514,6 +1505,19 @@ export function HomePage(): JSX.Element {
                 <p className="nc-loading">{copy.emptyThoughts}</p>
               )}
             </section>
+
+            {hasWowPanel ? (
+              <section className="nc-wow-panel" aria-label="generated WOW moments">
+                <WowMomentsSection
+                  error={wowMomentsError}
+                  loading={wowMomentsLoading}
+                  locale={locale}
+                  moments={wowMoments}
+                  onAddInspiration={() => setCaptureOpen(true)}
+                  showDevInspection={showAdminEntry}
+                />
+              </section>
+            ) : null}
 
             <footer className="nc-footnote">
               <p>{copy.footnote(displayHandle)}</p>

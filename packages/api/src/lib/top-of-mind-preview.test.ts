@@ -30,6 +30,30 @@ describe("rankTopOfMindPreview", () => {
     });
   });
 
+  it("does not turn saved inspirations into top-of-mind without meaning graph nodes", () => {
+    const preview = rankTopOfMindPreview({
+      generatedAt: now,
+      inspirationCount: 3,
+      meaningNoteCount: 0,
+      relationshipEdgeCount: 0,
+      nodes: [],
+      edges: [],
+      evidence: [],
+    });
+
+    expect(preview).toMatchObject({
+      headline: "Top of mind is not ready yet",
+      activeThemes: [],
+      activeQuestions: [],
+      relationshipSignals: [],
+      summary: {
+        inspirationCount: 3,
+        meaningNoteCount: 0,
+        relationshipEdgeCount: 0,
+      },
+    });
+  });
+
   it("promotes repeated question-like meaning notes and supporting inspirations", () => {
     const preview = rankTopOfMindPreview({
       generatedAt: now,
