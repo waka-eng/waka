@@ -109,6 +109,7 @@ async function clickQuickSave(): Promise<void> {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   vi.mocked(createInspiration).mockResolvedValue(inspiration());
   vi.mocked(createReflection).mockResolvedValue({
     reflection: {
@@ -163,6 +164,7 @@ afterEach(() => {
   container = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  window.localStorage.clear();
 });
 
 describe("CaptureForm responsive CTA CSS", () => {
@@ -177,6 +179,86 @@ describe("CaptureForm responsive CTA CSS", () => {
 });
 
 describe("CaptureForm multi-input quick capture", () => {
+  it("autosaves draft text locally and restores it on the next mount", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("A private draft that should not disappear");
+    });
+    await flushReactWork();
+
+    act(() => {
+      root?.unmount();
+    });
+    container?.remove();
+    root = null;
+    container = null;
+
+    await renderCaptureForm();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
+      "A private draft that should not disappear",
+    );
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Autosaved locally");
+  });
+
+  it("persists marked text and resonance as signal spark metadata", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("I keep returning to studios with huge north-facing windows");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      textarea?.setSelectionRange(20, 58);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capHighlight")?.click();
+    });
+    await act(async () => {
+      Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
+        .find((button) => button.textContent === "want")
+        ?.click();
+    });
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "I keep returning to studios with huge north-facing windows",
+      kind: "note",
+      sparks: [
+        {
+          text: "studios with huge north-facing windows",
+          source: "user_selected",
+          startOffset: 20,
+          endOffset: 58,
+          confidence: 100,
+          isPrimary: true,
+          note: "resonance:want",
+        },
+      ],
+    });
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
+      "WAKA noticed the part you marked.",
+    );
+    expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
+  it("keeps the draft intact when server save fails", async () => {
+    vi.mocked(createInspiration).mockRejectedValueOnce(
+      new ApiError({ status: 500, message: "save failed" }),
+    );
+    await renderCaptureForm();
+    await act(async () => {
+      setText("Do not clear this draft");
+    });
+
+    await clickQuickSave();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Do not clear this draft");
+    expect(window.localStorage.getItem("waka.captureDraft.v1")).toContain("Do not clear this draft");
+  });
+
   it("gently prompts instead of saving when the empty composer is invoked from the keyboard", async () => {
     await renderCaptureForm();
 

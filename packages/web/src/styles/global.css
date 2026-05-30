@@ -4177,14 +4177,139 @@ body.dragging .drop-overlay {
   resize: none;
   background: transparent;
   font-family: var(--font-serif);
-  font-size: 20px;
-  line-height: 1.35;
+  font-size: 17px;
+  line-height: 1.5;
   color: var(--ink);
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 .cap-body textarea::placeholder {
   color: var(--muted);
   font-style: italic;
+}
+
+.cap-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.cap-highlight-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  flex-wrap: wrap;
+}
+
+.cap-highlight-btn,
+.cap-highlight-chip button,
+.cap-resonance-options button {
+  border: var(--border-hairline);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.cap-highlight-btn {
+  height: 26px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.cap-highlight-btn:disabled {
+  color: var(--muted);
+  border-color: rgba(34, 34, 34, 0.16);
+  cursor: default;
+}
+
+.cap-highlight-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 26px;
+  gap: 6px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid rgba(34, 34, 34, 0.22);
+  background: rgba(255, 217, 102, 0.3);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.cap-highlight-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cap-highlight-chip button {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.cap-draft-state {
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.cap-resonance {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.cap-resonance legend {
+  margin-bottom: 6px;
+  font-size: 9px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.cap-resonance-options {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.cap-resonance-options::-webkit-scrollbar {
+  display: none;
+}
+
+.cap-resonance-options button {
+  flex: 0 0 auto;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.cap-resonance-options button.selected {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .cap-strip {

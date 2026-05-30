@@ -51,6 +51,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
+  type SyntheticEvent,
 } from "react";
 
 import {
@@ -164,6 +165,38 @@ export interface CaptureFormProps {
 const URL_REGEX = /\bhttps?:\/\/[^\s]+/gi;
 const TRAILING_PUNCT = /[.,)\]>;'"]+$/;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
+
+type CaptureResonanceAnswer =
+  | "want"
+  | "admire"
+  | "envy"
+  | "feels_like_me"
+  | "bothers_me"
+  | "not_sure";
+
+interface HighlightedSignalText {
+  text: string;
+  startOffset: number;
+  endOffset: number;
+}
+
+interface StoredCaptureDraft {
+  note?: string;
+  resonance?: CaptureResonanceAnswer | null;
+  highlight?: HighlightedSignalText | null;
+  links?: Array<{ url: string; name?: string }>;
+}
+
+const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string }> = [
+  { value: "want", label: "want" },
+  { value: "admire", label: "admire" },
+  { value: "envy", label: "envy" },
+  { value: "feels_like_me", label: "feels like me" },
+  { value: "bothers_me", label: "bothers me" },
+  { value: "not_sure", label: "not sure" },
+];
+
 export function extractUrlsFromText(text: string): string[] {
   const matches = text.match(URL_REGEX) ?? [];
   const out: string[] = [];
@@ -234,6 +267,49 @@ function fallbackTextForCaptureKind(kind: CaptureInputKind): string {
   return "Untitled signal";
 }
 
+function readStoredCaptureDraft(): StoredCaptureDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(CAPTURE_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredCaptureDraft;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCaptureDraft(draft: StoredCaptureDraft): void {
+  if (typeof window === "undefined") return;
+  const hasDraft =
+    (draft.note?.trim().length ?? 0) > 0 ||
+    Boolean(draft.resonance) ||
+    Boolean(draft.highlight?.text) ||
+    (draft.links?.length ?? 0) > 0;
+  try {
+    if (!hasDraft) {
+      window.localStorage.removeItem(CAPTURE_DRAFT_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // Draft persistence is best-effort; capture itself should keep working.
+  }
+}
+
+function clearStoredCaptureDraft(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(CAPTURE_DRAFT_STORAGE_KEY);
+  } catch {
+    // best-effort
+  }
+}
+
+function resonanceLabel(value: CaptureResonanceAnswer): string {
+  return resonanceOptions.find((option) => option.value === value)?.label ?? value;
+}
+
 /* ============================================================
  * Component
  * ============================================================ */
@@ -261,6 +337,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [reflectionAnswer, setReflectionAnswer] = useState("");
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
+    const [highlight, setHighlight] = useState<HighlightedSignalText | null>(null);
+    const [latestSelection, setLatestSelection] = useState<HighlightedSignalText | null>(null);
+    const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [saving, setSaving] = useState(false);
     /**
      * Confirmation / error message displayed in `cap-confirm`. The cell
@@ -271,6 +350,33 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [confirmVisible, setConfirmVisible] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => {
+      const draft = readStoredCaptureDraft();
+      if (!draft) return;
+      if (typeof draft.note === "string") setNote(draft.note);
+      if (draft.highlight?.text) setHighlight(draft.highlight);
+      if (draft.resonance) setResonance(draft.resonance);
+      if (Array.isArray(draft.links)) {
+        setPending(
+          draft.links
+            .filter((link) => typeof link.url === "string" && link.url.trim().length > 0)
+            .map((link) => ({
+              localId: makeLocalId("att"),
+              kind: "link",
+              url: link.url,
+              name: link.name ?? `${t(locale, "linkChipPrefix")} · ${linkLabel(link.url)}`,
+            })),
+        );
+      }
+    }, [locale]);
+
+    useEffect(() => {
+      const links = pending
+        .filter((att) => att.kind === "link" && att.url)
+        .map((att) => ({ url: att.url as string, name: att.name }));
+      writeStoredCaptureDraft({ note, resonance, highlight, links });
+    }, [note, resonance, highlight, pending]);
 
     // Cleanup timers when the component unmounts. Without this an
     // in-flight setTimeout would fire `setState` on an unmounted instance.
@@ -349,7 +455,33 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
     const handleNoteChange = useCallback((next: string): void => {
       setNote(next);
+      setLatestSelection(null);
+      setHighlight((current) => {
+        if (!current) return current;
+        return next.slice(current.startOffset, current.endOffset) === current.text ? current : null;
+      });
     }, []);
+
+    const handleNoteSelect = useCallback((event: SyntheticEvent<HTMLTextAreaElement>): void => {
+      const target = event.currentTarget;
+      const start = target.selectionStart;
+      const end = target.selectionEnd;
+      const text = target.value.slice(start, end).trim();
+      if (!text || start === end) {
+        setLatestSelection(null);
+        return;
+      }
+      setLatestSelection({ text, startOffset: start, endOffset: end });
+    }, []);
+
+    const markLatestSelection = useCallback((): void => {
+      if (!latestSelection) {
+        flashConfirm("Select the part that hit, then mark it.", 2200);
+        return;
+      }
+      setHighlight(latestSelection);
+      flashConfirm("Marked as the part that hit.", 1600);
+    }, [flashConfirm, latestSelection]);
 
     const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
       const pasted = event.clipboardData.getData("text/plain") || event.clipboardData.getData("text");
@@ -517,9 +649,24 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       try {
         // 2. Persist the inspiration row first. Until this resolves we have
         //    no inspirationId to attach attachments to.
+        const captureSparks =
+          highlight || resonance
+            ? [
+                {
+                  text: highlight?.text ?? inspirationText.slice(0, 4096),
+                  source: highlight ? ("user_selected" as const) : ("user_written" as const),
+                  startOffset: highlight?.startOffset,
+                  endOffset: highlight?.endOffset,
+                  confidence: highlight ? 100 : 80,
+                  isPrimary: true,
+                  note: resonance ? `resonance:${resonance}` : undefined,
+                },
+              ]
+            : undefined;
         const inspiration = await createInspiration({
           text: inspirationText,
           kind,
+          ...(captureSparks ? { sparks: captureSparks } : {}),
         });
 
         const reflection = isReflectiveSave
@@ -575,6 +722,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
         }
         setNote("");
+        setHighlight(null);
+        setLatestSelection(null);
+        setResonance(null);
         setReflectionAnswer("");
         setActiveView("note");
         setReflectGlow(Boolean(reflection));
@@ -586,10 +736,21 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           }, 1800);
         }
         setPending([]);
+        clearStoredCaptureDraft();
         if (failed.length > 0) {
           flashConfirm(formatMessage(locale, "partialAttachmentFailure", { count: failed.length }), 2800);
         } else {
-          flashConfirm(t(locale, "saved"));
+          const noticed = highlight
+            ? "WAKA noticed the part you marked."
+            : resonance
+              ? `WAKA noticed a ${resonanceLabel(resonance)} signal.`
+              : "WAKA noticed this signal is now saved.";
+          flashConfirm(
+            <span>
+              {t(locale, "saved")}. <small>{noticed}</small>
+            </span>,
+            2600,
+          );
         }
       } catch (err) {
         const error =
@@ -611,6 +772,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       locale,
       note,
       pending,
+      highlight,
+      resonance,
       saving,
       onOptimisticAdd,
       onPersisted,
@@ -663,6 +826,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
         onNotePaste={handleNotePaste}
+        onNoteSelect={handleNoteSelect}
         onNoteKeyDown={handleNoteKeyDown}
         saveVisible={saveVisible}
         onSave={() => {
@@ -683,6 +847,51 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onFileSelect={addFile}
         confirmVisible={confirmVisible}
         confirmMessage={confirmMessage}
+        captureMeta={
+          <div className="cap-meta" id="capMeta">
+            <div className="cap-highlight-row">
+              <button
+                type="button"
+                className="cap-highlight-btn"
+                id="capHighlight"
+                onClick={markLatestSelection}
+                disabled={!latestSelection}
+              >
+                {t(locale, "markWhatHit")}
+              </button>
+              {highlight ? (
+                <span className="cap-highlight-chip" id="capHighlightChip">
+                  <span>{highlight.text}</span>
+                  <button
+                    type="button"
+                    aria-label={t(locale, "removeHighlight")}
+                    onClick={() => setHighlight(null)}
+                  >
+                    x
+                  </button>
+                </span>
+              ) : (
+                <span className="cap-draft-state" id="capDraftState">{t(locale, "autosavedLocally")}</span>
+              )}
+            </div>
+            <fieldset className="cap-resonance" id="capResonance">
+              <legend>{t(locale, "resonanceQuestion")}</legend>
+              <div className="cap-resonance-options">
+                {resonanceOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={resonance === option.value ? "selected" : ""}
+                    aria-pressed={resonance === option.value}
+                    onClick={() => setResonance((current) => (current === option.value ? null : option.value))}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        }
         reflectQuestion={
           <>
             <span className="reflect-kicker">{t(locale, "processThisInspiration")}</span>

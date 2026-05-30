@@ -67,6 +67,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type ReactNode,
+  type SyntheticEvent,
   forwardRef,
   useState,
 } from "react";
@@ -121,6 +122,8 @@ export interface CaptureCellProps {
   onNoteChange?: (value: string) => void;
   /** Fires when text is pasted into the universal composer. */
   onNotePaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  /** Fires when the user selects text inside the capture textarea. */
+  onNoteSelect?: (event: SyntheticEvent<HTMLTextAreaElement>) => void;
   /**
    * Optional textarea keydown — used by the prototype to (a) submit on
    * Cmd/Ctrl+Enter and (b) discard with Escape. We forward the event
@@ -170,6 +173,8 @@ export interface CaptureCellProps {
    * the attachment data model.
    */
   attachments?: ReactNode;
+  /** Optional lightweight controls or metadata rendered under the textarea. */
+  captureMeta?: ReactNode;
 
   /**
    * Optional save-confirmation overlay copy. When set (and `confirmVisible`
@@ -247,6 +252,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       noteValue,
       onNoteChange,
       onNotePaste,
+      onNoteSelect,
       onNoteKeyDown,
       notePlaceholder = "Drop what hit: a note, link, or image. Save it fast or add context.",
       processSaveLabel = "Add context",
@@ -265,6 +271,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       focused = false,
       onToggleFocus,
       attachments,
+      captureMeta,
       confirmMessage,
       confirmVisible = false,
       reflectQuestion,
@@ -369,8 +376,12 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             value={noteValue ?? ""}
             onChange={handleNoteChange}
             onPaste={onNotePaste}
+            onSelect={onNoteSelect}
+            onMouseUp={onNoteSelect}
+            onKeyUp={onNoteSelect}
             onKeyDown={onNoteKeyDown}
           />
+          {captureMeta}
           <div className="cap-strip" id="capStrip">
             {attachments}
           </div>

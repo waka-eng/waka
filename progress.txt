@@ -15,6 +15,7 @@
 - Home should consume `fetchTopOfMindNotes` for the primary user-facing Top of Mind post-it surface; use the legacy `topOfMind` preview only as a fallback while compatibility remains.
 - Web feedback submissions should use `createFeedback` from `packages/web/src/lib/api.ts`; top-of-mind note feedback targets use `targetType: "top_of_mind_note"` and the note id returned by `/api/top-of-mind`.
 - Product-domain model calls should go through `packages/api/src/lib/model-provider.ts`; Gemini-specific HTTP clients remain the current implementation behind `gemini-model-provider.ts`.
+- Capture highlights and lightweight resonance answers should travel through the existing `inspiration_sparks` request fields until a dedicated signal metadata table exists.
 
 ---
 
@@ -471,5 +472,37 @@
     - The working PRD already had unrelated uncommitted story edits; US-015 was marked complete without reverting or reshaping those edits.
   - Useful context
     - The decision memo is API-only for now, so this story did not require browser verification.
+
+---
+
+## 2026-05-30 15:52 PDT - US-014A
+
+- What was implemented
+  - Made capture feel more like a low-pressure private scratchpad by reducing textarea type size and adding compact metadata controls below the note.
+  - Added local draft autosave for note text, highlighted snippets, resonance choice, and pasted link chips; drafts are cleared only after the server save succeeds.
+  - Added selected-text marking for "what hit" and persisted it as `sparks` metadata on the signal save payload.
+  - Added a lightweight resonance question with want, admire, envy, feels like me, bothers me, and not sure choices; resonance is stored in spark metadata when present.
+  - Updated post-save confirmation copy to reflect what WAKA noticed without making a final claim.
+- Files changed
+  - `packages/web/src/components/capture/CaptureCell.tsx`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts` passed: 15 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/i18n.test.ts` passed: 5 tests.
+  - Browser verification with Playwright + Vite passed for desktop highlight/resonance/save confirmation and mobile capture layout using mocked same-origin API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture highlight and resonance metadata can use the existing `sparks` create payload, avoiding a persistence migration for this story.
+  - Gotchas encountered
+    - React textarea selection updates need mouse/key selection events as well as `onSelect` so the mark-highlight action remains reliable.
+  - Useful context
+    - Autosave intentionally restores text and link chips only; image/file blobs are not persisted in localStorage.
 
 ---
