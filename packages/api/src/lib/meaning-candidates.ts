@@ -3,7 +3,7 @@
  *
  * This is deliberately retrieval-only: no LLM call, no graph write, no runtime
  * scores persisted. It reuses the existing WOW candidate selector when stored
- * embeddings are available, then returns compact meaning packets so downstream
+ * embeddings are available, then returns compact signal packets so downstream
  * judges do not need to read full artifacts.
  */
 
@@ -350,7 +350,7 @@ function mergeCandidates(candidates: MeaningPacketCandidate[]): MeaningPacketCan
 }
 
 /**
- * Return compact meaning packets worth judging against a trigger inspiration.
+ * Return compact signal packets worth judging against a trigger inspiration.
  *
  * The trigger and every candidate are tenant-scoped. The helper caps DB
  * preselection and final results, and it never reads unrelated full artifacts

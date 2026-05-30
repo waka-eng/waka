@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/meaning-packets.js", () => ({
-  persistMeaningPacketForInspiration: vi.fn(async () => null),
+vi.mock("../lib/signal-packets.js", () => ({
+  persistSignalPacketForSignal: vi.fn(async () => null),
 }));
 
 import { createInspirationsRoutes } from "./inspirations.js";

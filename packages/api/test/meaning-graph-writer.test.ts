@@ -14,7 +14,7 @@ import {
   persistMeaningGraphForInspiration,
 } from "../src/lib/meaning-graph-writer.js";
 import type { MeaningRelationshipJudgeClient } from "../src/lib/meaning-relationship-judge.js";
-import { persistMeaningPacketForInspiration } from "../src/lib/meaning-packets.js";
+import { persistSignalPacketForSignal } from "../src/lib/signal-packets.js";
 
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -25,10 +25,10 @@ async function createPacket(
   userId: string,
   inspiration: Inspiration,
 ): Promise<void> {
-  const result = await persistMeaningPacketForInspiration({
+  const result = await persistSignalPacketForSignal({
     db: testDb.db,
     userId,
-    inspirationId: inspiration.id,
+    signalId: inspiration.id,
   });
   expect(result.status).toBe("created_or_updated");
 }
@@ -404,7 +404,7 @@ describe("persistMeaningGraphForInspiration", () => {
     );
   }, 30000);
 
-  it("writes no meaning graph rows when the trigger has no meaning packet", async () => {
+  it("writes no meaning graph rows when the trigger has no signal packet", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Unpacketized trigger.",

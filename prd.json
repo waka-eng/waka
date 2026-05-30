@@ -60,7 +60,7 @@
         "Run API typecheck and targeted packet tests"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

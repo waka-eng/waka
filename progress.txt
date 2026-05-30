@@ -7,6 +7,7 @@
 - Keep the graph inspector internal. User-facing graph-backed output should appear as post-it-style Top of Mind notes, evidence drawers, patterns, and later decision memos.
 - Signal-facing compatibility currently wraps existing `/api/inspirations` responses with additive `signal` and `signalScores` fields instead of renaming the route or persistence immediately.
 - `meaning_nodes.type` remains a text compatibility field for now; use `contextNodeTypeValues` for new graph writes and `normalizeContextNodeType` when reading legacy `question`/`claim`/`life_direction` rows.
+- Signal packet creation lives in `packages/api/src/lib/signal-packets.ts`, but persists to the existing `meaning_packets` table; `packages/api/src/lib/meaning-packets.ts` is a compatibility wrapper for old imports.
 
 ---
 
@@ -94,5 +95,43 @@
     - The default API Vitest setup still requires a resolvable `DB_CONNECTION_URL`; use `vitest.unit.config.ts` for pure route/helper tests that should not run DB setup.
   - Useful context
     - Existing legacy type mapping is deterministic: `question` to `open_question`, `life_direction` to `project`, `person_archetype` to `person`, `desire` to `hypothesis`, and `claim` or unknown values to `theme`.
+
+---
+
+## 2026-05-30 14:35 PDT - US-004
+
+- What was implemented
+  - Added signal packet naming as the primary packet creation API while preserving the existing `meaning_packets` persistence table.
+  - Moved deterministic packet construction to `packages/api/src/lib/signal-packets.ts` and kept `packages/api/src/lib/meaning-packets.ts` as a source-compatible wrapper.
+  - Updated create/spark/rebuild code paths to call `persistSignalPacketForSignal`.
+  - Updated deterministic packet text from `waka.meaning_packet.v1`/`SPARKS` to `waka.signal_packet.v1`/`WHAT_HIT` plus `WHY_IT_MATTERS`.
+  - Updated packet-related tests and route mocks for the new signal packet imports/header.
+- Files changed
+  - `packages/api/src/lib/signal-packets.ts`
+  - `packages/api/src/lib/meaning-packets.ts`
+  - `packages/api/src/lib/signal-packets.test.ts`
+  - `packages/api/src/lib/meaning-candidates.ts`
+  - `packages/api/src/lib/meaning-graph-rebuild.ts`
+  - `packages/api/src/lib/meaning-relationship-judge.ts`
+  - `packages/api/src/routes/inspirations.ts`
+  - `packages/api/src/routes/inspirations-auto-wow.test.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/api/test/inspirations.test.ts`
+  - `packages/api/test/meaning-candidates.test.ts`
+  - `packages/api/test/meaning-graph-writer.test.ts`
+  - `packages/api/test/meaning-relationship-judge.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/signal-packets.test.ts src/routes/inspirations-auto-wow.test.ts src/routes/admin-meaning-graph.test.ts` passed: 6 tests.
+  - `pnpm --filter @waka/api test -- test/inspirations.test.ts -t "signal packet|bounded context"` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - New packet creation should use `signal-packets.ts`; old `meaning-packets.ts` exists only to keep compatibility while persistence remains `meaning_packets`.
+  - Gotchas encountered
+    - The DB-backed API test environment still points at unresolved `HOST.neon.tech`, so packet integration tests cannot run here until the test DB URL is fixed.
+  - Useful context
+    - Existing graph/candidate code still exposes `Meaning*` names where it describes internal graph relationships, but newly generated per-signal packet text now uses `waka.signal_packet.v1`.
 
 ---

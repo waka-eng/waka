@@ -8,7 +8,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { persistMeaningGraphForInspiration } from "./meaning-graph-writer.js";
-import { persistMeaningPacketForInspiration } from "./meaning-packets.js";
+import { persistSignalPacketForSignal } from "./signal-packets.js";
 
 export type MeaningGraphRebuildPhase =
   | "queued"
@@ -134,10 +134,10 @@ export async function rebuildMeaningGraphForUser(input: {
   await report({ phase: "processing" });
 
   for (const inspiration of inspirationRows) {
-    await persistMeaningPacketForInspiration({
+    await persistSignalPacketForSignal({
       db,
       userId: input.userId,
-      inspirationId: inspiration.id,
+      signalId: inspiration.id,
     });
     const result = await persistMeaningGraphForInspiration({
       db,

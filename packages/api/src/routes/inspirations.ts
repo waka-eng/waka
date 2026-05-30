@@ -55,7 +55,7 @@ import {
   persistLocalInspirationScores,
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
-import { persistMeaningPacketForInspiration } from "../lib/meaning-packets.js";
+import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
 import { withSignalLayer } from "../lib/signals.js";
@@ -393,10 +393,10 @@ routes.post("/", async (c) => {
       })),
     );
   }
-  await persistMeaningPacketForInspiration({
+  await persistSignalPacketForSignal({
     db,
     userId: scoredInserted.userId,
-    inspirationId: scoredInserted.id,
+    signalId: scoredInserted.id,
   });
 
   // 3. Enqueue a durable background classification job. The worker consumes
@@ -678,10 +678,10 @@ routes.post("/:id/sparks", async (c) => {
 
   if (!spark) return c.json({ error: "Failed to create spark" }, 500);
 
-  await persistMeaningPacketForInspiration({
+  await persistSignalPacketForSignal({
     db,
     userId: user.id,
-    inspirationId: idCheck.data,
+    signalId: idCheck.data,
   });
 
   return c.json({

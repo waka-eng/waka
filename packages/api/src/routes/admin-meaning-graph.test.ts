@@ -192,7 +192,7 @@ describe("GET /api/admin/meaning-graph", () => {
         inspirationText: "AI makes building faster, but choosing what to build gets harder.",
         inspirationCreatedAt: now,
         sparkText: "choosing what to build gets harder",
-        packetText: "waka.meaning_packet.v1\nSPARKS\nchoosing what to build gets harder",
+        packetText: "waka.signal_packet.v1\nWHAT_HIT\nchoosing what to build gets harder",
         tokenEstimate: 24,
       },
       {
@@ -207,7 +207,7 @@ describe("GET /api/admin/meaning-graph", () => {
         inspirationText: "AI makes building faster, but choosing what to build gets harder.",
         inspirationCreatedAt: now,
         sparkText: "choosing what to build gets harder",
-        packetText: "waka.meaning_packet.v1\nSPARKS\nchoosing what to build gets harder",
+        packetText: "waka.signal_packet.v1\nWHAT_HIT\nchoosing what to build gets harder",
         tokenEstimate: 24,
       },
     ];
