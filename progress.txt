@@ -16,6 +16,35 @@
 - Web feedback submissions should use `createFeedback` from `packages/web/src/lib/api.ts`; top-of-mind note feedback targets use `targetType: "top_of_mind_note"` and the note id returned by `/api/top-of-mind`.
 - Product-domain model calls should go through `packages/api/src/lib/model-provider.ts`; Gemini-specific HTTP clients remain the current implementation behind `gemini-model-provider.ts`.
 - Capture highlights and lightweight resonance answers should travel through the existing `inspiration_sparks` request fields until a dedicated signal metadata table exists.
+- The shareable Top of Mind value-prop surface currently lives at protected route `/top-of-mind/share` and reads the current user's notes from `/api/top-of-mind`; do not expose public note sharing until a share-token or permission model exists.
+
+---
+
+## 2026-05-30 15:58 PDT - US-014B
+
+- What was implemented
+  - Added a generated Top of Mind value-prop page at `/top-of-mind/share`.
+  - The page explains that most inspiration disappears, WAKA catches saved signals before they slip away, and saved signals form a changing picture of who the user wants to think with, where they want to be, and what they might build.
+  - Rendered active provisional post-it notes from the current `/api/top-of-mind` route with concise evidence previews and copy that frames them as reflections, tensions, questions, and action hints rather than permanent identity claims.
+  - Kept the route protected because the repo does not yet have a public share-token or note-sharing permission model.
+- Files changed
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/main.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/TopOfMindShare.test.ts` passed: 1 test.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/top-of-mind/share` on desktop and mobile using mocked same-origin auth and top-of-mind API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Share-style surfaces should consume `/api/top-of-mind` and user-facing top-of-mind note types instead of legacy WOW routes.
+  - Gotchas encountered
+    - A truly public share link needs an explicit share-token or permission model before exposing personal Top of Mind notes to anonymous visitors.
+  - Useful context
+    - The new page intentionally contains no visible WOW terminology; legacy compatibility fields can still appear in mocked data as long as they are not rendered.
 
 ---
 

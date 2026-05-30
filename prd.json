@@ -244,7 +244,7 @@
         "Run web typecheck, targeted page/component tests, and browser verification"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Draft copy direction: Yun’s Top of Mind. Most inspiration disappears. This person caught it before it vanished. Slowly, the things they saved began to take shape: who they want to think with, where they want to be, what they might be here to build. They did not write all of this; they saved what almost slipped away, and the rest emerged. Not final. Changes as new signals arrive. This page was made from the things they saved. It changes every week. © WAKA, 2026, for minds that wander."
     },
     {
