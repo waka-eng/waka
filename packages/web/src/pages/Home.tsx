@@ -515,7 +515,6 @@ const NOTE_COLORS = [
 const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "top of mind",
-    captureTab: "capture",
     savesTab: "all signals",
     room: "내 방",
     titleLineOne: (name: string) => (
@@ -584,7 +583,6 @@ const HOME_COPY = {
   },
   "en-US": {
     thoughtTab: "top of mind",
-    captureTab: "capture",
     savesTab: "all signals",
     room: "my room",
     titleLineOne: (name: string) => (
@@ -596,9 +594,9 @@ const HOME_COPY = {
     titleSuffix: "",
     tagline: (
       <>
-        Most signals disappear.
+        Most inspiration disappears.
         <br />
-        This person caught it before it vanished.
+        This person caught what almost slipped away.
         <br />
         And slowly, the things they saved began to take shape.
         <br />
@@ -657,7 +655,6 @@ const HOME_COPY = {
   SupportedLocale,
   {
     thoughtTab: string;
-    captureTab: string;
     savesTab: string;
     room: string;
     titleLineOne: (name: string) => JSX.Element;
@@ -1285,7 +1282,7 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     if (homeModeChosen || initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
-    setHomeMode(hasEnoughSignalsForTopOfMind ? "thought" : "capture");
+    setHomeMode("thought");
   }, [
     hasEnoughSignalsForTopOfMind,
     homeModeChosen,
@@ -1731,13 +1728,6 @@ export function HomePage(): JSX.Element {
             </button>
             <button
               type="button"
-              className={`nc-mode-btn${homeMode === "capture" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => chooseHomeMode("capture")}
-            >
-              {copy.captureTab}
-            </button>
-            <button
-              type="button"
               className={`nc-mode-btn${homeMode === "saves" ? " nc-mode-btn--active" : ""}`}
               onClick={() => chooseHomeMode("saves")}
             >
@@ -1800,29 +1790,6 @@ export function HomePage(): JSX.Element {
               <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
             </footer>
           </>
-        ) : homeMode === "capture" ? (
-          <section className="reference-capture-page" aria-label={copy.captureAria}>
-            <div className="reference-capture-page-copy">
-              <span>{copy.captureInlineKicker}</span>
-              <h1>{copy.captureTitle}</h1>
-              <p>{copy.captureBody}</p>
-            </div>
-            <div className="reference-capture-page-form">
-              <CaptureForm
-                view={captureView}
-                visualState={{
-                  focused: captureFocused,
-                  saveFlash: captureSaveFlash,
-                }}
-                focused={captureFocused}
-                onToggleFocus={setCaptureFocused}
-                onOptimisticAdd={handleOptimisticAdd}
-                onPersisted={handleCapturePersisted}
-                onPersistError={handlePersistError}
-                locale={locale}
-              />
-            </div>
-          </section>
         ) : (
           <section className="reference-saves-page" aria-label={copy.savesTitle}>
             <header>
@@ -1879,7 +1846,7 @@ export function HomePage(): JSX.Element {
         )}
       </main>
 
-      {expandedNoteIndex === null && homeMode !== "capture" ? (
+      {expandedNoteIndex === null ? (
         <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>
           <span className="nc-save-cta">{copy.captureCta}</span>
         </button>

@@ -590,7 +590,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-canvas")).not.toBeNull();
     expect(container.textContent).toContain("river's top of mind");
-    expect(container.textContent).toContain("Most signals disappear.");
+    expect(container.textContent).toContain("Most inspiration disappears.");
     expect(container.textContent).toContain("not final. changes as new signals arrive.");
   });
 
@@ -737,7 +737,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("could not save feedback");
   });
 
-  it("starts low-data users on capture-first signal entry", async () => {
+  it("starts low-data users on Top of Mind with bottom capture available", async () => {
     setApiFixtures({
       inspirations: [],
       topOfMindNotes: [],
@@ -755,11 +755,11 @@ describe("HomePage current home experience", () => {
     });
     const container = await renderHomePage();
 
-    expect(container.querySelector(".reference-capture-page")).not.toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("capture");
-    expect(container.textContent).toContain("Catch the first signals");
-    expect(container.textContent).toContain("what hit");
-    expect(container.querySelector("#capNote")).not.toBeNull();
+    expect(container.querySelector(".reference-capture-page")).toBeNull();
+    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
+    expect(container.textContent).toContain("When signals gather, provisional notes will appear here.");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("capture signal");
+    expect(container.querySelector("#capNote")).toBeNull();
   });
 
   it("falls back to graph preview notes while top-of-mind note persistence is empty", async () => {

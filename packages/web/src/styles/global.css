@@ -1266,23 +1266,23 @@
   border-radius: 2px;
   background: #fffefb;
   box-shadow: 0 28px 54px -42px rgba(0, 0, 0, 0.28);
-  padding: 30px 34px;
+  padding: 22px 24px;
 }
 
 .reference-capture-modal .cap-body textarea {
   color: #1a1a1a;
-  font-family: "Fraunces", "Times New Roman", serif;
-  font-size: clamp(28px, 4vw, 44px);
-  font-style: italic;
-  font-weight: 300;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(17px, 2.2vw, 23px);
+  font-style: normal;
+  font-weight: 450;
   letter-spacing: 0;
-  line-height: 1.08;
+  line-height: 1.45;
 }
 
 .reference-capture-modal .cap-body textarea::placeholder {
-  color: #c2c0ba;
-  font-family: "Fraunces", "Times New Roman", serif;
-  font-style: italic;
+  color: #aaa7a2;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-style: normal;
 }
 
 .reference-capture-close {
@@ -8645,7 +8645,7 @@ body.reflect-bg {
 
 .signal-archive-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
   gap: clamp(18px, 3vw, 36px);
   padding: clamp(18px, 4vw, 44px) clamp(18px, 5vw, 64px) 64px;
 }
@@ -8707,11 +8707,10 @@ body.reflect-bg {
 
 .signal-detail {
   align-self: start;
-  position: sticky;
+  position: relative;
   top: 18px;
-  max-height: calc(100vh - 36px);
-  overflow: auto;
-  padding: 24px;
+  min-height: calc(100vh - 220px);
+  padding: clamp(24px, 4vw, 44px);
   border: 1px solid rgba(23, 23, 21, 0.13);
   border-radius: 8px;
   background: #fffaf0;
