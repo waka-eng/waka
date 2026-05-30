@@ -2,13 +2,62 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
+  createInspiration,
+  fetchInspirations,
   fetchWowMoments,
   formatMeaningGraphRebuildError,
   updateAuthPreferences,
+  type ApiInspiration,
   type ListWowMomentsResponse,
 } from "../src/lib/api";
 
 const emptySuccess: ListWowMomentsResponse = { wowMoments: [] };
+
+const signalLayerInspiration: ApiInspiration = {
+  id: "insp-1",
+  userId: "user-1",
+  text: "light bends around dense thoughts",
+  kind: "note",
+  category: 3,
+  importanceScore: 44,
+  wowScore: 71,
+  cluster: null,
+  classifiedAt: null,
+  createdAt: "2026-05-30T20:00:00.000Z",
+  updatedAt: "2026-05-30T20:00:00.000Z",
+  signalScores: {
+    resonance: 71,
+    recurrence: 71,
+    agency: 44,
+    identitySignal: 44,
+    decisionRelevance: 44,
+  },
+  signal: {
+    id: "insp-1",
+    userId: "user-1",
+    text: "light bends around dense thoughts",
+    kind: "note",
+    category: 3,
+    scores: {
+      resonance: 71,
+      recurrence: 71,
+      agency: 44,
+      identitySignal: 44,
+      decisionRelevance: 44,
+    },
+    capturedAt: "2026-05-30T20:00:00.000Z",
+    updatedAt: "2026-05-30T20:00:00.000Z",
+    interpretation: {
+      cluster: null,
+      classifiedAt: null,
+    },
+    legacy: {
+      inspirationId: "insp-1",
+      importanceScore: 44,
+      wowScore: 71,
+    },
+  },
+};
 
 function stubFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn(async () => response));
@@ -92,6 +141,47 @@ describe("fetchWowMoments", () => {
     stubFetch(Response.json(emptySuccess));
 
     await expect(fetchWowMoments()).resolves.toEqual([]);
+  });
+});
+
+describe("inspiration signal compatibility", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps createInspiration on the existing route while preserving signal-facing scores", async () => {
+    stubFetch(Response.json({ inspiration: signalLayerInspiration }, { status: 201 }));
+
+    await expect(
+      createInspiration({
+        text: "light bends around dense thoughts",
+        kind: "note",
+        category: 3,
+      }),
+    ).resolves.toEqual(signalLayerInspiration);
+
+    expect(fetch).toHaveBeenCalledWith("/api/inspirations", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: "light bends around dense thoughts",
+        kind: "note",
+        category: 3,
+      }),
+    });
+  });
+
+  it("keeps fetchInspirations on the existing route while exposing signal-facing scores", async () => {
+    stubFetch(Response.json({ inspirations: [signalLayerInspiration] }));
+
+    await expect(fetchInspirations()).resolves.toEqual([signalLayerInspiration]);
+
+    expect(fetch).toHaveBeenCalledWith("/api/inspirations", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
   });
 });
 

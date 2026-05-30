@@ -58,6 +58,7 @@ import {
 import { persistMeaningPacketForInspiration } from "../lib/meaning-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
+import { withSignalLayer } from "../lib/signals.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -423,7 +424,7 @@ routes.post("/", async (c) => {
   // 4. 201 Created with the canonical row payload. Cluster will be `null`
   //    until the classifier worker updates it; the SPA renders an
   //    "uncategorised" state in that window.
-  return c.json({ inspiration: withDisplayedWowScore(scoredInserted) }, 201);
+  return c.json({ inspiration: withSignalLayer(withDisplayedWowScore(scoredInserted)) }, 201);
 });
 
 /**
@@ -572,10 +573,12 @@ routes.get("/", async (c) => {
 
   const now = new Date();
   return c.json({
-    inspirations: rows.map((row) => ({
-      ...withDisplayedWowScore(row, now),
-      attachments: attachmentsByInspiration.get(row.id) ?? [],
-    })),
+    inspirations: rows.map((row) =>
+      withSignalLayer({
+        ...withDisplayedWowScore(row, now),
+        attachments: attachmentsByInspiration.get(row.id) ?? [],
+      }),
+    ),
   }, 200);
 });
 

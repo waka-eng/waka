@@ -293,6 +293,35 @@ export type ClusterKind =
  */
 export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
 
+export type ApiSignalScoreName =
+  | "resonance"
+  | "recurrence"
+  | "agency"
+  | "identitySignal"
+  | "decisionRelevance";
+
+export type ApiSignalScores = Record<ApiSignalScoreName, number>;
+
+export interface ApiSignal {
+  id: string;
+  userId: string;
+  text: string;
+  kind: ApiInspirationKind | null;
+  category: number | null;
+  scores: ApiSignalScores;
+  capturedAt: string;
+  updatedAt: string;
+  interpretation: {
+    cluster: ClusterKind | null;
+    classifiedAt: string | null;
+  };
+  legacy: {
+    inspirationId: string;
+    importanceScore: number;
+    wowScore: number;
+  };
+}
+
 export interface ApiInspiration {
   id: string;
   userId: string;
@@ -307,6 +336,9 @@ export interface ApiInspiration {
   updatedAt: string;
   /** Populated by GET /inspirations; omitted on older create/update responses. */
   attachments?: ApiAttachment[];
+  /** Signal-facing compatibility layer over the current inspiration row. */
+  signal?: ApiSignal;
+  signalScores?: ApiSignalScores;
 }
 
 export interface ApiInspirationScoreBreakdown {

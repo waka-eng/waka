@@ -5,6 +5,7 @@
 - WAKA is a pnpm workspace with API code in `packages/api`, web app code in `packages/web`, and Drizzle migrations under `drizzle/migrations`.
 - Product direction for this run: WAKA becomes an ambition mirror powered by a personal context graph; use signal/context/top-of-mind language for new work.
 - Keep the graph inspector internal. User-facing graph-backed output should appear as post-it-style Top of Mind notes, evidence drawers, patterns, and later decision memos.
+- Signal-facing compatibility currently wraps existing `/api/inspirations` responses with additive `signal` and `signalScores` fields instead of renaming the route or persistence immediately.
 
 ---
 
@@ -30,5 +31,35 @@
     - `git add docs/ambition-mirror-domain-migration.md prd.json progress.txt && git commit -m "feat: US-001 - Document domain rename map and migration strategy"` failed because Git could not create `.git/index.lock` in this sandbox.
   - Useful context
     - Current persistence still uses `inspirations`, `meaning_packets`, `meaning_nodes`, `meaning_edges`, `meaning_evidence`, `wow_moments`, and `wow_moment_inspirations`; the doc recommends wrapping first before destructive renames.
+
+---
+
+## 2026-05-30 14:18 PDT - US-002
+
+- What was implemented
+  - Added a signal-facing API type adapter over the existing inspiration persistence shape.
+  - Existing POST/GET `/api/inspirations` responses now include additive `signal` and `signalScores` fields while preserving old inspiration fields and routes.
+  - Exposed resonance, recurrence, agency, identity signal, and decision relevance score names, initially derived from existing displayed WOW and importance scores.
+  - Added matching web API client types and fetch-stubbed compatibility tests for create/list behavior through the signal layer.
+- Files changed
+  - `packages/api/src/lib/signals.ts`
+  - `packages/api/src/routes/inspirations.ts`
+  - `packages/api/test/inspirations.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 11 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api test -- test/inspirations.test.ts` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Signal-facing compatibility can be additive on existing inspiration responses as `signal` and `signalScores` while keeping `/api/inspirations` stable.
+  - Gotchas encountered
+    - The local API integration test environment currently points at `HOST.neon.tech`, so DB-backed route tests cannot run until the DB connection URL is fixed.
+  - Useful context
+    - Initial signal score names intentionally map to existing fields: resonance/recurrence from displayed `wowScore`, and agency/identitySignal/decisionRelevance from `importanceScore`.
 
 ---

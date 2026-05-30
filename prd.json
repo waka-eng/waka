@@ -30,7 +30,7 @@
         "Run relevant API and web typechecks"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

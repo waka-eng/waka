@@ -111,6 +111,38 @@ interface ApiInspiration {
   classifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  signalScores?: {
+    resonance: number;
+    recurrence: number;
+    agency: number;
+    identitySignal: number;
+    decisionRelevance: number;
+  };
+  signal?: {
+    id: string;
+    userId: string;
+    text: string;
+    kind: string | null;
+    category: number | null;
+    scores: {
+      resonance: number;
+      recurrence: number;
+      agency: number;
+      identitySignal: number;
+      decisionRelevance: number;
+    };
+    capturedAt: string;
+    updatedAt: string;
+    interpretation: {
+      cluster: string | null;
+      classifiedAt: string | null;
+    };
+    legacy: {
+      inspirationId: string;
+      importanceScore: number;
+      wowScore: number;
+    };
+  };
   attachments?: Array<{
     id: string;
     type: string;
@@ -265,6 +297,32 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(dbRows[0]!.text).toBe("light bends around dense thoughts");
     expect(row.importanceScore).toEqual(expect.any(Number));
     expect(row.wowScore).toEqual(expect.any(Number));
+    expect(row.signalScores).toEqual({
+      resonance: row.wowScore,
+      recurrence: row.wowScore,
+      agency: row.importanceScore,
+      identitySignal: row.importanceScore,
+      decisionRelevance: row.importanceScore,
+    });
+    expect(row.signal).toMatchObject({
+      id: row.id,
+      userId: fixture.user.id,
+      text: "light bends around dense thoughts",
+      kind: "note",
+      category: 3,
+      scores: row.signalScores,
+      capturedAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      interpretation: {
+        cluster: null,
+        classifiedAt: null,
+      },
+      legacy: {
+        inspirationId: row.id,
+        importanceScore: row.importanceScore,
+        wowScore: row.wowScore,
+      },
+    });
     expect(dbRows[0]!.importanceScore).toBe(row.importanceScore);
     expect(row.wowScore).toBe(
       calculateDisplayedInspirationScore({
@@ -350,6 +408,19 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(kindByText.get("https://example.com/kind-link")).toBe("link");
     expect(kindByText.get("Image inspiration")).toBe("image");
     expect(kindByText.get("Mixed inspiration")).toBe("mixed");
+    for (const row of listed.body.inspirations) {
+      expect(row.signal?.id).toBe(row.id);
+      expect(row.signal?.scores).toEqual(row.signalScores);
+      expect(row.signalScores).toEqual(
+        expect.objectContaining({
+          resonance: expect.any(Number),
+          recurrence: expect.any(Number),
+          agency: expect.any(Number),
+          identitySignal: expect.any(Number),
+          decisionRelevance: expect.any(Number),
+        }),
+      );
+    }
   });
 
 
