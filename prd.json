@@ -90,7 +90,7 @@
         "Run API typecheck and targeted route tests"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

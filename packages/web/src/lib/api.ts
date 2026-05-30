@@ -721,6 +721,29 @@ export interface ApiTopOfMindNote {
   };
 }
 
+export interface ApiTopOfMindEvidencePreview {
+  signalId: string;
+  role: string;
+  reason: string;
+  textPreview: string;
+  kind: string | null;
+  createdAt: string;
+  resonanceScore: number;
+}
+
+export interface ApiTopOfMindRelatedSignalReference {
+  id: string;
+  preview: string;
+  kind: string | null;
+  createdAt: string;
+  resonanceScore: number;
+}
+
+export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
+  evidencePreviews: ApiTopOfMindEvidencePreview[];
+  relatedSignals: ApiTopOfMindRelatedSignalReference[];
+};
+
 export interface ApiWowMoment {
   id: string;
   userId: string;
@@ -741,7 +764,20 @@ export interface ListWowMomentsResponse {
   wowMoments: ApiWowMoment[];
 }
 
+export interface ListTopOfMindNotesResponse {
+  topOfMindNotes: ApiTopOfMindNoteSurface[];
+  topOfMind?: ApiTopOfMind;
+}
+
+export interface GetTopOfMindNoteResponse {
+  topOfMindNote: ApiTopOfMindNoteSurface;
+}
+
 export interface FetchWowMomentsOptions {
+  limit?: number;
+}
+
+export interface FetchTopOfMindNotesOptions {
   limit?: number;
 }
 
@@ -875,6 +911,45 @@ export async function fetchWowMoments(
     });
   }
   return payload.wowMoments;
+}
+
+export async function fetchTopOfMindNotes(
+  options: FetchTopOfMindNotesOptions = {},
+): Promise<ApiTopOfMindNoteSurface[]> {
+  const params = new URLSearchParams();
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<ListTopOfMindNotesResponse>(
+    apiPath(`/top-of-mind${query ? `?${query}` : ""}`),
+    "Failed to load top-of-mind notes",
+  );
+
+  if (!Array.isArray(body.topOfMindNotes)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed top-of-mind notes response",
+    });
+  }
+
+  return body.topOfMindNotes;
+}
+
+export async function fetchTopOfMindNote(
+  noteId: string,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await getJson<GetTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${noteId}`),
+    "Failed to load top-of-mind note",
+  );
+
+  if (!body.topOfMindNote) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed top-of-mind note response",
+    });
+  }
+
+  return body.topOfMindNote;
 }
 
 export async function fetchBackgroundJobs(

@@ -4,14 +4,60 @@ import {
   ApiError,
   createInspiration,
   fetchInspirations,
+  fetchTopOfMindNote,
+  fetchTopOfMindNotes,
   fetchWowMoments,
   formatMeaningGraphRebuildError,
   updateAuthPreferences,
   type ApiInspiration,
+  type ApiTopOfMindNoteSurface,
   type ListWowMomentsResponse,
 } from "../src/lib/api";
 
 const emptySuccess: ListWowMomentsResponse = { wowMoments: [] };
+
+const topOfMindNote: ApiTopOfMindNoteSurface = {
+  id: "note-1",
+  userId: "user-1",
+  title: "Recurring signal",
+  type: "pattern",
+  body: "Three saved signals rhyme.",
+  prompt: null,
+  guidance: null,
+  confidence: 91,
+  status: "active",
+  relatedSignalIds: ["signal-1"],
+  relatedContextNodeIds: [],
+  createdAt: "2026-05-01T00:00:00.000Z",
+  updatedAt: "2026-05-01T00:00:00.000Z",
+  source: "wow_moment_compatibility",
+  isProvisional: true,
+  legacy: {
+    wowMomentId: "note-1",
+    wowKind: "recurrence",
+    wowScore: 91,
+  },
+  evidencePreviews: [
+    {
+      signalId: "signal-1",
+      role: "Source signal",
+      reason: "This signal shows the recurring ritual.",
+      textPreview: "Signal text",
+      kind: "note",
+      createdAt: "2026-04-30T00:00:00.000Z",
+      resonanceScore: 64,
+    },
+  ],
+  relatedSignals: [
+    {
+      id: "signal-1",
+      preview: "Signal text",
+      kind: "note",
+      createdAt: "2026-04-30T00:00:00.000Z",
+      resonanceScore: 64,
+    },
+  ],
+};
 
 const signalLayerInspiration: ApiInspiration = {
   id: "insp-1",
@@ -163,6 +209,62 @@ describe("fetchWowMoments", () => {
     stubFetch(Response.json(emptySuccess));
 
     await expect(fetchWowMoments()).resolves.toEqual([]);
+  });
+});
+
+describe("fetchTopOfMindNotes", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns active top-of-mind notes from the user-facing route", async () => {
+    stubFetch(Response.json({ topOfMindNotes: [topOfMindNote] }));
+
+    await expect(fetchTopOfMindNotes({ limit: 3 })).resolves.toEqual([
+      topOfMindNote,
+    ]);
+    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind?limit=3", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("throws ApiError for a malformed note list response", async () => {
+    stubFetch(Response.json({ topOfMindNotes: null }));
+
+    await expect(fetchTopOfMindNotes()).rejects.toMatchObject({
+      name: "ApiError",
+      status: 200,
+      message: "Malformed top-of-mind notes response",
+    } satisfies Partial<ApiError>);
+  });
+});
+
+describe("fetchTopOfMindNote", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a single top-of-mind note detail", async () => {
+    stubFetch(Response.json({ topOfMindNote }));
+
+    await expect(fetchTopOfMindNote("note-1")).resolves.toEqual(topOfMindNote);
+    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/note-1", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("preserves API errors from the detail endpoint", async () => {
+    stubFetch(Response.json({ error: "Top-of-mind note not found" }, { status: 404 }));
+
+    await expect(fetchTopOfMindNote("missing")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "Top-of-mind note not found",
+    } satisfies Partial<ApiError>);
   });
 });
 

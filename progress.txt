@@ -9,6 +9,7 @@
 - `meaning_nodes.type` remains a text compatibility field for now; use `contextNodeTypeValues` for new graph writes and `normalizeContextNodeType` when reading legacy `question`/`claim`/`life_direction` rows.
 - Signal packet creation lives in `packages/api/src/lib/signal-packets.ts`, but persists to the existing `meaning_packets` table; `packages/api/src/lib/meaning-packets.ts` is a compatibility wrapper for old imports.
 - Top-of-mind note compatibility lives in `packages/api/src/lib/top-of-mind-notes.ts`; it serializes current `wow_moments` rows into provisional active notes while persistence remains unchanged.
+- The user-facing `/api/top-of-mind` route returns `topOfMindNotes` plus the legacy `topOfMind` preview field for current home-page compatibility; web client helpers live in `packages/web/src/lib/api.ts`.
 
 ---
 
@@ -167,5 +168,35 @@
   - Useful context
     - The compatibility note status is always `active` for now because there is no feedback or dismissal persistence yet.
     - Related context node ids are returned as an empty list until graph-backed note refresh/persistence lands.
+
+---
+
+## 2026-05-30 14:44 PDT - US-006
+
+- What was implemented
+  - Added authenticated `/api/top-of-mind` note list behavior backed by existing WOW moment compatibility persistence.
+  - Added authenticated `/api/top-of-mind/:noteId` detail behavior with tenant-scoped lookup and UUID validation.
+  - Returned active top-of-mind notes with concise evidence previews and related signal references without exposing raw admin graph fields.
+  - Kept the existing `topOfMind` preview response field on the list route so the current home page remains compatible until UI migration stories land.
+  - Added web API client types and helpers for top-of-mind note list/detail responses.
+- Files changed
+  - `packages/api/src/routes/top-of-mind.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/top-of-mind.test.ts` passed: 6 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 15 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - `/api/top-of-mind` is now the user-facing note surface; use `topOfMindNotes` for new UI work and keep `topOfMind` only as a compatibility preview until the home page migrates.
+  - Gotchas encountered
+    - The route still reads from WOW moment compatibility tables, so note status is active and related context node ids stay empty until feedback and refresh persistence stories land.
+  - Useful context
+    - Evidence previews intentionally expose signal ids, short text previews, role, reason, kind, timestamp, and resonance score, not meaning graph/admin internals.
 
 ---
