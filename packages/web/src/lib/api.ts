@@ -675,6 +675,19 @@ export type WowKind =
   | "tension"
   | "outlier";
 
+export type ApiTopOfMindNoteType =
+  | "pattern"
+  | "tension"
+  | "question"
+  | "hypothesis"
+  | "action";
+
+export type ApiTopOfMindNoteStatus =
+  | "active"
+  | "dismissed"
+  | "stale"
+  | "replaced";
+
 export interface ApiWowMomentRelatedInspiration {
   inspirationId: string;
   role: string;
@@ -683,6 +696,29 @@ export interface ApiWowMomentRelatedInspiration {
   kind: string | null;
   createdAt: string;
   wowScore: number;
+}
+
+export interface ApiTopOfMindNote {
+  id: string;
+  userId: string;
+  title: string;
+  type: ApiTopOfMindNoteType;
+  body: string;
+  prompt: string | null;
+  guidance: string | null;
+  confidence: number;
+  status: ApiTopOfMindNoteStatus;
+  relatedSignalIds: string[];
+  relatedContextNodeIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  source: "wow_moment_compatibility";
+  isProvisional: true;
+  legacy: {
+    wowMomentId: string;
+    wowKind: WowKind;
+    wowScore: number;
+  };
 }
 
 export interface ApiWowMoment {
@@ -698,6 +734,7 @@ export interface ApiWowMoment {
   createdAt: string;
   updatedAt: string;
   relatedInspirations: ApiWowMomentRelatedInspiration[];
+  topOfMindNote?: ApiTopOfMindNote;
 }
 
 export interface ListWowMomentsResponse {

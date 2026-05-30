@@ -75,7 +75,7 @@
         "Run API typecheck and targeted WOW/top-of-mind tests"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
