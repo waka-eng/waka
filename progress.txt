@@ -446,3 +446,30 @@
     - Existing legacy `Link inspiration` / `Image inspiration` / `Mixed inspiration` rows are still treated as system fallback text so old attachment-only saves remain clean in history.
 
 ---
+
+## 2026-05-30 15:46 PDT - US-015
+
+- What was implemented
+  - Added a low-prominence authenticated `/api/decision-memo` scaffold for a what-to-build memo.
+  - Added deterministic memo assembly from active context graph nodes, strongest signal evidence, active top-of-mind notes, unresolved tensions/questions/hypotheses, and one testable next action.
+  - Added focused tests for fixture-based memo assembly and route tenant scoping through the authenticated user id.
+- Files changed
+  - `packages/api/src/lib/decision-memo.ts`
+  - `packages/api/src/lib/decision-memo.test.ts`
+  - `packages/api/src/routes/decision-memo.ts`
+  - `packages/api/src/routes/decision-memo.test.ts`
+  - `packages/api/src/index.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/decision-memo.test.ts src/routes/decision-memo.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - The working PRD already had unrelated uncommitted story edits; US-015 was marked complete without reverting or reshaping those edits.
+  - Useful context
+    - The decision memo is API-only for now, so this story did not require browser verification.
+
+---

@@ -214,6 +214,40 @@
       "notes": ""
     },
     {
+      "id": "US-014A",
+      "title": "Make capture feel safe, autosaved, and highlightable",
+      "description": "As a user, I want capture to feel like private note-taking in a safe zone, with autosaved drafts and an easy way to mark the parts that mattered most.",
+      "acceptanceCriteria": [
+        "Reduce capture text size and visual pressure so long notes feel natural to write",
+        "Autosave capture drafts locally and never clear text until server save succeeds",
+        "Add a way to highlight selected text as the part that hit most",
+        "Persist highlighted snippets or structured highlight metadata with the signal, or explicitly store them as signal metadata if a dedicated table is too large for this story",
+        "After capture, ask one lightweight resonance question such as want, admire, envy, feels like me, bothers me, or not sure",
+        "Show a brief post-capture confirmation that reflects what WAKA noticed without sounding final",
+        "Run web typecheck, targeted capture tests, and browser verification"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Capture should feel like a safe private scratchpad, not a high-pressure form. The user should not worry that a long personal note will disappear accidentally. Highlights are high-confidence resonance evidence for the context graph."
+    },
+    {
+      "id": "US-014B",
+      "title": "Create shareable Top of Mind value-prop page",
+      "description": "As a user, I want a shareable Top of Mind page that explains what WAKA does while also showing my current provisional top-of-mind notes to other people.",
+      "acceptanceCriteria": [
+        "Create or update the shareable Top of Mind page so it can explain the product and show the user’s current top-of-mind notes in one link",
+        "Replace placeholder narrative with stronger value-prop copy that explains: most inspiration disappears, WAKA catches what almost slipped away, and saved signals slowly form a picture of who the user wants to think with, where they want to be, and what they might be here to build",
+        "Make clear that the page is not manually written by the user; it is generated from things they saved and changes as new signals arrive",
+        "Clarify what the bottom post-it notes represent: provisional graph-backed reflections, tensions, questions, and action hints, not permanent identity claims",
+        "Keep the tone poetic but understandable enough that sharing the link explains why WAKA exists",
+        "Remove WOW terminology from this page entirely",
+        "Run web typecheck, targeted page/component tests, and browser verification"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Draft copy direction: Yun’s Top of Mind. Most inspiration disappears. This person caught it before it vanished. Slowly, the things they saved began to take shape: who they want to think with, where they want to be, what they might be here to build. They did not write all of this; they saved what almost slipped away, and the rest emerged. Not final. Changes as new signals arrive. This page was made from the things they saved. It changes every week. © WAKA, 2026, for minds that wander."
+    },
+    {
       "id": "US-015",
       "title": "Add first decision memo scaffold for what to build",
       "description": "As a user, I want WAKA to turn my context graph into a lightweight decision memo for what to build next.",
@@ -224,22 +258,42 @@
         "Add targeted tests for memo assembly with fixture graph data",
         "Run relevant typechecks and tests"
       ],
-      "priority": 15,
-      "passes": false,
+      "priority": 18,
+      "passes": true,
       "notes": ""
     },
     {
+      "id": "US-014C",
+      "title": "Create saved signal search and deep-dive experience",
+      "description": "As a user, I want to search and deeply inspect the things I saved so the archive becomes a living context surface, not a flat list of old notes.",
+      "acceptanceCriteria": [
+        "Create or upgrade a saved-signal archive surface with prominent search, filter, and sort controls for saved signals",
+        "Support deep-dive inspection of a saved signal with raw text, highlighted snippets, attachments or links, resonance feedback, signal packet interpretation, related context nodes, and related top-of-mind notes where available",
+        "Make search useful for both exact text and meaning-oriented exploration by surfacing matching snippets and related graph terms; if semantic search is too large for this story, design the UI/API boundaries so it can be added without replacing the surface",
+        "Add quick filters for signal type, high-resonance or highlighted signals, unresolved questions/tensions, and recently revisited items where data exists",
+        "Let users continue the loop from the deep dive by adding a reflection, marking what still matters, or correcting the interpretation",
+        "Avoid second-brain filing behavior: do not require manual folders or tags before the archive is useful",
+        "Remove WOW terminology from the archive and deep-dive experience entirely",
+        "Run API/web typechecks, targeted archive/search tests, and browser verification"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Brainstorm direction: search should answer both \"where is that thing I saved?\" and \"what pattern was this part of?\" The deep dive should show the raw saved note, the exact part that hit, WAKA's current interpretation, graph links, top-of-mind notes it influenced, and lightweight correction actions. Good modes: All signals, Highlighted, Tensions, Questions, People/places, Recently resurfaced. Results should show matching snippets, resonance markers, and why this result is relevant."
+    },
+    {
       "id": "US-016",
-      "title": "Final terminology cleanup and compatibility audit",
-      "description": "As a developer, I need old inspiration/WOW/meaning vocabulary either intentionally internal, migrated, or documented before the Ralph run is considered complete.",
+      "title": "Remove WOW terminology from product-facing surfaces",
+      "description": "As a developer, I need WOW terminology removed from product-facing UI, docs, prompts, API clients, and new domain services because WAKA is now an ambition mirror centered on top-of-mind notes and personal context.",
       "acceptanceCriteria": [
         "Audit remaining user-facing inspiration, WOW, and meaning strings",
-        "Rename user-facing vocabulary where appropriate and document intentional internal leftovers",
-        "Ensure existing routes kept for compatibility are clearly marked",
+        "Remove WOW terminology from visible UI copy, README/product docs, model prompts, API client names, and new top-of-mind/context services",
+        "Keep legacy database table or column names such as wow_moments and wow_score only when changing them would require a larger persistence migration",
+        "Any retained legacy WOW names must be isolated behind top-of-mind, resonance, or context adapters and documented as legacy compatibility only",
+        "Do not expose /api/wow-moments as the preferred product route; new user-facing code must use /api/top-of-mind",
         "Run API and web typechecks plus the highest-value targeted regression tests",
         "Update progress.txt Codebase Patterns with final naming conventions"
       ],
-      "priority": 16,
+      "priority": 19,
       "passes": false,
       "notes": ""
     }
