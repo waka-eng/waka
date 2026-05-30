@@ -296,6 +296,27 @@
       "priority": 19,
       "passes": true,
       "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Make capture a low-friction self-understanding moment",
+      "description": "As a user, I want capture to feel valuable in the moment, not like required data entry for AI, by helping me quickly notice why a signal amused, moved, bothered, or pulled me before the feeling disappears.",
+      "acceptanceCriteria": [
+        "Reframe capture as a micro self-understanding loop: save the signal, mark what hit, optionally name why it hit, and receive a lightweight reflection without waiting for a later Top of Mind surface",
+        "Add low-friction emotion, resonance, or stakes controls using compact emoji/icon chips or similarly lightweight interactions rather than long forms",
+        "Support ambition-relevant reasons for saving such as amused me, I want this, I admire this, I envy this, feels like me, bothers me, makes me curious, high-stakes, and not sure",
+        "Let users skip every explicit input beyond the raw save without guilt, blocking, or degraded confirmation",
+        "Make the interaction feel fun and safe, not like tagging, journaling homework, a mood tracker, or engagement bait",
+        "Use progressive disclosure: show one simple prompt first, then offer an optional deeper question such as why did this amuse me or what part do I want more of",
+        "Persist emotion/reason/stakes metadata with the signal using the existing safest persistence path or a dedicated structure if already available",
+        "Use human-provided capture metadata in post-capture confirmation and make it available to signal packet/context graph interpretation as stronger evidence than model inference alone",
+        "Keep capture friction minimal on mobile and desktop, including keyboard-only and touch-friendly paths",
+        "Remove any WOW terminology from this capture flow",
+        "Run web typecheck, targeted capture tests, and browser verification"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Product rationale: in a world where AI can sense passively, asking humans for explicit input must be worth it immediately. The human-only value is not just emotion labeling; it is the user noticing why this signal mattered while the feeling is still alive. Capture should become a tiny revelation loop: this amused me, this made me envious, this feels like a life I want, this bothers me, this is high-stakes. Good interaction directions: one-tap chips, quick highlight plus reason, optional micro-question, press-and-hold intensity, or a tiny palette after selection. The goal is to reduce churn by making explicit input feel rewarding, clarifying, and uniquely human, not like feeding the AI."
     }
   ]
 }
