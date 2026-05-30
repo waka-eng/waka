@@ -41,6 +41,16 @@ function createRelatedRowsSelect<T>(terminal: T) {
   };
 }
 
+function createFeedbackRowsSelect<T>(terminal: T) {
+  return {
+    from: vi.fn(() => ({
+      where: vi.fn(() => ({
+        orderBy: vi.fn(async () => terminal),
+      })),
+    })),
+  };
+}
+
 describe("GET /api/top-of-mind", () => {
   it("returns top-of-mind notes and keeps the preview compatibility field", async () => {
     const topOfMind = {
@@ -152,7 +162,8 @@ describe("GET /api/top-of-mind", () => {
       select: vi
         .fn()
         .mockReturnValueOnce(momentsSelect.builder)
-        .mockReturnValueOnce(createRelatedRowsSelect(relatedRows)),
+        .mockReturnValueOnce(createRelatedRowsSelect(relatedRows))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
     };
     const getTopOfMind = vi.fn(async () => ({
       generatedAt: "2026-05-30T12:00:00.000Z",
@@ -221,6 +232,68 @@ describe("GET /api/top-of-mind", () => {
     ]);
     expect(JSON.stringify(body.topOfMindNotes)).not.toContain("meaningNodeId");
     expect(JSON.stringify(body.topOfMindNotes)).not.toContain("admin");
+  });
+
+  it("derives note status from latest applied feedback provenance", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000010",
+      userId: user.id,
+      title: "This reflection may be stale",
+      kind: "tension",
+      why: "The note no longer feels true.",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 52,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: moment.id,
+              metadata: {
+                appliedFeedback: {
+                  source: "user_feedback",
+                  topOfMindNoteStatus: "stale",
+                },
+              },
+            },
+          ]),
+        ),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind: vi.fn(async () => ({
+          generatedAt: "2026-05-30T12:00:00.000Z",
+          headline: "Top of mind",
+          activeThemes: [],
+          activeQuestions: [],
+          relationshipSignals: [],
+          summary: {
+            inspirationCount: 1,
+            meaningNoteCount: 0,
+            relationshipEdgeCount: 0,
+          },
+        })),
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNotes: [{ id: moment.id, status: "stale" }],
+    });
   });
 
   it("rejects invalid list query parameters", async () => {

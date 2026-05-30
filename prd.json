@@ -120,7 +120,7 @@
         "Run API typecheck and targeted feedback/graph tests"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

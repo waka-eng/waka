@@ -60,6 +60,7 @@ export interface TopOfMindNoteFromWowMomentInput {
   moment: TopOfMindNoteWowMoment;
   relatedSignalIds?: string[];
   relatedContextNodeIds?: string[];
+  status?: TopOfMindNoteStatus;
 }
 
 function confidenceFromWowScore(value: number): number {
@@ -98,7 +99,7 @@ export function topOfMindNoteFromWowMoment(
     prompt: moment.reflectionQuestion,
     guidance: moment.reflectionGuide,
     confidence: confidenceFromWowScore(moment.wowScore),
-    status: "active",
+    status: input.status ?? "active",
     relatedSignalIds: uniqueIds(input.relatedSignalIds ?? []),
     relatedContextNodeIds: uniqueIds(input.relatedContextNodeIds ?? []),
     createdAt: moment.createdAt,

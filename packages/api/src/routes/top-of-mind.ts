@@ -5,15 +5,18 @@ import { z } from "zod";
 
 import {
   inspirations,
+  feedback,
   type WowKind,
   wowMomentInspirations,
   wowMoments,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { readAppliedTopOfMindStatus } from "../lib/feedback-application.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
   topOfMindNoteFromWowMoment,
   type TopOfMindNote,
+  type TopOfMindNoteStatus,
 } from "../lib/top-of-mind-notes.js";
 import {
   buildTopOfMindPreviewForUser,
@@ -127,11 +130,13 @@ function truncatePreview(value: string): string {
 function serializeTopOfMindSurface(
   moment: TopOfMindWowMomentRow,
   relatedRows: TopOfMindRelatedSignalRow[],
+  status?: TopOfMindNoteStatus,
 ): TopOfMindNoteSurface {
   const limitedRows = relatedRows.slice(0, MAX_WOW_MOMENT_SOURCE_LINKS);
   const note = topOfMindNoteFromWowMoment({
     moment,
     relatedSignalIds: limitedRows.map((row) => row.inspirationId),
+    status,
   });
 
   const evidencePreviews = limitedRows.map((row) => {
@@ -177,6 +182,37 @@ function serializeTopOfMindSurface(
     evidencePreviews,
     relatedSignals,
   };
+}
+
+async function fetchLatestTopOfMindFeedbackStatuses(
+  db: WakaDb,
+  input: { userId: string; noteIds: string[] },
+): Promise<Map<string, TopOfMindNoteStatus>> {
+  if (input.noteIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      targetId: feedback.targetId,
+      metadata: feedback.metadata,
+    })
+    .from(feedback)
+    .where(
+      and(
+        eq(feedback.userId, input.userId),
+        eq(feedback.targetType, "top_of_mind_note"),
+        inArray(feedback.targetId, input.noteIds),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
+
+  const statuses = new Map<string, TopOfMindNoteStatus>();
+  for (const row of rows) {
+    if (statuses.has(row.targetId)) continue;
+    const status = readAppliedTopOfMindStatus(row.metadata);
+    if (status) statuses.set(row.targetId, status);
+  }
+
+  return statuses;
 }
 
 async function fetchRelatedSignalRows(
@@ -250,10 +286,18 @@ export async function listTopOfMindNotesForUser(
     userId: input.userId,
     momentIds: moments.map((moment) => moment.id),
   });
+  const feedbackStatuses = await fetchLatestTopOfMindFeedbackStatuses(db, {
+    userId: input.userId,
+    noteIds: moments.map((moment) => moment.id),
+  });
   const relatedByMomentId = groupRelatedRowsByMomentId(relatedRows);
 
   return moments.map((moment) =>
-    serializeTopOfMindSurface(moment, relatedByMomentId.get(moment.id) ?? []),
+    serializeTopOfMindSurface(
+      moment,
+      relatedByMomentId.get(moment.id) ?? [],
+      feedbackStatuses.get(moment.id),
+    ),
   );
 }
 
@@ -286,8 +330,16 @@ export async function getTopOfMindNoteForUser(
     userId: input.userId,
     momentIds: [moment.id],
   });
+  const feedbackStatuses = await fetchLatestTopOfMindFeedbackStatuses(db, {
+    userId: input.userId,
+    noteIds: [moment.id],
+  });
 
-  return serializeTopOfMindSurface(moment, relatedRows);
+  return serializeTopOfMindSurface(
+    moment,
+    relatedRows,
+    feedbackStatuses.get(moment.id),
+  );
 }
 
 export function createTopOfMindRoutes(

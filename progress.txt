@@ -233,3 +233,32 @@
     - `hypothesis` feedback validates against `meaning_nodes` rows with `type = 'hypothesis'`.
 
 ---
+
+## 2026-05-30 14:54 PDT - US-008
+
+- What was implemented
+  - Added deterministic feedback application logic for `true`, `partly`, `not_true`, `important`, and `not_important`.
+  - Feedback creation now applies graph effects after the feedback row is inserted, strengthening or weakening related context nodes and storing application provenance in feedback metadata.
+  - Top-of-mind note feedback updates compatibility note confidence through `wow_moments.wow_score` and derives note status from latest applied feedback metadata.
+  - Added targeted tests for every feedback value and for top-of-mind status serialization from applied feedback provenance.
+- Files changed
+  - `packages/api/src/lib/feedback-application.ts`
+  - `packages/api/src/lib/feedback-application.test.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/routes/feedback.ts`
+  - `packages/api/src/routes/top-of-mind.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/feedback-application.test.ts src/routes/feedback.test.ts src/routes/top-of-mind.test.ts` passed: 24 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - Top-of-mind notes still use WOW moment compatibility persistence, so note status is derived from applied feedback metadata until dedicated note persistence lands.
+  - Useful context
+    - Top-of-mind note feedback finds related context nodes through the note's related signal rows and existing `meaning_evidence`; if no graph evidence exists yet, provenance is still stored on the feedback row.
+
+---

@@ -16,6 +16,7 @@ import {
   type FeedbackValue,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { applyFeedbackToGraph } from "../lib/feedback-application.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 
 const DEFAULT_FEEDBACK_LIMIT = 50;
@@ -193,7 +194,18 @@ export async function createFeedbackForUser(
     })
     .returning();
 
-  return row ? serializeFeedback(row) : null;
+  if (!row) return null;
+
+  const metadata = await applyFeedbackToGraph(db, {
+    feedbackId: row.id,
+    userId: input.userId,
+    targetType: input.targetType,
+    targetId: input.targetId,
+    value: input.value,
+    correctionText: input.correctionText ?? null,
+  });
+
+  return serializeFeedback({ ...row, metadata, updatedAt: new Date() });
 }
 
 export async function listFeedbackForUser(
