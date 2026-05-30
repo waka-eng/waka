@@ -146,7 +146,7 @@ describe("TopOfMindSharePage", () => {
 
     expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 5 });
     expect(text).toContain("Yun's Top of Mind");
-    expect(text).toContain("Most inspiration disappears.");
+    expect(text).toContain("Most signals disappear.");
     expect(text).toContain("caught what almost slipped away");
     expect(text).toContain("They did not manually write this page.");
     expect(text).toContain("provisional reflections, tensions, questions, and action hints");

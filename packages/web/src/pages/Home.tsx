@@ -865,7 +865,7 @@ export function HomePage(): JSX.Element {
       } catch (err) {
         if (cancelled) return;
         const message =
-          err instanceof Error ? err.message : "Failed to load inspirations";
+          err instanceof Error ? err.message : "Failed to load signals";
         setLoadError(message);
         // Drop the skeleton even on failure so the user can still
         // capture into the empty state — the load-error banner below

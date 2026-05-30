@@ -9,17 +9,17 @@ import {
   fetchInspirations,
   fetchTopOfMindNote,
   fetchTopOfMindNotes,
-  fetchWowMoments,
+  fetchLegacyTopOfMindCompatibilityMoments,
   formatMeaningGraphRebuildError,
   updateAuthPreferences,
   type ApiInspiration,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
   type ApiTopOfMindNoteSurface,
-  type ListWowMomentsResponse,
+  type ListTopOfMindCompatibilityMomentsResponse,
 } from "../src/lib/api";
 
-const emptySuccess: ListWowMomentsResponse = { wowMoments: [] };
+const emptySuccess: ListTopOfMindCompatibilityMomentsResponse = { wowMoments: [] };
 
 const topOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
@@ -179,13 +179,13 @@ function stubFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn(async () => response));
 }
 
-describe("fetchWowMoments", () => {
+describe("fetchLegacyTopOfMindCompatibilityMoments", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("returns WOW moments from a successful JSON response", async () => {
-    const body: ListWowMomentsResponse = {
+  it("returns top-of-mind compatibility moments from a successful JSON response", async () => {
+    const body: ListTopOfMindCompatibilityMomentsResponse = {
       wowMoments: [
         {
           id: "moment-1",
@@ -227,7 +227,7 @@ describe("fetchWowMoments", () => {
     };
     stubFetch(Response.json(body));
 
-    await expect(fetchWowMoments()).resolves.toEqual(body.wowMoments);
+    await expect(fetchLegacyTopOfMindCompatibilityMoments()).resolves.toEqual(body.wowMoments);
     expect(fetch).toHaveBeenCalledWith("/api/wow-moments", {
       method: "GET",
       credentials: "include",
@@ -238,7 +238,7 @@ describe("fetchWowMoments", () => {
   it("preserves non-2xx API errors", async () => {
     stubFetch(Response.json({ error: "Please sign in" }, { status: 401 }));
 
-    await expect(fetchWowMoments()).rejects.toMatchObject({
+    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
       name: "ApiError",
       status: 401,
       message: "Please sign in",
@@ -248,37 +248,37 @@ describe("fetchWowMoments", () => {
   it("throws ApiError for a successful response missing wowMoments", async () => {
     stubFetch(Response.json({ moments: [] }));
 
-    await expect(fetchWowMoments()).rejects.toMatchObject({
+    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
       name: "ApiError",
       status: 200,
-      message: "Malformed WOW moments response",
+      message: "Malformed top-of-mind compatibility response",
     } satisfies Partial<ApiError>);
   });
 
   it("throws ApiError for a successful response with non-array wowMoments", async () => {
     stubFetch(Response.json({ wowMoments: null }));
 
-    await expect(fetchWowMoments()).rejects.toMatchObject({
+    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
       name: "ApiError",
       status: 200,
-      message: "Malformed WOW moments response",
+      message: "Malformed top-of-mind compatibility response",
     } satisfies Partial<ApiError>);
   });
 
   it("throws ApiError for a successful non-JSON response", async () => {
     stubFetch(new Response("<html>ok</html>", { status: 200 }));
 
-    await expect(fetchWowMoments()).rejects.toMatchObject({
+    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
       name: "ApiError",
       status: 200,
-      message: "Malformed WOW moments response",
+      message: "Malformed top-of-mind compatibility response",
     } satisfies Partial<ApiError>);
   });
 
-  it("still accepts an empty successful WOW moment list", async () => {
+  it("still accepts an empty successful compatibility list", async () => {
     stubFetch(Response.json(emptySuccess));
 
-    await expect(fetchWowMoments()).resolves.toEqual([]);
+    await expect(fetchLegacyTopOfMindCompatibilityMoments()).resolves.toEqual([]);
   });
 });
 

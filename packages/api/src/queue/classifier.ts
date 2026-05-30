@@ -17,8 +17,8 @@
  *   4. UPDATE the row's `cluster` + `classified_at` (+ `updated_at`) when a
  *      validated label comes back, guarded by `WHERE cluster IS NULL` for
  *      idempotency under at-least-once worker execution.
- *   5. Best-effort automatic WOW generation after classification reaches a
- *      success/permanent-skip outcome. WOW provider/runtime failures are
+ *   5. Best-effort automatic top-of-mind generation after classification reaches a
+ *      success/permanent-skip outcome. top-of-mind provider/runtime failures are
  *      swallowed here and must not alter classification retry semantics.
  *
  * Error & retry semantics (the contract)
@@ -278,13 +278,13 @@ async function attemptAutoWowGeneration(
     await recordAutoWowGenerationResult(deps.backgroundJobId, row.id, result);
 
     if (result.status === "unavailable") {
-      console.warn("[classifier] automatic WOW generation unavailable", {
+      console.warn("[classifier] automatic top-of-mind generation unavailable", {
         inspirationId: row.id,
         userId: row.userId,
       });
     }
   } catch (err) {
-    console.warn("[classifier] automatic WOW generation threw", {
+    console.warn("[classifier] automatic top-of-mind generation threw", {
       inspirationId: row.id,
       userId: row.userId,
       errorName: err instanceof Error ? err.name : typeof err,

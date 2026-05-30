@@ -608,13 +608,13 @@ export default function LoginPage(): JSX.Element {
 
   const subtitle =
     mode === "login"
-      ? "Sign in to return to your inspirations."
+      ? "Sign in to return to your signals."
       : "Create an account to capture, cluster, and reflect on the things that move you.";
 
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
-        <p className="login-eyebrow">WAKA · Inspirations</p>
+        <p className="login-eyebrow">WAKA · Signals</p>
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>

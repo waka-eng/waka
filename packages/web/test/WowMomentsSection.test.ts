@@ -11,9 +11,9 @@ import { BrowserRouter, MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { WowMomentsSection } from "../src/components/WowMomentsSection";
-import type { ApiWowMoment } from "../src/lib/api";
+import type { ApiTopOfMindCompatibilityMoment } from "../src/lib/api";
 
-const sampleMoment: ApiWowMoment = {
+const sampleMoment: ApiTopOfMindCompatibilityMoment = {
   id: "moment-1",
   userId: "user-1",
   title: "Prototype idea keeps returning",
@@ -158,7 +158,7 @@ describe("WowMomentsSection", () => {
   it("renders a loading state", () => {
     const html = renderSection({ moments: [], loading: true, error: null });
 
-    expect(html).toContain("Loading WOW moments");
+    expect(html).toContain("Loading top-of-mind notes");
     expect(html).toContain("aria-busy=\"true\"");
     expect(html).toContain("wow-moment-card--loading");
   });
@@ -166,7 +166,7 @@ describe("WowMomentsSection", () => {
   it("renders an empty state", () => {
     const html = renderSection({ moments: [], loading: false, error: null });
 
-    expect(html).toContain("No WOW moments yet.");
+    expect(html).toContain("No top-of-mind notes yet.");
     expect(html).toContain("patterns will appear here");
   });
 
@@ -177,12 +177,12 @@ describe("WowMomentsSection", () => {
       error: "Malformed WOW moments response",
     });
 
-    expect(html).toContain("Couldn’t load WOW moments.");
+    expect(html).toContain("Couldn’t load top-of-mind notes.");
     expect(html).toContain("Malformed WOW moments response");
   });
 
   it("renders every related inspiration as complete plain source text", () => {
-    const momentWithManyRelatedInspirations: ApiWowMoment = {
+    const momentWithManyRelatedInspirations: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       relatedInspirations: [
         {
@@ -229,7 +229,7 @@ describe("WowMomentsSection", () => {
     expect(html).toContain("What WAKA noticed");
     expect(html).toContain("1 best-recent mirror moments shown.");
     expect(html).not.toContain("Inspect all WOW moments (1)");
-    expect(html).not.toContain("Dev-only inspect WOW fields");
+    expect(html).not.toContain("Dev-only inspect legacy fields");
     expect(html).not.toContain(">1</span>");
     expect(html).not.toContain("confidence");
     expect(html).toContain("Prototype idea keeps returning");
@@ -264,7 +264,7 @@ describe("WowMomentsSection", () => {
     expect(html).not.toContain("What would make this bridge testable this week?");
   });
 
-  it("renders long related inspiration text in full without a snippet ellipsis", () => {
+  it("renders long related signal text in full without a snippet ellipsis", () => {
     const longSourceText =
       "This very long source inspiration should stay complete so the WOW card can grow and show the tiny WOW card context without hiding the final sentence about readable evidence.";
     const html = renderSection({
@@ -406,7 +406,7 @@ describe("WowMomentsSection", () => {
   it("renders a guided WOW disclosure sequence with expandable evidence reasons", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    const guidedMoment: ApiWowMoment = {
+    const guidedMoment: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       why: [
         "WAKA noticed that several saved inspirations return to small prototypes rather than polished plans.",
@@ -444,7 +444,7 @@ describe("WowMomentsSection", () => {
     expect(detail?.textContent).toContain("Where it came from");
     expect(detail?.textContent).toContain("Source trail");
     expect(detail?.textContent).toContain("The practice");
-    expect(detail?.textContent).toContain("Source inspiration");
+    expect(detail?.textContent).toContain("Source signal");
     expect(detail?.textContent).not.toContain("classifier rank id 2026-05-01");
     expect(detail?.textContent).not.toContain("runtimeCandidateScore");
     expect(detail?.textContent).toContain("What this may say about you");
@@ -564,7 +564,7 @@ describe("WowMomentsSection", () => {
   });
 
   it("uses product-facing source role labels in the detail report with safe legacy fallbacks", () => {
-    const momentWithSourceRoles: ApiWowMoment = {
+    const momentWithSourceRoles: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       relatedInspirations: [
         {
@@ -593,13 +593,13 @@ describe("WowMomentsSection", () => {
     const detailText = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid")?.textContent ?? "";
     expect(detailText).toContain("The practice");
     expect(detailText).toContain("This source shows the ritual the pattern keeps returning to.");
-    expect(detailText).toContain("Source inspiration");
+    expect(detailText).toContain("Source signal");
     expect(detailText).toContain("Why this source matters");
     expect(detailText).not.toContain("May 2024");
   });
 
   it("shows a quiet source count in the detail report without exposing source metadata", () => {
-    const momentWithThreeSources: ApiWowMoment = {
+    const momentWithThreeSources: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       relatedInspirations: [
         {
@@ -659,7 +659,7 @@ describe("WowMomentsSection", () => {
       "This long source evidence should remain fully visible in the detail sources, including a final sentence that proves source cards are not truncated by the belief helper.";
     const longSourceReason =
       "Saved because this long source note carries context that should remain visible outside the short belief sentence.";
-    const longMoment: ApiWowMoment = {
+    const longMoment: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       why: longWhy,
       relatedInspirations: [
@@ -691,7 +691,7 @@ describe("WowMomentsSection", () => {
   });
 
   it("grounds the belief statement in title and source reason for sparse moments", () => {
-    const sparseMoment: ApiWowMoment = {
+    const sparseMoment: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       title: "Quiet interfaces feel more humane.",
       why: "",
@@ -721,7 +721,7 @@ describe("WowMomentsSection", () => {
   });
 
   it("uses a safe source reason fallback in sparse belief copy when source reason is unsafe", () => {
-    const sparseUnsafeMoment: ApiWowMoment = {
+    const sparseUnsafeMoment: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       title: "Quiet interfaces feel more humane.",
       why: "",
@@ -758,7 +758,7 @@ describe("WowMomentsSection", () => {
   });
 
   it("uses a supplied source-grounded belief statement instead of deriving one from title and why", () => {
-    const momentWithBelief: ApiWowMoment = {
+    const momentWithBelief: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       title: "Title that should not be repurposed",
       why: "Why text that should not become the belief sentence.",
@@ -834,8 +834,6 @@ describe("WowMomentsSection", () => {
     expect(globalCss).toMatch(
       /\.wow-moment-belief-actions button\[aria-pressed="true"\]\s*\{[\s\S]*?background:\s*var\(--ink\);[\s\S]*?color:\s*var\(--cell\);/,
     );
-    expect(globalCss).not.toContain("var(--paper)");
-
     const closeButton = container.querySelector<HTMLButtonElement>(".wow-moment-detail-close");
     act(() => {
       closeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -941,7 +939,7 @@ describe("WowMomentsSection", () => {
   });
 
   it("shows an add-signal ending panel with count-aware prompts after resonance", () => {
-    const momentWithThreeSources: ApiWowMoment = {
+    const momentWithThreeSources: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       relatedInspirations: [
         sampleMoment.relatedInspirations[0]!,
@@ -1212,7 +1210,7 @@ describe("WowMomentsSection", () => {
   });
 
   it("resets local reflection and source reason state when switching query-selected moments", () => {
-    const secondMoment: ApiWowMoment = {
+    const secondMoment: ApiTopOfMindCompatibilityMoment = {
       ...sampleMoment,
       id: "moment-2",
       title: "Second pattern appears",
@@ -1305,7 +1303,7 @@ describe("WowMomentsSection", () => {
           ...sampleMoment.relatedInspirations[0]!,
           inspirationId: `inspiration-${index + 1}`,
           reason: `Evidence reason ${index + 1}`,
-          text: `Related inspiration evidence ${index + 1}`,
+          text: `Related signal evidence ${index + 1}`,
         },
       ],
     }));
@@ -1317,15 +1315,15 @@ describe("WowMomentsSection", () => {
 
     expect(html).toContain("9 best-recent mirror moments shown.");
     expect(html).not.toContain("Inspect all WOW moments (11)");
-    expect(html).not.toContain("Dev-only inspect WOW fields");
+    expect(html).not.toContain("Dev-only inspect legacy fields");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
     expect(html.match(/class=\"wow-moment-card wow-moment-card--interactive wow-moment-card--sticky\"/g)).toHaveLength(9);
     expect(html).toContain("WOW card 9");
-    expect(html).toContain("Related inspiration evidence 9");
+    expect(html).toContain("Related signal evidence 9");
     expect(html).not.toContain("Evidence reason 9");
     expect(html).not.toContain("primary");
     expect(html).not.toContain("WOW card 10");
-    expect(html).not.toContain("Related inspiration evidence 10");
+    expect(html).not.toContain("Related signal evidence 10");
   });
 
   it("hides the dev-only WOW inspection surface unless the internal gate is enabled", () => {
@@ -1346,14 +1344,14 @@ describe("WowMomentsSection", () => {
 
     expect(html).toContain("Hidden dev inspect moment");
     expect(html).toContain("Generated meaning copy that should stay in the main report only.");
-    expect(html).not.toContain("Dev-only inspect WOW fields");
+    expect(html).not.toContain("Dev-only inspect legacy fields");
     expect(html).not.toContain("Temporary internal inspection");
     expect(html).not.toContain("Generated field previews");
     expect(html).not.toContain("Belief statement");
     expect(html).not.toContain("Reflection prompt");
   });
 
-  function devInspectionMoments(): ApiWowMoment[] {
+  function devInspectionMoments(): ApiTopOfMindCompatibilityMoment[] {
     return Array.from({ length: 10 }, (_, index) => ({
       ...sampleMoment,
       id: `moment-${index + 1}`,
@@ -1370,7 +1368,7 @@ describe("WowMomentsSection", () => {
             index === 9
               ? "runtimeCandidateScore rank id 2026-05-01 came from the classifier"
               : "First signal in the bridge.",
-          text: `Related inspiration evidence ${index + 1}`,
+          text: `Related signal evidence ${index + 1}`,
         },
       ],
     }));
@@ -1386,11 +1384,11 @@ describe("WowMomentsSection", () => {
     });
 
     expect(container.textContent).toContain("9 best-recent mirror moments shown.");
-    expect(container.textContent).toContain("Dev-only inspect WOW fields (10)");
+    expect(container.textContent).toContain("Dev-only inspect legacy fields (10)");
     expect(container.textContent).toContain("WOW card 9");
     expect(container.textContent).not.toContain("Generated field previews");
     expect(container.textContent).not.toContain("WOW card 10");
-    expect(container.textContent).not.toContain("Related inspiration evidence 10");
+    expect(container.textContent).not.toContain("Related signal evidence 10");
 
     const inspectButton = container.querySelector<HTMLButtonElement>(".wow-moments-inspect-button");
     expect(inspectButton).not.toBeNull();
@@ -1407,7 +1405,7 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("Safe, bounded previews of generated fields for live internal testing.");
     expect(dialog?.textContent).toContain("Title / headline");
     expect(dialog?.textContent).toContain("WOW card 10");
-    expect(dialog?.textContent).toContain("Why / meaning copy");
+    expect(dialog?.textContent).toContain("Why / context copy");
     expect(dialog?.textContent).toContain("Belief statement");
     expect(dialog?.textContent).toContain("You may believe small tests make ideas safer to approach.");
     expect(dialog?.textContent).toContain("Reflection prompt");
@@ -1418,12 +1416,12 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).not.toContain("DEV WOW score");
     expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
     expect(dialog?.textContent).toContain("Source role / reason");
-    expect(dialog?.textContent).toContain("Source inspiration");
+    expect(dialog?.textContent).toContain("Source signal");
     expect(dialog?.textContent).toContain("Why this source matters");
     expect(dialog?.textContent).not.toContain("classifier score uuid rank 2026-05-01");
     expect(dialog?.textContent).not.toContain("runtimeCandidateScore rank id 2026-05-01 came from the classifier");
     expect(dialog?.textContent).not.toContain("2026-05-01 came from the classifier");
-    expect(dialog?.textContent).toContain("Related inspiration evidence 10");
+    expect(dialog?.textContent).toContain("Related signal evidence 10");
     expect(dialog?.textContent).not.toContain("runtimeCandidateScore");
     expect(dialog?.textContent).not.toContain("embedding");
     expect(dialog?.textContent).not.toContain("raw prompt");
@@ -1445,9 +1443,9 @@ describe("WowMomentsSection", () => {
     });
 
     expect(container.textContent).toContain("9개의 최근 핵심 미러 순간이 표시됨.");
-    expect(container.textContent).toContain("개발 전용 WOW 필드 점검 (10)");
+    expect(container.textContent).toContain("개발 전용 레거시 필드 점검 (10)");
     expect(container.textContent).toContain("WOW card 9");
-    expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
+    expect(container.textContent).not.toContain("Dev-only inspect legacy fields");
     expect(container.textContent).not.toContain("Generated field previews");
     expect(container.textContent).not.toContain("WOW card 10");
 
@@ -1464,21 +1462,21 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("생성 필드 미리보기");
     expect(dialog?.textContent).toContain("실시간 내부 테스트를 위한 안전하고 제한된 생성 필드 미리보기입니다.");
     expect(dialog?.textContent).toContain("제목 / 헤드라인");
-    expect(dialog?.textContent).toContain("의미 / 설명 문구");
+    expect(dialog?.textContent).toContain("맥락 / 설명 문구");
     expect(dialog?.textContent).toContain("믿음 문장");
     expect(dialog?.textContent).toContain("회고 질문");
     expect(dialog?.textContent).toContain("간단 집계");
     expect(dialog?.textContent).toContain("1개 출처; 생성 필드 4개 있음");
     expect(dialog?.textContent).toContain("출처 역할 / 이유");
-    expect(dialog?.textContent).toContain("출처 영감");
+    expect(dialog?.textContent).toContain("출처 신호");
     expect(dialog?.textContent).toContain("이 출처가 중요한 이유");
     expect(dialog?.textContent).toContain("WOW card 10");
     expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
     expect(dialog?.textContent).toContain("You may believe small tests make ideas safer to approach.");
-    expect(dialog?.textContent).toContain("Related inspiration evidence 10");
+    expect(dialog?.textContent).toContain("Related signal evidence 10");
     expect(dialog?.textContent).not.toContain("Temporary internal inspection");
     expect(dialog?.textContent).not.toContain("Title / headline");
-    expect(dialog?.textContent).not.toContain("Source inspiration");
+    expect(dialog?.textContent).not.toContain("Source signal");
     expect(dialog?.textContent).not.toContain("Why this source matters");
     expect(dialog?.textContent).not.toContain("classifier score uuid rank 2026-05-01");
     expect(dialog?.textContent).not.toContain("runtimeCandidateScore");

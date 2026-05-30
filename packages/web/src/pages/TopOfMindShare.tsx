@@ -74,7 +74,7 @@ export function TopOfMindSharePage(): JSX.Element {
           <p className="tom-share-eyebrow">Generated from saved signals</p>
           <h1 id="tom-share-title">{ownerName}'s Top of Mind</h1>
           <p className="tom-share-lede">
-            Most inspiration disappears. {ownerName} caught what almost slipped away.
+            Most signals disappear. {ownerName} caught what almost slipped away.
             Slowly, the things they saved began to take shape: who they want to
             think with, where they want to be, and what they might be here to build.
           </p>

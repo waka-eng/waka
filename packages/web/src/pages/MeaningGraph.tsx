@@ -189,7 +189,7 @@ function compactReason(reason: string): string {
 function readableGraphWarning(type: string): string | null {
   switch (type) {
     case "no_data":
-      return "No inspirations have been saved for this user yet.";
+      return "No signals have been saved for this user yet.";
     case "no_packets":
     case "stale":
       return "Some saves have not been processed into the graph yet. Rebuild should fix this.";
@@ -294,7 +294,7 @@ export default function MeaningGraphPage(): JSX.Element {
       setGraph(next);
       setSelectedNodeId((current) => current ?? next.nodes[0]?.id ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load meaning graph");
+      setError(err instanceof Error ? err.message : "Failed to load context graph");
     } finally {
       setLoading(false);
     }
@@ -399,16 +399,16 @@ export default function MeaningGraphPage(): JSX.Element {
     let processedWithoutNotes = 0;
     let processing = 0;
 
-    for (const inspiration of recentInspirations) {
-      if (!inspiration.packetCreatedAt) {
+    for (const signal of recentInspirations) {
+      if (!signal.packetCreatedAt) {
         processing += 1;
-      } else if (inspiration.meaningNotes.length === 0) {
+      } else if (signal.meaningNotes.length === 0) {
         processedWithoutNotes += 1;
       } else {
         enteredGraph += 1;
       }
 
-      if (inspiration.relationshipEdges.length > 0) {
+      if (signal.relationshipEdges.length > 0) {
         withRelationships += 1;
       }
     }
@@ -581,15 +581,15 @@ export default function MeaningGraphPage(): JSX.Element {
     ? nodeById.get(selectedEdge.targetNodeId) ?? null
     : null;
   const selectedEdgeEvidence = selectedEdge
-    ? recentInspirations.filter((inspiration) =>
-        inspiration.relationshipEdges.some((edge) => edge.id === selectedEdge.id),
+    ? recentInspirations.filter((signal) =>
+        signal.relationshipEdges.some((edge) => edge.id === selectedEdge.id),
       )
     : [];
 
   const evidenceHeading = selectedEdge
     ? "Relationship evidence"
     : selectedNode
-      ? "Meaning note evidence"
+      ? "Context node evidence"
       : "Graph evidence";
 
   const evidenceIntro = selectedEdge
@@ -598,37 +598,37 @@ export default function MeaningGraphPage(): JSX.Element {
       }`
     : selectedNode
       ? selectedNode.label
-      : "Select a meaning note or relationship edge in the graph.";
+      : "Select a context node or relationship edge in the graph.";
 
   const renderRecentInspiration = (
-    inspiration: ApiMeaningGraphRecentInspiration,
+    signal: ApiMeaningGraphRecentInspiration,
   ): JSX.Element => {
-    const hasMeaningNotes = inspiration.meaningNotes.length > 0;
-    const hasRelationships = inspiration.relationshipEdges.length > 0;
-    const status = !inspiration.packetCreatedAt
+    const hasMeaningNotes = signal.meaningNotes.length > 0;
+    const hasRelationships = signal.relationshipEdges.length > 0;
+    const status = !signal.packetCreatedAt
       ? "Processing"
       : hasMeaningNotes
         ? hasRelationships
           ? "Added notes and relationships"
-          : "Added meaning notes"
+          : "Added context nodes"
         : "Not added to graph";
 
     return (
-      <article className="meaning-recent-inspiration" key={inspiration.id}>
+      <article className="meaning-recent-inspiration" key={signal.id}>
         <div className="meaning-recent-inspiration-head">
-          <time dateTime={inspiration.createdAt}>{formatDate(inspiration.createdAt)}</time>
-          <span data-state={hasMeaningNotes ? "entered" : inspiration.packetCreatedAt ? "not-added" : "processing"}>
+          <time dateTime={signal.createdAt}>{formatDate(signal.createdAt)}</time>
+          <span data-state={hasMeaningNotes ? "entered" : signal.packetCreatedAt ? "not-added" : "processing"}>
             {status}
           </span>
         </div>
-        <blockquote>{shortPreview(inspiration.preview)}</blockquote>
+        <blockquote>{shortPreview(signal.preview)}</blockquote>
         <div className="meaning-recent-outcomes">
           <section>
-            <h3>Meaning notes</h3>
+            <h3>Context nodes</h3>
             {hasMeaningNotes ? (
               <ul>
-                {inspiration.meaningNotes.map((note) => (
-                  <li key={`${inspiration.id}-${note.id}`}>
+                {signal.meaningNotes.map((note) => (
+                  <li key={`${signal.id}-${note.id}`}>
                     <strong>{note.label}</strong>
                     <span>{TYPE_LABEL[note.type] ?? note.type}</span>
                     <p>{compactReason(note.reason)}</p>
@@ -637,8 +637,8 @@ export default function MeaningGraphPage(): JSX.Element {
               </ul>
             ) : (
               <p>
-                {inspiration.packetCreatedAt
-                  ? "No meaning note was created or reinforced from this save."
+                {signal.packetCreatedAt
+                  ? "No context node was created or reinforced from this save."
                   : "This save has not finished processing yet."}
               </p>
             )}
@@ -647,8 +647,8 @@ export default function MeaningGraphPage(): JSX.Element {
             <h3>Relationship edges</h3>
             {hasRelationships ? (
               <ul>
-                {inspiration.relationshipEdges.map((edge) => (
-                  <li key={`${inspiration.id}-${edge.id}`}>
+                {signal.relationshipEdges.map((edge) => (
+                  <li key={`${signal.id}-${edge.id}`}>
                     <strong>{relationshipSummary(edge)}</strong>
                     <span>{relationshipLabel(edge)}</span>
                     {edge.sourceReason || edge.targetReason ? (
@@ -681,10 +681,10 @@ export default function MeaningGraphPage(): JSX.Element {
     <main className="meaning-graph-page">
       <header className="meaning-graph-header">
         <div>
-          <span>admin meaning dashboard</span>
-          <h1>Meaning dashboard</h1>
+          <span>admin context dashboard</span>
+          <h1>Context dashboard</h1>
           <p>
-            Monitor how saved inspirations become meaning notes and relationship edges.
+            Monitor how saved signals become context nodes and relationship edges.
           </p>
         </div>
         <div className="meaning-graph-actions">
@@ -704,10 +704,10 @@ export default function MeaningGraphPage(): JSX.Element {
       {confirmingRebuild ? (
         <section className="meaning-graph-rebuild-alert" role="alert" aria-live="polite">
           <div>
-            <strong>Before you rebuild the meaning graph</strong>
+            <strong>Before you rebuild the context graph</strong>
             <p>
-              Rebuild rereads your saved inspirations, regenerates missing meaning packets, clears the current
-              meaning graph rows for this account, then rebuilds meaning notes, evidence, and relationship edges.
+              Rebuild rereads your saved signals, regenerates missing signal packets, clears the current
+              context graph rows for this account, then rebuilds context nodes, evidence, and relationship edges.
               It now runs as a background job, so the dashboard will poll progress and refresh itself when the job
               finishes. Starting another rebuild while one is active will return the existing job.
             </p>
@@ -733,7 +733,7 @@ export default function MeaningGraphPage(): JSX.Element {
       ) : null}
 
       {loading ? (
-        <p className="meaning-graph-status">Loading meaning graph...</p>
+        <p className="meaning-graph-status">Loading context graph...</p>
       ) : error ? (
         <p className="meaning-graph-status meaning-graph-status--error">{error}</p>
       ) : (
@@ -742,14 +742,14 @@ export default function MeaningGraphPage(): JSX.Element {
             <section className="meaning-graph-workbench meaning-graph-workbench--flow">
               <div className="meaning-dashboard-section-heading">
                 <div>
-                  <span>meaning graph</span>
+                  <span>context graph</span>
                   <h2>Graph</h2>
-                  <p>Click a meaning note or relationship edge to update the evidence section.</p>
+                  <p>Click a context node or relationship edge to update the evidence section.</p>
                 </div>
                 {health ? (
-                  <div className="meaning-dashboard-inline-meta" aria-label="Meaning graph snapshot">
-                    <span>{health.inspirationCount} inspirations</span>
-                    <span>{health.nodeCount} meaning notes</span>
+                  <div className="meaning-dashboard-inline-meta" aria-label="Context graph snapshot">
+                    <span>{health.inspirationCount} signals</span>
+                    <span>{health.nodeCount} context nodes</span>
                     <span>{health.edgeCount} relationship edges</span>
                   </div>
                 ) : null}
@@ -758,7 +758,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 <div className="meaning-dashboard-compact-status">
                   {lastRebuild ? (
                     <span>
-                      Rebuild finished: {lastRebuild.inspirations} inspirations / {lastRebuild.nodesTouched} notes /{" "}
+                      Rebuild finished: {lastRebuild.inspirations} signals / {lastRebuild.nodesTouched} notes /{" "}
                       {lastRebuild.edgesTouched} edges. Dashboard refreshed.
                     </span>
                   ) : null}
@@ -771,7 +771,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 {nodes.length === 0 ? (
                   <div className="meaning-graph-empty">
                     <strong>No graph rows yet</strong>
-                    <span>Click rebuild after saving inspirations locally.</span>
+                    <span>Click rebuild after saving signals locally.</span>
                   </div>
                 ) : (
                   <ReactFlow
@@ -813,7 +813,7 @@ export default function MeaningGraphPage(): JSX.Element {
               <>
                 <dl>
                   <div>
-                    <dt>evidence inspirations</dt>
+                    <dt>evidence signals</dt>
                     <dd>{selectedEdge.evidenceCount}</dd>
                   </div>
                   <div>
@@ -822,16 +822,16 @@ export default function MeaningGraphPage(): JSX.Element {
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Evidence inspirations</h3>
+                  <h3>Evidence signals</h3>
                   {selectedEdgeEvidence.length > 0 ? (
-                    selectedEdgeEvidence.map((inspiration) => (
-                      <article key={`${selectedEdge.id}-${inspiration.id}`}>
-                        <time dateTime={inspiration.createdAt}>{formatDate(inspiration.createdAt)}</time>
-                        <blockquote>{shortPreview(inspiration.preview)}</blockquote>
+                    selectedEdgeEvidence.map((signal) => (
+                      <article key={`${selectedEdge.id}-${signal.id}`}>
+                        <time dateTime={signal.createdAt}>{formatDate(signal.createdAt)}</time>
+                        <blockquote>{shortPreview(signal.preview)}</blockquote>
                       </article>
                     ))
                   ) : (
-                    <p>This relationship has stored evidence ids, but no recent matching inspiration is in the current feed.</p>
+                    <p>This relationship has stored evidence ids, but no recent matching signal is in the current feed.</p>
                   )}
                 </div>
               </>
@@ -840,7 +840,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 <p>{selectedNode.description || "No description yet."}</p>
                 <dl>
                   <div>
-                    <dt>evidence inspirations</dt>
+                    <dt>evidence signals</dt>
                     <dd>{selectedNode.evidenceCount}</dd>
                   </div>
                   <div>
@@ -849,7 +849,7 @@ export default function MeaningGraphPage(): JSX.Element {
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Evidence inspirations</h3>
+                  <h3>Evidence signals</h3>
                   {selectedNode.evidence.slice(0, 6).map((evidence) => (
                     <article key={`${selectedNode.id}-${evidence.inspirationId}-${evidence.packetId}`}>
                       <time>{formatDate(evidence.createdAt)}</time>
@@ -862,7 +862,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 </div>
               </>
             ) : (
-              <p>The graph above is the current meaning structure. Select a meaning note to see the inspirations behind it, or select a relationship edge to see what supports that connection.</p>
+              <p>The graph above is the current context structure. Select a context node to see the signals behind it, or select a relationship edge to see what supports that connection.</p>
             )}
             </section>
           </section>
@@ -871,9 +871,9 @@ export default function MeaningGraphPage(): JSX.Element {
             <section className="meaning-dashboard-panel meaning-recent-feed" aria-labelledby="recent-inspirations-title">
               <div className="meaning-dashboard-section-heading">
                 <div>
-                  <span>recent inspirations</span>
+                  <span>recent signals</span>
                   <h2 id="recent-inspirations-title">Graph entry review</h2>
-                  <p>Newest saves and what they added to the meaning graph.</p>
+                  <p>Newest saves and what they added to the context graph.</p>
                 </div>
                 <div className="meaning-dashboard-inline-meta" aria-label="Recent graph entry summary">
                   <span>{recentReviewStats.enteredGraph} added notes</span>
@@ -888,7 +888,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 {recentInspirations.length > 0 ? (
                   recentInspirations.map(renderRecentInspiration)
                 ) : (
-                  <p>No recent inspirations found.</p>
+                  <p>No recent signals found.</p>
                 )}
               </div>
             </section>

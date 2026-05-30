@@ -114,3 +114,15 @@ or derived graph state.
   as node categories land, while preserving tenant scoping and admin-only gates.
 - Frontend stories that change visible copy or top-of-mind interaction still
   require browser verification before being marked complete.
+
+## Final Naming Conventions
+
+- New product-facing UI, docs, model prompts, and web API helpers should say
+  signal, signal packet, context graph, context node, top-of-mind note,
+  resonance, and feedback.
+- `wow_moments`, `wow_score`, `/api/wow-moments`, and related TypeScript names
+  are legacy compatibility surfaces only. Prefer `/api/top-of-mind` and
+  top-of-mind serializers for user-facing work.
+- Admin-only diagnostics may mention legacy table, route, or enum names when
+  needed to debug compatibility, but visible labels should explain the product
+  concept as top-of-mind notes, resonance, or context.

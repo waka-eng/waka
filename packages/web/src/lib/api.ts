@@ -483,7 +483,7 @@ export async function createInspiration(
   const body = await postJson<CreateInspirationResponse>(
     apiPath("/inspirations"),
     input,
-    "Failed to save inspiration",
+    "Failed to save signal",
   );
   return body.inspiration;
 }
@@ -501,7 +501,7 @@ export async function updateInspiration(
   const body = await patchJson<UpdateInspirationResponse>(
     apiPath(`/inspirations/${encodeURIComponent(id)}`),
     input,
-    "Failed to update inspiration",
+    "Failed to update signal",
   );
   return body.inspiration;
 }
@@ -520,7 +520,7 @@ export async function recordInspirationRevisit(
   return postJson<CreateInspirationRevisitResponse>(
     apiPath(`/inspirations/${encodeURIComponent(id)}/revisits`),
     { eventType },
-    "Failed to record inspiration revisit",
+    "Failed to record signal revisit",
   );
 }
 
@@ -529,7 +529,7 @@ export async function fetchInspirationSparks(
 ): Promise<ApiInspirationSpark[]> {
   const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
     apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    "Failed to load inspiration sparks",
+    "Failed to load signal highlights",
   );
   return Array.isArray(body.sparks) ? body.sparks : [];
 }
@@ -594,7 +594,7 @@ export async function fetchInspirations(): Promise<ApiInspiration[]> {
   } catch {
     throw new ApiError({
       status: 0,
-      message: "Network unreachable while loading inspirations",
+      message: "Network unreachable while loading signals",
     });
   }
 
@@ -647,7 +647,7 @@ export async function deleteInspiration(id: string): Promise<void> {
   } catch {
     throw new ApiError({
       status: 0,
-      message: "Network unreachable while deleting inspiration",
+      message: "Network unreachable while deleting signal",
     });
   }
 
@@ -664,7 +664,7 @@ export async function deleteInspiration(id: string): Promise<void> {
     status: res.status,
     message:
       errorBody.error ??
-      `Failed to delete inspiration (HTTP ${res.status}). Please try again.`,
+      `Failed to delete signal (HTTP ${res.status}). Please try again.`,
   });
 }
 
@@ -688,7 +688,7 @@ export type ApiTopOfMindNoteStatus =
   | "stale"
   | "replaced";
 
-export interface ApiWowMomentRelatedInspiration {
+export interface ApiTopOfMindCompatibilitySignal {
   inspirationId: string;
   role: string;
   reason: string;
@@ -744,7 +744,7 @@ export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
   relatedSignals: ApiTopOfMindRelatedSignalReference[];
 };
 
-export interface ApiWowMoment {
+export interface ApiTopOfMindCompatibilityMoment {
   id: string;
   userId: string;
   title: string;
@@ -756,12 +756,12 @@ export interface ApiWowMoment {
   wowScore: number;
   createdAt: string;
   updatedAt: string;
-  relatedInspirations: ApiWowMomentRelatedInspiration[];
+  relatedInspirations: ApiTopOfMindCompatibilitySignal[];
   topOfMindNote?: ApiTopOfMindNote;
 }
 
-export interface ListWowMomentsResponse {
-  wowMoments: ApiWowMoment[];
+export interface ListTopOfMindCompatibilityMomentsResponse {
+  wowMoments: ApiTopOfMindCompatibilityMoment[];
 }
 
 export interface ListTopOfMindNotesResponse {
@@ -818,7 +818,7 @@ export interface CreateFeedbackResponse {
   feedback: ApiFeedbackRecord;
 }
 
-export interface FetchWowMomentsOptions {
+export interface FetchTopOfMindCompatibilityMomentsOptions {
   limit?: number;
 }
 
@@ -1000,14 +1000,14 @@ export async function fetchWowStatus(limit = 12): Promise<ApiWowStatusRow[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   const body = await getJson<ListWowStatusResponse>(
     apiPath(`/wow-status?${params.toString()}`),
-    "Failed to load WOW status",
+    "Failed to load top-of-mind status",
   );
   return Array.isArray(body.rows) ? body.rows : [];
 }
 
-export async function fetchWowMoments(
-  options: FetchWowMomentsOptions = {},
-): Promise<ApiWowMoment[]> {
+export async function fetchLegacyTopOfMindCompatibilityMoments(
+  options: FetchTopOfMindCompatibilityMomentsOptions = {},
+): Promise<ApiTopOfMindCompatibilityMoment[]> {
   const params = new URLSearchParams();
   if (typeof options.limit === "number") params.set("limit", String(options.limit));
   const query = params.toString();
@@ -1022,7 +1022,7 @@ export async function fetchWowMoments(
   } catch {
     throw new ApiError({
       status: 0,
-      message: "Network unreachable while loading WOW moments",
+      message: "Network unreachable while loading top-of-mind compatibility notes",
     });
   }
 
@@ -1039,15 +1039,15 @@ export async function fetchWowMoments(
       status: res.status,
       message:
         errorBody.error ??
-        `Failed to load WOW moments (HTTP ${res.status}). Please try again.`,
+        `Failed to load top-of-mind compatibility notes (HTTP ${res.status}). Please try again.`,
     });
   }
 
-  const payload = body as Partial<ListWowMomentsResponse> | null;
+  const payload = body as Partial<ListTopOfMindCompatibilityMomentsResponse> | null;
   if (!payload || !Array.isArray(payload.wowMoments)) {
     throw new ApiError({
       status: res.status,
-      message: "Malformed WOW moments response",
+      message: "Malformed top-of-mind compatibility response",
     });
   }
   return payload.wowMoments;
@@ -1340,7 +1340,7 @@ export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
   const params = new URLSearchParams({ limit: String(limit) });
   const body = await getJson<{ graph: ApiMeaningGraph }>(
     apiPath(`/admin/meaning-graph?${params.toString()}`),
-    "Failed to load meaning graph",
+    "Failed to load context graph",
   );
   return body.graph;
 }
@@ -1349,7 +1349,7 @@ export async function rebuildMeaningGraph(): Promise<{
   job: ApiMeaningGraphRebuildJob;
   statusUrl?: string;
 }> {
-  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to enqueue meaning graph rebuild");
+  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to enqueue context graph rebuild");
 }
 
 export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
@@ -1358,7 +1358,7 @@ export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
   const path = jobId
     ? `/admin/meaning-graph/rebuild/${encodeURIComponent(jobId)}`
     : "/admin/meaning-graph/rebuild";
-  return getJson(apiPath(path), "Failed to load meaning graph rebuild status");
+  return getJson(apiPath(path), "Failed to load context graph rebuild status");
 }
 
 export function formatMeaningGraphRebuildError(err: unknown): string {
@@ -1374,7 +1374,7 @@ export function formatMeaningGraphRebuildError(err: unknown): string {
     return timeoutMessage;
   }
 
-  const message = err instanceof Error ? err.message : "Failed to rebuild meaning graph";
+  const message = err instanceof Error ? err.message : "Failed to rebuild context graph";
   return `Rebuild failed: ${message}`;
 }
 

@@ -18,6 +18,7 @@
 - Capture highlights and lightweight resonance answers should travel through the existing `inspiration_sparks` request fields until a dedicated signal metadata table exists.
 - The shareable Top of Mind value-prop surface currently lives at protected route `/top-of-mind/share` and reads the current user's notes from `/api/top-of-mind`; do not expose public note sharing until a share-token or permission model exists.
 - Saved-signal archive and deep-dive UI should use the user-facing `/api/signals` route; it assembles legacy inspiration rows with signal packets, highlights, context nodes, top-of-mind notes, and signal feedback without making `/api/wow-moments` the preferred product surface.
+- Final naming convention: product-facing UI, docs, model prompts, and web client helpers should use signal, signal packet, context graph/node, top-of-mind note, resonance, and feedback; `wow_*`, `meaning_*`, and `/api/wow-moments` names are legacy compatibility only unless a persistence migration explicitly renames them.
 
 ---
 
@@ -572,5 +573,53 @@
     - React textarea selection updates need mouse/key selection events as well as `onSelect` so the mark-highlight action remains reliable.
   - Useful context
     - Autosave intentionally restores text and link chips only; image/file blobs are not persisted in localStorage.
+
+---
+## 2026-05-30 16:16 PDT - US-016
+
+- What was implemented
+  - Audited remaining product-facing WOW, inspiration, and meaning terminology across web UI copy, README/docs, model prompt text, and web API helper names.
+  - Moved visible product/admin labels toward signal, top-of-mind note, context graph, and resonance language while keeping legacy route/table/field names where they are compatibility or persistence details.
+  - Renamed the legacy web `/api/wow-moments` client helper/types to top-of-mind compatibility names so `/api/top-of-mind` remains the preferred user-facing route.
+  - Updated the Gemini judge prompt wording from WOW/inspiration framing to top-of-mind/signal framing while documenting retained `isWowMoment`, `relatedInspirationIds`, and `sourceEvidence.inspirationId` as legacy JSON compatibility keys.
+  - Added final naming conventions to the domain migration doc and Codebase Patterns.
+- Files changed
+  - `README.md`
+  - `docs/ambition-mirror-domain-migration.md`
+  - `packages/api/src/lib/auto-wow-generation.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/api/src/queue/classifier.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/pages/AdminHome.tsx`
+  - `packages/web/src/pages/AdminWowStatus.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/Login.tsx`
+  - `packages/web/src/pages/MeaningGraph.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/components/WowMomentsSection.tsx`
+  - `packages/web/src/components/history/InspirationDetail.tsx`
+  - `packages/web/src/components/layout/HistoryPanel.tsx`
+  - `packages/web/src/components/wm/WmActionList.tsx`
+  - `packages/web/test/api.test.ts`
+  - `packages/web/test/WowMomentsSection.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/model-provider.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/routes/top-of-mind.test.ts src/lib/wow-judge.test.ts` passed for collected unit-config tests: 16 tests.
+  - `pnpm --filter @waka/web test -- test/api.test.ts test/i18n.test.ts test/WowMomentsSection.test.ts test/Home.test.ts test/TopOfMindShare.test.ts` passed: 99 tests.
+  - `pnpm --filter @waka/api test -- test/wow-judge.test.ts` was attempted but the legacy integration-style test suite failed before collection with `getaddrinfo ENOTFOUND HOST.neon.tech`; no assertions ran.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Product-facing copy and new client helpers should use signal/top-of-mind/context/resonance naming even when the underlying persistence or compatibility route still says `wow`, `meaning`, or `inspiration`.
+  - Gotchas encountered
+    - `packages/api/test/wow-judge.test.ts` is not collected by `vitest.unit.config.ts` and tries to connect to the configured database when run through the package test script.
+    - Broad text replacement in admin graph code can accidentally change typed API field names like `recentInspirations` or `processedInspirations`; keep identifier compatibility separate from visible copy changes.
+  - Useful context
+    - `/api/wow-moments` remains a legacy compatibility route. User-facing web work should prefer `/api/top-of-mind` and top-of-mind note serializers.
 
 ---

@@ -3,15 +3,15 @@ import { Link } from "react-router-dom";
 const ADMIN_TOOLS = [
   {
     href: "/admin/meaning-graph",
-    label: "Meaning graph",
+    label: "Context graph",
     description:
-      "Inspect promoted meaning nodes, packet-backed evidence, and relationship edges.",
+      "Inspect promoted context nodes, packet-backed evidence, and relationship edges.",
   },
   {
     href: "/admin/wow-status",
-    label: "WOW pipeline status",
+    label: "Top-of-mind pipeline status",
     description:
-      "Review classifier, embedding, background job, and generated WOW moment diagnostics.",
+      "Review classifier, embedding, background job, and generated note diagnostics.",
   },
 ];
 
@@ -23,7 +23,7 @@ export default function AdminHomePage(): JSX.Element {
         <h1>Admin inspection</h1>
         <p>
           Developer-only surfaces for understanding how captures become WAKA
-          signals, meaning graph state, and generated moments.
+          signals, context graph state, and generated top-of-mind notes.
         </p>
       </header>
 
