@@ -11,6 +11,10 @@ import {
 } from "../db/index.js";
 import { normalizeContextNodeType, type ContextNodeType } from "./context-node-types.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import {
+  getDefaultModelProvider,
+  type ModelProvider,
+} from "./model-provider.js";
 
 const DEFAULT_REFRESH_LIMIT = 5;
 const MAX_REFRESH_LIMIT = 20;
@@ -280,7 +284,7 @@ async function loadExistingContextNoteKeys(
 
 export async function refreshTopOfMindNotesFromContextGraph(
   db: WakaDb,
-  input: { userId: string; limit?: number; now?: Date },
+  input: { userId: string; limit?: number; now?: Date; modelProvider?: ModelProvider },
 ): Promise<RefreshTopOfMindNotesResult> {
   const nodes = await db
     .select({
@@ -338,7 +342,8 @@ export async function refreshTopOfMindNotesFromContextGraph(
     loadExistingContextNoteKeys(db, { userId: input.userId, nodeIds }),
   ]);
 
-  const candidates = rankTopOfMindRefreshCandidates({
+  const modelProvider = input.modelProvider ?? (await getDefaultModelProvider());
+  const candidates = await modelProvider.generateTopOfMindNotes({
     userId: input.userId,
     nodes,
     evidence,

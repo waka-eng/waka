@@ -11,6 +11,7 @@ import {
 import { findWowMomentCandidates } from "./wow-candidates.js";
 import { getDb } from "./db.js";
 import { DEFAULT_LOCALE, normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
+import { getDefaultModelProvider } from "./model-provider.js";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
@@ -1472,7 +1473,8 @@ export async function judgeWowMomentForInspiration(
     );
   }
 
-  const client = params.client ?? new GeminiWowJudgeClient();
+  const client =
+    params.client ?? (await getDefaultModelProvider()).topOfMindNoteJudge;
   const judgment = await client.judgeWowMoment(input);
   if (!relatedIdsAreSafe(judgment, input)) {
     return defaultFalseJudgment("unclear_pattern", "Gemini referenced inspiration ids outside retrieved candidates.", { parseFailureStage: "unsafe_related_ids" });

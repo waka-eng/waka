@@ -20,6 +20,7 @@ import {
   type FindMeaningPacketCandidatesResult,
   type MeaningPacketCandidate,
 } from "./meaning-candidates.js";
+import { getDefaultModelProvider } from "./model-provider.js";
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 const MAX_OUTPUT_TOKENS = 1536;
@@ -597,7 +598,9 @@ export async function judgeMeaningRelationshipsForInspiration(
     };
   }
 
-  const client = params.client ?? new GeminiMeaningRelationshipJudgeClient();
+  const client =
+    params.client ??
+    (await getDefaultModelProvider()).contextGraphRelationshipJudge;
   let judgment: MeaningRelationshipJudgment;
   try {
     judgment = await client.judgeMeaningRelationships(input);

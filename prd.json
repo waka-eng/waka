@@ -210,7 +210,7 @@
         "Run API typecheck and targeted model pipeline tests"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

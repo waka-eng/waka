@@ -14,6 +14,38 @@
 - Top-of-mind refresh currently persists graph-generated notes through `wow_moments` with `top_of_mind_context_node:v1:*` idempotency keys until dedicated note persistence lands.
 - Home should consume `fetchTopOfMindNotes` for the primary user-facing Top of Mind post-it surface; use the legacy `topOfMind` preview only as a fallback while compatibility remains.
 - Web feedback submissions should use `createFeedback` from `packages/web/src/lib/api.ts`; top-of-mind note feedback targets use `targetType: "top_of_mind_note"` and the note id returned by `/api/top-of-mind`.
+- Product-domain model calls should go through `packages/api/src/lib/model-provider.ts`; Gemini-specific HTTP clients remain the current implementation behind `gemini-model-provider.ts`.
+
+---
+
+## 2026-05-30 15:41 PDT - US-014
+
+- What was implemented
+  - Added a model provider interface covering signal classification, signal packet generation, context graph relationship judgment, and top-of-mind note generation.
+  - Kept Gemini as the current provider implementation behind `gemini-model-provider.ts`.
+  - Routed classification, context relationship judgment, WOW/top-of-mind judgment defaults, and graph-backed top-of-mind refresh through provider-facing seams.
+  - Added focused provider tests for default override behavior and top-of-mind note generation through the provider interface.
+- Files changed
+  - `packages/api/src/lib/model-provider.ts`
+  - `packages/api/src/lib/gemini-model-provider.ts`
+  - `packages/api/src/lib/model-provider.test.ts`
+  - `packages/api/src/queue/classifier.ts`
+  - `packages/api/src/lib/meaning-relationship-judge.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/model-provider.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/meaning-relationship-judge.test.ts src/lib/wow-judge.test.ts src/lib/auto-wow-generation.test.ts` passed for the unit-config tests collected: 13 tests.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/model-provider.test.ts src/lib/signal-packets.test.ts src/routes/inspirations-auto-wow.test.ts src/lib/meaning-graph-writer-categories.test.ts src/routes/admin-meaning-graph.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/auto-wow-generation.test.ts` passed: 21 tests.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Product-domain model defaults should depend on `getDefaultModelProvider()` rather than instantiating provider-specific clients directly.
+  - Gotchas encountered
+    - `vitest.unit.config.ts` only includes `src/**/*.test.ts` plus `test/wow-score.test.ts`; test files under `packages/api/test` are not collected by that config.
+  - Useful context
+    - Signal packet and top-of-mind refresh generation are deterministic today, but they are included in the provider interface so later model-backed implementations can replace them without touching product-domain services.
 
 ---
 
