@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   createInspiration,
+  createFeedback,
   fetchInspirations,
   fetchTopOfMindNote,
   fetchTopOfMindNotes,
@@ -264,6 +265,65 @@ describe("fetchTopOfMindNote", () => {
       name: "ApiError",
       status: 404,
       message: "Top-of-mind note not found",
+    } satisfies Partial<ApiError>);
+  });
+});
+
+describe("createFeedback", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("persists top-of-mind note feedback through the feedback route", async () => {
+    const feedback = {
+      id: "feedback-1",
+      userId: "user-1",
+      targetType: "top_of_mind_note" as const,
+      targetId: "note-1",
+      value: "partly" as const,
+      emotionLabel: null,
+      correctionText: "This is closer if it mentions the workshop.",
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    };
+    stubFetch(Response.json({ feedback }, { status: 201 }));
+
+    await expect(
+      createFeedback({
+        targetType: "top_of_mind_note",
+        targetId: "note-1",
+        value: "partly",
+        correctionText: "This is closer if it mentions the workshop.",
+      }),
+    ).resolves.toEqual(feedback);
+    expect(fetch).toHaveBeenCalledWith("/api/feedback", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetType: "top_of_mind_note",
+        targetId: "note-1",
+        value: "partly",
+        correctionText: "This is closer if it mentions the workshop.",
+      }),
+    });
+  });
+
+  it("preserves feedback API failures", async () => {
+    stubFetch(Response.json({ error: "Feedback target not found" }, { status: 404 }));
+
+    await expect(
+      createFeedback({
+        targetType: "top_of_mind_note",
+        targetId: "missing",
+        value: "not_true",
+      }),
+    ).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "Feedback target not found",
     } satisfies Partial<ApiError>);
   });
 });

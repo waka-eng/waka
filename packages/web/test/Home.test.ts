@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createFeedback,
   createInspiration,
   finalizeAttachment,
   fetchInspirations,
@@ -61,6 +62,19 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchInspirations: vi.fn(async () => []),
     fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
     fetchTopOfMindNotes: vi.fn(async () => [sampleTopOfMindNote]),
+    createFeedback: vi.fn(async () => ({
+      id: "feedback-1",
+      userId: "user-1",
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "true",
+      emotionLabel: null,
+      correctionText: null,
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    })),
     fetchReflections: vi.fn(async () => []),
     fetchInspirationScoreBreakdown: vi.fn(async () => null),
     createInspiration: vi.fn(async () => {
@@ -646,6 +660,81 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("WAKA has not linked a durable context claim to this note yet.");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
     expect(expanded?.textContent).not.toContain("context_node:");
+  });
+
+  it("submits compact feedback for a top-of-mind note optimistically", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const trueButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-feedback-btn")).find(
+      (button) => button.textContent === "true",
+    );
+    expect(trueButton).not.toBeNull();
+
+    await act(async () => {
+      trueButton?.click();
+    });
+    await flushReactWork();
+
+    expect(trueButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("saved");
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "true",
+    });
+  });
+
+  it("sends optional correction text with expanded top-of-mind feedback", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const correction = container.querySelector<HTMLTextAreaElement>(".nc-note-correction textarea");
+    expect(correction).not.toBeNull();
+    await act(async () => {
+      setInputValue(correction!, "This is closer if it mentions the workshop.");
+    });
+    const partlyButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-feedback-btn")).find(
+      (button) => button.textContent === "partly",
+    );
+    expect(partlyButton).not.toBeNull();
+
+    await act(async () => {
+      partlyButton?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "partly",
+      correctionText: "This is closer if it mentions the workshop.",
+    });
+    expect(partlyButton?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("surfaces top-of-mind feedback failures without keeping optimistic state", async () => {
+    vi.mocked(createFeedback).mockRejectedValueOnce(new Error("offline"));
+    setApiFixtures();
+    const container = await renderHomePage();
+    const notTrueButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-feedback-btn")).find(
+      (button) => button.textContent === "not true",
+    );
+    expect(notTrueButton).not.toBeNull();
+
+    await act(async () => {
+      notTrueButton?.click();
+    });
+    await flushReactWork();
+
+    expect(notTrueButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(container.textContent).toContain("could not save feedback");
   });
 
   it("starts low-data users on capture-first signal entry", async () => {

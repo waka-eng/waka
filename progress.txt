@@ -13,6 +13,37 @@
 - User feedback persistence lives in `packages/api/src/db/schema-feedback.ts` and `/api/feedback`; feedback targets are polymorphic, but create paths must verify target ownership for the signed-in tenant before inserting rows.
 - Top-of-mind refresh currently persists graph-generated notes through `wow_moments` with `top_of_mind_context_node:v1:*` idempotency keys until dedicated note persistence lands.
 - Home should consume `fetchTopOfMindNotes` for the primary user-facing Top of Mind post-it surface; use the legacy `topOfMind` preview only as a fallback while compatibility remains.
+- Web feedback submissions should use `createFeedback` from `packages/web/src/lib/api.ts`; top-of-mind note feedback targets use `targetType: "top_of_mind_note"` and the note id returned by `/api/top-of-mind`.
+
+---
+
+## 2026-05-30 15:29 PDT - US-012
+
+- What was implemented
+  - Added compact feedback controls to active Top of Mind post-it notes for `true`, `partly`, `not true`, `important`, and `not important`.
+  - Persisted note feedback through the authenticated `/api/feedback` route using a new typed web API helper.
+  - Added optimistic note feedback state with saved/error UI and rollback on failed submissions.
+  - Added optional correction text on the expanded post-it surface without requiring the user to write.
+- Files changed
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/api.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 17 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 38 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for desktop compact feedback and mobile expanded feedback with optional correction text using mocked same-origin API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top-of-mind feedback should target the user-facing note id, not related signal or context node ids, when the control is attached to a post-it note.
+  - Gotchas encountered
+    - Feedback controls inside the hover-only note reveal were visible to tests but not reliably clickable in browser hit-testing; compact controls need to sit outside the hidden reveal and above the draggable note surface.
+  - Useful context
+    - Negative note feedback optimistically marks compatibility notes stale client-side while the server applies durable graph/note effects through `/api/feedback`.
 
 ---
 

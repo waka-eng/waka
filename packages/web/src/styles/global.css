@@ -1765,6 +1765,103 @@
   opacity: 1;
 }
 
+.nc-note-feedback {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  cursor: default;
+}
+
+.nc-note-feedback-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nc-note-feedback-btn {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0.62;
+  transition: opacity 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.nc-note-feedback-btn:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.nc-note-feedback-btn:disabled {
+  cursor: progress;
+  opacity: 0.44;
+}
+
+.nc-note-feedback-btn--active {
+  background: var(--ink);
+  color: var(--bg);
+  opacity: 1;
+}
+
+.nc-note-feedback-status {
+  margin: 0;
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  opacity: 0.56;
+}
+
+.nc-note-feedback-status--error {
+  opacity: 0.86;
+}
+
+.nc-note-feedback--expanded {
+  flex: 1 1 auto;
+}
+
+.nc-note-feedback--expanded .nc-note-feedback-options {
+  gap: 10px;
+}
+
+.nc-note-correction {
+  display: grid;
+  gap: 6px;
+  width: min(100%, 520px);
+}
+
+.nc-note-correction span {
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  opacity: 0.42;
+}
+
+.nc-note-correction textarea {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  border: 1px solid color-mix(in srgb, var(--ink) 26%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 80%, white);
+  color: var(--ink);
+  font: 13px/1.35 "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  padding: 8px 10px;
+}
+
 .nc-note-expanded-content {
   display: grid;
   gap: 22px;

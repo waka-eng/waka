@@ -47,6 +47,7 @@ import {
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
+  type ApiFeedbackValue,
   type ApiError,
   type ApiInspiration,
   type ApiInspirationScorePatch,
@@ -54,6 +55,7 @@ import {
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
   type ClusterKind,
+  createFeedback,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
@@ -115,8 +117,12 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  * online).
  */
 type InspirationStatus = "saving" | "saved" | "error";
-type ReactionKind = "neat" | "partial" | "off";
 type HomeMode = "capture" | "thought" | "saves";
+type TopOfMindFeedbackValue = Extract<
+  ApiFeedbackValue,
+  "true" | "partly" | "not_true" | "important" | "not_important"
+>;
+type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 
 const TOP_OF_MIND_SIGNAL_THRESHOLD = 2;
 
@@ -416,6 +422,7 @@ function normalizeMeaningLabel(value: string): string {
 
 interface HomeThoughtCard {
   id: string;
+  feedbackTargetId?: string;
   label: string;
   type: string;
   reason: string;
@@ -478,6 +485,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
 
   return {
     id: note.id,
+    feedbackTargetId: note.id,
     label: note.title,
     type: note.type,
     reason: note.body,
@@ -535,8 +543,19 @@ const HOME_COPY = {
     lifecycleHint: "not final. changes as new signals arrive.",
     noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
     evidenceLabel: "여기서 시작됨",
-    reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
+    feedbackLabels: {
+      true: "true",
+      partly: "partly",
+      not_true: "not true",
+      important: "important",
+      not_important: "not important",
+    },
     reactionGroup: "How does this land",
+    correctionLabel: "optional correction",
+    correctionPlaceholder: "what should this post-it know instead?",
+    feedbackSaved: "saved",
+    feedbackSaving: "saving...",
+    feedbackError: "could not save feedback",
     loadingThoughts: "생각이 모이는 중...",
     emptyThoughts: "신호가 쌓이면 여기에 생각이 나타납니다.",
     captureTitle: "첫 신호를 붙잡기",
@@ -593,8 +612,19 @@ const HOME_COPY = {
     lifecycleHint: "not final. changes as new signals arrive.",
     noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
     evidenceLabel: "where it began",
-    reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
+    feedbackLabels: {
+      true: "true",
+      partly: "partly",
+      not_true: "not true",
+      important: "important",
+      not_important: "not important",
+    },
     reactionGroup: "How does this land",
+    correctionLabel: "optional correction",
+    correctionPlaceholder: "what should this post-it know instead?",
+    feedbackSaved: "saved",
+    feedbackSaving: "saving...",
+    feedbackError: "could not save feedback",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "When signals gather, provisional notes will appear here.",
     captureTitle: "Catch the first signals",
@@ -637,8 +667,13 @@ const HOME_COPY = {
     lifecycleHint: string;
     noteShifted: string[];
     evidenceLabel: string;
-    reactionLabels: Record<ReactionKind, string>;
+    feedbackLabels: Record<TopOfMindFeedbackValue, string>;
     reactionGroup: string;
+    correctionLabel: string;
+    correctionPlaceholder: string;
+    feedbackSaved: string;
+    feedbackSaving: string;
+    feedbackError: string;
     loadingThoughts: string;
     emptyThoughts: string;
     captureTitle: string;
@@ -691,7 +726,17 @@ export function HomePage(): JSX.Element {
   const [homeMode, setHomeMode] = useState<HomeMode>("thought");
   const [homeModeChosen, setHomeModeChosen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
-  const [reactions, setReactions] = useState<Record<number, ReactionKind | null>>({});
+  const [noteFeedback, setNoteFeedback] = useState<
+    Record<
+      string,
+      {
+        value: TopOfMindFeedbackValue | null;
+        status: FeedbackStatus;
+        error: string | null;
+        correctionText: string;
+      }
+    >
+  >({});
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
@@ -1254,8 +1299,157 @@ export function HomePage(): JSX.Element {
     setHomeModeChosen(true);
   };
 
-  const setReaction = (index: number, kind: ReactionKind) => {
-    setReactions((prev) => ({ ...prev, [index]: prev[index] === kind ? null : kind }));
+  const feedbackValues: TopOfMindFeedbackValue[] = [
+    "true",
+    "partly",
+    "not_true",
+    "important",
+    "not_important",
+  ];
+
+  const updateCorrectionText = (noteId: string, correctionText: string) => {
+    setNoteFeedback((prev) => ({
+      ...prev,
+      [noteId]: {
+        value: prev[noteId]?.value ?? null,
+        status: prev[noteId]?.status ?? "idle",
+        error: null,
+        correctionText,
+      },
+    }));
+  };
+
+  const submitTopOfMindFeedback = async (
+    signal: HomeThoughtCard,
+    value: TopOfMindFeedbackValue,
+  ) => {
+    if (!signal.feedbackTargetId) return;
+
+    const previousNotes = topOfMindNotes;
+    const previousFeedback = noteFeedback[signal.id] ?? {
+      value: null,
+      status: "idle" as FeedbackStatus,
+      error: null,
+      correctionText: "",
+    };
+    const correctionText = previousFeedback.correctionText.trim();
+
+    setNoteFeedback((prev) => ({
+      ...prev,
+      [signal.id]: {
+        value,
+        status: "saving",
+        error: null,
+        correctionText: prev[signal.id]?.correctionText ?? "",
+      },
+    }));
+
+    setTopOfMindNotes((prev) =>
+      prev.map((note) =>
+        note.id === signal.feedbackTargetId
+          ? {
+              ...note,
+              status:
+                value === "not_true" || value === "not_important"
+                  ? "stale"
+                  : note.status,
+              confidence:
+                value === "true" || value === "important"
+                  ? Math.min(100, note.confidence + 4)
+                  : value === "not_true" || value === "not_important"
+                    ? Math.max(0, note.confidence - 12)
+                    : note.confidence,
+            }
+          : note,
+      ),
+    );
+
+    try {
+      await createFeedback({
+        targetType: "top_of_mind_note",
+        targetId: signal.feedbackTargetId,
+        value,
+        ...(correctionText ? { correctionText } : {}),
+      });
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          value,
+          status: "saved",
+          error: null,
+          correctionText: prev[signal.id]?.correctionText ?? "",
+        },
+      }));
+    } catch {
+      setTopOfMindNotes(previousNotes);
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          ...previousFeedback,
+          status: "error",
+          error: copy.feedbackError,
+        },
+      }));
+    }
+  };
+
+  const renderFeedbackControls = (
+    signal: HomeThoughtCard,
+    options: { expanded?: boolean } = {},
+  ): JSX.Element | null => {
+    if (!signal.feedbackTargetId) return null;
+    const feedbackState = noteFeedback[signal.id];
+    const saving = feedbackState?.status === "saving";
+    return (
+      <div
+        className={`nc-note-feedback${options.expanded ? " nc-note-feedback--expanded" : ""}`}
+        role="group"
+        aria-label={copy.reactionGroup}
+      >
+        <div className="nc-note-feedback-options">
+          {feedbackValues.map((value) => {
+            const active = feedbackState?.value === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                className={`nc-note-feedback-btn${active ? " nc-note-feedback-btn--active" : ""}`}
+                aria-pressed={active}
+                disabled={saving}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void submitTopOfMindFeedback(signal, value);
+                }}
+              >
+                {copy.feedbackLabels[value]}
+              </button>
+            );
+          })}
+        </div>
+        {options.expanded ? (
+          <label className="nc-note-correction" onClick={(event) => event.stopPropagation()}>
+            <span>{copy.correctionLabel}</span>
+            <textarea
+              value={feedbackState?.correctionText ?? ""}
+              placeholder={copy.correctionPlaceholder}
+              rows={2}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                updateCorrectionText(signal.id, event.target.value)
+              }
+            />
+          </label>
+        ) : null}
+        {feedbackState?.status === "saving" ? (
+          <p className="nc-note-feedback-status">{copy.feedbackSaving}</p>
+        ) : feedbackState?.status === "saved" ? (
+          <p className="nc-note-feedback-status">{copy.feedbackSaved}</p>
+        ) : feedbackState?.status === "error" ? (
+          <p className="nc-note-feedback-status nc-note-feedback-status--error">
+            {feedbackState.error ?? copy.feedbackError}
+          </p>
+        ) : null}
+      </div>
+    );
   };
 
   const relatedMeaningLabels = (signal: HomeThoughtCard): string[] => {
@@ -1376,27 +1570,8 @@ export function HomePage(): JSX.Element {
           </p>
           <span className="nc-note-evidence-source">— {meaningTypeLabel(signal.type)}</span>
         </div>
-        <div className="nc-note-reactions" role="group" aria-label={copy.reactionGroup}>
-          {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
-            const label = copy.reactionLabels[kind];
-            const active = reactions[index] === kind;
-            return (
-              <button
-                key={kind}
-                type="button"
-                className={`nc-note-reaction${active ? " nc-note-reaction--active" : ""}`}
-                aria-pressed={active}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setReaction(index, kind);
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
       </div>
+      {renderFeedbackControls(signal)}
     </article>
   );
   };
@@ -1518,25 +1693,7 @@ export function HomePage(): JSX.Element {
           ) : null}
 
           <footer className="nc-note-expanded-foot">
-            <div className="nc-note-reactions nc-note-reactions--expanded" role="group" aria-label={copy.reactionGroup}>
-              {(["neat", "partial", "off"] as ReactionKind[]).map((kind) => {
-                const active = reactions[index] === kind;
-                return (
-                  <button
-                    key={kind}
-                    type="button"
-                    className={`nc-note-reaction${active ? " nc-note-reaction--active" : ""}`}
-                    aria-pressed={active}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setReaction(index, kind);
-                    }}
-                  >
-                    {copy.reactionLabels[kind]}
-                  </button>
-                );
-              })}
-            </div>
+            {renderFeedbackControls(signal, { expanded: true })}
             <span>not final</span>
           </footer>
         </div>

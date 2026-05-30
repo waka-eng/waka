@@ -773,6 +773,51 @@ export interface GetTopOfMindNoteResponse {
   topOfMindNote: ApiTopOfMindNoteSurface;
 }
 
+export type ApiFeedbackTarget =
+  | "signal"
+  | "context_node"
+  | "top_of_mind_note"
+  | "hypothesis";
+export type ApiFeedbackValue =
+  | "true"
+  | "partly"
+  | "not_true"
+  | "important"
+  | "not_important";
+export type ApiFeedbackEmotion =
+  | "admire"
+  | "envy"
+  | "want"
+  | "fear"
+  | "curious"
+  | "aesthetic_only";
+
+export interface ApiFeedbackRecord {
+  id: string;
+  userId: string;
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+  value: ApiFeedbackValue;
+  emotionLabel: ApiFeedbackEmotion | null;
+  correctionText: string | null;
+  source: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFeedbackRequest {
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+  value: ApiFeedbackValue;
+  emotionLabel?: ApiFeedbackEmotion;
+  correctionText?: string;
+}
+
+export interface CreateFeedbackResponse {
+  feedback: ApiFeedbackRecord;
+}
+
 export interface FetchWowMomentsOptions {
   limit?: number;
 }
@@ -950,6 +995,25 @@ export async function fetchTopOfMindNote(
   }
 
   return body.topOfMindNote;
+}
+
+export async function createFeedback(
+  input: CreateFeedbackRequest,
+): Promise<ApiFeedbackRecord> {
+  const body = await postJson<CreateFeedbackResponse>(
+    apiPath("/feedback"),
+    input,
+    "Failed to save feedback",
+  );
+
+  if (!body.feedback) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed feedback response",
+    });
+  }
+
+  return body.feedback;
 }
 
 export async function fetchBackgroundJobs(
