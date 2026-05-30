@@ -163,6 +163,14 @@ describe("GET /api/top-of-mind", () => {
         .fn()
         .mockReturnValueOnce(momentsSelect.builder)
         .mockReturnValueOnce(createRelatedRowsSelect(relatedRows))
+        .mockReturnValueOnce(
+          createRelatedRowsSelect([
+            {
+              wowMomentId: moment.id,
+              meaningNodeId: "00000000-0000-4000-8000-000000000201",
+            },
+          ]),
+        )
         .mockReturnValueOnce(createFeedbackRowsSelect([])),
     };
     const getTopOfMind = vi.fn(async () => ({
@@ -202,7 +210,7 @@ describe("GET /api/top-of-mind", () => {
         confidence: 82,
         status: "active",
         relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
-        relatedContextNodeIds: [],
+        relatedContextNodeIds: ["00000000-0000-4000-8000-000000000201"],
         evidencePreviews: [
           {
             signalId: "00000000-0000-4000-8000-000000000101",
@@ -252,6 +260,7 @@ describe("GET /api/top-of-mind", () => {
       select: vi
         .fn()
         .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
         .mockReturnValueOnce(createRelatedRowsSelect([]))
         .mockReturnValueOnce(
           createFeedbackRowsSelect([

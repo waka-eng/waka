@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   inspirations,
   feedback,
+  meaningEvidence,
   type WowKind,
   wowMomentInspirations,
   wowMoments,
@@ -130,12 +131,14 @@ function truncatePreview(value: string): string {
 function serializeTopOfMindSurface(
   moment: TopOfMindWowMomentRow,
   relatedRows: TopOfMindRelatedSignalRow[],
+  relatedContextNodeIds: string[],
   status?: TopOfMindNoteStatus,
 ): TopOfMindNoteSurface {
   const limitedRows = relatedRows.slice(0, MAX_WOW_MOMENT_SOURCE_LINKS);
   const note = topOfMindNoteFromWowMoment({
     moment,
     relatedSignalIds: limitedRows.map((row) => row.inspirationId),
+    relatedContextNodeIds,
     status,
   });
 
@@ -182,6 +185,42 @@ function serializeTopOfMindSurface(
     evidencePreviews,
     relatedSignals,
   };
+}
+
+async function fetchRelatedContextNodeIdsByMomentId(
+  db: WakaDb,
+  input: { userId: string; momentIds: string[] },
+): Promise<Map<string, string[]>> {
+  if (input.momentIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      wowMomentId: wowMomentInspirations.wowMomentId,
+      meaningNodeId: meaningEvidence.meaningNodeId,
+    })
+    .from(wowMomentInspirations)
+    .innerJoin(
+      meaningEvidence,
+      and(
+        eq(wowMomentInspirations.userId, meaningEvidence.userId),
+        eq(wowMomentInspirations.inspirationId, meaningEvidence.inspirationId),
+      ),
+    )
+    .where(
+      and(
+        eq(wowMomentInspirations.userId, input.userId),
+        inArray(wowMomentInspirations.wowMomentId, input.momentIds),
+      ),
+    )
+    .orderBy(asc(wowMomentInspirations.sortOrder), asc(meaningEvidence.createdAt));
+
+  const byMomentId = new Map<string, string[]>();
+  for (const row of rows) {
+    const bucket = byMomentId.get(row.wowMomentId) ?? [];
+    bucket.push(row.meaningNodeId);
+    byMomentId.set(row.wowMomentId, [...new Set(bucket)]);
+  }
+  return byMomentId;
 }
 
 async function fetchLatestTopOfMindFeedbackStatuses(
@@ -286,6 +325,10 @@ export async function listTopOfMindNotesForUser(
     userId: input.userId,
     momentIds: moments.map((moment) => moment.id),
   });
+  const relatedContextNodeIds = await fetchRelatedContextNodeIdsByMomentId(db, {
+    userId: input.userId,
+    momentIds: moments.map((moment) => moment.id),
+  });
   const feedbackStatuses = await fetchLatestTopOfMindFeedbackStatuses(db, {
     userId: input.userId,
     noteIds: moments.map((moment) => moment.id),
@@ -296,6 +339,7 @@ export async function listTopOfMindNotesForUser(
     serializeTopOfMindSurface(
       moment,
       relatedByMomentId.get(moment.id) ?? [],
+      relatedContextNodeIds.get(moment.id) ?? [],
       feedbackStatuses.get(moment.id),
     ),
   );
@@ -330,6 +374,10 @@ export async function getTopOfMindNoteForUser(
     userId: input.userId,
     momentIds: [moment.id],
   });
+  const relatedContextNodeIds = await fetchRelatedContextNodeIdsByMomentId(db, {
+    userId: input.userId,
+    momentIds: [moment.id],
+  });
   const feedbackStatuses = await fetchLatestTopOfMindFeedbackStatuses(db, {
     userId: input.userId,
     noteIds: [moment.id],
@@ -338,6 +386,7 @@ export async function getTopOfMindNoteForUser(
   return serializeTopOfMindSurface(
     moment,
     relatedRows,
+    relatedContextNodeIds.get(moment.id) ?? [],
     feedbackStatuses.get(moment.id),
   );
 }

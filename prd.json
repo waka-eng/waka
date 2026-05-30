@@ -135,7 +135,7 @@
         "Run API typecheck and targeted top-of-mind refresh tests"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

@@ -11,6 +11,7 @@
 - Top-of-mind note compatibility lives in `packages/api/src/lib/top-of-mind-notes.ts`; it serializes current `wow_moments` rows into provisional active notes while persistence remains unchanged.
 - The user-facing `/api/top-of-mind` route returns `topOfMindNotes` plus the legacy `topOfMind` preview field for current home-page compatibility; web client helpers live in `packages/web/src/lib/api.ts`.
 - User feedback persistence lives in `packages/api/src/db/schema-feedback.ts` and `/api/feedback`; feedback targets are polymorphic, but create paths must verify target ownership for the signed-in tenant before inserting rows.
+- Top-of-mind refresh currently persists graph-generated notes through `wow_moments` with `top_of_mind_context_node:v1:*` idempotency keys until dedicated note persistence lands.
 
 ---
 
@@ -260,5 +261,32 @@
     - Top-of-mind notes still use WOW moment compatibility persistence, so note status is derived from applied feedback metadata until dedicated note persistence lands.
   - Useful context
     - Top-of-mind note feedback finds related context nodes through the note's related signal rows and existing `meaning_evidence`; if no graph evidence exists yet, provenance is still stored on the feedback row.
+
+---
+
+## 2026-05-30 14:59 PDT - US-009
+
+- What was implemented
+  - Added a bounded top-of-mind refresh service that selects active context nodes, ranks candidates by recurrence, agency-oriented node types, unresolved questions/tensions/hypotheses, and recency.
+  - Persisted generated provisional notes through the current WOW compatibility tables with stable `top_of_mind_context_node:v1:*` idempotency keys to avoid duplicating active notes for the same graph claim.
+  - Linked generated notes back to supporting signal evidence and exposed related context node ids on the user-facing top-of-mind note serializer where graph evidence is available.
+  - Added deterministic tests for ranking, evidence ordering, deduplication, and unsupported-claim skipping.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.test.ts`
+  - `packages/api/src/routes/top-of-mind.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts` passed: 11 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Graph-generated top-of-mind notes should use stable context-node idempotency keys while `wow_moments` remains the compatibility persistence layer.
+  - Gotchas encountered
+    - Existing top-of-mind route unit tests use narrow hand-built Drizzle mocks, so new serializer enrichment queries need matching mock shape updates.
+  - Useful context
+    - Related context node ids are inferred from linked signal evidence and `meaning_evidence`; they may include multiple nodes when a source signal supports more than one graph claim.
 
 ---
