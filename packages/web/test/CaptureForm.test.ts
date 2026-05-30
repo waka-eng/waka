@@ -217,12 +217,17 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
-        .find((button) => button.textContent === "want")
+        .find((button) => button.textContent?.includes("I want this"))
         ?.click();
     });
 
     await clickQuickSave();
 
+    const metadataNote = `capture_metadata:v1:${JSON.stringify({
+      reason: "want",
+      reasonLabel: "I want this",
+      userReason: null,
+    })}`;
     expect(createInspiration).toHaveBeenCalledWith({
       text: "I keep returning to studios with huge north-facing windows",
       kind: "note",
@@ -234,7 +239,7 @@ describe("CaptureForm multi-input quick capture", () => {
           endOffset: 58,
           confidence: 100,
           isPrimary: true,
-          note: "resonance:want",
+          note: metadataNote,
         },
       ],
     });
@@ -242,6 +247,88 @@ describe("CaptureForm multi-input quick capture", () => {
       "WAKA noticed the part you marked.",
     );
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
+  it("offers a one-tap reason and optional micro-answer without blocking save", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("A tiny studio ritual I want to borrow");
+    });
+    await act(async () => {
+      Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
+        .find((button) => button.textContent?.includes("amused me"))
+        ?.click();
+    });
+
+    expect(container?.querySelector("#capResonanceNote")?.getAttribute("placeholder")).toBe(
+      "Optional. Keep it tiny.",
+    );
+    expect(container?.querySelector("label.cap-resonance-note")?.textContent).toContain(
+      "Why did this amuse me?",
+    );
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "A tiny studio ritual I want to borrow",
+      kind: "note",
+      sparks: [
+        {
+          text: "A tiny studio ritual I want to borrow",
+          source: "user_written",
+          startOffset: undefined,
+          endOffset: undefined,
+          confidence: 90,
+          isPrimary: true,
+          note: `capture_metadata:v1:${JSON.stringify({
+            reason: "amused_me",
+            reasonLabel: "amused me",
+            userReason: null,
+          })}`,
+        },
+      ],
+    });
+    expect(createReflection).not.toHaveBeenCalled();
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
+      "WAKA noticed this amused me signal.",
+    );
+  });
+
+  it("persists the optional reason note as stronger user-provided capture metadata", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("This operating cadence feels expensive but clarifying");
+    });
+    await act(async () => {
+      Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
+        .find((button) => button.textContent?.includes("high-stakes"))
+        ?.click();
+    });
+    const noteInput = container?.querySelector<HTMLInputElement>("#capResonanceNote");
+    expect(noteInput).not.toBeNull();
+    await act(async () => {
+      if (noteInput) noteInput.value = "This might change what I commit to next.";
+      noteInput?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+      noteInput?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "This operating cadence feels expensive but clarifying",
+      kind: "note",
+      sparks: [
+        expect.objectContaining({
+          source: "user_written",
+          confidence: 90,
+          note: `capture_metadata:v1:${JSON.stringify({
+            reason: "high_stakes",
+            reasonLabel: "high-stakes",
+            userReason: "This might change what I commit to next.",
+          })}`,
+        }),
+      ],
+    });
   });
 
   it("keeps the draft intact when server save fails", async () => {

@@ -315,7 +315,7 @@
         "Run web typecheck, targeted capture tests, and browser verification"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "Product rationale: in a world where AI can sense passively, asking humans for explicit input must be worth it immediately. The human-only value is not just emotion labeling; it is the user noticing why this signal mattered while the feeling is still alive. Capture should become a tiny revelation loop: this amused me, this made me envious, this feels like a life I want, this bothers me, this is high-stakes. Good interaction directions: one-tap chips, quick highlight plus reason, optional micro-question, press-and-hold intensity, or a tiny palette after selection. The goal is to reduce churn by making explicit input feel rewarding, clarifying, and uniquely human, not like feeding the AI."
     }
   ]

@@ -19,6 +19,7 @@
 - The shareable Top of Mind value-prop surface currently lives at protected route `/top-of-mind/share` and reads the current user's notes from `/api/top-of-mind`; do not expose public note sharing until a share-token or permission model exists.
 - Saved-signal archive and deep-dive UI should use the user-facing `/api/signals` route; it assembles legacy inspiration rows with signal packets, highlights, context nodes, top-of-mind notes, and signal feedback without making `/api/wow-moments` the preferred product surface.
 - Final naming convention: product-facing UI, docs, model prompts, and web client helpers should use signal, signal packet, context graph/node, top-of-mind note, resonance, and feedback; `wow_*`, `meaning_*`, and `/api/wow-moments` names are legacy compatibility only unless a persistence migration explicitly renames them.
+- Capture self-understanding metadata should use existing `inspiration_sparks.note` as `capture_metadata:v1:{...}` until a dedicated signal metadata table exists; signal packets already carry spark notes forward as user-provided evidence.
 
 ---
 
@@ -619,7 +620,37 @@
   - Gotchas encountered
     - `packages/api/test/wow-judge.test.ts` is not collected by `vitest.unit.config.ts` and tries to connect to the configured database when run through the package test script.
     - Broad text replacement in admin graph code can accidentally change typed API field names like `recentInspirations` or `processedInspirations`; keep identifier compatibility separate from visible copy changes.
-  - Useful context
+- Useful context
     - `/api/wow-moments` remains a legacy compatibility route. User-facing web work should prefer `/api/top-of-mind` and top-of-mind note serializers.
+
+---
+
+## 2026-05-30 16:27 PDT - US-017
+
+- What was implemented
+  - Reframed capture metadata as a small self-understanding loop: save the signal, optionally mark what hit, tap a lightweight reason chip, optionally answer one tiny follow-up, then get confirmation that WAKA noticed the human-provided signal context.
+  - Expanded capture reason chips to cover amused me, I want this, I admire this, I envy this, feels like me, bothers me, makes me curious, high-stakes, and not sure.
+  - Added progressive disclosure for the optional follow-up question after a reason chip is selected.
+  - Persisted reason and optional micro-answer through existing signal spark metadata using `capture_metadata:v1` in the spark note so signal packets/context interpretation can treat it as stronger user evidence.
+  - Kept raw save friction unchanged: users can still save just text/link/image without selecting any metadata or opening the deeper prompt.
+- Files changed
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts` passed: 17 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for desktop 1280x900 and mobile 390x844 using mocked same-origin auth, inspiration list, top-of-mind, and inspiration create responses; verified optional capture metadata was posted and no horizontal overflow occurred.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture metadata can remain frictionless and packet-visible by encoding user-provided reason data in `inspiration_sparks.note` with a versioned `capture_metadata:v1` prefix.
+  - Gotchas encountered
+    - The optional reason input needs to preserve the live DOM value at save time as well as React state so fast save interactions do not drop the micro-answer.
+  - Useful context
+    - The chip icons intentionally use simple text symbols instead of image assets so the existing compact capture surface stays fast and keyboard/touch friendly.
 
 ---

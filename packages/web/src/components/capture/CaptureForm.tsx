@@ -168,11 +168,14 @@ const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
 
 type CaptureResonanceAnswer =
+  | "amused_me"
   | "want"
   | "admire"
   | "envy"
   | "feels_like_me"
   | "bothers_me"
+  | "curious"
+  | "high_stakes"
   | "not_sure";
 
 interface HighlightedSignalText {
@@ -184,17 +187,21 @@ interface HighlightedSignalText {
 interface StoredCaptureDraft {
   note?: string;
   resonance?: CaptureResonanceAnswer | null;
+  resonanceNote?: string;
   highlight?: HighlightedSignalText | null;
   links?: Array<{ url: string; name?: string }>;
 }
 
-const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string }> = [
-  { value: "want", label: "want" },
-  { value: "admire", label: "admire" },
-  { value: "envy", label: "envy" },
-  { value: "feels_like_me", label: "feels like me" },
-  { value: "bothers_me", label: "bothers me" },
-  { value: "not_sure", label: "not sure" },
+const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string; icon: string; prompt: string }> = [
+  { value: "amused_me", label: "amused me", icon: ":)", prompt: "Why did this amuse me?" },
+  { value: "want", label: "I want this", icon: "+", prompt: "What part do I want more of?" },
+  { value: "admire", label: "I admire this", icon: "*", prompt: "What do I admire here?" },
+  { value: "envy", label: "I envy this", icon: "~", prompt: "What does the envy point toward?" },
+  { value: "feels_like_me", label: "feels like me", icon: "=", prompt: "What feels like me here?" },
+  { value: "bothers_me", label: "bothers me", icon: "!", prompt: "What is this bothering in me?" },
+  { value: "curious", label: "makes me curious", icon: "?", prompt: "What question opened up?" },
+  { value: "high_stakes", label: "high-stakes", icon: "^", prompt: "What feels at stake?" },
+  { value: "not_sure", label: "not sure", icon: "...", prompt: "What is the first clue?" },
 ];
 
 export function extractUrlsFromText(text: string): string[] {
@@ -284,6 +291,7 @@ function writeStoredCaptureDraft(draft: StoredCaptureDraft): void {
   const hasDraft =
     (draft.note?.trim().length ?? 0) > 0 ||
     Boolean(draft.resonance) ||
+    (draft.resonanceNote?.trim().length ?? 0) > 0 ||
     Boolean(draft.highlight?.text) ||
     (draft.links?.length ?? 0) > 0;
   try {
@@ -308,6 +316,22 @@ function clearStoredCaptureDraft(): void {
 
 function resonanceLabel(value: CaptureResonanceAnswer): string {
   return resonanceOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function resonancePrompt(value: CaptureResonanceAnswer): string {
+  return resonanceOptions.find((option) => option.value === value)?.prompt ?? "Why did this hit?";
+}
+
+function buildCaptureMetadataNote(input: {
+  resonance: CaptureResonanceAnswer | null;
+  resonanceNote: string;
+}): string | undefined {
+  if (!input.resonance && input.resonanceNote.trim().length === 0) return undefined;
+  return `capture_metadata:v1:${JSON.stringify({
+    reason: input.resonance,
+    reasonLabel: input.resonance ? resonanceLabel(input.resonance) : null,
+    userReason: input.resonanceNote.trim() || null,
+  })}`;
 }
 
 /* ============================================================
@@ -340,6 +364,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [highlight, setHighlight] = useState<HighlightedSignalText | null>(null);
     const [latestSelection, setLatestSelection] = useState<HighlightedSignalText | null>(null);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
+    const [resonanceNote, setResonanceNote] = useState("");
     const [saving, setSaving] = useState(false);
     /**
      * Confirmation / error message displayed in `cap-confirm`. The cell
@@ -350,6 +375,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [confirmVisible, setConfirmVisible] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
       const draft = readStoredCaptureDraft();
@@ -357,6 +383,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       if (typeof draft.note === "string") setNote(draft.note);
       if (draft.highlight?.text) setHighlight(draft.highlight);
       if (draft.resonance) setResonance(draft.resonance);
+      if (typeof draft.resonanceNote === "string") setResonanceNote(draft.resonanceNote);
       if (Array.isArray(draft.links)) {
         setPending(
           draft.links
@@ -375,8 +402,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const links = pending
         .filter((att) => att.kind === "link" && att.url)
         .map((att) => ({ url: att.url as string, name: att.name }));
-      writeStoredCaptureDraft({ note, resonance, highlight, links });
-    }, [note, resonance, highlight, pending]);
+      writeStoredCaptureDraft({ note, resonance, resonanceNote, highlight, links });
+    }, [note, resonance, resonanceNote, highlight, pending]);
 
     // Cleanup timers when the component unmounts. Without this an
     // in-flight setTimeout would fire `setState` on an unmounted instance.
@@ -649,17 +676,19 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       try {
         // 2. Persist the inspiration row first. Until this resolves we have
         //    no inspirationId to attach attachments to.
+        const currentResonanceNote = resonanceNoteInputRef.current?.value ?? resonanceNote;
+        const captureMetadataNote = buildCaptureMetadataNote({ resonance, resonanceNote: currentResonanceNote });
         const captureSparks =
-          highlight || resonance
+          highlight || resonance || currentResonanceNote.trim().length > 0
             ? [
                 {
                   text: highlight?.text ?? inspirationText.slice(0, 4096),
                   source: highlight ? ("user_selected" as const) : ("user_written" as const),
                   startOffset: highlight?.startOffset,
                   endOffset: highlight?.endOffset,
-                  confidence: highlight ? 100 : 80,
+                  confidence: highlight ? 100 : resonance ? 90 : 80,
                   isPrimary: true,
-                  note: resonance ? `resonance:${resonance}` : undefined,
+                  note: captureMetadataNote,
                 },
               ]
             : undefined;
@@ -725,6 +754,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setHighlight(null);
         setLatestSelection(null);
         setResonance(null);
+        setResonanceNote("");
         setReflectionAnswer("");
         setActiveView("note");
         setReflectGlow(Boolean(reflection));
@@ -743,7 +773,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           const noticed = highlight
             ? "WAKA noticed the part you marked."
             : resonance
-              ? `WAKA noticed a ${resonanceLabel(resonance)} signal.`
+              ? `WAKA noticed this ${resonanceLabel(resonance)} signal.`
               : "WAKA noticed this signal is now saved.";
           flashConfirm(
             <span>
@@ -885,10 +915,25 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                     aria-pressed={resonance === option.value}
                     onClick={() => setResonance((current) => (current === option.value ? null : option.value))}
                   >
-                    {option.label}
+                    <span className="cap-resonance-icon" aria-hidden="true">{option.icon}</span>
+                    <span>{option.label}</span>
                   </button>
                 ))}
               </div>
+              {resonance ? (
+                <label className="cap-resonance-note" htmlFor="capResonanceNote">
+                  <span>{resonancePrompt(resonance)}</span>
+                  <input
+                    id="capResonanceNote"
+                    ref={resonanceNoteInputRef}
+                    type="text"
+                    value={resonanceNote}
+                    onChange={(event) => setResonanceNote(event.currentTarget.value)}
+                    onInput={(event) => setResonanceNote(event.currentTarget.value)}
+                    placeholder={t(locale, "resonanceNotePlaceholder")}
+                  />
+                </label>
+              ) : null}
             </fieldset>
           </div>
         }
