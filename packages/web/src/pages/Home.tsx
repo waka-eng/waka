@@ -1836,6 +1836,9 @@ export function HomePage(): JSX.Element {
                   placeholder={copy.searchPlaceholder}
                 />
               </label>
+              <Link to="/signals" className="reference-saves-archive-link">
+                deep signal archive
+              </Link>
             </header>
             <div className="reference-save-list">
               {filteredEntries.length > 0 ? (

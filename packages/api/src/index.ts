@@ -18,6 +18,7 @@ import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.
 import { decisionMemoRoutes } from "./routes/decision-memo.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { signalArchiveRoutes } from "./routes/signals.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
 import { wowStatusRoutes } from "./routes/wow-status.js";
@@ -50,6 +51,9 @@ app.route("/api/admin/top-of-mind-preview", adminTopOfMindPreviewRoutes);
 // Every handler in this router requires a valid session — the router
 // applies `requireAuth` at the mount point.
 app.route("/api/inspirations", inspirationsRoutes);
+
+// User-facing saved-signal archive and deep-dive surface.
+app.route("/api/signals", signalArchiveRoutes);
 
 // User-facing reading of the current meaning graph.
 app.route("/api/top-of-mind", topOfMindRoutes);

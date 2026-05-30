@@ -277,7 +277,7 @@
         "Run API/web typechecks, targeted archive/search tests, and browser verification"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Brainstorm direction: search should answer both \"where is that thing I saved?\" and \"what pattern was this part of?\" The deep dive should show the raw saved note, the exact part that hit, WAKA's current interpretation, graph links, top-of-mind notes it influenced, and lightweight correction actions. Good modes: All signals, Highlighted, Tensions, Questions, People/places, Recently resurfaced. Results should show matching snippets, resonance markers, and why this result is relevant."
     },
     {

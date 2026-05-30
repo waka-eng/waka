@@ -826,6 +826,101 @@ export interface FetchTopOfMindNotesOptions {
   limit?: number;
 }
 
+export type SavedSignalArchiveFilter =
+  | "all"
+  | "highlighted"
+  | "high_resonance"
+  | "tensions"
+  | "questions"
+  | "people_places"
+  | "recently_resurfaced";
+
+export type SavedSignalArchiveSort = "recent" | "resonance" | "revisited";
+
+export interface ApiSavedSignalSearchResult {
+  id: string;
+  userId: string;
+  textPreview: string;
+  kind: string | null;
+  capturedAt: string;
+  updatedAt: string;
+  resonanceScore: number;
+  signalScores: ApiSignalScores;
+  highlightedSnippets: Array<{
+    id: string;
+    text: string;
+    source: string;
+    confidence: number;
+    isPrimary: boolean;
+  }>;
+  matchingSnippets: string[];
+  relatedContextTerms: string[];
+  relatedTopOfMindNoteTitles: string[];
+  attachmentSummary: Array<{
+    id: string;
+    type: AttachmentType;
+    label: string;
+  }>;
+  relevanceReasons: string[];
+}
+
+export interface ApiSavedSignalDetail extends ApiSavedSignalSearchResult {
+  rawText: string;
+  attachments: Array<{
+    id: string;
+    type: AttachmentType;
+    url?: string;
+    label: string;
+    contentType: string | null;
+    size: number | null;
+  }>;
+  resonanceFeedback: Array<{
+    id: string;
+    value: ApiFeedbackValue;
+    emotionLabel: ApiFeedbackEmotion | null;
+    correctionText: string | null;
+    createdAt: string;
+  }>;
+  signalPacket: {
+    id: string;
+    text: string;
+    primarySpark: string;
+    artifactExcerpt: string;
+    updatedAt: string;
+  } | null;
+  relatedContextNodes: Array<{
+    id: string;
+    type: string;
+    label: string;
+    description: string;
+    confidence: number;
+    evidenceReason: string;
+  }>;
+  relatedTopOfMindNotes: Array<{
+    id: string;
+    title: string;
+    type: ApiTopOfMindNoteType;
+    body: string;
+    confidence: number;
+    status: "active";
+  }>;
+}
+
+export interface FetchSavedSignalsOptions {
+  q?: string;
+  filter?: SavedSignalArchiveFilter;
+  sort?: SavedSignalArchiveSort;
+  limit?: number;
+}
+
+export interface ListSavedSignalsResponse {
+  signals: ApiSavedSignalSearchResult[];
+}
+
+export interface GetSavedSignalResponse {
+  signal: ApiSavedSignalDetail;
+}
+
 export type BackgroundJobType = "process_inspiration";
 export type BackgroundJobStatus = "pending" | "running" | "succeeded" | "failed";
 
@@ -995,6 +1090,48 @@ export async function fetchTopOfMindNote(
   }
 
   return body.topOfMindNote;
+}
+
+export async function fetchSavedSignals(
+  options: FetchSavedSignalsOptions = {},
+): Promise<ApiSavedSignalSearchResult[]> {
+  const params = new URLSearchParams();
+  if (options.q) params.set("q", options.q);
+  if (options.filter && options.filter !== "all") params.set("filter", options.filter);
+  if (options.sort && options.sort !== "recent") params.set("sort", options.sort);
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<ListSavedSignalsResponse>(
+    apiPath(`/signals${query ? `?${query}` : ""}`),
+    "Failed to load saved signals",
+  );
+
+  if (!Array.isArray(body.signals)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed saved signals response",
+    });
+  }
+
+  return body.signals;
+}
+
+export async function fetchSavedSignalDetail(
+  signalId: string,
+): Promise<ApiSavedSignalDetail> {
+  const body = await getJson<GetSavedSignalResponse>(
+    apiPath(`/signals/${encodeURIComponent(signalId)}`),
+    "Failed to load saved signal",
+  );
+
+  if (!body.signal) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed saved signal response",
+    });
+  }
+
+  return body.signal;
 }
 
 export async function createFeedback(

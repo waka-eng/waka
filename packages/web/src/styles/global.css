@@ -1340,7 +1340,10 @@
 }
 
 .reference-saves-page > header {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   padding-bottom: 16px;
 }
@@ -1362,6 +1365,16 @@
 
 .reference-saves-page input::placeholder {
   color: #b7b7b2;
+}
+
+.reference-saves-archive-link {
+  color: #1a1a1a;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .reference-capture-page {
@@ -8474,7 +8487,281 @@ body.reflect-bg {
   gap: 4px;
 }
 
+.signal-archive-page {
+  min-height: 100vh;
+  background: #f5f2ea;
+  color: #171715;
+  font-family: var(--font-sans);
+}
+
+.signal-archive-topbar {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: clamp(18px, 4vw, 44px);
+  align-items: start;
+  padding: clamp(22px, 4vw, 44px) clamp(18px, 5vw, 64px) 20px;
+  border-bottom: 1px solid rgba(23, 23, 21, 0.1);
+}
+
+.signal-archive-home {
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+}
+
+.signal-archive-topbar span,
+.signal-search span,
+.signal-sort span,
+.signal-result-meta,
+.signal-detail-header > span,
+.signal-score-row span,
+.signal-result-tags span,
+.signal-detail-section h3,
+.signal-highlight-list span,
+.signal-context-list span,
+.signal-note-list span,
+.signal-attachments span {
+  color: #777167;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.signal-archive-topbar h1 {
+  max-width: 900px;
+  margin: 8px 0 0;
+  font-family: var(--font-serif);
+  font-size: clamp(2.4rem, 6vw, 6rem);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.signal-archive-controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) minmax(0, 1fr) 170px;
+  gap: 16px;
+  align-items: end;
+  padding: 18px clamp(18px, 5vw, 64px);
+  border-bottom: 1px solid rgba(23, 23, 21, 0.1);
+}
+
+.signal-search,
+.signal-sort {
+  display: grid;
+  gap: 8px;
+}
+
+.signal-search input,
+.signal-sort select,
+.signal-loop textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(23, 23, 21, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.52);
+  color: inherit;
+  font: inherit;
+  outline: none;
+  padding: 11px 12px;
+}
+
+.signal-filter-group,
+.signal-feedback-row,
+.signal-score-row,
+.signal-result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signal-filter-group button,
+.signal-feedback-row button {
+  min-height: 36px;
+  border: 1px solid rgba(23, 23, 21, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.45);
+  color: inherit;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.signal-filter-group button.is-active,
+.signal-feedback-row button:hover:not(:disabled) {
+  background: #171715;
+  color: #fffaf0;
+}
+
+.signal-archive-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+  gap: clamp(18px, 3vw, 36px);
+  padding: clamp(18px, 4vw, 44px) clamp(18px, 5vw, 64px) 64px;
+}
+
+.signal-results,
+.signal-detail {
+  min-height: 60vh;
+}
+
+.signal-results-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  color: #605b52;
+}
+
+.signal-result {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 18px;
+  border: 1px solid rgba(23, 23, 21, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.48);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.signal-result.is-selected {
+  border-color: rgba(23, 23, 21, 0.42);
+  background: #fff8df;
+}
+
+.signal-result strong,
+.signal-detail-header h2 {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.08;
+}
+
+.signal-result blockquote,
+.signal-highlight-list blockquote {
+  margin: 0;
+  border-left: 3px solid #d8b84f;
+  padding-left: 12px;
+  color: #574f43;
+  line-height: 1.45;
+}
+
+.signal-result-tags span {
+  border: 1px solid rgba(23, 23, 21, 0.12);
+  border-radius: 999px;
+  padding: 5px 8px;
+}
+
+.signal-detail {
+  align-self: start;
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 24px;
+  border: 1px solid rgba(23, 23, 21, 0.13);
+  border-radius: 8px;
+  background: #fffaf0;
+}
+
+.signal-detail-header {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(23, 23, 21, 0.12);
+}
+
+.signal-detail-section {
+  display: grid;
+  gap: 10px;
+  padding: 20px 0;
+  border-bottom: 1px solid rgba(23, 23, 21, 0.1);
+}
+
+.signal-detail-section p,
+.signal-raw {
+  margin: 0;
+  color: #3c372f;
+  line-height: 1.6;
+}
+
+.signal-highlight-list,
+.signal-context-list,
+.signal-note-list,
+.signal-attachments {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.signal-context-list li,
+.signal-note-list li,
+.signal-attachments li {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(23, 23, 21, 0.11);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.signal-context-list strong,
+.signal-note-list strong,
+.signal-attachments strong,
+.signal-attachments a {
+  color: inherit;
+  font-size: 1rem;
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+.signal-loop textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.signal-feedback-status,
+.signal-state {
+  margin: 0;
+  color: #6f675c;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.signal-feedback-status--error {
+  color: var(--error);
+}
+
 @media (max-width: 640px) {
+  .signal-archive-topbar,
+  .signal-archive-controls,
+  .signal-archive-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .signal-detail {
+    position: static;
+    max-height: none;
+  }
+
+  .signal-archive-topbar h1 {
+    font-size: 2.8rem;
+  }
+
   .wow-moments-heading,
   .wow-moments-actions,
   .inspiration-discovery-heading,

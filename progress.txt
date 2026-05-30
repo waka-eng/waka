@@ -17,6 +17,45 @@
 - Product-domain model calls should go through `packages/api/src/lib/model-provider.ts`; Gemini-specific HTTP clients remain the current implementation behind `gemini-model-provider.ts`.
 - Capture highlights and lightweight resonance answers should travel through the existing `inspiration_sparks` request fields until a dedicated signal metadata table exists.
 - The shareable Top of Mind value-prop surface currently lives at protected route `/top-of-mind/share` and reads the current user's notes from `/api/top-of-mind`; do not expose public note sharing until a share-token or permission model exists.
+- Saved-signal archive and deep-dive UI should use the user-facing `/api/signals` route; it assembles legacy inspiration rows with signal packets, highlights, context nodes, top-of-mind notes, and signal feedback without making `/api/wow-moments` the preferred product surface.
+
+---
+
+## 2026-05-30 16:07 PDT - US-014C
+
+- What was implemented
+  - Added authenticated `/api/signals` list/detail routes for saved-signal archive search and deep dives.
+  - Search supports exact text plus context-oriented matching over raw text, highlighted snippets, context terms, and related top-of-mind note titles.
+  - Added filters for all, highlighted, high resonance, tensions, questions, people/places, and recently resurfaced signals, plus recent/resonance/resurfaced sorting.
+  - Added protected `/signals` web route with prominent search/filter/sort controls and a deep-dive panel showing raw signal text, highlighted snippets, attachments, signal packet interpretation, related context nodes, related top-of-mind notes, and lightweight signal feedback/correction actions.
+  - Added a home all-signals link into the deep archive while keeping capture lightweight and folder/tag-free.
+- Files changed
+  - `packages/api/src/routes/signals.ts`
+  - `packages/api/src/routes/signals.test.ts`
+  - `packages/api/src/index.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/SavedSignalsArchive.tsx`
+  - `packages/web/src/main.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/api.test.ts`
+  - `packages/web/test/SavedSignalsArchive.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/signals.test.ts` passed: 2 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/api.test.ts test/SavedSignalsArchive.test.ts` passed: 22 tests.
+  - `pnpm --filter @waka/web test -- test/SavedSignalsArchive.test.ts` passed: 2 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/signals` on desktop and mobile using mocked same-origin auth, `/api/signals`, and feedback responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Saved-signal archive surfaces should call `/api/signals`, not legacy inspiration or WOW routes directly, when they need search plus packet/context/top-of-mind joins.
+  - Gotchas encountered
+    - Vite accepted the dev command but used the existing default `localhost:5173`; browser verification targeted the actual reported URL.
+  - Useful context
+    - `/api/signals` is still a compatibility assembler over existing inspiration, meaning packet, meaning graph, top-of-mind, and feedback persistence. A later dedicated signal persistence migration can keep the web route stable.
 
 ---
 

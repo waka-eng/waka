@@ -4,6 +4,8 @@ import {
   ApiError,
   createInspiration,
   createFeedback,
+  fetchSavedSignalDetail,
+  fetchSavedSignals,
   fetchInspirations,
   fetchTopOfMindNote,
   fetchTopOfMindNotes,
@@ -11,6 +13,8 @@ import {
   formatMeaningGraphRebuildError,
   updateAuthPreferences,
   type ApiInspiration,
+  type ApiSavedSignalDetail,
+  type ApiSavedSignalSearchResult,
   type ApiTopOfMindNoteSurface,
   type ListWowMomentsResponse,
 } from "../src/lib/api";
@@ -104,6 +108,71 @@ const signalLayerInspiration: ApiInspiration = {
       wowScore: 71,
     },
   },
+};
+
+const savedSignalResult: ApiSavedSignalSearchResult = {
+  id: "sig-1",
+  userId: "user-1",
+  textPreview: "A saved signal about quiet research rooms.",
+  kind: "note",
+  capturedAt: "2026-05-30T12:00:00.000Z",
+  updatedAt: "2026-05-30T12:00:00.000Z",
+  resonanceScore: 84,
+  signalScores: {
+    resonance: 84,
+    recurrence: 62,
+    agency: 71,
+    identitySignal: 73,
+    decisionRelevance: 70,
+  },
+  highlightedSnippets: [
+    {
+      id: "spark-1",
+      text: "quiet research rooms",
+      source: "user_selected",
+      confidence: 100,
+      isPrimary: true,
+    },
+  ],
+  matchingSnippets: ["quiet research rooms"],
+  relatedContextTerms: ["environment: quiet rooms"],
+  relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
+  attachmentSummary: [],
+  relevanceReasons: ["highlight match"],
+};
+
+const savedSignalDetail: ApiSavedSignalDetail = {
+  ...savedSignalResult,
+  rawText: "A saved signal about quiet research rooms and who gets to think there.",
+  attachments: [],
+  resonanceFeedback: [],
+  signalPacket: {
+    id: "packet-1",
+    text: "waka.signal_packet.v1\nWHY_IT_MATTERS: quiet rooms keep recurring.",
+    primarySpark: "quiet research rooms",
+    artifactExcerpt: "A saved signal about quiet research rooms.",
+    updatedAt: "2026-05-30T12:30:00.000Z",
+  },
+  relatedContextNodes: [
+    {
+      id: "node-1",
+      type: "environment",
+      label: "quiet research rooms",
+      description: "Where attention seems to work.",
+      confidence: 78,
+      evidenceReason: "The signal names the environment directly.",
+    },
+  ],
+  relatedTopOfMindNotes: [
+    {
+      id: "note-1",
+      title: "Rooms for honest work keep returning",
+      type: "pattern",
+      body: "Several signals point at this room.",
+      confidence: 86,
+      status: "active",
+    },
+  ],
 };
 
 function stubFetch(response: Response): void {
@@ -265,6 +334,54 @@ describe("fetchTopOfMindNote", () => {
       name: "ApiError",
       status: 404,
       message: "Top-of-mind note not found",
+    } satisfies Partial<ApiError>);
+  });
+});
+
+describe("saved signal archive API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches saved signal search results with search, filter, and sort params", async () => {
+    stubFetch(Response.json({ signals: [savedSignalResult] }));
+
+    await expect(
+      fetchSavedSignals({
+        q: "room",
+        filter: "highlighted",
+        sort: "resonance",
+        limit: 12,
+      }),
+    ).resolves.toEqual([savedSignalResult]);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/signals?q=room&filter=highlighted&sort=resonance&limit=12",
+      {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      },
+    );
+  });
+
+  it("fetches a saved signal deep dive", async () => {
+    stubFetch(Response.json({ signal: savedSignalDetail }));
+
+    await expect(fetchSavedSignalDetail("sig-1")).resolves.toEqual(savedSignalDetail);
+    expect(fetch).toHaveBeenCalledWith("/api/signals/sig-1", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("throws ApiError for malformed saved signal list responses", async () => {
+    stubFetch(Response.json({ signals: null }));
+
+    await expect(fetchSavedSignals()).rejects.toMatchObject({
+      name: "ApiError",
+      status: 200,
+      message: "Malformed saved signals response",
     } satisfies Partial<ApiError>);
   });
 });
