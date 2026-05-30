@@ -1154,9 +1154,18 @@
 }
 
 .reference-capture-page-form .cell.capture {
+  grid-column: auto;
+  grid-row: auto;
   width: 100%;
   max-width: none;
+  min-width: 0;
   min-height: 340px;
+  aspect-ratio: auto;
+  box-sizing: border-box;
+}
+
+.reference-capture-page-form {
+  min-width: 0;
 }
 
 .reference-save-list {

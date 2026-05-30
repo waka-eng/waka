@@ -102,9 +102,13 @@ function isSystemFallbackText(text: string | null | undefined, kind: string | nu
   const trimmed = text?.trim();
   if (!trimmed) return false;
   if (trimmed === "(attachment-only inspiration)") return true;
+  if (trimmed === "(attachment-only signal)") return true;
   if (kind === "link" && trimmed === "Link inspiration") return true;
+  if (kind === "link" && trimmed === "Link signal") return true;
   if (kind === "image" && trimmed === "Image inspiration") return true;
+  if (kind === "image" && trimmed === "Image signal") return true;
   if (kind === "mixed" && trimmed === "Mixed inspiration") return true;
+  if (kind === "mixed" && trimmed === "Mixed signal") return true;
   return false;
 }
 

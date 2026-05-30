@@ -622,9 +622,9 @@ export function InspirationDetail({
                 type="button"
                 className="reflect-btn reflect-next"
                 onClick={handleStartReflection}
-                aria-label="Process this inspiration with a reflection"
+                aria-label="Add context to this signal"
               >
-                Process this inspiration
+                Add context
               </button>
             ) : (
               <ReflectionForm

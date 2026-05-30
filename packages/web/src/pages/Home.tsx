@@ -150,10 +150,10 @@ interface InspirationListEntry {
 }
 
 function fallbackTextForEntryKind(kind: string | null): string {
-  if (kind === "image") return "Image inspiration";
-  if (kind === "link") return "Link inspiration";
-  if (kind === "mixed") return "Mixed inspiration";
-  return "Untitled inspiration";
+  if (kind === "image") return "Image signal";
+  if (kind === "link") return "Link signal";
+  if (kind === "mixed") return "Mixed signal";
+  return "Untitled signal";
 }
 
 function displayTextForEntry(entry: Pick<InspirationListEntry, "text" | "kind">): string {
@@ -644,8 +644,8 @@ const HOME_COPY = {
     footnoteCredit: "— Ⓒ WAKA, 2026, for minds that wander",
     savesTitle: "saved signals",
     searchLabel: "search",
-    searchPlaceholder: "search saved ideas",
-    loadingSaves: "loading saved ideas...",
+    searchPlaceholder: "search saved signals",
+    loadingSaves: "loading saved signals...",
     emptySaves: "no signals saved yet.",
     captureAria: "capture signal",
     captureCta: "capture signal",

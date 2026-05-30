@@ -376,3 +376,41 @@
     - The low-data threshold is currently two saved signals unless active top-of-mind notes already exist.
 
 ---
+
+## 2026-05-30 15:37 PDT - US-013
+
+- What was implemented
+  - Updated capture-facing English and Korean copy from inspiration/WOW framing toward signal, what hit, resonance, and lightweight context.
+  - Renamed visible capture CTAs from quick/process language to `Save signal` and `Add context`.
+  - Updated attachment-only fallback text to `Image signal`, `Link signal`, and `Mixed signal` while preserving legacy fallback suppression for old rows.
+  - Tightened the reference capture page CSS so the capture form no longer overflows mobile viewports.
+- Files changed
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/components/capture/CaptureCell.tsx`
+  - `packages/web/src/components/InspirationCard.tsx`
+  - `packages/web/src/components/history/InspirationDetail.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/InspirationCard.test.ts`
+  - `packages/web/test/i18n.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts` passed: 12 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 38 tests.
+  - `pnpm --filter @waka/web test -- test/InspirationCard.test.ts test/i18n.test.ts` passed: 8 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for the capture tab at 1280x900 and 390x844, including signal/resonance copy checks and viewport fit checks.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - The generic `.cell.capture` mobile aspect-ratio rule can leak into the reference capture page unless that page explicitly resets grid placement and aspect ratio.
+  - Useful context
+    - Existing legacy `Link inspiration` / `Image inspiration` / `Mixed inspiration` rows are still treated as system fallback text so old attachment-only saves remain clean in history.
+
+---

@@ -496,7 +496,7 @@ describe("HomePage current home experience", () => {
       inspirations: [
         persistedInspiration({
           id: "insp-link-only",
-          text: "Link inspiration",
+          text: "Link signal",
           kind: "link",
           createdAt: "2026-05-14T16:33:00.000Z",
           updatedAt: "2026-05-14T16:33:00.000Z",
@@ -530,7 +530,7 @@ describe("HomePage current home experience", () => {
         }),
         persistedInspiration({
           id: "insp-image-only",
-          text: "Image inspiration",
+          text: "Image signal",
           kind: "image",
           createdAt: "2026-05-14T16:31:00.000Z",
           updatedAt: "2026-05-14T16:31:00.000Z",
@@ -571,9 +571,9 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 4);
     expect(container.querySelector(".reference-save-kind")).toBeNull();
     const historyText = container.querySelector(".reference-saves-page")?.textContent ?? "";
-    expect(historyText).toContain("Link inspiration");
+    expect(historyText).toContain("Link signal");
     expect(historyText).toContain("Kyoto ramen note https://example.com/kyoto-guide");
-    expect(historyText).toContain("Image inspiration");
+    expect(historyText).toContain("Image signal");
     expect(historyText).toContain("Mixed capture about Osaka");
     expect(historyText).toContain("example.com");
     expect(historyText).toContain("pixel.png · 1 KB");
@@ -1102,7 +1102,7 @@ describe("HomePage current home experience", () => {
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({
         id: "insp-image-save",
-        text: "Image inspiration",
+        text: "Image signal",
         kind: "image",
       }),
     );
@@ -1148,7 +1148,7 @@ describe("HomePage current home experience", () => {
 
     expect(objectUrl).toHaveBeenCalledWith(file);
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "Image inspiration",
+      text: "Image signal",
       kind: "image",
     });
     expect(presignAttachment).toHaveBeenCalledWith({
@@ -1173,7 +1173,7 @@ describe("HomePage current home experience", () => {
       size: 5,
     });
     const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
-    expect(newSave?.textContent).toContain("Image inspiration");
+    expect(newSave?.textContent).toContain("Image signal");
     expect(newSave?.textContent).not.toContain("(attachment-only inspiration)");
     expect(newSave?.textContent).toContain("photo.png");
     expect(newSave?.textContent).not.toContain("IMAGE");

@@ -115,7 +115,7 @@ beforeEach(() => {
       id: "reflection-1",
       inspirationId: "insp-new",
       userId: "user-1",
-      question: "What caught your attention here?",
+      question: "What hit here?",
       answer: "It matters.",
       skipped: false,
       createdAt: "2026-05-27T12:01:00.000Z",
@@ -183,7 +183,9 @@ describe("CaptureForm multi-input quick capture", () => {
     await pressMetaEnter();
 
     expect(createInspiration).not.toHaveBeenCalled();
-    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Add a note, link, or image to save.");
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
+      "Add what hit: a note, link, or image to save.",
+    );
   });
 
   it("turns a pasted URL-only input into a removable link chip without duplicating raw text", async () => {
@@ -201,9 +203,9 @@ describe("CaptureForm multi-input quick capture", () => {
     await pasteText("https://example.com/article");
 
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
-      "저장하기 전에 맥락 메모 하나 추가",
+      "이 신호를 저장하기 전에 맥락 메모 하나 추가",
     );
-    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("맥락을 추가하지 않고 지금 저장");
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("맥락을 추가하지 않고 이 신호 저장");
     expect(container?.querySelector<HTMLButtonElement>(".att-x")?.getAttribute("aria-label")).toBe("첨부 제거");
   });
 
@@ -272,7 +274,7 @@ describe("CaptureForm multi-input quick capture", () => {
 
   it("quick saves an attachment-only image as kind image through the existing upload/finalize path", async () => {
     vi.mocked(createInspiration).mockResolvedValue(
-      inspiration({ kind: "image", text: "Image inspiration" }),
+      inspiration({ kind: "image", text: "Image signal" }),
     );
     vi.mocked(finalizeAttachment).mockResolvedValue({
       id: "att-image",
@@ -297,7 +299,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
 
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "Image inspiration",
+      text: "Image signal",
       kind: "image",
     });
     expect(presignAttachment).toHaveBeenCalledWith({
@@ -336,8 +338,8 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector("#capConfirm")?.textContent).toContain("This image is too large or not supported.");
   });
 
-  it("keeps the saved inspiration and reports recovery copy when attachment finalization partially fails", async () => {
-    vi.mocked(createInspiration).mockResolvedValue(inspiration({ kind: "link", text: "Link inspiration" }));
+  it("keeps the saved signal and reports recovery copy when attachment finalization partially fails", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(inspiration({ kind: "link", text: "Link signal" }));
     vi.mocked(finalizeAttachment).mockRejectedValueOnce(new ApiError({ status: 500, message: "upload failed" }));
     const onPersisted = vi.fn();
     await renderCaptureForm({ onPersisted });
@@ -350,7 +352,7 @@ describe("CaptureForm multi-input quick capture", () => {
       expect.objectContaining({ failedAttachments: [expect.objectContaining({ localId: expect.any(String) })] }),
     );
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Saved — 1 attachment failed. Your inspiration is still in history.",
+      "Saved — 1 attachment failed. Your signal is still in history.",
     );
   });
 
@@ -415,10 +417,9 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "What caught your attention here?",
+      question: "What hit here?",
       answer: "It connects to the next project.",
       skipped: false,
     });
   });
 });
-

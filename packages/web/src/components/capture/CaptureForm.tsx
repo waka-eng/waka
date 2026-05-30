@@ -228,10 +228,10 @@ function primaryCaptureKind(
 }
 
 function fallbackTextForCaptureKind(kind: CaptureInputKind): string {
-  if (kind === "image") return "Image inspiration";
-  if (kind === "link") return "Link inspiration";
-  if (kind === "mixed") return "Mixed inspiration";
-  return "Untitled inspiration";
+  if (kind === "image") return "Image signal";
+  if (kind === "link") return "Link signal";
+  if (kind === "mixed") return "Mixed signal";
+  return "Untitled signal";
 }
 
 /* ============================================================
@@ -600,7 +600,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 message:
                   err instanceof Error
                     ? err.message
-                    : "Failed to save inspiration",
+                    : "Failed to save signal",
               });
         onPersistError?.(tempId, error);
         flashConfirm(error.message, 2800);
