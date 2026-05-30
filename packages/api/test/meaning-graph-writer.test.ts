@@ -8,7 +8,11 @@ import {
   meaningNodes,
   type Inspiration,
 } from "../src/db/index.js";
-import { persistMeaningGraphForInspiration } from "../src/lib/meaning-graph-writer.js";
+import { contextNodeTypeValues } from "../src/lib/context-node-types.js";
+import {
+  meaningNodeTypeValues,
+  persistMeaningGraphForInspiration,
+} from "../src/lib/meaning-graph-writer.js";
 import type { MeaningRelationshipJudgeClient } from "../src/lib/meaning-relationship-judge.js";
 import { persistMeaningPacketForInspiration } from "../src/lib/meaning-packets.js";
 
@@ -42,6 +46,21 @@ describe("persistMeaningGraphForInspiration", () => {
 
   afterAll(async () => {
     await testDb.cleanup();
+  });
+
+  it("exposes the supported context node categories", () => {
+    expect(meaningNodeTypeValues).toEqual(contextNodeTypeValues);
+    expect(meaningNodeTypeValues).toEqual([
+      "theme",
+      "value",
+      "person",
+      "environment",
+      "aesthetic",
+      "tension",
+      "project",
+      "open_question",
+      "hypothesis",
+    ]);
   });
 
   it("promotes packet evidence into meaning nodes and meaning edges", async () => {
@@ -118,7 +137,7 @@ describe("persistMeaningGraphForInspiration", () => {
       .where(eq(meaningEdges.userId, alice.user.id));
 
     expect(persistedNodes.map((node) => node.type)).toEqual(
-      expect.arrayContaining(["question", "environment"]),
+      expect.arrayContaining(["open_question", "environment"]),
     );
     expect(persistedNodes.map((node) => node.label)).toEqual(
       expect.arrayContaining([
@@ -246,7 +265,7 @@ describe("persistMeaningGraphForInspiration", () => {
       .from(meaningEdges)
       .where(eq(meaningEdges.userId, alice.user.id));
 
-    expect(persistedNodes.map((node) => node.type)).toContain("claim");
+    expect(persistedNodes.map((node) => node.type)).toContain("theme");
     expect(persistedEdges.length).toBeGreaterThanOrEqual(1);
   }, 30000);
 
@@ -353,7 +372,7 @@ describe("persistMeaningGraphForInspiration", () => {
     });
   }, 30000);
 
-  it("does not create one-off claim nodes for ordinary high-scoring artifacts without a spark", async () => {
+  it("does not create one-off theme nodes for ordinary high-scoring artifacts without a spark", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "AI makes writing faster, but deciding what is worth saying still depends on human judgment.",
@@ -379,9 +398,9 @@ describe("persistMeaningGraphForInspiration", () => {
       .where(eq(meaningNodes.userId, alice.user.id));
 
     expect(result.judgmentResult.status).toBe("not_enough_candidates");
-    expect(persistedNodes.map((node) => node.type)).not.toContain("claim");
+    expect(persistedNodes.map((node) => node.type)).not.toContain("theme");
     expect(persistedNodes.map((node) => node.type)).toEqual(
-      expect.arrayContaining(["question", "value"]),
+      expect.arrayContaining(["open_question", "value"]),
     );
   }, 30000);
 

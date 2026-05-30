@@ -8,6 +8,7 @@ import {
   meaningPackets,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { normalizeContextNodeType } from "./context-node-types.js";
 
 const MAX_PREVIEW_LENGTH = 180;
 const TOP_NODE_LIMIT = 6;
@@ -104,28 +105,52 @@ function truncatePreview(value: string, maxLength = MAX_PREVIEW_LENGTH): string 
 }
 
 function typePriority(type: string): number {
-  switch (type) {
-    case "question":
+  switch (normalizeContextNodeType(type)) {
+    case "open_question":
       return 80;
-    case "life_direction":
+    case "project":
       return 70;
     case "tension":
       return 62;
-    case "desire":
+    case "hypothesis":
       return 56;
     case "value":
       return 50;
     case "environment":
       return 38;
-    case "person_archetype":
+    case "person":
       return 32;
+    case "aesthetic":
+      return 30;
+    case "theme":
     default:
       return 18;
   }
 }
 
 function isQuestionLike(type: string): boolean {
-  return type === "question" || type === "tension" || type === "life_direction";
+  switch (normalizeContextNodeType(type)) {
+    case "open_question":
+    case "tension":
+    case "project":
+    case "hypothesis":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function serializedNodeType(type: string): string {
+  switch (type) {
+    case "question":
+    case "life_direction":
+    case "desire":
+    case "claim":
+    case "person_archetype":
+      return normalizeContextNodeType(type);
+    default:
+      return type;
+  }
 }
 
 function recencyBoost(date: Date, now: Date): number {
@@ -191,7 +216,7 @@ function buildSignal(
   return {
     nodeId: node.id,
     label: node.label,
-    type: node.type,
+    type: serializedNodeType(node.type),
     reason: signalReason(node),
     evidenceCount: node.evidenceCount,
     lastReinforcedAt: node.lastReinforcedAt.toISOString(),

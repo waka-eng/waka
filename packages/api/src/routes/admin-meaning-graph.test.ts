@@ -297,6 +297,7 @@ describe("GET /api/admin/meaning-graph", () => {
     expect(body.graph.nodes[0]).toMatchObject({
       id: "node-1",
       type: "question",
+      contextType: "open_question",
       label: "what is worth building when building itself gets cheap",
       weight: 140,
       evidenceCount: 2,
@@ -320,6 +321,7 @@ describe("GET /api/admin/meaning-graph", () => {
       meaningNotes: [
         expect.objectContaining({
           id: "node-1",
+          contextType: "open_question",
           reason: "WAKA building/AI signals promoted this as a live question.",
         }),
         expect.objectContaining({

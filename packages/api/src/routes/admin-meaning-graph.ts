@@ -17,6 +17,7 @@ import {
   meaningPackets,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { normalizeContextNodeType } from "../lib/context-node-types.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import {
   enqueueMeaningGraphRebuild,
@@ -436,6 +437,7 @@ export function createAdminMeaningGraphRoutes(
         nodes: nodeRows.map((node) => ({
           id: node.id,
           type: node.type,
+          contextType: normalizeContextNodeType(node.type),
           label: node.label,
           description: node.description,
           status: node.status,
@@ -490,6 +492,7 @@ export function createAdminMeaningGraphRoutes(
                 id: row.meaningNodeId,
                 label: node?.label ?? "Unknown meaning note",
                 type: node?.type ?? "unknown",
+                contextType: normalizeContextNodeType(node?.type ?? ""),
                 reason: row.reason,
               };
             }),

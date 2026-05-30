@@ -45,7 +45,7 @@
         "Run API typecheck and targeted graph writer/admin graph tests"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

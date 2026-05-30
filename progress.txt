@@ -6,6 +6,7 @@
 - Product direction for this run: WAKA becomes an ambition mirror powered by a personal context graph; use signal/context/top-of-mind language for new work.
 - Keep the graph inspector internal. User-facing graph-backed output should appear as post-it-style Top of Mind notes, evidence drawers, patterns, and later decision memos.
 - Signal-facing compatibility currently wraps existing `/api/inspirations` responses with additive `signal` and `signalScores` fields instead of renaming the route or persistence immediately.
+- `meaning_nodes.type` remains a text compatibility field for now; use `contextNodeTypeValues` for new graph writes and `normalizeContextNodeType` when reading legacy `question`/`claim`/`life_direction` rows.
 
 ---
 
@@ -61,5 +62,37 @@
     - The local API integration test environment currently points at `HOST.neon.tech`, so DB-backed route tests cannot run until the DB connection URL is fixed.
   - Useful context
     - Initial signal score names intentionally map to existing fields: resonance/recurrence from displayed `wowScore`, and agency/identitySignal/decisionRelevance from `importanceScore`.
+
+---
+
+## 2026-05-30 14:29 PDT - US-003
+
+- What was implemented
+  - Added context node category support for theme, value, person, environment, aesthetic, tension, project, open_question, and hypothesis.
+  - Updated the meaning graph writer to emit the new context-node categories while keeping existing meaning graph tables unchanged.
+  - Added deterministic legacy type normalization for existing meaning graph rows and exposed `contextType` from the internal admin graph inspector.
+  - Updated top-of-mind ranking to understand both new context-node categories and old meaning-node type names.
+- Files changed
+  - `packages/api/src/lib/context-node-types.ts`
+  - `packages/api/src/lib/meaning-graph-writer.ts`
+  - `packages/api/src/lib/meaning-graph-writer-categories.test.ts`
+  - `packages/api/src/lib/top-of-mind-preview.ts`
+  - `packages/api/src/routes/admin-meaning-graph.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/api/test/meaning-graph-writer.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/meaning-graph-writer-categories.test.ts src/lib/top-of-mind-preview.test.ts src/routes/admin-meaning-graph.test.ts` passed: 8 tests.
+  - `pnpm --filter @waka/api test -- test/meaning-graph-writer.test.ts src/routes/admin-meaning-graph.test.ts` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Context graph code can evolve the category vocabulary without a DB migration because `meaning_nodes.type` is currently text.
+    - Use `normalizeContextNodeType` anywhere old meaning graph rows might be read into new signal/context/top-of-mind surfaces.
+  - Gotchas encountered
+    - The default API Vitest setup still requires a resolvable `DB_CONNECTION_URL`; use `vitest.unit.config.ts` for pure route/helper tests that should not run DB setup.
+  - Useful context
+    - Existing legacy type mapping is deterministic: `question` to `open_question`, `life_direction` to `project`, `person_archetype` to `person`, `desire` to `hypothesis`, and `claim` or unknown values to `theme`.
 
 ---
