@@ -16,6 +16,33 @@
 
 ---
 
+## 2026-05-30 15:11 PDT - US-011
+
+- What was implemented
+  - Added an expanded evidence panel for user-facing Top of Mind post-it notes on Home.
+  - The panel shows supporting evidence signals, concise evidence reasons, resonance labels where available, and related context claims without exposing raw admin graph fields.
+  - Added empty evidence/context states so provisional notes remain understandable when graph links are not attached yet.
+  - Added responsive panel styling and verified the expanded post-it stays inside desktop and mobile viewports without evidence/context overlap.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 35 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for desktop and mobile evidence panels using mocked same-origin API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - The top-of-mind route currently provides related context node ids but not context labels, so the Home surface must avoid rendering raw ids and use note/fallback labels until the API exposes public context summaries.
+  - Useful context
+    - The expanded post-it panel is the current evidence drawer surface; clicking a Top of Mind note opens it and clicking the backdrop closes it.
+
+---
+
 ## 2026-05-30 14:11 PDT - US-001
 
 - What was implemented

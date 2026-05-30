@@ -1844,6 +1844,87 @@
   opacity: 0.62;
 }
 
+.nc-note-evidence-panel,
+.nc-note-context-panel {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  padding-top: 14px !important;
+}
+
+.nc-note-evidence-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.nc-note-evidence-header span,
+.nc-note-evidence-list div span,
+.nc-note-context-list span {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0.42;
+}
+
+.nc-note-evidence-header strong {
+  color: var(--ink);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.2;
+  opacity: 0.68;
+  text-align: right;
+}
+
+.nc-note-evidence-list,
+.nc-note-context-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nc-note-evidence-list li,
+.nc-note-context-list li {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
+  padding-left: 12px;
+}
+
+.nc-note-evidence-list blockquote {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Fraunces", serif;
+  font-size: 15px;
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.38;
+  opacity: 0.74;
+}
+
+.nc-note-evidence-list p,
+.nc-note-context-list p,
+.nc-note-empty-evidence {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-style: normal;
+  line-height: 1.42;
+  opacity: 0.62;
+}
+
+.nc-note-evidence-list div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .nc-note-reactions--expanded {
   gap: 18px;
 }
@@ -2003,6 +2084,32 @@
 
   .nc-note--featured .nc-note-body {
     font-size: 24px;
+  }
+
+  .nc-note-overlay {
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .nc-note-modal {
+    width: 100%;
+    max-height: calc(100dvh - 32px);
+    padding: 28px 24px 30px;
+  }
+
+  .nc-note-modal .nc-note-body {
+    font-size: 30px;
+    line-height: 1.1;
+  }
+
+  .nc-note-evidence-header {
+    align-items: start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .nc-note-evidence-header strong {
+    text-align: left;
   }
 
   .nc-save-hint,

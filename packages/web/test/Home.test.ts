@@ -592,6 +592,62 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
+  it("reveals concise evidence signals and context claims for a top-of-mind note", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    expect(expanded).not.toBeNull();
+    expect(expanded?.textContent).toContain("evidence signals");
+    expect(expanded?.textContent).toContain("1 signal behind this");
+    expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(expanded?.textContent).toContain("This signal anchors the pattern.");
+    expect(expanded?.textContent).toContain("related context");
+    expect(expanded?.textContent).toContain("1 context claim");
+    expect(expanded?.textContent).toContain("Bridge ideas keep returning");
+    expect(expanded?.textContent).not.toContain("theme-1");
+    expect(expanded?.textContent).not.toContain("meaning_nodes");
+  });
+
+  it("renders empty evidence states without exposing internal graph fields", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          id: "note-no-evidence",
+          title: "A question is still forming",
+          evidencePreviews: [],
+          relatedSignals: [],
+          relatedSignalIds: [],
+          relatedContextNodeIds: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    expect(expanded?.textContent).toContain("no signal evidence yet");
+    expect(expanded?.textContent).toContain("This post-it does not have signal evidence attached yet.");
+    expect(expanded?.textContent).toContain("no context claims yet");
+    expect(expanded?.textContent).toContain("WAKA has not linked a durable context claim to this note yet.");
+    expect(expanded?.textContent).not.toContain("meaning_nodes");
+    expect(expanded?.textContent).not.toContain("context_node:");
+  });
+
   it("starts low-data users on capture-first signal entry", async () => {
     setApiFixtures({
       inspirations: [],

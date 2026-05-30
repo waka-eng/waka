@@ -165,7 +165,7 @@
         "Run web typecheck, targeted tests, and browser verification"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {

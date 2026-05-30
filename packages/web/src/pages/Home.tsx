@@ -424,6 +424,13 @@ interface HomeThoughtCard {
     preview: string;
     reason: string;
     createdAt: string;
+    kind?: string | null;
+    resonanceScore?: number;
+  }>;
+  contextNodes: Array<{
+    id: string;
+    label: string;
+    type: string;
   }>;
 }
 
@@ -439,6 +446,13 @@ function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
       reason: support.reason,
       createdAt: support.createdAt,
     })),
+    contextNodes: [
+      {
+        id: signal.nodeId,
+        label: signal.label,
+        type: signal.type,
+      },
+    ],
   };
 }
 
@@ -448,6 +462,8 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     preview: evidence.textPreview,
     reason: evidence.reason,
     createdAt: evidence.createdAt,
+    kind: evidence.kind,
+    resonanceScore: evidence.resonanceScore,
   }));
   const relatedSignals = note.relatedSignals
     .filter((signal) => !evidenceSignals.some((evidence) => evidence.id === signal.id))
@@ -456,6 +472,8 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
       preview: signal.preview,
       reason: "Related signal",
       createdAt: signal.createdAt,
+      kind: signal.kind,
+      resonanceScore: signal.resonanceScore,
     }));
 
   return {
@@ -464,6 +482,11 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     type: note.type,
     reason: note.body,
     supportingSignals: [...evidenceSignals, ...relatedSignals],
+    contextNodes: note.relatedContextNodeIds.map((nodeId) => ({
+      id: nodeId,
+      label: note.title,
+      type: note.type,
+    })),
   };
 }
 
@@ -1383,9 +1406,18 @@ export function HomePage(): JSX.Element {
     if (!signal) return null;
     const relatedLabels = relatedMeaningLabels(signal);
     const source = signal.supportingSignals[0];
+    const contextNodes =
+      signal.contextNodes.length > 0
+        ? signal.contextNodes
+        : relatedLabels.map((label, labelIndex) => ({
+            id: `${signal.id}-related-${labelIndex}`,
+            label,
+            type: "context",
+          }));
     return (
       <article
         className="nc-note-modal"
+        aria-labelledby={`top-of-mind-note-${signal.id}`}
         style={{
           ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
           ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
@@ -1399,7 +1431,7 @@ export function HomePage(): JSX.Element {
           </span>
         </header>
 
-        <p className="nc-note-body">
+        <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
           {locale === "en-US"
             ? signal.label
             : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
@@ -1415,6 +1447,67 @@ export function HomePage(): JSX.Element {
             <blockquote className="nc-note-source">
               “{shortText(source?.preview || signal.reason, 190)}”
             </blockquote>
+          </section>
+
+          <section className="nc-note-evidence-panel" aria-labelledby={`top-of-mind-evidence-${signal.id}`}>
+            <div className="nc-note-evidence-header">
+              <span>evidence signals</span>
+              <strong id={`top-of-mind-evidence-${signal.id}`}>
+                {signal.supportingSignals.length > 0
+                  ? `${signal.supportingSignals.length} signal${signal.supportingSignals.length === 1 ? "" : "s"} behind this`
+                  : "no signal evidence yet"}
+              </strong>
+            </div>
+            {signal.supportingSignals.length > 0 ? (
+              <ol className="nc-note-evidence-list">
+                {signal.supportingSignals.slice(0, 4).map((evidence) => (
+                  <li key={evidence.id}>
+                    <blockquote>“{shortText(evidence.preview || evidence.reason, 150)}”</blockquote>
+                    <p>{shortText(evidence.reason, 120)}</p>
+                    <div>
+                      <span>{evidence.kind || "signal"}</span>
+                      {typeof evidence.resonanceScore === "number" ? (
+                        <span>resonance {Math.round(evidence.resonanceScore)}</span>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="nc-note-empty-evidence">
+                This post-it does not have signal evidence attached yet.
+              </p>
+            )}
+          </section>
+
+          <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-context-${signal.id}`}>
+            <div className="nc-note-evidence-header">
+              <span>related context</span>
+              <strong id={`top-of-mind-context-${signal.id}`}>
+                {contextNodes.length > 0
+                  ? `${contextNodes.length} context claim${contextNodes.length === 1 ? "" : "s"}`
+                  : "no context claims yet"}
+              </strong>
+            </div>
+            {contextNodes.length > 0 ? (
+              <ul className="nc-note-context-list">
+                {contextNodes.slice(0, 4).map((node) => (
+                  <li key={node.id}>
+                    <span>{meaningTypeLabel(node.type)}</span>
+                    <p>
+                      {locale === "en-US"
+                        ? shortText(node.label, 120)
+                        : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(node.label)] ??
+                          shortText(node.label, 120)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="nc-note-empty-evidence">
+                WAKA has not linked a durable context claim to this note yet.
+              </p>
+            )}
           </section>
 
           {relatedLabels.length > 0 ? (
