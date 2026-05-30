@@ -21,5 +21,9 @@ coverage
 # Generated Ouroboros artifacts (kept locally during execution; not part of repo)
 .ouroboros/
 
+# Ralph loop local state
+.last-branch
+archive/
+
 # Visual-diff output is generated; commit only the tool, not its artifacts.
 tools/visual-diff/output/

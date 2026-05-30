@@ -1,0 +1,247 @@
+{
+  "project": "WAKA",
+  "branchName": "ralph/ambition-mirror-context-graph",
+  "description": "Pivot WAKA from inspiration capture into an ambition mirror powered by a personal context graph. Keep the post-it Top of Mind metaphor, aggressively migrate naming, keep graph inspection internal, and add a first self-improving loop through user feedback.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Document domain rename map and migration strategy",
+      "description": "As a developer, I need a concrete domain migration plan so every later Ralph iteration uses signal/context/top-of-mind language consistently.",
+      "acceptanceCriteria": [
+        "Add a docs plan that maps existing inspiration, meaning, and WOW concepts to signal, context graph, and top-of-mind concepts",
+        "Define which old tables/routes/components are renamed, wrapped, or left internal",
+        "State that admin graph inspection remains internal and should not become the primary user-facing graph UI",
+        "Include a phased compatibility note for existing data and tests",
+        "Run a markdown/file sanity check by reviewing the new doc"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Introduce signal domain types without changing behavior",
+      "description": "As a developer, I need signal-oriented API and shared types so the new product vocabulary can land before destructive route/schema migration.",
+      "acceptanceCriteria": [
+        "Add signal-facing TypeScript types that map to the current inspiration persistence shape",
+        "Expose score names for resonance, recurrence, agency, identity signal, and decision relevance even if some initially derive from existing score fields",
+        "Keep existing inspiration routes working",
+        "Add targeted API or web tests proving existing capture/list behavior still works through the new type layer",
+        "Run relevant API and web typechecks"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add context graph node categories",
+      "description": "As a developer, I need typed context graph nodes so graph output can represent ambition-relevant structure instead of generic meaning only.",
+      "acceptanceCriteria": [
+        "Add or migrate graph node type support for theme, value, person, environment, aesthetic, tension, project, open_question, and hypothesis",
+        "Preserve existing meaning graph data through a deterministic default type where needed",
+        "Update graph writer types and tests to understand the allowed node categories",
+        "Keep the admin graph route internal and functional",
+        "Run API typecheck and targeted graph writer/admin graph tests"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Rename meaning packet concept to signal packet in code paths",
+      "description": "As a developer, I need per-signal interpretation logic to use signal packet naming so future model prompts focus on why a signal matters to the user's ambitions.",
+      "acceptanceCriteria": [
+        "Introduce signal packet naming in library/API code while preserving or migrating existing meaning packet storage",
+        "Update prompts or deterministic packet text headers away from generic meaning language where tests allow",
+        "Keep old data readable",
+        "Update tests that assert packet creation or packet text",
+        "Run API typecheck and targeted packet tests"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create Top of Mind note model from WOW moments",
+      "description": "As a user, I want graph-backed post-it reflections to feel provisional and replaceable rather than permanent WOW artifacts.",
+      "acceptanceCriteria": [
+        "Introduce top-of-mind note types and serializers mapped from or migrated from current WOW moment persistence",
+        "Support note types pattern, tension, question, hypothesis, and action",
+        "Expose confidence, status, related signal ids, and related context node ids where available",
+        "Keep existing WOW routes working until UI route migration is complete",
+        "Run API typecheck and targeted WOW/top-of-mind tests"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Add top-of-mind API route",
+      "description": "As the web app, I need a `/api/top-of-mind` route that returns the current post-it reflection surface without exposing internal graph admin APIs.",
+      "acceptanceCriteria": [
+        "Add authenticated `/api/top-of-mind` list/detail endpoints or an equivalent route matching existing API style",
+        "Return active top-of-mind notes with evidence previews and related signal references",
+        "Do not expose raw admin graph internals",
+        "Add route tests for tenant scoping and serialization",
+        "Run API typecheck and targeted route tests"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Add user feedback persistence for graph-backed notes",
+      "description": "As a user, I want to validate or correct generated notes so WAKA can improve its personal context graph over time.",
+      "acceptanceCriteria": [
+        "Add feedback persistence for targets signal, context_node, top_of_mind_note, and hypothesis",
+        "Support feedback values true, partly, not_true, important, and not_important",
+        "Support optional emotion labels admire, envy, want, fear, curious, and aesthetic_only",
+        "Add authenticated feedback create/list API behavior with tenant scoping",
+        "Run migration checks, API typecheck, and targeted feedback tests"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Apply feedback to context graph weights",
+      "description": "As WAKA, I need user validation to strengthen, weaken, or qualify graph claims so the reflection loop genuinely improves.",
+      "acceptanceCriteria": [
+        "Add deterministic feedback application logic that updates top-of-mind note status and related context node confidence or weight",
+        "True/important feedback strengthens related claims; not_true/not_important weakens or marks stale; partly preserves the note and asks for correction when available",
+        "Store provenance that the update came from user feedback",
+        "Add unit tests for each feedback value",
+        "Run API typecheck and targeted feedback/graph tests"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Refresh Top of Mind notes from context graph",
+      "description": "As WAKA, I need a bounded job that regenerates provisional post-it notes from recent, recurring, high-agency, or unresolved graph patterns.",
+      "acceptanceCriteria": [
+        "Add a refresh job or service that selects candidate context nodes and evidence to produce active top-of-mind notes",
+        "Prioritize recurrence, agency, unresolved tensions, and recent evidence",
+        "Avoid duplicating active notes for the same underlying graph claim",
+        "Add deterministic tests for ranking and deduplication",
+        "Run API typecheck and targeted top-of-mind refresh tests"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Update home surface to Top of Mind first",
+      "description": "As a returning user, I want the home page to foreground provisional Top of Mind post-its while keeping capture one click away.",
+      "acceptanceCriteria": [
+        "Show capture-first behavior for low-data users and top-of-mind-first behavior when enough signals exist",
+        "Rename visible WOW/inspiration language toward top-of-mind, signal, resonance, and reflection language",
+        "Keep the existing post-it visual metaphor",
+        "Add or update component tests for low-data and returning-user states",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Add evidence drawer for Top of Mind notes",
+      "description": "As a user, I need to inspect why WAKA believes a reflection so generated notes feel trustworthy instead of like AI fortune-telling.",
+      "acceptanceCriteria": [
+        "Each top-of-mind note can reveal evidence signals and related context nodes",
+        "Evidence copy is concise and avoids exposing internal admin graph fields",
+        "The drawer or panel works on mobile and desktop without overlapping content",
+        "Add component tests for evidence rendering and empty evidence states",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Add feedback controls to Top of Mind notes",
+      "description": "As a user, I want lightweight controls like true, partly, not true, important, and not important so I can train WAKA without organizing notes manually.",
+      "acceptanceCriteria": [
+        "Add compact feedback controls to each active top-of-mind note",
+        "Submitting feedback updates note state optimistically and persists through the API",
+        "Support optional correction text without forcing the user to write",
+        "Add web tests for submit success and failure states",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Rename capture UI toward signal and resonance",
+      "description": "As a user, I want capture copy that matches the ambition mirror direction without making the product feel heavy or permanent.",
+      "acceptanceCriteria": [
+        "Update visible capture copy from inspiration/WOW framing toward signal, resonance, and what hit",
+        "Keep input friction low and manual capture fast",
+        "Do not require tagging or structured journaling",
+        "Update affected tests and snapshots",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Abstract model provider from Gemini-specific names",
+      "description": "As a developer, I need model calls abstracted so signal interpretation, context graph updates, and top-of-mind generation are not hardwired to Gemini naming.",
+      "acceptanceCriteria": [
+        "Introduce a model provider interface for classification, packet generation, graph writing, and note generation",
+        "Keep Gemini as the current implementation",
+        "Avoid leaking provider-specific names into product-domain services",
+        "Update tests/mocks around the interface",
+        "Run API typecheck and targeted model pipeline tests"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-015",
+      "title": "Add first decision memo scaffold for what to build",
+      "description": "As a user, I want WAKA to turn my context graph into a lightweight decision memo for what to build next.",
+      "acceptanceCriteria": [
+        "Add a backend or frontend scaffold for a what-to-build decision memo using existing context graph and top-of-mind evidence",
+        "Memo includes what the user seems drawn to, strongest evidence, tensions, and one testable next action",
+        "Keep this behind an internal or low-prominence route if the rest of the product is not ready",
+        "Add targeted tests for memo assembly with fixture graph data",
+        "Run relevant typechecks and tests"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-016",
+      "title": "Final terminology cleanup and compatibility audit",
+      "description": "As a developer, I need old inspiration/WOW/meaning vocabulary either intentionally internal, migrated, or documented before the Ralph run is considered complete.",
+      "acceptanceCriteria": [
+        "Audit remaining user-facing inspiration, WOW, and meaning strings",
+        "Rename user-facing vocabulary where appropriate and document intentional internal leftovers",
+        "Ensure existing routes kept for compatibility are clearly marked",
+        "Run API and web typechecks plus the highest-value targeted regression tests",
+        "Update progress.txt Codebase Patterns with final naming conventions"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
