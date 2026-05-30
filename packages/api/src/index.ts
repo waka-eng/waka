@@ -15,6 +15,7 @@ import { authRoutes } from "./routes/auth.js";
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
 import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.js";
+import { feedbackRoutes } from "./routes/feedback.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
@@ -51,6 +52,9 @@ app.route("/api/inspirations", inspirationsRoutes);
 
 // User-facing reading of the current meaning graph.
 app.route("/api/top-of-mind", topOfMindRoutes);
+
+// User feedback teaches the graph-backed signal and top-of-mind loop.
+app.route("/api/feedback", feedbackRoutes);
 
 // Attachments routes (presigned uploads, ...) live under /api/attachments.
 // The router applies `requireAuth` at the mount point, so no anonymous

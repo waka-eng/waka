@@ -10,6 +10,7 @@
 - Signal packet creation lives in `packages/api/src/lib/signal-packets.ts`, but persists to the existing `meaning_packets` table; `packages/api/src/lib/meaning-packets.ts` is a compatibility wrapper for old imports.
 - Top-of-mind note compatibility lives in `packages/api/src/lib/top-of-mind-notes.ts`; it serializes current `wow_moments` rows into provisional active notes while persistence remains unchanged.
 - The user-facing `/api/top-of-mind` route returns `topOfMindNotes` plus the legacy `topOfMind` preview field for current home-page compatibility; web client helpers live in `packages/web/src/lib/api.ts`.
+- User feedback persistence lives in `packages/api/src/db/schema-feedback.ts` and `/api/feedback`; feedback targets are polymorphic, but create paths must verify target ownership for the signed-in tenant before inserting rows.
 
 ---
 
@@ -198,5 +199,37 @@
     - The route still reads from WOW moment compatibility tables, so note status is active and related context node ids stay empty until feedback and refresh persistence stories land.
   - Useful context
     - Evidence previews intentionally expose signal ids, short text previews, role, reason, kind, timestamp, and resonance score, not meaning graph/admin internals.
+
+---
+
+## 2026-05-30 14:48 PDT - US-007
+
+- What was implemented
+  - Added polymorphic user feedback persistence for `signal`, `context_node`, `top_of_mind_note`, and `hypothesis` targets.
+  - Added feedback values `true`, `partly`, `not_true`, `important`, and `not_important`, plus optional emotion labels `admire`, `envy`, `want`, `fear`, `curious`, and `aesthetic_only`.
+  - Added authenticated `/api/feedback` create/list behavior with tenant-scoped target ownership checks before inserts.
+  - Added a Drizzle migration for the feedback table and enum types.
+- Files changed
+  - `packages/api/src/db/schema-feedback.ts`
+  - `packages/api/src/db/index.ts`
+  - `packages/api/src/routes/feedback.ts`
+  - `packages/api/src/routes/feedback.test.ts`
+  - `packages/api/src/index.ts`
+  - `drizzle/migrations/0019_add_feedback.sql`
+  - `drizzle/migrations/meta/_journal.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/feedback.test.ts` passed: 9 tests.
+  - `pnpm db:check` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Feedback writes should keep user validation/correction separate from graph mutation; US-008 can consume feedback provenance and apply deterministic graph updates.
+    - Polymorphic feedback targets need explicit tenant ownership checks because the database cannot enforce cross-table ownership with a single foreign key.
+  - Gotchas encountered
+    - `top_of_mind_note` feedback currently validates against `wow_moments` because top-of-mind note persistence is still a compatibility layer over WOW moment rows.
+  - Useful context
+    - `hypothesis` feedback validates against `meaning_nodes` rows with `type = 'hypothesis'`.
 
 ---
