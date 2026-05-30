@@ -12,6 +12,7 @@
 - The user-facing `/api/top-of-mind` route returns `topOfMindNotes` plus the legacy `topOfMind` preview field for current home-page compatibility; web client helpers live in `packages/web/src/lib/api.ts`.
 - User feedback persistence lives in `packages/api/src/db/schema-feedback.ts` and `/api/feedback`; feedback targets are polymorphic, but create paths must verify target ownership for the signed-in tenant before inserting rows.
 - Top-of-mind refresh currently persists graph-generated notes through `wow_moments` with `top_of_mind_context_node:v1:*` idempotency keys until dedicated note persistence lands.
+- Home should consume `fetchTopOfMindNotes` for the primary user-facing Top of Mind post-it surface; use the legacy `topOfMind` preview only as a fallback while compatibility remains.
 
 ---
 
@@ -288,5 +289,32 @@
     - Existing top-of-mind route unit tests use narrow hand-built Drizzle mocks, so new serializer enrichment queries need matching mock shape updates.
   - Useful context
     - Related context node ids are inferred from linked signal evidence and `meaning_evidence`; they may include multiple nodes when a source signal supports more than one graph claim.
+
+---
+
+## 2026-05-30 15:06 PDT - US-010
+
+- What was implemented
+  - Updated the authenticated home page to consume user-facing top-of-mind notes from `/api/top-of-mind` as the primary post-it surface.
+  - Added data-aware home behavior: returning users with enough signals or active notes land on Top of Mind, while low-data users land on an inline capture-first signal entry surface.
+  - Removed the home-page WOW moments panel/fetch path from the primary surface and shifted visible home copy toward top-of-mind, signal, resonance, and provisional reflection language.
+  - Kept capture one click away for returning users and inline for low-data users.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 33 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for returning-user Top of Mind and mobile low-data capture-first states.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Home should read `topOfMindNotes` for user-facing post-it notes and keep the legacy `topOfMind` preview as fallback compatibility.
+  - Gotchas encountered
+    - The Home test harness needs both `/api/top-of-mind?limit=4` note data and the legacy `topOfMind` fallback shape because the client still supports both during migration.
+  - Useful context
+    - The low-data threshold is currently two saved signals unless active top-of-mind notes already exist.
 
 ---

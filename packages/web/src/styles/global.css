@@ -1108,6 +1108,57 @@
   color: #b7b7b2;
 }
 
+.reference-capture-page {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: clamp(42px, 8vh, 86px) clamp(20px, 5vw, 58px) clamp(56px, 8vh, 96px);
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(320px, 1.1fr);
+  gap: clamp(24px, 5vw, 56px);
+  align-items: start;
+}
+
+.reference-capture-page-copy {
+  display: grid;
+  gap: 14px;
+  padding-top: 10px;
+}
+
+.reference-capture-page-copy span,
+.reference-capture-kicker {
+  color: #8f8a82;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.reference-capture-page-copy h1 {
+  margin: 0;
+  color: #1a1a1a;
+  font-family: "Fraunces", "Times New Roman", serif;
+  font-size: clamp(38px, 6vw, 68px);
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 1.02;
+  text-transform: lowercase;
+}
+
+.reference-capture-page-copy p {
+  max-width: 430px;
+  margin: 0;
+  color: #4a4a4a;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.reference-capture-page-form .cell.capture {
+  width: 100%;
+  max-width: none;
+  min-height: 340px;
+}
+
 .reference-save-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -1226,6 +1277,12 @@
 
 .nc-canvas--wow {
   height: auto;
+  overflow: visible;
+}
+
+.nc-canvas--top-of-mind {
+  height: auto;
+  min-height: 100dvh;
   overflow: visible;
 }
 
@@ -1951,6 +2008,12 @@
   .nc-save-hint,
   .nc-save-sep {
     display: none;
+  }
+
+  .reference-capture-page {
+    grid-template-columns: 1fr;
+    width: min(100vw - 28px, 560px);
+    padding: 32px 0 82px;
   }
 }
 

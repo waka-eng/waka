@@ -45,19 +45,18 @@ import {
   type InspirationDetailData,
 } from "../components/history";
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
-import { WowMomentsSection } from "../components/WowMomentsSection";
 import {
   type ApiAttachment,
   type ApiError,
   type ApiInspiration,
   type ApiInspirationScorePatch,
   type ApiTopOfMind,
+  type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
-  type ApiWowMoment,
   type ClusterKind,
   fetchInspirations,
   fetchTopOfMind,
-  fetchWowMoments,
+  fetchTopOfMindNotes,
   recordInspirationRevisit,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -117,6 +116,9 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  */
 type InspirationStatus = "saving" | "saved" | "error";
 type ReactionKind = "neat" | "partial" | "off";
+type HomeMode = "capture" | "thought" | "saves";
+
+const TOP_OF_MIND_SIGNAL_THRESHOLD = 2;
 
 interface InspirationListEntry {
   /** Server-assigned id once persisted; equals `tempId` while saving. */
@@ -412,9 +414,57 @@ function normalizeMeaningLabel(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function localizedMeaningLabel(signal: ApiTopOfMindSignal, locale: SupportedLocale): string {
-  if (locale === "en-US") return signal.label;
-  return MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label;
+interface HomeThoughtCard {
+  id: string;
+  label: string;
+  type: string;
+  reason: string;
+  supportingSignals: Array<{
+    id: string;
+    preview: string;
+    reason: string;
+    createdAt: string;
+  }>;
+}
+
+function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
+  return {
+    id: signal.nodeId,
+    label: signal.label,
+    type: signal.type,
+    reason: signal.reason,
+    supportingSignals: signal.supportingInspirations.map((support) => ({
+      id: support.id,
+      preview: support.preview,
+      reason: support.reason,
+      createdAt: support.createdAt,
+    })),
+  };
+}
+
+function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
+  const evidenceSignals = note.evidencePreviews.map((evidence) => ({
+    id: evidence.signalId,
+    preview: evidence.textPreview,
+    reason: evidence.reason,
+    createdAt: evidence.createdAt,
+  }));
+  const relatedSignals = note.relatedSignals
+    .filter((signal) => !evidenceSignals.some((evidence) => evidence.id === signal.id))
+    .map((signal) => ({
+      id: signal.id,
+      preview: signal.preview,
+      reason: "Related signal",
+      createdAt: signal.createdAt,
+    }));
+
+  return {
+    id: note.id,
+    label: note.title,
+    type: note.type,
+    reason: note.body,
+    supportingSignals: [...evidenceSignals, ...relatedSignals],
+  };
 }
 
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
@@ -434,7 +484,8 @@ const NOTE_COLORS = [
 const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "top of mind",
-    savesTab: "all inspirations",
+    captureTab: "capture",
+    savesTab: "all signals",
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
@@ -458,13 +509,16 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "not final. changes as new inspirations arrive.",
+    lifecycleHint: "not final. changes as new signals arrive.",
     noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
     evidenceLabel: "여기서 시작됨",
     reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
     reactionGroup: "How does this land",
     loadingThoughts: "생각이 모이는 중...",
-    emptyThoughts: "저장본이 쌓이면 여기에 생각이 나타납니다.",
+    emptyThoughts: "신호가 쌓이면 여기에 생각이 나타납니다.",
+    captureTitle: "첫 신호를 붙잡기",
+    captureBody: "가볍게 남겨도 됩니다. 무엇이 걸렸는지만 붙잡으면, WAKA가 나중에 공명과 반복을 찾아냅니다.",
+    captureInlineKicker: "signal capture",
     footnote: (name: string) => (
       <>
         ※ 본 페이지는 {name} 본인이 쓴 글이 아닙니다.
@@ -475,20 +529,21 @@ const HOME_COPY = {
       </>
     ),
     footnoteCredit: "— Ⓒ WAKA, 2026, 생각의 서랍",
-    savesTitle: "all inspirations",
+    savesTitle: "all signals",
     searchLabel: "search",
     searchPlaceholder: "저장본 검색",
     loadingSaves: "저장본을 불러오는 중...",
-    emptySaves: "아직 저장본이 없습니다.",
-    captureAria: "capture inspiration",
-    captureCta: "capture inspiration",
+    emptySaves: "아직 저장된 신호가 없습니다.",
+    captureAria: "capture signal",
+    captureCta: "capture signal",
     captureHint: () => "",
-    captureDialog: "capture inspiration",
+    captureDialog: "capture signal",
     close: "close",
   },
   "en-US": {
     thoughtTab: "top of mind",
-    savesTab: "all inspirations",
+    captureTab: "capture",
+    savesTab: "all signals",
     room: "my room",
     titleLineOne: (name: string) => (
       <>
@@ -499,7 +554,7 @@ const HOME_COPY = {
     titleSuffix: "",
     tagline: (
       <>
-        Most inspiration disappears.
+        Most signals disappear.
         <br />
         This person caught it before it vanished.
         <br />
@@ -512,13 +567,16 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "not final. changes as new inspirations arrive.",
+    lifecycleHint: "not final. changes as new signals arrive.",
     noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
     evidenceLabel: "where it began",
     reactionLabels: { neat: "keep", partial: "soften", off: "let go" },
     reactionGroup: "How does this land",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "When saved ideas gather, a shape will appear here.",
+    emptyThoughts: "When signals gather, provisional notes will appear here.",
+    captureTitle: "Catch the first signals",
+    captureBody: "No tagging, journaling, or organizing. Save what hit, and WAKA will start noticing resonance and recurrence.",
+    captureInlineKicker: "signal capture",
     footnote: (name: string) => (
       <>
         This page was not written by {name}.
@@ -531,21 +589,22 @@ const HOME_COPY = {
       </>
     ),
     footnoteCredit: "— Ⓒ WAKA, 2026, for minds that wander",
-    savesTitle: "saved",
+    savesTitle: "saved signals",
     searchLabel: "search",
     searchPlaceholder: "search saved ideas",
     loadingSaves: "loading saved ideas...",
-    emptySaves: "nothing saved yet.",
-    captureAria: "capture inspiration",
-    captureCta: "capture inspiration",
+    emptySaves: "no signals saved yet.",
+    captureAria: "capture signal",
+    captureCta: "capture signal",
     captureHint: () => "",
-    captureDialog: "capture inspiration",
+    captureDialog: "capture signal",
     close: "close",
   },
 } satisfies Record<
   SupportedLocale,
   {
     thoughtTab: string;
+    captureTab: string;
     savesTab: string;
     room: string;
     titleLineOne: (name: string) => JSX.Element;
@@ -559,6 +618,9 @@ const HOME_COPY = {
     reactionGroup: string;
     loadingThoughts: string;
     emptyThoughts: string;
+    captureTitle: string;
+    captureBody: string;
+    captureInlineKicker: string;
     footnote: (name: string) => JSX.Element;
     footnoteCredit: string;
     savesTitle: string;
@@ -594,9 +656,8 @@ export function HomePage(): JSX.Element {
   const [topOfMind, setTopOfMind] = useState<ApiTopOfMind | null>(null);
   const [topOfMindLoading, setTopOfMindLoading] = useState(true);
   const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
-  const [wowMoments, setWowMoments] = useState<ApiWowMoment[]>([]);
-  const [wowMomentsLoading, setWowMomentsLoading] = useState(true);
-  const [wowMomentsError, setWowMomentsError] = useState<string | null>(null);
+  const [topOfMindNotes, setTopOfMindNotes] = useState<ApiTopOfMindNoteSurface[]>([]);
+  const [topOfMindNotesLoading, setTopOfMindNotesLoading] = useState(true);
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
@@ -604,7 +665,8 @@ export function HomePage(): JSX.Element {
   const [captureSaveFlash, setCaptureSaveFlash] = useState(false);
   const [captureView] = useState<CaptureView>("note");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [homeMode, setHomeMode] = useState<"thought" | "saves">("thought");
+  const [homeMode, setHomeMode] = useState<HomeMode>("thought");
+  const [homeModeChosen, setHomeModeChosen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [reactions, setReactions] = useState<Record<number, ReactionKind | null>>({});
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
@@ -636,9 +698,7 @@ export function HomePage(): JSX.Element {
    */
   const loadedForUserIdRef = useRef<string | null>(null);
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
-  const wowMomentsLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
-  const wowMomentsRequestIdRef = useRef(0);
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
@@ -673,16 +733,13 @@ export function HomePage(): JSX.Element {
       // /login. Wipe local state defensively just in case.
       loadedForUserIdRef.current = null;
       topOfMindLoadedForUserIdRef.current = null;
-      wowMomentsLoadedForUserIdRef.current = null;
       topOfMindRequestIdRef.current += 1;
-      wowMomentsRequestIdRef.current += 1;
       setEntries([]);
       setTopOfMind(null);
       setTopOfMindLoading(false);
       setTopOfMindError(null);
-      setWowMoments([]);
-      setWowMomentsLoading(false);
-      setWowMomentsError(null);
+      setTopOfMindNotes([]);
+      setTopOfMindNotesLoading(false);
       return;
     }
 
@@ -765,15 +822,23 @@ export function HomePage(): JSX.Element {
       const requestId = topOfMindRequestIdRef.current + 1;
       topOfMindRequestIdRef.current = requestId;
 
-      if (options?.showLoading) setTopOfMindLoading(true);
+      if (options?.showLoading) {
+        setTopOfMindLoading(true);
+        setTopOfMindNotesLoading(true);
+      }
       if (options?.surfaceErrors ?? true) setTopOfMindError(null);
 
       try {
-        const next = await fetchTopOfMind();
+        const [next, notes] = await Promise.all([
+          fetchTopOfMind(),
+          fetchTopOfMindNotes({ limit: 4 }),
+        ]);
         if (topOfMindRequestIdRef.current !== requestId) return null;
         topOfMindLoadedForUserIdRef.current = requestUserId;
         setTopOfMind(next);
+        setTopOfMindNotes(notes.filter((note) => note.userId === requestUserId));
         setTopOfMindLoading(false);
+        setTopOfMindNotesLoading(false);
         setTopOfMindError(null);
         return next;
       } catch (err) {
@@ -784,43 +849,7 @@ export function HomePage(): JSX.Element {
           setTopOfMindError(message);
         }
         setTopOfMindLoading(false);
-        return null;
-      }
-    },
-    [user],
-  );
-
-  const refreshWowMoments = useCallback(
-    async (options?: {
-      showLoading?: boolean;
-      surfaceErrors?: boolean;
-    }): Promise<ApiWowMoment[] | null> => {
-      if (!user) return null;
-
-      const requestUserId = user.id;
-      const requestId = wowMomentsRequestIdRef.current + 1;
-      wowMomentsRequestIdRef.current = requestId;
-
-      if (options?.showLoading) setWowMomentsLoading(true);
-      if (options?.surfaceErrors ?? true) setWowMomentsError(null);
-
-      try {
-        const moments = await fetchWowMoments({ limit: 10 });
-        if (wowMomentsRequestIdRef.current !== requestId) return null;
-        const ownMoments = moments.filter((moment) => moment.userId === requestUserId);
-        wowMomentsLoadedForUserIdRef.current = requestUserId;
-        setWowMoments(ownMoments);
-        setWowMomentsLoading(false);
-        setWowMomentsError(null);
-        return ownMoments;
-      } catch (err) {
-        if (wowMomentsRequestIdRef.current !== requestId) return null;
-        if (options?.surfaceErrors ?? true) {
-          const message =
-            err instanceof Error ? err.message : "Failed to load WOW moments";
-          setWowMomentsError(message);
-        }
-        setWowMomentsLoading(false);
+        setTopOfMindNotesLoading(false);
         return null;
       }
     },
@@ -844,25 +873,6 @@ export function HomePage(): JSX.Element {
       topOfMindRequestIdRef.current += 1;
     };
   }, [refreshTopOfMind, user]);
-
-
-  useEffect(() => {
-    if (!user) return;
-    if (wowMomentsLoadedForUserIdRef.current === user.id) return;
-
-    if (
-      wowMomentsLoadedForUserIdRef.current &&
-      wowMomentsLoadedForUserIdRef.current !== user.id
-    ) {
-      setWowMoments([]);
-    }
-
-    void refreshWowMoments({ showLoading: true, surfaceErrors: true });
-
-    return () => {
-      wowMomentsRequestIdRef.current += 1;
-    };
-  }, [refreshWowMoments, user]);
 
   const handleOptimisticAdd = useCallback((pending: PendingInspiration) => {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
@@ -901,7 +911,6 @@ export function HomePage(): JSX.Element {
 
       const targetId = result.inspiration.id;
       void refreshTopOfMind({ showLoading: false, surfaceErrors: true });
-      void refreshWowMoments({ showLoading: false, surfaceErrors: false });
 
       // The classifier worker (or the dev-mode inline fallback) writes
       // `cluster` asynchronously after the row is persisted. Without a
@@ -945,10 +954,6 @@ export function HomePage(): JSX.Element {
                   showLoading: false,
                   surfaceErrors: false,
                 });
-                void refreshWowMoments({
-                  showLoading: false,
-                  surfaceErrors: false,
-                });
               }
             } catch {
               // Silent — the user will pick up the classification on
@@ -962,7 +967,6 @@ export function HomePage(): JSX.Element {
     },
     [
       refreshTopOfMind,
-      refreshWowMoments,
     ],
   );
 
@@ -1193,10 +1197,13 @@ export function HomePage(): JSX.Element {
     />
   ) : undefined;
 
-  const thoughtCards = [
+  const fallbackThoughtCards = [
     ...(topOfMind?.activeQuestions ?? []),
     ...(topOfMind?.activeThemes ?? []),
-  ].slice(0, 4);
+  ].slice(0, 4).map(signalToThoughtCard);
+  const thoughtCards = topOfMindNotes.length > 0
+    ? topOfMindNotes.slice(0, 4).map(noteToThoughtCard)
+    : fallbackThoughtCards;
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
   const dateLabel = new Date().toLocaleDateString("en-US", {
@@ -1205,18 +1212,35 @@ export function HomePage(): JSX.Element {
     day: "numeric",
   });
   const copy = HOME_COPY[locale];
-  const hasWowPanel = wowMomentsLoading || Boolean(wowMomentsError) || wowMoments.length > 0;
+  const hasEnoughSignalsForTopOfMind =
+    entries.length >= TOP_OF_MIND_SIGNAL_THRESHOLD || thoughtCards.length > 0;
+
+  useEffect(() => {
+    if (homeModeChosen || initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
+    setHomeMode(hasEnoughSignalsForTopOfMind ? "thought" : "capture");
+  }, [
+    hasEnoughSignalsForTopOfMind,
+    homeModeChosen,
+    initialLoading,
+    topOfMindLoading,
+    topOfMindNotesLoading,
+  ]);
+
+  const chooseHomeMode = (mode: HomeMode) => {
+    setHomeMode(mode);
+    setHomeModeChosen(true);
+  };
 
   const setReaction = (index: number, kind: ReactionKind) => {
     setReactions((prev) => ({ ...prev, [index]: prev[index] === kind ? null : kind }));
   };
 
-  const relatedMeaningLabels = (signal: ApiTopOfMindSignal): string[] => {
+  const relatedMeaningLabels = (signal: HomeThoughtCard): string[] => {
     if (!topOfMind) return [];
     const labels = new Set<string>();
     for (const edge of topOfMind.relationshipSignals) {
-      if (edge.sourceNodeId === signal.nodeId) labels.add(edge.targetLabel);
-      if (edge.targetNodeId === signal.nodeId) labels.add(edge.sourceLabel);
+      if (edge.sourceNodeId === signal.id) labels.add(edge.targetLabel);
+      if (edge.targetNodeId === signal.id) labels.add(edge.sourceLabel);
     }
     return [...labels].slice(0, 3).map((label) =>
       locale === "en-US"
@@ -1286,14 +1310,14 @@ export function HomePage(): JSX.Element {
     setExpandedNoteIndex(null);
   };
 
-  const renderThoughtCard = (signal: ApiTopOfMindSignal, index: number): JSX.Element => {
-    const source = signal.supportingInspirations[0];
+  const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
+    const source = signal.supportingSignals[0];
     const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
-      key={signal.nodeId}
+      key={signal.id}
       style={{
         ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
         ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
@@ -1315,7 +1339,11 @@ export function HomePage(): JSX.Element {
         </span>
       </header>
 
-      <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
+      <p className="nc-note-body">
+        {locale === "en-US"
+          ? signal.label
+          : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
+      </p>
 
       <div className="nc-note-reveal">
         <div className="nc-note-evidence">
@@ -1354,7 +1382,7 @@ export function HomePage(): JSX.Element {
     const signal = thoughtCards[index];
     if (!signal) return null;
     const relatedLabels = relatedMeaningLabels(signal);
-    const source = signal.supportingInspirations[0];
+    const source = signal.supportingSignals[0];
     return (
       <article
         className="nc-note-modal"
@@ -1371,7 +1399,11 @@ export function HomePage(): JSX.Element {
           </span>
         </header>
 
-        <p className="nc-note-body">{localizedMeaningLabel(signal, locale)}</p>
+        <p className="nc-note-body">
+          {locale === "en-US"
+            ? signal.label
+            : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
+        </p>
 
         <div className="nc-note-expanded-content">
           <section className="nc-note-reading">
@@ -1426,7 +1458,7 @@ export function HomePage(): JSX.Element {
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        title="all inspirations"
+        title="all signals"
         detail={historyDetail}
       >
         {historyContent}
@@ -1436,21 +1468,28 @@ export function HomePage(): JSX.Element {
           {renderExpandedThoughtCard(expandedNoteIndex)}
         </div>
       ) : null}
-      <main className={`nc-canvas${homeMode === "thought" && hasWowPanel ? " nc-canvas--wow" : ""}`}>
+      <main className={`nc-canvas${homeMode === "thought" ? " nc-canvas--top-of-mind" : ""}`}>
         <header className="nc-topbar">
           <div className="nc-topleft">
             <div className="nc-mode" role="tablist" aria-label="home mode">
             <button
               type="button"
               className={`nc-mode-btn${homeMode === "thought" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => setHomeMode("thought")}
+              onClick={() => chooseHomeMode("thought")}
             >
               {copy.thoughtTab}
             </button>
             <button
               type="button"
+              className={`nc-mode-btn${homeMode === "capture" ? " nc-mode-btn--active" : ""}`}
+              onClick={() => chooseHomeMode("capture")}
+            >
+              {copy.captureTab}
+            </button>
+            <button
+              type="button"
               className={`nc-mode-btn${homeMode === "saves" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => setHomeMode("saves")}
+              onClick={() => chooseHomeMode("saves")}
             >
               {copy.savesTab} ({entries.length})
             </button>
@@ -1506,24 +1545,34 @@ export function HomePage(): JSX.Element {
               )}
             </section>
 
-            {hasWowPanel ? (
-              <section className="nc-wow-panel" aria-label="generated WOW moments">
-                <WowMomentsSection
-                  error={wowMomentsError}
-                  loading={wowMomentsLoading}
-                  locale={locale}
-                  moments={wowMoments}
-                  onAddInspiration={() => setCaptureOpen(true)}
-                  showDevInspection={showAdminEntry}
-                />
-              </section>
-            ) : null}
-
             <footer className="nc-footnote">
               <p>{copy.footnote(displayHandle)}</p>
               <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
             </footer>
           </>
+        ) : homeMode === "capture" ? (
+          <section className="reference-capture-page" aria-label={copy.captureAria}>
+            <div className="reference-capture-page-copy">
+              <span>{copy.captureInlineKicker}</span>
+              <h1>{copy.captureTitle}</h1>
+              <p>{copy.captureBody}</p>
+            </div>
+            <div className="reference-capture-page-form">
+              <CaptureForm
+                view={captureView}
+                visualState={{
+                  focused: captureFocused,
+                  saveFlash: captureSaveFlash,
+                }}
+                focused={captureFocused}
+                onToggleFocus={setCaptureFocused}
+                onOptimisticAdd={handleOptimisticAdd}
+                onPersisted={handleCapturePersisted}
+                onPersistError={handlePersistError}
+                locale={locale}
+              />
+            </div>
+          </section>
         ) : (
           <section className="reference-saves-page" aria-label={copy.savesTitle}>
             <header>
@@ -1577,7 +1626,7 @@ export function HomePage(): JSX.Element {
         )}
       </main>
 
-      {expandedNoteIndex === null ? (
+      {expandedNoteIndex === null && homeMode !== "capture" ? (
         <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>
           <span className="nc-save-cta">{copy.captureCta}</span>
         </button>
@@ -1589,7 +1638,7 @@ export function HomePage(): JSX.Element {
             {copy.close}
           </button>
           <div className="reference-capture-shell">
-            <div className="reference-capture-kicker">capture inspiration</div>
+            <div className="reference-capture-kicker">{copy.captureInlineKicker}</div>
           <CaptureForm
             view={captureView}
             visualState={{

@@ -11,7 +11,7 @@ import {
   fetchInspirations,
   fetchReflections,
   fetchTopOfMind,
-  fetchWowMoments,
+  fetchTopOfMindNotes,
   presignAttachment,
   recordInspirationRevisit,
   updateInspiration,
@@ -22,7 +22,7 @@ import type {
   ApiInspiration,
   ApiReflection,
   ApiTopOfMind,
-  ApiWowMoment,
+  ApiTopOfMindNoteSurface,
 } from "../src/lib/api";
 import { HomePage } from "../src/pages/Home";
 
@@ -60,7 +60,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     ...actual,
     fetchInspirations: vi.fn(async () => []),
     fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
-    fetchWowMoments: vi.fn(async () => []),
+    fetchTopOfMindNotes: vi.fn(async () => [sampleTopOfMindNote]),
     fetchReflections: vi.fn(async () => []),
     fetchInspirationScoreBreakdown: vi.fn(async () => null),
     createInspiration: vi.fn(async () => {
@@ -138,32 +138,48 @@ const sampleInspirations: ApiInspiration[] = [
   },
 ];
 
-const sampleWowMoments: ApiWowMoment[] = [
-  {
-    id: "wow-1",
-    userId: "user-1",
-    title: "Cities keep teaching through bridges",
-    kind: "bridge",
-    why: "Several saves connect architecture essays with walking routes and jazz history.",
-    beliefStatement: "I keep learning through places I cross repeatedly.",
-    reflectionQuestion: "What bridge keeps reappearing?",
-    reflectionGuide: "Name what it connects, then choose one next crossing.",
+const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
+  id: "note-1",
+  userId: "user-1",
+  title: "Bridge ideas keep returning",
+  type: "pattern",
+  body: "Several saved signals connect architecture essays with walking routes and jazz history.",
+  prompt: "What bridge keeps reappearing?",
+  guidance: "Name what it connects, then choose one next crossing.",
+  confidence: 0.82,
+  status: "active",
+  relatedSignalIds: ["insp-1"],
+  relatedContextNodeIds: ["theme-1"],
+  createdAt: "2026-05-11T12:00:00.000Z",
+  updatedAt: "2026-05-11T12:00:00.000Z",
+  source: "wow_moment_compatibility",
+  isProvisional: true,
+  legacy: {
+    wowMomentId: "wow-1",
+    wowKind: "bridge",
     wowScore: 9,
-    createdAt: "2026-05-11T12:00:00.000Z",
-    updatedAt: "2026-05-11T12:00:00.000Z",
-    relatedInspirations: [
-      {
-        inspirationId: "insp-1",
-        role: "anchor",
-        reason: "This save anchors the pattern.",
-        text: "Architecture essay about bridge rhythms in city walks",
-        kind: "note",
-        createdAt: "2026-05-10T12:00:00.000Z",
-        wowScore: 4,
-      },
-    ],
   },
-];
+  evidencePreviews: [
+    {
+      signalId: "insp-1",
+      role: "anchor",
+      reason: "This signal anchors the pattern.",
+      textPreview: "Architecture essay about bridge rhythms in city walks",
+      kind: "note",
+      createdAt: "2026-05-10T12:00:00.000Z",
+      resonanceScore: 4,
+    },
+  ],
+  relatedSignals: [
+    {
+      id: "insp-1",
+      preview: "Architecture essay about bridge rhythms in city walks",
+      kind: "note",
+      createdAt: "2026-05-10T12:00:00.000Z",
+      resonanceScore: 4,
+    },
+  ],
+};
 
 const sampleTopOfMind: ApiTopOfMind = {
   generatedAt: "2026-05-12T12:00:00.000Z",
@@ -198,15 +214,15 @@ const sampleTopOfMind: ApiTopOfMind = {
 function setApiFixtures({
   inspirations = sampleInspirations,
   topOfMind = sampleTopOfMind,
-  wowMoments = sampleWowMoments,
+  topOfMindNotes = [sampleTopOfMindNote],
 }: {
   inspirations?: ApiInspiration[];
   topOfMind?: ApiTopOfMind;
-  wowMoments?: ApiWowMoment[];
+  topOfMindNotes?: ApiTopOfMindNoteSurface[];
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
-  vi.mocked(fetchWowMoments).mockResolvedValue(wowMoments);
+  vi.mocked(fetchTopOfMindNotes).mockResolvedValue(topOfMindNotes);
   vi.mocked(fetchReflections).mockResolvedValue([]);
   vi.mocked(recordInspirationRevisit).mockResolvedValue({
     revisit: {
@@ -324,7 +340,7 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
     const savesTab = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-mode-btn")).find(
-      (button) => button.textContent === `all inspirations (${count})`,
+      (button) => button.textContent === `all signals (${count})`,
     );
     expect(savesTab).not.toBeNull();
     await act(async () => {
@@ -352,13 +368,13 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
-  it("loads current Home data from inspirations, top-of-mind, and WOW endpoints", async () => {
+  it("loads current Home data from signals and top-of-mind endpoints", async () => {
     setApiFixtures();
     await renderHomePage();
 
     expect(fetchInspirations).toHaveBeenCalledTimes(1);
     expect(fetchTopOfMind).toHaveBeenCalledTimes(1);
-    expect(fetchWowMoments).toHaveBeenCalledWith({ limit: 10 });
+    expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 4 });
   });
 
 
@@ -421,7 +437,7 @@ describe("HomePage current home experience", () => {
           ],
         },
       ],
-      wowMoments: [],
+      topOfMindNotes: [],
     });
     const container = await renderHomePage();
 
@@ -534,7 +550,7 @@ describe("HomePage current home experience", () => {
           ],
         }),
       ],
-      wowMoments: [],
+      topOfMindNotes: [],
     });
     const container = await renderHomePage();
 
@@ -560,29 +576,54 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-canvas")).not.toBeNull();
     expect(container.textContent).toContain("river's top of mind");
-    expect(container.textContent).toContain("Most inspiration disappears.");
-    expect(container.textContent).toContain("not final. changes as new inspirations arrive.");
+    expect(container.textContent).toContain("Most signals disappear.");
+    expect(container.textContent).toContain("not final. changes as new signals arrive.");
   });
 
-  it("keeps meaning-graph top-of-mind primary when current WOW moments are available", async () => {
+  it("keeps top-of-mind notes primary when enough signals are available", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
-    expect(container.querySelector(".nc-wow-panel")).not.toBeNull();
-    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
-    expect(container.textContent).toContain("What WAKA noticed");
-    expect(container.textContent).toContain("Dev-only inspect WOW fields (1)");
+    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
+    expect(container.textContent).toContain("Bridge ideas keep returning");
+    expect(container.textContent).toContain("why it stuck");
+    expect(container.textContent).not.toContain("What WAKA noticed");
+    expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
-  it("renders WOW moments without replacing top-of-mind notes", async () => {
-    setApiFixtures();
+  it("starts low-data users on capture-first signal entry", async () => {
+    setApiFixtures({
+      inspirations: [],
+      topOfMindNotes: [],
+      topOfMind: {
+        ...sampleTopOfMind,
+        activeThemes: [],
+        activeQuestions: [],
+        relationshipSignals: [],
+        summary: {
+          inspirationCount: 0,
+          meaningNoteCount: 0,
+          relationshipEdgeCount: 0,
+        },
+      },
+    });
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".reference-capture-page")).not.toBeNull();
+    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("capture");
+    expect(container.textContent).toContain("Catch the first signals");
+    expect(container.textContent).toContain("what hit");
+    expect(container.querySelector("#capNote")).not.toBeNull();
+  });
+
+  it("falls back to graph preview notes while top-of-mind note persistence is empty", async () => {
+    setApiFixtures({ topOfMindNotes: [] });
     const container = await renderHomePage();
 
     expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
-    expect(container.textContent).toContain("What WAKA noticed");
-    expect(container.textContent).toContain("Cities keep teaching through bridges");
-    expect(container.textContent).toContain("Several saves connect architecture essays");
+    expect(container.textContent).toContain("why it stuck");
+    expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
   it("renders the Home authorship footnote for the signed-in user", async () => {
@@ -597,7 +638,7 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("all inspirations (2)");
+    expect(container.textContent).toContain("all signals (2)");
     expect(container.textContent).not.toContain("Other user save should never render");
   });
 
@@ -617,7 +658,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("WAKA가 포착한 것");
+    expect(container.textContent).toContain("Bridge ideas keep returning");
   });
 
   it("localizes the logout affordance in Korean", async () => {
@@ -645,14 +686,14 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
   });
 
-  it("switches to the all-inspirations page from the top mode tabs", async () => {
+  it("switches to the all-signals page from the top mode tabs", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     await clickSavesTab(container);
 
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("all inspirations (2)");
+    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("all signals (2)");
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -813,7 +854,7 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("closes capture and increments the all-inspirations count after a quick save", async () => {
+  it("closes capture and increments the all-signals count after a quick save", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -830,10 +871,10 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
-    expect(container.textContent).toContain("all inspirations (3)");
+    expect(container.textContent).toContain("all signals (3)");
   });
 
-  it("shows a newly persisted quick save in the all-inspirations list", async () => {
+  it("shows a newly persisted quick save in the all-signals list", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -853,7 +894,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("Fast save without reflective friction");
   });
 
-  it("persists a typed URL as a link attachment and shows it in all inspirations", async () => {
+  it("persists a typed URL as a link attachment and shows it in all signals", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({
@@ -1106,6 +1147,6 @@ describe("HomePage current home experience", () => {
 
     expect(HomePage).toBeTypeOf("function");
     expect(container.querySelector(".nc-mode")).not.toBeNull();
-    expect(container.textContent).toContain("capture inspiration");
+    expect(container.textContent).toContain("capture signal");
   });
 });
