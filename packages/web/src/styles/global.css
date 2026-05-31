@@ -163,6 +163,23 @@
   line-height: 1.65;
 }
 
+.tom-share-rhythm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.tom-share-rhythm span {
+  padding: 8px 11px;
+  border: 1px solid rgba(37, 35, 31, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.44);
+  color: #48443d;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .tom-share-proof {
   align-self: center;
   padding: 22px;

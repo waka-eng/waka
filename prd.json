@@ -555,7 +555,7 @@
         "Run web typecheck and browser verification of the share page"
       ],
       "priority": 33,
-      "passes": false,
+      "passes": true,
       "notes": "The share page should sell the product by showing the user's living Top of Mind. It should feel like: these post-its were not directly written by the user; they came from what the user saved, corrected, returned to, and outgrew."
     },
     {

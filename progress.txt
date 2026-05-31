@@ -33,6 +33,33 @@
 - When enough context exists, Home and share Top of Mind surfaces should render exactly five post-it slots; empty slots are provisional placeholders, and top-of-mind note feedback should use true, partly, not this, and rewrite in my words rather than importance ratings.
 - Context memory movement is currently derivable in `packages/api/src/lib/memory-movement.ts` from existing meaning node/evidence fields; Top of Mind refresh should rank by memory movement (`reactivated`, `contradicted`, `needs_testing`, etc.) as well as graph weight.
 - Ambition synthesis is a bounded layer after deterministic Top of Mind ranking: use `packages/api/src/lib/ambition-synthesis.ts` for trigger gating, compact evidence inputs, prior feedback/rewrites, rejected alternatives, generic-output rejection, and deterministic fallback.
+- Shareable Top of Mind surfaces can show generated post-its and provenance counts, but raw saved-signal text should stay private until an explicit sharing permission model exists.
+
+---
+
+## 2026-05-31 11:45 PDT - US-030
+
+- What was implemented
+  - Rebuilt the Top of Mind share page copy around the living value prop: WAKA catches what moved the user and turns saved signals into a changing map of what they may want to build, who they want around them, and where they may need to be.
+  - Foregrounded the current five Top of Mind post-its as provisional, replaceable reads shaped by saved signals, corrections, returns, and things that changed shape.
+  - Removed raw evidence previews from the shared post-it surface and replaced them with provenance counts plus privacy copy so private saved signals do not leak without a sharing model.
+- Files changed
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/TopOfMindShare.test.ts` passed: 1 test.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth and Top of Mind API responses. Verified five post-its render, value-prop/privacy copy appears, and raw private signal text does not render.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Shareable Top of Mind pages should explain provenance through generated post-its and counts, not by rendering raw saved-signal evidence.
+  - Gotchas encountered
+    - Playwright route handlers are order-sensitive; register broad `/api/**` fallbacks before specific mocked endpoints or auth will be intercepted by the fallback.
+  - Useful context
+    - The Vite dev command still served the verification run at `http://localhost:5173/` despite the requested port argument.
 
 ---
 

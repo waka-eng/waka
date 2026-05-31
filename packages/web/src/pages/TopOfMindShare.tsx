@@ -35,12 +35,22 @@ function replaceabilityLine(note: ApiTopOfMindNoteSurface): string {
   return "newly forming; changed by new signals";
 }
 
-function shortEvidence(note: ApiTopOfMindNoteSurface): string {
-  const evidencePreview = note.evidenceRationale || note.evidencePreviews[0]?.textPreview;
-  const relatedSignalPreview = note.relatedSignals[0]?.preview;
-  const text = evidencePreview ?? relatedSignalPreview;
-  if (!text) return "This reflection is still looking for stronger evidence.";
-  return text.length > 120 ? `${text.slice(0, 117).trim()}...` : text;
+function evidenceCount(note: ApiTopOfMindNoteSurface): number {
+  return new Set([
+    ...note.evidencePreviews.map((evidence) => evidence.signalId),
+    ...note.relatedSignalIds,
+    ...note.relatedSignals.map((signal) => signal.id),
+  ]).size;
+}
+
+function provenanceLine(note: ApiTopOfMindNoteSurface): string {
+  const count = evidenceCount(note);
+  const evidenceLabel = count > 0 ? `${count} saved signal${count === 1 ? "" : "s"}` : "saved signals";
+  const rationale = note.evidenceRationale?.trim();
+  if (rationale) {
+    return `${evidenceLabel} shaped this read; the private saved moments stay inside WAKA.`;
+  }
+  return `${evidenceLabel} and later corrections can keep, replace, or rewrite this post-it.`;
 }
 
 export function TopOfMindSharePage(): JSX.Element {
@@ -79,34 +89,42 @@ export function TopOfMindSharePage(): JSX.Element {
     <main className="tom-share-page">
       <section className="tom-share-hero" aria-labelledby="tom-share-title">
         <div className="tom-share-hero-copy">
-          <p className="tom-share-eyebrow">Generated from saved signals</p>
+          <p className="tom-share-eyebrow">Living Top of Mind</p>
           <h1 id="tom-share-title">{ownerName}'s Top of Mind</h1>
           <p className="tom-share-lede">
-            Most signals disappear. {ownerName} caught what almost slipped away.
-            Slowly, the things they saved began to take shape: who they want to
-            think with, where they want to be, and what they are here to build.
+            Most inspiration disappears. WAKA catches what moved {ownerName}
+            before it slips away, then turns those saved signals into a changing
+            map of what they may want to build, who they want around them, and
+            where they may need to be.
           </p>
           <p className="tom-share-note">
-            They did not manually write this page. WAKA generated it from saved
-            signals, and it changes as new signals arrive.
+            These post-its were not typed by {ownerName}. They emerged from what
+            they saved, corrected, returned to, and outgrew. The raw saved
+            signals stay private.
           </p>
+          <div className="tom-share-rhythm" aria-label="What shapes this page">
+            <span>saved</span>
+            <span>corrected</span>
+            <span>returned to</span>
+            <span>changed shape</span>
+          </div>
         </div>
 
         <aside className="tom-share-proof" aria-label="How this page works">
           <span>not final</span>
-          <strong>changes with new signals</strong>
+          <strong>personal context is alive</strong>
           <p>
-            The five post-its below are provisional ambition reads about places,
-            people, work, taste, tensions, and next experiments. They can be
-            corrected, replaced, or kept alive by what returns.
+            Five provisional post-its sit on top. They are graph-backed reads
+            about places, people, work, taste, tensions, and next experiments.
+            New signals and corrections can keep them here or replace them.
           </p>
         </aside>
       </section>
 
       <section className="tom-share-board" aria-labelledby="tom-share-board-title">
         <div className="tom-share-board-heading">
-          <p>Current reflections</p>
-          <h2 id="tom-share-board-title">What WAKA is holding up this week</h2>
+          <p>Current five</p>
+          <h2 id="tom-share-board-title">The living notes on top right now</h2>
         </div>
 
         {loadState === "loading" ? (
@@ -132,7 +150,7 @@ export function TopOfMindSharePage(): JSX.Element {
                   <>
                     <p>{note.matchedEnvironment}</p>
                     <p className="tom-share-anti">Not this: {note.antiEnvironment}</p>
-                    <blockquote>{shortEvidence(note)}</blockquote>
+                    <blockquote>{provenanceLine(note)}</blockquote>
                     <em>{replaceabilityLine(note)}</em>
                   </>
                 ) : (

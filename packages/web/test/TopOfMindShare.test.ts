@@ -74,7 +74,7 @@ const sampleNotes: ApiTopOfMindNoteSurface[] = [
         signalId: "sig-1",
         role: "anchor",
         reason: "The saved signal names the room pattern.",
-        textPreview: "A note about private salons where builders admit what they are actually making.",
+        textPreview: "RAW PRIVATE SIGNAL: private salons where builders admit what they are actually making.",
         kind: "note",
         createdAt: "2026-05-29T12:00:00.000Z",
         resonanceScore: 88,
@@ -157,15 +157,23 @@ describe("TopOfMindSharePage", () => {
 
     expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 5 });
     expect(text).toContain("Yun's Top of Mind");
-    expect(text).toContain("Most signals disappear.");
-    expect(text).toContain("caught what almost slipped away");
-    expect(text).toContain("They did not manually write this page.");
-    expect(text).toContain("The five post-its below are provisional ambition reads about places");
+    expect(text).toContain("Most inspiration disappears.");
+    expect(text).toContain("catches what moved Yunbefore it slips away");
+    expect(text).toContain("what they may want to build");
+    expect(text).toContain("who they want around them");
+    expect(text).toContain("where they may need to be");
+    expect(text).toContain("These post-its were not typed by Yun.");
+    expect(text).toContain("savedcorrectedreturned tochanged shape");
+    expect(text).toContain("The raw saved signals stay private.");
+    expect(text).toContain("personal context is alive");
+    expect(text).toContain("Five provisional post-its sit on top.");
     expect(container.querySelectorAll(".tom-share-postit")).toHaveLength(5);
     expect(text).toContain("I need places that quietly tell me to be braver.");
     expect(text).toContain("A city, studio, or room where honest work feels publicly reinforced.");
     expect(text).toContain("Settings that make ambition feel private");
-    expect(text).toContain("Three saved signals are clustering around this frequency.");
+    expect(text).toContain("1 saved signal shaped this read; the private saved moments stay inside WAKA.");
+    expect(text).not.toContain("RAW PRIVATE SIGNAL");
+    expect(text).not.toContain("private salons where builders admit");
     expect(text).toContain("still here because evidence keeps returning");
     expect(text).toContain("I want peers who make fast, public building feel normal.");
     expect(text).toContain("Waiting for a stronger signal to earn this spot.");
