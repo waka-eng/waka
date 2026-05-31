@@ -20,6 +20,7 @@
 - Saved-signal archive and deep-dive UI should use the user-facing `/api/signals` route; it assembles legacy inspiration rows with signal packets, highlights, context nodes, top-of-mind notes, and signal feedback without making `/api/wow-moments` the preferred product surface.
 - Final naming convention: product-facing UI, docs, model prompts, and web client helpers should use signal, signal packet, context graph/node, top-of-mind note, resonance, and feedback; `wow_*`, `meaning_*`, and `/api/wow-moments` names are legacy compatibility only unless a persistence migration explicitly renames them.
 - Capture self-understanding metadata should use existing `inspiration_sparks.note` as `capture_metadata:v1:{...}` until a dedicated signal metadata table exists; signal packets already carry spark notes forward as user-provided evidence.
+- Capture should remain one click away and quick-save capable, but the visible ritual should ask "What almost slipped away?", show local autosave safety near the writing area, and treat user highlights/resonance/micro-reflections as privileged evidence.
 - Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
 - Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
 - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
@@ -28,6 +29,38 @@
 - Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad, but it should be direct and credible. Prefer "I need...", "I want...", and "I am done with..." over second-person diagnosis or weak hedges such as "I think", "maybe", "might", "probably", or "seems".
 - Top-of-mind compatibility serialization should rewrite legacy second-person primary text and embedded ambient-signal fields into direct first-person post-it text instead of preserving old outside-voice copy.
 - Primary user-facing architecture should stay inside one reflective world: Capture, five Top of Mind post-its, Memory Drawer, Share, and dev-only Internal Debug. Avoid reintroducing dashboard/archive/graph terminology into the main Home surface.
+
+---
+
+## 2026-05-31 11:07 PDT - US-024
+
+- What was implemented
+  - Rebuilt the capture modal around the private blank-page prompt "What almost slipped away?" with calmer writing scale and visible local autosave safety copy.
+  - Replaced broad resonance chips with emotionally precise human pulls including wanting, missing, envy, hurt, fear, identity, rejection, people, building, environment, and uncertainty.
+  - Kept quick save, messy text, typed/pasted links, image upload, highlighting, and signal spark metadata persistence intact.
+  - Changed successful saves to show a tiny non-final mirror with keep, adjust, and just save actions instead of immediately dismissing capture.
+  - Updated reflection copy so user-written micro-reflections are framed as privileged evidence.
+- Files changed
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 57 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for Home capture on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, signals, Top of Mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture should keep quick-save mechanics and spark metadata persistence, but the visible ritual should ask for what almost slipped away and preserve the user's own micro-reflection as privileged evidence.
+  - Gotchas encountered
+    - Browser text for autosave safety is uppercased by CSS, so browser assertions should compare case-insensitively when checking rendered safety copy.
+  - Useful context
+    - The first Playwright run without complete same-origin API interception fell through to Vite's local proxy and logged expected connection errors; the successful verification intercepted the required `/api/*` calls.
 
 ---
 

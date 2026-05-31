@@ -444,7 +444,7 @@
         "Run targeted capture tests, web typecheck, and browser verification on desktop and mobile capture"
       ],
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "notes": "The friction of explicit human input should become the product's value. AI can summarize what happened; WAKA should preserve what it meant to the user. Capture should feel like a quiet ritual, not a form."
     },
     {

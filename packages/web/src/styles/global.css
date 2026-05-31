@@ -1270,7 +1270,10 @@
 .reference-capture-modal .cap-body {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 2px;
-  background: #fffefb;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.72)),
+    radial-gradient(circle at 12% 0%, rgba(170, 198, 184, 0.28), transparent 36%),
+    #fffefb;
   box-shadow: 0 28px 54px -42px rgba(0, 0, 0, 0.28);
   padding: 22px 24px;
 }
@@ -1278,15 +1281,15 @@
 .reference-capture-modal .cap-body textarea {
   color: #1a1a1a;
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: clamp(17px, 2.2vw, 23px);
+  font-size: 18px;
   font-style: normal;
   font-weight: 450;
   letter-spacing: 0;
-  line-height: 1.45;
+  line-height: 1.55;
 }
 
 .reference-capture-modal .cap-body textarea::placeholder {
-  color: #aaa7a2;
+  color: #7f8d87;
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-style: normal;
 }
@@ -5173,6 +5176,48 @@ body.dragging .drop-overlay {
 }
 .cap-confirm.visible {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.cap-save-mirror {
+  display: grid;
+  width: min(420px, calc(100% - 40px));
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(34, 34, 34, 0.1);
+  background: #fffdf7;
+  box-shadow: 0 22px 44px rgba(34, 34, 34, 0.08);
+  font-style: normal;
+  text-align: left;
+}
+
+.cap-save-mirror small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.cap-save-mirror-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cap-save-mirror-actions button {
+  min-height: 28px;
+  border: 1px solid rgba(34, 34, 34, 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 0 10px;
+  text-transform: uppercase;
 }
 
 /* Save-flash + reflect-glow ambient feedback animations on the capture

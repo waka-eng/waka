@@ -1367,7 +1367,6 @@ export function HomePage(): JSX.Element {
         captureSaveFlashTimerRef.current = null;
       }, 700);
       handlePersisted(tempId, result);
-      setCaptureOpen(false);
     },
     [handlePersisted],
   );
@@ -2236,6 +2235,7 @@ export function HomePage(): JSX.Element {
             onPersisted={handleCapturePersisted}
             onPersistError={handlePersistError}
             locale={locale}
+            onDismissAfterSave={() => setCaptureOpen(false)}
           />
           </div>
         </div>

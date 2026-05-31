@@ -116,7 +116,7 @@ beforeEach(() => {
       id: "reflection-1",
       inspirationId: "insp-new",
       userId: "user-1",
-      question: "What hit here?",
+      question: "What did this mean to you?",
       answer: "It matters.",
       skipped: false,
       createdAt: "2026-05-27T12:01:00.000Z",
@@ -179,6 +179,17 @@ describe("CaptureForm responsive CTA CSS", () => {
 });
 
 describe("CaptureForm multi-input quick capture", () => {
+  it("opens as a private blank-page capture ritual", async () => {
+    await renderCaptureForm();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.placeholder).toBe(
+      "What almost slipped away?",
+    );
+    expect(container?.querySelector("#capResonance")?.textContent).toContain("What pull does it have?");
+    expect(container?.querySelector("#capResonance")?.textContent).toContain("I want people like this");
+    expect(container?.querySelector("#capResonance")?.textContent).toContain("I don't know yet");
+  });
+
   it("autosaves draft text locally and restores it on the next mount", async () => {
     await renderCaptureForm();
     await act(async () => {
@@ -198,7 +209,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
       "A private draft that should not disappear",
     );
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Autosaved locally");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Private draft autosaved locally");
   });
 
   it("persists marked text and resonance as signal spark metadata", async () => {
@@ -244,7 +255,7 @@ describe("CaptureForm multi-input quick capture", () => {
       ],
     });
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "WAKA noticed the part you marked.",
+      "Tiny mirror, not a verdict: the marked part is carrying the charge.",
     );
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
   });
@@ -256,7 +267,7 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
-        .find((button) => button.textContent?.includes("amused me"))
+        .find((button) => button.textContent?.includes("this scared me"))
         ?.click();
     });
 
@@ -264,7 +275,7 @@ describe("CaptureForm multi-input quick capture", () => {
       "Optional. Keep it tiny.",
     );
     expect(container?.querySelector("label.cap-resonance-note")?.textContent).toContain(
-      "Why did this amuse me?",
+      "What feels at stake?",
     );
 
     await clickQuickSave();
@@ -281,8 +292,8 @@ describe("CaptureForm multi-input quick capture", () => {
           confidence: 90,
           isPrimary: true,
           note: `capture_metadata:v1:${JSON.stringify({
-            reason: "amused_me",
-            reasonLabel: "amused me",
+            reason: "scared",
+            reasonLabel: "this scared me",
             userReason: null,
           })}`,
         },
@@ -290,7 +301,28 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     expect(createReflection).not.toHaveBeenCalled();
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "WAKA noticed this amused me signal.",
+      "Tiny mirror, not a verdict: this reads like this scared me.",
+    );
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("keep");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("adjust");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("just save");
+  });
+
+  it("lets the user adjust after the non-final mirror without losing the saved text", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("This private weather needs one more pass");
+    });
+
+    await clickQuickSave();
+    await act(async () => {
+      Array.from(container?.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button") ?? [])
+        .find((button) => button.textContent === "adjust")
+        ?.click();
+    });
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
+      "This private weather needs one more pass",
     );
   });
 
@@ -301,7 +333,7 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
-        .find((button) => button.textContent?.includes("high-stakes"))
+        .find((button) => button.textContent?.includes("I want to build toward this"))
         ?.click();
     });
     const noteInput = container?.querySelector<HTMLInputElement>("#capResonanceNote");
@@ -322,8 +354,8 @@ describe("CaptureForm multi-input quick capture", () => {
           source: "user_written",
           confidence: 90,
           note: `capture_metadata:v1:${JSON.stringify({
-            reason: "high_stakes",
-            reasonLabel: "high-stakes",
+            reason: "build_toward_this",
+            reasonLabel: "I want to build toward this",
             userReason: "This might change what I commit to next.",
           })}`,
         }),
@@ -372,7 +404,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await pasteText("https://example.com/article");
 
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
-      "이 신호를 저장하기 전에 맥락 메모 하나 추가",
+      "이 신호를 저장하기 전에 개인 리플렉션 하나 추가",
     );
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("맥락을 추가하지 않고 이 신호 저장");
     expect(container?.querySelector<HTMLButtonElement>(".att-x")?.getAttribute("aria-label")).toBe("첨부 제거");
@@ -586,7 +618,7 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "What hit here?",
+      question: "What did this mean to you?",
       answer: "It connects to the next project.",
       skipped: false,
     });

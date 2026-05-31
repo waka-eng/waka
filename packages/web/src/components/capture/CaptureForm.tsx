@@ -149,6 +149,8 @@ export interface CaptureFormProps {
   visualState?: CaptureCellVisualState;
   /** Locale used for user-facing capture and reflection copy. */
   locale?: SupportedLocale;
+  /** Parent can close the modal after the post-save mirror action. */
+  onDismissAfterSave?: () => void;
 }
 
 /* ============================================================
@@ -168,14 +170,16 @@ const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
 
 type CaptureResonanceAnswer =
-  | "amused_me"
   | "want"
-  | "admire"
+  | "miss"
   | "envy"
+  | "hurt"
+  | "scared"
   | "feels_like_me"
-  | "bothers_me"
-  | "curious"
-  | "high_stakes"
+  | "not_me_anymore"
+  | "want_people_like_this"
+  | "build_toward_this"
+  | "live_near_this"
   | "not_sure";
 
 interface HighlightedSignalText {
@@ -193,15 +197,17 @@ interface StoredCaptureDraft {
 }
 
 const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string; icon: string; prompt: string }> = [
-  { value: "amused_me", label: "amused me", icon: ":)", prompt: "Why did this amuse me?" },
-  { value: "want", label: "I want this", icon: "+", prompt: "What part do I want more of?" },
-  { value: "admire", label: "I admire this", icon: "*", prompt: "What do I admire here?" },
+  { value: "want", label: "I want this", icon: "+", prompt: "What do I want more of here?" },
+  { value: "miss", label: "I miss this", icon: "<", prompt: "What does this make me miss?" },
   { value: "envy", label: "I envy this", icon: "~", prompt: "What does the envy point toward?" },
-  { value: "feels_like_me", label: "feels like me", icon: "=", prompt: "What feels like me here?" },
-  { value: "bothers_me", label: "bothers me", icon: "!", prompt: "What is this bothering in me?" },
-  { value: "curious", label: "makes me curious", icon: "?", prompt: "What question opened up?" },
-  { value: "high_stakes", label: "high-stakes", icon: "^", prompt: "What feels at stake?" },
-  { value: "not_sure", label: "not sure", icon: "...", prompt: "What is the first clue?" },
+  { value: "hurt", label: "this hurt", icon: "!", prompt: "What did this touch?" },
+  { value: "scared", label: "this scared me", icon: "^", prompt: "What feels at stake?" },
+  { value: "feels_like_me", label: "this feels like me", icon: "=", prompt: "What feels like me here?" },
+  { value: "not_me_anymore", label: "this is not me anymore", icon: "x", prompt: "What am I done being near?" },
+  { value: "want_people_like_this", label: "I want people like this", icon: "p", prompt: "What kind of people does this point to?" },
+  { value: "build_toward_this", label: "I want to build toward this", icon: "b", prompt: "What would building toward this mean?" },
+  { value: "live_near_this", label: "I want to live near this", icon: "m", prompt: "What environment does this make me want?" },
+  { value: "not_sure", label: "I don't know yet", icon: "...", prompt: "What is the first clue?" },
 ];
 
 export function extractUrlsFromText(text: string): string[] {
@@ -349,6 +355,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       view = "note",
       visualState,
       locale = DEFAULT_LOCALE,
+      onDismissAfterSave,
     },
     ref,
   ): JSX.Element {
@@ -771,15 +778,30 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           flashConfirm(formatMessage(locale, "partialAttachmentFailure", { count: failed.length }), 2800);
         } else {
           const noticed = highlight
-            ? "WAKA noticed the part you marked."
+            ? `Tiny mirror, not a verdict: the marked part is carrying the charge.`
             : resonance
-              ? `WAKA noticed this ${resonanceLabel(resonance)} signal.`
-              : "WAKA noticed this signal is now saved.";
+              ? `Tiny mirror, not a verdict: this reads like ${resonanceLabel(resonance)}.`
+              : "Tiny mirror, not a verdict: saved before it slipped away.";
           flashConfirm(
-            <span>
-              {t(locale, "saved")}. <small>{noticed}</small>
-            </span>,
-            2600,
+            <div className="cap-save-mirror">
+              <span>{t(locale, "saved")}. <small>{noticed}</small></span>
+              <div className="cap-save-mirror-actions" role="group" aria-label="post-save mirror actions">
+                <button type="button" onClick={() => {
+                  setConfirmVisible(false);
+                  onDismissAfterSave?.();
+                }}>keep</button>
+                <button type="button" onClick={() => {
+                  setNote(inspirationText);
+                  setConfirmVisible(false);
+                  queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#capNote")?.focus());
+                }}>adjust</button>
+                <button type="button" onClick={() => {
+                  setConfirmVisible(false);
+                  onDismissAfterSave?.();
+                }}>just save</button>
+              </div>
+            </div>,
+            9000,
           );
         }
       } catch (err) {
@@ -809,6 +831,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       onPersisted,
       onPersistError,
       flashConfirm,
+      onDismissAfterSave,
     ]);
 
     const handleStartReflectiveSave = useCallback((): void => {

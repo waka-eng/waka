@@ -1133,7 +1133,7 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("closes capture and increments the all-signals count after a quick save", async () => {
+  it("keeps the post-save mirror open until the user chooses just save", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -1149,8 +1149,15 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.querySelector(".reference-capture-modal")).toBeNull();
+    expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
+    expect(container.querySelector(".cap-save-mirror")?.textContent).toContain("Tiny mirror, not a verdict");
     expect(container.textContent).toContain("memory drawer (3)");
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button"))
+        .find((button) => button.textContent === "just save")
+        ?.click();
+    });
+    expect(container.querySelector(".reference-capture-modal")).toBeNull();
   });
 
   it("shows a newly persisted quick save in the all-signals list", async () => {
