@@ -463,7 +463,7 @@
         "Run API/web typechecks, targeted Top of Mind tests, and browser verification of the Home path"
       ],
       "priority": 28,
-      "passes": false,
+      "passes": true,
       "notes": "Five post-its are the main product object. They should feel temporary, important, movable, and replaceable: the current five things sitting on the front of the user's mind."
     },
     {

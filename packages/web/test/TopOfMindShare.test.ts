@@ -159,12 +159,15 @@ describe("TopOfMindSharePage", () => {
     expect(text).toContain("Most signals disappear.");
     expect(text).toContain("caught what almost slipped away");
     expect(text).toContain("They did not manually write this page.");
-    expect(text).toContain("provisional ambition reads about places");
+    expect(text).toContain("The five post-its below are provisional ambition reads about places");
+    expect(container.querySelectorAll(".tom-share-postit")).toHaveLength(5);
     expect(text).toContain("I need places that quietly tell me to be braver.");
     expect(text).toContain("A city, studio, or room where honest work feels publicly reinforced.");
     expect(text).toContain("Settings that make ambition feel private");
     expect(text).toContain("Three saved signals are clustering around this frequency.");
+    expect(text).toContain("still here because evidence keeps returning");
     expect(text).toContain("I want peers who make fast, public building feel normal.");
+    expect(text).toContain("Waiting for a stronger signal to earn this spot.");
     expect(text).not.toContain("WOW");
     expect(text).not.toContain("wow");
   });

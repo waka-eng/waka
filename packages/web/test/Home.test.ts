@@ -748,10 +748,28 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(5);
     expect(container.textContent).toContain("I need workrooms where making the thing is the default temperature.");
     expect(container.textContent).toContain("ambition signal");
+    expect(container.textContent).toContain("keeps returning");
+    expect(container.textContent).toContain("not final");
+    expect(container.textContent).toContain("changed by new signals");
+    expect(container.textContent).toContain("Waiting for a stronger signal to earn this spot.");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
+  });
+
+  it("keeps post-its direct and rejects summary-like topic labels", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const postitBodies = Array.from(container.querySelectorAll(".nc-note:not(.nc-note--empty) .nc-note-body")).map(
+      (note) => note.textContent ?? "",
+    );
+
+    expect(postitBodies).toHaveLength(1);
+    expect(postitBodies[0]).toMatch(/^I (need|want|am done with)\b/);
+    expect(postitBodies.join(" ")).not.toMatch(/\b(startups|comedy|cities|AI|inspiration|productivity)\b/i);
+    expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
 
   it("reveals concise evidence signals and context claims for a top-of-mind note", async () => {
@@ -771,7 +789,8 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("1 signal behind this");
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).toContain("This signal anchors the pattern.");
-    expect(expanded?.textContent).toContain("internal frequency");
+    expect(expanded?.textContent).toContain("memory movement");
+    expect(expanded?.textContent).toContain("why this slot");
     expect(expanded?.textContent).toContain("matched environment");
     expect(expanded?.textContent).toContain("anti-environment");
     expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
@@ -853,7 +872,7 @@ describe("HomePage current home experience", () => {
       setInputValue(correction!, "This is closer if it mentions the workshop.");
     });
     const partlyButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-feedback-btn")).find(
-      (button) => button.textContent === "partly",
+      (button) => button.textContent === "rewrite in my words",
     );
     expect(partlyButton).not.toBeNull();
 
@@ -876,7 +895,7 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
     const notTrueButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-feedback-btn")).find(
-      (button) => button.textContent === "not true",
+      (button) => button.textContent === "not this",
     );
     expect(notTrueButton).not.toBeNull();
 

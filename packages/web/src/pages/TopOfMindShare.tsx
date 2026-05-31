@@ -13,7 +13,26 @@ function firstName(name: string, email: string): string {
 }
 
 function noteKicker(note: ApiTopOfMindNoteSurface): string {
-  return note.ambitionDimension.replace(/_/g, " ");
+  if (note.status === "stale" || note.status === "replaced") return "fading";
+  if (note.type === "tension" || note.ambitionDimension === "tension") return "tension";
+  if (note.type === "question" || note.type === "hypothesis" || note.ambitionDimension === "next_experiment") {
+    return "needs testing";
+  }
+  if (note.evidencePreviews.length >= 3 || note.confidence >= 0.8) return "keeps returning";
+  if (note.evidencePreviews.some((evidence) => Date.now() - new Date(evidence.createdAt).getTime() > 1000 * 60 * 60 * 24 * 30)) {
+    return "came back";
+  }
+  return "newly forming";
+}
+
+function replaceabilityLine(note: ApiTopOfMindNoteSurface): string {
+  const state = noteKicker(note);
+  if (state === "keeps returning") return "still here because evidence keeps returning";
+  if (state === "came back") return "came back after going quiet";
+  if (state === "fading") return "ready to be replaced if new signals stop supporting it";
+  if (state === "tension") return "kept visible until the tension changes shape";
+  if (state === "needs testing") return "not final; asks for a small test";
+  return "newly forming; changed by new signals";
 }
 
 function shortEvidence(note: ApiTopOfMindNoteSurface): string {
@@ -53,7 +72,8 @@ export function TopOfMindSharePage(): JSX.Element {
     };
   }, []);
 
-  const featuredNotes = notes.slice(0, 4);
+  const featuredNotes = notes.slice(0, 5);
+  const shareSlots = Array.from({ length: 5 }, (_, index) => featuredNotes[index] ?? null);
 
   return (
     <main className="tom-share-page">
@@ -76,9 +96,9 @@ export function TopOfMindSharePage(): JSX.Element {
           <span>not final</span>
           <strong>changes with new signals</strong>
           <p>
-            The post-its below are provisional ambition reads about places,
-            people, work, taste, tensions, and next experiments. They are not
-            permanent identity claims.
+            The five post-its below are provisional ambition reads about places,
+            people, work, taste, tensions, and next experiments. They can be
+            corrected, replaced, or kept alive by what returns.
           </p>
         </aside>
       </section>
@@ -99,14 +119,25 @@ export function TopOfMindSharePage(): JSX.Element {
           </div>
         ) : featuredNotes.length > 0 ? (
           <div className="tom-share-notes">
-            {featuredNotes.map((note, index) => (
-              <article className="tom-share-postit" data-tone={index % 4} key={note.id}>
+            {shareSlots.map((note, index) => (
+              <article
+                className={`tom-share-postit${note ? "" : " tom-share-postit--empty"}`}
+                data-tone={index % 4}
+                key={note?.id ?? `share-empty-${index}`}
+              >
                 <div className="tom-share-postit-pin" aria-hidden="true" />
-                <span>{noteKicker(note)}</span>
-                <h3>{note.ambientSignal || note.title}</h3>
-                <p>{note.matchedEnvironment}</p>
-                <p className="tom-share-anti">Not this: {note.antiEnvironment}</p>
-                <blockquote>{shortEvidence(note)}</blockquote>
+                <span>{note ? noteKicker(note) : "waiting"}</span>
+                <h3>{note ? note.ambientSignal || note.title : "Waiting for a stronger signal to earn this spot."}</h3>
+                {note ? (
+                  <>
+                    <p>{note.matchedEnvironment}</p>
+                    <p className="tom-share-anti">Not this: {note.antiEnvironment}</p>
+                    <blockquote>{shortEvidence(note)}</blockquote>
+                    <em>{replaceabilityLine(note)}</em>
+                  </>
+                ) : (
+                  <em>empty on purpose; replaced when memory moves</em>
+                )}
               </article>
             ))}
           </div>

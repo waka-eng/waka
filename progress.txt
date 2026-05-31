@@ -29,6 +29,39 @@
 - Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad, but it should be direct and credible. Prefer "I need...", "I want...", and "I am done with..." over second-person diagnosis or weak hedges such as "I think", "maybe", "might", "probably", or "seems".
 - Top-of-mind compatibility serialization should rewrite legacy second-person primary text and embedded ambient-signal fields into direct first-person post-it text instead of preserving old outside-voice copy.
 - Primary user-facing architecture should stay inside one reflective world: Capture, five Top of Mind post-its, Memory Drawer, Share, and dev-only Internal Debug. Avoid reintroducing dashboard/archive/graph terminology into the main Home surface.
+- When enough context exists, Home and share Top of Mind surfaces should render exactly five post-it slots; empty slots are provisional placeholders, and top-of-mind note feedback should use true, partly, not this, and rewrite in my words rather than importance ratings.
+
+---
+
+## 2026-05-31 11:15 PDT - US-025
+
+- What was implemented
+  - Made the Home Top of Mind surface render exactly five post-it slots whenever enough context exists, with empty slots treated as provisional placeholders.
+  - Added visible memory-movement labels including keeps returning, newly forming, came back, fading, tension, and needs testing.
+  - Made compact and expanded post-it copy explicitly replaceable with not-final, changed-by-new-signals, still-here, and replaced-when-memory-moves language.
+  - Changed Top of Mind feedback controls to true, partly, not this, and rewrite in my words; rewrites persist as correction text through the existing feedback API.
+  - Updated the share page to foreground five current Top of Mind post-it slots with memory-state and replaceability language.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/TopOfMindShare.test.ts` passed: 40 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts` passed: 18 tests.
+  - Browser verification with Playwright + Vite passed for `/` and `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, saved-signal, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Five Top of Mind slots are now the primary product object; render empty placeholders rather than shrinking the surface when fewer than five notes are active.
+  - Gotchas encountered
+    - Playwright route handlers are order-sensitive; register broad `/api/**` fallbacks before more specific mocked endpoints.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/` even when a different port was passed through the pnpm command.
 
 ---
 

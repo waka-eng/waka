@@ -125,9 +125,17 @@ type InspirationStatus = "saving" | "saved" | "error";
 type HomeMode = "topOfMind" | "memoryDrawer";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
-  "true" | "partly" | "not_true" | "important" | "not_important"
+  "true" | "partly" | "not_true"
 >;
+type TopOfMindFeedbackAction = TopOfMindFeedbackValue | "rewrite";
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
+type MemoryMovementLabel =
+  | "keeps returning"
+  | "newly forming"
+  | "came back"
+  | "fading"
+  | "tension"
+  | "needs testing";
 
 const TOP_OF_MIND_SIGNAL_THRESHOLD = 2;
 const TOP_OF_MIND_NOTE_LIMIT = 5;
@@ -443,6 +451,8 @@ interface HomeThoughtCard {
   matchedEnvironment?: string;
   antiEnvironment?: string;
   evidenceRationale?: string;
+  status?: ApiTopOfMindNoteSurface["status"];
+  confidence?: number;
   type: string;
   reason: string;
   supportingSignals: Array<{
@@ -511,6 +521,8 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     matchedEnvironment: note.matchedEnvironment,
     antiEnvironment: note.antiEnvironment,
     evidenceRationale: note.evidenceRationale,
+    status: note.status,
+    confidence: note.confidence,
     type: note.type,
     reason: note.body,
     supportingSignals: [...evidenceSignals, ...relatedSignals],
@@ -537,6 +549,32 @@ const NOTE_COLORS = [
   { hue: "#cdd3df", ink: "#3a4456" },
   { hue: "#f1d7a8", ink: "#4f3921" },
 ];
+
+const EMPTY_TOP_OF_MIND_SLOTS = Array.from({ length: TOP_OF_MIND_NOTE_LIMIT }, (_, index) => index);
+
+function memoryMovementForThoughtCard(signal: HomeThoughtCard, index: number): MemoryMovementLabel {
+  if (signal.status === "stale" || signal.status === "replaced") return "fading";
+  if (signal.type === "tension" || signal.ambitionDimension === "tension") return "tension";
+  if (signal.type === "question" || signal.type === "hypothesis" || signal.ambitionDimension === "next_experiment") {
+    return "needs testing";
+  }
+  if ((signal.supportingSignals.length >= 3 || (signal.confidence ?? 0) >= 0.8) && index < 2) {
+    return "keeps returning";
+  }
+  if (signal.supportingSignals.some((support) => Date.now() - new Date(support.createdAt).getTime() > 1000 * 60 * 60 * 24 * 30)) {
+    return "came back";
+  }
+  return "newly forming";
+}
+
+function replaceabilityLine(label: MemoryMovementLabel): string {
+  if (label === "keeps returning") return "still here because the evidence keeps returning";
+  if (label === "came back") return "came back after going quiet";
+  if (label === "fading") return "may be replaced if new signals stop supporting it";
+  if (label === "tension") return "kept visible until the tension changes shape";
+  if (label === "needs testing") return "not final; asks for a small test";
+  return "newly forming; changed by new signals";
+}
 
 const HOME_COPY = {
   "ko-KR": {
@@ -567,14 +605,13 @@ const HOME_COPY = {
       </>
     ),
     lifecycleHint: "five provisional post-its. not final. changed by new signals.",
-    noteShifted: ["today's shape", "still here", "newly forming", "fading", "needs testing"],
+    noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "여기서 시작됨",
     feedbackLabels: {
       true: "true",
       partly: "partly",
-      not_true: "not true",
-      important: "important",
-      not_important: "not important",
+      not_true: "not this",
+      rewrite: "rewrite in my words",
     },
     reactionGroup: "How does this land",
     correctionLabel: "optional correction",
@@ -636,14 +673,13 @@ const HOME_COPY = {
       </>
     ),
     lifecycleHint: "five provisional post-its. not final. changed by new signals.",
-    noteShifted: ["today's shape", "still here", "newly forming", "fading", "needs testing"],
+    noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
     feedbackLabels: {
       true: "true",
       partly: "partly",
-      not_true: "not true",
-      important: "important",
-      not_important: "not important",
+      not_true: "not this",
+      rewrite: "rewrite in my words",
     },
     reactionGroup: "How does this land",
     correctionLabel: "optional correction",
@@ -693,7 +729,7 @@ const HOME_COPY = {
     lifecycleHint: string;
     noteShifted: string[];
     evidenceLabel: string;
-    feedbackLabels: Record<TopOfMindFeedbackValue, string>;
+    feedbackLabels: Record<TopOfMindFeedbackAction, string>;
     reactionGroup: string;
     correctionLabel: string;
     correctionPlaceholder: string;
@@ -1469,8 +1505,6 @@ export function HomePage(): JSX.Element {
     "true",
     "partly",
     "not_true",
-    "important",
-    "not_important",
   ];
 
   const updateCorrectionText = (noteId: string, correctionText: string) => {
@@ -1515,14 +1549,11 @@ export function HomePage(): JSX.Element {
         note.id === signal.feedbackTargetId
           ? {
               ...note,
-              status:
-                value === "not_true" || value === "not_important"
-                  ? "stale"
-                  : note.status,
+              status: value === "not_true" ? "stale" : note.status,
               confidence:
-                value === "true" || value === "important"
+                value === "true"
                   ? Math.min(100, note.confidence + 4)
-                  : value === "not_true" || value === "not_important"
+                  : value === "not_true"
                     ? Math.max(0, note.confidence - 12)
                     : note.confidence,
             }
@@ -1601,11 +1632,12 @@ export function HomePage(): JSX.Element {
         aria-label={copy.reactionGroup}
       >
         <div className="nc-note-feedback-options">
-          {feedbackValues.map((value) => {
+          {[...feedbackValues, ...(options.expanded ? (["rewrite"] as const) : [])].map((action) => {
+            const value: TopOfMindFeedbackValue = action === "rewrite" ? "partly" : action;
             const active = feedbackState?.value === value;
             return (
               <button
-                key={value}
+                key={action}
                 type="button"
                 className={`nc-note-feedback-btn${active ? " nc-note-feedback-btn--active" : ""}`}
                 aria-pressed={active}
@@ -1615,7 +1647,7 @@ export function HomePage(): JSX.Element {
                   void submitTopOfMindFeedback(signal, value);
                 }}
               >
-                {copy.feedbackLabels[value]}
+                {copy.feedbackLabels[action]}
               </button>
             );
           })}
@@ -1725,6 +1757,7 @@ export function HomePage(): JSX.Element {
     const source = signal.supportingSignals[0];
     const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
+    const memoryMovement = memoryMovementForThoughtCard(signal, index);
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
@@ -1745,9 +1778,7 @@ export function HomePage(): JSX.Element {
     >
       <header className="nc-note-head">
         <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
-        <span className="nc-note-shifted">
-          {copy.noteShifted[index] ?? copy.noteShifted[copy.noteShifted.length - 1]}
-        </span>
+        <span className="nc-note-shifted">{memoryMovement}</span>
       </header>
 
       <p className="nc-note-body">
@@ -1766,15 +1797,46 @@ export function HomePage(): JSX.Element {
             — {signal.ambitionDimension?.replace(/_/g, " ") ?? meaningTypeLabel(signal.type)}
           </span>
         </div>
+        <span className="nc-note-replaceability">{replaceabilityLine(memoryMovement)}</span>
       </div>
       {renderFeedbackControls(signal)}
     </article>
   );
   };
 
+  const renderEmptyTopOfMindSlot = (index: number): JSX.Element => {
+    const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
+    return (
+      <article
+        className="nc-note nc-note--empty"
+        key={`empty-top-of-mind-${index}`}
+        aria-label={`empty Top of Mind slot ${index + 1}`}
+        style={{
+          ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
+          ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
+          ["--tilt" as string]: `${position.tilt}deg`,
+          ["--w" as string]: position.w,
+          ["--top" as string]: position.top,
+          ["--left" as string]: position.left,
+          ["--dx" as string]: "0px",
+          ["--dy" as string]: "0px",
+          ["--decay" as string]: "0.42",
+        }}
+      >
+        <header className="nc-note-head">
+          <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
+          <span className="nc-note-shifted">waiting</span>
+        </header>
+        <p className="nc-note-body">Waiting for a stronger signal to earn this spot.</p>
+        <span className="nc-note-replaceability">empty on purpose; replaced when memory moves</span>
+      </article>
+    );
+  };
+
   const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
     const signal = thoughtCards[index];
     if (!signal) return null;
+    const memoryMovement = memoryMovementForThoughtCard(signal, index);
     const relatedLabels = relatedMeaningLabels(signal);
     const source = signal.supportingSignals[0];
     const contextNodes =
@@ -1797,9 +1859,7 @@ export function HomePage(): JSX.Element {
       >
         <header className="nc-note-head">
           <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
-          <span className="nc-note-shifted">
-            {copy.noteShifted[index] ?? copy.noteShifted[copy.noteShifted.length - 1]}
-          </span>
+          <span className="nc-note-shifted">{memoryMovement}</span>
         </header>
 
         <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
@@ -1815,12 +1875,16 @@ export function HomePage(): JSX.Element {
 
           <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-frequency-${signal.id}`}>
             <div className="nc-note-evidence-header">
-              <span>internal frequency</span>
+              <span>memory movement</span>
               <strong id={`top-of-mind-frequency-${signal.id}`}>
-                {signal.ambientSignal ?? signal.label}
+                {memoryMovement}
               </strong>
             </div>
             <dl className="nc-note-frequency-list">
+              <div>
+                <dt>why this slot</dt>
+                <dd>{replaceabilityLine(memoryMovement)}.</dd>
+              </div>
               <div>
                 <dt>matched environment</dt>
                 <dd>{signal.matchedEnvironment ?? "WAKA is still inferring the surrounding signal."}</dd>
@@ -1915,7 +1979,7 @@ export function HomePage(): JSX.Element {
 
           <footer className="nc-note-expanded-foot">
             {renderFeedbackControls(signal, { expanded: true })}
-            <span>not final</span>
+            <span>not final · changed by new signals · replaceable</span>
           </footer>
         </div>
       </article>
@@ -2005,8 +2069,12 @@ export function HomePage(): JSX.Element {
                 <p className="nc-loading">{copy.loadingThoughts}</p>
               ) : topOfMindError ? (
                 <p className="nc-loading">{topOfMindError}</p>
-              ) : thoughtCards.length > 0 ? (
-                thoughtCards.map(renderThoughtCard)
+              ) : hasEnoughSignalsForTopOfMind ? (
+                EMPTY_TOP_OF_MIND_SLOTS.map((slotIndex) =>
+                  thoughtCards[slotIndex]
+                    ? renderThoughtCard(thoughtCards[slotIndex], slotIndex)
+                    : renderEmptyTopOfMindSlot(slotIndex),
+                )
               ) : (
                 <p className="nc-loading">{copy.emptyThoughts}</p>
               )}

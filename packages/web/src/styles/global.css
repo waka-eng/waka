@@ -251,6 +251,11 @@
   transform: rotate(1.5deg) translateY(26px);
 }
 
+.tom-share-postit--empty {
+  border-style: dashed;
+  opacity: 0.58;
+}
+
 .tom-share-postit-pin {
   position: absolute;
   top: 12px;
@@ -291,6 +296,18 @@
   color: #5f594d;
   font-size: 0.92rem;
   line-height: 1.45;
+}
+
+.tom-share-postit em {
+  display: block;
+  margin-top: 14px;
+  color: #6f6759;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.58rem;
+  font-style: normal;
+  letter-spacing: 0.12em;
+  line-height: 1.45;
+  text-transform: uppercase;
 }
 
 .tom-share-state {
@@ -2076,6 +2093,19 @@
   z-index: 5;
 }
 
+.nc-note--empty {
+  cursor: default;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.nc-note--empty:hover,
+.nc-note--empty:focus-within {
+  transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: none;
+}
+
 .nc-note--featured .nc-note-body {
   font-size: 30px;
   line-height: 1.18;
@@ -2234,6 +2264,16 @@
   opacity: 0.85;
 }
 
+.nc-note-replaceability {
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  opacity: 0.48;
+}
+
 .nc-note-evidence-quote {
   margin: 0;
   font-size: 12px;
@@ -2300,7 +2340,8 @@
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.12em;
-  line-height: 1;
+  line-height: 1.2;
+  max-width: 180px;
   text-transform: uppercase;
   cursor: pointer;
   opacity: 0.62;
