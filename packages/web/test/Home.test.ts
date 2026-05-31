@@ -155,7 +155,8 @@ const sampleInspirations: ApiInspiration[] = [
 const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
   userId: "user-1",
-  title: "Bridge ideas keep returning",
+  title: "You may want work that turns bridge rhythms into something visible.",
+  ambitionDimension: "work",
   type: "pattern",
   body: "Several saved signals connect architecture essays with walking routes and jazz history.",
   prompt: "What bridge keeps reappearing?",
@@ -197,7 +198,7 @@ const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
 
 const sampleTopOfMind: ApiTopOfMind = {
   generatedAt: "2026-05-12T12:00:00.000Z",
-  headline: "Bridge ideas keep returning",
+  headline: "You may want work that turns bridge rhythms into something visible.",
   activeThemes: [
     {
       nodeId: "theme-1",
@@ -600,8 +601,8 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
-    expect(container.textContent).toContain("Bridge ideas keep returning");
-    expect(container.textContent).toContain("why it stuck");
+    expect(container.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
+    expect(container.textContent).toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
@@ -623,9 +624,9 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("1 signal behind this");
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).toContain("This signal anchors the pattern.");
-    expect(expanded?.textContent).toContain("related context");
-    expect(expanded?.textContent).toContain("1 context claim");
-    expect(expanded?.textContent).toContain("Bridge ideas keep returning");
+    expect(expanded?.textContent).toContain("ambition dimension");
+    expect(expanded?.textContent).toContain("work");
+    expect(expanded?.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
   });
@@ -656,7 +657,7 @@ describe("HomePage current home experience", () => {
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
     expect(expanded?.textContent).toContain("no signal evidence yet");
     expect(expanded?.textContent).toContain("This post-it does not have signal evidence attached yet.");
-    expect(expanded?.textContent).toContain("no context claims yet");
+    expect(expanded?.textContent).toContain("ambition dimension");
     expect(expanded?.textContent).toContain("WAKA has not linked a durable context claim to this note yet.");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
     expect(expanded?.textContent).not.toContain("context_node:");
@@ -767,7 +768,7 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
-    expect(container.textContent).toContain("why it stuck");
+    expect(container.textContent).toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
@@ -803,7 +804,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("Bridge ideas keep returning");
+    expect(container.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
   });
 
   it("localizes the logout affordance in Korean", async () => {

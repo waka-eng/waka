@@ -13,19 +13,7 @@ function firstName(name: string, email: string): string {
 }
 
 function noteKicker(note: ApiTopOfMindNoteSurface): string {
-  switch (note.type) {
-    case "tension":
-      return "Tension";
-    case "question":
-      return "Open question";
-    case "hypothesis":
-      return "Hypothesis";
-    case "action":
-      return "Action hint";
-    case "pattern":
-    default:
-      return "Pattern";
-  }
+  return note.ambitionDimension.replace(/_/g, " ");
 }
 
 function shortEvidence(note: ApiTopOfMindNoteSurface): string {
@@ -88,8 +76,9 @@ export function TopOfMindSharePage(): JSX.Element {
           <span>not final</span>
           <strong>changes with new signals</strong>
           <p>
-            The post-its below are provisional reflections, tensions, questions,
-            and action hints. They are not permanent identity claims.
+            The post-its below are provisional ambition reads about places,
+            people, work, taste, tensions, and next experiments. They are not
+            permanent identity claims.
           </p>
         </aside>
       </section>

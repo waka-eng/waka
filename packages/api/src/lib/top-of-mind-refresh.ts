@@ -15,6 +15,7 @@ import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "./model-provider.js";
+import type { AmbitionDimension } from "./top-of-mind-notes.js";
 
 const DEFAULT_REFRESH_LIMIT = 5;
 const MAX_REFRESH_LIMIT = 20;
@@ -51,6 +52,7 @@ export interface TopOfMindRefreshCandidate {
   idempotencyKey: string;
   title: string;
   why: string;
+  ambitionDimension: AmbitionDimension;
   kind: WowKind;
   reflectionQuestion: string | null;
   reflectionGuide: string | null;
@@ -175,48 +177,98 @@ function displayLabel(value: string): string {
   return `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
 }
 
+function ambitionDimensionForContextType(type: ContextNodeType): AmbitionDimension {
+  switch (type) {
+    case "environment":
+      return "place";
+    case "person":
+      return "people";
+    case "project":
+      return "work";
+    case "aesthetic":
+      return "taste";
+    case "tension":
+      return "rejection";
+    case "open_question":
+    case "hypothesis":
+      return "next_experiment";
+    case "value":
+      return "identity";
+    case "theme":
+    default:
+      return "work";
+  }
+}
+
+function ambitionDimensionPhrase(dimension: AmbitionDimension): string {
+  switch (dimension) {
+    case "place":
+      return "the environments that raise your standards";
+    case "people":
+      return "the peers you want ambition to happen around";
+    case "work":
+      return "the kind of work you may want to make real";
+    case "taste":
+      return "the standards your taste keeps defending";
+    case "tension":
+      return "a tension that is shaping what you can no longer ignore";
+    case "identity":
+      return "an emerging self-image you may be protecting";
+    case "rejection":
+      return "the contexts you may be ready to leave behind";
+    case "next_experiment":
+      return "a small experiment that could make the pattern less abstract";
+  }
+}
+
 function buildTopOfMindTitle(
   node: TopOfMindRefreshNodeInput,
   type: ContextNodeType,
 ): string {
   const label = displayLabel(node.label);
-  switch (type) {
-    case "open_question":
-      return truncateText(`You may be asking: ${label}?`, MAX_TITLE_CHARS);
+  const dimension = ambitionDimensionForContextType(type);
+  switch (dimension) {
+    case "place":
+      return truncateText(
+        /^(the\s+)?rooms?\b/i.test(label)
+          ? `You seem pulled toward ${label}.`
+          : `You seem pulled toward rooms where ${label} can become normal.`,
+        MAX_TITLE_CHARS,
+      );
+    case "people":
+      return truncateText(`You seem to want peers who make ${label} easier to practice.`, MAX_TITLE_CHARS);
+    case "work":
+      return truncateText(`You may want work that turns ${label} into something visible.`, MAX_TITLE_CHARS);
+    case "taste":
+      return truncateText(`Your taste seems to sharpen around ${label} as a standard, not decoration.`, MAX_TITLE_CHARS);
     case "tension":
-      return truncateText(`You seem caught between ${label}.`, MAX_TITLE_CHARS);
-    case "project":
-      return truncateText(`You may want to build toward ${label}.`, MAX_TITLE_CHARS);
-    case "value":
-      return truncateText(`You keep protecting ${label}.`, MAX_TITLE_CHARS);
-    case "environment":
-      return truncateText(`You seem drawn toward rooms shaped by ${label}.`, MAX_TITLE_CHARS);
-    case "person":
-      return truncateText(`You keep noticing people who embody ${label}.`, MAX_TITLE_CHARS);
-    case "aesthetic":
-      return truncateText(`Something about ${label} keeps pulling at your taste.`, MAX_TITLE_CHARS);
-    case "hypothesis":
-      return truncateText(`This might be becoming true for you: ${label}.`, MAX_TITLE_CHARS);
-    case "theme":
-    default:
-      return truncateText(`You keep circling ${label}.`, MAX_TITLE_CHARS);
+      return truncateText(`Your ambition may be forming inside the tension around ${label}.`, MAX_TITLE_CHARS);
+    case "identity":
+      return truncateText(`You seem to be protecting an identity built around ${label}.`, MAX_TITLE_CHARS);
+    case "rejection":
+      return truncateText(`You may be outgrowing contexts that force a choice between ${label}.`, MAX_TITLE_CHARS);
+    case "next_experiment":
+      return truncateText(`A next experiment may be to test whether ${label} belongs in your real life.`, MAX_TITLE_CHARS);
   }
 }
 
 function buildWhy(
   node: TopOfMindRefreshNodeInput,
   evidence: TopOfMindRefreshEvidenceInput[],
+  dimension: AmbitionDimension,
 ): string {
   const description = normalizeWhitespace(node.description);
-  const sourcePreview = evidencePreview(evidence[0]);
-  if (description && sourcePreview) {
-    return `${description} Recent evidence: "${sourcePreview}"`;
-  }
-  if (description) return description;
-  if (sourcePreview) {
-    return `This keeps showing up in your signals. Recent evidence: "${sourcePreview}"`;
-  }
-  return `${node.evidenceCount} signal${node.evidenceCount === 1 ? "" : "s"} currently point at this context.`;
+  const evidencePreviews = evidence
+    .map((row) => evidencePreview(row))
+    .filter((preview) => preview.length > 0)
+    .slice(0, 5);
+  const ambitionReason = `This may matter for ambition because it points at ${ambitionDimensionPhrase(dimension)}.`;
+  const descriptionText = description ? ` ${description}` : "";
+  const signalText =
+    evidencePreviews.length > 0
+      ? ` Supporting signals: ${evidencePreviews.map((preview) => `"${preview}"`).join("; ")}.`
+      : ` ${node.evidenceCount} signal${node.evidenceCount === 1 ? "" : "s"} currently support this note.`;
+  return `${ambitionReason}${descriptionText}${signalText}`;
 }
 
 function buildIdempotencyKey(userId: string, nodeId: string): string {
@@ -263,6 +315,7 @@ export function rankTopOfMindRefreshCandidates(input: {
             b.createdAt.getTime() - a.createdAt.getTime(),
         )
         .slice(0, MAX_EVIDENCE_PER_NOTE);
+      const ambitionDimension = ambitionDimensionForContextType(contextType);
       return {
         node,
         contextType,
@@ -270,7 +323,8 @@ export function rankTopOfMindRefreshCandidates(input: {
         score: candidateScore(node, contextType, now),
         idempotencyKey,
         title: buildTopOfMindTitle(node, contextType),
-        why: buildWhy(node, evidence),
+        why: buildWhy(node, evidence, ambitionDimension),
+        ambitionDimension,
         kind: noteKindForContextType(contextType),
         reflectionQuestion: reflectionQuestionForContextType(node, contextType),
         reflectionGuide: reflectionGuideForContextType(contextType),

@@ -24,7 +24,8 @@ const emptySuccess: ListTopOfMindCompatibilityMomentsResponse = { wowMoments: []
 const topOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
   userId: "user-1",
-  title: "Recurring signal",
+  title: "You may want work that turns recurring signals into something visible.",
+  ambitionDimension: "work",
   type: "pattern",
   body: "Three saved signals rhyme.",
   prompt: null,
@@ -190,7 +191,7 @@ describe("fetchLegacyTopOfMindCompatibilityMoments", () => {
         {
           id: "moment-1",
           userId: "user-1",
-          title: "Recurring signal",
+          title: "You may want work that turns recurring signals into something visible.",
           kind: "recurrence",
           why: "Three saved inspirations rhyme.",
           beliefStatement: null,
@@ -203,7 +204,8 @@ describe("fetchLegacyTopOfMindCompatibilityMoments", () => {
           topOfMindNote: {
             id: "moment-1",
             userId: "user-1",
-            title: "Recurring signal",
+            title: "You may want work that turns recurring signals into something visible.",
+            ambitionDimension: "work",
             type: "action",
             body: "Three saved inspirations rhyme.",
             prompt: null,

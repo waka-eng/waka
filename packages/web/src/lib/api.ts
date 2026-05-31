@@ -688,6 +688,16 @@ export type ApiTopOfMindNoteStatus =
   | "stale"
   | "replaced";
 
+export type ApiAmbitionDimension =
+  | "place"
+  | "people"
+  | "work"
+  | "taste"
+  | "tension"
+  | "identity"
+  | "rejection"
+  | "next_experiment";
+
 export interface ApiTopOfMindCompatibilitySignal {
   inspirationId: string;
   role: string;
@@ -702,6 +712,7 @@ export interface ApiTopOfMindNote {
   id: string;
   userId: string;
   title: string;
+  ambitionDimension: ApiAmbitionDimension;
   type: ApiTopOfMindNoteType;
   body: string;
   prompt: string | null;

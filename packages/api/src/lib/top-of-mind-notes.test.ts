@@ -66,7 +66,8 @@ describe("top-of-mind note compatibility model", () => {
     expect(note).toEqual({
       id: baseMoment.id,
       userId: baseMoment.userId,
-      title: "You keep circling the rooms where ambition feels humane",
+      title: "You seem pulled toward the rooms where ambition feels humane.",
+      ambitionDimension: "place",
       type: "question",
       body: baseMoment.why,
       prompt: "What should stay unresolved?",
@@ -96,6 +97,9 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("You keep circling founder cities.");
+    expect(note.title).toBe("You seem pulled toward rooms where founder cities can become normal.");
+    expect(note.title).not.toBe("founder cities");
+    expect(note.title).not.toMatch(/^You keep circling\b/);
+    expect(note.ambitionDimension).toBe("place");
   });
 });

@@ -78,11 +78,13 @@ describe("rankTopOfMindRefreshCandidates", () => {
     ]);
     expect(candidates[0]).toMatchObject({
       contextType: "project",
+      ambitionDimension: "work",
       kind: "bridge",
       reflectionGuide: expect.stringContaining("Start here"),
     });
     expect(candidates[1]).toMatchObject({
       contextType: "tension",
+      ambitionDimension: "rejection",
       kind: "tension",
       reflectionQuestion: "What correction would make this feel truer right now?",
     });
@@ -125,12 +127,14 @@ describe("rankTopOfMindRefreshCandidates", () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
       contextType: "open_question",
+      ambitionDimension: "next_experiment",
       kind: "outlier",
-      title: "You may be asking: what kind of ambition still leaves room for life?",
-      why: expect.stringContaining("Several signals ask whether ambition can stay humane."),
+      title: "A next experiment may be to test whether what kind of ambition still leaves room for life belongs in your real life.",
       reflectionQuestion: "what kind of ambition still leaves room for life?",
       wowScore: 100,
     });
+    expect(candidates[0]?.why).toContain("Several signals ask whether ambition can stay humane.");
+    expect(candidates[0]?.why).toContain("This may matter for ambition because it points at a small experiment");
     expect(candidates[0]?.evidence.map((row) => row.inspirationId)).toEqual([
       "signal-strong",
       "signal-old",
@@ -169,6 +173,58 @@ describe("rankTopOfMindRefreshCandidates", () => {
     expect(candidates[0]?.idempotencyKey).toBe(
       `top_of_mind_context_node:v1:${userId}:fresh-node`,
     );
+  });
+
+  it("generates ambition mirror statements instead of raw labels or shallow summaries", () => {
+    const candidates = rankTopOfMindRefreshCandidates({
+      userId,
+      now,
+      nodes: [
+        node({
+          id: "founder-cities",
+          type: "theme",
+          label: "founder cities",
+          description: "Saved signals point toward public building environments.",
+          evidenceCount: 3,
+        }),
+        node({
+          id: "consensus-tension",
+          type: "tension",
+          label: "consensus over aliveness",
+          description: "The user reacts against rooms that reward smoothing over truth.",
+          evidenceCount: 3,
+        }),
+      ],
+      evidence: [
+        evidence({
+          meaningNodeId: "founder-cities",
+          inspirationId: "signal-city-1",
+          sparkText: "people making things in public",
+        }),
+        evidence({
+          meaningNodeId: "founder-cities",
+          inspirationId: "signal-city-2",
+          sparkText: "rooms where ambition is contagious",
+          weight: 80,
+        }),
+        evidence({
+          meaningNodeId: "consensus-tension",
+          inspirationId: "signal-rejection-1",
+          sparkText: "leaving consensus rooms",
+        }),
+      ],
+    });
+
+    const titles = candidates.map((candidate) => candidate.title);
+    expect(titles).toContain("You may want work that turns founder cities into something visible.");
+    expect(titles).toContain("You may be outgrowing contexts that force a choice between consensus over aliveness.");
+    for (const candidate of candidates) {
+      expect(candidate.title).not.toBe(candidate.node.label);
+      expect(candidate.title).not.toMatch(/^You keep circling\b/);
+      expect(candidate.title).not.toMatch(/keep returning$/);
+      expect(candidate.why).toContain("This may matter for ambition");
+      expect(candidate.evidence.length).toBeGreaterThanOrEqual(1);
+    }
   });
 
   it("skips graph claims without supporting evidence", () => {

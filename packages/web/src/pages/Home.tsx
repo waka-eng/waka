@@ -47,6 +47,7 @@ import {
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
+  type ApiAmbitionDimension,
   type ApiFeedbackValue,
   type ApiError,
   type ApiInspiration,
@@ -424,6 +425,7 @@ interface HomeThoughtCard {
   id: string;
   feedbackTargetId?: string;
   label: string;
+  ambitionDimension?: ApiAmbitionDimension;
   type: string;
   reason: string;
   supportingSignals: Array<{
@@ -487,6 +489,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     id: note.id,
     feedbackTargetId: note.id,
     label: note.title,
+    ambitionDimension: note.ambitionDimension,
     type: note.type,
     reason: note.body,
     supportingSignals: [...evidenceSignals, ...relatedSignals],
@@ -1566,11 +1569,13 @@ export function HomePage(): JSX.Element {
 
       <div className="nc-note-reveal">
         <div className="nc-note-evidence">
-          <span className="nc-note-evidence-label">why it stuck</span>
+          <span className="nc-note-evidence-label">ambition signal</span>
           <p className="nc-note-evidence-quote">
             "{shortText(source?.preview || signal.reason, 120)}"
           </p>
-          <span className="nc-note-evidence-source">— {meaningTypeLabel(signal.type)}</span>
+          <span className="nc-note-evidence-source">
+            — {signal.ambitionDimension?.replace(/_/g, " ") ?? meaningTypeLabel(signal.type)}
+          </span>
         </div>
       </div>
       {renderFeedbackControls(signal)}
@@ -1659,13 +1664,15 @@ export function HomePage(): JSX.Element {
 
           <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-context-${signal.id}`}>
             <div className="nc-note-evidence-header">
-              <span>related context</span>
+              <span>ambition dimension</span>
               <strong id={`top-of-mind-context-${signal.id}`}>
-                {contextNodes.length > 0
-                  ? `${contextNodes.length} context claim${contextNodes.length === 1 ? "" : "s"}`
-                  : "no context claims yet"}
+                {signal.ambitionDimension?.replace(/_/g, " ") ?? "still forming"}
               </strong>
             </div>
+            <p className="nc-note-empty-evidence">
+              Feedback on this post-it trains the {signal.ambitionDimension?.replace(/_/g, " ") ?? "ambition"} read,
+              not just the graph claim underneath it.
+            </p>
             {contextNodes.length > 0 ? (
               <ul className="nc-note-context-list">
                 {contextNodes.slice(0, 4).map((node) => (

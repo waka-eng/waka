@@ -21,6 +21,7 @@
 - Final naming convention: product-facing UI, docs, model prompts, and web client helpers should use signal, signal packet, context graph/node, top-of-mind note, resonance, and feedback; `wow_*`, `meaning_*`, and `/api/wow-moments` names are legacy compatibility only unless a persistence migration explicitly renames them.
 - Capture self-understanding metadata should use existing `inspiration_sparks.note` as `capture_metadata:v1:{...}` until a dedicated signal metadata table exists; signal packets already carry spark notes forward as user-provided evidence.
 - Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
+- Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
 
 ---
 
@@ -697,5 +698,43 @@
     - The optional reason input needs to preserve the live DOM value at save time as well as React state so fast save interactions do not drop the micro-answer.
   - Useful context
     - The chip icons intentionally use simple text symbols instead of image assets so the existing compact capture surface stays fast and keyboard/touch friendly.
+
+---
+
+## 2026-05-30 17:30 PDT - US-018
+
+- What was implemented
+  - Rebuilt graph-backed Top of Mind generation around explicit ambition dimensions: place, people, work, taste, tension, identity, rejection, and next experiment.
+  - Changed generated post-it titles away from raw labels and "You keep circling" wrappers toward ambient ambition mirror statements.
+  - Added ambition-focused `why` text with supporting saved-signal previews and exposed `ambitionDimension` on top-of-mind note API/web types.
+  - Updated Home and Top of Mind share rendering so visible post-its foreground ambition reads and feedback is framed as correcting the dimension read.
+  - Added deterministic tests rejecting raw graph labels, saved-summary titles, and shallow theme-label phrasing.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/routes/top-of-mind.test.ts src/routes/wow-moments.test.ts` passed: 17 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts -t "top-of-mind|evidence|feedback|low-data|graph preview|Korean home copy"` passed: 11 tests, 27 skipped.
+  - `pnpm --filter @waka/web test -- test/TopOfMindShare.test.ts test/api.test.ts` passed: 21 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for the exact Home Top of Mind path using mocked same-origin auth, inspirations, and `/api/top-of-mind`; screenshot saved at `/tmp/waka-us018-home.png`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top-of-mind note surfaces now carry `ambitionDimension`; web feedback/correction UI should preserve that framing when validating or correcting a post-it.
+  - Gotchas encountered
+    - The full `Home.test.ts` suite still contains older all-signals tab assertions, but the current app navigates that tab to `/signals`; US-018 verification used the narrower Top of Mind path required by the story.
+  - Useful context
+    - Legacy WOW moments without mirror-style belief statements are converted into ambition mirror titles at serialization time, while newly refreshed graph notes generate mirror titles directly.
 
 ---

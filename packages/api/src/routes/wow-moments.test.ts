@@ -106,7 +106,8 @@ describe("GET /api/wow-moments top-of-mind compatibility", () => {
       topOfMindNote: {
         id: moment.id,
         userId: user.id,
-        title: "Rituals keep returning",
+        title: "A next experiment may be to test whether rituals keep returning belongs in your real life.",
+        ambitionDimension: "next_experiment",
         type: "action",
         body: "Multiple signals keep circling the same careful ritual.",
         prompt: null,

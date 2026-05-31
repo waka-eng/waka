@@ -45,7 +45,8 @@ const sampleNotes: ApiTopOfMindNoteSurface[] = [
   {
     id: "note-1",
     userId: "user-1",
-    title: "Rooms for honest work keep returning",
+    title: "You seem pulled toward rooms where honest work can become normal.",
+    ambitionDimension: "place",
     type: "pattern",
     body: "Saved signals keep pointing toward spaces where people can think before they perform.",
     prompt: "Where does this room already exist?",
@@ -79,7 +80,8 @@ const sampleNotes: ApiTopOfMindNoteSurface[] = [
   {
     id: "note-2",
     userId: "user-1",
-    title: "A question about who to think with",
+    title: "You seem to want peers who make original thinking easier to practice.",
+    ambitionDimension: "people",
     type: "question",
     body: "The next useful collaborator may be a reader, not another operator.",
     prompt: null,
@@ -149,10 +151,10 @@ describe("TopOfMindSharePage", () => {
     expect(text).toContain("Most signals disappear.");
     expect(text).toContain("caught what almost slipped away");
     expect(text).toContain("They did not manually write this page.");
-    expect(text).toContain("provisional reflections, tensions, questions, and action hints");
-    expect(text).toContain("Rooms for honest work keep returning");
+    expect(text).toContain("provisional ambition reads about places");
+    expect(text).toContain("You seem pulled toward rooms where honest work can become normal.");
     expect(text).toContain("A note about private salons");
-    expect(text).toContain("A question about who to think with");
+    expect(text).toContain("You seem to want peers who make original thinking easier to practice.");
     expect(text).not.toContain("WOW");
     expect(text).not.toContain("wow");
   });

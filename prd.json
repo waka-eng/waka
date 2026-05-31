@@ -333,7 +333,7 @@
         "Run API and web typechecks, targeted Top of Mind generation tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
       ],
       "priority": 21,
-      "passes": false,
+      "passes": true,
       "notes": "Product rationale: Paul Graham's cities essay points at ambient ambition signals: some rooms say you should be richer, smarter, braver, more tasteful, faster, freer, or more original. WAKA should help users infer which ambient signals they are already responding to. A useful post-it should read like: \"You seem pulled toward places where ambitious people make things in public,\" \"You may be trying to leave environments that reward consensus over aliveness,\" or \"You seem to want peers who act before permission arrives.\" It should not read like: \"founder cities,\" \"rituals keep returning,\" or \"You keep circling founder cities.\""
     },
     {

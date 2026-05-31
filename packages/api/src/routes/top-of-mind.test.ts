@@ -79,7 +79,8 @@ describe("GET /api/top-of-mind", () => {
     const note: TopOfMindNoteSurface = {
       id: "00000000-0000-4000-8000-000000000010",
       userId: user.id,
-      title: "Rituals keep returning",
+      title: "You may want work that turns rituals into something visible.",
+      ambitionDimension: "work",
       type: "pattern",
       body: "Multiple signals keep circling the same careful ritual.",
       prompt: null,
@@ -123,7 +124,8 @@ describe("GET /api/top-of-mind", () => {
       topOfMindNotes: [
         {
           id: "00000000-0000-4000-8000-000000000010",
-          title: "Rituals keep returning",
+          title: "You may want work that turns rituals into something visible.",
+          ambitionDimension: "work",
           status: "active",
           source: "wow_moment_compatibility",
         },
@@ -204,7 +206,8 @@ describe("GET /api/top-of-mind", () => {
       expect.objectContaining({
         id: moment.id,
         userId: user.id,
-        title: "A small next move may be hiding in rituals keep returning.",
+        title: "A next experiment may be to test whether rituals keep returning belongs in your real life.",
+        ambitionDimension: "next_experiment",
         type: "action",
         body: "Multiple signals keep circling the same careful ritual.",
         confidence: 82,
@@ -330,6 +333,7 @@ describe("GET /api/top-of-mind/:noteId", () => {
       id: noteId,
       userId: user.id,
       title: "A provisional reflection",
+      ambitionDimension: "next_experiment",
       type: "hypothesis",
       body: "This might matter.",
       prompt: "What would make this true?",
