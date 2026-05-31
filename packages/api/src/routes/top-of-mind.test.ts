@@ -79,9 +79,9 @@ describe("GET /api/top-of-mind", () => {
     const note: TopOfMindNoteSurface = {
       id: "00000000-0000-4000-8000-000000000010",
       userId: user.id,
-      title: "You may need workrooms where making the thing is the default temperature.",
+      title: "I need workrooms where making the thing is the default temperature.",
       ambitionDimension: "work",
-      ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+      ambientSignal: "I need workrooms where making the thing is the default temperature.",
       matchedEnvironment: "A working culture where rituals become visible through repeated making.",
       antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
       evidenceRationale: "Three saved signals are clustering around this frequency.",
@@ -128,9 +128,9 @@ describe("GET /api/top-of-mind", () => {
       topOfMindNotes: [
         {
           id: "00000000-0000-4000-8000-000000000010",
-          title: "You may need workrooms where making the thing is the default temperature.",
+          title: "I need workrooms where making the thing is the default temperature.",
           ambitionDimension: "work",
-          ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+          ambientSignal: "I need workrooms where making the thing is the default temperature.",
           status: "active",
           source: "wow_moment_compatibility",
         },
@@ -211,9 +211,9 @@ describe("GET /api/top-of-mind", () => {
       expect.objectContaining({
         id: moment.id,
         userId: user.id,
-        title: "You may need a small real-world test, not another private theory.",
+        title: "I need a small real-world test, not another private theory.",
         ambitionDimension: "next_experiment",
-        ambientSignal: "You may need a small real-world test, not another private theory.",
+        ambientSignal: "I need a small real-world test, not another private theory.",
         matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale:
@@ -344,7 +344,7 @@ describe("GET /api/top-of-mind/:noteId", () => {
       userId: user.id,
       title: "A provisional reflection",
       ambitionDimension: "next_experiment",
-      ambientSignal: "You may need a small real-world test, not another private theory.",
+      ambientSignal: "I need a small real-world test, not another private theory.",
       matchedEnvironment: "A practical setting where a provisional reflection can be tested in public conditions.",
       antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
       evidenceRationale: "This post-it is inferred from saved signals and may change as the graph gets better evidence.",

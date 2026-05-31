@@ -407,7 +407,7 @@
         "Run API and web typechecks, targeted Top of Mind generation/API tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
       ],
       "priority": 25,
-      "passes": false,
+      "passes": true,
       "notes": "Product correction after US-021: even good ambient-signal notes can feel wrong if WAKA speaks about the user from the outside. The post-it metaphor works better if the text feels like the user's own direct jotting: \"I need a city that makes brave work feel normal\" or \"I want peers who make building in public less weird.\" Keep the page honest that WAKA generated the notes from saved signals, but make the post-it itself feel first-person, credible, and replaceable without hedging language."
     }
   ]

@@ -26,6 +26,46 @@
 - Top of Mind needs an explicit internal-frequency / ambient-signal layer above individual graph nodes. It should answer what kind of city, room, peer group, standard, anti-environment, or self-image the user is trying to live near, not just rephrase a context node with ambition-flavored copy.
 - Top-of-mind note surfaces expose `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale`; graph refresh stores those fields in the legacy `wow_moments.why` text until dedicated note persistence exists, and serializers split them back out for the API/UI.
 - Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad, but it should be direct and credible. Prefer "I need...", "I want...", and "I am done with..." over second-person diagnosis or weak hedges such as "I think", "maybe", "might", "probably", or "seems".
+- Top-of-mind compatibility serialization should rewrite legacy second-person primary text and embedded ambient-signal fields into direct first-person post-it text instead of preserving old outside-voice copy.
+
+---
+
+## 2026-05-30 23:02 PDT - US-022
+
+- What was implemented
+  - Changed deterministic Top of Mind ambient-signal generation to direct first-person post-it language.
+  - Updated legacy top-of-mind serialization so older second-person `beliefStatement` and embedded `Ambient signal` text become direct first-person primary note text.
+  - Updated the top-of-mind model prompt/validation to request direct first-person belief statements for newly judged notes.
+  - Updated Home/share/API fixtures and tests so first-read post-its avoid outside voice and weak hedges.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.test.ts`
+  - `packages/api/src/lib/top-of-mind-notes.test.ts`
+  - `packages/api/src/lib/auto-wow-generation.test.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts src/routes/wow-moments.test.ts src/lib/auto-wow-generation.test.ts` passed: 26 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/TopOfMindShare.test.ts test/api.test.ts` passed: 58 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` and `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, signals, top-of-mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Legacy persisted Top of Mind text can contain structured ambient fields from older runs; sanitize those fields at serialization time before the UI sees them as primary post-it text.
+  - Gotchas encountered
+    - Ambition-dimension inference should check people language before generic `environment` text because serialized field labels like `Matched environment` can otherwise force a people note into the place dimension.
+  - Useful context
+    - Vite served the browser verification run at `http://localhost:5173/`.
 
 ---
 

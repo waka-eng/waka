@@ -227,28 +227,28 @@ function buildInternalFrequency(
   switch (dimension) {
     case "place":
       return {
-        ambientSignal: "You may be looking for places that quietly tell you to be braver.",
+        ambientSignal: "I need places that quietly tell me to be braver.",
         matchedEnvironment: `A city, studio, or room where ${label} feels publicly reinforced.`,
         antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
         evidenceRationale: evidencePhrase,
       };
     case "people":
       return {
-        ambientSignal: "You seem to want peers who make fast, public building feel normal.",
+        ambientSignal: "I want peers who make fast, public building feel normal.",
         matchedEnvironment: `People who make ${label} feel like a shared operating rhythm.`,
         antiEnvironment: "Circles where permission, polish, or social caution arrives before motion.",
         evidenceRationale: evidencePhrase,
       };
     case "work":
       return {
-        ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+        ambientSignal: "I need workrooms where making the thing is the default temperature.",
         matchedEnvironment: `A working culture where ${label} becomes visible through repeated making.`,
         antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
         evidenceRationale: evidencePhrase,
       };
     case "taste":
       return {
-        ambientSignal: "You seem drawn to standards that make sharper taste feel ordinary.",
+        ambientSignal: "I want standards that make sharper taste feel ordinary.",
         matchedEnvironment: `Surroundings where ${label} is treated as a standard, not decoration.`,
         antiEnvironment: "Rooms that flatten taste into trend, convenience, or generic approval.",
         evidenceRationale: evidencePhrase,
@@ -256,21 +256,21 @@ function buildInternalFrequency(
     case "tension":
     case "rejection":
       return {
-        ambientSignal: "You may be trying to leave rooms that reward consensus over aliveness.",
+        ambientSignal: "I am done with rooms that reward consensus over aliveness.",
         matchedEnvironment: `A surrounding culture that lets the tension around ${label} stay visible long enough to choose from it.`,
         antiEnvironment: "Rooms that smooth over the live part so everyone can keep performing agreement.",
         evidenceRationale: evidencePhrase,
       };
     case "identity":
       return {
-        ambientSignal: "You may be practicing a self-image that needs braver surroundings.",
+        ambientSignal: "I need surroundings that make this emerging self-image feel normal.",
         matchedEnvironment: `An environment where ${label} is mirrored back as normal behavior.`,
         antiEnvironment: "Contexts that make the emerging version of you feel like a private exception.",
         evidenceRationale: evidencePhrase,
       };
     case "next_experiment":
       return {
-        ambientSignal: "You may need a small real-world test, not another private theory.",
+        ambientSignal: "I need a small real-world test, not another private theory.",
         matchedEnvironment: `A practical setting where ${label} can be tested in public conditions.`,
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale: evidencePhrase,
@@ -292,7 +292,7 @@ function buildWhy(
     .map((row) => evidencePreview(row))
     .filter((preview) => preview.length > 0)
     .slice(0, 5);
-  const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings you seem to need.`;
+  const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings I need.`;
   const descriptionText = description ? ` ${description}` : "";
   const signalText =
     evidencePreviews.length > 0

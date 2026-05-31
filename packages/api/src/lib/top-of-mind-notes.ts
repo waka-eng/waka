@@ -103,8 +103,8 @@ function lowerFirst(value: string): string {
 
 function ambitionDimensionFromMoment(moment: TopOfMindNoteWowMoment): AmbitionDimension {
   const text = `${moment.title} ${moment.why} ${moment.beliefStatement ?? ""}`.toLowerCase();
+  if (/\b(peer|peers|people|collaborator|friend|mentor|who to think with)\b/.test(text)) return "people";
   if (/\b(room|place|city|cities|environment|studio|world|where)\b/.test(text)) return "place";
-  if (/\b(peer|people|collaborator|friend|mentor|who to think with)\b/.test(text)) return "people";
   if (/\b(work|build|make|project|craft|ship)\b/.test(text)) return "work";
   if (/\b(taste|standard|beautiful|aesthetic|style)\b/.test(text)) return "taste";
   if (moment.kind === "tension") return "tension";
@@ -116,22 +116,40 @@ function ambitionDimensionFromMoment(moment: TopOfMindNoteWowMoment): AmbitionDi
 function mirrorTitleFromLegacyLabel(_label: string, dimension: AmbitionDimension): string {
   switch (dimension) {
     case "place":
-      return "You may be looking for places that quietly tell you to be braver.";
+      return "I need places that quietly tell me to be braver.";
     case "people":
-      return "You seem to want peers who make fast, public building feel normal.";
+      return "I want peers who make fast, public building feel normal.";
     case "work":
-      return "You may need workrooms where making the thing is the default temperature.";
+      return "I need workrooms where making the thing is the default temperature.";
     case "taste":
-      return "You seem drawn to standards that make sharper taste feel ordinary.";
+      return "I want standards that make sharper taste feel ordinary.";
     case "tension":
     case "rejection":
-      return "You may be trying to leave rooms that reward consensus over aliveness.";
+      return "I am done with rooms that reward consensus over aliveness.";
     case "next_experiment":
-      return "You may need a small real-world test, not another private theory.";
+      return "I need a small real-world test, not another private theory.";
     case "identity":
     default:
-      return "You may be practicing a self-image that needs braver surroundings.";
+      return "I need surroundings that make this emerging self-image feel normal.";
   }
+}
+
+function isFirstPersonPostIt(value: string): boolean {
+  return /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i.test(
+    normalizeTitleText(value),
+  );
+}
+
+function isOutsideVoicePostIt(value: string): boolean {
+  return /^(you|your|this person|waka)\b/i.test(normalizeTitleText(value));
+}
+
+function primaryPostItText(value: string | null | undefined, dimension: AmbitionDimension): string | null {
+  const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (isOutsideVoicePostIt(normalized)) return mirrorTitleFromLegacyLabel(normalized, dimension);
+  if (isFirstPersonPostIt(normalized)) return normalized;
+  return null;
 }
 
 function extractAmbientField(body: string, field: string): string | null {
@@ -192,21 +210,16 @@ function fallbackAntiEnvironment(dimension: AmbitionDimension): string {
 
 function titleFromLegacyMoment(moment: TopOfMindNoteWowMoment): string {
   const belief = normalizeTitleText(moment.beliefStatement ?? "");
-  if (
-    belief &&
-    !/^this may point to\b/i.test(belief) &&
-    !/^you keep circling\b/i.test(belief) &&
-    /^(you|your|a next experiment)\b/i.test(belief)
-  ) {
-    return belief;
-  }
+  const dimension = ambitionDimensionFromMoment(moment);
+  const postItBelief = primaryPostItText(belief, dimension);
+  if (postItBelief) return postItBelief;
 
   const label = lowerFirst(
     /^you keep circling\b/i.test(belief)
       ? belief.replace(/^you keep circling\s+/i, "")
       : moment.title,
   );
-  return mirrorTitleFromLegacyLabel(label, ambitionDimensionFromMoment(moment));
+  return mirrorTitleFromLegacyLabel(label, dimension);
 }
 
 export function topOfMindNoteTypeFromWowMoment(input: {
@@ -230,12 +243,16 @@ export function topOfMindNoteFromWowMoment(
   const ambitionDimension = ambitionDimensionFromMoment(moment);
   const title = titleFromLegacyMoment(moment);
   const legacyLabel = lowerFirst(moment.title);
+  const embeddedAmbientSignal = primaryPostItText(
+    extractAmbientField(moment.why, "Ambient signal"),
+    ambitionDimension,
+  );
   return {
     id: moment.id,
     userId: moment.userId,
     title,
     ambitionDimension,
-    ambientSignal: extractAmbientField(moment.why, "Ambient signal") ?? title,
+    ambientSignal: embeddedAmbientSignal ?? title,
     matchedEnvironment:
       extractAmbientField(moment.why, "Matched environment") ??
       fallbackMatchedEnvironment(legacyLabel, ambitionDimension),

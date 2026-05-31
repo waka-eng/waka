@@ -24,7 +24,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       kind: "bridge",
       title: "Bridge",
       why: "These ideas connect.",
-      beliefStatement: "You may believe bridges make ideas more humane.",
+      beliefStatement: "I think bridges make ideas feel more humane.",
       relatedInspirationIds: [relatedId],
       sourceEvidence: [
         {
@@ -70,7 +70,7 @@ describe("generateAutoWowMomentForInspiration", () => {
       kind: "recurrence",
       title: "Again",
       why: "It repeats.",
-      beliefStatement: "This might suggest you value recurring signals.",
+      beliefStatement: "I might value the signals that keep recurring.",
       relatedInspirationIds: [relatedId],
       sourceEvidence: [
         {

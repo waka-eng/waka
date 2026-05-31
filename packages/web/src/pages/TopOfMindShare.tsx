@@ -64,7 +64,7 @@ export function TopOfMindSharePage(): JSX.Element {
           <p className="tom-share-lede">
             Most signals disappear. {ownerName} caught what almost slipped away.
             Slowly, the things they saved began to take shape: who they want to
-            think with, where they want to be, and what they might be here to build.
+            think with, where they want to be, and what they are here to build.
           </p>
           <p className="tom-share-note">
             They did not manually write this page. WAKA generated it from saved

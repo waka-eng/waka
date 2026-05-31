@@ -611,11 +611,11 @@ const HOME_COPY = {
       <>
         Most inspiration disappears.
         <br />
-        This person caught what almost slipped away.
+        They caught what almost slipped away.
         <br />
         And slowly, the things they saved began to take shape.
         <br />
-        Who they want to think with. Where they want to be. What they might be here to build.
+        Who they want to think with. Where they want to be. What they are here to build.
         <br />
         <span className="nc-tagline-en">
           — they did not write any of this. they only saved what almost slipped away. the rest emerged.

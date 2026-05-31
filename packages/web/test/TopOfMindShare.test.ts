@@ -45,9 +45,9 @@ const sampleNotes: ApiTopOfMindNoteSurface[] = [
   {
     id: "note-1",
     userId: "user-1",
-    title: "You may be looking for places that quietly tell you to be braver.",
+    title: "I need places that quietly tell me to be braver.",
     ambitionDimension: "place",
-    ambientSignal: "You may be looking for places that quietly tell you to be braver.",
+    ambientSignal: "I need places that quietly tell me to be braver.",
     matchedEnvironment: "A city, studio, or room where honest work feels publicly reinforced.",
     antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
     evidenceRationale: "Three saved signals are clustering around this frequency.",
@@ -84,9 +84,9 @@ const sampleNotes: ApiTopOfMindNoteSurface[] = [
   {
     id: "note-2",
     userId: "user-1",
-    title: "You seem to want peers who make fast, public building feel normal.",
+    title: "I want peers who make fast, public building feel normal.",
     ambitionDimension: "people",
-    ambientSignal: "You seem to want peers who make fast, public building feel normal.",
+    ambientSignal: "I want peers who make fast, public building feel normal.",
     matchedEnvironment: "People who make original thinking feel like a shared operating rhythm.",
     antiEnvironment: "Circles where permission, polish, or social caution arrives before motion.",
     evidenceRationale: "Two saved signals point toward a peer frequency.",
@@ -160,11 +160,11 @@ describe("TopOfMindSharePage", () => {
     expect(text).toContain("caught what almost slipped away");
     expect(text).toContain("They did not manually write this page.");
     expect(text).toContain("provisional ambition reads about places");
-    expect(text).toContain("You may be looking for places that quietly tell you to be braver.");
+    expect(text).toContain("I need places that quietly tell me to be braver.");
     expect(text).toContain("A city, studio, or room where honest work feels publicly reinforced.");
     expect(text).toContain("Settings that make ambition feel private");
     expect(text).toContain("Three saved signals are clustering around this frequency.");
-    expect(text).toContain("You seem to want peers who make fast, public building feel normal.");
+    expect(text).toContain("I want peers who make fast, public building feel normal.");
     expect(text).not.toContain("WOW");
     expect(text).not.toContain("wow");
   });

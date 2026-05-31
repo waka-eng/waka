@@ -106,9 +106,9 @@ describe("GET /api/wow-moments top-of-mind compatibility", () => {
       topOfMindNote: {
         id: moment.id,
         userId: user.id,
-        title: "You may need a small real-world test, not another private theory.",
+        title: "I need a small real-world test, not another private theory.",
         ambitionDimension: "next_experiment",
-        ambientSignal: "You may need a small real-world test, not another private theory.",
+        ambientSignal: "I need a small real-world test, not another private theory.",
         matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale:

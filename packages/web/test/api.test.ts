@@ -24,9 +24,9 @@ const emptySuccess: ListTopOfMindCompatibilityMomentsResponse = { wowMoments: []
 const topOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
   userId: "user-1",
-  title: "You may need workrooms where making the thing is the default temperature.",
+  title: "I need workrooms where making the thing is the default temperature.",
   ambitionDimension: "work",
-  ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+  ambientSignal: "I need workrooms where making the thing is the default temperature.",
   matchedEnvironment: "A working culture where recurring signals become visible through repeated making.",
   antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
   evidenceRationale: "Three saved signals are clustering around this frequency.",
@@ -195,7 +195,7 @@ describe("fetchLegacyTopOfMindCompatibilityMoments", () => {
         {
           id: "moment-1",
           userId: "user-1",
-          title: "You may need workrooms where making the thing is the default temperature.",
+          title: "I need workrooms where making the thing is the default temperature.",
           kind: "recurrence",
           why: "Three saved inspirations rhyme.",
           beliefStatement: null,
@@ -208,9 +208,9 @@ describe("fetchLegacyTopOfMindCompatibilityMoments", () => {
           topOfMindNote: {
             id: "moment-1",
             userId: "user-1",
-            title: "You may need workrooms where making the thing is the default temperature.",
+            title: "I need workrooms where making the thing is the default temperature.",
             ambitionDimension: "work",
-            ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+            ambientSignal: "I need workrooms where making the thing is the default temperature.",
             matchedEnvironment: "A working culture where recurring signals become visible through repeated making.",
             antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
             evidenceRationale: "Three saved signals are clustering around this frequency.",
