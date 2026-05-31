@@ -27,6 +27,34 @@
 - Top-of-mind note surfaces expose `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale`; graph refresh stores those fields in the legacy `wow_moments.why` text until dedicated note persistence exists, and serializers split them back out for the API/UI.
 - Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad, but it should be direct and credible. Prefer "I need...", "I want...", and "I am done with..." over second-person diagnosis or weak hedges such as "I think", "maybe", "might", "probably", or "seems".
 - Top-of-mind compatibility serialization should rewrite legacy second-person primary text and embedded ambient-signal fields into direct first-person post-it text instead of preserving old outside-voice copy.
+- Primary user-facing architecture should stay inside one reflective world: Capture, five Top of Mind post-its, Memory Drawer, Share, and dev-only Internal Debug. Avoid reintroducing dashboard/archive/graph terminology into the main Home surface.
+
+---
+
+## 2026-05-31 10:59 PDT - US-023
+
+- What was implemented
+  - Reset the Home architecture vocabulary around the reflective ambition mirror spaces: Top of Mind, Memory Drawer, Share, Capture, and dev-only Debug.
+  - Moved the primary revisit surface from "all signals" language to Memory Drawer copy and demoted the legacy `/signals` route link to an older archive view.
+  - Expanded the Home Top of Mind fetch/render limit and paper layout from four notes to the five-post-it metaphor.
+  - Added smoke coverage that asserts the primary spaces render without exposing meaning graph or compatibility archive language.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 38 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and feedback API responses. Verified five visible post-its, Memory Drawer navigation, Share link, and no visible compatibility archive copy.
+- Learnings for future iterations:
+  - Patterns discovered
+    - The primary product architecture should stay in one reflective shell: Capture, five Top of Mind post-its, Memory Drawer, Share, and dev-only Internal Debug.
+  - Gotchas encountered
+    - The Home route was still fetching only four top-of-mind notes, so the five-post-it metaphor needed an explicit client limit and a fifth paper position/color.
+  - Useful context
+    - `/signals` remains as a compatibility route, but the Home copy now frames it as an older archive view instead of the primary saved-signal experience.
 
 ---
 

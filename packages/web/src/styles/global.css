@@ -1859,6 +1859,7 @@
 }
 
 .nc-mode-btn,
+.nc-mode-link,
 .nc-lang-btn {
   background: transparent;
   border: none;
@@ -1869,10 +1870,12 @@
   color: #999;
   padding: 6px 12px;
   cursor: pointer;
+  text-decoration: none;
   transition: background 160ms ease, color 160ms ease;
 }
 
 .nc-mode-btn:hover,
+.nc-mode-link:hover,
 .nc-lang-btn:hover {
   color: #1a1a1a;
 }

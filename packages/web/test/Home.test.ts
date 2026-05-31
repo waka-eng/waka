@@ -485,7 +485,7 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
     const savesTab = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-mode-btn")).find(
-      (button) => button.textContent === `all signals (${count})`,
+      (button) => button.textContent === `memory drawer (${count})`,
     );
     expect(savesTab).not.toBeNull();
     await act(async () => {
@@ -522,7 +522,7 @@ describe("HomePage current home experience", () => {
 
     expect(fetchInspirations).toHaveBeenCalledTimes(1);
     expect(fetchTopOfMind).toHaveBeenCalledTimes(1);
-    expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 4 });
+    expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 5 });
   });
 
 
@@ -725,7 +725,21 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-canvas")).not.toBeNull();
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("Most inspiration disappears.");
-    expect(container.textContent).toContain("not final. changes as new signals arrive.");
+    expect(container.textContent).toContain("five provisional post-its. not final. changed by new signals.");
+  });
+
+  it("names the primary product spaces without surfacing internal graph UI", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("top of mind");
+    expect(container.textContent).toContain("memory drawer (2)");
+    expect(container.querySelector<HTMLAnchorElement>("a[aria-label='Share']")?.getAttribute("href")).toBe(
+      "/top-of-mind/share",
+    );
+    expect(container.querySelector(".admin-entry-pill")?.textContent).toBe("Debug");
+    expect(container.textContent).not.toContain("meaning graph");
+    expect(container.textContent).not.toContain("compatibility archive");
   });
 
   it("keeps top-of-mind notes primary when enough signals are available", async () => {
@@ -921,7 +935,7 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("all signals (2)");
+    expect(container.textContent).toContain("memory drawer (2)");
     expect(container.textContent).not.toContain("Other user save should never render");
   });
 
@@ -969,7 +983,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
   });
 
-  it("switches to the in-place all-signals revisit surface from the top mode tabs", async () => {
+  it("switches to the in-place memory drawer surface from the top mode tabs", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -978,8 +992,9 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("all signals (2)");
-    expect(container.textContent).toContain("Return to what once hit.");
+    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("memory drawer (2)");
+    expect(container.textContent).toContain("Return to what once moved you.");
+    expect(container.textContent).toContain("This is the drawer beneath the post-its");
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -1135,7 +1150,7 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
-    expect(container.textContent).toContain("all signals (3)");
+    expect(container.textContent).toContain("memory drawer (3)");
   });
 
   it("shows a newly persisted quick save in the all-signals list", async () => {

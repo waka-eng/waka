@@ -122,7 +122,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  * online).
  */
 type InspirationStatus = "saving" | "saved" | "error";
-type HomeMode = "thought" | "saves";
+type HomeMode = "topOfMind" | "memoryDrawer";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "true" | "partly" | "not_true" | "important" | "not_important"
@@ -130,6 +130,15 @@ type TopOfMindFeedbackValue = Extract<
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 
 const TOP_OF_MIND_SIGNAL_THRESHOLD = 2;
+const TOP_OF_MIND_NOTE_LIMIT = 5;
+
+const PRODUCT_SPACES = {
+  capture: "Capture",
+  topOfMind: "Five Top of Mind post-its",
+  memoryDrawer: "Memory Drawer",
+  share: "Share",
+  internalDebug: "Internal Debug",
+} as const;
 
 interface InspirationListEntry {
   /** Server-assigned id once persisted; equals `tempId` while saving. */
@@ -518,6 +527,7 @@ const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string
   { top: "74px", left: "calc(50% - 520px)", tilt: -2.2, w: "260px" },
   { top: "270px", left: "calc(50% + 80px)", tilt: 1.8, w: "280px" },
   { top: "268px", left: "calc(50% - 470px)", tilt: 1.2, w: "260px" },
+  { top: "438px", left: "calc(50% - 110px)", tilt: -0.8, w: "300px" },
 ];
 
 const NOTE_COLORS = [
@@ -525,12 +535,14 @@ const NOTE_COLORS = [
   { hue: "#e8d4ce", ink: "#6b3c34" },
   { hue: "#d8ddc6", ink: "#3f4a2a" },
   { hue: "#cdd3df", ink: "#3a4456" },
+  { hue: "#f1d7a8", ink: "#4f3921" },
 ];
 
 const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "top of mind",
-    savesTab: "all signals",
+    savesTab: "memory drawer",
+    shareTab: "share",
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
@@ -554,8 +566,8 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "not final. changes as new signals arrive.",
-    noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
+    lifecycleHint: "five provisional post-its. not final. changed by new signals.",
+    noteShifted: ["today's shape", "still here", "newly forming", "fading", "needs testing"],
     evidenceLabel: "여기서 시작됨",
     feedbackLabels: {
       true: "true",
@@ -585,7 +597,7 @@ const HOME_COPY = {
       </>
     ),
     footnoteCredit: "— Ⓒ WAKA, 2026, 생각의 서랍",
-    savesTitle: "all signals",
+    savesTitle: "memory drawer",
     searchLabel: "search",
     searchPlaceholder: "저장본 검색",
     loadingSaves: "저장본을 불러오는 중...",
@@ -598,7 +610,8 @@ const HOME_COPY = {
   },
   "en-US": {
     thoughtTab: "top of mind",
-    savesTab: "all signals",
+    savesTab: "memory drawer",
+    shareTab: "share",
     room: "my room",
     titleLineOne: (name: string) => (
       <>
@@ -622,8 +635,8 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "not final. changes as new signals arrive.",
-    noteShifted: ["today's shape", "still here", "not gone yet", "fading"],
+    lifecycleHint: "five provisional post-its. not final. changed by new signals.",
+    noteShifted: ["today's shape", "still here", "newly forming", "fading", "needs testing"],
     evidenceLabel: "where it began",
     feedbackLabels: {
       true: "true",
@@ -655,7 +668,7 @@ const HOME_COPY = {
       </>
     ),
     footnoteCredit: "— Ⓒ WAKA, 2026, for minds that wander",
-    savesTitle: "saved signals",
+    savesTitle: "memory drawer",
     searchLabel: "search",
     searchPlaceholder: "search saved signals",
     loadingSaves: "loading saved signals...",
@@ -671,6 +684,7 @@ const HOME_COPY = {
   {
     thoughtTab: string;
     savesTab: string;
+    shareTab: string;
     room: string;
     titleLineOne: (name: string) => JSX.Element;
     titleLineTwo: string;
@@ -735,7 +749,7 @@ export function HomePage(): JSX.Element {
   const [captureSaveFlash, setCaptureSaveFlash] = useState(false);
   const [captureView] = useState<CaptureView>("note");
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [homeMode, setHomeMode] = useState<HomeMode>("thought");
+  const [homeMode, setHomeMode] = useState<HomeMode>("topOfMind");
   const [homeModeChosen, setHomeModeChosen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [noteFeedback, setNoteFeedback] = useState<
@@ -923,7 +937,7 @@ export function HomePage(): JSX.Element {
       try {
         const [next, notes] = await Promise.all([
           fetchTopOfMind(),
-          fetchTopOfMindNotes({ limit: 4 }),
+          fetchTopOfMindNotes({ limit: TOP_OF_MIND_NOTE_LIMIT }),
         ]);
         if (topOfMindRequestIdRef.current !== requestId) return null;
         topOfMindLoadedForUserIdRef.current = requestUserId;
@@ -1260,7 +1274,7 @@ export function HomePage(): JSX.Element {
   }, [inPlaceSignals, selectedSavedSignalId]);
 
   useEffect(() => {
-    if (homeMode !== "saves") return;
+    if (homeMode !== "memoryDrawer") return;
     if (inPlaceSignals.length === 0) {
       if (selectedSavedSignalId !== null) setSelectedSavedSignalId(null);
       return;
@@ -1271,7 +1285,7 @@ export function HomePage(): JSX.Element {
   }, [homeMode, inPlaceSignals, selectedSavedSignalId]);
 
   useEffect(() => {
-    if (!user || homeMode !== "saves") return;
+    if (!user || homeMode !== "memoryDrawer") return;
     let cancelled = false;
     setSavedSignalsLoading(true);
     setSavedSignalsError(null);
@@ -1303,7 +1317,7 @@ export function HomePage(): JSX.Element {
   }, [homeMode, inspirationFilters.search, user]);
 
   useEffect(() => {
-    if (homeMode !== "saves") return;
+    if (homeMode !== "memoryDrawer") return;
     if (!selectedSavedSignal?.id) {
       setSavedSignalDetail(null);
       return;
@@ -1421,9 +1435,9 @@ export function HomePage(): JSX.Element {
   const fallbackThoughtCards = [
     ...(topOfMind?.activeQuestions ?? []),
     ...(topOfMind?.activeThemes ?? []),
-  ].slice(0, 4).map(signalToThoughtCard);
+  ].slice(0, TOP_OF_MIND_NOTE_LIMIT).map(signalToThoughtCard);
   const thoughtCards = topOfMindNotes.length > 0
-    ? topOfMindNotes.slice(0, 4).map(noteToThoughtCard)
+    ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
@@ -1438,7 +1452,7 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     if (homeModeChosen || initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
-    setHomeMode("thought");
+    setHomeMode("topOfMind");
   }, [
     hasEnoughSignalsForTopOfMind,
     homeModeChosen,
@@ -1916,7 +1930,7 @@ export function HomePage(): JSX.Element {
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        title="all signals"
+        title={PRODUCT_SPACES.memoryDrawer}
         detail={historyDetail}
       >
         {historyContent}
@@ -1926,24 +1940,27 @@ export function HomePage(): JSX.Element {
           {renderExpandedThoughtCard(expandedNoteIndex)}
         </div>
       ) : null}
-      <main className={`nc-canvas${homeMode === "thought" ? " nc-canvas--top-of-mind" : ""}`}>
+      <main className={`nc-canvas${homeMode === "topOfMind" ? " nc-canvas--top-of-mind" : ""}`}>
         <header className="nc-topbar">
           <div className="nc-topleft">
             <div className="nc-mode" role="tablist" aria-label="home mode">
             <button
               type="button"
-              className={`nc-mode-btn${homeMode === "thought" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => chooseHomeMode("thought")}
+              className={`nc-mode-btn${homeMode === "topOfMind" ? " nc-mode-btn--active" : ""}`}
+              onClick={() => chooseHomeMode("topOfMind")}
             >
               {copy.thoughtTab}
             </button>
             <button
               type="button"
-              className={`nc-mode-btn${homeMode === "saves" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => chooseHomeMode("saves")}
+              className={`nc-mode-btn${homeMode === "memoryDrawer" ? " nc-mode-btn--active" : ""}`}
+              onClick={() => chooseHomeMode("memoryDrawer")}
             >
               {copy.savesTab} ({entries.length})
             </button>
+            <Link to="/top-of-mind/share" className="nc-mode-link" aria-label={PRODUCT_SPACES.share}>
+              {copy.shareTab}
+            </Link>
             </div>
           </div>
           <span className="nc-meta">{dateLabel}</span>
@@ -1967,7 +1984,7 @@ export function HomePage(): JSX.Element {
           </div>
         </header>
 
-        {homeMode === "thought" ? (
+        {homeMode === "topOfMind" ? (
           <>
             <section className="nc-titlecard">
               <h1 className="nc-title">
@@ -1984,7 +2001,7 @@ export function HomePage(): JSX.Element {
               <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p>
             </section>
 
-            <section className="nc-stage" aria-label="generated thoughts">
+            <section className="nc-stage" aria-label={PRODUCT_SPACES.topOfMind}>
               {topOfMindLoading ? (
                 <p className="nc-loading">{copy.loadingThoughts}</p>
               ) : topOfMindError ? (
@@ -2005,9 +2022,9 @@ export function HomePage(): JSX.Element {
           <section className="reference-saves-page signal-revisit-page" aria-label={copy.savesTitle}>
             <header className="signal-revisit-header">
               <div>
-                <span>all signals</span>
-                <h2>Return to what once hit.</h2>
-                <p>Browse gently first. Search is here only when you need it.</p>
+                <span>{PRODUCT_SPACES.memoryDrawer}</span>
+                <h2>Return to what once moved you.</h2>
+                <p>This is the drawer beneath the post-its: saved moments first, search only when you need it.</p>
               </div>
               <details className="signal-revisit-search">
                 <summary>advanced search</summary>
@@ -2025,7 +2042,7 @@ export function HomePage(): JSX.Element {
                 />
                 </label>
                 <Link to="/signals" className="reference-saves-archive-link">
-                  compatibility archive
+                  older archive view
                 </Link>
               </details>
             </header>
@@ -2290,9 +2307,9 @@ export function HomePage(): JSX.Element {
           to="/admin"
           className="admin-entry-pill"
           aria-label="Open admin inspection tools"
-          title="Admin inspection"
+          title={PRODUCT_SPACES.internalDebug}
         >
-          Admin
+          Debug
         </Link>
       ) : null}
     </>

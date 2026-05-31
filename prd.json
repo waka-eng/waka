@@ -409,6 +409,172 @@
       "priority": 25,
       "passes": true,
       "notes": "Product correction after US-021: even good ambient-signal notes can feel wrong if WAKA speaks about the user from the outside. The post-it metaphor works better if the text feels like the user's own direct jotting: \"I need a city that makes brave work feel normal\" or \"I want peers who make building in public less weird.\" Keep the page honest that WAKA generated the notes from saved signals, but make the post-it itself feel first-person, credible, and replaceable without hedging language."
+    },
+    {
+      "id": "US-023",
+      "title": "Reset product architecture around reflective ambition mirror",
+      "description": "As a user, I want WAKA to feel like a private reflective room for understanding what I am becoming, not a productivity dashboard or second-brain archive.",
+      "acceptanceCriteria": [
+        "Audit the current primary user-facing flows and identify/remove or demote surfaces that feel like productivity dashboards, archive management, generic AI insights, graph UI, or separate app sections that break the reflective world",
+        "Define the core product spaces in code and copy as Capture, Five Top of Mind post-its, Signal Revisit/Memory Drawer, Share, and Internal Debug",
+        "Keep the five post-it Top of Mind metaphor as the primary home object because post-its are ephemeral, replaceable, human, and aligned with personal context as the moat while software is ephemeral",
+        "Preserve existing useful data and APIs where practical, but allow aggressive UI, naming, route, and component restructuring if it improves the end-to-end reflective experience",
+        "Ensure product-facing copy frames WAKA as preserving what moved the user and reflecting what it may mean, not remembering everything or organizing knowledge",
+        "Keep admin/graph/debug concepts internal and out of the primary user experience",
+        "Document the new experience architecture in progress.txt so later loops do not regress into dashboard/archive/productivity patterns",
+        "Run web typecheck and targeted smoke tests for the Home route"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Product reset: WAKA should feel like a private place where what moved the user becomes a living map of who they are becoming. The hierarchy should be blank-page capture for what I feel now, five post-its for what keeps mattering, memory drawer for what I saved, and internal graph only as invisible machinery."
+    },
+    {
+      "id": "US-024",
+      "title": "Rebuild capture as private reflection ritual",
+      "description": "As a user coming out of a high-emotion, high-stakes, or ambiguous moment, I want capture to feel safe, quick, and immediately self-revealing instead of like manual data entry for AI.",
+      "acceptanceCriteria": [
+        "Redesign the capture entry experience around a blank-page/private-weather feeling with the primary prompt \"What almost slipped away?\"",
+        "Keep capture one click away from the main experience and avoid adding a top-level capture tab or heavy form flow",
+        "Support messy text, links, images/files where already supported, and add or preserve a low-friction path for quickly saving before reflection",
+        "Make autosave/private safety visible near the writing area and never clear unsaved content until persistence succeeds",
+        "Keep highlighting \"what hit\" as a first-class action for long pasted text or quotes",
+        "Replace or refine resonance chips into emotionally precise human pulls such as I want this, I miss this, I envy this, this hurt, this scared me, this feels like me, this is not me anymore, I want people like this, I want to build toward this, I want to live near this, and I don't know yet",
+        "After save, show a tiny non-final mirror that gives immediate value, with actions to keep, adjust, or just save without interpretation",
+        "Ensure capture metadata and user-written micro-reflections persist as privileged evidence for downstream signal packets and ambition synthesis",
+        "Run targeted capture tests, web typecheck, and browser verification on desktop and mobile capture"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "The friction of explicit human input should become the product's value. AI can summarize what happened; WAKA should preserve what it meant to the user. Capture should feel like a quiet ritual, not a form."
+    },
+    {
+      "id": "US-025",
+      "title": "Make five ephemeral Top of Mind post-its the core surface",
+      "description": "As a user, I want exactly five replaceable Top of Mind post-its that show the current shape of my ambition, not summaries of saved content.",
+      "acceptanceCriteria": [
+        "Home should center exactly five Top of Mind post-it slots when enough context exists; low-data states should still point users into capture without becoming a dashboard",
+        "Each post-it must be first-person, direct, credible, and scratchpad-like without weak hedges or external diagnosis",
+        "Each post-it must represent a memory movement or ambition direction, not a topic summary, graph label, or saved-content summary",
+        "Add visible memory-state labels such as keeps returning, newly forming, came back, fading, tension, or needs testing",
+        "Post-it details should make replaceability explicit through copy such as not final, changed by new signals, replaced, or still here",
+        "Include light evidence affordances without making the first-read surface feel analytical or admin-like",
+        "Feedback should allow true, partly, not this, and rewrite in my words so the user shapes the post-it rather than merely rating AI",
+        "Update Home and share rendering, API surfaces if needed, and tests so regressions to summary-like Top of Mind fail",
+        "Run API/web typechecks, targeted Top of Mind tests, and browser verification of the Home path"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "Five post-its are the main product object. They should feel temporary, important, movable, and replaceable: the current five things sitting on the front of the user's mind."
+    },
+    {
+      "id": "US-026",
+      "title": "Add memory movement model for personal context",
+      "description": "As a user, I want WAKA to evolve like memory by reinforcing, forgetting, reactivating, and surfacing contradictions as new signals arrive.",
+      "acceptanceCriteria": [
+        "Introduce a persisted or derivable memory-state layer for context patterns with states including emerging, active, fading, dormant, reactivated, contradicted, and needs_testing",
+        "Track or derive first_seen_at, last_seen_at, reinforcement_count, recent_reinforcement_count, current_weight, confidence, decay, and supporting signal ids for memory patterns",
+        "New signals should be evaluated as reinforcing an existing pattern, creating a new emerging pattern, reactivating an old pattern, contradicting an active pattern, or contributing to decay by omission over time",
+        "Decay should reduce dominance of old unrepeated patterns without deleting historical context",
+        "Reactivation should make an old pattern meaningful again when new evidence returns after dormancy",
+        "Contradictions should be preserved as live tensions rather than averaged into bland balanced statements",
+        "Top of Mind selection should prioritize meaningful memory movement, not only highest-weight graph nodes",
+        "Add deterministic tests for reinforcement, decay, reactivation, contradiction, and Top of Mind selection from memory movement",
+        "Run API typecheck and targeted memory-model tests"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "This is the core self-evolving loop. Personal context should behave more like memory than a static graph: what returns matters more, what stops returning fades, what comes back after dormancy becomes meaningful, and contradictions reveal live ambition tensions."
+    },
+    {
+      "id": "US-027",
+      "title": "Build bounded ambition synthesis loop",
+      "description": "As a user, I want WAKA to synthesize ambition only when there is enough evidence, so insights feel specific and earned rather than token-heavy generic AI output.",
+      "acceptanceCriteria": [
+        "Create an event-triggered ambition synthesis path that runs only for qualified clusters, memory movements, explicit deep dives, weekly refreshes, strong user feedback, corrections, or contradictions",
+        "Keep cheap deterministic graph/memory updates continuous and reserve model-heavy divergent synthesis for bounded evidence sets",
+        "Synthesis input must include selected saved signals, highlights, emotional pull metadata, user micro-reflections, prior feedback, rewrites, memory state, and rejected/competing interpretations where available",
+        "Synthesis output must include a first-person post-it candidate, memory state, what environment it points toward, what it rejects, evidence rationale, confidence, and a rejected alternative interpretation",
+        "User correction and rewrite should update future synthesis behavior and not just the visible text",
+        "Prevent generic outputs by testing against shallow categories such as startups, comedy, cities, AI, inspiration, or productivity unless the output states the user's personal edge",
+        "Add token-budget safeguards, bounded input limits, idempotency, and fallback deterministic generation when synthesis is unavailable",
+        "Run API typecheck and targeted synthesis tests with mocked model/provider behavior"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Do not build an always-on token furnace. Build Ambition Synthesis as a gated, evidence-bounded loop that produces what deterministic ranking cannot: the personal edge connecting what moved the user."
+    },
+    {
+      "id": "US-028",
+      "title": "Rebuild post-it deep dive as peel-open reflection",
+      "description": "As a user, I want opening a Top of Mind post-it to feel like peeling it open into a calm reflective space, not inspecting a narrow sidebar or admin panel.",
+      "acceptanceCriteria": [
+        "Replace any narrow-sidebar post-it detail pattern with a full-screen or large focused reflection surface that visually grows from the selected post-it",
+        "The opened post-it should preserve the first-person note as the emotional anchor",
+        "Show what this note points toward, what it rejects, what changed recently, memory state, and why it is currently on top of mind",
+        "Show 2-5 supporting saved moments with highlights and enough original context to feel emotionally grounded",
+        "Show rejected alternative interpretation where available so the user can see why WAKA chose this read instead of a shallow one",
+        "Provide true, partly, not this, and rewrite in my words controls, with rewrite treated as a first-class learning signal",
+        "Keep the visual language paper/post-it based and avoid cards-inside-cards, dense tables, or graph/admin terminology",
+        "Add targeted Home deep-dive tests and browser verification on desktop and mobile"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "Deep diving should feel like reflective self-understanding. The user is not opening a database record; they are opening the current note their saved life has written back to them."
+    },
+    {
+      "id": "US-029",
+      "title": "Rebuild saved signals as memory drawer",
+      "description": "As a user, I want revisiting saved signals to feel like returning to moments that once moved me, not searching an archive.",
+      "acceptanceCriteria": [
+        "Rename or reframe All Signals toward a softer memory-drawer concept while preserving compatibility routes if needed",
+        "Organize the primary revisit experience by emotional/memory sections such as still alive, changed shape, forgotten but returning, from an older version of me, keeps coming back, and tensions",
+        "Search and filters should be available but secondary or progressively disclosed, not the main posture of the page",
+        "Opening a saved signal should use a calm full-width reflective surface rather than a narrow sidebar",
+        "The signal detail should show original content, highlighted part, emotional pull at capture time, what it may mean now, related Top of Mind post-its, and prompts like what did this mean then, what does it mean now, and is this still me",
+        "Provide still alive, changed shape, not anymore, and optional what changed feedback, feeding the memory movement model",
+        "Keep the visual language consistent with the Top of Mind post-it world and avoid archive/admin/dashboard styling",
+        "Add targeted tests for in-place navigation, memory sections, signal detail, and feedback persistence",
+        "Run web typecheck and browser verification on desktop and mobile"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "Saved signals are not files. They are the drawer beneath the desk: the moments, quotes, images, and fragments the five post-its emerged from."
+    },
+    {
+      "id": "US-030",
+      "title": "Rebuild share page around living Top of Mind value prop",
+      "description": "As a user, I want to share one link that both explains WAKA and shows my current living Top of Mind without feeling like a marketing page.",
+      "acceptanceCriteria": [
+        "Share page should foreground the user's five current post-its and explain that they emerged from saved signals, corrections, returns, and things that changed shape",
+        "Copy should clearly communicate the value prop: most inspiration disappears; WAKA catches what moved the user and turns it into a changing map of what they may want to build, who they want around them, and where they may need to be",
+        "Avoid claiming the user literally wrote generated post-its; provenance should be honest but poetic",
+        "Use the post-it metaphor and ephemeral/change language prominently: not final, changes with new signals, personal context is alive",
+        "Do not create a separate generic landing page; the share page itself should explain the product through the user's current Top of Mind",
+        "Make privacy boundaries clear and do not expose raw saved signals unless an explicit sharing model exists",
+        "Update tests for share rendering and no raw private signal leakage",
+        "Run web typecheck and browser verification of the share page"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": "The share page should sell the product by showing the user's living Top of Mind. It should feel like: these post-its were not directly written by the user; they came from what the user saved, corrected, returned to, and outgrew."
+    },
+    {
+      "id": "US-031",
+      "title": "Update internal debug for memory and synthesis quality",
+      "description": "As an internal operator, I need to debug whether WAKA is truly learning ambition through memory movement and synthesis rather than producing nice-sounding summaries.",
+      "acceptanceCriteria": [
+        "Keep this dashboard internal/admin-only",
+        "Show memory states, reinforcement, decay, reactivation, contradiction, feedback, rewrites, and supporting signals for each active pattern",
+        "For each Top of Mind post-it, show why it exists now, what changed recently, what evidence supports it, what alternative interpretation was rejected, and what feedback has shaped it",
+        "Add quality indicators that help detect shallow summaries, raw graph labels, generic ambition wrappers, and unsupported synthesis",
+        "Allow filtering by memory state, ambition dimension, confidence, stale/fading status, contradicted status, and recent user correction",
+        "Preserve or restore graph navigation only as internal diagnostic context; do not make graph inspection part of the user-facing experience",
+        "Add targeted internal-dashboard tests or browser verification",
+        "Run web/API typechecks and targeted admin tests"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": "Internal debug should serve product truth: is WAKA learning what actually moves the user, or just generating aesthetic summaries? This should help inspect the memory loop and ambition synthesis loop without leaking machinery into the user experience."
     }
   ]
 }
