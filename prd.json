@@ -351,7 +351,7 @@
         "Run web typecheck and any targeted context-dashboard tests"
       ],
       "priority": 22,
-      "passes": false,
+      "passes": true,
       "notes": "This is internal tooling for judging whether WAKA is learning ambition. The dashboard should help debug how saved signals become context nodes, ambition dimensions, Top of Mind notes, and feedback-adjusted confidence. Current pain points: hard to read/navigate, and graph nodes that used to be individually draggable now appear to drag only as connected groups."
     },
     {

@@ -125,7 +125,7 @@ describe("GET /api/admin/meaning-graph/rebuild", () => {
 });
 
 describe("GET /api/admin/meaning-graph", () => {
-  it("returns active meaning nodes, meaning edges, and evidence", async () => {
+  it("returns context nodes, relationship edges, evidence, notes, and feedback", async () => {
     const now = new Date("2026-05-24T12:00:00.000Z");
     const nodes = [
       {
@@ -221,6 +221,28 @@ describe("GET /api/admin/meaning-graph", () => {
         packetCreatedAt: now,
       },
     ];
+    const relatedTopOfMind = [
+      {
+        id: "note-1",
+        title: "You seem pulled toward rooms where honest builders make in public.",
+        why: "This may matter because the signal points to the environments where ambition feels alive.",
+        idempotencyKey: `top_of_mind_context_node:v1:${user.id}:node-2`,
+        score: 91,
+        createdAt: now,
+      },
+    ];
+    const nodeFeedback = [
+      {
+        id: "feedback-1",
+        targetId: "node-2",
+        targetType: "context_node",
+        value: "important",
+        emotionLabel: "want",
+        correctionText: "This is exactly the kind of room I want.",
+        source: "user",
+        createdAt: now,
+      },
+    ];
     const db = {
       select: vi
         .fn()
@@ -228,6 +250,8 @@ describe("GET /api/admin/meaning-graph", () => {
         .mockReturnValueOnce(createSelect(edges))
         .mockReturnValueOnce(createSelect(evidence))
         .mockReturnValueOnce(createSelect(recentInspirations))
+        .mockReturnValueOnce(createSelect(relatedTopOfMind))
+        .mockReturnValueOnce(createSelect(nodeFeedback))
         .mockReturnValueOnce(createSelect([{ count: 12 }]))
         .mockReturnValueOnce(createSelect([{ count: 11 }]))
         .mockReturnValueOnce(createSelect([{ count: 2 }]))
@@ -298,9 +322,31 @@ describe("GET /api/admin/meaning-graph", () => {
       id: "node-1",
       type: "question",
       contextType: "open_question",
+      ambitionDimension: "next_experiment",
       label: "what is worth building when building itself gets cheap",
       weight: 140,
       evidenceCount: 2,
+      relatedTopOfMindNotes: [],
+      feedback: [],
+    });
+    expect(body.graph.nodes[1]).toMatchObject({
+      id: "node-2",
+      contextType: "environment",
+      ambitionDimension: "place",
+      relatedTopOfMindNotes: [
+        expect.objectContaining({
+          id: "note-1",
+          title: "You seem pulled toward rooms where honest builders make in public.",
+        }),
+      ],
+      feedback: [
+        expect.objectContaining({
+          id: "feedback-1",
+          value: "important",
+          emotionLabel: "want",
+          correctionText: "This is exactly the kind of room I want.",
+        }),
+      ],
     });
     expect(body.graph.nodes[0]!.evidence[0]).toMatchObject({
       inspirationId: "insp-1",

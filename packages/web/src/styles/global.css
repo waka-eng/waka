@@ -3574,7 +3574,7 @@
 
 .meaning-dashboard-graph-row .meaning-graph-workbench {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
 }
 
 .meaning-graph-flow-shell {
@@ -3705,6 +3705,50 @@
   text-transform: none;
 }
 
+.meaning-graph-filterbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) repeat(4, minmax(128px, 1fr)) auto auto;
+  gap: 8px;
+  align-items: end;
+  border-bottom: 1px solid #000;
+  padding: 8px 10px;
+  background: #fff;
+}
+
+.meaning-graph-filterbar label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #333;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.meaning-graph-filterbar input,
+.meaning-graph-filterbar select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #000;
+  border-radius: 0;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 5px 6px;
+}
+
+.meaning-graph-filterbar input[type="range"] {
+  padding: 0;
+}
+
+.meaning-graph-filterbar > span {
+  border: 1px solid #000;
+  color: #000;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 5px 6px;
+}
+
 .meaning-graph-detail dd {
   font-family: var(--font-sans);
   font-size: 13px;
@@ -3728,6 +3772,19 @@
     max-width: none;
   }
 
+  .meaning-dashboard-graph-row {
+    grid-template-columns: 1fr;
+    flex: none;
+  }
+
+  .meaning-dashboard-graph-row .meaning-graph-workbench {
+    min-height: 520px;
+  }
+
+  .meaning-graph-filterbar {
+    grid-template-columns: 1fr;
+  }
+
   .meaning-recent-outcomes {
     grid-template-columns: 1fr;
   }
@@ -3743,6 +3800,12 @@
   .meaning-graph-detail,
   .meaning-recent-inspiration-list {
     max-height: none;
+  }
+
+  .meaning-graph-flow-shell {
+    height: 360px;
+    min-height: 360px;
+    width: 100%;
   }
 }
 

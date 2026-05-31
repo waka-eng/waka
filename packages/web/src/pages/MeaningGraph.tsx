@@ -38,6 +38,8 @@ interface SimNode extends SimulationNodeDatum {
 
 interface MeaningNodeData {
   type: string;
+  contextType: string;
+  ambitionDimension: AmbitionDimension;
   label: string;
   description: string;
   weight: number;
@@ -53,23 +55,53 @@ const MAX_VISIBLE_EDGES = 72;
 const REBUILD_POLL_MS = 2_500;
 
 const TYPE_ORDER = [
-  "question",
-  "life_direction",
-  "desire",
+  "theme",
   "value",
-  "tension",
+  "person",
   "environment",
-  "person_archetype",
+  "aesthetic",
+  "tension",
+  "project",
+  "open_question",
+  "hypothesis",
 ];
 
+const AMBITION_DIMENSIONS = [
+  "place",
+  "people",
+  "work",
+  "taste",
+  "identity",
+  "rejection",
+  "next_experiment",
+] as const;
+
+type AmbitionDimension = (typeof AMBITION_DIMENSIONS)[number];
+
 const TYPE_LABEL: Record<string, string> = {
+  theme: "theme",
   value: "value",
+  person: "person",
+  aesthetic: "aesthetic",
+  tension: "tension",
+  project: "project",
+  open_question: "open question",
+  hypothesis: "hypothesis",
+  environment: "environment",
   question: "question",
   desire: "desire",
-  tension: "tension",
   life_direction: "life direction",
   person_archetype: "person",
-  environment: "environment",
+};
+
+const AMBITION_LABEL: Record<AmbitionDimension, string> = {
+  place: "place",
+  people: "people",
+  work: "work",
+  taste: "taste",
+  identity: "identity",
+  rejection: "rejection",
+  next_experiment: "next experiment",
 };
 
 const EDGE_LABEL: Record<string, string> = {
@@ -121,6 +153,62 @@ function edgeColor(kind: string): string {
 function typeRank(type: string): number {
   const index = TYPE_ORDER.indexOf(type);
   return index === -1 ? TYPE_ORDER.length : index;
+}
+
+function ambitionDimensionForNode(node: ApiMeaningGraphNode): AmbitionDimension {
+  return node.ambitionDimension ?? "work";
+}
+
+function includesSearchText(node: ApiMeaningGraphNode, search: string): boolean {
+  if (!search.trim()) return true;
+  const haystack = [
+    node.label,
+    node.description,
+    node.contextType,
+    node.ambitionDimension,
+    node.status,
+    ...node.evidence.map((item) => `${item.preview} ${item.reason}`),
+    ...node.relatedTopOfMindNotes.map((note) => `${note.title} ${note.why}`),
+    ...node.feedback.map((item) => `${item.value} ${item.correctionText ?? ""}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(search.trim().toLowerCase());
+}
+
+export function filterMeaningGraphNodes(input: {
+  nodes: ApiMeaningGraphNode[];
+  search: string;
+  contextType: string;
+  ambitionDimension: string;
+  status: string;
+  minConfidence: number;
+}): ApiMeaningGraphNode[] {
+  return input.nodes.filter((node) => {
+    if (input.contextType !== "all" && node.contextType !== input.contextType) return false;
+    if (input.ambitionDimension !== "all" && ambitionDimensionForNode(node) !== input.ambitionDimension) {
+      return false;
+    }
+    if (input.status !== "all" && node.status !== input.status) return false;
+    if (node.confidence < input.minConfidence) return false;
+    return includesSearchText(node, input.search);
+  });
+}
+
+export function meaningGraphDragModeSummary(nodesDraggable: boolean): string {
+  return nodesDraggable
+    ? "Individual node dragging is enabled; moved nodes keep their positions until the graph is refreshed."
+    : "Node dragging is disabled.";
+}
+
+export function updateManualNodePosition(
+  current: Map<string, { x: number; y: number }>,
+  nodeId: string,
+  position: { x: number; y: number },
+): Map<string, { x: number; y: number }> {
+  const next = new Map(current);
+  next.set(nodeId, position);
+  return next;
 }
 
 function formatDate(value: string): string {
@@ -262,9 +350,12 @@ const MeaningFlowNode = memo(({ data }: NodeProps<MeaningNodeData>) => (
     <Handle type="target" position={Position.Top} style={{ visibility: "hidden" }} />
     <Handle type="source" position={Position.Bottom} style={{ visibility: "hidden" }} />
     <span className="meaning-flow-node-type" style={{ color: colorForType(data.type) }}>
-      {TYPE_LABEL[data.type] ?? data.type}
+      {TYPE_LABEL[data.contextType] ?? TYPE_LABEL[data.type] ?? data.type} / {AMBITION_LABEL[data.ambitionDimension]}
     </span>
     <p className="meaning-flow-node-label">{data.label}</p>
+    <span className="meaning-flow-node-meta">
+      {Math.round(data.weight)} weight / {data.evidenceCount} evidence
+    </span>
   </div>
 ));
 MeaningFlowNode.displayName = "MeaningFlowNode";
@@ -280,6 +371,14 @@ export default function MeaningGraphPage(): JSX.Element {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
+  const [contextTypeFilter, setContextTypeFilter] = useState("all");
+  const [ambitionFilter, setAmbitionFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [minConfidence, setMinConfidence] = useState(0);
+  const [manualNodePositions, setManualNodePositions] = useState<Map<string, { x: number; y: number }>>(
+    () => new Map(),
+  );
   const [rebuilding, setRebuilding] = useState(false);
   const [confirmingRebuild, setConfirmingRebuild] = useState(false);
   const [rebuildJob, setRebuildJob] = useState<ApiMeaningGraphRebuildJob | null>(null);
@@ -432,12 +531,30 @@ export default function MeaningGraphPage(): JSX.Element {
     [nodes],
   );
 
+  const contextTypeOptions = useMemo(
+    () => [...new Set(nodes.map((node) => node.contextType))].sort((a, b) => typeRank(a) - typeRank(b)),
+    [nodes],
+  );
+
+  const filteredNodes = useMemo(
+    () =>
+      filterMeaningGraphNodes({
+        nodes: sortedNodes,
+        search: searchText,
+        contextType: contextTypeFilter,
+        ambitionDimension: ambitionFilter,
+        status: statusFilter,
+        minConfidence,
+      }),
+    [ambitionFilter, contextTypeFilter, minConfidence, searchText, sortedNodes, statusFilter],
+  );
+
   const visibleMeaningNodes = useMemo(
     () =>
-      sortedNodes
+      filteredNodes
         .filter((node, index) => node.evidenceCount > 1 || node.weight >= 160 || index < 24)
         .slice(0, MAX_VISIBLE_NODES),
-    [sortedNodes],
+    [filteredNodes],
   );
 
   const visibleNodeIds = useMemo(
@@ -484,16 +601,19 @@ export default function MeaningGraphPage(): JSX.Element {
 
     const positions = runLayout(visibleMeaningNodes, visibleMeaningEdges);
     return visibleMeaningNodes.map((node) => {
-      const position = positions.get(node.id) ?? { x: 540, y: 330 };
+      const layoutPosition = positions.get(node.id) ?? { x: 540, y: 330 };
+      const position = manualNodePositions.get(node.id) ?? {
+        x: layoutPosition.x - NODE_WIDTH / 2,
+        y: layoutPosition.y - NODE_HEIGHT / 2,
+      };
       return {
         id: node.id,
         type: "meaning",
-        position: {
-          x: position.x - NODE_WIDTH / 2,
-          y: position.y - NODE_HEIGHT / 2,
-        },
+        position,
         data: {
           type: node.type,
+          contextType: node.contextType,
+          ambitionDimension: ambitionDimensionForNode(node),
           label: node.label,
           description: node.description,
           weight: node.weight,
@@ -501,10 +621,11 @@ export default function MeaningGraphPage(): JSX.Element {
           isFocus: false,
           fade: false,
         },
+        draggable: true,
         style: { width: NODE_WIDTH, height: NODE_HEIGHT },
       };
     });
-  }, [graph, visibleMeaningEdges, visibleMeaningNodes]);
+  }, [graph, manualNodePositions, visibleMeaningEdges, visibleMeaningNodes]);
 
   const focusNodeId = hoverNodeId;
   const selectedOrHoverNodeId = hoverNodeId ?? selectedNodeId;
@@ -573,6 +694,10 @@ export default function MeaningGraphPage(): JSX.Element {
       }),
     [focusNodeId, hoverNodeId, selectedEdgeId, visibleMeaningEdges],
   );
+
+  const handleNodeDragStop = useCallback((_: unknown, node: Node<MeaningNodeData>) => {
+    setManualNodePositions((current) => updateManualNodePosition(current, node.id, node.position));
+  }, []);
 
   const selectedEdgeSource = selectedEdge
     ? nodeById.get(selectedEdge.sourceNodeId) ?? null
@@ -744,7 +869,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 <div>
                   <span>context graph</span>
                   <h2>Graph</h2>
-                  <p>Click a context node or relationship edge to update the evidence section.</p>
+                  <p>Filter context claims, select evidence, and drag one node at a time while debugging.</p>
                 </div>
                 {health ? (
                   <div className="meaning-dashboard-inline-meta" aria-label="Context graph snapshot">
@@ -767,6 +892,60 @@ export default function MeaningGraphPage(): JSX.Element {
                   ))}
                 </div>
               ) : null}
+              <div className="meaning-graph-filterbar" aria-label="Context graph filters">
+                <label>
+                  Search
+                  <input
+                    value={searchText}
+                    onChange={(event) => setSearchText(event.target.value)}
+                    placeholder="node, evidence, note, feedback"
+                  />
+                </label>
+                <label>
+                  Node type
+                  <select value={contextTypeFilter} onChange={(event) => setContextTypeFilter(event.target.value)}>
+                    <option value="all">All types</option>
+                    {contextTypeOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {TYPE_LABEL[type] ?? type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Ambition
+                  <select value={ambitionFilter} onChange={(event) => setAmbitionFilter(event.target.value)}>
+                    <option value="all">All dimensions</option>
+                    {AMBITION_DIMENSIONS.map((dimension) => (
+                      <option key={dimension} value={dimension}>
+                        {AMBITION_LABEL[dimension]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Status
+                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                    <option value="all">All statuses</option>
+                    <option value="active">Active</option>
+                    <option value="stale">Stale</option>
+                  </select>
+                </label>
+                <label>
+                  Confidence
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={minConfidence}
+                    onChange={(event) => setMinConfidence(Number(event.target.value))}
+                  />
+                  <span>{minConfidence}%+</span>
+                </label>
+                <span>{visibleMeaningNodes.length} shown</span>
+                <span>{meaningGraphDragModeSummary(true)}</span>
+              </div>
               <div className="meaning-graph-flow-shell">
                 {nodes.length === 0 ? (
                   <div className="meaning-graph-empty">
@@ -789,12 +968,13 @@ export default function MeaningGraphPage(): JSX.Element {
                     proOptions={{ hideAttribution: true }}
                     onNodeClick={(_, node) => {
                       setSelectedEdgeId(null);
-                      setSelectedNodeId((current) => (current === node.id ? null : node.id));
+                      setSelectedNodeId(node.id);
                     }}
                     onEdgeClick={(_, edge) => {
                       setSelectedNodeId(null);
                       setSelectedEdgeId((current) => (current === edge.id ? null : edge.id));
                     }}
+                    onNodeDragStop={handleNodeDragStop}
                     onNodeMouseEnter={(_, node) => setHoverNodeId(node.id)}
                     onNodeMouseLeave={() => setHoverNodeId(null)}
                     onPaneClick={() => {
@@ -840,6 +1020,14 @@ export default function MeaningGraphPage(): JSX.Element {
                 <p>{selectedNode.description || "No description yet."}</p>
                 <dl>
                   <div>
+                    <dt>type</dt>
+                    <dd>{TYPE_LABEL[selectedNode.contextType] ?? selectedNode.contextType}</dd>
+                  </div>
+                  <div>
+                    <dt>ambition dimension</dt>
+                    <dd>{AMBITION_LABEL[ambitionDimensionForNode(selectedNode)]}</dd>
+                  </div>
+                  <div>
                     <dt>evidence signals</dt>
                     <dd>{selectedNode.evidenceCount}</dd>
                   </div>
@@ -849,16 +1037,59 @@ export default function MeaningGraphPage(): JSX.Element {
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
+                  <h3>Why this may matter for ambition</h3>
+                  <p>
+                    This node is currently treated as a {AMBITION_LABEL[ambitionDimensionForNode(selectedNode)]} signal:
+                    use the supporting saved signals, related Top of Mind notes, and feedback below to decide whether
+                    that read is useful or misleading.
+                  </p>
+                </div>
+                <div className="meaning-graph-evidence-list">
                   <h3>Evidence signals</h3>
-                  {selectedNode.evidence.slice(0, 6).map((evidence) => (
-                    <article key={`${selectedNode.id}-${evidence.inspirationId}-${evidence.packetId}`}>
-                      <time>{formatDate(evidence.createdAt)}</time>
-                      <blockquote>
-                        {shortPreview(evidence.preview || evidence.packetPreview)}
-                      </blockquote>
-                      <p>{evidence.reason}</p>
-                    </article>
-                  ))}
+                  {selectedNode.evidence.length > 0 ? (
+                    selectedNode.evidence.slice(0, 6).map((evidence) => (
+                      <article key={`${selectedNode.id}-${evidence.inspirationId}-${evidence.packetId}`}>
+                        <time>{formatDate(evidence.createdAt)}</time>
+                        <blockquote>
+                          {shortPreview(evidence.preview || evidence.packetPreview)}
+                        </blockquote>
+                        <p>{evidence.reason}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p>No saved-signal evidence is attached to this context node yet.</p>
+                  )}
+                </div>
+                <div className="meaning-graph-evidence-list">
+                  <h3>Related Top of Mind notes</h3>
+                  {selectedNode.relatedTopOfMindNotes.length > 0 ? (
+                    selectedNode.relatedTopOfMindNotes.map((note) => (
+                      <article key={`${selectedNode.id}-${note.id}`}>
+                        <time dateTime={note.createdAt}>{formatDate(note.createdAt)}</time>
+                        <blockquote>{note.title}</blockquote>
+                        <p>{note.why}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p>No active Top of Mind note is currently tied to this context node.</p>
+                  )}
+                </div>
+                <div className="meaning-graph-evidence-list">
+                  <h3>Feedback</h3>
+                  {selectedNode.feedback.length > 0 ? (
+                    selectedNode.feedback.map((item) => (
+                      <article key={`${selectedNode.id}-${item.id}`}>
+                        <time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time>
+                        <blockquote>
+                          {item.value.replaceAll("_", " ")}
+                          {item.emotionLabel ? ` / ${item.emotionLabel.replaceAll("_", " ")}` : ""}
+                        </blockquote>
+                        <p>{item.correctionText || `Feedback source: ${item.source}`}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p>No user feedback has been stored for this context node yet.</p>
+                  )}
                 </div>
               </>
             ) : (

@@ -69,6 +69,39 @@
 
 ---
 
+## 2026-05-30 18:38 PDT - US-019
+
+- What was implemented
+  - Updated the internal context dashboard to expose context node type, ambition dimension, status/confidence/search filtering, and readable selected-node debug details.
+  - Extended the admin graph API serialization with related Top of Mind notes and feedback for context nodes.
+  - Restored individual node dragging by persisting manual positions for only the dragged node until refresh.
+  - Improved dashboard layout so the graph, detail panel, filters, and recent-signal review remain readable on desktop and mobile.
+- Files changed
+  - `packages/api/src/routes/admin-meaning-graph.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/MeaningGraph.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/MeaningGraph.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/MeaningGraph.test.ts` passed: 5 tests.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/admin-meaning-graph.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/admin/meaning-graph` on desktop and mobile using mocked same-origin auth and admin graph API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - Adding controls above the ReactFlow canvas requires explicit grid rows; otherwise later dashboard sections can overlap the graph and intercept node clicks.
+    - Mobile graph verification should check the actual canvas bounding box because desktop viewport constraints can collapse after stacked layout rules apply.
+  - Useful context
+    - The dashboard remains internal/admin-only at `/admin/meaning-graph`; this story did not make graph inspection part of the primary user-facing Top of Mind experience.
+
+---
+
 ## 2026-05-30 16:07 PDT - US-014C
 
 - What was implemented

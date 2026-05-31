@@ -1211,6 +1211,15 @@ export async function fetchBackgroundJobs(
 export interface ApiMeaningGraphNode {
   id: string;
   type: string;
+  contextType: string;
+  ambitionDimension:
+    | "place"
+    | "people"
+    | "work"
+    | "taste"
+    | "identity"
+    | "rejection"
+    | "next_experiment";
   label: string;
   description: string;
   status: string;
@@ -1222,6 +1231,22 @@ export interface ApiMeaningGraphNode {
   lastReinforcedAt: string;
   createdAt: string;
   updatedAt: string;
+  relatedTopOfMindNotes: Array<{
+    id: string;
+    title: string;
+    why: string;
+    score: number;
+    createdAt: string;
+  }>;
+  feedback: Array<{
+    id: string;
+    targetType: "context_node" | "hypothesis";
+    value: ApiFeedbackValue;
+    emotionLabel: ApiFeedbackEmotion | null;
+    correctionText: string | null;
+    source: string;
+    createdAt: string;
+  }>;
   evidence: Array<{
     inspirationId: string;
     packetId: string;
@@ -1263,6 +1288,7 @@ export interface ApiMeaningGraphRecentInspiration {
     id: string;
     label: string;
     type: string;
+    contextType?: string;
     reason: string;
   }>;
   relationshipEdges: Array<{

@@ -10,11 +10,13 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 
 import {
+  feedback,
   inspirations,
   meaningEdges,
   meaningEvidence,
   meaningNodes,
   meaningPackets,
+  wowMoments,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { normalizeContextNodeType } from "../lib/context-node-types.js";
@@ -30,6 +32,47 @@ import {
 const DEFAULT_LIMIT = 120;
 const MAX_LIMIT = 300;
 const MAX_PREVIEW_LENGTH = 180;
+
+function ambitionDimensionForContextType(
+  type: ReturnType<typeof normalizeContextNodeType>,
+):
+  | "place"
+  | "people"
+  | "work"
+  | "taste"
+  | "identity"
+  | "rejection"
+  | "next_experiment" {
+  switch (type) {
+    case "environment":
+      return "place";
+    case "person":
+      return "people";
+    case "project":
+      return "work";
+    case "aesthetic":
+      return "taste";
+    case "tension":
+      return "rejection";
+    case "open_question":
+    case "hypothesis":
+      return "next_experiment";
+    case "value":
+      return "identity";
+    case "theme":
+    default:
+      return "work";
+  }
+}
+
+function contextNoteKey(userId: string, nodeId: string): string {
+  return `top_of_mind_context_node:v1:${userId}:${nodeId}`;
+}
+
+function nodeIdFromContextNoteKey(userId: string, key: string): string | null {
+  const prefix = contextNoteKey(userId, "");
+  return key.startsWith(prefix) ? key.slice(prefix.length) : null;
+}
 
 type GraphHealthStatus = "no_data" | "writer_failed" | "sparse" | "stale" | "healthy";
 
@@ -330,7 +373,7 @@ export function createAdminMeaningGraphRoutes(
     const nodeRows = await db
       .select()
       .from(meaningNodes)
-      .where(and(eq(meaningNodes.userId, userId), eq(meaningNodes.status, "active")))
+      .where(eq(meaningNodes.userId, userId))
       .orderBy(desc(meaningNodes.weight), desc(meaningNodes.lastReinforcedAt))
       .limit(limit);
 
@@ -431,38 +474,119 @@ export function createAdminMeaningGraphRoutes(
       .limit(18);
 
     const nodeById = new Map(nodeRows.map((node) => [node.id, node] as const));
+    const contextNoteKeys = nodeIds.map((nodeId) => contextNoteKey(userId, nodeId));
+    const [relatedTopOfMindRows, feedbackRows] = await Promise.all([
+      contextNoteKeys.length === 0
+        ? []
+        : db
+            .select({
+              id: wowMoments.id,
+              title: wowMoments.title,
+              why: wowMoments.why,
+              idempotencyKey: wowMoments.idempotencyKey,
+              score: wowMoments.wowScore,
+              createdAt: wowMoments.createdAt,
+            })
+            .from(wowMoments)
+            .where(
+              and(
+                eq(wowMoments.userId, userId),
+                inArray(wowMoments.idempotencyKey, contextNoteKeys),
+              ),
+            )
+            .orderBy(desc(wowMoments.wowScore), desc(wowMoments.createdAt)),
+      nodeIds.length === 0
+        ? []
+        : db
+            .select({
+              id: feedback.id,
+              targetId: feedback.targetId,
+              targetType: feedback.targetType,
+              value: feedback.value,
+              emotionLabel: feedback.emotionLabel,
+              correctionText: feedback.correctionText,
+              source: feedback.source,
+              createdAt: feedback.createdAt,
+            })
+            .from(feedback)
+            .where(
+              and(
+                eq(feedback.userId, userId),
+                inArray(feedback.targetType, ["context_node", "hypothesis"]),
+                inArray(feedback.targetId, nodeIds),
+              ),
+            )
+            .orderBy(desc(feedback.createdAt))
+            .limit(limit * 2),
+    ]);
+
+    const topOfMindByNodeId = new Map<string, typeof relatedTopOfMindRows>();
+    for (const note of relatedTopOfMindRows) {
+      const nodeId = nodeIdFromContextNoteKey(userId, note.idempotencyKey);
+      if (!nodeId) continue;
+      const rows = topOfMindByNodeId.get(nodeId) ?? [];
+      rows.push(note);
+      topOfMindByNodeId.set(nodeId, rows);
+    }
+
+    const feedbackByNodeId = new Map<string, typeof feedbackRows>();
+    for (const row of feedbackRows) {
+      const rows = feedbackByNodeId.get(row.targetId) ?? [];
+      rows.push(row);
+      feedbackByNodeId.set(row.targetId, rows);
+    }
 
     return c.json({
       graph: {
-        nodes: nodeRows.map((node) => ({
-          id: node.id,
-          type: node.type,
-          contextType: normalizeContextNodeType(node.type),
-          label: node.label,
-          description: node.description,
-          status: node.status,
-          source: node.source,
-          weight: node.weight,
-          confidence: node.confidence,
-          evidenceCount: node.evidenceCount,
-          firstSeenAt: node.firstSeenAt.toISOString(),
-          lastReinforcedAt: node.lastReinforcedAt.toISOString(),
-          createdAt: node.createdAt.toISOString(),
-          updatedAt: node.updatedAt.toISOString(),
-          evidence: (evidenceByNodeId.get(node.id) ?? []).slice(0, 8).map((evidence) => ({
-            inspirationId: evidence.inspirationId,
-            packetId: evidence.packetId,
-            reason: evidence.reason,
-            weight: evidence.weight,
-            confidence: evidence.confidence,
-            source: evidence.source,
-            preview: truncatePreview(evidence.sparkText || evidence.inspirationText),
-            packetPreview: truncatePreview(evidence.packetText, 260),
-            tokenEstimate: evidence.tokenEstimate,
-            inspirationCreatedAt: evidence.inspirationCreatedAt.toISOString(),
-            createdAt: evidence.createdAt.toISOString(),
-          })),
-        })),
+        nodes: nodeRows.map((node) => {
+          const contextType = normalizeContextNodeType(node.type);
+          return {
+            id: node.id,
+            type: node.type,
+            contextType,
+            ambitionDimension: ambitionDimensionForContextType(contextType),
+            label: node.label,
+            description: node.description,
+            status: node.status,
+            source: node.source,
+            weight: node.weight,
+            confidence: node.confidence,
+            evidenceCount: node.evidenceCount,
+            firstSeenAt: node.firstSeenAt.toISOString(),
+            lastReinforcedAt: node.lastReinforcedAt.toISOString(),
+            createdAt: node.createdAt.toISOString(),
+            updatedAt: node.updatedAt.toISOString(),
+            relatedTopOfMindNotes: (topOfMindByNodeId.get(node.id) ?? []).slice(0, 4).map((note) => ({
+              id: note.id,
+              title: note.title,
+              why: truncatePreview(note.why, 220),
+              score: note.score,
+              createdAt: note.createdAt.toISOString(),
+            })),
+            feedback: (feedbackByNodeId.get(node.id) ?? []).slice(0, 5).map((item) => ({
+              id: item.id,
+              targetType: item.targetType,
+              value: item.value,
+              emotionLabel: item.emotionLabel,
+              correctionText: item.correctionText,
+              source: item.source,
+              createdAt: item.createdAt.toISOString(),
+            })),
+            evidence: (evidenceByNodeId.get(node.id) ?? []).slice(0, 8).map((evidence) => ({
+              inspirationId: evidence.inspirationId,
+              packetId: evidence.packetId,
+              reason: evidence.reason,
+              weight: evidence.weight,
+              confidence: evidence.confidence,
+              source: evidence.source,
+              preview: truncatePreview(evidence.sparkText || evidence.inspirationText),
+              packetPreview: truncatePreview(evidence.packetText, 260),
+              tokenEstimate: evidence.tokenEstimate,
+              inspirationCreatedAt: evidence.inspirationCreatedAt.toISOString(),
+              createdAt: evidence.createdAt.toISOString(),
+            })),
+          };
+        }),
         edges: edgeRows.map((edge) => ({
           id: edge.id,
           sourceNodeId: edge.sourceNodeId,
