@@ -1482,6 +1482,227 @@
   color: #9d5f16;
 }
 
+.signal-revisit-page {
+  width: min(1180px, calc(100vw - 36px));
+  padding-top: 34px;
+}
+
+.signal-revisit-header {
+  align-items: end;
+}
+
+.signal-revisit-header > div {
+  max-width: 620px;
+}
+
+.signal-revisit-header span,
+.signal-revisit-detail section > span,
+.signal-revisit-search summary,
+.signal-revisit-feedback-status {
+  color: #8f8a82;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.signal-revisit-header h2 {
+  margin: 8px 0 0;
+  color: #191817;
+  font-family: var(--font-serif);
+  font-size: clamp(38px, 6vw, 72px);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: 0;
+}
+
+.signal-revisit-header p {
+  margin: 12px 0 0;
+  color: #6f6a63;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.signal-revisit-search {
+  width: min(360px, 100%);
+  border: 1px solid rgba(0, 0, 0, 0.09);
+  background: rgba(255, 254, 251, 0.78);
+  padding: 12px 14px;
+}
+
+.signal-revisit-search summary {
+  cursor: pointer;
+}
+
+.signal-revisit-search label {
+  margin-top: 12px;
+}
+
+.signal-revisit-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(360px, 1.15fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 28px;
+}
+
+.signal-revisit-list {
+  grid-template-columns: 1fr;
+  max-height: calc(100dvh - 260px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.signal-revisit-card {
+  min-height: 150px;
+  gap: 12px;
+  background: #fffaf0;
+}
+
+.signal-revisit-card--selected {
+  border-color: rgba(15, 15, 14, 0.38);
+  box-shadow: 0 16px 32px -30px rgba(0, 0, 0, 0.35);
+}
+
+.signal-revisit-card blockquote {
+  margin: 0;
+  border-left: 2px solid rgba(15, 15, 14, 0.18);
+  color: #5f594f;
+  padding-left: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.signal-revisit-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.signal-revisit-card-tags span {
+  border: 1px solid rgba(15, 15, 14, 0.1);
+  background: rgba(255, 255, 255, 0.5);
+  padding: 5px 7px;
+}
+
+.signal-revisit-detail {
+  display: grid;
+  gap: 18px;
+  min-height: min(620px, calc(100dvh - 240px));
+  border: 1px solid rgba(15, 15, 14, 0.1);
+  background: #f7edc4;
+  box-shadow: 0 22px 54px -46px rgba(0, 0, 0, 0.42);
+  padding: clamp(22px, 4vw, 36px);
+}
+
+.signal-revisit-detail header span {
+  color: #7d735b;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.signal-revisit-detail h3 {
+  margin: 8px 0 0;
+  color: #2b281f;
+  font-family: var(--font-serif);
+  font-size: clamp(30px, 4vw, 52px);
+  font-weight: 400;
+  line-height: 1.04;
+  letter-spacing: 0;
+}
+
+.signal-revisit-detail section {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid rgba(43, 40, 31, 0.14);
+  padding-top: 16px;
+}
+
+.signal-revisit-detail p,
+.signal-revisit-detail blockquote {
+  margin: 0;
+  color: #3d392f;
+  font-size: 16px;
+  line-height: 1.58;
+}
+
+.signal-revisit-raw {
+  font-size: 18px;
+}
+
+.signal-revisit-highlights,
+.signal-revisit-notes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.signal-revisit-highlights li,
+.signal-revisit-notes li {
+  border: 1px solid rgba(43, 40, 31, 0.1);
+  background: rgba(255, 255, 255, 0.26);
+  padding: 12px;
+}
+
+.signal-revisit-notes strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #2b281f;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.signal-revisit-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signal-revisit-feedback button {
+  border: 1px solid rgba(43, 40, 31, 0.18);
+  background: rgba(255, 255, 255, 0.34);
+  color: #2b281f;
+  cursor: pointer;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  padding: 9px 12px;
+}
+
+.signal-revisit-feedback button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+@media (max-width: 820px) {
+  .signal-revisit-page {
+    width: min(100vw - 24px, 620px);
+    height: calc(100dvh - 82px);
+    padding-top: 24px;
+  }
+
+  .signal-revisit-header {
+    align-items: stretch;
+  }
+
+  .signal-revisit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .signal-revisit-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .signal-revisit-detail {
+    min-height: auto;
+  }
+}
+
 .history-item-warning,
 .detail-warning {
   color: #9d5f16;

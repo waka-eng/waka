@@ -370,7 +370,7 @@
         "Run web typecheck, targeted tests, and browser verification for the exact Home All Signals path on desktop and mobile"
       ],
       "priority": 23,
-      "passes": false,
+      "passes": true,
       "notes": "Product correction: the current `/signals` archive is too complicated and feels like a search/admin surface. The user wants past inspirations to feel like therapy: a soft return to what they once loved, with enough structure to notice whether the signal still matters and how it connects to ambition. All Signals should share the Top of Mind look and feel, stay in the same product world, and make deep dive emotionally legible before it becomes searchable."
     }
   ]

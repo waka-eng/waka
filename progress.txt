@@ -22,6 +22,35 @@
 - Capture self-understanding metadata should use existing `inspiration_sparks.note` as `capture_metadata:v1:{...}` until a dedicated signal metadata table exists; signal packets already carry spark notes forward as user-provided evidence.
 - Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
 - Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
+- Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
+
+---
+
+## 2026-05-30 18:48 PDT - US-020
+
+- What was implemented
+  - Rebuilt the Home All Signals tab as an in-place saved-signal revisit surface instead of routing to `/signals`.
+  - Added a soft browse-first layout with progressive advanced search, saved-signal cards, highlighted snippets, raw signal revisit detail, attachment context, related Top of Mind notes, and lightweight "still matters" feedback.
+  - Kept newly captured/optimistic local signals merged into the in-place list so quick saves remain visible before `/api/signals` refresh catches up.
+  - Left `/signals` available as a compatibility archive link, but no longer as the primary Home tab path.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 37 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, top-of-mind, saved-signal, and feedback API responses. The All Signals tab stayed at `/`, rendered inside `.nc-canvas`, did not render `.signal-archive-page`, and saved "Still alive" feedback from the in-place revisit detail.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
+  - Gotchas encountered
+    - The in-place list must merge local optimistic entries with `/api/signals` rows or freshly captured signals disappear until a backend refresh.
+    - Search filtering needs to clear stale selected detail state so the right-side revisit panel does not keep showing the previous signal.
+  - Useful context
+    - The separate `/signals` archive still exists for compatibility, but the product path from Home no longer navigates there.
 
 ---
 

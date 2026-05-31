@@ -11,6 +11,8 @@ import {
   finalizeAttachment,
   fetchInspirations,
   fetchReflections,
+  fetchSavedSignalDetail,
+  fetchSavedSignals,
   fetchTopOfMind,
   fetchTopOfMindNotes,
   presignAttachment,
@@ -22,6 +24,8 @@ import type {
   ApiAttachment,
   ApiInspiration,
   ApiReflection,
+  ApiSavedSignalDetail,
+  ApiSavedSignalSearchResult,
   ApiTopOfMind,
   ApiTopOfMindNoteSurface,
 } from "../src/lib/api";
@@ -76,6 +80,8 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       updatedAt: "2026-05-01T00:00:00.000Z",
     })),
     fetchReflections: vi.fn(async () => []),
+    fetchSavedSignals: vi.fn(async () => sampleSavedSignals),
+    fetchSavedSignalDetail: vi.fn(async () => sampleSavedSignalDetail),
     fetchInspirationScoreBreakdown: vi.fn(async () => null),
     createInspiration: vi.fn(async () => {
       throw new Error("createInspiration mock not configured");
@@ -151,6 +157,95 @@ const sampleInspirations: ApiInspiration[] = [
     updatedAt: "2026-05-08T12:00:00.000Z",
   },
 ];
+
+const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
+  {
+    id: "insp-1",
+    userId: "user-1",
+    textPreview: "Architecture essay about bridge rhythms in city walks",
+    kind: "note",
+    capturedAt: "2026-05-10T12:00:00.000Z",
+    updatedAt: "2026-05-10T12:00:00.000Z",
+    resonanceScore: 7,
+    signalScores: {
+      resonance: 7,
+      recurrence: 6,
+      agency: 5,
+      identitySignal: 7,
+      decisionRelevance: 4,
+    },
+    highlightedSnippets: [
+      {
+        id: "spark-1",
+        text: "bridge rhythms in city walks",
+        source: "user",
+        confidence: 0.96,
+        isPrimary: true,
+      },
+    ],
+    matchingSnippets: ["bridge rhythms"],
+    relatedContextTerms: ["places that make movement visible"],
+    relatedTopOfMindNoteTitles: ["You may want work that turns bridge rhythms into something visible."],
+    attachmentSummary: [],
+    relevanceReasons: ["highlighted"],
+  },
+  {
+    id: "insp-2",
+    userId: "user-1",
+    textPreview: "Synthetic memory note for rereading old journals",
+    kind: "quote",
+    capturedAt: "2026-05-09T12:00:00.000Z",
+    updatedAt: "2026-05-09T12:00:00.000Z",
+    resonanceScore: 8,
+    signalScores: {
+      resonance: 8,
+      recurrence: 3,
+      agency: 2,
+      identitySignal: 6,
+      decisionRelevance: 3,
+    },
+    highlightedSnippets: [],
+    matchingSnippets: [],
+    relatedContextTerms: ["memory as a working material"],
+    relatedTopOfMindNoteTitles: [],
+    attachmentSummary: [],
+    relevanceReasons: [],
+  },
+];
+
+const sampleSavedSignalDetail: ApiSavedSignalDetail = {
+  ...sampleSavedSignals[0],
+  rawText: "Architecture essay about bridge rhythms in city walks",
+  attachments: [],
+  resonanceFeedback: [],
+  signalPacket: {
+    id: "packet-1",
+    text: "waka.signal_packet:v1\nREAD: This signal suggests work that turns movement, place, and public rhythm into visible form.",
+    primarySpark: "bridge rhythms in city walks",
+    artifactExcerpt: "Architecture essay about bridge rhythms in city walks",
+    updatedAt: "2026-05-10T12:05:00.000Z",
+  },
+  relatedContextNodes: [
+    {
+      id: "ctx-1",
+      type: "environment",
+      label: "places that make movement visible",
+      description: "The user keeps saving signals about environments with readable rhythm.",
+      confidence: 0.8,
+      evidenceReason: "Supported by architecture and walking signals.",
+    },
+  ],
+  relatedTopOfMindNotes: [
+    {
+      id: "note-1",
+      title: "You may want work that turns bridge rhythms into something visible.",
+      type: "pattern",
+      body: "The signal keeps pointing toward environments where movement becomes a public artifact.",
+      confidence: 0.82,
+      status: "active",
+    },
+  ],
+};
 
 const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
@@ -230,15 +325,40 @@ function setApiFixtures({
   inspirations = sampleInspirations,
   topOfMind = sampleTopOfMind,
   topOfMindNotes = [sampleTopOfMindNote],
+  savedSignals = sampleSavedSignals,
+  savedSignalDetail = sampleSavedSignalDetail,
 }: {
   inspirations?: ApiInspiration[];
   topOfMind?: ApiTopOfMind;
   topOfMindNotes?: ApiTopOfMindNoteSurface[];
+  savedSignals?: ApiSavedSignalSearchResult[];
+  savedSignalDetail?: ApiSavedSignalDetail;
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
   vi.mocked(fetchTopOfMindNotes).mockResolvedValue(topOfMindNotes);
   vi.mocked(fetchReflections).mockResolvedValue([]);
+  vi.mocked(fetchSavedSignals).mockResolvedValue(savedSignals);
+  vi.mocked(fetchSavedSignalDetail).mockImplementation(async (id: string) => {
+    const fallback = savedSignals.find((signal) => signal.id === id) ?? savedSignals[0] ?? sampleSavedSignals[0];
+    if (id === savedSignalDetail.id || fallback.textPreview.includes("Architecture essay")) {
+      return {
+        ...savedSignalDetail,
+        id,
+        textPreview: fallback.textPreview,
+        rawText: fallback.textPreview,
+      };
+    }
+    return {
+      ...fallback,
+      rawText: fallback.textPreview,
+      attachments: [],
+      resonanceFeedback: [],
+      signalPacket: null,
+      relatedContextNodes: [],
+      relatedTopOfMindNotes: [],
+    };
+  });
   vi.mocked(recordInspirationRevisit).mockResolvedValue({
     revisit: {
       id: "revisit-1",
@@ -285,6 +405,12 @@ async function renderHomePage(): Promise<HTMLDivElement> {
 async function flushReactWork(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
+  });
+}
+
+async function waitForTimers(ms = 0): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, ms));
   });
 }
 
@@ -366,6 +492,8 @@ describe("HomePage current home experience", () => {
 
   async function openBridgeDetail(container: HTMLElement): Promise<HTMLElement> {
     await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
     const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
@@ -378,7 +506,8 @@ describe("HomePage current home experience", () => {
       bridgeSave?.click();
     });
     await flushReactWork();
-    const detail = container.querySelector<HTMLElement>(".detail-view");
+    await flushReactWork();
+    const detail = container.querySelector<HTMLElement>(".signal-revisit-detail");
     expect(detail).not.toBeNull();
     return detail!;
   }
@@ -467,9 +596,9 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("Attachment context");
-    expect(container.textContent).toContain("example.com · URL source");
-    expect(container.textContent).toContain("image/png · 4 KB · User-uploaded attachment");
+    expect(container.textContent).toContain("attachment context");
+    expect(container.textContent).toContain("<script>alert(1)</script> Source title");
+    expect(container.textContent).toContain("image.png · 4 KB");
     expect(container.querySelector(".detail-attachment-image")).toBeNull();
     expect(container.innerHTML).not.toContain("private-bucket.s3.us-east-1.amazonaws.com");
     expect(container.innerHTML).not.toContain("users/user-1/image.png");
@@ -832,14 +961,17 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
   });
 
-  it("switches to the all-signals page from the top mode tabs", async () => {
+  it("switches to the in-place all-signals revisit surface from the top mode tabs", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     await clickSavesTab(container);
 
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
+    expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
+    expect(container.querySelector(".signal-archive-page")).toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("all signals (2)");
+    expect(container.textContent).toContain("Return to what once hit.");
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -864,6 +996,7 @@ describe("HomePage current home experience", () => {
     await act(async () => {
       setInputValue(search!, "synthetic");
     });
+    await flushReactWork();
     const savesPageAfterSearch = container.querySelector<HTMLElement>(".reference-saves-page");
     expect(savesPageAfterSearch?.textContent).toContain("Synthetic memory note");
     expect(savesPageAfterSearch?.textContent).not.toContain("Architecture essay about bridge rhythms");
@@ -879,78 +1012,55 @@ describe("HomePage current home experience", () => {
     await act(async () => {
       setInputValue(search!, "bridge");
     });
+    await flushReactWork();
     const savesPageAfterSearch = container.querySelector<HTMLElement>(".reference-saves-page");
     expect(savesPageAfterSearch?.textContent).toContain("Architecture essay about bridge rhythms");
     expect(savesPageAfterSearch?.textContent).not.toContain("Synthetic memory note");
   });
 
-  it("opens a saved inspiration detail and records a revisit", async () => {
+  it("opens an in-place saved signal revisit and records a revisit", async () => {
     setApiFixtures();
-    vi.mocked(fetchReflections).mockResolvedValue([
-      persistedReflection({ id: "reflection-existing", answer: "This already helped once." }),
-    ]);
     const container = await renderHomePage();
 
     await openBridgeDetail(container);
 
-    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
-  it("shows existing reflections in the inspiration detail", async () => {
+  it("shows the raw signal, highlights, interpretation, and related top-of-mind notes in-place", async () => {
     setApiFixtures();
-    vi.mocked(fetchReflections).mockResolvedValue([
-      persistedReflection({ id: "reflection-existing", answer: "This already helped once." }),
-    ]);
     const container = await renderHomePage();
 
     const detail = await openBridgeDetail(container);
 
-    expect(detail.textContent).toContain("Inspiration details");
-    expect(detail.textContent).toContain("This already helped once.");
+    expect(detail.textContent).toContain("what once hit");
+    expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(detail.textContent).toContain("bridge rhythms in city walks");
+    expect(detail.textContent).toContain("what it may reveal now");
+    expect(detail.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
   });
 
-  it("opens saved inspirations as editable detail text instead of a static preview", async () => {
+  it("lets users mark whether a revisited signal still matters", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     const detail = await openBridgeDetail(container);
-    const detailsTextarea = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inspiration details"]');
-
-    expect(detailsTextarea).not.toBeNull();
-    expect(detailsTextarea?.value).toBe("Architecture essay about bridge rhythms in city walks");
-  });
-
-  it("saves detail edits through updateInspiration", async () => {
-    setApiFixtures();
-    vi.mocked(updateInspiration).mockResolvedValue(
-      persistedInspiration({
-        id: "insp-1",
-        text: "Edited bridge rhythm note for the next walk",
-        wowScore: 6,
-        createdAt: "2026-05-10T12:00:00.000Z",
-        updatedAt: "2026-05-15T12:00:00.000Z",
-      }),
+    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "Still alive",
     );
-    const container = await renderHomePage();
-    const detail = await openBridgeDetail(container);
-    const detailsTextarea = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inspiration details"]');
-
+    expect(stillAlive).not.toBeNull();
     await act(async () => {
-      setInputValue(detailsTextarea!, "Edited bridge rhythm note for the next walk");
-    });
-    const saveButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Save details",
-    );
-    await act(async () => {
-      saveButton?.click();
+      stillAlive?.click();
     });
     await flushReactWork();
 
-    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
-      text: "Edited bridge rhythm note for the next walk",
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "important",
     });
-    expect(detailsTextarea?.value).toBe("Edited bridge rhythm note for the next walk");
+    expect(detail.textContent).toContain("Saved: Still alive");
   });
 
   it("opens capture from the floating action", async () => {

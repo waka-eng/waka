@@ -29,7 +29,7 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import {
   InspirationCard,
@@ -52,11 +52,15 @@ import {
   type ApiError,
   type ApiInspiration,
   type ApiInspirationScorePatch,
+  type ApiSavedSignalDetail,
+  type ApiSavedSignalSearchResult,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
   type ClusterKind,
   createFeedback,
+  fetchSavedSignalDetail,
+  fetchSavedSignals,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
@@ -696,7 +700,6 @@ const HOME_COPY = {
 
 export function HomePage(): JSX.Element {
   const { user, logout, updatePreferredLocale } = useAuth();
-  const navigate = useNavigate();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -741,6 +744,18 @@ export function HomePage(): JSX.Element {
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
+  const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
+  const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
+  const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
+  const [selectedSavedSignalId, setSelectedSavedSignalId] = useState<string | null>(null);
+  const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
+  const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
+  const [savedSignalFeedback, setSavedSignalFeedback] = useState<
+    | { status: "idle" }
+    | { status: "saving" }
+    | { status: "saved"; label: string }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -1178,6 +1193,135 @@ export function HomePage(): JSX.Element {
     return filterAndSortInspirationEntries(entries, inspirationFilters);
   }, [entries, inspirationFilters]);
 
+  const savedSignalQuery = inspirationFilters.search.trim().toLowerCase();
+  const localSignalRows = filteredEntries.map((entry) => ({
+    id: entry.id,
+    userId: user?.id ?? "",
+    textPreview: shortText(displayTextForEntry(entry), 260),
+    kind: entry.kind,
+    capturedAt: entry.createdAt,
+    updatedAt: entry.createdAt,
+    resonanceScore: entry.wowScore ?? 0,
+    signalScores: {
+      resonance: entry.wowScore ?? 0,
+      recurrence: 0,
+      agency: 0,
+      identitySignal: 0,
+      decisionRelevance: 0,
+    },
+    highlightedSnippets: [],
+    matchingSnippets: [],
+    relatedContextTerms: [],
+    relatedTopOfMindNoteTitles: [],
+    attachmentSummary: entry.attachments.map((attachment) => ({
+      id: attachment.id,
+      type: attachment.type,
+      label: attachmentContextLabel(attachment, locale),
+    })),
+    relevanceReasons: entry.errorMessage ? [entry.errorMessage] : [],
+  } satisfies ApiSavedSignalSearchResult));
+  const savedSignalRows = savedSignals.length > 0
+    ? [
+        ...localSignalRows.filter((entry) => !savedSignals.some((signal) => signal.id === entry.id)),
+        ...savedSignals.map((signal) => {
+          const local = localSignalRows.find((entry) => entry.id === signal.id);
+          if (!local) return signal;
+          return {
+            ...signal,
+            attachmentSummary:
+              signal.attachmentSummary.length > 0 ? signal.attachmentSummary : local.attachmentSummary,
+            relevanceReasons: [...signal.relevanceReasons, ...local.relevanceReasons],
+          };
+        }),
+      ]
+    : localSignalRows;
+  const inPlaceSignals = savedSignalRows.filter((signal) => {
+        if (!savedSignalQuery) return true;
+        const haystack = [
+          signal.textPreview,
+          ...signal.highlightedSnippets.map((snippet) => snippet.text),
+          ...signal.matchingSnippets,
+          ...signal.relatedContextTerms,
+          ...signal.relatedTopOfMindNoteTitles,
+        ].join(" ").toLowerCase();
+        return haystack.includes(savedSignalQuery);
+      });
+
+  const selectedSavedSignal = useMemo(() => {
+    return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? inPlaceSignals[0] ?? null;
+  }, [inPlaceSignals, selectedSavedSignalId]);
+
+  useEffect(() => {
+    if (homeMode !== "saves") return;
+    if (inPlaceSignals.length === 0) {
+      if (selectedSavedSignalId !== null) setSelectedSavedSignalId(null);
+      return;
+    }
+    if (!selectedSavedSignalId || !inPlaceSignals.some((signal) => signal.id === selectedSavedSignalId)) {
+      setSelectedSavedSignalId(inPlaceSignals[0].id);
+    }
+  }, [homeMode, inPlaceSignals, selectedSavedSignalId]);
+
+  useEffect(() => {
+    if (!user || homeMode !== "saves") return;
+    let cancelled = false;
+    setSavedSignalsLoading(true);
+    setSavedSignalsError(null);
+
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const rows = await fetchSavedSignals({
+            q: inspirationFilters.search.trim() || undefined,
+            limit: 24,
+          });
+          if (cancelled) return;
+          const ownRows = rows.filter((row) => row.userId === user.id);
+          setSavedSignals(ownRows);
+          setSelectedSavedSignalId((current) => current ?? ownRows[0]?.id ?? null);
+        } catch (caught) {
+          if (cancelled) return;
+          setSavedSignalsError(caught instanceof Error ? caught.message : "Failed to load saved signals");
+        } finally {
+          if (!cancelled) setSavedSignalsLoading(false);
+        }
+      })();
+    }, 120);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [homeMode, inspirationFilters.search, user]);
+
+  useEffect(() => {
+    if (homeMode !== "saves") return;
+    if (!selectedSavedSignal?.id) {
+      setSavedSignalDetail(null);
+      return;
+    }
+
+    let cancelled = false;
+    setSavedSignalDetailLoading(true);
+    setSavedSignalFeedback({ status: "idle" });
+    void (async () => {
+      try {
+        const detail = await fetchSavedSignalDetail(selectedSavedSignal.id);
+        if (cancelled) return;
+        setSavedSignalDetail(detail);
+      } catch {
+        if (cancelled) return;
+        setSavedSignalDetail(null);
+      } finally {
+        if (!cancelled) setSavedSignalDetailLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [homeMode, selectedSavedSignal?.id]);
+
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
     return [...cardItems].reverse().map((item) => (
@@ -1296,10 +1440,6 @@ export function HomePage(): JSX.Element {
   ]);
 
   const chooseHomeMode = (mode: HomeMode) => {
-    if (mode === "saves") {
-      navigate("/signals");
-      return;
-    }
     setHomeMode(mode);
     setHomeModeChosen(true);
   };
@@ -1396,6 +1536,34 @@ export function HomePage(): JSX.Element {
         },
       }));
     }
+  };
+
+  const submitSavedSignalFeedback = async (value: ApiFeedbackValue, label: string) => {
+    const targetId = savedSignalDetail?.id ?? selectedSavedSignal?.id;
+    if (!targetId) return;
+    setSavedSignalFeedback({ status: "saving" });
+    try {
+      await createFeedback({
+        targetType: "signal",
+        targetId,
+        value,
+      });
+      setSavedSignalFeedback({ status: "saved", label });
+    } catch (caught) {
+      setSavedSignalFeedback({
+        status: "error",
+        message: caught instanceof Error ? caught.message : "Feedback did not save",
+      });
+    }
+  };
+
+  const packetSummary = (packetText: string): string => {
+    return packetText
+      .split("\n")
+      .filter((line) => !line.startsWith("waka.signal_packet"))
+      .join(" ")
+      .replace(/^[A-Z_]+:\s*/, "")
+      .trim();
   };
 
   const renderFeedbackControls = (
@@ -1803,56 +1971,193 @@ export function HomePage(): JSX.Element {
             </footer>
           </>
         ) : (
-          <section className="reference-saves-page" aria-label={copy.savesTitle}>
-            <header>
-              <label>
-                <input
-                  type="search"
+          <section className="reference-saves-page signal-revisit-page" aria-label={copy.savesTitle}>
+            <header className="signal-revisit-header">
+              <div>
+                <span>all signals</span>
+                <h2>Return to what once hit.</h2>
+                <p>Browse gently first. Search is here only when you need it.</p>
+              </div>
+              <details className="signal-revisit-search">
+                <summary>advanced search</summary>
+                <label>
+                  <span>{copy.searchLabel}</span>
+                  <input
+                    type="search"
                   value={inspirationFilters.search}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    setInspirationFilters({ search: event.target.value })
-                  }
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    setInspirationFilters({ search: event.target.value });
+                    setSelectedSavedSignalId(null);
+                    setSavedSignalDetail(null);
+                  }}
                   placeholder={copy.searchPlaceholder}
                 />
-              </label>
-              <Link to="/signals" className="reference-saves-archive-link">
-                deep signal archive
-              </Link>
+                </label>
+                <Link to="/signals" className="reference-saves-archive-link">
+                  compatibility archive
+                </Link>
+              </details>
             </header>
-            <div className="reference-save-list">
-              {filteredEntries.length > 0 ? (
-                filteredEntries.map((entry) => (
+
+            <div className="signal-revisit-layout">
+              <div className="reference-save-list signal-revisit-list" aria-label="saved signals to revisit">
+                {savedSignalsError ? <p>{savedSignalsError}</p> : null}
+                {savedSignalsLoading && inPlaceSignals.length === 0 ? <p>{copy.loadingSaves}</p> : null}
+                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                  <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+                ) : null}
+                {inPlaceSignals.map((signal) => (
                   <button
                     type="button"
-                    key={entry.id}
-                    onClick={() => handleSelectInspiration(entry.id)}
-                    className="reference-save"
+                    key={signal.id}
+                    onClick={() => {
+                      setSelectedSavedSignalId(signal.id);
+                      recordRevisit(signal.id, "detail_opened");
+                    }}
+                    className={`reference-save signal-revisit-card${
+                      selectedSavedSignal?.id === signal.id ? " signal-revisit-card--selected" : ""
+                    }`}
                   >
-                    <span>{entry.status === "saved" ? entry.timestamp : entry.status}</span>
-                    <strong>{shortText(displayTextForEntry(entry), 420)}</strong>
-                    {entry.attachments.map((attachment) => (
+                    <span>{formatTimestamp(signal.capturedAt)}</span>
+                    <strong>{shortText(signal.textPreview, 280)}</strong>
+                    {signal.highlightedSnippets[0] ? (
+                      <blockquote>{shortText(signal.highlightedSnippets[0].text, 150)}</blockquote>
+                    ) : null}
+                    <div className="signal-revisit-card-tags">
+                      {[...signal.relevanceReasons, ...signal.relatedContextTerms].slice(0, 3).map((tag) => (
+                        <span key={tag}>{tag}</span>
+                      ))}
+                    </div>
+                    {signal.attachmentSummary.map((attachment) => (
                       <span
                         key={attachment.id}
                         className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
                       >
-                        {attachmentContextLabel(attachment, locale)}
+                        {attachment.label}
                       </span>
                     ))}
-                    {entry.attachments.length === 0
-                      ? entry.links.map((link) => (
-                          <span key={link} className="reference-save-link">
-                            {link}
-                          </span>
-                        ))
-                      : null}
-                    {entry.status === "saved" && entry.errorMessage ? (
-                      <span className="reference-save-warning">{entry.errorMessage}</span>
-                    ) : null}
                   </button>
-                ))
-              ) : (
-                <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-              )}
+                ))}
+              </div>
+
+              <article className="signal-revisit-detail" aria-label="signal revisit">
+                {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the signal...</p> : null}
+                {!savedSignalDetailLoading && selectedSavedSignal ? (
+                  <>
+                    <header>
+                      <span>{formatTimestamp(selectedSavedSignal.capturedAt)}</span>
+                      <h3>{shortText(savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview, 180)}</h3>
+                    </header>
+
+                    <section>
+                      <span>what once hit</span>
+                      <p className="signal-revisit-raw">{savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview}</p>
+                    </section>
+
+                    <section>
+                      <span>marked alive</span>
+                      {(savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets).length > 0 ? (
+                        <ul className="signal-revisit-highlights">
+                          {(savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets)
+                            .slice(0, 3)
+                            .map((snippet) => (
+                              <li key={snippet.id}>
+                                <blockquote>{snippet.text}</blockquote>
+                              </li>
+                            ))}
+                        </ul>
+                      ) : (
+                        <p>No highlight yet. The whole signal can still be the part worth returning to.</p>
+                      )}
+                    </section>
+
+                    {(savedSignalDetail?.attachments.length ?? 0) > 0 || selectedSavedSignal.attachmentSummary.length > 0 ? (
+                      <section>
+                        <span>attachment context</span>
+                        <ul className="signal-revisit-notes">
+                          {(savedSignalDetail?.attachments.length
+                            ? savedSignalDetail.attachments.map((attachment) => ({
+                                id: attachment.id,
+                                label: `${attachment.label}${
+                                  attachment.contentType || attachment.size
+                                    ? ` · ${[attachment.contentType, attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : null]
+                                        .filter(Boolean)
+                                        .join(" · ")}`
+                                    : ""
+                                }`,
+                              }))
+                            : selectedSavedSignal.attachmentSummary
+                          ).map((attachment) => (
+                            <li key={attachment.id}>
+                              <strong>{attachment.label}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : null}
+
+                    <section>
+                      <span>what it may reveal now</span>
+                      {savedSignalDetail?.signalPacket ? (
+                        <p>{shortText(packetSummary(savedSignalDetail.signalPacket.text), 360)}</p>
+                      ) : (
+                        <p>WAKA has not written a signal packet for this yet.</p>
+                      )}
+                    </section>
+
+                    <section>
+                      <span>nearby ambition reads</span>
+                      {(savedSignalDetail?.relatedTopOfMindNotes ?? []).length > 0 ? (
+                        <ul className="signal-revisit-notes">
+                          {savedSignalDetail!.relatedTopOfMindNotes.slice(0, 3).map((note) => (
+                            <li key={note.id}>
+                              <strong>{note.title}</strong>
+                              <p>{note.body}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : selectedSavedSignal.relatedTopOfMindNoteTitles.length > 0 ? (
+                        <ul className="signal-revisit-notes">
+                          {selectedSavedSignal.relatedTopOfMindNoteTitles.slice(0, 3).map((title) => (
+                            <li key={title}>
+                              <strong>{title}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No top-of-mind post-it points back here yet.</p>
+                      )}
+                    </section>
+
+                    <section>
+                      <span>still matters?</span>
+                      <div className="signal-revisit-feedback" role="group" aria-label="mark whether this signal still matters">
+                        {[
+                          { value: "important" as const, label: "Still alive" },
+                          { value: "partly" as const, label: "Changed shape" },
+                          { value: "not_important" as const, label: "Not anymore" },
+                        ].map((action) => (
+                          <button
+                            key={action.value}
+                            type="button"
+                            disabled={savedSignalFeedback.status === "saving"}
+                            onClick={() => void submitSavedSignalFeedback(action.value, action.label)}
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                      {savedSignalFeedback.status === "saved" ? (
+                        <p className="signal-revisit-feedback-status">Saved: {savedSignalFeedback.label}</p>
+                      ) : savedSignalFeedback.status === "saving" ? (
+                        <p className="signal-revisit-feedback-status">Saving...</p>
+                      ) : savedSignalFeedback.status === "error" ? (
+                        <p className="signal-revisit-feedback-status">{savedSignalFeedback.message}</p>
+                      ) : null}
+                    </section>
+                  </>
+                ) : null}
+              </article>
             </div>
           </section>
         )}
