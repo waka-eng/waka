@@ -38,6 +38,20 @@
 
 ---
 
+## 2026-05-30 17:14 PDT - US-019 setup
+
+- Added follow-up Ralph story: `US-019 Update internal context dashboard for ambition graph debugging`.
+- Scope:
+  - Keep dashboard internal/admin-only.
+  - Make ambition dimensions readable and filterable.
+  - Improve selected-node evidence navigation across saved signals, Top of Mind notes, and feedback.
+  - Restore individual node dragging; dragging one node should not move an entire connected component unless explicit group-drag mode exists.
+- Ordering:
+  - US-018 remains the next story because the user-facing Top of Mind ambition mirror is higher priority.
+  - US-019 should run after US-018 to improve internal graph debugging around the new ambition dimensions.
+
+---
+
 ## 2026-05-30 16:07 PDT - US-014C
 
 - What was implemented

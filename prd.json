@@ -335,6 +335,24 @@
       "priority": 21,
       "passes": false,
       "notes": "Product rationale: Paul Graham's cities essay points at ambient ambition signals: some rooms say you should be richer, smarter, braver, more tasteful, faster, freer, or more original. WAKA should help users infer which ambient signals they are already responding to. A useful post-it should read like: \"You seem pulled toward places where ambitious people make things in public,\" \"You may be trying to leave environments that reward consensus over aliveness,\" or \"You seem to want peers who act before permission arrives.\" It should not read like: \"founder cities,\" \"rituals keep returning,\" or \"You keep circling founder cities.\""
+    },
+    {
+      "id": "US-019",
+      "title": "Update internal context dashboard for ambition graph debugging",
+      "description": "As an internal operator, I need the context dashboard to make ambition graph quality readable and navigable, including restoring individual node dragging.",
+      "acceptanceCriteria": [
+        "Keep the context dashboard internal/admin-only and do not turn the graph inspector into the primary user-facing product UI",
+        "Show ambition dimension or derived ambition role for context nodes where available, including place, people, work, taste, tension, identity, rejection, and next experiment",
+        "Add practical filters/search for node type, ambition dimension, confidence/weight, active versus stale status, and text labels",
+        "Improve the selected-node detail panel so it clearly shows supporting saved signals, related Top of Mind notes, related feedback, and why the node may matter for ambition",
+        "Restore individual node dragging in the graph; dragging one node must not move the entire connected component unless a group-drag mode is explicitly selected",
+        "Make the dashboard readable on common desktop widths without dense overlapping text or hard-to-scan panels",
+        "Add targeted tests or browser verification that selecting/filtering nodes works and that individual node drag behavior is restored",
+        "Run web typecheck and any targeted context-dashboard tests"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "This is internal tooling for judging whether WAKA is learning ambition. The dashboard should help debug how saved signals become context nodes, ambition dimensions, Top of Mind notes, and feedback-adjusted confidence. Current pain points: hard to read/navigate, and graph nodes that used to be individually draggable now appear to drag only as connected groups."
     }
   ]
 }
