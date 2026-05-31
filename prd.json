@@ -353,6 +353,25 @@
       "priority": 22,
       "passes": false,
       "notes": "This is internal tooling for judging whether WAKA is learning ambition. The dashboard should help debug how saved signals become context nodes, ambition dimensions, Top of Mind notes, and feedback-adjusted confidence. Current pain points: hard to read/navigate, and graph nodes that used to be individually draggable now appear to drag only as connected groups."
+    },
+    {
+      "id": "US-020",
+      "title": "Rebuild All Signals as an in-place inspiration revisit experience",
+      "description": "As a user, I want the All Signals tab to feel like gently revisiting what I once loved inside the Top of Mind experience, not navigating to a complicated archive page.",
+      "acceptanceCriteria": [
+        "Clicking the Home All Signals tab must stay within the Top of Mind shell instead of navigating to a completely separate page",
+        "Replace the dense archive/search-page feel with an in-place surface whose visual language matches the Top of Mind post-it world",
+        "Make deep diving past inspirations feel calm, personal, and therapeutic: revisiting what once hit, what still feels alive, what changed, and what it may reveal about ambition",
+        "Reduce navigation complexity by using a simple browse-and-revisit flow before advanced search/filter controls; advanced controls should be secondary or progressively disclosed",
+        "Avoid the current narrow-sidebar deep dive pattern and avoid an admin-dashboard feel",
+        "Show the raw saved inspiration prominently, with highlighted parts, original context, gentle reflection prompts, related Top of Mind notes, and one lightweight way to mark whether it still matters",
+        "Keep any full `/signals` route only as an optional compatibility/deep link if needed; the primary product path from Home must be in-place",
+        "Add targeted Home/All Signals tests proving the tab does not route away and that the revisit/deep-dive surface renders in the Home experience",
+        "Run web typecheck, targeted tests, and browser verification for the exact Home All Signals path on desktop and mobile"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Product correction: the current `/signals` archive is too complicated and feels like a search/admin surface. The user wants past inspirations to feel like therapy: a soft return to what they once loved, with enough structure to notice whether the signal still matters and how it connects to ambition. All Signals should share the Top of Mind look and feel, stay in the same product world, and make deep dive emotionally legible before it becomes searchable."
     }
   ]
 }

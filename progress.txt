@@ -52,6 +52,22 @@
 
 ---
 
+## 2026-05-30 17:20 PDT - US-020 setup
+
+- Added follow-up Ralph story: `US-020 Rebuild All Signals as an in-place inspiration revisit experience`.
+- Product correction:
+  - Home All Signals should not navigate to a completely separate page.
+  - The current archive/search experience is too complicated and does not match the Top of Mind look and feel.
+  - Deep diving past inspirations should feel like gently revisiting what the user once loved: what hit, what still feels alive, what changed, and what it reveals about ambition.
+- UX direction:
+  - Stay inside the Top of Mind shell.
+  - Prefer a calm browse-and-revisit flow over a dense search/filter dashboard.
+  - Keep advanced search secondary.
+  - Avoid narrow sidebars and admin-dashboard layouts.
+  - Show raw inspiration, highlighted parts, original context, related Top of Mind notes, and one lightweight "still matters" correction path.
+
+---
+
 ## 2026-05-30 16:07 PDT - US-014C
 
 - What was implemented
