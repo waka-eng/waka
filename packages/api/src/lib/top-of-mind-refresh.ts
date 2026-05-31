@@ -15,6 +15,10 @@ import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "./model-provider.js";
+import {
+  deriveMemoryPattern,
+  type MemoryPattern,
+} from "./memory-movement.js";
 import type { AmbitionDimension } from "./top-of-mind-notes.js";
 
 const DEFAULT_REFRESH_LIMIT = 5;
@@ -31,6 +35,7 @@ export interface TopOfMindRefreshNodeInput {
   weight: number;
   confidence: number;
   evidenceCount: number;
+  firstSeenAt: Date;
   lastReinforcedAt: Date;
 }
 
@@ -48,6 +53,7 @@ export interface TopOfMindRefreshCandidate {
   node: TopOfMindRefreshNodeInput;
   contextType: ContextNodeType;
   evidence: TopOfMindRefreshEvidenceInput[];
+  memoryPattern: MemoryPattern;
   score: number;
   idempotencyKey: string;
   title: string;
@@ -120,13 +126,19 @@ function recencyScore(date: Date, now: Date): number {
   return 0;
 }
 
-function candidateScore(node: TopOfMindRefreshNodeInput, type: ContextNodeType, now: Date): number {
+function candidateScore(
+  node: TopOfMindRefreshNodeInput,
+  type: ContextNodeType,
+  memoryPattern: MemoryPattern,
+  now: Date,
+): number {
   return (
     node.evidenceCount * 130 +
-    node.weight +
+    memoryPattern.currentWeight +
     node.confidence * 0.6 +
     contextPriority(type) +
-    recencyScore(node.lastReinforcedAt, now)
+    recencyScore(node.lastReinforcedAt, now) +
+    memoryPattern.movementScore
   );
 }
 
@@ -293,6 +305,7 @@ function buildWhy(
     .filter((preview) => preview.length > 0)
     .slice(0, 5);
   const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings I need.`;
+  const memoryText = ` Memory movement: ${node.evidenceCount} reinforcement${node.evidenceCount === 1 ? "" : "s"}; current state is derived from recurrence, recency, decay, and reactivation.`;
   const descriptionText = description ? ` ${description}` : "";
   const signalText =
     evidencePreviews.length > 0
@@ -303,7 +316,7 @@ function buildWhy(
     `Matched environment: ${frequency.matchedEnvironment}`,
     `Anti-environment: ${frequency.antiEnvironment}`,
     `Evidence rationale: ${frequency.evidenceRationale}`,
-    `${ambitionReason}${descriptionText}${signalText}`,
+    `${ambitionReason}${descriptionText}${signalText}${memoryText}`,
   ].join(" ");
 }
 
@@ -351,13 +364,15 @@ export function rankTopOfMindRefreshCandidates(input: {
             b.createdAt.getTime() - a.createdAt.getTime(),
         )
         .slice(0, MAX_EVIDENCE_PER_NOTE);
+      const memoryPattern = deriveMemoryPattern({ node, evidence, now });
       const ambitionDimension = ambitionDimensionForContextType(contextType);
       const frequency = buildInternalFrequency(node, contextType, evidence);
       return {
         node,
         contextType,
         evidence,
-        score: candidateScore(node, contextType, now),
+        memoryPattern,
+        score: candidateScore(node, contextType, memoryPattern, now),
         idempotencyKey,
         title: truncateText(frequency.ambientSignal, MAX_TITLE_CHARS),
         ...frequency,
@@ -421,6 +436,7 @@ export async function refreshTopOfMindNotesFromContextGraph(
       weight: meaningNodes.weight,
       confidence: meaningNodes.confidence,
       evidenceCount: meaningNodes.evidenceCount,
+      firstSeenAt: meaningNodes.firstSeenAt,
       lastReinforcedAt: meaningNodes.lastReinforcedAt,
     })
     .from(meaningNodes)

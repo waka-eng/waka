@@ -482,7 +482,7 @@
         "Run API typecheck and targeted memory-model tests"
       ],
       "priority": 29,
-      "passes": false,
+      "passes": true,
       "notes": "This is the core self-evolving loop. Personal context should behave more like memory than a static graph: what returns matters more, what stops returning fades, what comes back after dormancy becomes meaningful, and contradictions reveal live ambition tensions."
     },
     {

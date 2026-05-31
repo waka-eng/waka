@@ -57,6 +57,7 @@ describe("model provider abstraction", () => {
           weight: 150,
           confidence: 70,
           evidenceCount: 2,
+          firstSeenAt: new Date("2026-05-01T10:00:00.000Z"),
           lastReinforcedAt: new Date("2026-05-30T10:00:00.000Z"),
         },
       ],
@@ -76,7 +77,7 @@ describe("model provider abstraction", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({
       contextType: "project",
-      title: "build a quieter research room",
+      title: "I need workrooms where making the thing is the default temperature.",
     });
   });
 });

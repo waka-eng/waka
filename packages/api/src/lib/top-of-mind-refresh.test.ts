@@ -17,6 +17,7 @@ function node(
     weight: 100,
     confidence: 50,
     evidenceCount: 2,
+    firstSeenAt: new Date("2026-05-01T10:00:00.000Z"),
     lastReinforcedAt: new Date("2026-05-30T10:00:00.000Z"),
     ...input,
   };
@@ -138,6 +139,13 @@ describe("rankTopOfMindRefreshCandidates", () => {
     });
     expect(candidates[0]?.why).toContain("Several signals ask whether ambition can stay humane.");
     expect(candidates[0]?.why).toContain("This may matter for ambition because it points at a next experiment frequency");
+    expect(candidates[0]?.why).toContain("Memory movement:");
+    expect(candidates[0]?.memoryPattern).toMatchObject({
+      state: "active",
+      reinforcementCount: 4,
+      recentReinforcementCount: 2,
+      supportingSignalIds: ["signal-strong", "signal-old"],
+    });
     expect(candidates[0]?.evidence.map((row) => row.inspirationId)).toEqual([
       "signal-strong",
       "signal-old",
@@ -260,5 +268,59 @@ describe("rankTopOfMindRefreshCandidates", () => {
     });
 
     expect(candidates).toEqual([]);
+  });
+
+  it("prioritizes meaningful memory movement over static highest-weight nodes", () => {
+    const candidates = rankTopOfMindRefreshCandidates({
+      userId,
+      now,
+      nodes: [
+        node({
+          id: "static-active",
+          type: "theme",
+          label: "generic productivity systems",
+          weight: 260,
+          confidence: 75,
+          evidenceCount: 5,
+          firstSeenAt: new Date("2026-04-01T10:00:00.000Z"),
+          lastReinforcedAt: new Date("2026-05-25T10:00:00.000Z"),
+        }),
+        node({
+          id: "returned-after-dormancy",
+          type: "environment",
+          label: "rooms where brave public building is normal",
+          weight: 120,
+          confidence: 68,
+          evidenceCount: 3,
+          firstSeenAt: new Date("2025-10-01T10:00:00.000Z"),
+          lastReinforcedAt: new Date("2026-05-30T10:00:00.000Z"),
+        }),
+      ],
+      evidence: [
+        evidence({
+          meaningNodeId: "static-active",
+          inspirationId: "signal-static",
+          createdAt: new Date("2026-05-25T10:00:00.000Z"),
+        }),
+        evidence({
+          meaningNodeId: "returned-after-dormancy",
+          inspirationId: "signal-return",
+          createdAt: new Date("2026-05-30T10:00:00.000Z"),
+          sparkText: "this came back after months away",
+        }),
+        evidence({
+          meaningNodeId: "returned-after-dormancy",
+          inspirationId: "signal-old",
+          createdAt: new Date("2026-02-01T10:00:00.000Z"),
+          sparkText: "an older version of this same pull",
+        }),
+      ],
+    });
+
+    expect(candidates[0]?.node.id).toBe("returned-after-dormancy");
+    expect(candidates[0]?.memoryPattern.state).toBe("reactivated");
+    expect(candidates[0]?.memoryPattern.currentWeight).toBeLessThan(
+      candidates[1]?.memoryPattern.currentWeight ?? 0,
+    );
   });
 });
