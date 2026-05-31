@@ -169,6 +169,40 @@ function evidencePreview(evidence: TopOfMindRefreshEvidenceInput | undefined): s
   return truncateText(evidence.sparkText || evidence.inspirationText, 96);
 }
 
+function displayLabel(value: string): string {
+  const label = normalizeWhitespace(value).replace(/[.。]+$/, "");
+  if (!label) return "this";
+  return `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+}
+
+function buildTopOfMindTitle(
+  node: TopOfMindRefreshNodeInput,
+  type: ContextNodeType,
+): string {
+  const label = displayLabel(node.label);
+  switch (type) {
+    case "open_question":
+      return truncateText(`You may be asking: ${label}?`, MAX_TITLE_CHARS);
+    case "tension":
+      return truncateText(`You seem caught between ${label}.`, MAX_TITLE_CHARS);
+    case "project":
+      return truncateText(`You may want to build toward ${label}.`, MAX_TITLE_CHARS);
+    case "value":
+      return truncateText(`You keep protecting ${label}.`, MAX_TITLE_CHARS);
+    case "environment":
+      return truncateText(`You seem drawn toward rooms shaped by ${label}.`, MAX_TITLE_CHARS);
+    case "person":
+      return truncateText(`You keep noticing people who embody ${label}.`, MAX_TITLE_CHARS);
+    case "aesthetic":
+      return truncateText(`Something about ${label} keeps pulling at your taste.`, MAX_TITLE_CHARS);
+    case "hypothesis":
+      return truncateText(`This might be becoming true for you: ${label}.`, MAX_TITLE_CHARS);
+    case "theme":
+    default:
+      return truncateText(`You keep circling ${label}.`, MAX_TITLE_CHARS);
+  }
+}
+
 function buildWhy(
   node: TopOfMindRefreshNodeInput,
   evidence: TopOfMindRefreshEvidenceInput[],
@@ -235,7 +269,7 @@ export function rankTopOfMindRefreshCandidates(input: {
         evidence,
         score: candidateScore(node, contextType, now),
         idempotencyKey,
-        title: truncateText(node.label, MAX_TITLE_CHARS),
+        title: buildTopOfMindTitle(node, contextType),
         why: buildWhy(node, evidence),
         kind: noteKindForContextType(contextType),
         reflectionQuestion: reflectionQuestionForContextType(node, contextType),
@@ -363,7 +397,7 @@ export async function refreshTopOfMindNotesFromContextGraph(
           kind: candidate.kind,
           idempotencyKey: candidate.idempotencyKey,
           why: candidate.why,
-          beliefStatement: `This may point to ${candidate.node.label}.`,
+          beliefStatement: candidate.title,
           reflectionQuestion: candidate.reflectionQuestion,
           reflectionGuide: candidate.reflectionGuide,
           wowScore: candidate.wowScore,

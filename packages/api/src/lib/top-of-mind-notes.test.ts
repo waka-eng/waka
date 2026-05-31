@@ -12,6 +12,7 @@ const baseMoment = {
   title: "A provisional reflection",
   kind: "bridge" as const,
   why: "Several signals point at the same ambition pattern.",
+  beliefStatement: "You keep circling the rooms where ambition feels humane.",
   reflectionQuestion: null,
   reflectionGuide: null,
   wowScore: 87,
@@ -65,7 +66,7 @@ describe("top-of-mind note compatibility model", () => {
     expect(note).toEqual({
       id: baseMoment.id,
       userId: baseMoment.userId,
-      title: baseMoment.title,
+      title: "You keep circling the rooms where ambition feels humane",
       type: "question",
       body: baseMoment.why,
       prompt: "What should stay unresolved?",
@@ -84,5 +85,17 @@ describe("top-of-mind note compatibility model", () => {
         wowScore: 101,
       },
     });
+  });
+
+  it("turns legacy summary titles into top-of-mind reflections", () => {
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        beliefStatement: "This may point to founder cities.",
+        title: "founder cities",
+      },
+    });
+
+    expect(note.title).toBe("You keep circling founder cities.");
   });
 });

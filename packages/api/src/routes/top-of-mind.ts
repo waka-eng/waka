@@ -66,6 +66,7 @@ type TopOfMindWowMomentRow = {
   title: string;
   kind: WowKind;
   why: string;
+  beliefStatement: string | null;
   reflectionQuestion: string | null;
   reflectionGuide: string | null;
   wowScore: number;
@@ -310,6 +311,7 @@ export async function listTopOfMindNotesForUser(
       title: wowMoments.title,
       kind: wowMoments.kind,
       why: wowMoments.why,
+      beliefStatement: wowMoments.beliefStatement,
       reflectionQuestion: wowMoments.reflectionQuestion,
       reflectionGuide: wowMoments.reflectionGuide,
       wowScore: wowMoments.wowScore,
@@ -356,6 +358,7 @@ export async function getTopOfMindNoteForUser(
       title: wowMoments.title,
       kind: wowMoments.kind,
       why: wowMoments.why,
+      beliefStatement: wowMoments.beliefStatement,
       reflectionQuestion: wowMoments.reflectionQuestion,
       reflectionGuide: wowMoments.reflectionGuide,
       wowScore: wowMoments.wowScore,

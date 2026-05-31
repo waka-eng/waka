@@ -49,6 +49,7 @@ type TopOfMindNoteWowMoment = Pick<
   | "title"
   | "kind"
   | "why"
+  | "beliefStatement"
   | "reflectionQuestion"
   | "reflectionGuide"
   | "wowScore"
@@ -72,6 +73,30 @@ function uniqueIds(ids: string[]): string[] {
   return [...new Set(ids.filter((id) => id.trim().length > 0))];
 }
 
+function normalizeTitleText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().replace(/[.。]+$/, "");
+}
+
+function lowerFirst(value: string): string {
+  const normalized = normalizeTitleText(value);
+  if (!normalized) return "this";
+  return `${normalized.charAt(0).toLowerCase()}${normalized.slice(1)}`;
+}
+
+function titleFromLegacyMoment(moment: TopOfMindNoteWowMoment): string {
+  const belief = normalizeTitleText(moment.beliefStatement ?? "");
+  if (belief && !/^this may point to\b/i.test(belief)) return belief;
+
+  const label = lowerFirst(moment.title);
+  if (moment.reflectionQuestion?.trim()) return `You may be asking: ${label}?`;
+  if (moment.reflectionGuide?.trim()) return `A small next move may be hiding in ${label}.`;
+  if (moment.kind === "tension") return `You seem caught between ${label}.`;
+  if (moment.kind === "outlier" || moment.kind === "surprise_bridge") {
+    return `Something about ${label} keeps pulling at you.`;
+  }
+  return `You keep circling ${label}.`;
+}
+
 export function topOfMindNoteTypeFromWowMoment(input: {
   kind: WowKind;
   reflectionQuestion?: string | null;
@@ -93,7 +118,7 @@ export function topOfMindNoteFromWowMoment(
   return {
     id: moment.id,
     userId: moment.userId,
-    title: moment.title,
+    title: titleFromLegacyMoment(moment),
     type: topOfMindNoteTypeFromWowMoment(moment),
     body: moment.why,
     prompt: moment.reflectionQuestion,

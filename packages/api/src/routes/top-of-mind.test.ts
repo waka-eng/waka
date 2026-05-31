@@ -204,7 +204,7 @@ describe("GET /api/top-of-mind", () => {
       expect.objectContaining({
         id: moment.id,
         userId: user.id,
-        title: "Rituals keep returning",
+        title: "A small next move may be hiding in rituals keep returning.",
         type: "action",
         body: "Multiple signals keep circling the same careful ritual.",
         confidence: 82,

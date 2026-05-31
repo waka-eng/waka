@@ -29,7 +29,7 @@ import {
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import {
   InspirationCard,
@@ -117,7 +117,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  * online).
  */
 type InspirationStatus = "saving" | "saved" | "error";
-type HomeMode = "capture" | "thought" | "saves";
+type HomeMode = "thought" | "saves";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "true" | "partly" | "not_true" | "important" | "not_important"
@@ -693,6 +693,7 @@ const HOME_COPY = {
 
 export function HomePage(): JSX.Element {
   const { user, logout, updatePreferredLocale } = useAuth();
+  const navigate = useNavigate();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -1292,6 +1293,10 @@ export function HomePage(): JSX.Element {
   ]);
 
   const chooseHomeMode = (mode: HomeMode) => {
+    if (mode === "saves") {
+      navigate("/signals");
+      return;
+    }
     setHomeMode(mode);
     setHomeModeChosen(true);
   };

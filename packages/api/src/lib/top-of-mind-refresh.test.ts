@@ -126,7 +126,7 @@ describe("rankTopOfMindRefreshCandidates", () => {
     expect(candidates[0]).toMatchObject({
       contextType: "open_question",
       kind: "outlier",
-      title: "what kind of ambition still leaves room for life",
+      title: "You may be asking: what kind of ambition still leaves room for life?",
       why: expect.stringContaining("Several signals ask whether ambition can stay humane."),
       reflectionQuestion: "what kind of ambition still leaves room for life?",
       wowScore: 100,
