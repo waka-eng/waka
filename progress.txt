@@ -25,6 +25,21 @@
 - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
 - Top of Mind needs an explicit internal-frequency / ambient-signal layer above individual graph nodes. It should answer what kind of city, room, peer group, standard, anti-environment, or self-image the user is trying to live near, not just rephrase a context node with ambition-flavored copy.
 - Top-of-mind note surfaces expose `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale`; graph refresh stores those fields in the legacy `wow_moments.why` text until dedicated note persistence exists, and serializers split them back out for the API/UI.
+- Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad. Prefer "I think I need...", "I might be looking for...", and "I keep wanting..." over second-person diagnosis such as "You seem..." or "WAKA thinks...".
+
+---
+
+## 2026-05-30 22:42 PDT - US-022 setup
+
+- Added follow-up Ralph story: `US-022 Make Top of Mind read like first-person jotting`.
+- Product correction:
+  - US-021 adds an internal-frequency / ambient-signal layer, but the voice still matters.
+  - The post-it should feel like a live note the user might jot down to themselves, not an AI diagnosis from the outside.
+  - Good examples: "I think I need a city that makes brave work feel normal" or "I keep wanting peers who make building in public less weird."
+  - Bad examples: "You seem to want...", "WAKA thinks...", "This person is drawn to...", or raw graph-label summaries.
+- Ralph acceptance warning:
+  - Keep evidence/provenance visible as generated support, but make the primary post-it text first-person.
+  - Preserve the ambient-signal goal: first-person notes still need to point at cities, rooms, peers, standards, anti-environments, or emerging self-image.
 
 ---
 

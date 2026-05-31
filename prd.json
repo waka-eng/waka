@@ -391,6 +391,24 @@
       "priority": 24,
       "passes": true,
       "notes": "Product correction after US-018: ambition dimensions and mirror-style templates are not enough. Paul Graham's cities frame is about ambient external signals: a city tells you to be richer, smarter, more ambitious, more tasteful, freer, braver, or more original. WAKA should infer the user's internal frequency so they can match it to cities, rooms, peers, and work environments. The post-it should not merely say what the saved things are about; it should say what kind of surrounding signal the user seems to need."
+    },
+    {
+      "id": "US-022",
+      "title": "Make Top of Mind read like first-person jotting",
+      "description": "As a user, I want generated Top of Mind post-its to sound like provisional notes I might have jotted to myself, not like an external AI describing me.",
+      "acceptanceCriteria": [
+        "Change primary Top of Mind titles and first-read Home/share copy to first-person note-to-self language such as \"I think I am looking for...\", \"I might need rooms where...\", or \"I keep wanting people who...\"",
+        "Avoid second-person or third-person framing in the main post-it text, including \"you seem\", \"you may\", \"this person\", and \"WAKA thinks\" unless it appears in secondary explanatory copy",
+        "Keep the tone provisional and scratchpad-like, as if the user is jotting down a live thought on a post-it, not making a permanent identity claim",
+        "Preserve the internal-frequency / ambient-signal goal from US-021: first-person notes must still point at cities, rooms, peers, standards, anti-environments, or emerging self-image",
+        "Keep evidence and provenance available as secondary support so the product remains generated from saved signals rather than pretending the user literally typed the note",
+        "Update Top of Mind generation, legacy note serialization, Home rendering, share-page rendering, and tests as needed so existing/generated notes use the first-person voice",
+        "Add deterministic tests that fail if primary Top of Mind titles begin with or prominently use \"You\", \"Your\", \"This person\", \"WAKA\", or raw graph labels",
+        "Run API and web typechecks, targeted Top of Mind generation/API tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Product correction after US-021: even good ambient-signal notes can feel wrong if WAKA speaks about the user from the outside. The post-it metaphor works better if the text feels like the user's own provisional jotting: \"I think I need a city that makes brave work feel normal\" or \"I keep wanting peers who make building in public less weird.\" Keep the page honest that WAKA generated the notes from saved signals, but make the post-it itself feel first-person and replaceable."
     }
   ]
 }
