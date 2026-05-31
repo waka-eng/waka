@@ -518,7 +518,7 @@
         "Add targeted Home deep-dive tests and browser verification on desktop and mobile"
       ],
       "priority": 31,
-      "passes": false,
+      "passes": true,
       "notes": "Deep diving should feel like reflective self-understanding. The user is not opening a database record; they are opening the current note their saved life has written back to them."
     },
     {

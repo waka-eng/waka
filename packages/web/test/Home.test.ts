@@ -256,6 +256,7 @@ const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
   matchedEnvironment: "A working culture where bridge rhythms become visible through repeated making.",
   antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
   evidenceRationale: "Several saved signals cluster around city walks, architecture, and jazz history.",
+  rejectedAlternativeInterpretation: "This is not just an archive theme about bridges or city walking.",
   type: "pattern",
   body: "Several saved signals connect architecture essays with walking routes and jazz history.",
   prompt: "What bridge keeps reappearing?",
@@ -785,14 +786,21 @@ describe("HomePage current home experience", () => {
 
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
     expect(expanded).not.toBeNull();
+    expect(expanded?.classList.contains("nc-note-peel")).toBe(true);
+    expect(expanded?.getAttribute("role")).toBe("dialog");
+    expect(expanded?.textContent).toContain("peeled open from the current five post-its");
+    expect(expanded?.textContent).toContain("supporting saved moments");
     expect(expanded?.textContent).toContain("evidence signals");
     expect(expanded?.textContent).toContain("1 signal behind this");
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).toContain("This signal anchors the pattern.");
     expect(expanded?.textContent).toContain("memory movement");
-    expect(expanded?.textContent).toContain("why this slot");
-    expect(expanded?.textContent).toContain("matched environment");
-    expect(expanded?.textContent).toContain("anti-environment");
+    expect(expanded?.textContent).toContain("why it is here now");
+    expect(expanded?.textContent).toContain("what this points toward");
+    expect(expanded?.textContent).toContain("what it rejects");
+    expect(expanded?.textContent).toContain("what changed recently");
+    expect(expanded?.textContent).toContain("rejected alternate read");
+    expect(expanded?.textContent).toContain("This is not just an archive theme about bridges or city walking.");
     expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
     expect(expanded?.textContent).toContain("ambition dimension");
     expect(expanded?.textContent).toContain("work");

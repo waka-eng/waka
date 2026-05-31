@@ -1069,3 +1069,32 @@
     - The current Gemini provider still returns deterministic fallback synthesis; future model-heavy synthesis can replace only `synthesizeAmbition` without changing refresh persistence.
 
 ---
+
+## 2026-05-31 11:33 PDT - US-028
+
+- What was implemented
+  - Rebuilt the opened Top of Mind post-it as a large peel-open reflection surface instead of a compact centered detail panel.
+  - Preserved the first-person post-it as the emotional anchor and added sections for what it points toward, what it rejects, what changed recently, why it is here now, and rejected alternate read.
+  - Expanded supporting saved moments to show up to five evidence signals and kept true, partly, not this, and rewrite in my words feedback inside the opened surface.
+  - Added Home tests for the peel-open surface and rejected-alternative rendering, and kept typed Top of Mind fixtures aligned with the current API shape.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 39 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for opening a Home Top of Mind post-it on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable codebase pattern discovered.
+  - Gotchas encountered
+    - Playwright route interception is order-sensitive in this setup; broad `/api/**` fallbacks need to be registered before specific mocked endpoints.
+  - Useful context
+    - Vite served the browser verification run at `http://localhost:5173/` despite the alternate port argument.
+
+---

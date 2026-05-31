@@ -30,6 +30,7 @@ const topOfMindNote: ApiTopOfMindNoteSurface = {
   matchedEnvironment: "A working culture where recurring signals become visible through repeated making.",
   antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
   evidenceRationale: "Three saved signals are clustering around this frequency.",
+  rejectedAlternativeInterpretation: null,
   type: "pattern",
   body: "Three saved signals rhyme.",
   prompt: null,

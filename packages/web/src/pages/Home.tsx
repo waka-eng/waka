@@ -451,6 +451,7 @@ interface HomeThoughtCard {
   matchedEnvironment?: string;
   antiEnvironment?: string;
   evidenceRationale?: string;
+  rejectedAlternativeInterpretation?: string | null;
   status?: ApiTopOfMindNoteSurface["status"];
   confidence?: number;
   type: string;
@@ -521,6 +522,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     matchedEnvironment: note.matchedEnvironment,
     antiEnvironment: note.antiEnvironment,
     evidenceRationale: note.evidenceRationale,
+    rejectedAlternativeInterpretation: note.rejectedAlternativeInterpretation,
     status: note.status,
     confidence: note.confidence,
     type: note.type,
@@ -1849,7 +1851,9 @@ export function HomePage(): JSX.Element {
           }));
     return (
       <article
-        className="nc-note-modal"
+        className="nc-note-modal nc-note-peel"
+        role="dialog"
+        aria-modal="true"
         aria-labelledby={`top-of-mind-note-${signal.id}`}
         style={{
           ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
@@ -1857,59 +1861,79 @@ export function HomePage(): JSX.Element {
         }}
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="nc-note-head">
-          <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
-          <span className="nc-note-shifted">{memoryMovement}</span>
+        <button
+          type="button"
+          className="nc-note-peel-close"
+          aria-label="close post-it reflection"
+          onClick={closeExpandedNoteOnBackdrop}
+        >
+          close
+        </button>
+
+        <header className="nc-note-peel-head">
+          <div>
+            <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
+            <span className="nc-note-shifted">{memoryMovement}</span>
+          </div>
+          <p>peeled open from the current five post-its</p>
         </header>
 
-        <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
-          {locale === "en-US"
-            ? signal.label
-            : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
-        </p>
-
         <div className="nc-note-expanded-content">
-          <section className="nc-note-reading">
+          <section className="nc-note-peel-hero" aria-label="opened post-it">
+            <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
+              {locale === "en-US"
+                ? signal.label
+                : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
+            </p>
             <p>{signal.reason}</p>
           </section>
 
-          <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-frequency-${signal.id}`}>
-            <div className="nc-note-evidence-header">
-              <span>memory movement</span>
-              <strong id={`top-of-mind-frequency-${signal.id}`}>
-                {memoryMovement}
-              </strong>
-            </div>
-            <dl className="nc-note-frequency-list">
-              <div>
-                <dt>why this slot</dt>
-                <dd>{replaceabilityLine(memoryMovement)}.</dd>
+          <div className="nc-note-peel-grid">
+            <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-frequency-${signal.id}`}>
+              <div className="nc-note-evidence-header">
+                <span>memory movement</span>
+                <strong id={`top-of-mind-frequency-${signal.id}`}>
+                  {memoryMovement}
+                </strong>
               </div>
-              <div>
-                <dt>matched environment</dt>
-                <dd>{signal.matchedEnvironment ?? "WAKA is still inferring the surrounding signal."}</dd>
-              </div>
-              <div>
-                <dt>anti-environment</dt>
-                <dd>{signal.antiEnvironment ?? "No rejected context has surfaced clearly yet."}</dd>
-              </div>
-              <div>
-                <dt>evidence rationale</dt>
-                <dd>{signal.evidenceRationale ?? "This read is provisional and should be corrected if it misses."}</dd>
-              </div>
-            </dl>
-          </section>
+              <dl className="nc-note-frequency-list">
+                <div>
+                  <dt>why it is here now</dt>
+                  <dd>{replaceabilityLine(memoryMovement)}.</dd>
+                </div>
+                <div>
+                  <dt>what this points toward</dt>
+                  <dd>{signal.matchedEnvironment ?? "WAKA is still inferring the surrounding signal."}</dd>
+                </div>
+                <div>
+                  <dt>what it rejects</dt>
+                  <dd>{signal.antiEnvironment ?? "No rejected context has surfaced clearly yet."}</dd>
+                </div>
+                <div>
+                  <dt>what changed recently</dt>
+                  <dd>{signal.evidenceRationale ?? "This read is provisional and should be corrected if it misses."}</dd>
+                </div>
+                <div>
+                  <dt>rejected alternate read</dt>
+                  <dd>
+                    {signal.rejectedAlternativeInterpretation ??
+                      "No competing interpretation has been strong enough to name yet."}
+                  </dd>
+                </div>
+              </dl>
+            </section>
 
-          <section className="nc-note-source-section">
+          <section className="nc-note-source-section nc-note-peel-source">
             <span>it began here</span>
             <blockquote className="nc-note-source">
               “{shortText(source?.preview || signal.reason, 190)}”
             </blockquote>
           </section>
+          </div>
 
-          <section className="nc-note-evidence-panel" aria-labelledby={`top-of-mind-evidence-${signal.id}`}>
+          <section className="nc-note-evidence-panel nc-note-peel-evidence" aria-labelledby={`top-of-mind-evidence-${signal.id}`}>
             <div className="nc-note-evidence-header">
-              <span>evidence signals</span>
+              <span>supporting saved moments · evidence signals</span>
               <strong id={`top-of-mind-evidence-${signal.id}`}>
                 {signal.supportingSignals.length > 0
                   ? `${signal.supportingSignals.length} signal${signal.supportingSignals.length === 1 ? "" : "s"} behind this`
@@ -1918,7 +1942,7 @@ export function HomePage(): JSX.Element {
             </div>
             {signal.supportingSignals.length > 0 ? (
               <ol className="nc-note-evidence-list">
-                {signal.supportingSignals.slice(0, 4).map((evidence) => (
+                {signal.supportingSignals.slice(0, 5).map((evidence) => (
                   <li key={evidence.id}>
                     <blockquote>“{shortText(evidence.preview || evidence.reason, 150)}”</blockquote>
                     <p>{shortText(evidence.reason, 120)}</p>

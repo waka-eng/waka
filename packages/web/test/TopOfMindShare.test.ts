@@ -51,6 +51,7 @@ const sampleNotes: ApiTopOfMindNoteSurface[] = [
     matchedEnvironment: "A city, studio, or room where honest work feels publicly reinforced.",
     antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
     evidenceRationale: "Three saved signals are clustering around this frequency.",
+    rejectedAlternativeInterpretation: null,
     type: "pattern",
     body: "Saved signals keep pointing toward spaces where people can think before they perform.",
     prompt: "Where does this room already exist?",

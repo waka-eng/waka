@@ -2012,11 +2012,12 @@
   position: fixed;
   inset: 0;
   z-index: 55;
-  background: rgba(250, 249, 246, 0.58);
+  background: rgba(250, 249, 246, 0.76);
   cursor: default;
   display: grid;
   place-items: center;
-  padding: 48px 32px;
+  padding: clamp(18px, 4vh, 48px) clamp(16px, 4vw, 56px);
+  overflow: auto;
 }
 
 .nc-loading {
@@ -2130,9 +2131,9 @@
 }
 
 .nc-note-modal {
-  width: min(680px, calc(100vw - 64px));
-  max-height: min(680px, calc(100dvh - 96px));
-  padding: 38px 44px 42px;
+  width: min(1120px, calc(100vw - 56px));
+  max-height: min(860px, calc(100dvh - 56px));
+  padding: clamp(30px, 4vw, 56px);
   background: var(--bg);
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
@@ -2145,15 +2146,81 @@
   cursor: default;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 24px;
   animation: nc-note-modal-open 120ms ease-out both;
 }
 
 .nc-note-modal .nc-note-body {
-  font-size: 40px;
+  font-size: clamp(34px, 5vw, 62px);
   font-weight: 420;
-  line-height: 1.04;
-  letter-spacing: -0.018em;
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+.nc-note-peel {
+  position: relative;
+  min-height: min(760px, calc(100dvh - 56px));
+}
+
+.nc-note-peel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-style: solid;
+  border-width: 0 54px 54px 0;
+  border-color: transparent color-mix(in srgb, white 72%, var(--bg)) transparent transparent;
+  filter: drop-shadow(-8px 8px 12px rgba(0, 0, 0, 0.08));
+  pointer-events: none;
+}
+
+.nc-note-peel-close {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 2;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  opacity: 0.52;
+}
+
+.nc-note-peel-close:hover,
+.nc-note-peel-close:focus-visible {
+  opacity: 0.9;
+}
+
+.nc-note-peel-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-right: 58px;
+}
+
+.nc-note-peel-head div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.nc-note-peel-head p {
+  margin: 0;
+  max-width: 280px;
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  line-height: 1.45;
+  text-align: right;
+  text-transform: uppercase;
+  opacity: 0.42;
 }
 
 @keyframes nc-note-modal-open {
@@ -2437,6 +2504,10 @@
   transition: none;
 }
 
+.nc-note-peel .nc-note-expanded-content {
+  gap: clamp(24px, 4vw, 40px);
+}
+
 .nc-note-expanded-content section {
   display: grid;
   gap: 8px;
@@ -2468,6 +2539,31 @@
   max-width: 560px;
   font-size: 18px;
   line-height: 1.54;
+}
+
+.nc-note-peel-hero {
+  max-width: 860px;
+  padding: clamp(16px, 3vw, 30px) 0 clamp(18px, 3vw, 34px) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.nc-note-peel-hero p:not(.nc-note-body) {
+  max-width: 680px;
+  font-size: 20px;
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+.nc-note-peel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: clamp(24px, 4vw, 54px);
+  align-items: start;
+}
+
+.nc-note-peel-source {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  padding-top: 14px !important;
 }
 
 .nc-note-source {
@@ -2535,6 +2631,11 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.nc-note-peel-evidence .nc-note-evidence-list {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
 }
 
 .nc-note-evidence-list li,
@@ -2756,6 +2857,29 @@
     width: 100%;
     max-height: calc(100dvh - 32px);
     padding: 28px 24px 30px;
+  }
+
+  .nc-note-peel {
+    min-height: calc(100dvh - 32px);
+  }
+
+  .nc-note-peel::before {
+    border-width: 0 38px 38px 0;
+  }
+
+  .nc-note-peel-head {
+    flex-direction: column;
+    padding-right: 42px;
+  }
+
+  .nc-note-peel-head p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .nc-note-peel-grid {
+    grid-template-columns: 1fr;
+    gap: 22px;
   }
 
   .nc-note-modal .nc-note-body {
