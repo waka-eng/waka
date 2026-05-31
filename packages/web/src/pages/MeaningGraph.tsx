@@ -78,6 +78,26 @@ const AMBITION_DIMENSIONS = [
 
 type AmbitionDimension = (typeof AMBITION_DIMENSIONS)[number];
 
+const MEMORY_STATES = [
+  "emerging",
+  "active",
+  "fading",
+  "dormant",
+  "reactivated",
+  "contradicted",
+  "needs_testing",
+] as const;
+
+const MEMORY_LABEL: Record<(typeof MEMORY_STATES)[number], string> = {
+  emerging: "emerging",
+  active: "active",
+  fading: "fading",
+  dormant: "dormant",
+  reactivated: "reactivated",
+  contradicted: "contradicted",
+  needs_testing: "needs testing",
+};
+
 const TYPE_LABEL: Record<string, string> = {
   theme: "theme",
   value: "value",
@@ -182,6 +202,8 @@ export function filterMeaningGraphNodes(input: {
   contextType: string;
   ambitionDimension: string;
   status: string;
+  memoryState: string;
+  onlyRecentCorrections: boolean;
   minConfidence: number;
 }): ApiMeaningGraphNode[] {
   return input.nodes.filter((node) => {
@@ -190,8 +212,23 @@ export function filterMeaningGraphNodes(input: {
       return false;
     }
     if (input.status !== "all" && node.status !== input.status) return false;
+    if (input.memoryState !== "all" && node.memory.state !== input.memoryState) return false;
+    if (input.onlyRecentCorrections && !hasRecentCorrection(node)) return false;
     if (node.confidence < input.minConfidence) return false;
     return includesSearchText(node, input.search);
+  });
+}
+
+function hasRecentCorrection(node: ApiMeaningGraphNode): boolean {
+  const correctionCutoff = Date.now() - 30 * 86_400_000;
+  const feedback = [
+    ...node.feedback,
+    ...node.relatedTopOfMindNotes.flatMap((note) => note.feedback),
+  ];
+  return feedback.some((item) => {
+    if (!item.correctionText?.trim()) return false;
+    const createdAt = new Date(item.createdAt).getTime();
+    return Number.isFinite(createdAt) && createdAt >= correctionCutoff;
   });
 }
 
@@ -375,6 +412,8 @@ export default function MeaningGraphPage(): JSX.Element {
   const [contextTypeFilter, setContextTypeFilter] = useState("all");
   const [ambitionFilter, setAmbitionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [memoryStateFilter, setMemoryStateFilter] = useState("all");
+  const [onlyRecentCorrections, setOnlyRecentCorrections] = useState(false);
   const [minConfidence, setMinConfidence] = useState(0);
   const [manualNodePositions, setManualNodePositions] = useState<Map<string, { x: number; y: number }>>(
     () => new Map(),
@@ -544,9 +583,20 @@ export default function MeaningGraphPage(): JSX.Element {
         contextType: contextTypeFilter,
         ambitionDimension: ambitionFilter,
         status: statusFilter,
+        memoryState: memoryStateFilter,
+        onlyRecentCorrections,
         minConfidence,
       }),
-    [ambitionFilter, contextTypeFilter, minConfidence, searchText, sortedNodes, statusFilter],
+    [
+      ambitionFilter,
+      contextTypeFilter,
+      memoryStateFilter,
+      minConfidence,
+      onlyRecentCorrections,
+      searchText,
+      sortedNodes,
+      statusFilter,
+    ],
   );
 
   const visibleMeaningNodes = useMemo(
@@ -932,6 +982,17 @@ export default function MeaningGraphPage(): JSX.Element {
                   </select>
                 </label>
                 <label>
+                  Memory
+                  <select value={memoryStateFilter} onChange={(event) => setMemoryStateFilter(event.target.value)}>
+                    <option value="all">All memory states</option>
+                    {MEMORY_STATES.map((state) => (
+                      <option key={state} value={state}>
+                        {MEMORY_LABEL[state]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
                   Confidence
                   <input
                     type="range"
@@ -942,6 +1003,14 @@ export default function MeaningGraphPage(): JSX.Element {
                     onChange={(event) => setMinConfidence(Number(event.target.value))}
                   />
                   <span>{minConfidence}%+</span>
+                </label>
+                <label className="meaning-graph-checkbox-filter">
+                  <input
+                    type="checkbox"
+                    checked={onlyRecentCorrections}
+                    onChange={(event) => setOnlyRecentCorrections(event.target.checked)}
+                  />
+                  Recent corrections
                 </label>
                 <span>{visibleMeaningNodes.length} shown</span>
                 <span>{meaningGraphDragModeSummary(true)}</span>
@@ -1035,7 +1104,40 @@ export default function MeaningGraphPage(): JSX.Element {
                     <dt>updated</dt>
                     <dd>{formatDate(selectedNode.lastReinforcedAt)}</dd>
                   </div>
+                  <div>
+                    <dt>memory state</dt>
+                    <dd>{MEMORY_LABEL[selectedNode.memory.state]}</dd>
+                  </div>
+                  <div>
+                    <dt>reinforcement</dt>
+                    <dd>
+                      {selectedNode.memory.reinforcementCount} total /{" "}
+                      {selectedNode.memory.recentReinforcementCount} recent
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>decay</dt>
+                    <dd>{selectedNode.memory.decay}</dd>
+                  </div>
+                  <div>
+                    <dt>movement score</dt>
+                    <dd>{selectedNode.memory.movementScore}</dd>
+                  </div>
                 </dl>
+                <div className="meaning-graph-evidence-list">
+                  <h3>Memory and synthesis quality</h3>
+                  {selectedNode.qualityIndicators.length > 0 ? (
+                    selectedNode.qualityIndicators.map((indicator) => (
+                      <article key={`${selectedNode.id}-${indicator.type}`}>
+                        <time>{indicator.severity}</time>
+                        <blockquote>{indicator.label}</blockquote>
+                        <p>{indicator.detail}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <p>No quality warnings are attached to this context node.</p>
+                  )}
+                </div>
                 <div className="meaning-graph-evidence-list">
                   <h3>Why this may matter for ambition</h3>
                   <p>
@@ -1067,7 +1169,38 @@ export default function MeaningGraphPage(): JSX.Element {
                       <article key={`${selectedNode.id}-${note.id}`}>
                         <time dateTime={note.createdAt}>{formatDate(note.createdAt)}</time>
                         <blockquote>{note.title}</blockquote>
-                        <p>{note.why}</p>
+                        <p>{note.whyNow}</p>
+                        <p>{note.changedRecently}</p>
+                        <p>{note.evidenceRationale}</p>
+                        <p>
+                          Matched: {note.matchedEnvironment} Rejected: {note.antiEnvironment}
+                        </p>
+                        <p>
+                          Rejected alternate read:{" "}
+                          {note.rejectedAlternativeInterpretation ?? "No rejected alternative stored yet."}
+                        </p>
+                        {note.qualityIndicators.length > 0 ? (
+                          <ul className="meaning-quality-list">
+                            {note.qualityIndicators.map((indicator) => (
+                              <li key={`${note.id}-${indicator.type}`}>
+                                <strong>{indicator.label}</strong>
+                                <span>{indicator.detail}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        {note.feedback.length > 0 ? (
+                          <ul className="meaning-quality-list">
+                            {note.feedback.map((item) => (
+                              <li key={`${note.id}-${item.id}`}>
+                                <strong>{item.value.replaceAll("_", " ")}</strong>
+                                <span>{item.correctionText || `Feedback source: ${item.source}`}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>No user feedback has shaped this post-it yet.</p>
+                        )}
                       </article>
                     ))
                   ) : (

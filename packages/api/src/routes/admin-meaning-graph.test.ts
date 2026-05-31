@@ -224,14 +224,20 @@ describe("GET /api/admin/meaning-graph", () => {
     const relatedTopOfMind = [
       {
         id: "note-1",
+        userId: user.id,
         title: "You seem pulled toward rooms where honest builders make in public.",
+        kind: "pattern",
         why: "This may matter because the signal points to the environments where ambition feels alive.",
+        beliefStatement: "I need rooms where honest builders make in public.",
+        reflectionQuestion: null,
+        reflectionGuide: null,
         idempotencyKey: `top_of_mind_context_node:v1:${user.id}:node-2`,
-        score: 91,
+        wowScore: 91,
         createdAt: now,
+        updatedAt: now,
       },
     ];
-    const nodeFeedback = [
+    const feedbackRows = [
       {
         id: "feedback-1",
         targetId: "node-2",
@@ -239,6 +245,16 @@ describe("GET /api/admin/meaning-graph", () => {
         value: "important",
         emotionLabel: "want",
         correctionText: "This is exactly the kind of room I want.",
+        source: "user",
+        createdAt: now,
+      },
+      {
+        id: "feedback-2",
+        targetId: "note-1",
+        targetType: "top_of_mind_note",
+        value: "partly",
+        emotionLabel: null,
+        correctionText: "Make the post-it more about honest rooms than public building.",
         source: "user",
         createdAt: now,
       },
@@ -251,7 +267,7 @@ describe("GET /api/admin/meaning-graph", () => {
         .mockReturnValueOnce(createSelect(evidence))
         .mockReturnValueOnce(createSelect(recentInspirations))
         .mockReturnValueOnce(createSelect(relatedTopOfMind))
-        .mockReturnValueOnce(createSelect(nodeFeedback))
+        .mockReturnValueOnce(createSelect(feedbackRows))
         .mockReturnValueOnce(createSelect([{ count: 12 }]))
         .mockReturnValueOnce(createSelect([{ count: 11 }]))
         .mockReturnValueOnce(createSelect([{ count: 2 }]))
@@ -328,6 +344,13 @@ describe("GET /api/admin/meaning-graph", () => {
       evidenceCount: 2,
       relatedTopOfMindNotes: [],
       feedback: [],
+      memory: expect.objectContaining({
+        state: "active",
+        reinforcementCount: 2,
+        recentReinforcementCount: 1,
+        supportingSignalIds: ["insp-1"],
+      }),
+      qualityIndicators: [],
     });
     expect(body.graph.nodes[1]).toMatchObject({
       id: "node-2",
@@ -336,7 +359,20 @@ describe("GET /api/admin/meaning-graph", () => {
       relatedTopOfMindNotes: [
         expect.objectContaining({
           id: "note-1",
-          title: "You seem pulled toward rooms where honest builders make in public.",
+          title: "I need rooms where honest builders make in public",
+          whyNow: expect.stringContaining("current memory pattern"),
+          changedRecently: expect.stringContaining("recent supporting signal"),
+          rejectedAlternativeInterpretation: null,
+          feedback: [
+            expect.objectContaining({
+              id: "feedback-2",
+              value: "partly",
+              correctionText: "Make the post-it more about honest rooms than public building.",
+            }),
+          ],
+          qualityIndicators: expect.arrayContaining([
+            expect.objectContaining({ type: "unsupported_synthesis" }),
+          ]),
         }),
       ],
       feedback: [

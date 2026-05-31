@@ -34,6 +34,38 @@
 - Context memory movement is currently derivable in `packages/api/src/lib/memory-movement.ts` from existing meaning node/evidence fields; Top of Mind refresh should rank by memory movement (`reactivated`, `contradicted`, `needs_testing`, etc.) as well as graph weight.
 - Ambition synthesis is a bounded layer after deterministic Top of Mind ranking: use `packages/api/src/lib/ambition-synthesis.ts` for trigger gating, compact evidence inputs, prior feedback/rewrites, rejected alternatives, generic-output rejection, and deterministic fallback.
 - Shareable Top of Mind surfaces can show generated post-its and provenance counts, but raw saved-signal text should stay private until an explicit sharing permission model exists.
+- Internal context debugging should use `/api/admin/meaning-graph` as the diagnostic surface for memory movement, synthesis quality, Top of Mind provenance, and user corrections; keep this admin-only and out of the primary user experience.
+
+---
+
+## 2026-05-31 11:55 PDT - US-031
+
+- What was implemented
+  - Enriched the internal `/api/admin/meaning-graph` response with derivable memory movement state, reinforcement/decay metrics, Top of Mind why-now diagnostics, rejected alternative interpretation, note-level feedback, and quality indicators for shallow summaries, raw graph labels, generic wrappers, and thin synthesis support.
+  - Updated the internal Context dashboard with memory-state and recent-correction filters plus selected-node diagnostics for memory movement, synthesis quality, Top of Mind provenance, rejected reads, and feedback that shaped a post-it.
+  - Kept the graph inspector internal/admin-only and preserved individual-node graph navigation behavior.
+- Files changed
+  - `packages/api/src/routes/admin-meaning-graph.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/MeaningGraph.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/MeaningGraph.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/admin-meaning-graph.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/web test -- test/MeaningGraph.test.ts` passed: 6 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/admin/meaning-graph` on desktop `1280x850` and mobile `390x844` using mocked auth and admin graph API responses. Verified memory diagnostics, synthesis quality, rejected alternate read, Top of Mind feedback, memory-state filtering, and recent-correction filtering.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Internal debug can derive memory movement from existing context node/evidence rows and should serialize it through the admin graph route instead of adding a user-facing graph surface.
+  - Gotchas encountered
+    - Playwright route handlers are order-sensitive; register broad `/api/**` fallbacks before more specific mocked endpoints so the specific mocks win.
+  - Useful context
+    - Vite served the browser verification run at `http://localhost:5173/`.
 
 ---
 

@@ -44,6 +44,19 @@ function graphNode(input: Partial<ApiMeaningGraphNode> & Pick<ApiMeaningGraphNod
     lastReinforcedAt: "2026-05-01T00:00:00.000Z",
     createdAt: "2026-05-01T00:00:00.000Z",
     updatedAt: "2026-05-01T00:00:00.000Z",
+    memory: {
+      state: "active",
+      firstSeenAt: "2026-05-01T00:00:00.000Z",
+      lastSeenAt: "2026-05-01T00:00:00.000Z",
+      reinforcementCount: 1,
+      recentReinforcementCount: 1,
+      currentWeight: 112,
+      confidence: 80,
+      decay: 0,
+      supportingSignalIds: ["signal-1"],
+      movementScore: 180,
+    },
+    qualityIndicators: [],
     relatedTopOfMindNotes: [],
     feedback: [],
     evidence: [],
@@ -160,9 +173,70 @@ describe("filterMeaningGraphNodes", () => {
         contextType: "environment",
         ambitionDimension: "place",
         status: "active",
+        memoryState: "all",
+        onlyRecentCorrections: false,
         minConfidence: 90,
       }).map((node) => node.id),
     ).toEqual(["place-1"]);
+  });
+
+  it("filters by memory state and recent corrections across graph claims and post-its", () => {
+    const nodes = [
+      graphNode({
+        id: "corrected-post-it",
+        label: "rooms that changed after feedback",
+        memory: {
+          ...graphNode({ id: "tmp", label: "tmp" }).memory,
+          state: "reactivated",
+        },
+        relatedTopOfMindNotes: [
+          {
+            id: "note-1",
+            title: "I need rooms where honest building feels normal.",
+            why: "This may matter now.",
+            score: 88,
+            ambitionDimension: "place",
+            ambientSignal: "I need rooms where honest building feels normal.",
+            matchedEnvironment: "Rooms with honest builders.",
+            antiEnvironment: "Rooms that reward performance.",
+            evidenceRationale: "Supported by saved signals.",
+            rejectedAlternativeInterpretation: "The shallow read would call this startups.",
+            whyNow: "A pattern came back.",
+            changedRecently: "One recent signal reinforced this.",
+            feedback: [
+              {
+                id: "feedback-1",
+                targetType: "top_of_mind_note",
+                value: "partly",
+                emotionLabel: null,
+                correctionText: "Make this about courage, not productivity.",
+                source: "user",
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            qualityIndicators: [],
+            createdAt: "2026-05-01T00:00:00.000Z",
+          },
+        ],
+      }),
+      graphNode({
+        id: "active-no-correction",
+        label: "active but unchanged",
+      }),
+    ];
+
+    expect(
+      filterMeaningGraphNodes({
+        nodes,
+        search: "",
+        contextType: "all",
+        ambitionDimension: "all",
+        status: "all",
+        memoryState: "reactivated",
+        onlyRecentCorrections: true,
+        minConfidence: 0,
+      }).map((node) => node.id),
+    ).toEqual(["corrected-post-it"]);
   });
 });
 

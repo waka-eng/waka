@@ -573,7 +573,7 @@
         "Run web/API typechecks and targeted admin tests"
       ],
       "priority": 34,
-      "passes": false,
+      "passes": true,
       "notes": "Internal debug should serve product truth: is WAKA learning what actually moves the user, or just generating aesthetic summaries? This should help inspect the memory loop and ambition synthesis loop without leaking machinery into the user experience."
     }
   ]

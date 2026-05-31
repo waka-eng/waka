@@ -1213,6 +1213,40 @@ export async function fetchBackgroundJobs(
   return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
+export type ApiMeaningGraphMemoryState =
+  | "emerging"
+  | "active"
+  | "fading"
+  | "dormant"
+  | "reactivated"
+  | "contradicted"
+  | "needs_testing";
+
+export interface ApiMeaningGraphMemory {
+  state: ApiMeaningGraphMemoryState;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  reinforcementCount: number;
+  recentReinforcementCount: number;
+  currentWeight: number;
+  confidence: number;
+  decay: number;
+  supportingSignalIds: string[];
+  movementScore: number;
+}
+
+export interface ApiMeaningGraphQualityIndicator {
+  type:
+    | "raw_graph_label"
+    | "shallow_summary"
+    | "generic_ambition_wrapper"
+    | "unsupported_synthesis"
+    | "healthy_specificity";
+  severity: "ok" | "watch" | "risk";
+  label: string;
+  detail: string;
+}
+
 export interface ApiMeaningGraphNode {
   id: string;
   type: string;
@@ -1236,11 +1270,31 @@ export interface ApiMeaningGraphNode {
   lastReinforcedAt: string;
   createdAt: string;
   updatedAt: string;
+  memory: ApiMeaningGraphMemory;
+  qualityIndicators: ApiMeaningGraphQualityIndicator[];
   relatedTopOfMindNotes: Array<{
     id: string;
     title: string;
     why: string;
     score: number;
+    ambitionDimension: ApiTopOfMindNote["ambitionDimension"];
+    ambientSignal: string;
+    matchedEnvironment: string;
+    antiEnvironment: string;
+    evidenceRationale: string;
+    rejectedAlternativeInterpretation: string | null;
+    whyNow: string;
+    changedRecently: string;
+    feedback: Array<{
+      id: string;
+      targetType: "top_of_mind_note";
+      value: ApiFeedbackValue;
+      emotionLabel: ApiFeedbackEmotion | null;
+      correctionText: string | null;
+      source: string;
+      createdAt: string;
+    }>;
+    qualityIndicators: ApiMeaningGraphQualityIndicator[];
     createdAt: string;
   }>;
   feedback: Array<{

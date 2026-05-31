@@ -4228,12 +4228,43 @@
 
 .meaning-graph-filterbar {
   display: grid;
-  grid-template-columns: minmax(180px, 1.6fr) repeat(4, minmax(128px, 1fr)) auto auto;
+  grid-template-columns: minmax(180px, 1.6fr) repeat(5, minmax(112px, 1fr)) minmax(120px, auto) auto auto;
   gap: 8px;
   align-items: end;
   border-bottom: 1px solid #000;
   padding: 8px 10px;
   background: #fff;
+}
+
+.meaning-graph-checkbox-filter {
+  align-content: center;
+  grid-template-columns: auto 1fr;
+  min-height: 48px;
+}
+
+.meaning-graph-checkbox-filter input {
+  width: auto;
+}
+
+.meaning-quality-list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.meaning-quality-list li {
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid rgba(0, 0, 0, 0.18);
+  padding-top: 6px;
+}
+
+.meaning-quality-list strong,
+.meaning-quality-list span {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .meaning-graph-filterbar label {
