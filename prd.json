@@ -317,6 +317,24 @@
       "priority": 20,
       "passes": true,
       "notes": "Product rationale: in a world where AI can sense passively, asking humans for explicit input must be worth it immediately. The human-only value is not just emotion labeling; it is the user noticing why this signal mattered while the feeling is still alive. Capture should become a tiny revelation loop: this amused me, this made me envious, this feels like a life I want, this bothers me, this is high-stakes. Good interaction directions: one-tap chips, quick highlight plus reason, optional micro-question, press-and-hold intensity, or a tiny palette after selection. The goal is to reduce churn by making explicit input feel rewarding, clarifying, and uniquely human, not like feeding the AI."
+    },
+    {
+      "id": "US-018",
+      "title": "Rebuild Top of Mind as ambition mirror statements",
+      "description": "As a user, I want Top of Mind post-its to help me discover my ambition and internal frequency, not summarize the things I saved or label context graph nodes.",
+      "acceptanceCriteria": [
+        "Change the Top of Mind generation architecture so every active note is grounded in an ambition dimension such as place, people, work, taste, tension, identity, rejection, or next experiment",
+        "Generate post-it titles as ambient-signal mirror statements about desired environments, desired peer groups, work direction, operating standards, rejected contexts, or emerging self-image",
+        "Do not use raw context node labels, saved-signal summaries, tags, or generic phrases such as \"You keep circling X\" as the main post-it text",
+        "Each Top of Mind note must expose why this may matter for ambition and 2-5 supporting saved signals or explicit evidence previews where available",
+        "Add deterministic tests that fail if a generated Top of Mind title is only a graph label, a saved content summary, or a shallow theme label",
+        "Update Home and share-page copy/rendering only as needed so the visible post-its read like ambition mirror statements on first load, not archive summaries",
+        "Ensure user feedback remains connected to the note and can validate or correct the ambition dimension, not just the underlying graph node",
+        "Run API and web typechecks, targeted Top of Mind generation tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "Product rationale: Paul Graham's cities essay points at ambient ambition signals: some rooms say you should be richer, smarter, braver, more tasteful, faster, freer, or more original. WAKA should help users infer which ambient signals they are already responding to. A useful post-it should read like: \"You seem pulled toward places where ambitious people make things in public,\" \"You may be trying to leave environments that reward consensus over aliveness,\" or \"You seem to want peers who act before permission arrives.\" It should not read like: \"founder cities,\" \"rituals keep returning,\" or \"You keep circling founder cities.\""
     }
   ]
 }

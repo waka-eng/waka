@@ -72,7 +72,11 @@ Product language:
 
 Keep the post-it metaphor. Top-of-mind notes should feel provisional, replaceable, and evidence-backed.
 
+Top-of-mind notes must help the user infer ambition and internal frequency. They should point toward desired environments, people, work, taste, standards, rejected contexts, or emerging self-image. They should not read like saved-content summaries, raw context-node labels, tags, or shallow wrappers such as `You keep circling X`.
+
 The admin graph inspector remains internal. Do not make a literal graph the main user-facing UX.
+
+When a story changes a user-facing workflow, verify the exact path the user will use in the product. Do not satisfy an acceptance criterion by only adding an isolated route, hidden surface, or backend helper if the current primary UI still shows the old experience.
 
 ## Stop Condition
 

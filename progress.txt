@@ -20,6 +20,21 @@
 - Saved-signal archive and deep-dive UI should use the user-facing `/api/signals` route; it assembles legacy inspiration rows with signal packets, highlights, context nodes, top-of-mind notes, and signal feedback without making `/api/wow-moments` the preferred product surface.
 - Final naming convention: product-facing UI, docs, model prompts, and web client helpers should use signal, signal packet, context graph/node, top-of-mind note, resonance, and feedback; `wow_*`, `meaning_*`, and `/api/wow-moments` names are legacy compatibility only unless a persistence migration explicitly renames them.
 - Capture self-understanding metadata should use existing `inspiration_sparks.note` as `capture_metadata:v1:{...}` until a dedicated signal metadata table exists; signal packets already carry spark notes forward as user-provided evidence.
+- Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
+
+---
+
+## 2026-05-30 17:10 PDT - US-018 setup
+
+- Added the next Ralph story: `US-018 Rebuild Top of Mind as ambition mirror statements`.
+- Product correction from manual review:
+  - Existing Top of Mind notes can still feel like graph-node labels or summaries of saved content.
+  - That does not satisfy the ambition mirror goal. The user wants the surface to infer an internal frequency: the environments, people, standards, rejected contexts, and emerging self-image their saved signals point toward.
+  - Future Top of Mind generation must produce ambient-signal mirror statements, not theme labels. Good outputs sound like "You seem pulled toward places where ambitious people make things in public." Bad outputs sound like "founder cities" or "You keep circling founder cities."
+- Ralph acceptance warning:
+  - Do not satisfy this by only changing copy on a hidden route or by wrapping existing graph labels in generic sentence templates.
+  - Verify the exact Home Top of Mind path because this is where the user judges whether the product helps them find ambition.
+  - Add tests that reject summary-like titles and raw graph labels.
 
 ---
 
