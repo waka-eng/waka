@@ -17,7 +17,7 @@ function noteKicker(note: ApiTopOfMindNoteSurface): string {
 }
 
 function shortEvidence(note: ApiTopOfMindNoteSurface): string {
-  const evidencePreview = note.evidencePreviews[0]?.textPreview;
+  const evidencePreview = note.evidenceRationale || note.evidencePreviews[0]?.textPreview;
   const relatedSignalPreview = note.relatedSignals[0]?.preview;
   const text = evidencePreview ?? relatedSignalPreview;
   if (!text) return "This reflection is still looking for stronger evidence.";
@@ -103,8 +103,9 @@ export function TopOfMindSharePage(): JSX.Element {
               <article className="tom-share-postit" data-tone={index % 4} key={note.id}>
                 <div className="tom-share-postit-pin" aria-hidden="true" />
                 <span>{noteKicker(note)}</span>
-                <h3>{note.title}</h3>
-                <p>{note.body}</p>
+                <h3>{note.ambientSignal || note.title}</h3>
+                <p>{note.matchedEnvironment}</p>
+                <p className="tom-share-anti">Not this: {note.antiEnvironment}</p>
                 <blockquote>{shortEvidence(note)}</blockquote>
               </article>
             ))}

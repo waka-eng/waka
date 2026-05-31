@@ -430,6 +430,10 @@ interface HomeThoughtCard {
   feedbackTargetId?: string;
   label: string;
   ambitionDimension?: ApiAmbitionDimension;
+  ambientSignal?: string;
+  matchedEnvironment?: string;
+  antiEnvironment?: string;
+  evidenceRationale?: string;
   type: string;
   reason: string;
   supportingSignals: Array<{
@@ -492,8 +496,12 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
   return {
     id: note.id,
     feedbackTargetId: note.id,
-    label: note.title,
+    label: note.ambientSignal || note.title,
     ambitionDimension: note.ambitionDimension,
+    ambientSignal: note.ambientSignal,
+    matchedEnvironment: note.matchedEnvironment,
+    antiEnvironment: note.antiEnvironment,
+    evidenceRationale: note.evidenceRationale,
     type: note.type,
     reason: note.body,
     supportingSignals: [...evidenceSignals, ...relatedSignals],
@@ -1790,6 +1798,29 @@ export function HomePage(): JSX.Element {
         <div className="nc-note-expanded-content">
           <section className="nc-note-reading">
             <p>{signal.reason}</p>
+          </section>
+
+          <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-frequency-${signal.id}`}>
+            <div className="nc-note-evidence-header">
+              <span>internal frequency</span>
+              <strong id={`top-of-mind-frequency-${signal.id}`}>
+                {signal.ambientSignal ?? signal.label}
+              </strong>
+            </div>
+            <dl className="nc-note-frequency-list">
+              <div>
+                <dt>matched environment</dt>
+                <dd>{signal.matchedEnvironment ?? "WAKA is still inferring the surrounding signal."}</dd>
+              </div>
+              <div>
+                <dt>anti-environment</dt>
+                <dd>{signal.antiEnvironment ?? "No rejected context has surfaced clearly yet."}</dd>
+              </div>
+              <div>
+                <dt>evidence rationale</dt>
+                <dd>{signal.evidenceRationale ?? "This read is provisional and should be corrected if it misses."}</dd>
+              </div>
+            </dl>
           </section>
 
           <section className="nc-note-source-section">

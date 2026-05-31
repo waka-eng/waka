@@ -185,7 +185,7 @@ const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
     ],
     matchingSnippets: ["bridge rhythms"],
     relatedContextTerms: ["places that make movement visible"],
-    relatedTopOfMindNoteTitles: ["You may want work that turns bridge rhythms into something visible."],
+    relatedTopOfMindNoteTitles: ["You may need workrooms where making the thing is the default temperature."],
     attachmentSummary: [],
     relevanceReasons: ["highlighted"],
   },
@@ -238,7 +238,7 @@ const sampleSavedSignalDetail: ApiSavedSignalDetail = {
   relatedTopOfMindNotes: [
     {
       id: "note-1",
-      title: "You may want work that turns bridge rhythms into something visible.",
+      title: "You may need workrooms where making the thing is the default temperature.",
       type: "pattern",
       body: "The signal keeps pointing toward environments where movement becomes a public artifact.",
       confidence: 0.82,
@@ -250,8 +250,12 @@ const sampleSavedSignalDetail: ApiSavedSignalDetail = {
 const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
   userId: "user-1",
-  title: "You may want work that turns bridge rhythms into something visible.",
+  title: "You may need workrooms where making the thing is the default temperature.",
   ambitionDimension: "work",
+  ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+  matchedEnvironment: "A working culture where bridge rhythms become visible through repeated making.",
+  antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
+  evidenceRationale: "Several saved signals cluster around city walks, architecture, and jazz history.",
   type: "pattern",
   body: "Several saved signals connect architecture essays with walking routes and jazz history.",
   prompt: "What bridge keeps reappearing?",
@@ -293,7 +297,7 @@ const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
 
 const sampleTopOfMind: ApiTopOfMind = {
   generatedAt: "2026-05-12T12:00:00.000Z",
-  headline: "You may want work that turns bridge rhythms into something visible.",
+  headline: "You may need workrooms where making the thing is the default temperature.",
   activeThemes: [
     {
       nodeId: "theme-1",
@@ -730,7 +734,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
-    expect(container.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
+    expect(container.textContent).toContain("You may need workrooms where making the thing is the default temperature.");
     expect(container.textContent).toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
@@ -753,9 +757,13 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("1 signal behind this");
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).toContain("This signal anchors the pattern.");
+    expect(expanded?.textContent).toContain("internal frequency");
+    expect(expanded?.textContent).toContain("matched environment");
+    expect(expanded?.textContent).toContain("anti-environment");
+    expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
     expect(expanded?.textContent).toContain("ambition dimension");
     expect(expanded?.textContent).toContain("work");
-    expect(expanded?.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
+    expect(expanded?.textContent).toContain("You may need workrooms where making the thing is the default temperature.");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
   });
@@ -933,7 +941,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
+    expect(container.textContent).toContain("You may need workrooms where making the thing is the default temperature.");
   });
 
   it("localizes the logout affordance in Korean", async () => {
@@ -1038,7 +1046,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).toContain("what it may reveal now");
-    expect(detail.textContent).toContain("You may want work that turns bridge rhythms into something visible.");
+    expect(detail.textContent).toContain("You may need workrooms where making the thing is the default temperature.");
   });
 
   it("lets users mark whether a revisited signal still matters", async () => {

@@ -713,6 +713,10 @@ export interface ApiTopOfMindNote {
   userId: string;
   title: string;
   ambitionDimension: ApiAmbitionDimension;
+  ambientSignal: string;
+  matchedEnvironment: string;
+  antiEnvironment: string;
+  evidenceRationale: string;
   type: ApiTopOfMindNoteType;
   body: string;
   prompt: string | null;

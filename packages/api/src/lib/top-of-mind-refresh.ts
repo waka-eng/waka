@@ -51,6 +51,10 @@ export interface TopOfMindRefreshCandidate {
   score: number;
   idempotencyKey: string;
   title: string;
+  ambientSignal: string;
+  matchedEnvironment: string;
+  antiEnvironment: string;
+  evidenceRationale: string;
   why: string;
   ambitionDimension: AmbitionDimension;
   kind: WowKind;
@@ -200,55 +204,77 @@ function ambitionDimensionForContextType(type: ContextNodeType): AmbitionDimensi
   }
 }
 
-function ambitionDimensionPhrase(dimension: AmbitionDimension): string {
-  switch (dimension) {
-    case "place":
-      return "the environments that raise your standards";
-    case "people":
-      return "the peers you want ambition to happen around";
-    case "work":
-      return "the kind of work you may want to make real";
-    case "taste":
-      return "the standards your taste keeps defending";
-    case "tension":
-      return "a tension that is shaping what you can no longer ignore";
-    case "identity":
-      return "an emerging self-image you may be protecting";
-    case "rejection":
-      return "the contexts you may be ready to leave behind";
-    case "next_experiment":
-      return "a small experiment that could make the pattern less abstract";
-  }
-}
-
-function buildTopOfMindTitle(
+function buildInternalFrequency(
   node: TopOfMindRefreshNodeInput,
   type: ContextNodeType,
-): string {
+  evidence: TopOfMindRefreshEvidenceInput[],
+): Pick<
+  TopOfMindRefreshCandidate,
+  "ambientSignal" | "matchedEnvironment" | "antiEnvironment" | "evidenceRationale"
+> {
   const label = displayLabel(node.label);
   const dimension = ambitionDimensionForContextType(type);
+  const evidenceCount = Math.max(node.evidenceCount, evidence.length);
+  const patternScope =
+    evidenceCount > 1
+      ? `${evidenceCount} saved signals are clustering around this frequency`
+      : "one saved signal is starting this frequency";
+  const evidencePhrase =
+    evidence.length > 1
+      ? `${patternScope}, with the strongest ones pointing through "${evidencePreview(evidence[0])}" and "${evidencePreview(evidence[1])}".`
+      : `${patternScope}, led by "${evidencePreview(evidence[0]) || label}".`;
+
   switch (dimension) {
     case "place":
-      return truncateText(
-        /^(the\s+)?rooms?\b/i.test(label)
-          ? `You seem pulled toward ${label}.`
-          : `You seem pulled toward rooms where ${label} can become normal.`,
-        MAX_TITLE_CHARS,
-      );
+      return {
+        ambientSignal: "You may be looking for places that quietly tell you to be braver.",
+        matchedEnvironment: `A city, studio, or room where ${label} feels publicly reinforced.`,
+        antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
+        evidenceRationale: evidencePhrase,
+      };
     case "people":
-      return truncateText(`You seem to want peers who make ${label} easier to practice.`, MAX_TITLE_CHARS);
+      return {
+        ambientSignal: "You seem to want peers who make fast, public building feel normal.",
+        matchedEnvironment: `People who make ${label} feel like a shared operating rhythm.`,
+        antiEnvironment: "Circles where permission, polish, or social caution arrives before motion.",
+        evidenceRationale: evidencePhrase,
+      };
     case "work":
-      return truncateText(`You may want work that turns ${label} into something visible.`, MAX_TITLE_CHARS);
+      return {
+        ambientSignal: "You may need workrooms where making the thing is the default temperature.",
+        matchedEnvironment: `A working culture where ${label} becomes visible through repeated making.`,
+        antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
+        evidenceRationale: evidencePhrase,
+      };
     case "taste":
-      return truncateText(`Your taste seems to sharpen around ${label} as a standard, not decoration.`, MAX_TITLE_CHARS);
+      return {
+        ambientSignal: "You seem drawn to standards that make sharper taste feel ordinary.",
+        matchedEnvironment: `Surroundings where ${label} is treated as a standard, not decoration.`,
+        antiEnvironment: "Rooms that flatten taste into trend, convenience, or generic approval.",
+        evidenceRationale: evidencePhrase,
+      };
     case "tension":
-      return truncateText(`Your ambition may be forming inside the tension around ${label}.`, MAX_TITLE_CHARS);
-    case "identity":
-      return truncateText(`You seem to be protecting an identity built around ${label}.`, MAX_TITLE_CHARS);
     case "rejection":
-      return truncateText(`You may be outgrowing contexts that force a choice between ${label}.`, MAX_TITLE_CHARS);
+      return {
+        ambientSignal: "You may be trying to leave rooms that reward consensus over aliveness.",
+        matchedEnvironment: `A surrounding culture that lets the tension around ${label} stay visible long enough to choose from it.`,
+        antiEnvironment: "Rooms that smooth over the live part so everyone can keep performing agreement.",
+        evidenceRationale: evidencePhrase,
+      };
+    case "identity":
+      return {
+        ambientSignal: "You may be practicing a self-image that needs braver surroundings.",
+        matchedEnvironment: `An environment where ${label} is mirrored back as normal behavior.`,
+        antiEnvironment: "Contexts that make the emerging version of you feel like a private exception.",
+        evidenceRationale: evidencePhrase,
+      };
     case "next_experiment":
-      return truncateText(`A next experiment may be to test whether ${label} belongs in your real life.`, MAX_TITLE_CHARS);
+      return {
+        ambientSignal: "You may need a small real-world test, not another private theory.",
+        matchedEnvironment: `A practical setting where ${label} can be tested in public conditions.`,
+        antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
+        evidenceRationale: evidencePhrase,
+      };
   }
 }
 
@@ -256,19 +282,29 @@ function buildWhy(
   node: TopOfMindRefreshNodeInput,
   evidence: TopOfMindRefreshEvidenceInput[],
   dimension: AmbitionDimension,
+  frequency: Pick<
+    TopOfMindRefreshCandidate,
+    "ambientSignal" | "matchedEnvironment" | "antiEnvironment" | "evidenceRationale"
+  >,
 ): string {
   const description = normalizeWhitespace(node.description);
   const evidencePreviews = evidence
     .map((row) => evidencePreview(row))
     .filter((preview) => preview.length > 0)
     .slice(0, 5);
-  const ambitionReason = `This may matter for ambition because it points at ${ambitionDimensionPhrase(dimension)}.`;
+  const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings you seem to need.`;
   const descriptionText = description ? ` ${description}` : "";
   const signalText =
     evidencePreviews.length > 0
       ? ` Supporting signals: ${evidencePreviews.map((preview) => `"${preview}"`).join("; ")}.`
       : ` ${node.evidenceCount} signal${node.evidenceCount === 1 ? "" : "s"} currently support this note.`;
-  return `${ambitionReason}${descriptionText}${signalText}`;
+  return [
+    `Ambient signal: ${frequency.ambientSignal}`,
+    `Matched environment: ${frequency.matchedEnvironment}`,
+    `Anti-environment: ${frequency.antiEnvironment}`,
+    `Evidence rationale: ${frequency.evidenceRationale}`,
+    `${ambitionReason}${descriptionText}${signalText}`,
+  ].join(" ");
 }
 
 function buildIdempotencyKey(userId: string, nodeId: string): string {
@@ -316,14 +352,16 @@ export function rankTopOfMindRefreshCandidates(input: {
         )
         .slice(0, MAX_EVIDENCE_PER_NOTE);
       const ambitionDimension = ambitionDimensionForContextType(contextType);
+      const frequency = buildInternalFrequency(node, contextType, evidence);
       return {
         node,
         contextType,
         evidence,
         score: candidateScore(node, contextType, now),
         idempotencyKey,
-        title: buildTopOfMindTitle(node, contextType),
-        why: buildWhy(node, evidence, ambitionDimension),
+        title: truncateText(frequency.ambientSignal, MAX_TITLE_CHARS),
+        ...frequency,
+        why: buildWhy(node, evidence, ambitionDimension, frequency),
         ambitionDimension,
         kind: noteKindForContextType(contextType),
         reflectionQuestion: reflectionQuestionForContextType(node, contextType),

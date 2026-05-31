@@ -389,7 +389,7 @@
         "Run API and web typechecks, targeted Top of Mind generation/API tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
       ],
       "priority": 24,
-      "passes": false,
+      "passes": true,
       "notes": "Product correction after US-018: ambition dimensions and mirror-style templates are not enough. Paul Graham's cities frame is about ambient external signals: a city tells you to be richer, smarter, more ambitious, more tasteful, freer, braver, or more original. WAKA should infer the user's internal frequency so they can match it to cities, rooms, peers, and work environments. The post-it should not merely say what the saved things are about; it should say what kind of surrounding signal the user seems to need."
     }
   ]

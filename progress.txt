@@ -24,6 +24,41 @@
 - Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
 - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
 - Top of Mind needs an explicit internal-frequency / ambient-signal layer above individual graph nodes. It should answer what kind of city, room, peer group, standard, anti-environment, or self-image the user is trying to live near, not just rephrase a context node with ambition-flavored copy.
+- Top-of-mind note surfaces expose `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale`; graph refresh stores those fields in the legacy `wow_moments.why` text until dedicated note persistence exists, and serializers split them back out for the API/UI.
+
+---
+
+## 2026-05-30 22:34 PDT - US-021
+
+- What was implemented
+  - Added an explicit internal-frequency ambient-signal layer to graph-backed Top of Mind generation.
+  - Replaced label-wrapper titles with ambient-signal titles about braver places, fast public-building peers, workroom temperature, taste standards, rejected consensus rooms, self-image, and real-world tests.
+  - Exposed `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale` through the Top of Mind compatibility model and `/api/top-of-mind` surfaces without exposing admin graph internals.
+  - Updated Home and share-page rendering so the first-read post-it is the ambient signal, with matched/anti-environment and evidence rationale available second.
+  - Stripped structured ambient prefixes out of serialized note `body` so the UI does not duplicate the dedicated internal-frequency fields.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/styles/global.css`
+  - Targeted API/web tests and `prd.json`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts src/routes/wow-moments.test.ts` passed: 18 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/TopOfMindShare.test.ts test/api.test.ts` passed: 58 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` and `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, signals, top-of-mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top-of-mind ambient-signal fields are currently serialized through the legacy WOW persistence layer and split back out by `top-of-mind-notes.ts`.
+  - Gotchas encountered
+    - Generated note `body` should not repeat the structured ambient fields now that Home renders a dedicated internal-frequency section.
+  - Useful context
+    - The dev server command accepted the Vite args through pnpm but still served on the existing default `http://localhost:5173/`; browser verification targeted that reported URL.
 
 ---
 

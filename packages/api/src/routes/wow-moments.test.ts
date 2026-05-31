@@ -106,8 +106,13 @@ describe("GET /api/wow-moments top-of-mind compatibility", () => {
       topOfMindNote: {
         id: moment.id,
         userId: user.id,
-        title: "A next experiment may be to test whether rituals keep returning belongs in your real life.",
+        title: "You may need a small real-world test, not another private theory.",
         ambitionDimension: "next_experiment",
+        ambientSignal: "You may need a small real-world test, not another private theory.",
+        matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
+        antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
+        evidenceRationale:
+          "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
         type: "action",
         body: "Multiple signals keep circling the same careful ritual.",
         prompt: null,

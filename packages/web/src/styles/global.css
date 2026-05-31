@@ -278,6 +278,12 @@
   line-height: 1.5;
 }
 
+.tom-share-postit .tom-share-anti {
+  margin-top: 10px;
+  color: #5f594d;
+  font-size: 0.92rem;
+}
+
 .tom-share-postit blockquote {
   margin: 22px 0 0;
   padding: 14px 0 0;
@@ -2475,7 +2481,8 @@
 }
 
 .nc-note-evidence-list,
-.nc-note-context-list {
+.nc-note-context-list,
+.nc-note-frequency-list {
   display: grid;
   gap: 10px;
   list-style: none;
@@ -2484,7 +2491,8 @@
 }
 
 .nc-note-evidence-list li,
-.nc-note-context-list li {
+.nc-note-context-list li,
+.nc-note-frequency-list div {
   display: grid;
   gap: 6px;
   min-width: 0;
@@ -2505,6 +2513,7 @@
 
 .nc-note-evidence-list p,
 .nc-note-context-list p,
+.nc-note-frequency-list dd,
 .nc-note-empty-evidence {
   margin: 0;
   color: var(--ink);
@@ -2513,6 +2522,15 @@
   font-style: normal;
   line-height: 1.42;
   opacity: 0.62;
+}
+
+.nc-note-frequency-list dt {
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.42;
 }
 
 .nc-note-evidence-list div {

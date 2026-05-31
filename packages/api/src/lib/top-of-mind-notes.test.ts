@@ -66,8 +66,14 @@ describe("top-of-mind note compatibility model", () => {
     expect(note).toEqual({
       id: baseMoment.id,
       userId: baseMoment.userId,
-      title: "You seem pulled toward the rooms where ambition feels humane.",
+      title: "You may be looking for places that quietly tell you to be braver.",
       ambitionDimension: "place",
+      ambientSignal: "You may be looking for places that quietly tell you to be braver.",
+      matchedEnvironment:
+        "A city, studio, or room where a provisional reflection feels publicly reinforced.",
+      antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
+      evidenceRationale:
+        "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
       type: "question",
       body: baseMoment.why,
       prompt: "What should stay unresolved?",
@@ -97,9 +103,34 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("You seem pulled toward rooms where founder cities can become normal.");
+    expect(note.title).toBe("You may be looking for places that quietly tell you to be braver.");
     expect(note.title).not.toBe("founder cities");
     expect(note.title).not.toMatch(/^You keep circling\b/);
+    expect(note.title).not.toMatch(/rooms where .+ can become normal/i);
     expect(note.ambitionDimension).toBe("place");
+  });
+
+  it("exposes ambient signal fields embedded by graph refresh notes", () => {
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        title: "You seem to want peers who make fast, public building feel normal.",
+        why:
+          "Ambient signal: You seem to want peers who make fast, public building feel normal. " +
+          "Matched environment: People who make publishing early feel ordinary. " +
+          "Anti-environment: Circles where permission arrives before motion. " +
+          "Evidence rationale: Three saved signals are clustering around this frequency. " +
+          "This may matter for ambition because it points at a people frequency.",
+        beliefStatement: "You seem to want peers who make fast, public building feel normal.",
+      },
+    });
+
+    expect(note).toMatchObject({
+      ambientSignal: "You seem to want peers who make fast, public building feel normal.",
+      matchedEnvironment: "People who make publishing early feel ordinary.",
+      antiEnvironment: "Circles where permission arrives before motion.",
+      evidenceRationale: "Three saved signals are clustering around this frequency.",
+      body: "This may matter for ambition because it points at a people frequency.",
+    });
   });
 });
