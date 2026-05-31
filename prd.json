@@ -372,6 +372,25 @@
       "priority": 23,
       "passes": true,
       "notes": "Product correction: the current `/signals` archive is too complicated and feels like a search/admin surface. The user wants past inspirations to feel like therapy: a soft return to what they once loved, with enough structure to notice whether the signal still matters and how it connects to ambition. All Signals should share the Top of Mind look and feel, stay in the same product world, and make deep dive emotionally legible before it becomes searchable."
+    },
+    {
+      "id": "US-021",
+      "title": "Generate internal-frequency ambient signals for Top of Mind",
+      "description": "As a user, I want Top of Mind to help me identify the ambient signals I am trying to live near, so I can understand which cities, rooms, peers, and environments match my ambition.",
+      "acceptanceCriteria": [
+        "Add an explicit internal-frequency or ambient-signal layer above individual context nodes; Top of Mind must infer what kind of surrounding signal the user seems to be seeking, not only rephrase one graph node",
+        "Each primary Top of Mind post-it must answer one of these questions: what kind of city/room would make me more alive, what kind of people should I think with, what standard should feel normal around me, what environment am I rejecting, or what version of myself am I trying to become",
+        "Generate user-facing copy in the form of ambient signals such as \"You may be looking for places that quietly tell you to be braver\" or \"You seem to want peers who make fast, public building feel normal\"",
+        "Avoid generic ambition wrappers and label interpolation patterns such as \"rooms where X can become normal\", \"work that turns X visible\", or any sentence that still reads like a graph-label summary",
+        "Use multiple saved signals or multiple context nodes where possible so a Top of Mind note reflects a frequency pattern rather than a single extracted theme",
+        "Expose the ambient signal, matched environment, anti-environment, and evidence rationale in the Top of Mind API or note surface without leaking admin graph internals",
+        "Update Home and share-page rendering so the first-read value is the internal-frequency insight, with evidence available second",
+        "Add deterministic tests that fail when a generated note can be reduced to a single context label or does not mention an ambient signal, environment, peer group, standard, rejection, or self-image",
+        "Run API and web typechecks, targeted Top of Mind generation/API tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Product correction after US-018: ambition dimensions and mirror-style templates are not enough. Paul Graham's cities frame is about ambient external signals: a city tells you to be richer, smarter, more ambitious, more tasteful, freer, braver, or more original. WAKA should infer the user's internal frequency so they can match it to cities, rooms, peers, and work environments. The post-it should not merely say what the saved things are about; it should say what kind of surrounding signal the user seems to need."
     }
   ]
 }

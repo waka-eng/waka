@@ -23,6 +23,22 @@
 - Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
 - Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
 - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
+- Top of Mind needs an explicit internal-frequency / ambient-signal layer above individual graph nodes. It should answer what kind of city, room, peer group, standard, anti-environment, or self-image the user is trying to live near, not just rephrase a context node with ambition-flavored copy.
+
+---
+
+## 2026-05-30 19:05 PDT - US-021 setup
+
+- Added follow-up Ralph story: `US-021 Generate internal-frequency ambient signals for Top of Mind`.
+- Product correction:
+  - US-018 improved wording and introduced ambition dimensions, but the resulting post-its can still feel like graph-node summaries.
+  - The Paul Graham cities frame requires a higher-level inference: what ambient external signal is the user trying to match with their internal frequency?
+  - Useful notes should sound like "You may be looking for places that quietly tell you to be braver" or "You seem to want peers who make fast, public building feel normal."
+  - Bad notes are still label wrappers: "rooms where X can become normal," "work that turns X visible," or anything reducible to one context label.
+- Ralph acceptance warning:
+  - Do not satisfy this by another template pass over `meaning_nodes.label`.
+  - Use multiple evidence points where possible and expose ambient signal, matched environment, anti-environment, and evidence rationale.
+  - Verify the exact Home Top of Mind path because this is the primary product surface.
 
 ---
 
