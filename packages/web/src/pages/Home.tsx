@@ -396,6 +396,15 @@ interface InspirationDiscoveryFilters {
   search: string;
 }
 
+type MemoryDrawerLens =
+  | "all"
+  | "still_alive"
+  | "changed_shape"
+  | "returning"
+  | "older_self"
+  | "keeps_returning"
+  | "tensions";
+
 const DEFAULT_INSPIRATION_FILTERS: InspirationDiscoveryFilters = {
   search: "",
 };
@@ -554,6 +563,16 @@ const NOTE_COLORS = [
 
 const EMPTY_TOP_OF_MIND_SLOTS = Array.from({ length: TOP_OF_MIND_NOTE_LIMIT }, (_, index) => index);
 
+const MEMORY_DRAWER_LENSES: Array<{ id: MemoryDrawerLens; label: string }> = [
+  { id: "all", label: "all" },
+  { id: "still_alive", label: "still alive" },
+  { id: "changed_shape", label: "changed shape" },
+  { id: "returning", label: "forgotten but returning" },
+  { id: "older_self", label: "older version of me" },
+  { id: "keeps_returning", label: "keeps coming back" },
+  { id: "tensions", label: "tensions" },
+];
+
 function memoryMovementForThoughtCard(signal: HomeThoughtCard, index: number): MemoryMovementLabel {
   if (signal.status === "stale" || signal.status === "replaced") return "fading";
   if (signal.type === "tension" || signal.ambitionDimension === "tension") return "tension";
@@ -567,6 +586,62 @@ function memoryMovementForThoughtCard(signal: HomeThoughtCard, index: number): M
     return "came back";
   }
   return "newly forming";
+}
+
+function capturedAtMs(signal: ApiSavedSignalSearchResult): number {
+  const parsed = new Date(signal.capturedAt).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function signalAgeDays(signal: ApiSavedSignalSearchResult): number {
+  const age = Date.now() - capturedAtMs(signal);
+  if (!Number.isFinite(age) || age < 0) return 0;
+  return Math.floor(age / (1000 * 60 * 60 * 24));
+}
+
+function signalTextHaystack(signal: ApiSavedSignalSearchResult): string {
+  return [
+    signal.textPreview,
+    ...signal.highlightedSnippets.map((snippet) => snippet.text),
+    ...signal.matchingSnippets,
+    ...signal.relatedContextTerms,
+    ...signal.relatedTopOfMindNoteTitles,
+    ...signal.relevanceReasons,
+  ].join(" ").toLowerCase();
+}
+
+function memoryDrawerSectionForSignal(signal: ApiSavedSignalSearchResult): MemoryDrawerLens {
+  const haystack = signalTextHaystack(signal);
+  if (haystack.includes("tension") || haystack.includes("bothers") || haystack.includes("not anymore")) {
+    return "tensions";
+  }
+  if (signal.relatedTopOfMindNoteTitles.length > 0 || signal.signalScores.recurrence >= 6) {
+    return "keeps_returning";
+  }
+  if (signal.highlightedSnippets.length > 0 || signal.resonanceScore >= 7) {
+    return "still_alive";
+  }
+  if (signalAgeDays(signal) >= 45) {
+    return "older_self";
+  }
+  if (signal.relatedContextTerms.length > 0 || signal.matchingSnippets.length > 0) {
+    return "returning";
+  }
+  return "changed_shape";
+}
+
+function memoryDrawerSectionLabel(section: MemoryDrawerLens): string {
+  return MEMORY_DRAWER_LENSES.find((lens) => lens.id === section)?.label ?? section.replace(/_/g, " ");
+}
+
+function memoryDrawerSectionDescription(section: MemoryDrawerLens): string {
+  if (section === "still_alive") return "signals that still have heat when you touch them again";
+  if (section === "changed_shape") return "saved moments whose meaning is allowed to move";
+  if (section === "returning") return "fragments that went quiet and are starting to reappear";
+  if (section === "older_self") return "older saves from a version of you worth meeting gently";
+  if (section === "keeps_returning") return "patterns that keep writing their way back to the five post-its";
+  if (section === "tensions") return "live contradictions WAKA should not smooth away";
+  return "everything in the drawer";
 }
 
 function replaceabilityLine(label: MemoryMovementLabel): string {
@@ -783,6 +858,7 @@ export function HomePage(): JSX.Element {
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
+  const [memoryDrawerLens, setMemoryDrawerLens] = useState<MemoryDrawerLens>("all");
   const [captureFocused, setCaptureFocused] = useState(false);
   const [captureSaveFlash, setCaptureSaveFlash] = useState(false);
   const [captureView] = useState<CaptureView>("note");
@@ -816,6 +892,7 @@ export function HomePage(): JSX.Element {
     | { status: "saved"; label: string }
     | { status: "error"; message: string }
   >({ status: "idle" });
+  const [savedSignalChangeText, setSavedSignalChangeText] = useState("");
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -1295,17 +1372,21 @@ export function HomePage(): JSX.Element {
         }),
       ]
     : localSignalRows;
-  const inPlaceSignals = savedSignalRows.filter((signal) => {
-        if (!savedSignalQuery) return true;
-        const haystack = [
-          signal.textPreview,
-          ...signal.highlightedSnippets.map((snippet) => snippet.text),
-          ...signal.matchingSnippets,
-          ...signal.relatedContextTerms,
-          ...signal.relatedTopOfMindNoteTitles,
-        ].join(" ").toLowerCase();
-        return haystack.includes(savedSignalQuery);
-      });
+  const searchedSignals = savedSignalRows.filter((signal) => {
+    if (!savedSignalQuery) return true;
+    return signalTextHaystack(signal).includes(savedSignalQuery);
+  });
+  const inPlaceSignals = searchedSignals.filter(
+    (signal) =>
+      memoryDrawerLens === "all" || memoryDrawerSectionForSignal(signal) === memoryDrawerLens,
+  );
+  const memoryDrawerSections = MEMORY_DRAWER_LENSES.filter((section) => section.id !== "all")
+    .map((section) => ({
+      ...section,
+      description: memoryDrawerSectionDescription(section.id),
+      signals: inPlaceSignals.filter((signal) => memoryDrawerSectionForSignal(signal) === section.id),
+    }))
+    .filter((section) => section.signals.length > 0);
 
   const selectedSavedSignal = useMemo(() => {
     return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? inPlaceSignals[0] ?? null;
@@ -1364,6 +1445,7 @@ export function HomePage(): JSX.Element {
     let cancelled = false;
     setSavedSignalDetailLoading(true);
     setSavedSignalFeedback({ status: "idle" });
+    setSavedSignalChangeText("");
     void (async () => {
       try {
         const detail = await fetchSavedSignalDetail(selectedSavedSignal.id);
@@ -1601,6 +1683,9 @@ export function HomePage(): JSX.Element {
         targetType: "signal",
         targetId,
         value,
+        ...(savedSignalChangeText.trim()
+          ? { correctionText: savedSignalChangeText.trim() }
+          : {}),
       });
       setSavedSignalFeedback({ status: "saved", label });
     } catch (caught) {
@@ -2139,62 +2224,101 @@ export function HomePage(): JSX.Element {
             </header>
 
             <div className="signal-revisit-layout">
-              <div className="reference-save-list signal-revisit-list" aria-label="saved signals to revisit">
+              <div className="signal-memory-lenses" aria-label="memory drawer sections">
+                {MEMORY_DRAWER_LENSES.map((lens) => (
+                  <button
+                    key={lens.id}
+                    type="button"
+                    className={memoryDrawerLens === lens.id ? "is-active" : ""}
+                    aria-pressed={memoryDrawerLens === lens.id}
+                    onClick={() => {
+                      setMemoryDrawerLens(lens.id);
+                      setSelectedSavedSignalId(null);
+                      setSavedSignalDetail(null);
+                    }}
+                  >
+                    {lens.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="signal-memory-shelves" aria-label="memory sections">
                 {savedSignalsError ? <p>{savedSignalsError}</p> : null}
                 {savedSignalsLoading && inPlaceSignals.length === 0 ? <p>{copy.loadingSaves}</p> : null}
                 {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
                   <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
                 ) : null}
-                {inPlaceSignals.map((signal) => (
-                  <button
-                    type="button"
-                    key={signal.id}
-                    onClick={() => {
-                      setSelectedSavedSignalId(signal.id);
-                      recordRevisit(signal.id, "detail_opened");
-                    }}
-                    className={`reference-save signal-revisit-card${
-                      selectedSavedSignal?.id === signal.id ? " signal-revisit-card--selected" : ""
-                    }`}
-                  >
-                    <span>{formatTimestamp(signal.capturedAt)}</span>
-                    <strong>{shortText(signal.textPreview, 280)}</strong>
-                    {signal.highlightedSnippets[0] ? (
-                      <blockquote>{shortText(signal.highlightedSnippets[0].text, 150)}</blockquote>
-                    ) : null}
-                    <div className="signal-revisit-card-tags">
-                      {[...signal.relevanceReasons, ...signal.relatedContextTerms].slice(0, 3).map((tag) => (
-                        <span key={tag}>{tag}</span>
+                {memoryDrawerSections.map((section) => (
+                  <section key={section.id} className="signal-memory-section">
+                    <header>
+                      <div>
+                        <span>{section.label}</span>
+                        <p>{section.description}</p>
+                      </div>
+                      <strong>{section.signals.length}</strong>
+                    </header>
+                    <div className="reference-save-list signal-revisit-list">
+                      {section.signals.map((signal) => (
+                        <button
+                          type="button"
+                          key={signal.id}
+                          onClick={() => {
+                            setSelectedSavedSignalId(signal.id);
+                            recordRevisit(signal.id, "detail_opened");
+                          }}
+                          className={`reference-save signal-revisit-card${
+                            selectedSavedSignal?.id === signal.id ? " signal-revisit-card--selected" : ""
+                          }`}
+                        >
+                          <span>{formatTimestamp(signal.capturedAt)}</span>
+                          <strong>{shortText(signal.textPreview, 280)}</strong>
+                          {signal.highlightedSnippets[0] ? (
+                            <blockquote>{shortText(signal.highlightedSnippets[0].text, 150)}</blockquote>
+                          ) : null}
+                          <div className="signal-revisit-card-tags">
+                            <span>{memoryDrawerSectionLabel(memoryDrawerSectionForSignal(signal))}</span>
+                            {[...signal.relevanceReasons, ...signal.relatedContextTerms].slice(0, 2).map((tag) => (
+                              <span key={tag}>{tag}</span>
+                            ))}
+                          </div>
+                          {signal.attachmentSummary.map((attachment) => (
+                            <span
+                              key={attachment.id}
+                              className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
+                            >
+                              {attachment.label}
+                            </span>
+                          ))}
+                        </button>
                       ))}
                     </div>
-                    {signal.attachmentSummary.map((attachment) => (
-                      <span
-                        key={attachment.id}
-                        className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
-                      >
-                        {attachment.label}
-                      </span>
-                    ))}
-                  </button>
+                  </section>
                 ))}
               </div>
 
-              <article className="signal-revisit-detail" aria-label="signal revisit">
+              <article className="signal-revisit-detail signal-revisit-detail--open" aria-label="signal revisit">
                 {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the signal...</p> : null}
                 {!savedSignalDetailLoading && selectedSavedSignal ? (
                   <>
                     <header>
-                      <span>{formatTimestamp(selectedSavedSignal.capturedAt)}</span>
+                      <span>
+                        {memoryDrawerSectionLabel(memoryDrawerSectionForSignal(selectedSavedSignal))} ·{" "}
+                        {formatTimestamp(selectedSavedSignal.capturedAt)}
+                      </span>
                       <h3>{shortText(savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview, 180)}</h3>
+                      <p>
+                        A saved signal opened from the drawer, not a database record. The question is what it
+                        meant then, what it means now, and whether it still feels like you.
+                      </p>
                     </header>
 
                     <section>
-                      <span>what once hit</span>
+                      <span>original signal</span>
                       <p className="signal-revisit-raw">{savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview}</p>
                     </section>
 
                     <section>
-                      <span>marked alive</span>
+                      <span>what once hit · highlighted part</span>
                       {(savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets).length > 0 ? (
                         <ul className="signal-revisit-highlights">
                           {(savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets)
@@ -2208,6 +2332,17 @@ export function HomePage(): JSX.Element {
                       ) : (
                         <p>No highlight yet. The whole signal can still be the part worth returning to.</p>
                       )}
+                    </section>
+
+                    <section>
+                      <span>emotional pull at capture time</span>
+                      <p>
+                        {selectedSavedSignal.relevanceReasons.length > 0
+                          ? selectedSavedSignal.relevanceReasons.join(" · ")
+                          : selectedSavedSignal.resonanceScore > 0
+                            ? `resonance ${Math.round(selectedSavedSignal.resonanceScore)}`
+                            : "No explicit pull was named then. Revisit feedback can teach WAKA what it was."}
+                      </p>
                     </section>
 
                     {(savedSignalDetail?.attachments.length ?? 0) > 0 || selectedSavedSignal.attachmentSummary.length > 0 ? (
@@ -2245,6 +2380,30 @@ export function HomePage(): JSX.Element {
                     </section>
 
                     <section>
+                      <span>related context</span>
+                      {(savedSignalDetail?.relatedContextNodes ?? []).length > 0 ? (
+                        <ul className="signal-revisit-notes">
+                          {savedSignalDetail!.relatedContextNodes.slice(0, 3).map((node) => (
+                            <li key={node.id}>
+                              <strong>{node.label}</strong>
+                              <p>{node.evidenceReason || node.description}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : selectedSavedSignal.relatedContextTerms.length > 0 ? (
+                        <ul className="signal-revisit-notes">
+                          {selectedSavedSignal.relatedContextTerms.slice(0, 3).map((term) => (
+                            <li key={term}>
+                              <strong>{term}</strong>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>No durable context has attached itself to this signal yet.</p>
+                      )}
+                    </section>
+
+                    <section>
                       <span>nearby ambition reads</span>
                       {(savedSignalDetail?.relatedTopOfMindNotes ?? []).length > 0 ? (
                         <ul className="signal-revisit-notes">
@@ -2269,7 +2428,35 @@ export function HomePage(): JSX.Element {
                     </section>
 
                     <section>
-                      <span>still matters?</span>
+                      <span>what did this mean then?</span>
+                      <p>
+                        It was saved because something in it had charge. The exact charge can stay messy; WAKA
+                        treats the saved moment and highlight as evidence before it asks for structure.
+                      </p>
+                    </section>
+
+                    <section>
+                      <span>what does it mean now?</span>
+                      <p>
+                        {selectedSavedSignal.relatedTopOfMindNoteTitles[0] ??
+                          selectedSavedSignal.relatedContextTerms[0] ??
+                          "Its current shape is still open. Marking what changed will move the memory model."}
+                      </p>
+                    </section>
+
+                    <section>
+                      <span>is this still me?</span>
+                      <label className="signal-revisit-change-note">
+                        <span>optional what changed</span>
+                        <textarea
+                          value={savedSignalChangeText}
+                          rows={3}
+                          placeholder="what changed since you saved this?"
+                          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                            setSavedSignalChangeText(event.target.value)
+                          }
+                        />
+                      </label>
                       <div className="signal-revisit-feedback" role="group" aria-label="mark whether this signal still matters">
                         {[
                           { value: "important" as const, label: "Still alive" },

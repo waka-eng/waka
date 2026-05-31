@@ -537,7 +537,7 @@
         "Run web typecheck and browser verification on desktop and mobile"
       ],
       "priority": 32,
-      "passes": false,
+      "passes": true,
       "notes": "Saved signals are not files. They are the drawer beneath the desk: the moments, quotes, images, and fragments the five post-its emerged from."
     },
     {

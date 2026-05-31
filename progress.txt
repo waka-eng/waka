@@ -24,6 +24,7 @@
 - Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
 - Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
 - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
+- Memory Drawer is the primary saved-signal revisit surface in Home. It should group signals into emotional/memory sections, keep search/filters secondary, open signals in a full-width reflective detail, and persist still-alive/changed-shape/not-anymore feedback as `targetType: "signal"`.
 - Top of Mind needs an explicit internal-frequency / ambient-signal layer above individual graph nodes. It should answer what kind of city, room, peer group, standard, anti-environment, or self-image the user is trying to live near, not just rephrase a context node with ambition-flavored copy.
 - Top-of-mind note surfaces expose `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale`; graph refresh stores those fields in the legacy `wow_moments.why` text until dedicated note persistence exists, and serializers split them back out for the API/UI.
 - Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad, but it should be direct and credible. Prefer "I need...", "I want...", and "I am done with..." over second-person diagnosis or weak hedges such as "I think", "maybe", "might", "probably", or "seems".
@@ -1096,5 +1097,32 @@
     - Playwright route interception is order-sensitive in this setup; broad `/api/**` fallbacks need to be registered before specific mocked endpoints.
   - Useful context
     - Vite served the browser verification run at `http://localhost:5173/` despite the alternate port argument.
+
+---
+## 2026-05-31 11:40 PDT - US-029
+
+- What was implemented
+  - Rebuilt the Home Memory Drawer around emotional memory sections: still alive, changed shape, forgotten but returning, older version of me, keeps coming back, and tensions.
+  - Kept advanced search and section filters secondary while preserving the in-place Home path and `/signals` as the older compatibility route.
+  - Replaced the side-by-side inspection feel with a full-width opened saved-signal reflection surface showing original signal, highlights, emotional pull, signal packet interpretation, related context, related Top of Mind notes, and reflection prompts for then/now/still-me.
+  - Added still alive, changed shape, and not anymore signal feedback with optional what-changed text persisted through the existing feedback API.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 41 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for Home -> Memory Drawer -> opened saved signal -> changed-shape feedback on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, signal detail, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer should stay in the Home Top of Mind world, with emotional sections and a full-width reflective signal detail instead of an archive/search or narrow-sidebar inspection pattern.
+  - Gotchas encountered
+    - The saved-signal API fetch is debounced in Home; component tests that need server-enriched Memory Drawer rows should wait past the debounce before asserting sections.
+    - Browser verification needs to mock the best-effort `/api/inspirations/:id/revisits` endpoint if logs matter; missing it only produced Vite proxy noise because revisit recording is non-blocking.
+  - Useful context
+    - Optional what-changed text rides through `createFeedback` as `correctionText` on `targetType: "signal"`.
 
 ---

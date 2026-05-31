@@ -1036,6 +1036,23 @@ describe("HomePage current home experience", () => {
     expect(savesPage?.textContent).not.toContain("Other user save should never render");
   });
 
+  it("organizes saved signals into soft memory drawer sections with search secondary", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const drawer = container.querySelector<HTMLElement>(".signal-revisit-page");
+    expect(drawer?.textContent).toContain("still alive");
+    expect(drawer?.textContent).toContain("keeps coming back");
+    expect(drawer?.textContent).toContain("signals that still have heat");
+    expect(drawer?.textContent).toContain("patterns that keep writing their way back");
+    expect(drawer?.querySelector(".signal-memory-lenses")).not.toBeNull();
+    expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("advanced search");
+  });
+
   it("searches the current all-inspirations list", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -1085,10 +1102,16 @@ describe("HomePage current home experience", () => {
     const detail = await openBridgeDetail(container);
 
     expect(detail.textContent).toContain("what once hit");
+    expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
+    expect(detail.textContent).toContain("emotional pull at capture time");
     expect(detail.textContent).toContain("what it may reveal now");
+    expect(detail.textContent).toContain("related context");
     expect(detail.textContent).toContain("I need workrooms where making the thing is the default temperature.");
+    expect(detail.textContent).toContain("what did this mean then?");
+    expect(detail.textContent).toContain("what does it mean now?");
+    expect(detail.textContent).toContain("is this still me?");
   });
 
   it("lets users mark whether a revisited signal still matters", async () => {
@@ -1111,6 +1134,34 @@ describe("HomePage current home experience", () => {
       value: "important",
     });
     expect(detail.textContent).toContain("Saved: Still alive");
+  });
+
+  it("persists changed-shape feedback with optional what-changed text", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const detail = await openBridgeDetail(container);
+    const changeNote = detail.querySelector<HTMLTextAreaElement>(".signal-revisit-change-note textarea");
+    expect(changeNote).not.toBeNull();
+    await act(async () => {
+      setInputValue(changeNote!, "It feels less like architecture now and more like choosing collaborators.");
+    });
+    const changedShape = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent === "Changed shape",
+    );
+    expect(changedShape).not.toBeNull();
+    await act(async () => {
+      changedShape?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "partly",
+      correctionText: "It feels less like architecture now and more like choosing collaborators.",
+    });
+    expect(detail.textContent).toContain("Saved: Changed shape");
   });
 
   it("opens capture from the floating action", async () => {
@@ -1249,7 +1300,9 @@ describe("HomePage current home experience", () => {
       url: "https://example.com/article",
       name: "example.com/article",
     });
-    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
+      save.textContent?.includes("Read https://example.com/article before the next salon"),
+    );
     expect(newSave?.textContent).toContain("Read https://example.com/article before the next salon");
     expect(newSave?.textContent).toContain("example.com");
     expect(newSave?.textContent).not.toContain("MIXED");
@@ -1340,7 +1393,9 @@ describe("HomePage current home experience", () => {
       contentType: "image/png",
       size: 5,
     });
-    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
+      save.textContent?.includes("Image signal"),
+    );
     expect(newSave?.textContent).toContain("Image signal");
     expect(newSave?.textContent).not.toContain("(attachment-only inspiration)");
     expect(newSave?.textContent).toContain("photo.png");
@@ -1418,7 +1473,9 @@ describe("HomePage current home experience", () => {
 
     await clickSavesTab(container, 3);
 
-    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
+      save.textContent?.includes("Image with local upload trouble"),
+    );
     expect(newSave?.textContent).toContain("Image with local upload trouble");
     expect(newSave?.textContent).toContain("photo.png");
     expect(newSave?.textContent).not.toContain("IMAGE");
