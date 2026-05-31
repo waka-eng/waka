@@ -41,6 +41,7 @@ export interface TopOfMindNote {
   matchedEnvironment: string;
   antiEnvironment: string;
   evidenceRationale: string;
+  rejectedAlternativeInterpretation: string | null;
   type: TopOfMindNoteType;
   body: string;
   prompt: string | null;
@@ -154,7 +155,7 @@ function primaryPostItText(value: string | null | undefined, dimension: Ambition
 
 function extractAmbientField(body: string, field: string): string | null {
   const pattern = new RegExp(
-    `${field}:\\s+(.+?)(?=\\s+(?:Ambient signal:|Matched environment:|Anti-environment:|Evidence rationale:|This may matter|Supporting signals:)|$)`,
+    `${field}:\\s+(.+?)(?=\\s+(?:Ambient signal:|Matched environment:|Anti-environment:|Evidence rationale:|Rejected alternative interpretation:|This may matter|Supporting signals:)|$)`,
   );
   const match = body.match(pattern);
   return match?.[1]?.trim() ?? null;
@@ -262,6 +263,10 @@ export function topOfMindNoteFromWowMoment(
     evidenceRationale:
       extractAmbientField(moment.why, "Evidence rationale") ??
       "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+    rejectedAlternativeInterpretation: extractAmbientField(
+      moment.why,
+      "Rejected alternative interpretation",
+    ),
     type: topOfMindNoteTypeFromWowMoment(moment),
     body: stripAmbientFieldPrefix(moment.why),
     prompt: moment.reflectionQuestion,

@@ -74,6 +74,7 @@ describe("top-of-mind note compatibility model", () => {
       antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
       evidenceRationale:
         "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+      rejectedAlternativeInterpretation: null,
       type: "question",
       body: baseMoment.why,
       prompt: "What should stay unresolved?",

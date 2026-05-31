@@ -7,6 +7,10 @@ import type {
   PersistSignalPacketResult,
 } from "./signal-packets.js";
 import type {
+  AmbitionSynthesisInput,
+  AmbitionSynthesisOutput,
+} from "./ambition-synthesis.js";
+import type {
   TopOfMindRefreshCandidate,
   TopOfMindRefreshEvidenceInput,
   TopOfMindRefreshNodeInput,
@@ -33,6 +37,9 @@ export interface ModelProvider {
   generateTopOfMindNotes(
     input: TopOfMindNoteGenerationInput,
   ): Promise<TopOfMindRefreshCandidate[]>;
+  synthesizeAmbition(
+    input: AmbitionSynthesisInput,
+  ): Promise<AmbitionSynthesisOutput | null>;
 }
 
 let defaultProvider: ModelProvider | null = null;

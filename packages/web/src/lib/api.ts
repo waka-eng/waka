@@ -717,6 +717,7 @@ export interface ApiTopOfMindNote {
   matchedEnvironment: string;
   antiEnvironment: string;
   evidenceRationale: string;
+  rejectedAlternativeInterpretation: string | null;
   type: ApiTopOfMindNoteType;
   body: string;
   prompt: string | null;

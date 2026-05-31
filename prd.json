@@ -500,7 +500,7 @@
         "Run API typecheck and targeted synthesis tests with mocked model/provider behavior"
       ],
       "priority": 30,
-      "passes": false,
+      "passes": true,
       "notes": "Do not build an always-on token furnace. Build Ambition Synthesis as a gated, evidence-bounded loop that produces what deterministic ranking cannot: the personal edge connecting what moved the user."
     },
     {

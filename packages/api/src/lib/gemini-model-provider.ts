@@ -15,5 +15,8 @@ export function createGeminiModelProvider(): ModelProvider {
     async generateTopOfMindNotes(input) {
       return rankTopOfMindRefreshCandidates(input);
     },
+    async synthesizeAmbition(input) {
+      return input.fallback;
+    },
   };
 }

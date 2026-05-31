@@ -1,7 +1,9 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 
 import {
+  feedback,
   inspirations,
+  inspirationSparks,
   meaningEvidence,
   meaningNodes,
   meaningPackets,
@@ -9,6 +11,11 @@ import {
   wowMoments,
   type WowKind,
 } from "../db/index.js";
+import {
+  runBoundedAmbitionSynthesisLoop,
+  type AmbitionSynthesisFeedbackInput,
+  type AmbitionSynthesisTrigger,
+} from "./ambition-synthesis.js";
 import { normalizeContextNodeType, type ContextNodeType } from "./context-node-types.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import {
@@ -47,6 +54,7 @@ export interface TopOfMindRefreshEvidenceInput {
   createdAt: Date;
   inspirationText: string;
   sparkText: string | null;
+  sparkNote?: string | null;
 }
 
 export interface TopOfMindRefreshCandidate {
@@ -61,6 +69,7 @@ export interface TopOfMindRefreshCandidate {
   matchedEnvironment: string;
   antiEnvironment: string;
   evidenceRationale: string;
+  rejectedAlternativeInterpretation?: string;
   why: string;
   ambitionDimension: AmbitionDimension;
   kind: WowKind;
@@ -425,7 +434,13 @@ async function loadExistingContextNoteKeys(
 
 export async function refreshTopOfMindNotesFromContextGraph(
   db: WakaDb,
-  input: { userId: string; limit?: number; now?: Date; modelProvider?: ModelProvider },
+  input: {
+    userId: string;
+    limit?: number;
+    now?: Date;
+    modelProvider?: ModelProvider;
+    synthesisTrigger?: AmbitionSynthesisTrigger;
+  },
 ): Promise<RefreshTopOfMindNotesResult> {
   const nodes = await db
     .select({
@@ -457,6 +472,7 @@ export async function refreshTopOfMindNotesFromContextGraph(
             createdAt: meaningEvidence.createdAt,
             inspirationText: inspirations.text,
             sparkText: meaningPackets.sparkText,
+            sparkNote: inspirationSparks.note,
           })
           .from(meaningEvidence)
           .innerJoin(
@@ -473,6 +489,13 @@ export async function refreshTopOfMindNotesFromContextGraph(
               eq(meaningPackets.userId, meaningEvidence.userId),
             ),
           )
+          .leftJoin(
+            inspirationSparks,
+            and(
+              eq(inspirationSparks.id, meaningPackets.primarySparkId),
+              eq(inspirationSparks.userId, meaningEvidence.userId),
+            ),
+          )
           .where(
             and(
               eq(meaningEvidence.userId, input.userId),
@@ -485,7 +508,7 @@ export async function refreshTopOfMindNotesFromContextGraph(
   ]);
 
   const modelProvider = input.modelProvider ?? (await getDefaultModelProvider());
-  const candidates = await modelProvider.generateTopOfMindNotes({
+  const rankedCandidates = await modelProvider.generateTopOfMindNotes({
     userId: input.userId,
     nodes,
     evidence,
@@ -493,6 +516,68 @@ export async function refreshTopOfMindNotesFromContextGraph(
     limit: input.limit,
     now: input.now,
   });
+  const candidateNodeIds = rankedCandidates.map((candidate) => candidate.node.id);
+  const candidateSignalIds = [
+    ...new Set(
+      rankedCandidates.flatMap((candidate) =>
+        candidate.evidence.map((row) => row.inspirationId),
+      ),
+    ),
+  ];
+  const synthesisFeedback: AmbitionSynthesisFeedbackInput[] =
+    candidateNodeIds.length === 0 && candidateSignalIds.length === 0
+      ? []
+      : (
+          await db
+            .select({
+              targetType: feedback.targetType,
+              targetId: feedback.targetId,
+              value: feedback.value,
+              emotionLabel: feedback.emotionLabel,
+              correctionText: feedback.correctionText,
+              createdAt: feedback.createdAt,
+            })
+            .from(feedback)
+            .where(
+              and(
+                eq(feedback.userId, input.userId),
+                or(
+                  candidateNodeIds.length > 0
+                    ? and(
+                        inArray(feedback.targetType, [
+                          "context_node",
+                          "hypothesis",
+                        ]),
+                        inArray(feedback.targetId, candidateNodeIds),
+                      )
+                    : undefined,
+                  candidateSignalIds.length > 0
+                    ? and(
+                        eq(feedback.targetType, "signal"),
+                        inArray(feedback.targetId, candidateSignalIds),
+                      )
+                    : undefined,
+                ),
+              ),
+            )
+            .orderBy(desc(feedback.createdAt))
+            .limit(80)
+        ).map((row) => ({
+          targetType: row.targetType,
+          targetId: row.targetId,
+          value: row.value,
+          emotionLabel: row.emotionLabel,
+          correctionText: row.correctionText,
+          createdAt: row.createdAt,
+        }));
+  const synthesisResult = await runBoundedAmbitionSynthesisLoop({
+    userId: input.userId,
+    trigger: input.synthesisTrigger ?? "weekly_refresh",
+    candidates: rankedCandidates,
+    feedback: synthesisFeedback,
+    synthesize: modelProvider.synthesizeAmbition,
+  });
+  const candidates = synthesisResult.candidates;
 
   const notes: RefreshTopOfMindNotesResult["notes"] = [];
   for (const candidate of candidates) {

@@ -21,6 +21,7 @@ function fakeProvider(): ModelProvider {
     classifySignalText: vi.fn(),
     generateSignalPacket: vi.fn(),
     generateTopOfMindNotes: vi.fn(),
+    synthesizeAmbition: vi.fn(),
   };
 }
 
@@ -78,6 +79,47 @@ describe("model provider abstraction", () => {
     expect(notes[0]).toMatchObject({
       contextType: "project",
       title: "I need workrooms where making the thing is the default temperature.",
+    });
+
+    await expect(
+      provider.synthesizeAmbition({
+        userId,
+        trigger: "weekly_refresh",
+        synthesisKey: "ambition_synthesis:v1:test",
+        contextNode: {
+          id: "context-node-1",
+          type: "project",
+          label: "build a quieter research room",
+          description: "The graph keeps returning to humane ambition.",
+          confidence: 70,
+        },
+        memoryState: "active",
+        memoryMovementScore: 100,
+        selectedSignals: [],
+        priorFeedback: [],
+        rewrites: [],
+        rejectedOrCompetingInterpretations: [],
+        tokenBudget: 2400,
+        estimatedTokens: 100,
+        fallback: {
+          firstPersonPostItCandidate:
+            "I need workrooms where making the thing is the default temperature.",
+          memoryState: "active",
+          environmentDirection:
+            "A working culture where humane ambition becomes visible through repeated making.",
+          rejectedEnvironment:
+            "Work contexts that reward commentary while the real object stays abstract.",
+          evidenceRationale:
+            "Two saved signals point at humane ambition as a recurring work frequency.",
+          confidence: 82,
+          rejectedAlternativeInterpretation:
+            "The shallow read would call this productivity, but the stronger read is about humane working conditions.",
+        },
+      }),
+    ).resolves.toMatchObject({
+      firstPersonPostItCandidate:
+        "I need workrooms where making the thing is the default temperature.",
+      rejectedAlternativeInterpretation: expect.stringContaining("shallow read"),
     });
   });
 });
