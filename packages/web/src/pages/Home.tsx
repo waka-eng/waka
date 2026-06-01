@@ -850,6 +850,8 @@ const HOME_COPY = {
     ),
     footnoteCredit: "— Ⓒ WAKA, 2026, 생각의 서랍",
     savesTitle: "memory drawer",
+    drawerObjectTitle: "saved inspirations",
+    drawerObjectBody: "open the drawer",
     searchLabel: "search",
     searchPlaceholder: "저장본 검색",
     loadingSaves: "저장본을 불러오는 중...",
@@ -919,6 +921,8 @@ const HOME_COPY = {
     ),
     footnoteCredit: "— Ⓒ WAKA, 2026, for minds that wander",
     savesTitle: "memory drawer",
+    drawerObjectTitle: "saved inspirations",
+    drawerObjectBody: "open the drawer",
     searchLabel: "search",
     searchPlaceholder: "search saved signals",
     loadingSaves: "loading saved signals...",
@@ -957,6 +961,8 @@ const HOME_COPY = {
     footnote: (name: string) => JSX.Element;
     footnoteCredit: string;
     savesTitle: string;
+    drawerObjectTitle: string;
+    drawerObjectBody: string;
     searchLabel: string;
     searchPlaceholder: string;
     loadingSaves: string;
@@ -1000,7 +1006,6 @@ export function HomePage(): JSX.Element {
   const [captureView] = useState<CaptureView>("note");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [homeMode, setHomeMode] = useState<HomeMode>("topOfMind");
-  const [homeModeChosen, setHomeModeChosen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [noteFeedback, setNoteFeedback] = useState<
     Record<
@@ -1812,26 +1817,15 @@ export function HomePage(): JSX.Element {
     .slice(0, 5);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
-  const dateLabel = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
   const copy = HOME_COPY[locale];
 
   useEffect(() => {
-    if (homeModeChosen || initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
+    if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
     setHomeMode("topOfMind");
-  }, [
-    homeModeChosen,
-    initialLoading,
-    topOfMindLoading,
-    topOfMindNotesLoading,
-  ]);
+  }, [initialLoading, topOfMindLoading, topOfMindNotesLoading]);
 
   const chooseHomeMode = (mode: HomeMode) => {
     setHomeMode(mode);
-    setHomeModeChosen(true);
   };
 
   const feedbackValues: TopOfMindFeedbackValue[] = [
@@ -2591,46 +2585,6 @@ export function HomePage(): JSX.Element {
         </div>
       ) : null}
       <main className={`nc-canvas${homeMode === "topOfMind" ? " nc-canvas--top-of-mind" : ""}`}>
-        <header className="nc-topbar">
-          <div className="nc-topleft">
-            <div className="nc-mode" role="tablist" aria-label="home mode">
-            <button
-              type="button"
-              className={`nc-mode-btn${homeMode === "topOfMind" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => chooseHomeMode("topOfMind")}
-            >
-              {copy.thoughtTab}
-            </button>
-            <button
-              type="button"
-              className={`nc-mode-btn${homeMode === "memoryDrawer" ? " nc-mode-btn--active" : ""}`}
-              onClick={() => chooseHomeMode("memoryDrawer")}
-            >
-              {copy.savesTab} ({entries.length})
-            </button>
-            </div>
-          </div>
-          <span className="nc-meta">{dateLabel}</span>
-          <div className="nc-topright">
-            <div className="nc-lang" aria-label="language">
-            <button
-              type="button"
-              className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
-              onClick={() => handleLocaleChange("ko-KR")}
-            >
-              한
-            </button>
-            <button
-              type="button"
-              className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
-              onClick={() => handleLocaleChange("en-US")}
-            >
-              en
-            </button>
-            </div>
-          </div>
-        </header>
-
         {homeMode === "topOfMind" ? (
           <>
             <section className="nc-titlecard">
@@ -2661,11 +2615,38 @@ export function HomePage(): JSX.Element {
               ) : (
                 <p className="nc-loading">{copy.emptyThoughts}</p>
               )}
+              <button
+                type="button"
+                className="nc-drawer-object"
+                onClick={() => chooseHomeMode("memoryDrawer")}
+                aria-label={`${copy.drawerObjectBody}: ${copy.savesTitle}`}
+              >
+                <span className="nc-drawer-tab" aria-hidden="true" />
+                <span className="nc-drawer-title">{copy.drawerObjectTitle}</span>
+                <strong>{copy.drawerObjectBody}</strong>
+                <small>{entries.length} saved</small>
+              </button>
             </section>
 
             <footer className="nc-footnote">
               <p>{copy.footnote(displayHandle)}</p>
               <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
+              <div className="nc-lang nc-lang--footer" aria-label="language">
+                <button
+                  type="button"
+                  className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
+                  onClick={() => handleLocaleChange("ko-KR")}
+                >
+                  한
+                </button>
+                <button
+                  type="button"
+                  className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
+                  onClick={() => handleLocaleChange("en-US")}
+                >
+                  en
+                </button>
+              </div>
             </footer>
           </>
         ) : (
@@ -2676,6 +2657,13 @@ export function HomePage(): JSX.Element {
                 <h2>Return to what you saved.</h2>
                 <p>List scans the timeline. Canvas keeps the scraps near the moments they seem to touch.</p>
               </div>
+              <button
+                type="button"
+                className="nc-wall-return"
+                onClick={() => chooseHomeMode("topOfMind")}
+              >
+                back to wall
+              </button>
               <div className="memory-mode-switcher" role="group" aria-label="memory drawer mode">
                 {[
                   { id: "list" as const, label: "List" },

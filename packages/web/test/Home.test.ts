@@ -513,12 +513,10 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
-    const savesTab = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-mode-btn")).find(
-      (button) => button.textContent === `memory drawer (${count})`,
-    );
-    expect(savesTab).not.toBeNull();
+    const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
+    expect(drawerObject?.textContent).toContain(`${count} saved`);
     await act(async () => {
-      savesTab?.click();
+      drawerObject?.click();
     });
     await flushReactWork();
   }
@@ -752,6 +750,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelector(".nc-canvas")).not.toBeNull();
+    expect(container.querySelector(".nc-topbar")).toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("Most inspiration disappears.");
     expect(container.textContent).toContain("five provisional post-its. not final. changed by new signals.");
@@ -762,7 +763,7 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.textContent).toContain("top of mind");
-    expect(container.textContent).toContain("memory drawer (2)");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("2 saved");
     expect(container.querySelector("a[href='/top-of-mind/share']")).toBeNull();
     expect(container.querySelector(".admin-entry-pill")?.textContent).toBe("Debug");
     expect(container.textContent).not.toContain("meaning graph");
@@ -774,7 +775,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
+    expect(container.querySelector(".nc-topbar")).toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).not.toContain("ambition signal");
@@ -1095,8 +1098,10 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelector(".reference-capture-page")).toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
+    expect(container.querySelector(".nc-topbar")).toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.textContent).toContain("When signals gather, provisional notes will appear here.");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture signal");
     expect(container.querySelector("#capNote")).toBeNull();
   });
@@ -1123,7 +1128,7 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("memory drawer (2)");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("2 saved");
     expect(container.textContent).not.toContain("Other user save should never render");
   });
 
@@ -1171,7 +1176,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
   });
 
-  it("switches to the in-place memory drawer surface from the top mode tabs", async () => {
+  it("switches to the in-place memory drawer surface from the wall drawer object", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1180,7 +1185,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("memory drawer (2)");
+    expect(container.querySelector(".nc-drawer-object")).toBeNull();
     expect(container.textContent).toContain("Return to what you saved.");
     expect(container.textContent).toContain("List scans the timeline");
     expect(container.querySelector(".memory-mode-switcher")?.textContent).toContain("List");
@@ -1468,7 +1473,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
     expect(container.querySelector(".cap-save-mirror")?.textContent).toContain("Tiny mirror, not a verdict");
-    expect(container.textContent).toContain("memory drawer (3)");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("3 saved");
     await act(async () => {
       Array.from(container.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button"))
         .find((button) => button.textContent === "close")
@@ -1755,7 +1760,8 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(HomePage).toBeTypeOf("function");
-    expect(container.querySelector(".nc-mode")).not.toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
     expect(container.textContent).toContain("capture signal");
   });
 });

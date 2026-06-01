@@ -708,6 +708,166 @@
       "priority": 40,
       "passes": true,
       "notes": "Product correction after US-036: the current implementation still generates actions in the frontend from deterministic phrase templates. The target is a real self-improving personal-context action loop. Actions are not a to-do list. They are small experiments that create new evidence about the user's ambition and feed back into future Top of Mind and action recommendations."
+    },
+    {
+      "id": "US-038",
+      "title": "Make the main wall the only primary navigation surface",
+      "description": "As a user, I want the app to open as a calm personal museum wall that helps me feel curious and understood, not as a dashboard with tabs, dates, and sections.",
+      "acceptanceCriteria": [
+        "Remove the persistent top bar, mode tabs, date display, and dashboard-like navigation from the primary Home experience",
+        "Do not render the product name as a prominent interface label on the primary wall",
+        "Make the Top of Mind wall the default and only primary surface: Top of Mind post-its, action checklist post-it, meaningful generated stickers, capture button, and a drawer-entry object",
+        "The wall should feel like a personal museum: calm, intimate, composed, and curious, with post-its and objects as the navigation",
+        "Use the reference implementation cues from Yan Liu and Studio Dunbar for object-led navigation: absolute-positioned board objects, cursor-grab draggable artifacts, subdued paper materials, and tactile decorative details rather than tab chrome",
+        "Replace the Memory Drawer tab with a physical-feeling drawer/folder entry on the wall that opens the drawer in-place",
+        "Move Korean/English switching out of the removed top bar into a small secondary control such as a quiet footer mark or settings object without making it visually dominant",
+        "Keep capture accessible from the bottom-center wall affordance and do not introduce a separate Capture tab",
+        "Top of Mind evidence should not be rawly exposed on the public wall; post-it deep dive may link into the private drawer evidence instead",
+        "Ensure the wall still works on mobile without overlapping post-its, stickers, action checklist, drawer entry, or capture affordance",
+        "Update Home tests so the old top tabs/date/product-name header do not render and the drawer can be entered from the wall object",
+        "Run web typecheck, targeted Home tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": "Product correction: the first five seconds should feel calm, curious, and understood. The surface is a personal museum; deeper drawer views become more diary-like. Navigation should happen through objects, not app tabs. Reference code cues inspected: Yan Liu's Next bundle uses mac-folder assets, selected/onClick category states, absolute-positioned bulletin artifacts, cursor-grab and active:cursor-grabbing; Studio Dunbar's shipped CSS uses rough-edge/tactile desktop-window materials that can inform paper texture and object styling without copying a desktop clone."
+    },
+    {
+      "id": "US-039",
+      "title": "Rebuild Memory Drawer as proposed inspiration groupings",
+      "description": "As a user, I want to enter a private drawer where my inspirations are easy to revisit, search, and compare through WAKA-proposed groupings and my own groupings, without losing the raw saved thing.",
+      "acceptanceCriteria": [
+        "Replace the default Memory Drawer list/canvas landing with a drawer-desk view of visual group objects inspired by file/folder navigation, without requiring the visible word \"folders\"",
+        "Use the reference implementation cues from Yan Liu's shipped page bundle: mac-folder/front-back folder assets, folder category icons, selected/onClick state changes, absolute board positioning, and draggable bulletin objects as the interaction model for visual group objects",
+        "Use the reference implementation cues from Weird Folders: file/folder object grid, selected object, preview/details affordances, tactile surface/card tokens, and object-first navigation rather than dashboard panels",
+        "Generate proposed groupings from personal context patterns, highlights, source types, recurrence, tensions, recent saves, and Top of Mind evidence rather than hardcoding productivity categories",
+        "Allow the user to create their own grouping, rename a proposed grouping, and keep or dismiss proposed groupings",
+        "Grouping names must feel like good summaries of the inspirations inside, not clinical labels; examples include \"rooms i keep wanting\", \"people i want near me\", \"work i keep circling\", \"places pulling me\", \"things i am done with\", \"highlighted by me\", or \"recently saved\"",
+        "Each grouping may include a quiet one-sentence explanation of why these inspirations belong together, but the original inspiration content must remain the focus",
+        "Clicking a grouping opens an in-place contents view with bounded inspiration cards, not a narrow sidebar, dense graph, or admin search panel",
+        "Grouping contents must support at least two browse orders: newest first and strongest relevance to the grouping",
+        "Always provide a clean chronological path for viewing all inspirations in the order they were saved, because users need to search and revisit specific things quickly",
+        "Cards must visually distinguish typed notes, links, images, highlights, and mixed saves using existing saved signal and attachment fields",
+        "Search should be a small supporting command inside the drawer, not the primary structure",
+        "Add tests proving groupings are generated from inspiration data, user-created groupings can exist, grouping explanations render quietly, chronological all-inspirations view remains available, and old list/canvas landing copy does not render",
+        "Run web typecheck, targeted Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 42,
+      "passes": false,
+      "notes": "Reference code pointers: Yan Liu page bundle at /_next/static/chunks/app/page-c5a178a9a1cf7d72.js exposes mac-folder, folder-icon, selected/onClick category behavior, absolute board objects, cursor-grab, active:cursor-grabbing, zIndex, and draggable bulletin artifacts. Weird Folders source exposes folder, grid, selected, preview, details, collection, cursor/touch/select object vocabulary. Karpathy's LLM wiki pattern is relevant only as a layered model: raw inspirations stay immutable, while the generated organization layer compounds above them."
+    },
+    {
+      "id": "US-040",
+      "title": "Add draggable inspiration windows for comparison",
+      "description": "As a user, I want to open inspirations from the drawer and drag them around like diary cards so I can compare what moved me across time.",
+      "acceptanceCriteria": [
+        "Clicking an inspiration card opens the full inspiration as a draggable window/card on top of the drawer workspace",
+        "Use the reference implementation cues from Wes Dieleman's shipped bundle: window state, focus, zIndex ordering, drag, resize if needed, close, minimize, desktop file/window concepts, and keyboard/search affordances",
+        "Multiple inspiration windows can remain open at once for comparison",
+        "Open windows support focus, close, minimize/collapse, and z-index ordering so the active memory comes forward",
+        "Open windows are approximately 90% original saved inspiration and 10% WAKA context; the raw saved thing should feel private, mostly untouched, and prevalent",
+        "Open windows show the full saved content, source/link/image where available, user note, highlights, and capture/reflection context",
+        "WAKA context inside a single open inspiration must stay contained and gentle: why it may belong here, related groupings, and actions if requested, not a large interpretation panel",
+        "Users can add and remove highlights directly in the full inspiration text without highlights drifting out of alignment",
+        "When two or more inspirations are open, WAKA may show sparse relationship hints between them such as \"same room, later version\", \"both point at who to build around\", or \"old envy became clearer\"",
+        "Relationship hints must be optional, sparse, and dismissible; do not force graph labels, node names, confidence scores, or dense connector webs",
+        "Window positions should persist during the drawer session and reset cleanly when leaving the drawer",
+        "Keyboard and mobile alternatives must exist for opening, focusing, and closing windows when drag is not practical",
+        "Add tests for opening multiple windows, focus/z-index, close/minimize behavior, highlight add/remove, and relationship hints only appearing when multiple related memories are open",
+        "Run web typecheck, targeted Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 43,
+      "passes": false,
+      "notes": "Reference code pointer: Wes Dieleman's Next chunk /_next/static/chunks/2f1bfa57a26af57b.js exposes repeated window, zIndex, resize, drag, close, minimize, focus, desktop, file, search, and terminal app-window mechanics. WAKA should use that interaction model for emotional comparison, not for a literal desktop clone."
+    },
+    {
+      "id": "US-041",
+      "title": "Add inspiration flow mode inside folders",
+      "description": "As a user, I want an immersive way to scroll through inspirations inside a folder one at a time, so revisiting saved signals feels reflective instead of like scanning a database.",
+      "acceptanceCriteria": [
+        "Inside an opened folder, provide a Flow mode that lets users move through inspiration cards one at a time with large readable content and minimal surrounding UI",
+        "Use the reference implementation cues from Obys: explicit Vertical/Horizontal/Grid mode structure, fixed/absolute layers, transform/translate movement, stable aspect-ratio cards, clip-path reveals, pointer-events control, and no leftover content below the active mode",
+        "Flow mode should preserve context: folder name, position in the folder, and why this memory is included should be visible but quiet",
+        "Support vertical scrolling by default and a horizontal/filmstrip treatment only if it remains readable and stable on mobile",
+        "Use stable aspect ratios, clipping, and transform-based transitions so images, links, long text, and highlight cards do not cause layout jumps",
+        "Allow opening any Flow item into the draggable comparison workspace",
+        "Do not show anything below the canvas/flow workspace that makes the mode feel like a broken page with leftover content",
+        "Add tests proving Flow mode renders stable cards, can move between inspirations, opens items into comparison windows, and does not render unrelated drawer content below it",
+        "Run web typecheck, targeted Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 44,
+      "passes": false,
+      "notes": "Reference code pointer: Obys CSS at /css/d.css?mod9hgsf exposes position:fixed/absolute layering, transform/translate transitions, clip-path, aspect-ratio, will-change, pointer-events, and repeated ho-wo project layers plus explicit Vertical, Horizontal, and Grid modes. WAKA should adapt this into a calmer memory flow inside groupings."
+    },
+    {
+      "id": "US-042",
+      "title": "Replace Top of Mind feedback buttons with physical edit and pull-down gestures",
+      "description": "As a user, I want correcting a Top of Mind post-it to feel like changing or removing a note on my wall, not rating an AI answer.",
+      "acceptanceCriteria": [
+        "Remove visible Top of Mind reaction buttons such as yes/no/not me/true/partly from the main wall and opened post-it experience",
+        "Provide a way to edit or rewrite a Top of Mind post-it in-place using the user's own wording",
+        "Provide a way to pull down/remove a Top of Mind post-it from the wall when it does not feel like the user",
+        "Persist edits and removals as feedback signals for future Top of Mind generation without exposing feedback mechanics in the UI copy",
+        "When a post-it is removed, do not immediately replace it with a weak slot; show fewer post-its until a meaningful one earns the wall",
+        "Keep Top of Mind voice focused on quiet truths about what is alive now or what the user is outgrowing",
+        "Update tests so old feedback button labels do not render, edited post-its persist, removed post-its disappear, and weak replacements are not shown",
+        "Run web/API typechecks, targeted Top of Mind feedback tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 45,
+      "passes": false,
+      "notes": "Vision correction: Top of Mind is WAKA's opinionated surface, but feedback should match the post-it wall metaphor. A user should correct it or pull it down, not rate it like a chatbot."
+    },
+    {
+      "id": "US-043",
+      "title": "Make capture branch between quick safe save and reflective save",
+      "description": "As a user, I want to capture an inspiration with almost no friction when I need safety, or pause to understand why it moved me when I want reflection.",
+      "acceptanceCriteria": [
+        "Capture must clearly support two paths after text/link/image entry: quick save and reflect deeper",
+        "Quick save should give immediate reassuring feedback that the inspiration is safe and will be used as an ingredient for future understanding",
+        "Reflect deeper should invite one small self-understanding step about why this mattered without making the user feel analyzed or forced",
+        "The user must be able to save messy, embarrassing, half-formed, high-emotion, or high-stakes inspirations without needing to organize them",
+        "After save, offer an optional path to continue reflecting now or return later from the drawer",
+        "Do not use clinical or internal language such as signal, graph, node, memory movement, resonance, or analysis in the capture UI",
+        "Update tests for quick save, reflective save, saved confirmation copy, optional deeper reflection, and absence of internal language",
+        "Run web/API typechecks, targeted capture tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 46,
+      "passes": false,
+      "notes": "Capture should solve the friction problem by making friction optional. The first emotional payoff is relief that the inspiration will not disappear; the second optional payoff is curiosity about why it moved the user."
+    },
+    {
+      "id": "US-044",
+      "title": "Add action completion follow-up loop",
+      "description": "As a user, I want checking off an action to turn into a small reflection about what happened, so the action creates new personal context instead of becoming a dead task.",
+      "acceptanceCriteria": [
+        "When a user checks off an action, ask a concise follow-up such as \"what happened?\" or \"what did this show you?\"",
+        "The follow-up should be optional but easy to answer immediately",
+        "Persist the follow-up as a new inspiration or action outcome linked to the completed action and its source Top of Mind/inspirations",
+        "Completed action outcomes should feed future Top of Mind and action recommendations as stronger evidence only when the user provided an outcome or related captured inspiration",
+        "The action checklist should keep command-like, specific, external actions rather than vague invitations or reflective homework",
+        "Actions may be generated from the main wall or from a drawer deep-dive when the user is looking at a specific grouping or inspiration",
+        "Update recommender tests so completed action outcomes influence future recommendations and empty completions do not over-strengthen a pattern",
+        "Run API/web typechecks, targeted action loop tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 47,
+      "passes": false,
+      "notes": "Actions are WAKA's coaching edge. They should be straightforward commands, and the result of doing them should become new personal context."
+    },
+    {
+      "id": "US-045",
+      "title": "Apply user-facing language constraints across the product",
+      "description": "As a user, I want the interface to feel intimate and human, without internal AI, graph, or productivity language breaking the spell.",
+      "acceptanceCriteria": [
+        "Use \"inspirations\" for saved things in user-facing copy; avoid \"signals\", \"memories\", \"nodes\", \"graph\", \"resonance\", \"memory movement\", \"analysis\", and \"AI\" unless hidden in internal/admin surfaces",
+        "Do not render the product name as a prominent interface label on the main wall or drawer chrome",
+        "Top of Mind copy should feel like quiet truths emerging from saved inspirations, not summaries any inspiration could have produced",
+        "Drawer copy should emphasize revisiting, searching, comparing, and keeping inspirations from disappearing, not productivity or knowledge-base management",
+        "WAKA may be bold when organizing inspirations into groupings or Top of Mind, but must be gentle and contained when showing one raw inspiration",
+        "Add text-regression tests or targeted UI tests that fail if banned internal terms return to user-facing Home, drawer, capture, Top of Mind, and action surfaces",
+        "Run web/API typechecks, targeted copy tests, and browser verification of the main user journey"
+      ],
+      "priority": 48,
+      "passes": false,
+      "notes": "Core product sentence: this helps me see what I keep caring about before I can explain it, and helps me revisit/search the inspirations that mattered so they do not disappear."
     }
   ]
 }

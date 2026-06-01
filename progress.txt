@@ -41,6 +41,34 @@
 - Memory Drawer should stay as two modes inside Home: chronological List and relationship Canvas. Do not reintroduce memory-movement sections, dense sidebars, search-first structure, or graph/admin vocabulary into this user-facing revisit surface.
 - Top of Mind action checklist items should be generated from post-it evidence, ambient/environment fields, and ambition dimension. Reject generic reflective homework such as "do one tiny test", "explore", "journal", "learn more", or actions that simply repeat the post-it title.
 - Action recommendation state currently persists through `feedback` rows with `source: "action_recommendation"` and metadata keyed to the source top-of-mind note; use `/api/action-recommendations` rather than frontend-only action helpers.
+- Home primary navigation should be object-led inside the wall: no persistent topbar, date display, or mode tabs; enter Memory Drawer through the physical drawer object and keep language switching as a quiet footer control.
+
+---
+
+## 2026-06-01 11:20 PDT - US-038
+
+- What was implemented
+  - Removed the persistent Home top bar, mode tabs, and date display from the primary wall.
+  - Added a physical drawer/folder object on the Top of Mind wall that opens Memory Drawer in-place, plus a small paper-style return control inside the drawer.
+  - Moved Korean/English switching into a quiet footer control and kept bottom-center capture available.
+  - Tightened mobile layout so Top of Mind post-its, action checklist, drawer object, and capture affordance stay within the wall flow.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 44 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind fallback, action recommendations, and saved signals APIs. Verified old topbar/tabs/date are absent, drawer object opens Memory Drawer in-place, capture remains bottom-center, and mobile wall objects stay visible.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Primary Home navigation should happen through wall objects rather than app chrome; the drawer object is now the entry point for saved inspirations.
+  - Gotchas encountered
+    - The action recommendation post-it used desktop absolute coordinates on mobile; when adding new wall objects, verify all absolute-positioned artifacts have mobile relative/flex fallbacks.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 
