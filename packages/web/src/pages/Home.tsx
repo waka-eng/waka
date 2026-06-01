@@ -132,6 +132,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
 type InspirationStatus = "saving" | "saved" | "error";
 type HomeMode = "topOfMind" | "memoryDrawer";
 type MemoryBrowseOrder = "newest" | "relevance";
+type MemoryFolderView = "grid" | "vertical" | "horizontal";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "true" | "partly" | "not_true"
@@ -1210,6 +1211,8 @@ export function HomePage(): JSX.Element {
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string>("all");
   const [memoryBrowseOrder, setMemoryBrowseOrder] = useState<MemoryBrowseOrder>("newest");
+  const [memoryFolderView, setMemoryFolderView] = useState<MemoryFolderView>("grid");
+  const [memoryFlowIndex, setMemoryFlowIndex] = useState(0);
   const [userMemoryGroups, setUserMemoryGroups] = useState<UserMemoryGrouping[]>([]);
   const [renamedMemoryGroups, setRenamedMemoryGroups] = useState<Record<string, string>>({});
   const [dismissedMemoryGroupIds, setDismissedMemoryGroupIds] = useState<Set<string>>(() => new Set());
@@ -2413,6 +2416,7 @@ export function HomePage(): JSX.Element {
             setSelectedMemoryGroupId(group.id);
             setSelectedSavedSignalId(null);
             setSavedSignalDetail(null);
+            setMemoryFlowIndex(0);
           }}
         >
           <span className="mac-folder-back" aria-hidden="true" />
@@ -2585,6 +2589,103 @@ export function HomePage(): JSX.Element {
           </div>
         ) : null}
       </article>
+    );
+  };
+
+  const renderMemoryFlow = (): JSX.Element => {
+    const flowSignals = selectedMemoryGroupSignals;
+    const activeIndex = Math.min(memoryFlowIndex, Math.max(flowSignals.length - 1, 0));
+    const activeSignal = flowSignals[activeIndex];
+    const axis = memoryFolderView === "horizontal" ? "horizontal" : "vertical";
+
+    if (!activeSignal) {
+      return <p className="memory-relationship-empty">Nothing in this pile yet.</p>;
+    }
+
+    return (
+      <section
+        className={`memory-flow-workspace memory-flow-workspace--${axis}`}
+        aria-label={`${axis} inspiration flow`}
+      >
+        <header className="memory-flow-toolbar">
+          <div>
+            <span>{axis} flow</span>
+            <strong>
+              {activeIndex + 1} / {flowSignals.length}
+            </strong>
+          </div>
+          <div className="memory-flow-controls">
+            <button
+              type="button"
+              disabled={activeIndex === 0}
+              onClick={() => setMemoryFlowIndex((index) => Math.max(0, index - 1))}
+            >
+              previous
+            </button>
+            <button
+              type="button"
+              disabled={activeIndex >= flowSignals.length - 1}
+              onClick={() =>
+                setMemoryFlowIndex((index) => Math.min(flowSignals.length - 1, index + 1))
+              }
+            >
+              next
+            </button>
+          </div>
+        </header>
+        <div className="memory-flow-stage">
+          <div
+            className="memory-flow-track"
+            style={{
+              transform:
+                axis === "horizontal"
+                  ? `translateX(-${activeIndex * 100}%)`
+                  : `translateY(-${activeIndex * 100}%)`,
+            }}
+          >
+            {flowSignals.map((signal, index) => {
+              const visual = signalVisualTreatment(signal);
+              const whyIncluded =
+                selectedMemoryGroup?.source === "all"
+                  ? "newest saved inspiration in the drawer"
+                  : selectedMemoryGroup?.terms.find((term) => signalTextHaystack(signal).includes(term)) ||
+                    signal.relatedTopOfMindNoteTitles[0] ||
+                    signal.relatedContextTerms[0] ||
+                    selectedMemoryGroup?.explanation ||
+                    "this pile is still forming";
+              return (
+                <article
+                  key={signal.id}
+                  className={`memory-flow-card memory-flow-card--${visual}${
+                    index === activeIndex ? " memory-flow-card--active" : ""
+                  }`}
+                  aria-hidden={index === activeIndex ? undefined : true}
+                >
+                  <span className="memory-flow-kicker">{signalMaterialLabel(signal)}</span>
+                  <p className="memory-flow-readable">{signal.textPreview}</p>
+                  {signal.highlightedSnippets[0] ? (
+                    <blockquote>{signal.highlightedSnippets[0].text}</blockquote>
+                  ) : null}
+                  {signal.attachmentSummary.slice(0, 2).map((attachment) => (
+                    <span key={attachment.id} className="memory-flow-attachment">
+                      {attachment.label}
+                    </span>
+                  ))}
+                  <footer>
+                    <div>
+                      <span>{selectedMemoryGroup?.name ?? "current pile"}</span>
+                      <p>{shortText(whyIncluded, 112)}</p>
+                    </div>
+                    <button type="button" onClick={() => openMemoryWindow(signal)}>
+                      open on desk
+                    </button>
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
     );
   };
 
@@ -3412,10 +3513,34 @@ export function HomePage(): JSX.Element {
                       </button>
                     ))}
                   </div>
+                  <div className="memory-view-switcher" role="group" aria-label="pile view">
+                    {[
+                      { id: "grid" as const, label: "grid" },
+                      { id: "vertical" as const, label: "vertical flow" },
+                      { id: "horizontal" as const, label: "horizontal flow" },
+                    ].map((view) => (
+                      <button
+                        key={view.id}
+                        type="button"
+                        className={memoryFolderView === view.id ? "is-active" : ""}
+                        aria-pressed={memoryFolderView === view.id}
+                        onClick={() => {
+                          setMemoryFolderView(view.id);
+                          setMemoryFlowIndex(0);
+                        }}
+                      >
+                        {view.label}
+                      </button>
+                    ))}
+                  </div>
                 </header>
-                <div className="memory-list-stack">
-                  {selectedMemoryGroupSignals.map((signal) => renderMemorySignalCard(signal))}
-                </div>
+                {memoryFolderView === "grid" ? (
+                  <div className="memory-list-stack">
+                    {selectedMemoryGroupSignals.map((signal) => renderMemorySignalCard(signal))}
+                  </div>
+                ) : (
+                  renderMemoryFlow()
+                )}
               </section>
             </div>
           </section>

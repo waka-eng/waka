@@ -1388,6 +1388,63 @@ describe("HomePage current home experience", () => {
     );
   });
 
+  it("shows a stable flow mode inside a selected grouping and opens flow items into windows", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const verticalFlowButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".memory-view-switcher button"),
+    ).find((button) => button.textContent === "vertical flow");
+    expect(verticalFlowButton).not.toBeNull();
+    await act(async () => {
+      verticalFlowButton?.click();
+    });
+    await flushReactWork();
+
+    const contents = container.querySelector<HTMLElement>(".memory-group-contents");
+    const flow = contents?.querySelector<HTMLElement>(".memory-flow-workspace--vertical");
+    expect(flow).not.toBeNull();
+    expect(contents?.querySelector(".memory-list-stack")).toBeNull();
+    expect(flow?.textContent).toContain("vertical flow");
+    expect(flow?.textContent).toContain("1 / 2");
+    expect(flow?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(flow?.textContent).toContain("newest saved inspiration in the drawer");
+
+    const nextButton = Array.from(flow?.querySelectorAll<HTMLButtonElement>(".memory-flow-controls button") ?? []).find(
+      (button) => button.textContent === "next",
+    );
+    await act(async () => {
+      nextButton?.click();
+    });
+    await flushReactWork();
+    expect(flow?.querySelector(".memory-flow-track")?.getAttribute("style")).toContain("translateY(-100%)");
+    expect(flow?.textContent).toContain("2 / 2");
+
+    const openButtons = Array.from(flow?.querySelectorAll<HTMLButtonElement>("button") ?? []).filter(
+      (button) => button.textContent === "open on desk",
+    );
+    const openButton = openButtons[openButtons.length - 1];
+    await act(async () => {
+      openButton?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".memory-window")?.textContent).toContain("Synthetic memory note");
+
+    const horizontalFlowButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>(".memory-view-switcher button"),
+    ).find((button) => button.textContent === "horizontal flow");
+    await act(async () => {
+      horizontalFlowButton?.click();
+    });
+    await flushReactWork();
+    expect(contents?.querySelector(".memory-flow-workspace--horizontal")).not.toBeNull();
+    expect(contents?.querySelector(".memory-flow-track")?.getAttribute("style")).toContain("translateX(-0%)");
+  });
+
   it("searches the current all-inspirations list", async () => {
     setApiFixtures();
     const container = await renderHomePage();

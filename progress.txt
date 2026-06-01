@@ -44,6 +44,33 @@
 - Home primary navigation should be object-led inside the wall: no persistent topbar, date display, or mode tabs; enter Memory Drawer through the physical drawer object and keep language switching as a quiet footer control.
 - Memory Drawer default landing should be an object-led grouping desk: WAKA-proposed and user-created group objects sit above immutable raw saved signals, with chronological all-saves kept as a clean path and search as a secondary command.
 - Memory Drawer inspiration comparison should happen through draggable `.memory-window` cards layered over the drawer desk; raw saved inspiration remains dominant, with only gentle nearby-pile and relationship context.
+- Opened Memory Drawer groupings support Grid, Vertical Flow, and Horizontal Flow views; Flow mode should use clipped/aspect-ratio stages and transform movement, with draggable comparison windows still layered above the drawer desk.
+
+---
+
+## 2026-06-01 11:56 PDT - US-041
+
+- What was implemented
+  - Added Grid, Vertical Flow, and Horizontal Flow view controls inside opened Memory Drawer groupings.
+  - Built a clipped, aspect-ratio Flow workspace with transform-based movement, stable one-at-a-time inspiration cards, quiet pile context, previous/next controls, and an open-on-desk path into existing draggable comparison windows.
+  - Kept Flow mode isolated from the underlying stack so the drawer does not show leftover list content beneath the active flow workspace.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 47 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and action recommendation APIs. Verified Memory Drawer entry, Vertical Flow transform navigation, no stack content under Flow mode, opening a Flow item into a draggable inspiration window, Horizontal Flow rendering, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer groupings can now expose alternate views without leaving the drawer desk; keep comparison windows as the layered workspace above any grouping view.
+  - Gotchas encountered
+    - In browser accessibility queries, hidden Flow cards are correctly excluded by `aria-hidden`, so verification should click the active card action rather than assuming all transformed cards are accessible.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 
