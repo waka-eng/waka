@@ -813,7 +813,7 @@
         "Run web/API typechecks, targeted Top of Mind feedback tests, and browser verification on desktop and mobile"
       ],
       "priority": 45,
-      "passes": false,
+      "passes": true,
       "notes": "Vision correction: Top of Mind is WAKA's opinionated surface, but feedback should match the post-it wall metaphor. A user should correct it or pull it down, not rate it like a chatbot."
     },
     {

@@ -212,9 +212,9 @@ describe("GET /api/top-of-mind", () => {
       expect.objectContaining({
         id: moment.id,
         userId: user.id,
-        title: "I need a small real-world test, not another private theory.",
+        title: "test the question where it can cost something",
         ambitionDimension: "next_experiment",
-        ambientSignal: "I need a small real-world test, not another private theory.",
+        ambientSignal: "test the question where it can cost something",
         matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale:
@@ -345,7 +345,7 @@ describe("GET /api/top-of-mind/:noteId", () => {
       userId: user.id,
       title: "A provisional reflection",
       ambitionDimension: "next_experiment",
-      ambientSignal: "I need a small real-world test, not another private theory.",
+      ambientSignal: "test the question where it can cost something",
       matchedEnvironment: "A practical setting where a provisional reflection can be tested in public conditions.",
       antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
       evidenceRationale: "This post-it is inferred from saved signals and may change as the graph gets better evidence.",

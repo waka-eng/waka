@@ -782,7 +782,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).toContain("try next");
-    expect(container.querySelector(".nc-note .nc-note-feedback-btn")).toBeNull();
+    expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("not final");
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("changed by new signals");
@@ -947,7 +947,7 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("points toward");
     expect(expanded?.textContent).toContain("pushes away from");
     expect(expanded?.textContent).toContain("why now");
-    expect(expanded?.textContent).toContain("not this");
+    expect(expanded?.textContent).toContain("outside reading");
     expect(expanded?.textContent).toContain("This is not just an archive theme about bridges or city walking.");
     expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
     expect(expanded?.textContent).toContain("ambition dimension");
@@ -989,10 +989,10 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("context_node:");
   });
 
-  it("keeps top-of-mind feedback inside the opened post-it", async () => {
+  it("removes old reaction buttons from the wall and opened post-it", async () => {
     setApiFixtures();
     const container = await renderHomePage();
-    expect(container.querySelector(".nc-note .nc-note-feedback-btn")).toBeNull();
+    expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
     await act(async () => {
@@ -1000,26 +1000,52 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const trueButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-feedback-btn")).find(
-      (button) => button.textContent === "true",
-    );
-    expect(trueButton).not.toBeNull();
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    expect(expanded?.textContent).not.toContain("true");
+    expect(expanded?.textContent).not.toContain("partly");
+    expect(expanded?.textContent).not.toContain("not this");
+    expect(expanded?.textContent).not.toContain("rewrite in my words");
+    expect(expanded?.textContent).toContain("rewrite this post-it");
+    expect(expanded?.textContent).toContain("pin wording");
+    expect(expanded?.textContent).toContain("pull down");
+  });
 
+  it("persists an in-place Top of Mind rewrite using the user's wording", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
     await act(async () => {
-      trueButton?.click();
+      note?.click();
     });
     await flushReactWork();
 
-    expect(trueButton?.getAttribute("aria-pressed")).toBe("true");
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-rewrite textarea");
+    expect(rewrite).not.toBeNull();
+    await act(async () => {
+      setInputValue(rewrite!, "make rooms where rough drafts can breathe");
+    });
+    const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "pin wording",
+    );
+    expect(pinButton).not.toBeNull();
+
+    await act(async () => {
+      pinButton?.click();
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("make rooms where rough drafts can breathe");
     expect(container.textContent).toContain("saved");
     expect(createFeedback).toHaveBeenCalledWith({
       targetType: "top_of_mind_note",
       targetId: "note-1",
-      value: "true",
+      value: "partly",
+      correctionText: "make rooms where rough drafts can breathe",
     });
   });
 
-  it("sends optional correction text with expanded top-of-mind feedback", async () => {
+  it("pulls down a Top of Mind post-it without showing a weak replacement", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -1030,31 +1056,30 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const correction = container.querySelector<HTMLTextAreaElement>(".nc-note-correction textarea");
-    expect(correction).not.toBeNull();
-    await act(async () => {
-      setInputValue(correction!, "This is closer if it mentions the workshop.");
-    });
-    const partlyButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-feedback-btn")).find(
-      (button) => button.textContent === "rewrite in my words",
+    const pullDownButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "pull down",
     );
-    expect(partlyButton).not.toBeNull();
+    expect(pullDownButton).not.toBeNull();
 
     await act(async () => {
-      partlyButton?.click();
+      pullDownButton?.click();
     });
     await flushReactWork();
 
+    expect(container.querySelector(".nc-note-modal")).toBeNull();
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("When signals gather, provisional notes will appear here.");
+    expect(container.textContent).not.toContain("ambition signal");
+    expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
       targetType: "top_of_mind_note",
       targetId: "note-1",
-      value: "partly",
-      correctionText: "This is closer if it mentions the workshop.",
+      value: "not_true",
+      correctionText: "pulled down from the wall",
     });
-    expect(partlyButton?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("surfaces top-of-mind feedback failures without keeping optimistic state", async () => {
+  it("surfaces Top of Mind edit failures without keeping optimistic wording", async () => {
     vi.mocked(createFeedback).mockRejectedValueOnce(new Error("offline"));
     setApiFixtures();
     const container = await renderHomePage();
@@ -1065,18 +1090,27 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const notTrueButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-feedback-btn")).find(
-      (button) => button.textContent === "not this",
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-rewrite textarea");
+    expect(rewrite).not.toBeNull();
+    await act(async () => {
+      setInputValue(rewrite!, "make the public room first");
+    });
+    const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "pin wording",
     );
-    expect(notTrueButton).not.toBeNull();
+    expect(pinButton).not.toBeNull();
 
     await act(async () => {
-      notTrueButton?.click();
+      pinButton?.click();
     });
     await flushReactWork();
 
-    expect(notTrueButton?.getAttribute("aria-pressed")).toBe("false");
-    expect(container.textContent).toContain("could not save feedback");
+    const visiblePostItBodies = Array.from(container.querySelectorAll(".nc-note-body")).map(
+      (body) => body.textContent ?? "",
+    );
+    expect(visiblePostItBodies.join(" ")).toContain("make the thing before explaining it");
+    expect(visiblePostItBodies.join(" ")).not.toContain("make the public room first");
+    expect(container.textContent).toContain("could not change post-it");
   });
 
   it("starts low-data users on Top of Mind with bottom capture available", async () => {

@@ -135,9 +135,8 @@ type MemoryBrowseOrder = "newest" | "relevance";
 type MemoryFolderView = "grid" | "vertical" | "horizontal";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
-  "true" | "partly" | "not_true"
+  "partly" | "not_true"
 >;
-type TopOfMindFeedbackAction = TopOfMindFeedbackValue | "rewrite";
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
 
@@ -1031,18 +1030,14 @@ const HOME_COPY = {
     lifecycleHint: "five provisional post-its. not final. changed by new signals.",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "여기서 시작됨",
-    feedbackLabels: {
-      true: "true",
-      partly: "partly",
-      not_true: "not this",
-      rewrite: "rewrite in my words",
-    },
-    reactionGroup: "How does this land",
-    correctionLabel: "optional correction",
-    correctionPlaceholder: "what should this post-it know instead?",
+    reactionGroup: "post-it controls",
+    correctionLabel: "rewrite this post-it",
+    correctionPlaceholder: "write the version you would keep on the wall",
+    rewriteCta: "pin wording",
+    removeCta: "pull down",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
-    feedbackError: "could not save feedback",
+    feedbackError: "could not change post-it",
     loadingThoughts: "생각이 모이는 중...",
     emptyThoughts: "신호가 쌓이면 여기에 생각이 나타납니다.",
     captureTitle: "첫 신호를 붙잡기",
@@ -1100,18 +1095,14 @@ const HOME_COPY = {
     lifecycleHint: "five provisional post-its. not final. changed by new signals.",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
-    feedbackLabels: {
-      true: "true",
-      partly: "partly",
-      not_true: "not this",
-      rewrite: "rewrite in my words",
-    },
-    reactionGroup: "How does this land",
-    correctionLabel: "optional correction",
-    correctionPlaceholder: "what should this post-it know instead?",
+    reactionGroup: "post-it controls",
+    correctionLabel: "rewrite this post-it",
+    correctionPlaceholder: "write the version you would keep on the wall",
+    rewriteCta: "pin wording",
+    removeCta: "pull down",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
-    feedbackError: "could not save feedback",
+    feedbackError: "could not change post-it",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "When signals gather, provisional notes will appear here.",
     captureTitle: "Catch the first signals",
@@ -1155,10 +1146,11 @@ const HOME_COPY = {
     lifecycleHint: string;
     noteShifted: string[];
     evidenceLabel: string;
-    feedbackLabels: Record<TopOfMindFeedbackAction, string>;
     reactionGroup: string;
     correctionLabel: string;
     correctionPlaceholder: string;
+    rewriteCta: string;
+    removeCta: string;
     feedbackSaved: string;
     feedbackSaving: string;
     feedbackError: string;
@@ -1241,6 +1233,7 @@ export function HomePage(): JSX.Element {
       }
     >
   >({});
+  const [removedTopOfMindNoteIds, setRemovedTopOfMindNoteIds] = useState<Set<string>>(() => new Set());
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [actionDrag, setActionDrag] = useState({ x: 0, y: 0 });
@@ -2091,7 +2084,8 @@ export function HomePage(): JSX.Element {
     ...(topOfMind?.activeQuestions ?? []),
     ...(topOfMind?.activeThemes ?? []),
   ].slice(0, TOP_OF_MIND_NOTE_LIMIT).map(signalToThoughtCard);
-  const thoughtCards = topOfMindNotes.length > 0
+  const usesTopOfMindNoteSurface = topOfMindNotes.length > 0 || removedTopOfMindNoteIds.size > 0;
+  const thoughtCards = usesTopOfMindNoteSurface
     ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
@@ -2111,12 +2105,6 @@ export function HomePage(): JSX.Element {
     setHomeMode(mode);
   };
 
-  const feedbackValues: TopOfMindFeedbackValue[] = [
-    "true",
-    "partly",
-    "not_true",
-  ];
-
   const updateCorrectionText = (noteId: string, correctionText: string) => {
     setNoteFeedback((prev) => ({
       ...prev,
@@ -2129,11 +2117,13 @@ export function HomePage(): JSX.Element {
     }));
   };
 
-  const submitTopOfMindFeedback = async (
+  const submitTopOfMindEdit = async (
     signal: HomeThoughtCard,
-    value: TopOfMindFeedbackValue,
+    nextTitle: string,
   ) => {
     if (!signal.feedbackTargetId) return;
+    const trimmedTitle = nextTitle.trim();
+    if (!trimmedTitle) return;
 
     const previousNotes = topOfMindNotes;
     const previousFeedback = noteFeedback[signal.id] ?? {
@@ -2142,15 +2132,14 @@ export function HomePage(): JSX.Element {
       error: null,
       correctionText: "",
     };
-    const correctionText = previousFeedback.correctionText.trim();
 
     setNoteFeedback((prev) => ({
       ...prev,
       [signal.id]: {
-        value,
+        value: "partly",
         status: "saving",
         error: null,
-        correctionText: prev[signal.id]?.correctionText ?? "",
+        correctionText: trimmedTitle,
       },
     }));
 
@@ -2159,13 +2148,8 @@ export function HomePage(): JSX.Element {
         note.id === signal.feedbackTargetId
           ? {
               ...note,
-              status: value === "not_true" ? "stale" : note.status,
-              confidence:
-                value === "true"
-                  ? Math.min(100, note.confidence + 4)
-                  : value === "not_true"
-                    ? Math.max(0, note.confidence - 12)
-                    : note.confidence,
+              title: trimmedTitle,
+              ambientSignal: trimmedTitle,
             }
           : note,
       ),
@@ -2175,16 +2159,16 @@ export function HomePage(): JSX.Element {
       await createFeedback({
         targetType: "top_of_mind_note",
         targetId: signal.feedbackTargetId,
-        value,
-        ...(correctionText ? { correctionText } : {}),
+        value: "partly",
+        correctionText: trimmedTitle,
       });
       setNoteFeedback((prev) => ({
         ...prev,
         [signal.id]: {
-          value,
+          value: "partly",
           status: "saved",
           error: null,
-          correctionText: prev[signal.id]?.correctionText ?? "",
+          correctionText: trimmedTitle,
         },
       }));
     } catch {
@@ -2200,53 +2184,109 @@ export function HomePage(): JSX.Element {
     }
   };
 
-  const renderFeedbackControls = (
+  const pullDownTopOfMindNote = async (signal: HomeThoughtCard) => {
+    if (!signal.feedbackTargetId) return;
+
+    const previousNotes = topOfMindNotes;
+    const previousRemovedIds = removedTopOfMindNoteIds;
+    const previousFeedback = noteFeedback[signal.id] ?? {
+      value: null,
+      status: "idle" as FeedbackStatus,
+      error: null,
+      correctionText: "",
+    };
+
+    setNoteFeedback((prev) => ({
+      ...prev,
+      [signal.id]: {
+        value: "not_true",
+        status: "saving",
+        error: null,
+        correctionText: prev[signal.id]?.correctionText ?? signal.label,
+      },
+    }));
+    setRemovedTopOfMindNoteIds((prev) => new Set(prev).add(signal.feedbackTargetId!));
+    setTopOfMindNotes((prev) => prev.filter((note) => note.id !== signal.feedbackTargetId));
+    setExpandedNoteIndex(null);
+
+    try {
+      await createFeedback({
+        targetType: "top_of_mind_note",
+        targetId: signal.feedbackTargetId,
+        value: "not_true",
+        correctionText: "pulled down from the wall",
+      });
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          value: "not_true",
+          status: "saved",
+          error: null,
+          correctionText: prev[signal.id]?.correctionText ?? signal.label,
+        },
+      }));
+    } catch {
+      setTopOfMindNotes(previousNotes);
+      setRemovedTopOfMindNoteIds(previousRemovedIds);
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          ...previousFeedback,
+          status: "error",
+          error: copy.feedbackError,
+        },
+      }));
+    }
+  };
+
+  const renderPostItControls = (
     signal: HomeThoughtCard,
-    options: { expanded?: boolean } = {},
   ): JSX.Element | null => {
     if (!signal.feedbackTargetId) return null;
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
+    const draft = feedbackState?.correctionText || signal.label;
     return (
       <div
-        className={`nc-note-feedback${options.expanded ? " nc-note-feedback--expanded" : ""}`}
+        className="nc-note-controls"
         role="group"
         aria-label={copy.reactionGroup}
       >
-        <div className="nc-note-feedback-options">
-          {[...feedbackValues, ...(options.expanded ? (["rewrite"] as const) : [])].map((action) => {
-            const value: TopOfMindFeedbackValue = action === "rewrite" ? "partly" : action;
-            const active = feedbackState?.value === value;
-            return (
-              <button
-                key={action}
-                type="button"
-                className={`nc-note-feedback-btn${active ? " nc-note-feedback-btn--active" : ""}`}
-                aria-pressed={active}
-                disabled={saving}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void submitTopOfMindFeedback(signal, value);
-                }}
-              >
-                {copy.feedbackLabels[action]}
-              </button>
-            );
-          })}
+        <label className="nc-note-rewrite" onClick={(event) => event.stopPropagation()}>
+          <span>{copy.correctionLabel}</span>
+          <textarea
+            value={draft}
+            placeholder={copy.correctionPlaceholder}
+            rows={2}
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+              updateCorrectionText(signal.id, event.target.value)
+            }
+          />
+        </label>
+        <div className="nc-note-control-actions">
+          <button
+            type="button"
+            className="nc-note-control-btn"
+            disabled={saving || !draft.trim()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void submitTopOfMindEdit(signal, draft);
+            }}
+          >
+            {copy.rewriteCta}
+          </button>
+          <button
+            type="button"
+            className="nc-note-control-btn nc-note-control-btn--pull"
+            disabled={saving}
+            onClick={(event) => {
+              event.stopPropagation();
+              void pullDownTopOfMindNote(signal);
+            }}
+          >
+            {copy.removeCta}
+          </button>
         </div>
-        {options.expanded ? (
-          <label className="nc-note-correction" onClick={(event) => event.stopPropagation()}>
-            <span>{copy.correctionLabel}</span>
-            <textarea
-              value={feedbackState?.correctionText ?? ""}
-              placeholder={copy.correctionPlaceholder}
-              rows={2}
-              onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                updateCorrectionText(signal.id, event.target.value)
-              }
-            />
-          </label>
-        ) : null}
         {feedbackState?.status === "saving" ? (
           <p className="nc-note-feedback-status">{copy.feedbackSaving}</p>
         ) : feedbackState?.status === "saved" ? (
@@ -3247,7 +3287,7 @@ export function HomePage(): JSX.Element {
                   <dd>{signal.evidenceRationale ?? "This read is provisional and should be corrected if it misses."}</dd>
                 </div>
                 <div>
-                  <dt>not this</dt>
+                  <dt>outside reading</dt>
                   <dd>
                     {signal.rejectedAlternativeInterpretation ??
                       "No competing interpretation has been strong enough to name yet."}
@@ -3303,8 +3343,8 @@ export function HomePage(): JSX.Element {
               </strong>
             </div>
             <p className="nc-note-empty-evidence">
-              Feedback on this post-it trains the {signal.ambitionDimension?.replace(/_/g, " ") ?? "ambition"} read,
-              not just the graph claim underneath it.
+              Edits to this post-it help WAKA keep the {signal.ambitionDimension?.replace(/_/g, " ") ?? "ambition"} read
+              close to what is alive now.
             </p>
             {contextNodes.length > 0 ? (
               <ul className="nc-note-context-list">
@@ -3335,7 +3375,7 @@ export function HomePage(): JSX.Element {
           ) : null}
 
           <footer className="nc-note-expanded-foot">
-            {renderFeedbackControls(signal, { expanded: true })}
+            {renderPostItControls(signal)}
             <span>not final · changed by new signals · replaceable</span>
           </footer>
         </div>
