@@ -227,11 +227,13 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.setSelectionRange(20, 58);
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
-    expect(container?.querySelector("#capHighlightState")?.textContent).toContain("add highlight");
+    const selectionPopover = container?.querySelector<HTMLElement>(".cap-highlight-popover--selection");
+    expect(selectionPopover?.textContent).toContain("add highlight");
+    expect(selectionPopover?.style.getPropertyValue("--highlight-top")).not.toBe("");
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>("#capHighlightState button")?.click();
+      selectionPopover?.querySelector<HTMLButtonElement>("button")?.click();
     });
-    expect(container?.querySelector("#capHighlightState")?.textContent).toContain("highlighted in text");
+    expect(container?.querySelector(".cap-highlight-popover--saved")?.textContent).toContain("highlighted in text");
     expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe(
       "studios with huge north-facing windows",
     );
@@ -280,7 +282,7 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>("#capHighlightState button")?.click();
+      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
@@ -323,6 +325,77 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("save another");
     expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("add a little more");
     expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("return later");
+  });
+
+  it("keeps highlight editing next to the highlighted text instead of a detached list", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("The part that hit was the open studio table");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(26, 43);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
+    });
+
+    const savedPopover = container?.querySelector<HTMLElement>(".cap-highlight-popover--saved");
+    expect(savedPopover).not.toBeNull();
+    expect(savedPopover?.style.getPropertyValue("--highlight-left")).not.toBe("");
+    expect(container?.querySelector(".cap-highlight-row")).toBeNull();
+    expect(container?.querySelector("#capHighlightState")).toBeNull();
+
+    expect(container?.querySelector(".cap-resonance--popover")).not.toBeNull();
+
+    await act(async () => {
+      savedPopover?.querySelector<HTMLButtonElement>("[aria-label='Remove highlighted text']")?.click();
+    });
+    expect(container?.querySelector(".cap-note-highlight-layer mark")).toBeNull();
+    expect(container?.querySelector(".cap-highlight-popover--saved")).toBeNull();
+  });
+
+  it("expands into a full-page writing environment without losing draft highlights", async () => {
+    const toggleFocus = vi.fn();
+    const { rerender } = await (async () => {
+      await renderCaptureForm({ focused: false, onToggleFocus: toggleFocus });
+      return {
+        rerender: async (focused: boolean) => {
+          await act(async () => {
+            root?.render(createElement(CaptureForm, { focused, onToggleFocus: toggleFocus }));
+          });
+        },
+      };
+    })();
+    await act(async () => {
+      setText("Keep the open studio table safe");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(9, 26);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
+    });
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(toggleFocus).toHaveBeenCalledWith(true);
+    await rerender(true);
+    expect(container?.querySelector(".cell.capture")?.className).toContain("focused");
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Keep the open studio table safe");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe("open studio table");
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(toggleFocus).toHaveBeenLastCalledWith(false);
+    await rerender(false);
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Keep the open studio table safe");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe("open studio table");
   });
 
   it("lets the user keep writing after the non-final mirror", async () => {
@@ -389,7 +462,7 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>("#capHighlightState button")?.click();
+      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])

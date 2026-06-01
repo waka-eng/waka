@@ -1025,7 +1025,7 @@ describe("HomePage current home experience", () => {
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
 
-  it("reveals concise evidence inspirations for a top-of-mind note", async () => {
+  it("opens a simplified top-of-mind post-it with a private drawer evidence action", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -1041,26 +1041,25 @@ describe("HomePage current home experience", () => {
     expect(expanded?.classList.contains("nc-note-peel")).toBe(true);
     expect(expanded?.getAttribute("role")).toBe("dialog");
     expect(expanded?.textContent).toContain("opened post-it");
-    expect(expanded?.textContent).toContain("supporting saved inspirations");
-    expect(expanded?.textContent).toContain("1 inspiration behind this");
-    expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
-    expect(expanded?.textContent).toContain("This inspiration anchors the pattern.");
+    expect(expanded?.textContent).toContain("short, provisional, easy to change");
+    expect(expanded?.textContent).toContain("open the private drawer");
+    expect(expanded?.textContent).toContain("1 saved inspiration nearby");
+    expect(expanded?.textContent).not.toContain("Architecture essay about bridge rhythms in city walks");
+    expect(expanded?.textContent).not.toContain("This inspiration anchors the pattern.");
     expect(expanded?.textContent?.toLowerCase()).not.toContain("memory movement");
-    expect(expanded?.textContent).toContain("why this matters");
-    expect(expanded?.textContent).toContain("points toward");
-    expect(expanded?.textContent).toContain("pushes away from");
-    expect(expanded?.textContent).toContain("why now");
-    expect(expanded?.textContent).toContain("outside reading");
-    expect(expanded?.textContent).toContain("This is not just an archive theme about bridges or city walking.");
     expect(expanded?.textContent).toContain("Several saved inspirations cluster around city walks");
-    expect(expanded?.textContent).toContain("ambition dimension");
-    expect(expanded?.textContent).toContain("work");
-    expect(expanded?.textContent).toContain("make the thing before explaining it");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-note-drawer-link")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-note-modal")).toBeNull();
+    expect(container.querySelector(".memory-drawer-workspace")).not.toBeNull();
   });
 
-  it("renders empty evidence states without exposing internal graph fields", async () => {
+  it("keeps empty evidence out of the opened post-it and points to the drawer", async () => {
     setApiFixtures({
       topOfMindNotes: [
         {
@@ -1084,10 +1083,12 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
-    expect(expanded?.textContent).toContain("no saved inspiration attached yet");
-    expect(expanded?.textContent).toContain("This post-it does not have saved inspiration attached yet.");
-    expect(expanded?.textContent).toContain("ambition dimension");
-    expect(expanded?.textContent).toContain("No deeper read has attached to this note yet.");
+    expect(expanded?.textContent).toContain("open the private drawer");
+    expect(expanded?.textContent).toContain("saved inspirations stay private there");
+    expect(expanded?.textContent).not.toContain("no saved inspiration attached yet");
+    expect(expanded?.textContent).not.toContain("This post-it does not have saved inspiration attached yet.");
+    expect(expanded?.textContent).not.toContain("ambition dimension");
+    expect(expanded?.textContent).not.toContain("No deeper read has attached to this note yet.");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
     expect(expanded?.textContent).not.toContain("context_node:");
   });

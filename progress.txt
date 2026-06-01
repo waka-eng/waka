@@ -50,6 +50,39 @@
 - Home user-facing surfaces should sanitize backend-provided Top of Mind, evidence, and action copy before rendering so internal terms such as signal, graph, node, resonance, analysis, and AI do not leak outside admin/debug surfaces.
 - Main wall actions are independent paper objects: keep the action checklist visible and draggable on the wall whenever meaningful actions exist, even if Top of Mind notes are empty or the drawer UI changes.
 - Memory Drawer should open to one clean white workspace with quiet grouping/all-inspirations entry objects; selecting one swaps to that focused card workspace with a small way back, rather than stacking grouping navigation and long card lists in separate vertical sections.
+- Opened Top of Mind post-its should stay minimal: post-it text, one short explanatory paragraph, private-drawer evidence handoff, and physical edit/pull-down controls only.
+- Capture highlight controls should be proximity-based inside the writing area; selected text gets an inline add-highlight popover and saved highlights expose nearby edit/remove/reason controls instead of detached bottom lists.
+
+---
+
+## 2026-06-01 13:15 PDT - US-047
+
+- What was implemented
+  - Simplified opened Top of Mind post-its to the note text, one concise explanatory paragraph, a quiet private-drawer action, and existing rewrite/pull-down controls.
+  - Removed raw saved-inspiration evidence cards, dense context panels, repeated headings, and empty evidence blocks from the opened post-it surface.
+  - Moved capture highlighting into proximity popovers near selected/highlighted text, including add-highlight, remove, and why-it-mattered controls.
+  - Made expanded capture occupy the full viewport and preserve draft text/highlights across expand and collapse.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 73 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, saved-inspiration, reflection, and capture-save APIs. Verified capture launcher, full-screen expanded capture, selection-near highlight popover, saved-highlight controls, quick-save confirmation, opened post-it without raw evidence, drawer evidence handoff, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Opened Top of Mind should hand evidence inspection to Memory Drawer rather than duplicating saved inspiration cards in the post-it.
+    - Capture highlight interaction needs to stay physically close to the selected text; bottom highlight rows make the writing surface feel detached.
+  - Gotchas encountered
+    - Browser verification must enter capture through the `.nc-save` launcher; the capture composer is not mounted on the wall until that dialog opens.
+    - Playwright route mocks are order-sensitive in this setup; register the broad `/api/**` fallback before specific API mocks.
+  - Useful context
+    - Vite served browser verification at `http://127.0.0.1:5173/`.
 
 ---
 

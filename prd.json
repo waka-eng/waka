@@ -891,6 +891,31 @@
       "priority": 49,
       "passes": true,
       "notes": "Correction after US-038 through US-045: the result over-added structure and regressed the action checklist. The drawer should become simpler, cleaner, and whiter. The experience should be wall -> drawer workspace -> grouping/all inspirations -> minimal cards, not a new page, not a scroll stack, and not several competing sections."
+    },
+    {
+      "id": "US-047",
+      "title": "Simplify opened post-it and make capture highlights proximity-based",
+      "description": "As a user, I want opening a Top of Mind post-it and capturing an inspiration to stay calm, focused, and physically intuitive, without raw evidence blocks, detached highlight controls, or awkward save/reflect buttons.",
+      "acceptanceCriteria": [
+        "Simplify the opened Top of Mind post-it so it shows the post-it text, one short explanatory paragraph, and a quiet link/action to view supporting inspirations in the private drawer",
+        "Do not render raw saved inspiration cards directly inside the opened Top of Mind post-it; evidence should be accessed through the drawer, not exposed in the post-it surface",
+        "Remove bulky sections, repeated headings, feedback button groups, and dense evidence panels from the opened post-it experience",
+        "Keep opened post-it correction physical and simple: edit/rewrite the post-it or pull it down/remove it, not yes/no rating buttons",
+        "In capture, text highlighting must be proximity-based: after selecting text, show an inline floating control near the selection to add the highlight and optionally answer why that part mattered",
+        "Do not place add-highlight controls at the bottom of the capture panel when the selection happens elsewhere",
+        "Existing highlights should render directly on the text; hovering or focusing a highlight should show nearby controls to expand/edit the note or remove that highlight in place",
+        "Remove separate detached highlight lists such as a standalone highlighted-text area and a separate clear button when the same actions can happen on the highlighted text itself",
+        "The highlight note/reflection prompt should happen near the selected highlight, not in a distant panel",
+        "Expanding the inspiration capture composer should create a dedicated full-page or full-screen note-taking environment, so it feels safe to write without losing text",
+        "The expanded capture environment should preserve all draft text, attachments, selections, and highlights when opened/closed",
+        "Replace awkward equal-weight \"reflect deeper\" and \"save now\" button treatment with a calmer two-path design: primary quick safe save and secondary optional reflection, with copy and layout that feel like a safe drawer rather than a form",
+        "After quick save, show reassuring confirmation that the inspiration is safe and can be revisited later; after optional reflection, keep the user in the same safe note-taking context",
+        "Add tests proving opened post-its no longer render raw inspiration evidence, drawer evidence link/action exists, highlight controls appear near selected text, existing highlights expose nearby edit/remove controls, detached highlight lists are gone, expanded capture fills the page, and drafts/highlights persist across expand/collapse",
+        "Run web typecheck, targeted Home/capture tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 50,
+      "passes": true,
+      "notes": "Correction after US-038 through US-045: the opened post-it and capture experiences still feel overbuilt and detached. Opened post-it should be minimal and link into the private drawer for evidence. Capture should feel like safe note-taking, with highlight actions physically near the text being highlighted."
     }
   ]
 }

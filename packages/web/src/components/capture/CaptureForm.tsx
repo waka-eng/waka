@@ -189,6 +189,11 @@ interface HighlightedSignalText {
   endOffset: number;
 }
 
+interface CapturePopoverPosition {
+  top: number;
+  left: number;
+}
+
 interface StoredCaptureDraft {
   note?: string;
   resonance?: CaptureResonanceAnswer | null;
@@ -234,6 +239,17 @@ function suggestedResonanceOptions(text: string): typeof resonanceOptions {
     .map((item) => item.option);
   if (!top.some((option) => option.value === "not_sure")) top.push(resonanceOptions[resonanceOptions.length - 1]);
   return top;
+}
+
+function approximateSelectionPopoverPosition(text: string, offset: number): CapturePopoverPosition {
+  const before = text.slice(0, Math.max(0, offset));
+  const lines = before.split("\n");
+  const line = Math.max(0, lines.length - 1);
+  const column = lines[lines.length - 1]?.length ?? 0;
+  return {
+    top: 18 + line * 24,
+    left: Math.min(420, 18 + column * 7.4),
+  };
 }
 
 export function extractUrlsFromText(text: string): string[] {
@@ -397,6 +413,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [highlight, setHighlight] = useState<HighlightedSignalText | null>(null);
     const [pendingHighlight, setPendingHighlight] = useState<HighlightedSignalText | null>(null);
+    const [highlightPopoverPosition, setHighlightPopoverPosition] = useState<CapturePopoverPosition | null>(null);
+    const [highlightDetailsOpen, setHighlightDetailsOpen] = useState(false);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [resonanceNote, setResonanceNote] = useState("");
     const [saving, setSaving] = useState(false);
@@ -419,7 +437,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const draft = readStoredCaptureDraft();
       if (!draft) return;
       if (typeof draft.note === "string") setNote(draft.note);
-      if (draft.highlight?.text) setHighlight(draft.highlight);
+      if (draft.highlight?.text) {
+        setHighlight(draft.highlight);
+        setHighlightPopoverPosition(approximateSelectionPopoverPosition(draft.note ?? "", draft.highlight.startOffset));
+      }
       if (draft.resonance) setResonance(draft.resonance);
       if (typeof draft.resonanceNote === "string") setResonanceNote(draft.resonanceNote);
       if (Array.isArray(draft.links)) {
@@ -522,11 +543,18 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       setNote(next);
       setHighlight((current) => {
         if (!current) return current;
-        return next.slice(current.startOffset, current.endOffset) === current.text ? current : null;
+        const stillMatches = next.slice(current.startOffset, current.endOffset) === current.text;
+        if (!stillMatches) {
+          setHighlightPopoverPosition(null);
+          setHighlightDetailsOpen(false);
+        }
+        return stillMatches ? current : null;
       });
       setPendingHighlight((current) => {
         if (!current) return current;
-        return next.slice(current.startOffset, current.endOffset) === current.text ? current : null;
+        const stillMatches = next.slice(current.startOffset, current.endOffset) === current.text;
+        if (!stillMatches) setHighlightPopoverPosition(null);
+        return stillMatches ? current : null;
       });
     }, []);
 
@@ -546,6 +574,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         startOffset: start + leadingWhitespace,
         endOffset: end - trailingWhitespace,
       });
+      setHighlightPopoverPosition(approximateSelectionPopoverPosition(target.value, start + leadingWhitespace));
+      setHighlightDetailsOpen(true);
     }, []);
 
     const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
@@ -791,6 +821,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setNote("");
         setHighlight(null);
         setPendingHighlight(null);
+        setHighlightPopoverPosition(null);
+        setHighlightDetailsOpen(false);
         setResonance(null);
         setResonanceNote("");
         setReflectionAnswer("");
@@ -980,7 +1012,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       <CaptureCell
         ref={ref}
         view={activeView}
-        visualState={{ ...visualState, reflectGlow }}
+        visualState={{ ...visualState, focused, reflectGlow }}
         noteValue={note}
         noteHighlight={highlight}
         notePlaceholder={t(locale, "capturePlaceholder")}
@@ -1009,40 +1041,76 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         confirmMessage={confirmMessage}
         captureMeta={
           <div className="cap-meta" id="capMeta">
-            <div className="cap-highlight-row">
-              {highlight ? (
-                <span className="cap-highlight-state" id="capHighlightState">
+            <span className="cap-draft-state" id="capDraftState">
+              Select the part that hit, if you want. {t(locale, "autosavedLocally")}
+            </span>
+            {pendingHighlight && highlightPopoverPosition ? (
+              <div
+                className="cap-highlight-popover cap-highlight-popover--selection"
+                id="capHighlightPopover"
+                style={{
+                  ["--highlight-top" as string]: `${highlightPopoverPosition.top}px`,
+                  ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
+                }}
+              >
+                <span>{pendingHighlight.text}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHighlight(pendingHighlight);
+                    setPendingHighlight(null);
+                    setHighlightPopoverPosition(
+                      approximateSelectionPopoverPosition(note, pendingHighlight.startOffset),
+                    );
+                    setHighlightDetailsOpen(true);
+                  }}
+                >
+                  add highlight
+                </button>
+              </div>
+            ) : null}
+            {highlight && highlightPopoverPosition ? (
+              <div
+                className="cap-highlight-popover cap-highlight-popover--saved"
+                id="capHighlightPopover"
+                style={{
+                  ["--highlight-top" as string]: `${highlightPopoverPosition.top}px`,
+                  ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
+                }}
+              >
+                <button
+                  type="button"
+                  className="cap-highlight-chip"
+                  aria-expanded={highlightDetailsOpen}
+                  onClick={() => setHighlightDetailsOpen((open) => !open)}
+                >
                   highlighted in text
-                  <button
-                    type="button"
-                    aria-label={t(locale, "removeHighlight")}
-                    onClick={() => {
-                      setHighlight(null);
-                      setResonance(null);
-                    }}
-                  >
-                    clear
-                  </button>
-                </span>
-              ) : pendingHighlight ? (
-                <span className="cap-highlight-state cap-highlight-state--pending" id="capHighlightState">
-                  {pendingHighlight.text}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHighlight(pendingHighlight);
-                      setPendingHighlight(null);
-                    }}
-                  >
-                    add highlight
-                  </button>
-                </span>
-              ) : (
-                <span className="cap-draft-state" id="capDraftState">Select the part that hit, if you want. {t(locale, "autosavedLocally")}</span>
-              )}
-            </div>
-            {highlight ? (
-              <fieldset className="cap-resonance" id="capResonance">
+                </button>
+                <button
+                  type="button"
+                  aria-label={t(locale, "removeHighlight")}
+                  onClick={() => {
+                    setHighlight(null);
+                    setPendingHighlight(null);
+                    setHighlightPopoverPosition(null);
+                    setHighlightDetailsOpen(false);
+                    setResonance(null);
+                    setResonanceNote("");
+                  }}
+                >
+                  remove
+                </button>
+              </div>
+            ) : null}
+            {highlight && highlightDetailsOpen && highlightPopoverPosition ? (
+              <fieldset
+                className="cap-resonance cap-resonance--popover"
+                id="capResonance"
+                style={{
+                  ["--highlight-top" as string]: `${highlightPopoverPosition.top + 36}px`,
+                  ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
+                }}
+              >
                 <legend>why this part mattered</legend>
                 <div className="cap-resonance-options">
                   {pullOptions.map((option) => (

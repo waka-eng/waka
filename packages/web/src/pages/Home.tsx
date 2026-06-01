@@ -487,10 +487,6 @@ function renderHighlightedInspirationText(
   return chunks;
 }
 
-function meaningTypeLabel(type: string): string {
-  return type.replace(/_/g, " ");
-}
-
 const MEANING_NOTE_LABEL_TRANSLATIONS: Record<string, string> = {
   "what kind of life would make this work worth it": "이 일을 가치 있게 만드는 삶",
   "rooms where people can be honest before they are impressive": "인상적이기 전에 솔직할 수 있는 방",
@@ -2888,20 +2884,6 @@ export function HomePage(): JSX.Element {
     );
   };
 
-  const relatedMeaningLabels = (signal: HomeThoughtCard): string[] => {
-    if (!topOfMind) return [];
-    const labels = new Set<string>();
-    for (const edge of topOfMind.relationshipSignals) {
-      if (edge.sourceNodeId === signal.id) labels.add(edge.targetLabel);
-      if (edge.targetNodeId === signal.id) labels.add(edge.sourceLabel);
-    }
-    return [...labels].slice(0, 3).map((label) =>
-      locale === "en-US"
-        ? label
-        : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(label)] ?? label,
-    );
-  };
-
   useEffect(() => {
     if (draggingIndex === null) return undefined;
 
@@ -3296,16 +3278,7 @@ export function HomePage(): JSX.Element {
   const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
     const signal = meaningfulThoughtCards[index];
     if (!signal) return null;
-    const relatedLabels = relatedMeaningLabels(signal);
-    const source = signal.supportingSignals[0];
-    const contextNodes =
-      signal.contextNodes.length > 0
-        ? signal.contextNodes
-        : relatedLabels.map((label, labelIndex) => ({
-            id: `${signal.id}-related-${labelIndex}`,
-            label,
-            type: "context",
-          }));
+    const supportingCount = signal.supportingSignals.length;
     return (
       <article
         className="nc-note-modal nc-note-peel"
@@ -3331,7 +3304,7 @@ export function HomePage(): JSX.Element {
           <div>
             <span className="nc-note-title">opened post-it</span>
           </div>
-          <p>the short note, with just enough context to understand why it surfaced</p>
+          <p>short, provisional, easy to change</p>
         </header>
 
         <div className="nc-note-expanded-content">
@@ -3341,117 +3314,30 @@ export function HomePage(): JSX.Element {
                 ? signal.label
                 : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
             </p>
-            <p>{userFacingCopy(signal.reason)}</p>
-          </section>
-
-          <div className="nc-note-peel-grid">
-            <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-frequency-${signal.id}`}>
-              <div className="nc-note-evidence-header">
-                <span>why this matters</span>
-                <strong id={`top-of-mind-frequency-${signal.id}`}>
-                  current read
-                </strong>
-              </div>
-              <dl className="nc-note-frequency-list">
-                <div>
-                  <dt>points toward</dt>
-                  <dd>{signal.matchedEnvironment ? userFacingCopy(signal.matchedEnvironment) : "Still learning what kind of room this belongs in."}</dd>
-                </div>
-                <div>
-                  <dt>pushes away from</dt>
-                  <dd>{signal.antiEnvironment ? userFacingCopy(signal.antiEnvironment) : "No clear opposite has surfaced yet."}</dd>
-                </div>
-                <div>
-                  <dt>why now</dt>
-                  <dd>{signal.evidenceRationale ? userFacingCopy(signal.evidenceRationale) : "This read is provisional and should be corrected if it misses."}</dd>
-                </div>
-                <div>
-                  <dt>outside reading</dt>
-                  <dd>
-                    {signal.rejectedAlternativeInterpretation ? userFacingCopy(signal.rejectedAlternativeInterpretation) :
-                      "No competing interpretation has been strong enough to name yet."}
-                  </dd>
-                </div>
-              </dl>
-            </section>
-
-          <section className="nc-note-source-section nc-note-peel-source">
-            <span>it began here</span>
-            <blockquote className="nc-note-source">
-              “{shortText(userFacingCopy(source?.preview || signal.reason), 190)}”
-            </blockquote>
-          </section>
-          </div>
-
-          <section className="nc-note-evidence-panel nc-note-peel-evidence" aria-labelledby={`top-of-mind-evidence-${signal.id}`}>
-            <div className="nc-note-evidence-header">
-              <span>supporting saved inspirations</span>
-              <strong id={`top-of-mind-evidence-${signal.id}`}>
-                {signal.supportingSignals.length > 0
-                  ? `${signal.supportingSignals.length} inspiration${signal.supportingSignals.length === 1 ? "" : "s"} behind this`
-                  : "no saved inspiration attached yet"}
-              </strong>
-            </div>
-            {signal.supportingSignals.length > 0 ? (
-              <ol className="nc-note-evidence-list">
-                {signal.supportingSignals.slice(0, 5).map((evidence) => (
-                  <li key={evidence.id}>
-                    <blockquote>“{shortText(userFacingCopy(evidence.preview || evidence.reason), 150)}”</blockquote>
-                    <p>{shortText(userFacingCopy(evidence.reason), 120)}</p>
-                    <div>
-                      <span>{evidence.kind || "inspiration"}</span>
-                      {typeof evidence.resonanceScore === "number" ? (
-                        <span>felt strongly {Math.round(evidence.resonanceScore)}/10</span>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="nc-note-empty-evidence">
-                This post-it does not have saved inspiration attached yet.
-              </p>
-            )}
-          </section>
-
-          <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-context-${signal.id}`}>
-            <div className="nc-note-evidence-header">
-              <span>ambition dimension</span>
-              <strong id={`top-of-mind-context-${signal.id}`}>
-                {signal.ambitionDimension?.replace(/_/g, " ") ?? "still forming"}
-              </strong>
-            </div>
-            <p className="nc-note-empty-evidence">
-              Edits to this post-it keep the {signal.ambitionDimension?.replace(/_/g, " ") ?? "ambition"} read
-              close to what is alive now.
+            <p className="nc-note-one-read">
+              {userFacingCopy(
+                signal.evidenceRationale ||
+                  signal.reason ||
+                  "This showed up because a few saved inspirations are leaning in the same direction.",
+              )}
             </p>
-            {contextNodes.length > 0 ? (
-              <ul className="nc-note-context-list">
-                {contextNodes.slice(0, 4).map((node) => (
-                  <li key={node.id}>
-                    <span>{meaningTypeLabel(node.type)}</span>
-                    <p>
-                      {locale === "en-US"
-                        ? shortText(node.label, 120)
-                        : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(node.label)] ??
-                          shortText(node.label, 120)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="nc-note-empty-evidence">
-                No deeper read has attached to this note yet.
-              </p>
-            )}
           </section>
 
-          {relatedLabels.length > 0 ? (
-            <section className="nc-note-nearby-section">
-              <span>nearby thought</span>
-              <p className="nc-note-related-line">{relatedLabels[0]}</p>
-            </section>
-          ) : null}
+          <button
+            type="button"
+            className="nc-note-drawer-link"
+            onClick={() => {
+              closeExpandedNoteOnBackdrop();
+              chooseHomeMode("memoryDrawer");
+            }}
+          >
+            open the private drawer
+            <span>
+              {supportingCount > 0
+                ? `${supportingCount} saved inspiration${supportingCount === 1 ? "" : "s"} nearby`
+                : "saved inspirations stay private there"}
+            </span>
+          </button>
 
           <footer className="nc-note-expanded-foot">
             {renderPostItControls(signal)}

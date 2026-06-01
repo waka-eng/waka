@@ -611,9 +611,13 @@
 
 .top-home-capture .cell.capture.focused {
   position: fixed;
-  inset: 24px;
+  inset: 0;
   z-index: 260;
   width: auto;
+  min-height: 100dvh;
+  margin: 0;
+  padding: clamp(18px, 4vw, 42px);
+  background: #fffdf7;
 }
 
 .top-home-capture .cap-title {
@@ -3212,8 +3216,8 @@
 }
 
 .nc-note-modal {
-  width: min(1120px, calc(100vw - 56px));
-  max-height: min(860px, calc(100dvh - 56px));
+  width: min(760px, calc(100vw - 56px));
+  max-height: min(760px, calc(100dvh - 56px));
   padding: clamp(30px, 4vw, 56px);
   background: var(--bg);
   background-image:
@@ -3240,7 +3244,7 @@
 
 .nc-note-peel {
   position: relative;
-  min-height: min(760px, calc(100dvh - 56px));
+  min-height: min(560px, calc(100dvh - 56px));
 }
 
 .nc-note-peel::before {
@@ -3756,7 +3760,7 @@
 }
 
 .nc-note-peel .nc-note-expanded-content {
-  gap: clamp(24px, 4vw, 40px);
+  gap: clamp(18px, 3vw, 28px);
 }
 
 .nc-note-expanded-content section {
@@ -3794,7 +3798,7 @@
 
 .nc-note-peel-hero {
   max-width: 860px;
-  padding: clamp(16px, 3vw, 30px) 0 clamp(18px, 3vw, 34px) !important;
+  padding: clamp(16px, 3vw, 30px) 0 clamp(14px, 3vw, 26px) !important;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
@@ -3803,6 +3807,37 @@
   font-size: 20px;
   line-height: 1.5;
   opacity: 0.72;
+}
+
+.nc-note-one-read {
+  margin-top: 18px !important;
+}
+
+.nc-note-drawer-link {
+  justify-self: start;
+  display: inline-grid;
+  gap: 5px;
+  max-width: min(100%, 360px);
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, white 22%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 620;
+  line-height: 1.2;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.nc-note-drawer-link span {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  opacity: 0.55;
+  text-transform: uppercase;
 }
 
 .nc-note-peel-grid {
@@ -6280,6 +6315,58 @@ body.dragging .drop-overlay {
   color: var(--muted);
 }
 
+.cap-highlight-popover,
+.cap-resonance--popover {
+  position: absolute;
+  z-index: 4;
+  top: min(var(--highlight-top), calc(100% - 132px));
+  left: min(var(--highlight-left), calc(100% - 260px));
+  width: min(260px, calc(100% - 28px));
+  border: 1px solid rgba(31, 29, 24, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 253, 247, 0.96);
+  box-shadow: 0 14px 26px -22px rgba(0, 0, 0, 0.35);
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+
+.cap-highlight-popover {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+}
+
+.cap-highlight-popover span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cap-highlight-popover button {
+  flex: 0 0 auto;
+  border: 1px solid rgba(31, 29, 24, 0.18);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+  padding: 5px 8px;
+}
+
+.cap-highlight-popover .cap-highlight-chip {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cap-highlight-row {
   display: flex;
   align-items: center;
@@ -6330,6 +6417,12 @@ body.dragging .drop-overlay {
   min-width: 0;
   padding: 0;
   border: 0;
+}
+
+.cap-resonance--popover {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
 }
 
 .cap-resonance legend {
