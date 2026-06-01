@@ -657,7 +657,7 @@ describe("HomePage current home experience", () => {
       inspirations: [
         persistedInspiration({
           id: "insp-link-only",
-          text: "Link signal",
+          text: "Link inspiration",
           kind: "link",
           createdAt: "2026-05-14T16:33:00.000Z",
           updatedAt: "2026-05-14T16:33:00.000Z",
@@ -691,7 +691,7 @@ describe("HomePage current home experience", () => {
         }),
         persistedInspiration({
           id: "insp-image-only",
-          text: "Image signal",
+          text: "Image inspiration",
           kind: "image",
           createdAt: "2026-05-14T16:31:00.000Z",
           updatedAt: "2026-05-14T16:31:00.000Z",
@@ -732,9 +732,9 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 4);
     expect(container.querySelector(".reference-save-kind")).toBeNull();
     const historyText = container.querySelector(".reference-saves-page")?.textContent ?? "";
-    expect(historyText).toContain("Link signal");
+    expect(historyText).toContain("Link inspiration");
     expect(historyText).toContain("Kyoto ramen note https://example.com/kyoto-guide");
-    expect(historyText).toContain("Image signal");
+    expect(historyText).toContain("Image inspiration");
     expect(historyText).toContain("Mixed capture about Osaka");
     expect(historyText).toContain("example.com");
     expect(historyText).toContain("pixel.png · 1 KB");
@@ -1068,7 +1068,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When signals gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
@@ -1134,9 +1134,9 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-page")).toBeNull();
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
-    expect(container.textContent).toContain("When signals gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
-    expect(container.querySelector(".nc-save")?.textContent).toContain("capture signal");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("catch inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
   });
 
@@ -1672,11 +1672,11 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
-    expect(container.querySelector(".cap-save-mirror")?.textContent).toContain("Tiny mirror, not a verdict");
+    expect(container.querySelector(".cap-save-mirror")?.textContent).toContain("Saved safe before it slipped away");
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("3 saved");
     await act(async () => {
       Array.from(container.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button"))
-        .find((button) => button.textContent === "close")
+        .find((button) => button.textContent === "return later")
         ?.click();
     });
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
@@ -1767,7 +1767,7 @@ describe("HomePage current home experience", () => {
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({
         id: "insp-image-save",
-        text: "Image signal",
+        text: "Image inspiration",
         kind: "image",
       }),
     );
@@ -1813,7 +1813,7 @@ describe("HomePage current home experience", () => {
 
     expect(objectUrl).toHaveBeenCalledWith(file);
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "Image signal",
+      text: "Image inspiration",
       kind: "image",
     });
     expect(presignAttachment).toHaveBeenCalledWith({
@@ -1838,9 +1838,9 @@ describe("HomePage current home experience", () => {
       size: 5,
     });
     const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
-      save.textContent?.includes("Image signal"),
+      save.textContent?.includes("Image inspiration"),
     );
-    expect(newSave?.textContent).toContain("Image signal");
+    expect(newSave?.textContent).toContain("Image inspiration");
     expect(newSave?.textContent).not.toContain("(attachment-only inspiration)");
     expect(newSave?.textContent).toContain("photo.png");
     expect(newSave?.textContent).not.toContain("IMAGE");
@@ -1962,6 +1962,6 @@ describe("HomePage current home experience", () => {
     expect(HomePage).toBeTypeOf("function");
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
-    expect(container.textContent).toContain("capture signal");
+    expect(container.textContent).toContain("catch inspiration");
   });
 });

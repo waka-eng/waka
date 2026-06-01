@@ -186,7 +186,12 @@ describe("CaptureForm multi-input quick capture", () => {
       "What almost slipped away?",
     );
     expect(container?.querySelector("#capResonance")).toBeNull();
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Select a phrase, then add a highlight.");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Select the part that hit, if you want.");
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
+    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect deeper");
+    expect(container?.textContent?.toLowerCase()).not.toMatch(
+      /\bsignal\b|\bgraph\b|\bnode\b|memory movement|\bresonance\b|\banalysis\b/,
+    );
   });
 
   it("autosaves draft text locally and restores it on the next mount", async () => {
@@ -211,7 +216,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector("#capDraftState")?.textContent).toContain("Private draft autosaved locally");
   });
 
-  it("persists marked text and resonance as signal spark metadata", async () => {
+  it("persists marked text and the small why-it-mattered answer as spark metadata", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("I keep returning to studios with huge north-facing windows");
@@ -259,7 +264,7 @@ describe("CaptureForm multi-input quick capture", () => {
       ],
     });
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Tiny mirror, not a verdict: the marked part is carrying the charge.",
+      "Saved safe. The marked part can help you understand why it mattered later.",
     );
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
   });
@@ -313,10 +318,11 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     expect(createReflection).not.toHaveBeenCalled();
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Tiny mirror, not a verdict: the marked part is carrying the charge.",
+      "Saved safe. The marked part can help you understand why it mattered later.",
     );
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("new note");
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("close");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("save another");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("add a little more");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("return later");
   });
 
   it("lets the user keep writing after the non-final mirror", async () => {
@@ -328,11 +334,48 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button") ?? [])
-        .find((button) => button.textContent === "new note")
+        .find((button) => button.textContent === "save another")
         ?.click();
     });
 
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
+  });
+
+  it("offers optional post-save reflection and attaches it to the saved inspiration", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save" }));
+    await renderCaptureForm();
+    await act(async () => {
+      setText("A messy thing I want safe before I understand it");
+    });
+
+    await clickQuickSave();
+    await act(async () => {
+      Array.from(container?.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button") ?? [])
+        .find((button) => button.textContent === "add a little more")
+        ?.click();
+    });
+    expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
+
+    const answer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
+    expect(answer).not.toBeNull();
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(answer, "It showed me what I want to protect.");
+      answer?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspiration).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
+      question: "Why did this matter right now?",
+      answer: "It showed me what I want to protect.",
+      skipped: false,
+    });
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Saved with your thought");
   });
 
   it("persists the optional reason note as stronger user-provided capture metadata", async () => {
@@ -425,9 +468,9 @@ describe("CaptureForm multi-input quick capture", () => {
     await pasteText("https://example.com/article");
 
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
-      "이 신호를 저장하기 전에 개인 리플렉션 하나 추가",
+      "이 영감을 저장하기 전에 짧은 생각 하나 더하기",
     );
-    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("맥락을 추가하지 않고 이 신호 저장");
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("이 영감을 지금 저장");
     expect(container?.querySelector<HTMLButtonElement>(".att-x")?.getAttribute("aria-label")).toBe("첨부 제거");
   });
 
@@ -496,7 +539,7 @@ describe("CaptureForm multi-input quick capture", () => {
 
   it("quick saves an attachment-only image as kind image through the existing upload/finalize path", async () => {
     vi.mocked(createInspiration).mockResolvedValue(
-      inspiration({ kind: "image", text: "Image signal" }),
+      inspiration({ kind: "image", text: "Image inspiration" }),
     );
     vi.mocked(finalizeAttachment).mockResolvedValue({
       id: "att-image",
@@ -521,7 +564,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
 
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "Image signal",
+      text: "Image inspiration",
       kind: "image",
     });
     expect(presignAttachment).toHaveBeenCalledWith({
@@ -560,8 +603,8 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector("#capConfirm")?.textContent).toContain("This image is too large or not supported.");
   });
 
-  it("keeps the saved signal and reports recovery copy when attachment finalization partially fails", async () => {
-    vi.mocked(createInspiration).mockResolvedValue(inspiration({ kind: "link", text: "Link signal" }));
+  it("keeps the saved inspiration and reports recovery copy when attachment finalization partially fails", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(inspiration({ kind: "link", text: "Link inspiration" }));
     vi.mocked(finalizeAttachment).mockRejectedValueOnce(new ApiError({ status: 500, message: "upload failed" }));
     const onPersisted = vi.fn();
     await renderCaptureForm({ onPersisted });
@@ -574,7 +617,7 @@ describe("CaptureForm multi-input quick capture", () => {
       expect.objectContaining({ failedAttachments: [expect.objectContaining({ localId: expect.any(String) })] }),
     );
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Saved — 1 attachment failed. Your signal is still in history.",
+      "Saved — 1 attachment failed. Your inspiration is still safe.",
     );
   });
 
@@ -604,7 +647,7 @@ describe("CaptureForm multi-input quick capture", () => {
 });
 
 describe("CaptureForm Process journey", () => {
-  it("enters reflection only from Process and saves the reflection separately on Continue", async () => {
+  it("enters the deeper path only from Reflect deeper and saves the answer separately", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("Process this richer input");
@@ -639,7 +682,7 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "What did this mean to you?",
+      question: "Why did this matter right now?",
       answer: "It connects to the next project.",
       skipped: false,
     });

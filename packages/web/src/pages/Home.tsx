@@ -173,10 +173,10 @@ interface InspirationListEntry {
 }
 
 function fallbackTextForEntryKind(kind: string | null): string {
-  if (kind === "image") return "Image signal";
-  if (kind === "link") return "Link signal";
-  if (kind === "mixed") return "Mixed signal";
-  return "Untitled signal";
+  if (kind === "image") return "Image inspiration";
+  if (kind === "link") return "Link inspiration";
+  if (kind === "mixed") return "Mixed inspiration";
+  return "Untitled inspiration";
 }
 
 function displayTextForEntry(entry: Pick<InspirationListEntry, "text" | "kind">): string {
@@ -1039,10 +1039,10 @@ const HOME_COPY = {
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
     loadingThoughts: "생각이 모이는 중...",
-    emptyThoughts: "신호가 쌓이면 여기에 생각이 나타납니다.",
-    captureTitle: "첫 신호를 붙잡기",
-    captureBody: "가볍게 남겨도 됩니다. 무엇이 걸렸는지만 붙잡으면, WAKA가 나중에 공명과 반복을 찾아냅니다.",
-    captureInlineKicker: "signal capture",
+    emptyThoughts: "저장한 영감이 쌓이면 여기에 생각이 나타납니다.",
+    captureTitle: "첫 영감 붙잡기",
+    captureBody: "정리하지 않아도 됩니다. 지저분하고 부끄럽고 덜 완성된 것도 사라지기 전에 저장하세요.",
+    captureInlineKicker: "inspiration capture",
     footnote: (name: string) => (
       <>
         ※ 본 페이지는 {name} 본인이 쓴 글이 아닙니다.
@@ -1059,11 +1059,11 @@ const HOME_COPY = {
     searchLabel: "search",
     searchPlaceholder: "저장본 검색",
     loadingSaves: "저장본을 불러오는 중...",
-    emptySaves: "아직 저장된 신호가 없습니다.",
-    captureAria: "capture signal",
-    captureCta: "capture signal",
+    emptySaves: "아직 저장된 영감이 없습니다.",
+    captureAria: "capture inspiration",
+    captureCta: "catch inspiration",
     captureHint: () => "",
-    captureDialog: "capture signal",
+    captureDialog: "capture inspiration",
     close: "close",
   },
   "en-US": {
@@ -1104,10 +1104,10 @@ const HOME_COPY = {
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "When signals gather, provisional notes will appear here.",
-    captureTitle: "Catch the first signals",
-    captureBody: "No tagging, journaling, or organizing. Save what hit, and WAKA will start noticing resonance and recurrence.",
-    captureInlineKicker: "signal capture",
+    emptyThoughts: "When saved inspirations gather, provisional notes will appear here.",
+    captureTitle: "Catch the first inspiration",
+    captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing before it disappears.",
+    captureInlineKicker: "inspiration capture",
     footnote: (name: string) => (
       <>
         This page was not written by {name}.
@@ -1124,13 +1124,13 @@ const HOME_COPY = {
     drawerObjectTitle: "saved inspirations",
     drawerObjectBody: "open the drawer",
     searchLabel: "search",
-    searchPlaceholder: "search saved signals",
-    loadingSaves: "loading saved signals...",
-    emptySaves: "no signals saved yet.",
-    captureAria: "capture signal",
-    captureCta: "capture signal",
+    searchPlaceholder: "search saved inspirations",
+    loadingSaves: "loading saved inspirations...",
+    emptySaves: "no inspirations saved yet.",
+    captureAria: "capture inspiration",
+    captureCta: "catch inspiration",
     captureHint: () => "",
-    captureDialog: "capture signal",
+    captureDialog: "capture inspiration",
     close: "close",
   },
 } satisfies Record<

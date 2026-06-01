@@ -300,10 +300,10 @@ function primaryCaptureKind(
 }
 
 function fallbackTextForCaptureKind(kind: CaptureInputKind): string {
-  if (kind === "image") return "Image signal";
-  if (kind === "link") return "Link signal";
-  if (kind === "mixed") return "Mixed signal";
-  return "Untitled signal";
+  if (kind === "image") return "Image inspiration";
+  if (kind === "link") return "Link inspiration";
+  if (kind === "mixed") return "Mixed inspiration";
+  return "Untitled inspiration";
 }
 
 function readStoredCaptureDraft(): StoredCaptureDraft | null {
@@ -392,6 +392,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [note, setNote] = useState("");
     const [activeView, setActiveView] = useState<CaptureView>(view);
     const [reflectionAnswer, setReflectionAnswer] = useState("");
+    const [postSaveReflectionTargetId, setPostSaveReflectionTargetId] = useState<string | null>(null);
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [highlight, setHighlight] = useState<HighlightedSignalText | null>(null);
@@ -794,6 +795,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setResonanceNote("");
         setReflectionAnswer("");
         setActiveView("note");
+        setPostSaveReflectionTargetId(reflection ? null : inspiration.id);
         setReflectGlow(Boolean(reflection));
         if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
         if (reflection) {
@@ -808,22 +810,29 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           flashConfirm(formatMessage(locale, "partialAttachmentFailure", { count: failed.length }), 2800);
         } else {
           const noticed = highlight
-            ? `Tiny mirror, not a verdict: the marked part is carrying the charge.`
+            ? "Saved safe. The marked part can help you understand why it mattered later."
             : resonance
-              ? `Tiny mirror, not a verdict: this reads like ${resonanceLabel(resonance)}.`
-              : "Tiny mirror, not a verdict: saved before it slipped away.";
+              ? `Saved safe. You marked this as: ${resonanceLabel(resonance)}.`
+              : "Saved safe before it slipped away. It can become an ingredient for later understanding.";
           flashConfirm(
             <div className="cap-save-mirror">
               <span>{t(locale, "saved")}. <small>{noticed}</small></span>
               <div className="cap-save-mirror-actions" role="group" aria-label="post-save mirror actions">
                 <button type="button" onClick={() => {
                   setConfirmVisible(false);
+                  setPostSaveReflectionTargetId(null);
                   queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#capNote")?.focus());
-                }}>new note</button>
+                }}>save another</button>
+                <button type="button" onClick={() => {
+                  setConfirmVisible(false);
+                  setActiveView("reflect");
+                  onToggleFocus?.(true);
+                  queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus());
+                }}>add a little more</button>
                 <button type="button" onClick={() => {
                   setConfirmVisible(false);
                   onDismissAfterSave?.();
-                }}>close</button>
+                }}>return later</button>
               </div>
             </div>,
             4200,
@@ -838,7 +847,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 message:
                   err instanceof Error
                     ? err.message
-                    : "Failed to save signal",
+                    : "Failed to save inspiration",
               });
         onPersistError?.(tempId, error);
         flashConfirm(error.message, 2800);
@@ -862,6 +871,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const handleStartReflectiveSave = useCallback((): void => {
       if (saving) return;
       if (note.trim().length === 0 && pending.length === 0) return;
+      setPostSaveReflectionTargetId(null);
       setActiveView("reflect");
       setReflectGlow(false);
       onToggleFocus?.(true);
@@ -870,18 +880,89 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       });
     }, [note, pending, saving, onToggleFocus]);
 
+    const savePostSaveReflection = useCallback(async (): Promise<void> => {
+      if (!postSaveReflectionTargetId || saving) return;
+      const answer = reflectionAnswer.trim();
+      if (answer.length === 0) {
+        flashConfirm(t(locale, "addThoughtBeforeReflectiveSave"), 2600);
+        return;
+      }
+      setSaving(true);
+      try {
+        await createReflection(postSaveReflectionTargetId, {
+          question: t(locale, "reflectionQuestion"),
+          answer,
+          skipped: false,
+        });
+        setReflectionAnswer("");
+        setPostSaveReflectionTargetId(null);
+        setActiveView("note");
+        setReflectGlow(true);
+        if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
+        reflectGlowTimerRef.current = setTimeout(() => {
+          setReflectGlow(false);
+          reflectGlowTimerRef.current = null;
+        }, 1800);
+        flashConfirm(
+          <div className="cap-save-mirror">
+            <span>{t(locale, "savedWithReflection")}. <small>You can return from the drawer later.</small></span>
+            <div className="cap-save-mirror-actions" role="group" aria-label="post-save mirror actions">
+              <button type="button" onClick={() => {
+                setConfirmVisible(false);
+                queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#capNote")?.focus());
+              }}>save another</button>
+              <button type="button" onClick={() => {
+                setConfirmVisible(false);
+                onDismissAfterSave?.();
+              }}>return later</button>
+            </div>
+          </div>,
+          3600,
+        );
+      } catch (err) {
+        const error =
+          err instanceof ApiError
+            ? err
+            : new ApiError({
+                status: 0,
+                message:
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to save reflection",
+              });
+        flashConfirm(error.message, 2800);
+      } finally {
+        setSaving(false);
+      }
+    }, [
+      flashConfirm,
+      locale,
+      onDismissAfterSave,
+      postSaveReflectionTargetId,
+      reflectionAnswer,
+      saving,
+    ]);
+
     const handleReflectAnswerKeyDown = useCallback(
       (event: KeyboardEvent<HTMLTextAreaElement>): void => {
         if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
-          void triggerSave({ reflectionAnswer: reflectionAnswer });
+          if (postSaveReflectionTargetId) void savePostSaveReflection();
+          else void triggerSave({ reflectionAnswer: reflectionAnswer });
         }
         if (event.key === "Escape" && focused) {
           event.preventDefault();
           onToggleFocus?.(false);
         }
       },
-      [focused, onToggleFocus, reflectionAnswer, triggerSave],
+      [
+        focused,
+        onToggleFocus,
+        postSaveReflectionTargetId,
+        reflectionAnswer,
+        savePostSaveReflection,
+        triggerSave,
+      ],
     );
 
     /* --------------------------------------------------------
@@ -957,12 +1038,12 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                   </button>
                 </span>
               ) : (
-                <span className="cap-draft-state" id="capDraftState">Select a phrase, then add a highlight. {t(locale, "autosavedLocally")}</span>
+                <span className="cap-draft-state" id="capDraftState">Select the part that hit, if you want. {t(locale, "autosavedLocally")}</span>
               )}
             </div>
             {highlight ? (
               <fieldset className="cap-resonance" id="capResonance">
-                <legend>suggested pulls for this highlight</legend>
+                <legend>why this part mattered</legend>
                 <div className="cap-resonance-options">
                   {pullOptions.map((option) => (
                     <button
@@ -1005,9 +1086,13 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
         reflectPlaceholder={t(locale, "reflectionPlaceholder")}
-        onReflectLater={() => setActiveView("note")}
+        onReflectLater={() => {
+          setActiveView("note");
+          setPostSaveReflectionTargetId(null);
+        }}
         onReflectNext={() => {
-          void triggerSave({ reflectionAnswer });
+          if (postSaveReflectionTargetId) void savePostSaveReflection();
+          else void triggerSave({ reflectionAnswer });
         }}
         reflectComplete={reflectGlow ? t(locale, "savedWithReflection") : null}
         reflectCompleteVisible={reflectGlow}

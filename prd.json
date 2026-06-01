@@ -831,7 +831,7 @@
         "Run web/API typechecks, targeted capture tests, and browser verification on desktop and mobile"
       ],
       "priority": 46,
-      "passes": false,
+      "passes": true,
       "notes": "Capture should solve the friction problem by making friction optional. The first emotional payoff is relief that the inspiration will not disappear; the second optional payoff is curiosity about why it moved the user."
     },
     {

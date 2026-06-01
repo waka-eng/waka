@@ -46,6 +46,39 @@
 - Memory Drawer inspiration comparison should happen through draggable `.memory-window` cards layered over the drawer desk; raw saved inspiration remains dominant, with only gentle nearby-pile and relationship context.
 - Opened Memory Drawer groupings support Grid, Vertical Flow, and Horizontal Flow views; Flow mode should use clipped/aspect-ratio stages and transform movement, with draggable comparison windows still layered above the drawer desk.
 - Top of Mind correction should use the wall metaphor: edit/pin the post-it wording or pull it down, persist through `/api/feedback`, and avoid visible true/partly/not-this reaction controls on user-facing note surfaces.
+- Capture UI should call saved things inspirations and avoid internal/clinical terms such as signal, graph, node, memory movement, resonance, and analysis; quick save should feel safe first, with deeper reflection optional.
+
+---
+
+## 2026-06-01 12:16 PDT - US-043
+
+- What was implemented
+  - Reworked capture into two explicit paths: primary quick save as "Save it now" and secondary "Reflect deeper" before saving.
+  - Updated quick-save confirmation to reassure the user that the inspiration is safe and can become an ingredient for later understanding.
+  - Added a post-save "add a little more" path that persists an optional reflection against the already-saved inspiration, plus a "return later" path that closes the modal.
+  - Removed internal/clinical capture UI language from the launcher, modal copy, fallback attachment-only labels, and capture tests.
+- Files changed
+  - `packages/web/src/components/capture/CaptureCell.tsx`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 68 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, saved inspirations, action recommendations, and reflection APIs. Verified capture launcher, banned capture-language absence, quick save confirmation, post-save deeper reflection persistence, return-later close, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture is now the exception to older signal-forward copy: user-facing capture should say inspiration and keep internal model vocabulary out of the writing surface.
+  - Gotchas encountered
+    - Post-save reflection cannot reuse the original pre-save reflective flow after the form clears; it needs to attach a reflection to the just-saved inspiration id.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 
