@@ -827,6 +827,54 @@ export interface GetTopOfMindNoteResponse {
   topOfMindNote: ApiTopOfMindNoteSurface;
 }
 
+export type ApiActionRecommendationStatus =
+  | "active"
+  | "completed"
+  | "removed";
+
+export type ApiActionRecommendationKind =
+  | "message_person"
+  | "enter_room"
+  | "make_artifact"
+  | "remove_pull"
+  | "test_hunch"
+  | "revisit_signal";
+
+export interface ApiActionRecommendation {
+  id: string;
+  text: string;
+  sourceTopOfMindId: string;
+  sourceSignalIds: string[];
+  evidenceSnippets: string[];
+  kind: ApiActionRecommendationKind;
+  whyNow: string;
+  confidence: number;
+  createdAt: string;
+  status: ApiActionRecommendationStatus;
+  dismissedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ListActionRecommendationsResponse {
+  actionRecommendations: ApiActionRecommendation[];
+}
+
+export interface UpdateActionRecommendationStateRequest {
+  sourceTopOfMindId: string;
+  status: Exclude<ApiActionRecommendationStatus, "active">;
+}
+
+export interface ApiActionRecommendationState {
+  actionId: string;
+  sourceTopOfMindId: string;
+  status: ApiActionRecommendationStatus;
+  updatedAt: string;
+}
+
+export interface UpdateActionRecommendationStateResponse {
+  actionRecommendationState: ApiActionRecommendationState;
+}
+
 export type ApiFeedbackTarget =
   | "signal"
   | "context_node"
@@ -1144,6 +1192,44 @@ export async function fetchTopOfMindNote(
   }
 
   return body.topOfMindNote;
+}
+
+export async function fetchActionRecommendations(): Promise<
+  ApiActionRecommendation[]
+> {
+  const body = await getJson<ListActionRecommendationsResponse>(
+    apiPath("/action-recommendations"),
+    "Failed to load action recommendations",
+  );
+
+  if (!Array.isArray(body.actionRecommendations)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed action recommendation response",
+    });
+  }
+
+  return body.actionRecommendations;
+}
+
+export async function updateActionRecommendationState(
+  actionId: string,
+  input: UpdateActionRecommendationStateRequest,
+): Promise<ApiActionRecommendationState> {
+  const body = await postJson<UpdateActionRecommendationStateResponse>(
+    apiPath(`/action-recommendations/${encodeURIComponent(actionId)}/state`),
+    input,
+    "Failed to update action recommendation",
+  );
+
+  if (!body.actionRecommendationState) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed action recommendation state response",
+    });
+  }
+
+  return body.actionRecommendationState;
 }
 
 export async function fetchSavedSignals(

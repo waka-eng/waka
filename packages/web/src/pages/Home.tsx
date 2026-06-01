@@ -48,6 +48,7 @@ import {
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
+  type ApiActionRecommendation,
   type ApiAmbitionDimension,
   type ApiFeedbackValue,
   type ApiError,
@@ -63,12 +64,14 @@ import {
   createFeedback,
   createInspirationSpark,
   deleteInspirationSpark,
+  fetchActionRecommendations,
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
   recordInspirationRevisit,
+  updateActionRecommendationState,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
@@ -517,13 +520,6 @@ interface HomeThoughtCard {
   }>;
 }
 
-interface HomeActionItem {
-  id: string;
-  text: string;
-  source: string;
-  evidence: string | null;
-}
-
 interface MemoryConstellationNode {
   signal: ApiSavedSignalSearchResult;
   visual: MemoryConstellationVisual;
@@ -642,95 +638,6 @@ function explainThoughtCard(card: HomeThoughtCard): string {
   if (reason) return reason;
   if (context) return `This keeps surfacing around ${shortText(context, 96)}.`;
   return "This is provisional. New saves can replace it.";
-}
-
-const GENERIC_ACTION_PATTERN =
-  /\b(do one tiny|tiny test|smallest test|explore this|explore it|reflect on|journal|learn more|think about|research|dig deeper|look into|productivity|optimize)\b/i;
-
-function actionObject(value: string | null | undefined, fallback: string): string {
-  const cleaned = (value ?? "")
-    .replace(/["“”]/g, "")
-    .replace(/[.?!:;]+$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned) return fallback;
-  return shortText(cleaned, 70).replace(/[.?!:;]+$/g, "");
-}
-
-function evidencePhrase(card: HomeThoughtCard): string | null {
-  const evidence = card.supportingSignals.find((signal) => signal.preview.trim());
-  if (!evidence) return null;
-  return actionObject(evidence.preview, "the saved signal");
-}
-
-function actionTextForThoughtCard(card: HomeThoughtCard): string | null {
-  const dimension = card.ambitionDimension ?? card.type;
-  const label = actionObject(card.label || card.ambientSignal, "this post-it");
-  const environment = actionObject(card.matchedEnvironment || card.ambientSignal, label);
-  const antiEnvironment = actionObject(card.antiEnvironment, label);
-  const evidence = evidencePhrase(card);
-
-  if (dimension === "people") {
-    return `Message one person who makes ${label.toLowerCase()} feel normal and ask for a 20-minute exchange.`;
-  }
-  if (dimension === "place") {
-    return `Spend one hour in a room that matches ${environment.toLowerCase()}, then save what shifts.`;
-  }
-  if (dimension === "work") {
-    if (/make the thing before explaining it/i.test(label)) {
-      return "Make the rough thing first, then show one person before explaining it.";
-    }
-    return `Make a rough artifact from ${evidence?.toLowerCase() ?? label.toLowerCase()} and show one person.`;
-  }
-  if (dimension === "taste") {
-    return `Make one version using the standard in ${evidence?.toLowerCase() ?? label.toLowerCase()} and compare it out loud.`;
-  }
-  if (dimension === "rejection") {
-    return `Remove one pull toward ${antiEnvironment.toLowerCase()} for the next 48 hours.`;
-  }
-  if (dimension === "tension") {
-    return `Put ${label.toLowerCase()} in front of one trusted person and ask what feels false.`;
-  }
-  if (dimension === "identity") {
-    return `Do one visible act from ${label.toLowerCase()} before you can fully explain it.`;
-  }
-  if (dimension === "next_experiment" || card.type === "question" || card.type === "hypothesis") {
-    return `Ask one person to try the rough version of ${label.toLowerCase()} this week.`;
-  }
-  if (!evidence && !card.evidenceRationale && !card.matchedEnvironment) return null;
-  return `Share one rough artifact connected to ${label.toLowerCase()} with one real person.`;
-}
-
-function isUsefulActionText(text: string, card: HomeThoughtCard): boolean {
-  const normalizedText = normalizeMeaningLabel(text);
-  const normalizedLabel = normalizeMeaningLabel(card.label);
-  if (GENERIC_ACTION_PATTERN.test(text)) return false;
-  if (normalizedText === normalizedLabel) return false;
-  if (!/\b(message|spend|make|show|remove|put|ask|do|share|visit|send|invite)\b/i.test(text)) return false;
-  if (!/\b(person|people|room|hour|artifact|version|pull|trusted|visible|rough|week|48 hours|exchange)\b/i.test(text)) {
-    return false;
-  }
-  return text.split(/\s+/).length >= 8;
-}
-
-function actionItemsForThoughtCards(cards: HomeThoughtCard[]): HomeActionItem[] {
-  const seen = new Set<string>();
-  const items: HomeActionItem[] = [];
-  for (const card of cards) {
-    const text = actionTextForThoughtCard(card);
-    if (!text || !isUsefulActionText(text, card)) continue;
-    const key = normalizeMeaningLabel(text);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    items.push({
-      id: `action-${card.id}`,
-      text,
-      source: card.label,
-      evidence: evidencePhrase(card),
-    });
-    if (items.length >= 5) break;
-  }
-  return items;
 }
 
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
@@ -1111,8 +1018,9 @@ export function HomePage(): JSX.Element {
   const [actionDrag, setActionDrag] = useState({ x: 0, y: 0 });
   const [actionDragging, setActionDragging] = useState(false);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
-  const [completedActions, setCompletedActions] = useState<Set<string>>(() => new Set());
-  const [removedActions, setRemovedActions] = useState<Set<string>>(() => new Set());
+  const [actionRecommendations, setActionRecommendations] = useState<
+    ApiActionRecommendation[]
+  >([]);
   const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
@@ -1197,6 +1105,7 @@ export function HomePage(): JSX.Element {
       setTopOfMindError(null);
       setTopOfMindNotes([]);
       setTopOfMindNotesLoading(false);
+      setActionRecommendations([]);
       return;
     }
 
@@ -1294,6 +1203,17 @@ export function HomePage(): JSX.Element {
         topOfMindLoadedForUserIdRef.current = requestUserId;
         setTopOfMind(next);
         setTopOfMindNotes(notes.filter((note) => note.userId === requestUserId));
+        fetchActionRecommendations()
+          .then((actions) => {
+            if (topOfMindRequestIdRef.current === requestId) {
+              setActionRecommendations(actions.filter((action) => action.status === "active"));
+            }
+          })
+          .catch(() => {
+            if (topOfMindRequestIdRef.current === requestId) {
+              setActionRecommendations([]);
+            }
+          });
         setTopOfMindLoading(false);
         setTopOfMindNotesLoading(false);
         setTopOfMindError(null);
@@ -1887,8 +1807,8 @@ export function HomePage(): JSX.Element {
     ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
-  const visibleActionItems = actionItemsForThoughtCards(meaningfulThoughtCards)
-    .filter((item) => !removedActions.has(item.id))
+  const visibleActionItems = actionRecommendations
+    .filter((item) => item.status === "active")
     .slice(0, 5);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
@@ -2367,22 +2287,40 @@ export function HomePage(): JSX.Element {
     setExpandedNoteIndex(null);
   };
 
-  const toggleActionDone = (actionId: string): void => {
-    setCompletedActions((current) => {
-      const next = new Set(current);
-      if (next.has(actionId)) next.delete(actionId);
-      else next.add(actionId);
-      return next;
+  const completeActionItem = (item: ApiActionRecommendation): void => {
+    setActionRecommendations((current) =>
+      current.filter((action) => action.id !== item.id),
+    );
+    void updateActionRecommendationState(item.id, {
+      sourceTopOfMindId: item.sourceTopOfMindId,
+      status: "completed",
+    }).catch(() => {
+      setActionRecommendations((current) =>
+        current.some((action) => action.id === item.id)
+          ? current
+          : [...current, item].sort((a, b) => b.confidence - a.confidence),
+      );
     });
   };
 
-  const removeActionItem = (actionId: string): void => {
-    setRemovedActions((current) => new Set(current).add(actionId));
+  const removeActionItem = (item: ApiActionRecommendation): void => {
+    setActionRecommendations((current) =>
+      current.filter((action) => action.id !== item.id),
+    );
+    void updateActionRecommendationState(item.id, {
+      sourceTopOfMindId: item.sourceTopOfMindId,
+      status: "removed",
+    }).catch(() => {
+      setActionRecommendations((current) =>
+        current.some((action) => action.id === item.id)
+          ? current
+          : [...current, item].sort((a, b) => b.confidence - a.confidence),
+      );
+    });
   };
 
   const renderActionPostIt = (): JSX.Element | null => {
-    const activeItems = visibleActionItems.filter((item) => !completedActions.has(item.id));
-    if (visibleActionItems.length === 0 || activeItems.length === 0) return null;
+    if (visibleActionItems.length === 0) return null;
     return (
       <aside
         className={`nc-action-pad${actionDragging ? " nc-action-pad--dragging" : ""}`}
@@ -2399,28 +2337,28 @@ export function HomePage(): JSX.Element {
         </header>
         <ul>
           {visibleActionItems.map((item) => {
-            const done = completedActions.has(item.id);
-            if (done) return null;
             return (
               <li key={item.id}>
                 <button
                   type="button"
                   className="nc-action-check"
                   aria-label={`mark done: ${item.text}`}
-                  onClick={() => toggleActionDone(item.id)}
+                  onClick={() => completeActionItem(item)}
                 />
                 <span>
                   <strong>{item.text}</strong>
                   <small>
-                    from "{shortText(item.source, 54)}"
-                    {item.evidence ? ` · evidence: ${shortText(item.evidence, 54)}` : ""}
+                    {shortText(item.whyNow, 54)}
+                    {item.evidenceSnippets[0]
+                      ? ` · evidence: ${shortText(item.evidenceSnippets[0], 54)}`
+                      : ""}
                   </small>
                 </span>
                 <button
                   type="button"
                   className="nc-action-remove"
                   aria-label={`remove action: ${item.text}`}
-                  onClick={() => removeActionItem(item.id)}
+                  onClick={() => removeActionItem(item)}
                 >
                   ×
                 </button>

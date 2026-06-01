@@ -9,6 +9,7 @@ import {
   createFeedback,
   createInspiration,
   finalizeAttachment,
+  fetchActionRecommendations,
   fetchInspirations,
   fetchReflections,
   fetchSavedSignalDetail,
@@ -17,11 +18,13 @@ import {
   fetchTopOfMindNotes,
   presignAttachment,
   recordInspirationRevisit,
+  updateActionRecommendationState,
   updateInspiration,
   uploadToPresignedUrl,
 } from "../src/lib/api";
 import type {
   ApiAttachment,
+  ApiActionRecommendation,
   ApiInspiration,
   ApiReflection,
   ApiSavedSignalDetail,
@@ -66,6 +69,13 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchInspirations: vi.fn(async () => []),
     fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
     fetchTopOfMindNotes: vi.fn(async () => [sampleTopOfMindNote]),
+    fetchActionRecommendations: vi.fn(async () => [sampleActionRecommendation]),
+    updateActionRecommendationState: vi.fn(async (actionId: string, input: any) => ({
+      actionId,
+      sourceTopOfMindId: input.sourceTopOfMindId,
+      status: input.status,
+      updatedAt: "2026-06-01T10:00:00.000Z",
+    })),
     createFeedback: vi.fn(async () => ({
       id: "feedback-1",
       userId: "user-1",
@@ -326,22 +336,40 @@ const sampleTopOfMind: ApiTopOfMind = {
   },
 };
 
+const sampleActionRecommendation: ApiActionRecommendation = {
+  id: "action-note-1-rough",
+  text: "Make the rough thing first, then show one person before explaining it.",
+  sourceTopOfMindId: "note-1",
+  sourceSignalIds: ["insp-1"],
+  evidenceSnippets: ["Architecture essay about bridge rhythms in city walks"],
+  kind: "make_artifact",
+  whyNow: "Saved signals keep returning to public rough drafts.",
+  confidence: 95,
+  createdAt: "2026-05-11T12:00:00.000Z",
+  status: "active",
+  dismissedAt: null,
+  completedAt: null,
+};
+
 function setApiFixtures({
   inspirations = sampleInspirations,
   topOfMind = sampleTopOfMind,
   topOfMindNotes = [sampleTopOfMindNote],
+  actionRecommendations = [sampleActionRecommendation],
   savedSignals = sampleSavedSignals,
   savedSignalDetail = sampleSavedSignalDetail,
 }: {
   inspirations?: ApiInspiration[];
   topOfMind?: ApiTopOfMind;
   topOfMindNotes?: ApiTopOfMindNoteSurface[];
+  actionRecommendations?: ApiActionRecommendation[];
   savedSignals?: ApiSavedSignalSearchResult[];
   savedSignalDetail?: ApiSavedSignalDetail;
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
   vi.mocked(fetchTopOfMindNotes).mockResolvedValue(topOfMindNotes);
+  vi.mocked(fetchActionRecommendations).mockResolvedValue(actionRecommendations);
   vi.mocked(fetchReflections).mockResolvedValue([]);
   vi.mocked(fetchSavedSignals).mockResolvedValue(savedSignals);
   vi.mocked(fetchSavedSignalDetail).mockImplementation(async (id: string) => {
@@ -760,30 +788,20 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
-  it("generates grounded action checklist items from post-it evidence instead of generic templates", async () => {
+  it("renders persisted grounded action recommendations instead of frontend templates", async () => {
     setApiFixtures({
-      topOfMindNotes: [
-        sampleTopOfMindNote,
+      actionRecommendations: [
+        sampleActionRecommendation,
         {
-          ...sampleTopOfMindNote,
-          id: "note-people",
-          title: "people who make building feel less lonely",
-          ambitionDimension: "people",
-          matchedEnvironment: "Peers who trade rough drafts before polish",
-          evidenceRationale: "Saved signals keep naming collaborators who make courage feel ordinary.",
-          evidencePreviews: [
-            {
-              signalId: "insp-people",
-              role: "anchor",
-              reason: "This signal names the desired peer atmosphere.",
-              textPreview: "A studio note about friends who send ugly first drafts",
-              kind: "note",
-              createdAt: "2026-05-10T12:00:00.000Z",
-              resonanceScore: 5,
-            },
-          ],
-          relatedSignals: [],
-          relatedSignalIds: ["insp-people"],
+          ...sampleActionRecommendation,
+          id: "action-note-people",
+          text: "Message one person who makes people who make building feel less lonely feel normal and ask for a 20-minute exchange.",
+          sourceTopOfMindId: "note-people",
+          sourceSignalIds: ["insp-people"],
+          evidenceSnippets: ["A studio note about friends who send ugly first drafts"],
+          kind: "message_person",
+          whyNow: "Saved signals keep naming collaborators who make courage feel ordinary.",
+          confidence: 88,
         },
       ],
     });
@@ -794,11 +812,12 @@ describe("HomePage current home experience", () => {
     const actionText = actionPad?.textContent ?? "";
     expect(actionText).toContain("Make the rough thing first, then show one person before explaining it.");
     expect(actionText).toContain("Message one person who makes people who make building feel less lonely feel normal");
-    expect(actionText).toContain('from "make the thing before explaining it"');
+    expect(actionText).toContain("Saved signals keep returning to public rough drafts.");
     expect(actionText).toContain("evidence: Architecture essay about bridge rhythms");
     expect(actionText).not.toMatch(/do one tiny|smallest test|explore this|reflect on|journal|learn more|think about|research/i);
     expect(actionText).not.toContain("Make one rough artifact for:");
     expect(actionText).not.toContain("Run the smallest test of:");
+    expect(fetchActionRecommendations).toHaveBeenCalled();
   });
 
   it("lets action checklist items disappear when done or removed", async () => {
@@ -812,12 +831,20 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(container.querySelector(".nc-action-pad")).toBeNull();
+    expect(updateActionRecommendationState).toHaveBeenCalledWith(
+      sampleActionRecommendation.id,
+      {
+        sourceTopOfMindId: sampleActionRecommendation.sourceTopOfMindId,
+        status: "completed",
+      },
+    );
 
     setApiFixtures({
-      topOfMindNotes: [
+      actionRecommendations: [
         {
-          ...sampleTopOfMindNote,
-          id: "note-remove-action",
+          ...sampleActionRecommendation,
+          id: "action-remove",
+          sourceTopOfMindId: "note-remove-action",
         },
       ],
     });
@@ -835,6 +862,13 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(nextContainer.querySelector(".nc-action-pad")).toBeNull();
+    expect(updateActionRecommendationState).toHaveBeenCalledWith(
+      "action-remove",
+      {
+        sourceTopOfMindId: "note-remove-action",
+        status: "removed",
+      },
+    );
   });
 
   it("makes the action checklist draggable like a paper object", async () => {

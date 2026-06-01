@@ -40,6 +40,40 @@
 - Top-of-mind primary text should be compressed but interpretable, usually 6-14 words, with a concrete ambition object plus a reason, contrast, or tension; reject ultra-short slogans such as "public before perfect", "taste as default", "test it outside", and "courage normal".
 - Memory Drawer should stay as two modes inside Home: chronological List and relationship Canvas. Do not reintroduce memory-movement sections, dense sidebars, search-first structure, or graph/admin vocabulary into this user-facing revisit surface.
 - Top of Mind action checklist items should be generated from post-it evidence, ambient/environment fields, and ambition dimension. Reject generic reflective homework such as "do one tiny test", "explore", "journal", "learn more", or actions that simply repeat the post-it title.
+- Action recommendation state currently persists through `feedback` rows with `source: "action_recommendation"` and metadata keyed to the source top-of-mind note; use `/api/action-recommendations` rather than frontend-only action helpers.
+
+---
+
+## 2026-06-01 10:26 PDT - US-037
+
+- What was implemented
+  - Added a tested action recommendation domain layer that converts active Top of Mind notes plus evidence into structured, high-confidence real-world experiments.
+  - Added authenticated `/api/action-recommendations` list/state endpoints; completed and removed actions persist as feedback metadata against the source top-of-mind note and are filtered out on future recommendation runs.
+  - Updated Home to fetch persisted action recommendations, render the top active actions on the draggable paper post-it, and post completed/removed state changes instead of using frontend template helpers.
+- Files changed
+  - `packages/api/src/lib/action-recommendations.ts`
+  - `packages/api/src/lib/action-recommendations.test.ts`
+  - `packages/api/src/routes/action-recommendations.ts`
+  - `packages/api/src/routes/action-recommendations.test.ts`
+  - `packages/api/src/index.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/action-recommendations.test.ts src/routes/action-recommendations.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 44 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked same-origin auth, inspirations, Top of Mind, action recommendations, and signals APIs. Verified grounded action copy, no generic placeholders, done/remove persistence posts, mobile viewport fit, and draggable paper interaction.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Action recommendation state can reuse feedback metadata until a dedicated action persistence table is warranted.
+  - Gotchas encountered
+    - Home needs `/api/action-recommendations` mocked separately from `/api/top-of-mind`; otherwise the action pad correctly stays hidden because low-confidence or absent recommendations are no longer generated in the frontend.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 

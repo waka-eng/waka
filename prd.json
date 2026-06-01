@@ -684,6 +684,30 @@
       "priority": 39,
       "passes": true,
       "notes": "Product correction: the current action checklist is a placeholder UI built from actionForThoughtCard(card), so the actions can feel weird and generic. This must become a real ambition-learning loop: actions are not productivity tasks, they are small real-world experiments that create new personal context. They should feel like the next thing a reflective person would actually try after noticing a pattern in their saved inspirations."
+    },
+    {
+      "id": "US-037",
+      "title": "Build true action recommender learning loop",
+      "description": "As a user, I want WAKA's action post-it to recommend personally grounded real-world experiments from my evolving personal context, not frontend templates dressed up as recommendations.",
+      "acceptanceCriteria": [
+        "Move action recommendation out of Home.tsx template helpers into a dedicated recommender layer that can run from backend/API or shared domain code and be tested independently",
+        "Model each recommended action as structured data with id, text, sourceTopOfMindId, sourceSignalIds, evidence snippets, action kind, whyNow rationale, confidence, createdAt, status, and dismissed/completed timestamps where appropriate",
+        "Generate recommendations from current Top of Mind notes plus supporting saved inspirations, highlights, user-written resonance notes, repeated motifs, recently reactivated memories, and rejected/anti-environment signals",
+        "Rank actions by personal-context usefulness: actions should help the user learn about people, place, work, taste, identity, rejection, or next experiment rather than optimize productivity",
+        "Require every recommendation to name a concrete 24-72 hour real-world move such as message a specific kind of person, enter a specific type of room, make and show a rough artifact, remove an environmental pull, test a career/build hunch, or revisit a saved inspiration with a concrete external action",
+        "Reject actions that are generic, self-help flavored, template-shaped, broad life advice, reflective homework, corporate productivity language, or merely a paraphrase of the Top of Mind post-it",
+        "Use completion/removal feedback as learning signals: completed actions should strengthen the source pattern only after a follow-up captured signal or explicit user note; removed actions should reduce similar future suggestions",
+        "Persist action state locally or through the API so done/removed actions do not reappear after refresh and can be used by the recommender on the next run",
+        "Show only the top five active high-confidence recommendations on the draggable action post-it; hide low-confidence slots entirely",
+        "Keep the action post-it draggable with the same paper interaction affordance as Top of Mind notes",
+        "Add unit tests for the recommender ranking/filtering that fail on generic template outputs and disconnected evidence",
+        "Add API or integration tests proving completed/removed actions affect future recommendations",
+        "Add Home tests proving persisted active actions render, completed/removed actions disappear after refresh, and the action post-it remains draggable",
+        "Run API/web typechecks, recommender tests, Home tests, and browser verification on localhost desktop and mobile"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": "Product correction after US-036: the current implementation still generates actions in the frontend from deterministic phrase templates. The target is a real self-improving personal-context action loop. Actions are not a to-do list. They are small experiments that create new evidence about the user's ambition and feed back into future Top of Mind and action recommendations."
     }
   ]
 }
