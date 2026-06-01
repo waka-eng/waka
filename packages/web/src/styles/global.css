@@ -1357,6 +1357,137 @@
 .memory-drawer-desk {
   display: grid;
   gap: 18px;
+  position: relative;
+}
+
+.memory-window-layer {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 30;
+}
+
+.memory-window {
+  background: #fffaf0;
+  border: 1px solid rgba(62, 53, 36, 0.2);
+  box-shadow: 0 26px 70px rgba(42, 35, 21, 0.22);
+  color: #332d22;
+  display: grid;
+  left: var(--x);
+  max-height: min(78dvh, 680px);
+  overflow: hidden;
+  pointer-events: auto;
+  position: absolute;
+  top: var(--y);
+  touch-action: none;
+  width: min(620px, calc(100vw - 42px));
+}
+
+.memory-window--dragging {
+  cursor: grabbing;
+}
+
+.memory-window--minimized {
+  width: min(360px, calc(100vw - 42px));
+}
+
+.memory-window-bar {
+  align-items: center;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.32), transparent),
+    #eadcb8;
+  border-bottom: 1px solid rgba(62, 53, 36, 0.16);
+  cursor: grab;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 46px;
+  padding: 8px 10px 8px 14px;
+}
+
+.memory-window-bar:active {
+  cursor: grabbing;
+}
+
+.memory-window-title {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: inherit;
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.memory-window-title span,
+.memory-window-context span,
+.memory-window-hints span,
+.memory-window-primary span {
+  color: rgba(54, 47, 31, 0.58);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.memory-window-title strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-window-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.memory-window-actions button {
+  background: rgba(255, 253, 247, 0.72);
+  border: 1px solid rgba(62, 53, 36, 0.16);
+  border-radius: 999px;
+  color: #332d22;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 9px;
+}
+
+.memory-window-body {
+  border: 0;
+  box-shadow: none;
+  max-height: calc(min(78dvh, 680px) - 47px);
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.memory-window-primary .memory-readable-signal {
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3vw, 34px);
+  line-height: 1.22;
+}
+
+.memory-window-context p,
+.memory-window-hints p {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.memory-window-hints {
+  background: rgba(255, 255, 255, 0.3);
+  border-top: 1px solid rgba(43, 40, 31, 0.14);
+  display: grid;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.memory-window-hints strong {
+  font-weight: 700;
 }
 
 .memory-group-board {
@@ -2330,6 +2461,25 @@
     min-height: auto;
     overflow: visible;
     padding: 14px;
+  }
+
+  .memory-window-layer {
+    display: grid;
+    gap: 12px;
+    position: relative;
+  }
+
+  .memory-window,
+  .memory-window--minimized {
+    left: auto;
+    max-height: none;
+    position: relative;
+    top: auto;
+    width: 100%;
+  }
+
+  .memory-window-body {
+    max-height: none;
   }
 
   .memory-group-object,

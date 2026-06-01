@@ -538,7 +538,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await flushReactWork();
-    const detail = container.querySelector<HTMLElement>(".signal-revisit-detail");
+    const detail = container.querySelector<HTMLElement>(".memory-window .signal-revisit-detail");
     expect(detail).not.toBeNull();
     return detail!;
   }
@@ -1430,22 +1430,91 @@ describe("HomePage current home experience", () => {
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
-  it("shows the full saved signal, highlights, and relationship explanation in-place", async () => {
+  it("opens the full saved inspiration as a draggable comparison window", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     const detail = await openBridgeDetail(container);
+    const memoryWindow = container.querySelector<HTMLElement>(".memory-window");
 
-    expect(detail.textContent).toContain("original signal");
+    expect(memoryWindow).not.toBeNull();
+    expect(memoryWindow?.textContent).toContain("highlighted scrap");
+    expect(detail.textContent).toContain("saved inspiration");
     expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
-    expect(detail.textContent).toContain("why it sits near other saves");
+    expect(detail.textContent).toContain("nearby piles");
     expect(detail.textContent).toContain("make the thing before explaining it");
     expect(detail.textContent).not.toContain("is this still me?");
     expect(detail.textContent).not.toContain("Still alive");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
+  });
+
+  it("keeps multiple inspiration windows open with focus, minimize, close, and drag behavior", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          relatedSignalIds: ["insp-1", "insp-2"],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    const cards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-signal-card-summary"));
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+    await act(async () => {
+      cards[0]?.click();
+      cards[1]?.click();
+    });
+    await flushReactWork();
+
+    const windows = Array.from(container.querySelectorAll<HTMLElement>(".memory-window"));
+    expect(windows).toHaveLength(2);
+    expect(container.querySelector(".memory-window-hints")?.textContent).toMatch(
+      /both point at the same post-it|same room, different mask|two saves touching/,
+    );
+
+    const firstWindow = windows[0];
+    const firstLeft = firstWindow.style.getPropertyValue("--x");
+    await act(async () => {
+      const pointerDown = new Event("pointerdown", { bubbles: true });
+      Object.assign(pointerDown, { clientX: 100, clientY: 100 });
+      firstWindow.dispatchEvent(pointerDown);
+    });
+    expect(firstWindow.classList.contains("memory-window--dragging")).toBe(true);
+    await act(async () => {
+      const pointerMove = new Event("pointermove", { bubbles: true });
+      Object.assign(pointerMove, { clientX: 150, clientY: 126 });
+      window.dispatchEvent(pointerMove);
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    });
+    await flushReactWork();
+    const draggedWindow = container.querySelector<HTMLElement>(".memory-window");
+    expect(draggedWindow?.style.getPropertyValue("--x")).not.toBe(firstLeft);
+
+    const minimizeButton = Array.from(draggedWindow?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
+      (button) => button.textContent === "minimize",
+    );
+    await act(async () => {
+      minimizeButton?.click();
+    });
+    const minimizedWindow = container.querySelector<HTMLElement>(".memory-window");
+    expect(minimizedWindow?.classList.contains("memory-window--minimized")).toBe(true);
+
+    const closeButton = Array.from(minimizedWindow?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
+      (button) => button.textContent === "close",
+    );
+    await act(async () => {
+      closeButton?.click();
+    });
+    expect(container.querySelectorAll(".memory-window")).toHaveLength(1);
   });
 
   it("opens capture from the floating action", async () => {

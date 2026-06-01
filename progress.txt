@@ -43,6 +43,7 @@
 - Action recommendation state currently persists through `feedback` rows with `source: "action_recommendation"` and metadata keyed to the source top-of-mind note; use `/api/action-recommendations` rather than frontend-only action helpers.
 - Home primary navigation should be object-led inside the wall: no persistent topbar, date display, or mode tabs; enter Memory Drawer through the physical drawer object and keep language switching as a quiet footer control.
 - Memory Drawer default landing should be an object-led grouping desk: WAKA-proposed and user-created group objects sit above immutable raw saved signals, with chronological all-saves kept as a clean path and search as a secondary command.
+- Memory Drawer inspiration comparison should happen through draggable `.memory-window` cards layered over the drawer desk; raw saved inspiration remains dominant, with only gentle nearby-pile and relationship context.
 
 ---
 
@@ -69,6 +70,32 @@
     - The saved signals fetch is delayed after opening Memory Drawer, so browser verification needs to wait briefly for `/api/signals` before asserting highlight- and Top-of-Mind-derived groups.
   - Useful context
     - Vite served browser verification at `http://127.0.0.1:5173/`.
+
+---
+
+## 2026-06-01 11:47 PDT - US-040
+
+- What was implemented
+  - Added draggable Memory Drawer inspiration windows that open from saved-inspiration cards and layer above the grouping desk for side-by-side comparison.
+  - Supported multiple open windows with z-index focus, close, minimize/reopen controls, per-session positions, reset on drawer exit, and mobile stacked behavior when dragging is not practical.
+  - Moved full saved inspiration reading, attachments, highlight add/remove, nearby grouping context, and sparse relationship hints into the window body while keeping WAKA context contained.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 46 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and action recommendation APIs. Verified two open inspiration windows, desktop drag state/position changes, minimize, close, mobile fit, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer comparison should use layered paper windows above the grouping desk rather than expanding cards inline.
+  - Gotchas encountered
+    - The visible window title area must remain a drag handle; making it a button caused real browser drag attempts from the header to be ignored.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 
