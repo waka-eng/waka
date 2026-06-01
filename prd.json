@@ -916,6 +916,28 @@
       "priority": 50,
       "passes": true,
       "notes": "Correction after US-038 through US-045: the opened post-it and capture experiences still feel overbuilt and detached. Opened post-it should be minimal and link into the private drawer for evidence. Capture should feel like safe note-taking, with highlight actions physically near the text being highlighted."
+    },
+    {
+      "id": "US-048",
+      "title": "Make drawer open as an anchored glass stack",
+      "description": "As a user, I want clicking the drawer object to open a small glassy stack directly from the wall, like a Mac downloads stack, so I can drill into groupings and inspirations without feeling like I left the wall.",
+      "acceptanceCriteria": [
+        "Replace the full-screen drawer overlay with an anchored drawer stack/popover that opens from the wall drawer object itself",
+        "The wall, post-its, and action checklist must remain visible behind the drawer stack with a subtle glass or translucent layer separating the drawer from the wall",
+        "Opening the drawer must not navigate, replace the canvas, scroll to a new page-like section, or make the user feel transferred to a separate surface",
+        "The first drawer stack view should show only the clean entry objects: proposed groupings, all inspirations, and an optional small search control",
+        "Clicking a grouping should replace the stack contents in-place with that grouping's inspiration cards, instead of opening a separate page area below or beside it",
+        "Clicking back should replace the stack contents with the previous stack level, preserving a simple drill-down path",
+        "Clicking an actual inspiration should open its readable detail within the same anchored glass stack or as a small card layered from it, not as a full-page route or unrelated panel",
+        "The stack should have stable dimensions, internal scrolling only when needed, and no page-level vertical scroll created by the drawer",
+        "On mobile, the anchored stack may become a bottom sheet, but it should still feel like it emerged from the drawer object and should not become a separate page",
+        "Remove leftover drawer workspace language and large headers such as \"Choose a pile, or open everything\" if they make the stack feel like a page",
+        "Add tests proving the drawer object remains on the wall, the stack opens anchored to it, groupings replace stack contents in-place, inspiration detail opens inside the stack, and no full-screen drawer overlay/page replacement renders",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 51,
+      "passes": true,
+      "notes": "Product correction: even the simplified white overlay still feels too page-like. The target is closer to macOS Downloads stack behavior: object on wall -> glass stack opens from that object -> drill into grouping -> drill into inspiration -> back, all while the wall remains the context."
     }
   ]
 }

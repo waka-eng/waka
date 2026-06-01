@@ -541,7 +541,7 @@ describe("HomePage current home experience", () => {
     await act(async () => {
       setInputValue(search!, "bridge");
     });
-    const bridgeSave = container.querySelector<HTMLButtonElement>(".memory-signal-card-summary");
+    const bridgeSave = container.querySelector<HTMLButtonElement>(".memory-stack-signal");
     expect(bridgeSave).not.toBeNull();
     expect(bridgeSave?.textContent).toContain("Architecture essay about bridge rhythms");
     await act(async () => {
@@ -549,7 +549,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await flushReactWork();
-    const detail = container.querySelector<HTMLElement>(".memory-window .signal-revisit-detail");
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail.signal-revisit-detail");
     expect(detail).not.toBeNull();
     return detail!;
   }
@@ -633,7 +633,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("image.png · 4 KB");
 
-    const save = container.querySelector<HTMLButtonElement>(".memory-signal-card-summary");
+    const save = container.querySelector<HTMLButtonElement>(".memory-stack-signal");
     await act(async () => {
       save?.click();
     });
@@ -768,7 +768,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("Most inspiration disappears.");
-    expect(container.textContent).toContain("five provisional post-its. not final. changed by new saves.");
+    expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
   });
 
   it("names the primary product spaces without surfacing internal graph UI", async () => {
@@ -1038,11 +1038,11 @@ describe("HomePage current home experience", () => {
 
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
     expect(expanded).not.toBeNull();
-    expect(expanded?.classList.contains("nc-note-peel")).toBe(true);
+    expect(expanded?.classList.contains("nc-note-peel")).toBe(false);
     expect(expanded?.getAttribute("role")).toBe("dialog");
-    expect(expanded?.textContent).toContain("opened post-it");
-    expect(expanded?.textContent).toContain("short, provisional, easy to change");
-    expect(expanded?.textContent).toContain("open the private drawer");
+    expect(expanded?.textContent).not.toContain("opened post-it");
+    expect(expanded?.textContent).not.toContain("short, provisional, easy to change");
+    expect(expanded?.textContent).toContain("inspirations that led here");
     expect(expanded?.textContent).toContain("1 saved inspiration nearby");
     expect(expanded?.textContent).not.toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).not.toContain("This inspiration anchors the pattern.");
@@ -1056,7 +1056,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(container.querySelector(".nc-note-modal")).toBeNull();
-    expect(container.querySelector(".memory-drawer-workspace")).not.toBeNull();
+    expect(container.querySelector(".memory-drawer-stack")).not.toBeNull();
   });
 
   it("keeps empty evidence out of the opened post-it and points to the drawer", async () => {
@@ -1083,7 +1083,7 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
-    expect(expanded?.textContent).toContain("open the private drawer");
+    expect(expanded?.textContent).toContain("inspirations that led here");
     expect(expanded?.textContent).toContain("saved inspirations stay private there");
     expect(expanded?.textContent).not.toContain("no saved inspiration attached yet");
     expect(expanded?.textContent).not.toContain("This post-it does not have saved inspiration attached yet.");
@@ -1109,8 +1109,8 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("partly");
     expect(expanded?.textContent).not.toContain("not this");
     expect(expanded?.textContent).not.toContain("rewrite in my words");
-    expect(expanded?.textContent).toContain("rewrite this post-it");
-    expect(expanded?.textContent).toContain("pin wording");
+    expect(expanded?.textContent).not.toContain("rewrite this post-it");
+    expect(expanded?.textContent).not.toContain("pin wording");
     expect(expanded?.textContent).toContain("pull down");
   });
 
@@ -1124,13 +1124,13 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-rewrite textarea");
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
     expect(rewrite).not.toBeNull();
     await act(async () => {
       setInputValue(rewrite!, "make rooms where rough drafts can breathe");
     });
     const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
-      (button) => button.textContent === "pin wording",
+      (button) => button.textContent === "save",
     );
     expect(pinButton).not.toBeNull();
 
@@ -1194,13 +1194,13 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-rewrite textarea");
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
     expect(rewrite).not.toBeNull();
     await act(async () => {
       setInputValue(rewrite!, "make the public room first");
     });
     const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
-      (button) => button.textContent === "pin wording",
+      (button) => button.textContent === "save",
     );
     expect(pinButton).not.toBeNull();
 
@@ -1314,7 +1314,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
   });
 
-  it("switches to the in-place memory drawer surface from the wall drawer object", async () => {
+  it("opens an anchored memory drawer stack from the wall drawer object", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1323,12 +1323,63 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
-    expect(container.querySelector(".nc-drawer-object")).toBeNull();
-    expect(container.textContent).toContain("Choose a pile, or open everything.");
+    expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
+    expect(container.querySelector(".memory-drawer-stack")).not.toBeNull();
+    expect(container.querySelector(".memory-drawer-overlay")).toBeNull();
+    expect(container.textContent).not.toContain("Choose a pile, or open everything.");
+    expect(container.textContent).not.toContain("back to wall");
     expect(container.querySelector(".memory-group-board")).not.toBeNull();
     expect(container.querySelector(".memory-group-contents")).toBeNull();
     expect(container.querySelector(".memory-mode-switcher")).toBeNull();
     expect(container.textContent).not.toContain("List scans the timeline");
+  });
+
+  it("drills from drawer stack entries to group contents and inspiration detail in place", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
+    expect(stack).not.toBeNull();
+    expect(stack?.querySelector(".memory-group-board")).not.toBeNull();
+    expect(stack?.querySelector(".memory-group-contents")).toBeNull();
+    expect(stack?.querySelector(".memory-stack-detail")).toBeNull();
+
+    await openAllInspirations(container);
+    expect(stack?.querySelector(".memory-group-board")).toBeNull();
+    const contents = stack?.querySelector<HTMLElement>(".memory-group-contents");
+    expect(contents).not.toBeNull();
+    expect(contents?.textContent).toContain("Architecture essay about bridge rhythms");
+
+    const firstInspiration = contents?.querySelector<HTMLButtonElement>(".memory-stack-signal");
+    expect(firstInspiration).not.toBeNull();
+    await act(async () => {
+      firstInspiration?.click();
+    });
+    await flushReactWork();
+
+    expect(stack?.querySelector(".memory-group-contents")).toBeNull();
+    const detail = stack?.querySelector<HTMLElement>(".memory-stack-detail");
+    expect(detail).not.toBeNull();
+    expect(detail?.textContent).toContain("Architecture essay about bridge rhythms");
+    expect(container.querySelector(".memory-window")).toBeNull();
+
+    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-workspace-back");
+    await act(async () => {
+      detailBack?.click();
+    });
+    await flushReactWork();
+    expect(stack?.querySelector(".memory-group-contents")).not.toBeNull();
+
+    const stackBack = stack?.querySelector<HTMLButtonElement>(".memory-group-contents .memory-workspace-back");
+    await act(async () => {
+      stackBack?.click();
+    });
+    await flushReactWork();
+    expect(stack?.querySelector(".memory-group-board")).not.toBeNull();
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -1360,13 +1411,13 @@ describe("HomePage current home experience", () => {
     expect(board?.textContent).toContain("highlighted by me");
     expect(board?.textContent).toContain("work i keep circling");
     expect(contents).toBeNull();
+    expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("search");
     await openAllInspirations(container);
     const openedContents = drawer?.querySelector<HTMLElement>(".memory-group-contents");
     expect(openedContents?.textContent?.indexOf("Architecture essay")).toBeLessThan(
       openedContents?.textContent?.indexOf("Synthetic memory note") ?? 9999,
     );
     expect(drawer?.querySelector(".signal-memory-lenses")).toBeNull();
-    expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("search");
     expect(drawer?.textContent?.toLowerCase()).not.toContain("keeps coming back");
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
@@ -1534,7 +1585,7 @@ describe("HomePage current home experience", () => {
     );
   });
 
-  it("shows a stable flow mode inside a selected grouping and opens flow items into windows", async () => {
+  it("keeps selected grouping contents inside the anchored stack", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1543,53 +1594,17 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     await openAllInspirations(container);
 
-    const verticalFlowButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".memory-view-switcher button"),
-    ).find((button) => button.textContent === "vertical flow");
-    expect(verticalFlowButton).not.toBeNull();
-    await act(async () => {
-      verticalFlowButton?.click();
-    });
-    await flushReactWork();
-
+    const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
     const contents = container.querySelector<HTMLElement>(".memory-group-contents");
-    const flow = contents?.querySelector<HTMLElement>(".memory-flow-workspace--vertical");
-    expect(flow).not.toBeNull();
-    expect(container.querySelector(".memory-list-stack")).toBeNull();
-    expect(flow?.textContent).toContain("vertical flow");
-    expect(flow?.textContent).toContain("1 / 2");
-    expect(flow?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
-    expect(flow?.textContent).toContain("newest saved inspiration in the drawer");
-
-    const nextButton = Array.from(flow?.querySelectorAll<HTMLButtonElement>(".memory-flow-controls button") ?? []).find(
-      (button) => button.textContent === "next",
-    );
-    await act(async () => {
-      nextButton?.click();
-    });
-    await flushReactWork();
-    expect(flow?.querySelector(".memory-flow-track")?.getAttribute("style")).toContain("translateY(-100%)");
-    expect(flow?.textContent).toContain("2 / 2");
-
-    const openButtons = Array.from(flow?.querySelectorAll<HTMLButtonElement>("button") ?? []).filter(
-      (button) => button.textContent === "open on desk",
-    );
-    const openButton = openButtons[openButtons.length - 1];
-    await act(async () => {
-      openButton?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector(".memory-window")?.textContent).toContain("Synthetic memory note");
-
-    const horizontalFlowButton = Array.from(
-      container.querySelectorAll<HTMLButtonElement>(".memory-view-switcher button"),
-    ).find((button) => button.textContent === "horizontal flow");
-    await act(async () => {
-      horizontalFlowButton?.click();
-    });
-    await flushReactWork();
-    expect(contents?.querySelector(".memory-flow-workspace--horizontal")).not.toBeNull();
-    expect(contents?.querySelector(".memory-flow-track")?.getAttribute("style")).toContain("translateX(-0%)");
+    expect(stack).not.toBeNull();
+    expect(contents).not.toBeNull();
+    expect(contents?.querySelector(".memory-list-stack")).not.toBeNull();
+    expect(contents?.textContent).toContain("newest first");
+    expect(contents?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(contents?.textContent).toContain("Synthetic memory note");
+    expect(container.querySelector(".memory-view-switcher")).toBeNull();
+    expect(container.querySelector(".memory-flow-workspace")).toBeNull();
+    expect(container.querySelector(".memory-window")).toBeNull();
   });
 
   it("searches the current all-inspirations list", async () => {
@@ -1634,28 +1649,27 @@ describe("HomePage current home experience", () => {
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
-  it("opens the full saved inspiration as a draggable comparison window", async () => {
+  it("opens the full saved inspiration inside the anchored stack", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     const detail = await openBridgeDetail(container);
-    const memoryWindow = container.querySelector<HTMLElement>(".memory-window");
 
-    expect(memoryWindow).not.toBeNull();
-    expect(memoryWindow?.textContent).toContain("highlighted scrap");
+    expect(container.querySelector(".memory-window")).toBeNull();
+    expect(detail.textContent).toContain("highlighted scrap");
     expect(detail.textContent).toContain("saved inspiration");
     expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).toContain("nearby piles");
-    expect(detail.textContent).toContain("make the thing before explaining it");
+    expect(detail.textContent).toContain("highlighted by me");
     expect(detail.textContent).not.toContain("is this still me?");
     expect(detail.textContent).not.toContain("Still alive");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
   });
 
-  it("keeps multiple inspiration windows open with focus, minimize, close, and drag behavior", async () => {
+  it("replaces one stack inspiration detail with another without opening windows", async () => {
     setApiFixtures({
       topOfMindNotes: [
         {
@@ -1670,56 +1684,28 @@ describe("HomePage current home experience", () => {
     await waitForTimers(130);
     await flushReactWork();
     await openAllInspirations(container);
-    const cards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-signal-card-summary"));
+    const cards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal"));
     expect(cards.length).toBeGreaterThanOrEqual(2);
     await act(async () => {
       cards[0]?.click();
-      cards[1]?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Architecture essay");
+
+    const back = container.querySelector<HTMLButtonElement>(".memory-stack-detail .memory-workspace-back");
+    await act(async () => {
+      back?.click();
+    });
+    await flushReactWork();
+    const nextCards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal"));
+    await act(async () => {
+      nextCards[1]?.click();
     });
     await flushReactWork();
 
-    const windows = Array.from(container.querySelectorAll<HTMLElement>(".memory-window"));
-    expect(windows).toHaveLength(2);
-    expect(container.querySelector(".memory-window-hints")?.textContent).toMatch(
-      /both point at the same post-it|same room, different mask|two saves touching/,
-    );
-
-    const firstWindow = windows[0];
-    const firstLeft = firstWindow.style.getPropertyValue("--x");
-    await act(async () => {
-      const pointerDown = new Event("pointerdown", { bubbles: true });
-      Object.assign(pointerDown, { clientX: 100, clientY: 100 });
-      firstWindow.dispatchEvent(pointerDown);
-    });
-    expect(firstWindow.classList.contains("memory-window--dragging")).toBe(true);
-    await act(async () => {
-      const pointerMove = new Event("pointermove", { bubbles: true });
-      Object.assign(pointerMove, { clientX: 150, clientY: 126 });
-      window.dispatchEvent(pointerMove);
-    });
-    await act(async () => {
-      window.dispatchEvent(new Event("pointerup", { bubbles: true }));
-    });
-    await flushReactWork();
-    const draggedWindow = container.querySelector<HTMLElement>(".memory-window");
-    expect(draggedWindow?.style.getPropertyValue("--x")).not.toBe(firstLeft);
-
-    const minimizeButton = Array.from(draggedWindow?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
-      (button) => button.textContent === "minimize",
-    );
-    await act(async () => {
-      minimizeButton?.click();
-    });
-    const minimizedWindow = container.querySelector<HTMLElement>(".memory-window");
-    expect(minimizedWindow?.classList.contains("memory-window--minimized")).toBe(true);
-
-    const closeButton = Array.from(minimizedWindow?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
-      (button) => button.textContent === "close",
-    );
-    await act(async () => {
-      closeButton?.click();
-    });
-    expect(container.querySelectorAll(".memory-window")).toHaveLength(1);
+    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Synthetic memory note");
+    expect(container.querySelectorAll(".memory-stack-detail")).toHaveLength(1);
+    expect(container.querySelector(".memory-window")).toBeNull();
   });
 
   it("opens capture from the floating action", async () => {

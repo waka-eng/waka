@@ -1036,13 +1036,13 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "five provisional post-its. not final. changed by new saves.",
+    lifecycleHint: "",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "여기서 시작됨",
     reactionGroup: "post-it controls",
-    correctionLabel: "rewrite this post-it",
+    correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
-    rewriteCta: "pin wording",
+    rewriteCta: "save",
     removeCta: "pull down",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
@@ -1101,13 +1101,13 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "five provisional post-its. not final. changed by new saves.",
+    lifecycleHint: "",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
     reactionGroup: "post-it controls",
-    correctionLabel: "rewrite this post-it",
+    correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
-    rewriteCta: "pin wording",
+    rewriteCta: "save",
     removeCta: "pull down",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
@@ -2111,7 +2111,7 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
-    setHomeMode("topOfMind");
+    setHomeMode((current) => (current === "memoryDrawer" ? current : "topOfMind"));
   }, [initialLoading, topOfMindLoading, topOfMindNotesLoading]);
 
   const chooseHomeMode = (mode: HomeMode) => {
@@ -2198,6 +2198,7 @@ export function HomePage(): JSX.Element {
           ...previousFeedback,
           status: "error",
           error: copy.feedbackError,
+          correctionText: signal.label,
         },
       }));
     }
@@ -2264,32 +2265,20 @@ export function HomePage(): JSX.Element {
     if (!signal.feedbackTargetId) return null;
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
-    const draft = feedbackState?.correctionText || signal.label;
     return (
       <div
         className="nc-note-controls"
         role="group"
         aria-label={copy.reactionGroup}
       >
-        <label className="nc-note-rewrite" onClick={(event) => event.stopPropagation()}>
-          <span>{copy.correctionLabel}</span>
-          <textarea
-            value={draft}
-            placeholder={copy.correctionPlaceholder}
-            rows={2}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-              updateCorrectionText(signal.id, event.target.value)
-            }
-          />
-        </label>
         <div className="nc-note-control-actions">
           <button
             type="button"
             className="nc-note-control-btn"
-            disabled={saving || !draft.trim()}
+            disabled={saving || !(noteFeedback[signal.id]?.correctionText || signal.label).trim()}
             onClick={(event) => {
               event.stopPropagation();
-              void submitTopOfMindEdit(signal, draft);
+              void submitTopOfMindEdit(signal, noteFeedback[signal.id]?.correctionText || signal.label);
             }}
           >
             {copy.rewriteCta}
@@ -2650,6 +2639,135 @@ export function HomePage(): JSX.Element {
     );
   };
 
+  const openStackSignal = (signal: ApiSavedSignalSearchResult): void => {
+    setSelectedInspirationText(null);
+    setSelectedSavedSignalId(signal.id);
+    recordRevisit(signal.id, "detail_opened");
+  };
+
+  const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
+    const visual = signalVisualTreatment(signal);
+    return (
+      <button
+        key={signal.id}
+        type="button"
+        className={`reference-save signal-revisit-card memory-signal-card memory-signal-card--${visual} memory-stack-signal`}
+        onClick={() => openStackSignal(signal)}
+      >
+        <span className="memory-signal-card-kind">{signalMaterialLabel(signal)}</span>
+        <strong>{shortText(signal.textPreview, 142)}</strong>
+        {signal.highlightedSnippets[0] ? (
+          <blockquote>{shortText(signal.highlightedSnippets[0].text, 96)}</blockquote>
+        ) : null}
+        {signal.attachmentSummary.slice(0, 2).map((attachment) => (
+          <span
+            key={attachment.id}
+            className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
+          >
+            {attachment.label}
+          </span>
+        ))}
+        {signal.relevanceReasons.find((reason) => reason.includes("failed to upload")) ? (
+          <span className="reference-save-attachment">
+            {signal.relevanceReasons.find((reason) => reason.includes("failed to upload"))}
+          </span>
+        ) : null}
+        <span className="memory-signal-card-date">{formatTimestamp(signal.capturedAt)}</span>
+      </button>
+    );
+  };
+
+  const renderMemoryStackDetail = (): JSX.Element | null => {
+    if (!selectedSavedSignal) return null;
+    const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
+    const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
+    const relatedGroupNames = memoryGroupings
+      .filter((group) => group.signals.some((signal) => signal.id === selectedSavedSignal.id))
+      .map((group) => group.name)
+      .slice(0, 3);
+
+    return (
+      <div className="memory-stack-detail signal-revisit-detail signal-revisit-detail--open" aria-label="opened inspiration">
+        <header className="memory-stack-header">
+          <button
+            type="button"
+            className="memory-workspace-back"
+            onClick={() => {
+              setSelectedSavedSignalId(null);
+              setSavedSignalDetail(null);
+            }}
+          >
+            back
+          </button>
+          <div>
+            <span>{signalMaterialLabel(selectedSavedSignal)}</span>
+            <strong>{shortText(selectedSavedSignal.textPreview, 56)}</strong>
+          </div>
+        </header>
+        {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the inspiration...</p> : null}
+        <section className="memory-stack-readable">
+          <span>saved inspiration</span>
+          <p
+            className="signal-revisit-raw memory-readable-signal"
+            onMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
+            onKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
+          >
+            {renderHighlightedInspirationText(detailText, detailHighlights, (highlight) => {
+              void removeMemoryHighlight(selectedSavedSignal.id, highlight);
+            })}
+          </p>
+        </section>
+        {selectedInspirationText?.signalId === selectedSavedSignal.id ? (
+          <div className="memory-highlight-popover">
+            <span>{shortText(selectedInspirationText.text, 90)}</span>
+            <button
+              type="button"
+              disabled={highlightStatus.status === "saving"}
+              onClick={() => void addMemoryHighlight(selectedSavedSignal.id)}
+            >
+              {highlightStatus.status === "saving" ? "adding..." : "add highlight"}
+            </button>
+          </div>
+        ) : null}
+        {highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id ? (
+          <p className="signal-revisit-state">{highlightStatus.message}</p>
+        ) : null}
+        {(savedSignalDetail?.attachments.length ?? 0) > 0 || selectedSavedSignal.attachmentSummary.length > 0 ? (
+          <section>
+            <span>attachment details</span>
+            <ul className="signal-revisit-notes">
+              {(savedSignalDetail?.attachments.length
+                ? savedSignalDetail.attachments.map((attachment) => ({
+                    id: attachment.id,
+                    label: `${attachment.label}${
+                      attachment.contentType || attachment.size
+                        ? ` · ${[attachment.contentType, attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : null]
+                            .filter(Boolean)
+                            .join(" · ")}`
+                        : ""
+                    }`,
+                  }))
+                : selectedSavedSignal.attachmentSummary
+              ).map((attachment) => (
+                <li key={attachment.id}>
+                  <strong>{attachment.label}</strong>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        <section>
+          <span>nearby piles</span>
+          <p>
+            {relatedGroupNames.length > 0
+              ? relatedGroupNames.join(", ")
+              : "No clear pile has claimed this yet."}
+          </p>
+        </section>
+      </div>
+    );
+  };
+
   const renderMemoryFlow = (): JSX.Element => {
     const flowSignals = selectedMemoryGroupSignals;
     const activeIndex = Math.min(memoryFlowIndex, Math.max(flowSignals.length - 1, 0));
@@ -2883,6 +3001,14 @@ export function HomePage(): JSX.Element {
       </article>
     );
   };
+
+  // Retired by the anchored stack drawer; keep the old comparison helpers
+  // inert until the remaining memory-window state can be removed in one cleanup.
+  void setMemoryFolderView;
+  void visibleMemoryWindows;
+  void renderMemorySignalCard;
+  void renderMemoryFlow;
+  void renderMemoryWindow;
 
   useEffect(() => {
     if (draggingIndex === null) return undefined;
@@ -3281,7 +3407,7 @@ export function HomePage(): JSX.Element {
     const supportingCount = signal.supportingSignals.length;
     return (
       <article
-        className="nc-note-modal nc-note-peel"
+        className="nc-note-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={`top-of-mind-note-${signal.id}`}
@@ -3300,20 +3426,31 @@ export function HomePage(): JSX.Element {
           close
         </button>
 
-        <header className="nc-note-peel-head">
-          <div>
-            <span className="nc-note-title">opened post-it</span>
-          </div>
-          <p>short, provisional, easy to change</p>
-        </header>
-
         <div className="nc-note-expanded-content">
           <section className="nc-note-peel-hero" aria-label="opened post-it">
-            <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
-              {locale === "en-US"
-                ? signal.label
-                : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
-            </p>
+            {signal.feedbackTargetId ? (
+              <textarea
+                className="nc-note-body nc-note-body-edit"
+                id={`top-of-mind-note-${signal.id}`}
+                aria-label={copy.correctionLabel}
+                value={
+                  noteFeedback[signal.id]?.correctionText ??
+                  (locale === "en-US"
+                    ? signal.label
+                    : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label)
+                }
+                rows={3}
+                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
+                  updateCorrectionText(signal.id, event.target.value)
+                }
+              />
+            ) : (
+              <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
+                {locale === "en-US"
+                  ? signal.label
+                  : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
+              </p>
+            )}
             <p className="nc-note-one-read">
               {userFacingCopy(
                 signal.evidenceRationale ||
@@ -3331,7 +3468,7 @@ export function HomePage(): JSX.Element {
               chooseHomeMode("memoryDrawer");
             }}
           >
-            open the private drawer
+            inspirations that led here
             <span>
               {supportingCount > 0
                 ? `${supportingCount} saved inspiration${supportingCount === 1 ? "" : "s"} nearby`
@@ -3341,7 +3478,6 @@ export function HomePage(): JSX.Element {
 
           <footer className="nc-note-expanded-foot">
             {renderPostItControls(signal)}
-            <span>not final · changed by new saves · replaceable</span>
           </footer>
         </div>
       </article>
@@ -3365,209 +3501,170 @@ export function HomePage(): JSX.Element {
           {renderExpandedThoughtCard(expandedNoteIndex)}
         </div>
       ) : null}
-      <main className={`nc-canvas${homeMode === "topOfMind" ? " nc-canvas--top-of-mind" : ""}`}>
-        {homeMode === "topOfMind" ? (
-          <>
-            <section className="nc-titlecard">
-              <h1 className="nc-title">
-                {copy.titleLineOne(displayHandle)}
-                {copy.titleLineTwo ? (
-                  <>
-                    <br />
-                    {copy.titleLineTwo}
-                  </>
-                ) : null}
-                {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
-              </h1>
-              <p className="nc-tagline">{copy.tagline}</p>
-              <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p>
-            </section>
+      <main className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}>
+        <section className="nc-titlecard">
+          <h1 className="nc-title">
+            {copy.titleLineOne(displayHandle)}
+            {copy.titleLineTwo ? (
+              <>
+                <br />
+                {copy.titleLineTwo}
+              </>
+            ) : null}
+            {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
+          </h1>
+          <p className="nc-tagline">{copy.tagline}</p>
+          {copy.lifecycleHint ? <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p> : null}
+        </section>
 
-            <section className="nc-stage" aria-label={PRODUCT_SPACES.topOfMind}>
-              {topOfMindLoading ? (
-                <p className="nc-loading">{copy.loadingThoughts}</p>
-              ) : topOfMindError ? (
-                <p className="nc-loading">{topOfMindError}</p>
-              ) : meaningfulThoughtCards.length > 0 ? (
-                meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
-              ) : (
-                <p className="nc-loading">{copy.emptyThoughts}</p>
-              )}
-              {renderActionPostIt()}
-              <button
-                type="button"
-                className="nc-drawer-object"
-                onClick={() => chooseHomeMode("memoryDrawer")}
-                aria-label={`${copy.drawerObjectBody}: ${copy.savesTitle}`}
-              >
-                <span className="nc-drawer-tab" aria-hidden="true" />
-                <span className="nc-drawer-title">{copy.drawerObjectTitle}</span>
-                <strong>{copy.drawerObjectBody}</strong>
-                <small>{entries.length} saved</small>
-              </button>
-            </section>
+        <section className="nc-stage" aria-label={PRODUCT_SPACES.topOfMind}>
+          {topOfMindLoading ? (
+            <p className="nc-loading">{copy.loadingThoughts}</p>
+          ) : topOfMindError ? (
+            <p className="nc-loading">{topOfMindError}</p>
+          ) : meaningfulThoughtCards.length > 0 ? (
+            meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
+          ) : (
+            <p className="nc-loading">{copy.emptyThoughts}</p>
+          )}
+          {renderActionPostIt()}
+          <button
+            type="button"
+            className="nc-drawer-object"
+            onClick={() => chooseHomeMode("memoryDrawer")}
+            aria-label={`${copy.drawerObjectBody}: ${copy.savesTitle}`}
+          >
+            <span className="nc-drawer-tab" aria-hidden="true" />
+            <span className="nc-drawer-title">{copy.drawerObjectTitle}</span>
+            <strong>{copy.drawerObjectBody}</strong>
+            <small>{entries.length} saved</small>
+          </button>
+        </section>
 
-            <footer className="nc-footnote">
-              <p>{copy.footnote(displayHandle)}</p>
-              <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
-              <div className="nc-lang nc-lang--footer" aria-label="language">
+        <footer className="nc-footnote">
+          <p>{copy.footnote(displayHandle)}</p>
+          <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
+          <div className="nc-lang nc-lang--footer" aria-label="language">
+            <button
+              type="button"
+              className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
+              onClick={() => handleLocaleChange("ko-KR")}
+            >
+              한
+            </button>
+            <button
+              type="button"
+              className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
+              onClick={() => handleLocaleChange("en-US")}
+            >
+              en
+            </button>
+          </div>
+        </footer>
+      </main>
+
+      {homeMode === "memoryDrawer" ? (
+        <section className="reference-saves-page signal-revisit-page memory-drawer-stack" aria-label={copy.savesTitle}>
+          <span className="memory-stack-glass" aria-hidden="true" />
+          <button
+            type="button"
+            className="memory-stack-close"
+            onClick={() => chooseHomeMode("topOfMind")}
+            aria-label="close inspiration drawer"
+          />
+          {selectedSavedSignal ? (
+            renderMemoryStackDetail()
+          ) : selectedMemoryGroup ? (
+            <div className="memory-group-contents memory-stack-level" aria-label="grouping contents">
+              <header className="memory-stack-header">
                 <button
                   type="button"
-                  className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
-                  onClick={() => handleLocaleChange("ko-KR")}
-                >
-                  한
-                </button>
-                <button
-                  type="button"
-                  className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
-                  onClick={() => handleLocaleChange("en-US")}
-                >
-                  en
-                </button>
-              </div>
-            </footer>
-          </>
-        ) : (
-          <section className="reference-saves-page signal-revisit-page" aria-label={copy.savesTitle}>
-            <header className="signal-revisit-header">
-              <div>
-                <span>{PRODUCT_SPACES.memoryDrawer}</span>
-                <h2>Choose a pile, or open everything.</h2>
-              </div>
-              <button
-                type="button"
-                className="nc-wall-return"
-                onClick={() => chooseHomeMode("topOfMind")}
-              >
-                back to wall
-              </button>
-              <details className="signal-revisit-search">
-                <summary>search</summary>
-                <label>
-                  <span>{copy.searchLabel}</span>
-                  <input
-                    type="search"
-                  value={inspirationFilters.search}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    setInspirationFilters({ search: event.target.value });
-                    setSelectedMemoryGroupId("all");
+                  className="memory-workspace-back"
+                  onClick={() => {
+                    setSelectedMemoryGroupId(null);
                     setSelectedSavedSignalId(null);
                     setSavedSignalDetail(null);
                   }}
-                  placeholder={copy.searchPlaceholder}
-                />
-                </label>
-              </details>
-            </header>
-
-            <div className="memory-drawer-desk">
-              <div className="memory-window-layer" aria-label="open inspiration windows">
-                {visibleMemoryWindows.map(renderMemoryWindow)}
-              </div>
-              <section
-                className={`memory-drawer-workspace${
-                  selectedMemoryGroup ? " memory-drawer-workspace--selected" : ""
-                }`}
-                aria-label="drawer workspace"
-              >
-                {selectedMemoryGroup ? (
-                  <div className="memory-group-contents" aria-label="grouping contents">
-                    <header>
-                      <button
-                        type="button"
-                        className="memory-workspace-back"
-                        onClick={() => {
-                          setSelectedMemoryGroupId(null);
-                          setSelectedSavedSignalId(null);
-                          setSavedSignalDetail(null);
-                          setMemoryWindows([]);
-                        }}
-                      >
-                        all piles
-                      </button>
-                      <div>
-                        <span>{selectedMemoryGroup.source === "all" ? "all inspirations" : "selected pile"}</span>
-                        <label className="memory-group-name-edit">
-                          <span>name</span>
-                          <input
-                            value={selectedMemoryGroup.name}
-                            onChange={(event) => {
-                              renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
-                            }}
-                          />
-                        </label>
-                      </div>
-                      <div className="memory-order-switcher" role="group" aria-label="browse order">
-                        {[
-                          { id: "newest" as const, label: "newest first" },
-                          { id: "relevance" as const, label: "strongest fit" },
-                        ].map((order) => (
-                          <button
-                            key={order.id}
-                            type="button"
-                            className={memoryBrowseOrder === order.id ? "is-active" : ""}
-                            aria-pressed={memoryBrowseOrder === order.id}
-                            onClick={() => setMemoryBrowseOrder(order.id)}
-                          >
-                            {order.label}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="memory-view-switcher" role="group" aria-label="pile view">
-                        {[
-                          { id: "grid" as const, label: "grid" },
-                          { id: "vertical" as const, label: "vertical flow" },
-                          { id: "horizontal" as const, label: "horizontal flow" },
-                        ].map((view) => (
-                          <button
-                            key={view.id}
-                            type="button"
-                            className={memoryFolderView === view.id ? "is-active" : ""}
-                            aria-pressed={memoryFolderView === view.id}
-                            onClick={() => {
-                              setMemoryFolderView(view.id);
-                              setMemoryFlowIndex(0);
-                            }}
-                          >
-                            {view.label}
-                          </button>
-                        ))}
-                      </div>
-                    </header>
-                    {memoryFolderView === "grid" ? (
-                      <div className="memory-list-stack">
-                        {selectedMemoryGroupSignals.map((signal) => renderMemorySignalCard(signal))}
-                      </div>
-                    ) : (
-                      renderMemoryFlow()
-                    )}
-                  </div>
-                ) : (
-                  <div className="memory-group-board" aria-label="proposed inspiration groupings">
-                    {memoryGroupings.map(renderMemoryGroupObject)}
+                >
+                  all piles
+                </button>
+                <div>
+                  <span>{selectedMemoryGroup.source === "all" ? "all inspirations" : "selected pile"}</span>
+                  <label className="memory-group-name-edit">
+                    <span>name</span>
+                    <input
+                      value={selectedMemoryGroup.name}
+                      onChange={(event) => {
+                        renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="memory-order-switcher" role="group" aria-label="browse order">
+                  {[
+                    { id: "newest" as const, label: "newest first" },
+                    { id: "relevance" as const, label: "strongest fit" },
+                  ].map((order) => (
                     <button
+                      key={order.id}
                       type="button"
-                      className="memory-bulletin-object"
-                      onClick={createUserMemoryGroup}
+                      className={memoryBrowseOrder === order.id ? "is-active" : ""}
+                      aria-pressed={memoryBrowseOrder === order.id}
+                      onClick={() => setMemoryBrowseOrder(order.id)}
                     >
-                      <span>new pile</span>
-                      <strong>make my own</strong>
+                      {order.label}
                     </button>
-                    {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
-                    {savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                      <p className="memory-relationship-empty">{copy.loadingSaves}</p>
-                    ) : null}
-                    {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                      <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-                    ) : null}
-                  </div>
-                )}
-              </section>
+                  ))}
+                </div>
+              </header>
+              <div className="memory-list-stack">
+                {selectedMemoryGroupSignals.map((signal) => renderMemoryStackSignalCard(signal))}
+              </div>
             </div>
-          </section>
-        )}
-      </main>
+          ) : (
+            <div className="memory-stack-level">
+              <div className="memory-stack-entrybar">
+                <span>{PRODUCT_SPACES.memoryDrawer}</span>
+                <details className="signal-revisit-search">
+                  <summary>search</summary>
+                  <label>
+                    <span>{copy.searchLabel}</span>
+                    <input
+                      type="search"
+                      value={inspirationFilters.search}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                        setInspirationFilters({ search: event.target.value });
+                        setSelectedMemoryGroupId("all");
+                        setSelectedSavedSignalId(null);
+                        setSavedSignalDetail(null);
+                      }}
+                      placeholder={copy.searchPlaceholder}
+                    />
+                  </label>
+                </details>
+              </div>
+              <div className="memory-group-board" aria-label="proposed inspiration groupings">
+                {memoryGroupings.map(renderMemoryGroupObject)}
+                <button
+                  type="button"
+                  className="memory-bulletin-object"
+                  onClick={createUserMemoryGroup}
+                >
+                  <span>new pile</span>
+                  <strong>make my own</strong>
+                </button>
+                {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+                {savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                  <p className="memory-relationship-empty">{copy.loadingSaves}</p>
+                ) : null}
+                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                  <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {expandedNoteIndex === null ? (
         <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>

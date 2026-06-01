@@ -1665,3 +1665,31 @@
     - Vite served browser verification at `http://localhost:5173/`.
 
 ---
+
+## 2026-06-01 13:39 PDT - US-048
+
+- What was implemented
+  - Replaced the page-like memory drawer overlay with an anchored glass stack that opens from the wall drawer object while keeping the wall, post-its, and action checklist visible behind it.
+  - Made the stack drill in-place from clean entry objects to grouping contents, then to a readable saved-inspiration detail, with back controls returning through the same stack levels.
+  - Removed large drawer workspace/header language from the active stack path and kept stack dimensions stable with internal scrolling and a mobile bottom-sheet treatment.
+  - Updated Home tests away from full-screen drawer and draggable-window expectations toward anchored stack behavior.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 52 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, saved-inspiration list/detail, and revisit APIs. Verified drawer object remains visible, stack opens without `.memory-drawer-overlay`, grouping contents replace entry objects in-place, inspiration detail opens inside `.memory-drawer-stack`, no `.memory-window` renders, stack is in frame, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable codebase pattern.
+  - Gotchas encountered
+    - The old draggable memory-window helpers are still present but inert after the stack pivot; remove them in a focused cleanup rather than mixing that deletion into this UI correction.
+    - Playwright can consider stack cards unstable during quick re-renders; forcing the click after the card is located was needed for this verification script.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
