@@ -145,7 +145,7 @@ const TOP_OF_MIND_NOTE_LIMIT = 5;
 const PRODUCT_SPACES = {
   capture: "Capture",
   topOfMind: "Five Top of Mind post-its",
-  memoryDrawer: "Memory Drawer",
+  memoryDrawer: "Inspiration Drawer",
   internalDebug: "Internal Debug",
 } as const;
 
@@ -425,6 +425,19 @@ function shortText(value: string, maxLength = 220): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+function userFacingCopy(value: string): string {
+  return value
+    .replace(/\bsaved signals\b/gi, "saved inspirations")
+    .replace(/\bsignals\b/gi, "inspirations")
+    .replace(/\bsignal\b/gi, "inspiration")
+    .replace(/\bresonance\b/gi, "what hit")
+    .replace(/\bgraph\b/gi, "pattern")
+    .replace(/\bnodes?\b/gi, "claim")
+    .replace(/\bmemory movement\b/gi, "what changed")
+    .replace(/\banalysis\b/gi, "read")
+    .replace(/\bAI\b/g, "the read");
+}
+
 type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text">;
 
 function renderHighlightedInspirationText(
@@ -603,7 +616,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     .map((signal) => ({
       id: signal.id,
       preview: signal.preview,
-      reason: "Related signal",
+      reason: "Related inspiration",
       createdAt: signal.createdAt,
       kind: signal.kind,
       resonanceScore: signal.resonanceScore,
@@ -658,8 +671,8 @@ function uniqueThoughtCards(cards: HomeThoughtCard[]): HomeThoughtCard[] {
 }
 
 function explainThoughtCard(card: HomeThoughtCard): string {
-  const reason = shortText(card.reason || card.evidenceRationale || "", 135);
-  const context = card.matchedEnvironment || card.ambientSignal;
+  const reason = shortText(userFacingCopy(card.reason || card.evidenceRationale || ""), 135);
+  const context = userFacingCopy(card.matchedEnvironment || card.ambientSignal || "");
   if (reason && context) {
     return `${reason} It keeps pointing toward ${shortText(context, 72)}.`;
   }
@@ -810,7 +823,7 @@ function buildMemoryConstellationRelationships(
         sourceId: source.id,
         targetId: target.id,
         label: relationshipLabelForSignals(source, target, []),
-        reason: "These saves sit close together in the drawer while WAKA looks for a sharper connection.",
+        reason: "These saves sit close together while a sharper connection forms.",
         sourceTerms: termsBySignal.get(source.id) ?? [],
         targetTerms: termsBySignal.get(target.id) ?? [],
         sourceSignal: source,
@@ -845,7 +858,7 @@ function groupNameFromLanguage(value: string): string {
   if (/image|aesthetic|taste|beautiful|visual|style/.test(label)) return "taste with a pulse";
   if (/question|wonder|unknown|test/.test(label)) return "questions still open";
   const words = label.split(/\s+/).filter((word) => word.length > 2).slice(0, 4);
-  return words.length > 0 ? words.join(" ") : "signals touching";
+  return words.length > 0 ? words.join(" ") : "inspirations touching";
 }
 
 function groupingIconForSignals(signals: ApiSavedSignalSearchResult[]): MemoryGrouping["icon"] {
@@ -918,7 +931,7 @@ function buildProposedMemoryGroupings(
     addGroup({
       id: userGroup.id,
       name: userGroup.name,
-      explanation: "A grouping you made, kept beside WAKA's proposed piles.",
+      explanation: "A grouping you made, kept beside the suggested piles.",
       source: "user",
       icon: "pin",
       signals: signals.filter((signal) => userGroup.signalIds.includes(signal.id)),
@@ -954,7 +967,7 @@ function buildProposedMemoryGroupings(
     addGroup({
       id: `tom-${note.id}`,
       name: groupNameFromLanguage(language),
-      explanation: `WAKA put these near the post-it "${shortText(note.title, 58)}".`,
+      explanation: `These sit near the post-it "${shortText(note.title, 58)}".`,
       source: "proposed",
       icon: groupingIconForSignals(related),
       signals: related,
@@ -990,7 +1003,7 @@ function buildProposedMemoryGroupings(
   addGroup({
     id: "keeps-returning",
     name: "things that keep returning",
-    explanation: "Recurrence is high here, so WAKA is keeping the pattern visible.",
+    explanation: "This keeps returning, so the pile stays visible.",
     source: "proposed",
     icon: groupingIconForSignals(recurring),
     signals: recurring,
@@ -1003,7 +1016,7 @@ function buildProposedMemoryGroupings(
 const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "top of mind",
-    savesTab: "memory drawer",
+    savesTab: "inspiration drawer",
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
@@ -1027,7 +1040,7 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "five provisional post-its. not final. changed by new signals.",
+    lifecycleHint: "five provisional post-its. not final. changed by new saves.",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "여기서 시작됨",
     reactionGroup: "post-it controls",
@@ -1052,8 +1065,8 @@ const HOME_COPY = {
         매주 바뀝니다. 어쩔 수 없음.
       </>
     ),
-    footnoteCredit: "— Ⓒ WAKA, 2026, 생각의 서랍",
-    savesTitle: "memory drawer",
+    footnoteCredit: "— Ⓒ 2026, 생각의 서랍",
+    savesTitle: "inspiration drawer",
     drawerObjectTitle: "saved inspirations",
     drawerObjectBody: "open the drawer",
     searchLabel: "search",
@@ -1068,7 +1081,7 @@ const HOME_COPY = {
   },
   "en-US": {
     thoughtTab: "top of mind",
-    savesTab: "memory drawer",
+    savesTab: "inspiration drawer",
     room: "my room",
     titleLineOne: (name: string) => (
       <>
@@ -1092,7 +1105,7 @@ const HOME_COPY = {
         </span>
       </>
     ),
-    lifecycleHint: "five provisional post-its. not final. changed by new signals.",
+    lifecycleHint: "five provisional post-its. not final. changed by new saves.",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
     reactionGroup: "post-it controls",
@@ -1119,8 +1132,8 @@ const HOME_COPY = {
         It changes every week. It cannot help itself.
       </>
     ),
-    footnoteCredit: "— Ⓒ WAKA, 2026, for minds that wander",
-    savesTitle: "memory drawer",
+    footnoteCredit: "— Ⓒ 2026, for minds that wander",
+    savesTitle: "inspiration drawer",
     drawerObjectTitle: "saved inspirations",
     drawerObjectBody: "open the drawer",
     searchLabel: "search",
@@ -1390,7 +1403,7 @@ export function HomePage(): JSX.Element {
       } catch (err) {
         if (cancelled) return;
         const message =
-          err instanceof Error ? err.message : "Failed to load signals";
+          err instanceof Error ? err.message : "Failed to load saved inspirations";
         setLoadError(message);
         // Drop the skeleton even on failure so the user can still
         // capture into the empty state — the load-error banner below
@@ -1955,7 +1968,7 @@ export function HomePage(): JSX.Element {
           );
         } catch (caught) {
           if (cancelled) return;
-          setSavedSignalsError(caught instanceof Error ? caught.message : "Failed to load saved signals");
+          setSavedSignalsError(caught instanceof Error ? caught.message : "Failed to load saved inspirations");
         } finally {
           if (!cancelled) setSavedSignalsLoading(false);
         }
@@ -2563,9 +2576,9 @@ export function HomePage(): JSX.Element {
         </button>
         {isExpanded ? (
           <div className="memory-signal-card-detail signal-revisit-detail signal-revisit-detail--open">
-            {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the signal...</p> : null}
+            {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the inspiration...</p> : null}
             <section>
-              <span>original signal</span>
+              <span>saved inspiration</span>
             <p
               className="signal-revisit-raw memory-readable-signal"
               onMouseUp={() => handleMemoryTextSelection(signal.id)}
@@ -2593,7 +2606,7 @@ export function HomePage(): JSX.Element {
             ) : null}
             {(savedSignalDetail?.attachments.length ?? 0) > 0 || signal.attachmentSummary.length > 0 ? (
               <section>
-                <span>attachment context</span>
+                <span>attachment details</span>
                 <ul className="signal-revisit-notes">
                   {(savedSignalDetail?.attachments.length
                     ? savedSignalDetail.attachments.map((attachment) => ({
@@ -2811,7 +2824,7 @@ export function HomePage(): JSX.Element {
             ) : null}
             {(detail?.attachments.length ?? 0) > 0 || signal.attachmentSummary.length > 0 ? (
               <section className="memory-window-context">
-                <span>attachment context</span>
+                <span>attachment details</span>
                 <ul className="signal-revisit-notes">
                   {(detail?.attachments.length
                     ? detail.attachments.map((attachment) => ({
@@ -3169,7 +3182,7 @@ export function HomePage(): JSX.Element {
       >
         <header>
           <span>try next</span>
-          <strong>get one signal from the real world</strong>
+          <strong>try one small thing in the real world</strong>
         </header>
         <ul>
           {visibleActionItems.map((item) => {
@@ -3186,9 +3199,9 @@ export function HomePage(): JSX.Element {
                 <span>
                   <strong>{item.text}</strong>
                   <small>
-                    {shortText(item.whyNow, 54)}
+                    {shortText(userFacingCopy(item.whyNow), 54)}
                     {item.evidenceSnippets[0]
-                      ? ` · evidence: ${shortText(item.evidenceSnippets[0], 54)}`
+                      ? ` · evidence: ${shortText(userFacingCopy(item.evidenceSnippets[0]), 54)}`
                       : ""}
                   </small>
                   {isOutcomePending ? (
@@ -3321,7 +3334,7 @@ export function HomePage(): JSX.Element {
                 ? signal.label
                 : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
             </p>
-            <p>{signal.reason}</p>
+            <p>{userFacingCopy(signal.reason)}</p>
           </section>
 
           <div className="nc-note-peel-grid">
@@ -3335,20 +3348,20 @@ export function HomePage(): JSX.Element {
               <dl className="nc-note-frequency-list">
                 <div>
                   <dt>points toward</dt>
-                  <dd>{signal.matchedEnvironment ?? "WAKA is still inferring the surrounding signal."}</dd>
+                  <dd>{signal.matchedEnvironment ? userFacingCopy(signal.matchedEnvironment) : "Still learning what kind of room this belongs in."}</dd>
                 </div>
                 <div>
                   <dt>pushes away from</dt>
-                  <dd>{signal.antiEnvironment ?? "No rejected context has surfaced clearly yet."}</dd>
+                  <dd>{signal.antiEnvironment ? userFacingCopy(signal.antiEnvironment) : "No clear opposite has surfaced yet."}</dd>
                 </div>
                 <div>
                   <dt>why now</dt>
-                  <dd>{signal.evidenceRationale ?? "This read is provisional and should be corrected if it misses."}</dd>
+                  <dd>{signal.evidenceRationale ? userFacingCopy(signal.evidenceRationale) : "This read is provisional and should be corrected if it misses."}</dd>
                 </div>
                 <div>
                   <dt>outside reading</dt>
                   <dd>
-                    {signal.rejectedAlternativeInterpretation ??
+                    {signal.rejectedAlternativeInterpretation ? userFacingCopy(signal.rejectedAlternativeInterpretation) :
                       "No competing interpretation has been strong enough to name yet."}
                   </dd>
                 </div>
@@ -3358,30 +3371,30 @@ export function HomePage(): JSX.Element {
           <section className="nc-note-source-section nc-note-peel-source">
             <span>it began here</span>
             <blockquote className="nc-note-source">
-              “{shortText(source?.preview || signal.reason, 190)}”
+              “{shortText(userFacingCopy(source?.preview || signal.reason), 190)}”
             </blockquote>
           </section>
           </div>
 
           <section className="nc-note-evidence-panel nc-note-peel-evidence" aria-labelledby={`top-of-mind-evidence-${signal.id}`}>
             <div className="nc-note-evidence-header">
-              <span>supporting saved moments · evidence signals</span>
+              <span>supporting saved inspirations</span>
               <strong id={`top-of-mind-evidence-${signal.id}`}>
                 {signal.supportingSignals.length > 0
-                  ? `${signal.supportingSignals.length} signal${signal.supportingSignals.length === 1 ? "" : "s"} behind this`
-                  : "no signal evidence yet"}
+                  ? `${signal.supportingSignals.length} inspiration${signal.supportingSignals.length === 1 ? "" : "s"} behind this`
+                  : "no saved inspiration attached yet"}
               </strong>
             </div>
             {signal.supportingSignals.length > 0 ? (
               <ol className="nc-note-evidence-list">
                 {signal.supportingSignals.slice(0, 5).map((evidence) => (
                   <li key={evidence.id}>
-                    <blockquote>“{shortText(evidence.preview || evidence.reason, 150)}”</blockquote>
-                    <p>{shortText(evidence.reason, 120)}</p>
+                    <blockquote>“{shortText(userFacingCopy(evidence.preview || evidence.reason), 150)}”</blockquote>
+                    <p>{shortText(userFacingCopy(evidence.reason), 120)}</p>
                     <div>
-                      <span>{evidence.kind || "signal"}</span>
+                      <span>{evidence.kind || "inspiration"}</span>
                       {typeof evidence.resonanceScore === "number" ? (
-                        <span>resonance {Math.round(evidence.resonanceScore)}</span>
+                        <span>felt strongly {Math.round(evidence.resonanceScore)}/10</span>
                       ) : null}
                     </div>
                   </li>
@@ -3389,7 +3402,7 @@ export function HomePage(): JSX.Element {
               </ol>
             ) : (
               <p className="nc-note-empty-evidence">
-                This post-it does not have signal evidence attached yet.
+                This post-it does not have saved inspiration attached yet.
               </p>
             )}
           </section>
@@ -3402,7 +3415,7 @@ export function HomePage(): JSX.Element {
               </strong>
             </div>
             <p className="nc-note-empty-evidence">
-              Edits to this post-it help WAKA keep the {signal.ambitionDimension?.replace(/_/g, " ") ?? "ambition"} read
+              Edits to this post-it keep the {signal.ambitionDimension?.replace(/_/g, " ") ?? "ambition"} read
               close to what is alive now.
             </p>
             {contextNodes.length > 0 ? (
@@ -3421,7 +3434,7 @@ export function HomePage(): JSX.Element {
               </ul>
             ) : (
               <p className="nc-note-empty-evidence">
-                WAKA has not linked a durable context claim to this note yet.
+                No deeper read has attached to this note yet.
               </p>
             )}
           </section>
@@ -3435,7 +3448,7 @@ export function HomePage(): JSX.Element {
 
           <footer className="nc-note-expanded-foot">
             {renderPostItControls(signal)}
-            <span>not final · changed by new signals · replaceable</span>
+            <span>not final · changed by new saves · replaceable</span>
           </footer>
         </div>
       </article>
@@ -3529,8 +3542,8 @@ export function HomePage(): JSX.Element {
             <header className="signal-revisit-header">
               <div>
                 <span>{PRODUCT_SPACES.memoryDrawer}</span>
-                <h2>Open the piles WAKA thinks belong together.</h2>
-                <p>Raw saves stay intact. These groupings are a removable layer above them.</p>
+                <h2>Open the piles that seem to belong together.</h2>
+                <p>Original inspirations stay intact. These groupings are easy to keep, rename, or dismiss.</p>
               </div>
               <button
                 type="button"

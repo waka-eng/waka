@@ -627,7 +627,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("attachment context");
+    expect(container.textContent).toContain("attachment details");
     expect(container.textContent).toContain("<script>alert(1)</script> Source title");
     expect(container.textContent).toContain("image.png · 4 KB");
     expect(container.querySelector(".detail-attachment-image")).toBeNull();
@@ -755,7 +755,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("Most inspiration disappears.");
-    expect(container.textContent).toContain("five provisional post-its. not final. changed by new signals.");
+    expect(container.textContent).toContain("five provisional post-its. not final. changed by new saves.");
   });
 
   it("names the primary product spaces without surfacing internal graph UI", async () => {
@@ -770,7 +770,46 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("compatibility archive");
   });
 
-  it("keeps top-of-mind notes primary when enough signals are available", async () => {
+  it("keeps internal language out of the main wall, post-it, drawer, capture, and action copy", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const bannedInternalCopy = /\b(signals?|memories|nodes?|graph|resonance|analysis|AI|productivity|knowledge[-\s]?base)\b|memory movement/i;
+    const wallCopy = [
+      container.querySelector(".nc-titlecard")?.textContent,
+      container.querySelector(".nc-stage")?.textContent,
+      container.querySelector(".nc-action-pad")?.textContent,
+      container.querySelector(".nc-save")?.textContent,
+    ].join(" ");
+
+    expect(wallCopy).not.toMatch(bannedInternalCopy);
+    expect(container.querySelector(".nc-titlecard")?.textContent).not.toMatch(/\bWAKA\b/);
+    expect(container.querySelector(".nc-stage")?.textContent).not.toMatch(/\bWAKA\b/);
+
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-note-modal")?.textContent).not.toMatch(bannedInternalCopy);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-note-peel-close")?.click();
+    });
+    await flushReactWork();
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const drawerCopy = [
+      container.querySelector(".signal-revisit-header")?.textContent,
+      container.querySelector(".memory-group-board")?.textContent,
+      container.querySelector(".memory-group-contents > header")?.textContent,
+    ].join(" ");
+    expect(drawerCopy).not.toMatch(bannedInternalCopy);
+    expect(drawerCopy).not.toMatch(/\bWAKA\b/);
+  });
+
+  it("keeps top-of-mind notes primary when enough inspirations are available", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -785,7 +824,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("not final");
-    expect(container.querySelector(".nc-note")?.textContent).not.toContain("changed by new signals");
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("changed by new saves");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
@@ -815,7 +854,7 @@ describe("HomePage current home experience", () => {
     const actionText = actionPad?.textContent ?? "";
     expect(actionText).toContain("Make the rough thing first, then show one person before explaining it.");
     expect(actionText).toContain("Message one person who makes people who make building feel less lonely feel normal");
-    expect(actionText).toContain("Saved signals keep returning to public rough drafts.");
+    expect(actionText).toContain("saved inspirations keep returning to public rough dra");
     expect(actionText).toContain("evidence: Architecture essay about bridge rhythms");
     expect(actionText).not.toMatch(/do one tiny|smallest test|explore this|reflect on|journal|learn more|think about|research/i);
     expect(actionText).not.toContain("Make one rough artifact for:");
@@ -959,7 +998,7 @@ describe("HomePage current home experience", () => {
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
 
-  it("reveals concise evidence signals and context claims for a top-of-mind note", async () => {
+  it("reveals concise evidence inspirations for a top-of-mind note", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -975,11 +1014,10 @@ describe("HomePage current home experience", () => {
     expect(expanded?.classList.contains("nc-note-peel")).toBe(true);
     expect(expanded?.getAttribute("role")).toBe("dialog");
     expect(expanded?.textContent).toContain("opened post-it");
-    expect(expanded?.textContent).toContain("supporting saved moments");
-    expect(expanded?.textContent).toContain("evidence signals");
-    expect(expanded?.textContent).toContain("1 signal behind this");
+    expect(expanded?.textContent).toContain("supporting saved inspirations");
+    expect(expanded?.textContent).toContain("1 inspiration behind this");
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
-    expect(expanded?.textContent).toContain("This signal anchors the pattern.");
+    expect(expanded?.textContent).toContain("This inspiration anchors the pattern.");
     expect(expanded?.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(expanded?.textContent).toContain("why this matters");
     expect(expanded?.textContent).toContain("points toward");
@@ -987,7 +1025,7 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("why now");
     expect(expanded?.textContent).toContain("outside reading");
     expect(expanded?.textContent).toContain("This is not just an archive theme about bridges or city walking.");
-    expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
+    expect(expanded?.textContent).toContain("Several saved inspirations cluster around city walks");
     expect(expanded?.textContent).toContain("ambition dimension");
     expect(expanded?.textContent).toContain("work");
     expect(expanded?.textContent).toContain("make the thing before explaining it");
@@ -1019,10 +1057,10 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
-    expect(expanded?.textContent).toContain("no signal evidence yet");
-    expect(expanded?.textContent).toContain("This post-it does not have signal evidence attached yet.");
+    expect(expanded?.textContent).toContain("no saved inspiration attached yet");
+    expect(expanded?.textContent).toContain("This post-it does not have saved inspiration attached yet.");
     expect(expanded?.textContent).toContain("ambition dimension");
-    expect(expanded?.textContent).toContain("WAKA has not linked a durable context claim to this note yet.");
+    expect(expanded?.textContent).toContain("No deeper read has attached to this note yet.");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
     expect(expanded?.textContent).not.toContain("context_node:");
   });
@@ -1193,7 +1231,7 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.textContent).toContain("This page was not written by river.");
-    expect(container.textContent).toContain("— Ⓒ WAKA, 2026, for minds that wander");
+    expect(container.textContent).toContain("— Ⓒ 2026, for minds that wander");
   });
 
   it("filters server-returned inspirations down to the authenticated user", async () => {
@@ -1258,7 +1296,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
     expect(container.querySelector(".nc-drawer-object")).toBeNull();
-    expect(container.textContent).toContain("Open the piles WAKA thinks belong together.");
+    expect(container.textContent).toContain("Open the piles that seem to belong together.");
     expect(container.querySelector(".memory-group-board")).not.toBeNull();
     expect(container.querySelector(".memory-mode-switcher")).toBeNull();
     expect(container.textContent).not.toContain("List scans the timeline");
@@ -1301,7 +1339,7 @@ describe("HomePage current home experience", () => {
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
-  it("generates object groupings from signal materials and top-of-mind evidence", async () => {
+  it("generates object groupings from saved inspiration materials and top-of-mind evidence", async () => {
     const constellationSignals: ApiSavedSignalSearchResult[] = [
       {
         ...sampleSavedSignals[0],
@@ -1325,7 +1363,7 @@ describe("HomePage current home experience", () => {
       {
         ...sampleSavedSignals[0],
         id: "sig-image",
-        textPreview: "Image signal",
+        textPreview: "Image inspiration",
         kind: "image",
         relatedContextTerms: ["studio wall"],
         attachmentSummary: [
@@ -1374,7 +1412,7 @@ describe("HomePage current home experience", () => {
     expect(board?.querySelector(".memory-group-object--pin")?.textContent).toContain("highlighted by me");
     expect(board?.querySelector(".memory-group-object--image")?.textContent).toContain("work i keep circling");
     expect(board?.querySelector(".folder-icon")).not.toBeNull();
-    expect(board?.textContent).toContain("WAKA put these near the post-it");
+    expect(board?.textContent).toContain("These sit near the post-it");
     expect(board?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
     expect(board?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
@@ -1549,7 +1587,7 @@ describe("HomePage current home experience", () => {
     expect(savesPageAfterSearch?.textContent).not.toContain("Synthetic memory note");
   });
 
-  it("opens an in-place saved signal revisit and records a revisit", async () => {
+  it("opens an in-place saved inspiration revisit and records a revisit", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1720,7 +1758,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
   });
 
-  it("shows a newly persisted quick save in the all-signals list", async () => {
+  it("shows a newly persisted quick save in the inspiration drawer list", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -1740,7 +1778,7 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("Fast save without reflective friction");
   });
 
-  it("persists a typed URL as a link attachment and shows it in all signals", async () => {
+  it("persists a typed URL as a link attachment and shows it in the inspiration drawer", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({

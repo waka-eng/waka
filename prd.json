@@ -866,7 +866,7 @@
         "Run web/API typechecks, targeted copy tests, and browser verification of the main user journey"
       ],
       "priority": 48,
-      "passes": false,
+      "passes": true,
       "notes": "Core product sentence: this helps me see what I keep caring about before I can explain it, and helps me revisit/search the inspirations that mattered so they do not disappear."
     }
   ]

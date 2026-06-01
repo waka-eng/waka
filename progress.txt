@@ -47,6 +47,37 @@
 - Opened Memory Drawer groupings support Grid, Vertical Flow, and Horizontal Flow views; Flow mode should use clipped/aspect-ratio stages and transform movement, with draggable comparison windows still layered above the drawer desk.
 - Top of Mind correction should use the wall metaphor: edit/pin the post-it wording or pull it down, persist through `/api/feedback`, and avoid visible true/partly/not-this reaction controls on user-facing note surfaces.
 - Capture UI should call saved things inspirations and avoid internal/clinical terms such as signal, graph, node, memory movement, resonance, and analysis; quick save should feel safe first, with deeper reflection optional.
+- Home user-facing surfaces should sanitize backend-provided Top of Mind, evidence, and action copy before rendering so internal terms such as signal, graph, node, resonance, analysis, and AI do not leak outside admin/debug surfaces.
+
+---
+
+## 2026-06-01 12:35 PDT - US-045
+
+- What was implemented
+  - Removed prominent product-name chrome from the main wall/footer and drawer header, replacing it with quieter inspiration-drawer language.
+  - Replaced user-facing signal/resonance/internal wording across Home, Top of Mind evidence, action recommendations, drawer copy, and English/Korean i18n strings with inspiration/what-hit language.
+  - Added a `userFacingCopy` sanitizer for backend-provided Top of Mind, evidence, and action text before it reaches user-facing Home surfaces.
+  - Added Home/Capture regression coverage for banned internal terms across wall, opened post-it, drawer chrome, capture, and action surfaces.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/CaptureForm.test.ts` passed: 70 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, and saved-inspiration APIs. Verified wall, opened post-it, drawer, action pad, capture entry, banned internal copy absence, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - User-facing Home copy needs a rendering-time sanitizer for model/API text because backend compatibility payloads can still contain internal signal/resonance vocabulary.
+  - Gotchas encountered
+    - Browser mocks for `/api/top-of-mind` must include the legacy `relationshipSignals` and `summary` fields because Home still reads compatibility preview fields even when rendering Top of Mind note surfaces.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 

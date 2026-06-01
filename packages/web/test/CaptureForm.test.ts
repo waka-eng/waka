@@ -190,7 +190,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect deeper");
     expect(container?.textContent?.toLowerCase()).not.toMatch(
-      /\bsignal\b|\bgraph\b|\bnode\b|memory movement|\bresonance\b|\banalysis\b/,
+      /\bsignals?\b|\bmemories\b|\bgraph\b|\bnodes?\b|memory movement|\bresonance\b|\banalysis\b|\bAI\b/,
     );
   });
 
