@@ -1186,10 +1186,10 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
     expect(container.querySelector(".nc-drawer-object")).toBeNull();
-    expect(container.textContent).toContain("Return to what you saved.");
-    expect(container.textContent).toContain("List scans the timeline");
-    expect(container.querySelector(".memory-mode-switcher")?.textContent).toContain("List");
-    expect(container.querySelector(".memory-mode-switcher")?.textContent).toContain("Canvas");
+    expect(container.textContent).toContain("Open the piles WAKA thinks belong together.");
+    expect(container.querySelector(".memory-group-board")).not.toBeNull();
+    expect(container.querySelector(".memory-mode-switcher")).toBeNull();
+    expect(container.textContent).not.toContain("List scans the timeline");
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -1204,7 +1204,7 @@ describe("HomePage current home experience", () => {
     expect(savesPage?.textContent).not.toContain("Other user save should never render");
   });
 
-  it("shows a chronological Memory Drawer list with search secondary", async () => {
+  it("shows generated groupings with a chronological all-inspirations path and search secondary", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1213,10 +1213,15 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const drawer = container.querySelector<HTMLElement>(".signal-revisit-page");
-    const list = drawer?.querySelector<HTMLElement>(".memory-list-mode");
-    expect(list).not.toBeNull();
-    expect(list?.textContent?.indexOf("Architecture essay")).toBeLessThan(
-      list?.textContent?.indexOf("Synthetic memory note") ?? 9999,
+    const board = drawer?.querySelector<HTMLElement>(".memory-group-board");
+    const contents = drawer?.querySelector<HTMLElement>(".memory-group-contents");
+    expect(board).not.toBeNull();
+    expect(board?.textContent).toContain("all saved, newest first");
+    expect(board?.textContent).toContain("highlighted by me");
+    expect(board?.textContent).toContain("work i keep circling");
+    expect(board?.textContent).toContain("These are the saves where you marked the part that hit.");
+    expect(contents?.textContent?.indexOf("Architecture essay")).toBeLessThan(
+      contents?.textContent?.indexOf("Synthetic memory note") ?? 9999,
     );
     expect(drawer?.querySelector(".signal-memory-lenses")).toBeNull();
     expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("search");
@@ -1224,7 +1229,7 @@ describe("HomePage current home experience", () => {
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
-  it("renders a sparse Memory Drawer constellation with different signal materials", async () => {
+  it("generates object groupings from signal materials and top-of-mind evidence", async () => {
     const constellationSignals: ApiSavedSignalSearchResult[] = [
       {
         ...sampleSavedSignals[0],
@@ -1291,41 +1296,69 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 4);
     await waitForTimers(130);
     await flushReactWork();
-    const canvasButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-mode-switcher button")).find(
-      (button) => button.textContent === "Canvas",
-    );
-    await act(async () => {
-      canvasButton?.click();
-    });
 
-    const constellation = container.querySelector<HTMLElement>(".memory-constellation");
-    expect(constellation).not.toBeNull();
-    expect(container.querySelector<HTMLElement>(".memory-canvas-mode")).not.toBeNull();
-    expect(constellation?.querySelector(".memory-constellation-node--note")?.textContent).toContain("scrap");
-    expect(constellation?.querySelector(".memory-constellation-node--link")?.textContent).toContain("example.com");
-    expect(constellation?.querySelector(".memory-constellation-node--image")?.textContent).toContain("image tile");
-    expect(constellation?.querySelector(".memory-constellation-node--mixed")?.textContent).toContain("layered");
-    expect(constellation?.textContent).toContain("both point at the same post-it");
-    expect(constellation?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
-    expect(constellation?.textContent?.toLowerCase()).not.toContain("memory movement");
+    const board = container.querySelector<HTMLElement>(".memory-group-board");
+    expect(board).not.toBeNull();
+    expect(board?.querySelector(".memory-group-object--pin")?.textContent).toContain("highlighted by me");
+    expect(board?.querySelector(".memory-group-object--image")?.textContent).toContain("work i keep circling");
+    expect(board?.querySelector(".folder-icon")).not.toBeNull();
+    expect(board?.textContent).toContain("WAKA put these near the post-it");
+    expect(board?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
+    expect(board?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
-  it("keeps Canvas mode to the canvas without a lower detail panel", async () => {
+  it("allows user-created groupings and renaming or dismissing proposed groupings", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const createButton = container.querySelector<HTMLButtonElement>(".memory-bulletin-object");
+    expect(createButton).not.toBeNull();
+    await act(async () => {
+      createButton?.click();
+    });
+
+    const nameInput = container.querySelector<HTMLInputElement>(".memory-group-name-edit input");
+    expect(nameInput).not.toBeNull();
+    expect(nameInput?.value).toBe("my own pile");
+    await act(async () => {
+      setInputValue(nameInput!, "places pulling me");
+    });
+    expect(nameInput?.value).toBe("places pulling me");
+
+    const proposed = Array.from(container.querySelectorAll<HTMLElement>(".memory-group-object")).find((object) =>
+      object.textContent?.includes("highlighted by me"),
+    );
+    const dismissButton = Array.from(proposed?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
+      (button) => button.textContent === "dismiss",
+    );
+    await act(async () => {
+      dismissButton?.click();
+    });
+    expect(container.querySelector(".memory-group-board")?.textContent).not.toContain("highlighted by me");
+  });
+
+  it("switches grouping contents between newest and strongest relevance", async () => {
     setApiFixtures({
       savedSignals: [
         {
           ...sampleSavedSignals[0],
-          id: "sig-a",
-          textPreview: "A save about public work rooms",
-          relatedContextTerms: ["public work"],
-          attachmentSummary: [],
+          id: "sig-relevant-old",
+          textPreview: "Old highlighted save about bridge rooms",
+          capturedAt: "2026-04-01T12:00:00.000Z",
+          highlightedSnippets: [{ id: "spark-old", text: "bridge rooms", source: "user", confidence: 0.9, isPrimary: true }],
+          signalScores: { resonance: 9, recurrence: 9, agency: 9, identitySignal: 9, decisionRelevance: 9 },
         },
         {
           ...sampleSavedSignals[1],
-          id: "sig-b",
-          textPreview: "A later save about public work peers",
-          relatedContextTerms: ["public work"],
-          attachmentSummary: [],
+          id: "sig-recent-light",
+          textPreview: "Recent lightly relevant save about a room",
+          capturedAt: "2026-05-20T12:00:00.000Z",
+          highlightedSnippets: [{ id: "spark-new", text: "room", source: "user", confidence: 0.8, isPrimary: true }],
+          signalScores: { resonance: 1, recurrence: 1, agency: 1, identitySignal: 1, decisionRelevance: 1 },
         },
       ],
     });
@@ -1334,18 +1367,25 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container);
     await waitForTimers(130);
     await flushReactWork();
-    const canvasButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-mode-switcher button")).find(
-      (button) => button.textContent === "Canvas",
+    const highlightedGroup = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-group-hitarea")).find(
+      (button) => button.textContent?.includes("highlighted by me"),
     );
     await act(async () => {
-      canvasButton?.click();
+      highlightedGroup?.click();
     });
-    expect(container.querySelector(".memory-constellation-line")).not.toBeNull();
-    expect(container.querySelector(".memory-constellation-label")).toBeNull();
-
-    expect(container.querySelector(".memory-relationship-detail")).toBeNull();
-    expect(container.querySelector(".signal-revisit-detail")).toBeNull();
-    expect(createFeedback).not.toHaveBeenCalledWith(expect.objectContaining({ targetType: "signal" }));
+    const contents = container.querySelector<HTMLElement>(".memory-group-contents");
+    expect(contents?.textContent?.indexOf("Recent lightly relevant")).toBeLessThan(
+      contents?.textContent?.indexOf("Old highlighted save") ?? 9999,
+    );
+    const relevanceButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-order-switcher button")).find(
+      (button) => button.textContent === "strongest fit",
+    );
+    await act(async () => {
+      relevanceButton?.click();
+    });
+    expect(contents?.textContent?.indexOf("Old highlighted save")).toBeLessThan(
+      contents?.textContent?.indexOf("Recent lightly relevant") ?? 9999,
+    );
   });
 
   it("searches the current all-inspirations list", async () => {

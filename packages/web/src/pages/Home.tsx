@@ -130,7 +130,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  */
 type InspirationStatus = "saving" | "saved" | "error";
 type HomeMode = "topOfMind" | "memoryDrawer";
-type MemoryDrawerMode = "list" | "canvas";
+type MemoryBrowseOrder = "newest" | "relevance";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "true" | "partly" | "not_true"
@@ -539,6 +539,25 @@ interface MemoryConstellationRelationship {
   targetSignal: ApiSavedSignalSearchResult;
 }
 
+interface MemoryGrouping {
+  id: string;
+  name: string;
+  explanation: string;
+  source: "all" | "proposed" | "user";
+  icon: "folder" | "pin" | "image" | "link" | "note";
+  signals: ApiSavedSignalSearchResult[];
+  terms: string[];
+  x: number;
+  y: number;
+  tilt: number;
+}
+
+interface UserMemoryGrouping {
+  id: string;
+  name: string;
+  signalIds: string[];
+}
+
 function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
   return {
     id: signal.nodeId,
@@ -792,6 +811,186 @@ function buildMemoryConstellationRelationships(
   });
 }
 
+function signalRelevanceScore(signal: ApiSavedSignalSearchResult, terms: string[] = []): number {
+  const scores = signal.signalScores;
+  const haystack = signalTextHaystack(signal);
+  const termBoost = terms.reduce((total, term) => total + (haystack.includes(term.toLowerCase()) ? 2 : 0), 0);
+  return (
+    signal.resonanceScore * 1.6 +
+    scores.recurrence * 1.2 +
+    scores.agency +
+    scores.identitySignal +
+    scores.decisionRelevance * 0.8 +
+    signal.highlightedSnippets.length * 2 +
+    signal.relatedTopOfMindNoteTitles.length * 1.4 +
+    termBoost
+  );
+}
+
+function groupNameFromLanguage(value: string): string {
+  const label = normalizeMeaningLabel(value);
+  if (/room|studio|city|place|where|environment|walk|bridge/.test(label)) return "rooms i keep wanting";
+  if (/people|peer|collaborator|friend|near|with/.test(label)) return "people i want near me";
+  if (/work|build|make|project|craft|public|product/.test(label)) return "work i keep circling";
+  if (/done|reject|anti|bother|tension|fear|argu/.test(label)) return "things i am done with";
+  if (/image|aesthetic|taste|beautiful|visual|style/.test(label)) return "taste with a pulse";
+  if (/question|wonder|unknown|test/.test(label)) return "questions still open";
+  const words = label.split(/\s+/).filter((word) => word.length > 2).slice(0, 4);
+  return words.length > 0 ? words.join(" ") : "signals touching";
+}
+
+function groupingIconForSignals(signals: ApiSavedSignalSearchResult[]): MemoryGrouping["icon"] {
+  if (signals.some((signal) => signalVisualTreatment(signal) === "image")) return "image";
+  if (signals.some((signal) => signalVisualTreatment(signal) === "link")) return "link";
+  if (signals.some((signal) => signal.highlightedSnippets.length > 0)) return "pin";
+  return "folder";
+}
+
+function uniqueSignals(signals: ApiSavedSignalSearchResult[]): ApiSavedSignalSearchResult[] {
+  const seen = new Set<string>();
+  return signals.filter((signal) => {
+    if (seen.has(signal.id)) return false;
+    seen.add(signal.id);
+    return true;
+  });
+}
+
+function sortSignalsForGrouping(
+  signals: ApiSavedSignalSearchResult[],
+  terms: string[],
+  order: MemoryBrowseOrder,
+): ApiSavedSignalSearchResult[] {
+  if (order === "newest") return [...signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
+  return [...signals].sort((a, b) => signalRelevanceScore(b, terms) - signalRelevanceScore(a, terms));
+}
+
+function buildProposedMemoryGroupings(
+  signals: ApiSavedSignalSearchResult[],
+  notes: ApiTopOfMindNoteSurface[],
+  userGroups: UserMemoryGrouping[],
+  renamedGroups: Record<string, string>,
+  dismissedGroupIds: Set<string>,
+): MemoryGrouping[] {
+  const positions = [
+    { x: 42, y: 72, tilt: -2 },
+    { x: 330, y: 42, tilt: 1.5 },
+    { x: 638, y: 88, tilt: -0.8 },
+    { x: 148, y: 315, tilt: 2 },
+    { x: 480, y: 292, tilt: -1.4 },
+    { x: 760, y: 345, tilt: 1.2 },
+  ];
+  const groups: MemoryGrouping[] = [];
+  const addGroup = (group: Omit<MemoryGrouping, "x" | "y" | "tilt">) => {
+    if (group.signals.length === 0 || dismissedGroupIds.has(group.id) || groups.some((existing) => existing.id === group.id)) {
+      return;
+    }
+    const position = positions[groups.length % positions.length];
+    groups.push({
+      ...group,
+      name: renamedGroups[group.id] ?? group.name,
+      signals: uniqueSignals(group.signals),
+      x: position.x,
+      y: position.y,
+      tilt: position.tilt,
+    });
+  };
+
+  addGroup({
+    id: "all",
+    name: "all saved, newest first",
+    explanation: "A clean chronological path when you need the exact thing you saved.",
+    source: "all",
+    icon: "folder",
+    signals,
+    terms: [],
+  });
+
+  for (const userGroup of userGroups) {
+    addGroup({
+      id: userGroup.id,
+      name: userGroup.name,
+      explanation: "A grouping you made, kept beside WAKA's proposed piles.",
+      source: "user",
+      icon: "pin",
+      signals: signals.filter((signal) => userGroup.signalIds.includes(signal.id)),
+      terms: [userGroup.name],
+    });
+  }
+
+  const highlighted = signals.filter((signal) => signal.highlightedSnippets.length > 0);
+  addGroup({
+    id: "highlighted-by-me",
+    name: "highlighted by me",
+    explanation: "These are the saves where you marked the part that hit.",
+    source: "proposed",
+    icon: "pin",
+    signals: highlighted,
+    terms: ["highlighted"],
+  });
+
+  addGroup({
+    id: "recently-saved",
+    name: "recently saved",
+    explanation: "The newest pieces stay close to the front of the drawer.",
+    source: "proposed",
+    icon: "note",
+    signals: signals.slice(0, Math.min(6, signals.length)),
+    terms: ["recent"],
+  });
+
+  for (const note of notes.slice(0, 4)) {
+    const related = signals.filter((signal) => note.relatedSignalIds.includes(signal.id));
+    if (related.length === 0) continue;
+    const language = note.ambientSignal || note.matchedEnvironment || note.title;
+    addGroup({
+      id: `tom-${note.id}`,
+      name: groupNameFromLanguage(language),
+      explanation: `WAKA put these near the post-it "${shortText(note.title, 58)}".`,
+      source: "proposed",
+      icon: groupingIconForSignals(related),
+      signals: related,
+      terms: [language, note.title].map(normalizeMeaningLabel),
+    });
+  }
+
+  const byTerm = new Map<string, ApiSavedSignalSearchResult[]>();
+  for (const signal of signals) {
+    for (const rawTerm of [...signal.relatedContextTerms, ...signal.relatedTopOfMindNoteTitles]) {
+      const term = normalizeMeaningLabel(rawTerm);
+      if (!term) continue;
+      byTerm.set(term, [...(byTerm.get(term) ?? []), signal]);
+    }
+  }
+  [...byTerm.entries()]
+    .filter(([, termSignals]) => termSignals.length >= 2)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 4)
+    .forEach(([term, termSignals]) => {
+      addGroup({
+        id: `term-${term.replace(/[^a-z0-9]+/g, "-")}`,
+        name: groupNameFromLanguage(term),
+        explanation: "These saves keep sharing language, highlights, or Top of Mind evidence.",
+        source: "proposed",
+        icon: groupingIconForSignals(termSignals),
+        signals: termSignals,
+        terms: [term],
+      });
+    });
+
+  const recurring = signals.filter((signal) => signal.signalScores.recurrence >= 5);
+  addGroup({
+    id: "keeps-returning",
+    name: "things that keep returning",
+    explanation: "Recurrence is high here, so WAKA is keeping the pattern visible.",
+    source: "proposed",
+    icon: groupingIconForSignals(recurring),
+    signals: recurring,
+    terms: ["recurrence"],
+  });
+
+  return groups.slice(0, 8);
+}
+
 const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "top of mind",
@@ -1000,7 +1199,14 @@ export function HomePage(): JSX.Element {
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
-  const [memoryDrawerMode, setMemoryDrawerMode] = useState<MemoryDrawerMode>("list");
+  const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string>("all");
+  const [memoryBrowseOrder, setMemoryBrowseOrder] = useState<MemoryBrowseOrder>("newest");
+  const [userMemoryGroups, setUserMemoryGroups] = useState<UserMemoryGrouping[]>([]);
+  const [renamedMemoryGroups, setRenamedMemoryGroups] = useState<Record<string, string>>({});
+  const [dismissedMemoryGroupIds, setDismissedMemoryGroupIds] = useState<Set<string>>(() => new Set());
+  const [keptMemoryGroupIds, setKeptMemoryGroupIds] = useState<Set<string>>(() => new Set());
+  const [memoryGroupDrags, setMemoryGroupDrags] = useState<Record<string, { x: number; y: number }>>({});
+  const [draggingMemoryGroupId, setDraggingMemoryGroupId] = useState<string | null>(null);
   const [captureFocused, setCaptureFocused] = useState(false);
   const [captureSaveFlash, setCaptureSaveFlash] = useState(false);
   const [captureView] = useState<CaptureView>("note");
@@ -1070,7 +1276,9 @@ export function HomePage(): JSX.Element {
   const topOfMindRequestIdRef = useRef(0);
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const actionDragStartRef = useRef<{ x: number; y: number; baseX: number; baseY: number } | null>(null);
+  const memoryGroupDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
+  const memoryGroupDragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
 
   const handleLocaleChange = useCallback(
@@ -1619,25 +1827,22 @@ export function HomePage(): JSX.Element {
     return signalTextHaystack(signal).includes(savedSignalQuery);
   });
   const inPlaceSignals = [...searchedSignals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
-  const constellationNodes: MemoryConstellationNode[] = inPlaceSignals.slice(0, 8).map((signal, index) => {
-    const positions = [
-      { x: 70, y: 92 },
-      { x: 650, y: 210 },
-      { x: 405, y: 18 },
-      { x: 162, y: 430 },
-      { x: 720, y: 468 },
-      { x: 782, y: 68 },
-      { x: 430, y: 432 },
-      { x: 840, y: 332 },
-    ];
-    const position = positions[index] ?? { x: 90 + (index % 3) * 330, y: 80 + Math.floor(index / 3) * 220 };
-    return {
-      signal,
-      visual: signalVisualTreatment(signal),
-      x: position.x,
-      y: position.y,
-    };
-  });
+  const memoryGroupings = useMemo(
+    () =>
+      buildProposedMemoryGroupings(
+        inPlaceSignals,
+        topOfMindNotes,
+        userMemoryGroups,
+        renamedMemoryGroups,
+        dismissedMemoryGroupIds,
+      ),
+    [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, topOfMindNotes, userMemoryGroups],
+  );
+  const selectedMemoryGroup =
+    memoryGroupings.find((group) => group.id === selectedMemoryGroupId) ?? memoryGroupings[0] ?? null;
+  const selectedMemoryGroupSignals = selectedMemoryGroup
+    ? sortSignalsForGrouping(selectedMemoryGroup.signals, selectedMemoryGroup.terms, memoryBrowseOrder)
+    : [];
   const constellationRelationships = buildMemoryConstellationRelationships(inPlaceSignals, topOfMindNotes);
   const selectedMemoryRelationship = constellationRelationships[0] ?? null;
 
@@ -1655,6 +1860,14 @@ export function HomePage(): JSX.Element {
       setSelectedSavedSignalId(null);
     }
   }, [homeMode, inPlaceSignals, selectedSavedSignalId]);
+
+  useEffect(() => {
+    if (homeMode !== "memoryDrawer") return;
+    if (memoryGroupings.length === 0) return;
+    if (!memoryGroupings.some((group) => group.id === selectedMemoryGroupId)) {
+      setSelectedMemoryGroupId(memoryGroupings[0].id);
+    }
+  }, [homeMode, memoryGroupings, selectedMemoryGroupId]);
 
   useEffect(() => {
     if (!user || homeMode !== "memoryDrawer") return;
@@ -1986,6 +2199,103 @@ export function HomePage(): JSX.Element {
     return "layered save";
   };
 
+  const createUserMemoryGroup = (): void => {
+    const id = `user-${Date.now()}`;
+    const signalIds = inPlaceSignals.slice(0, 4).map((signal) => signal.id);
+    setUserMemoryGroups((current) => [
+      ...current,
+      {
+        id,
+        name: "my own pile",
+        signalIds,
+      },
+    ]);
+    setSelectedMemoryGroupId(id);
+  };
+
+  const renameMemoryGroup = (groupId: string, name: string): void => {
+    const nextName = name.trimStart();
+    setRenamedMemoryGroups((current) => ({ ...current, [groupId]: nextName }));
+    setUserMemoryGroups((current) =>
+      current.map((group) => (group.id === groupId ? { ...group, name: nextName || group.name } : group)),
+    );
+  };
+
+  const keepMemoryGroup = (groupId: string): void => {
+    setKeptMemoryGroupIds((current) => new Set([...current, groupId]));
+  };
+
+  const dismissMemoryGroup = (groupId: string): void => {
+    setDismissedMemoryGroupIds((current) => new Set([...current, groupId]));
+    if (selectedMemoryGroupId === groupId) setSelectedMemoryGroupId("all");
+  };
+
+  const renderMemoryGroupObject = (group: MemoryGrouping): JSX.Element => {
+    const selected = selectedMemoryGroup?.id === group.id;
+    const kept = keptMemoryGroupIds.has(group.id);
+    return (
+      <article
+        key={group.id}
+        className={`memory-group-object mac-folder memory-group-object--${group.icon}${
+          selected ? " memory-group-object--selected selected" : ""
+        }${draggingMemoryGroupId === group.id ? " memory-group-object--dragging" : ""}`}
+        style={{
+          ["--x" as string]: `${group.x + (memoryGroupDrags[group.id]?.x ?? 0)}px`,
+          ["--y" as string]: `${group.y + (memoryGroupDrags[group.id]?.y ?? 0)}px`,
+          ["--tilt" as string]: `${group.tilt}deg`,
+        }}
+      >
+        <button
+          type="button"
+          className="memory-group-hitarea"
+          aria-pressed={selected}
+          onPointerDown={(event) => {
+            const drag = memoryGroupDrags[group.id] ?? { x: 0, y: 0 };
+            memoryGroupDragStartRef.current = {
+              id: group.id,
+              x: event.clientX,
+              y: event.clientY,
+              baseX: drag.x,
+              baseY: drag.y,
+            };
+            memoryGroupDragMovedRef.current = false;
+            setDraggingMemoryGroupId(group.id);
+          }}
+          onClick={() => {
+            if (memoryGroupDragMovedRef.current) {
+              memoryGroupDragMovedRef.current = false;
+              return;
+            }
+            setSelectedMemoryGroupId(group.id);
+            setSelectedSavedSignalId(null);
+            setSavedSignalDetail(null);
+          }}
+        >
+          <span className="mac-folder-back" aria-hidden="true" />
+          <span className="mac-folder-front" aria-hidden="true" />
+          <span className="folder-icon" data-icon={group.icon} aria-hidden="true">
+            {group.icon === "pin" ? "*" : group.icon === "image" ? "I" : group.icon === "link" ? "L" : "F"}
+          </span>
+          <strong>{group.name}</strong>
+          <small>{group.signals.length} saved</small>
+        </button>
+        <p>{group.explanation}</p>
+        <div className="memory-group-actions">
+          {group.source === "proposed" ? (
+            <>
+              <button type="button" onClick={() => keepMemoryGroup(group.id)}>
+                {kept ? "kept" : "keep"}
+              </button>
+              <button type="button" onClick={() => dismissMemoryGroup(group.id)}>
+                dismiss
+              </button>
+            </>
+          ) : null}
+        </div>
+      </article>
+    );
+  };
+
   const renderMemorySignalCard = (
     signal: ApiSavedSignalSearchResult,
     options: { node?: MemoryConstellationNode; compact?: boolean } = {},
@@ -2141,32 +2451,6 @@ export function HomePage(): JSX.Element {
     );
   };
 
-  const renderConstellationNode = (node: MemoryConstellationNode): JSX.Element =>
-    renderMemorySignalCard(node.signal, { node, compact: true });
-
-  const renderConstellationLine = (relationship: MemoryConstellationRelationship): JSX.Element | null => {
-    const source = constellationNodes.find((node) => node.signal.id === relationship.sourceId);
-    const target = constellationNodes.find((node) => node.signal.id === relationship.targetId);
-    if (!source || !target) return null;
-    const midX = (source.x + target.x) / 2;
-    const midY = (source.y + target.y) / 2;
-    const sourceCenterX = source.x + 145;
-    const sourceCenterY = source.y + 80;
-    const targetCenterX = target.x + 135;
-    const targetCenterY = target.y + 78;
-    const controlX = midX - 70;
-    const controlY = midY + 118;
-    return (
-      <g key={relationship.id}>
-        <title>{relationship.label}: {relationship.reason}</title>
-        <path
-          d={`M ${sourceCenterX} ${sourceCenterY} Q ${controlX} ${controlY} ${targetCenterX} ${targetCenterY}`}
-          className="memory-constellation-line"
-        />
-      </g>
-    );
-  };
-
   const relatedMeaningLabels = (signal: HomeThoughtCard): string[] => {
     if (!topOfMind) return [];
     const labels = new Set<string>();
@@ -2240,6 +2524,39 @@ export function HomePage(): JSX.Element {
       window.removeEventListener("pointercancel", handlePointerUp);
     };
   }, [actionDragging]);
+
+  useEffect(() => {
+    if (draggingMemoryGroupId === null) return undefined;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = memoryGroupDragStartRef.current;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) memoryGroupDragMovedRef.current = true;
+      setMemoryGroupDrags((current) => ({
+        ...current,
+        [start.id]: {
+          x: start.baseX + dx,
+          y: start.baseY + dy,
+        },
+      }));
+    };
+
+    const handlePointerUp = () => {
+      memoryGroupDragStartRef.current = null;
+      setDraggingMemoryGroupId(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggingMemoryGroupId]);
 
   const onNotePointerDown = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
@@ -2654,8 +2971,8 @@ export function HomePage(): JSX.Element {
             <header className="signal-revisit-header">
               <div>
                 <span>{PRODUCT_SPACES.memoryDrawer}</span>
-                <h2>Return to what you saved.</h2>
-                <p>List scans the timeline. Canvas keeps the scraps near the moments they seem to touch.</p>
+                <h2>Open the piles WAKA thinks belong together.</h2>
+                <p>Raw saves stay intact. These groupings are a removable layer above them.</p>
               </div>
               <button
                 type="button"
@@ -2664,22 +2981,6 @@ export function HomePage(): JSX.Element {
               >
                 back to wall
               </button>
-              <div className="memory-mode-switcher" role="group" aria-label="memory drawer mode">
-                {[
-                  { id: "list" as const, label: "List" },
-                  { id: "canvas" as const, label: "Canvas" },
-                ].map((mode) => (
-                  <button
-                    key={mode.id}
-                    type="button"
-                    className={memoryDrawerMode === mode.id ? "is-active" : ""}
-                    aria-pressed={memoryDrawerMode === mode.id}
-                    onClick={() => setMemoryDrawerMode(mode.id)}
-                  >
-                    {mode.label}
-                  </button>
-                ))}
-              </div>
               <details className="signal-revisit-search">
                 <summary>search</summary>
                 <label>
@@ -2698,33 +2999,63 @@ export function HomePage(): JSX.Element {
               </details>
             </header>
 
-            <div className="memory-drawer-modes">
-              {memoryDrawerMode === "canvas" ? (
-                <section className="memory-constellation memory-canvas-mode" aria-label="memory canvas">
-                  <div className="memory-constellation-board">
-                    <svg className="memory-constellation-lines" aria-hidden="true" viewBox="0 0 1040 650" preserveAspectRatio="xMinYMin meet">
-                      {constellationRelationships.map(renderConstellationLine)}
-                    </svg>
-                    {constellationNodes.map(renderConstellationNode)}
+            <div className="memory-drawer-desk">
+              <section className="memory-group-board" aria-label="proposed inspiration groupings">
+                {memoryGroupings.map(renderMemoryGroupObject)}
+                <button
+                  type="button"
+                  className="memory-bulletin-object"
+                  onClick={createUserMemoryGroup}
+                >
+                  <span>new pile</span>
+                  <strong>make my own</strong>
+                </button>
+                {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+                {savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                  <p className="memory-relationship-empty">{copy.loadingSaves}</p>
+                ) : null}
+                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                  <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+                ) : null}
+              </section>
+
+              <section className="memory-group-contents" aria-label="grouping contents">
+                <header>
+                  <div>
+                    <span>{selectedMemoryGroup?.source === "all" ? "chronological path" : "selected grouping"}</span>
+                    <label className="memory-group-name-edit">
+                      <span>name</span>
+                      <input
+                        value={selectedMemoryGroup?.name ?? ""}
+                        onChange={(event) => {
+                          if (selectedMemoryGroup) renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
+                        }}
+                        disabled={!selectedMemoryGroup}
+                      />
+                    </label>
+                    {selectedMemoryGroup ? <p>{selectedMemoryGroup.explanation}</p> : null}
                   </div>
-                  {!selectedMemoryRelationship ? (
-                    <p className="memory-relationship-empty">
-                      Save a few more signals and WAKA will draw a few gentle lines here.
-                    </p>
-                  ) : null}
-                </section>
-              ) : (
-                <section className="memory-list-mode" aria-label="memory list">
-                  {savedSignalsError ? <p>{savedSignalsError}</p> : null}
-                  {savedSignalsLoading && inPlaceSignals.length === 0 ? <p>{copy.loadingSaves}</p> : null}
-                  {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                    <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-                  ) : null}
-                  <div className="memory-list-stack">
-                    {inPlaceSignals.map((signal) => renderMemorySignalCard(signal))}
+                  <div className="memory-order-switcher" role="group" aria-label="browse order">
+                    {[
+                      { id: "newest" as const, label: "newest first" },
+                      { id: "relevance" as const, label: "strongest fit" },
+                    ].map((order) => (
+                      <button
+                        key={order.id}
+                        type="button"
+                        className={memoryBrowseOrder === order.id ? "is-active" : ""}
+                        aria-pressed={memoryBrowseOrder === order.id}
+                        onClick={() => setMemoryBrowseOrder(order.id)}
+                      >
+                        {order.label}
+                      </button>
+                    ))}
                   </div>
-                </section>
-              )}
+                </header>
+                <div className="memory-list-stack">
+                  {selectedMemoryGroupSignals.map((signal) => renderMemorySignalCard(signal))}
+                </div>
+              </section>
             </div>
           </section>
         )}

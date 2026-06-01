@@ -42,6 +42,33 @@
 - Top of Mind action checklist items should be generated from post-it evidence, ambient/environment fields, and ambition dimension. Reject generic reflective homework such as "do one tiny test", "explore", "journal", "learn more", or actions that simply repeat the post-it title.
 - Action recommendation state currently persists through `feedback` rows with `source: "action_recommendation"` and metadata keyed to the source top-of-mind note; use `/api/action-recommendations` rather than frontend-only action helpers.
 - Home primary navigation should be object-led inside the wall: no persistent topbar, date display, or mode tabs; enter Memory Drawer through the physical drawer object and keep language switching as a quiet footer control.
+- Memory Drawer default landing should be an object-led grouping desk: WAKA-proposed and user-created group objects sit above immutable raw saved signals, with chronological all-saves kept as a clean path and search as a secondary command.
+
+---
+
+## 2026-06-01 11:31 PDT - US-039
+
+- What was implemented
+  - Rebuilt the Memory Drawer landing as a drawer-desk of tactile grouping objects, including front/back folder styling, category icons, selected state, absolute board positioning, and a bulletin object for creating a user grouping.
+  - Added deterministic WAKA-proposed groupings from saved signal highlights, recent saves, recurrence, Top of Mind evidence, context terms, and source/material signals while keeping raw saved inspiration cards as the contents.
+  - Added in-place grouping contents with newest-first and strongest-fit browse orders, quiet grouping explanations, rename support, and keep/dismiss controls for proposed groupings.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 45 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and action recommendations APIs. Verified generated grouping objects, draggable desktop folder behavior, no old List/Canvas landing copy, grouped contents preserving raw saves, and viewport fit.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer should now treat generated organization as a removable layer above immutable saved signals, with object-led grouping navigation before any list/search structure.
+  - Gotchas encountered
+    - The saved signals fetch is delayed after opening Memory Drawer, so browser verification needs to wait briefly for `/api/signals` before asserting highlight- and Top-of-Mind-derived groups.
+  - Useful context
+    - Vite served browser verification at `http://127.0.0.1:5173/`.
 
 ---
 
