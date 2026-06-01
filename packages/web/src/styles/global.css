@@ -1588,6 +1588,250 @@
   margin-top: 28px;
 }
 
+.memory-constellation {
+  margin: 22px 0;
+  padding: 18px;
+  border: 1px solid rgba(79, 65, 43, 0.16);
+  background: rgba(255, 252, 242, 0.58);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.42);
+}
+
+.memory-constellation > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+
+.memory-constellation > header span,
+.memory-relationship-detail header span,
+.memory-relationship-sources span,
+.memory-relationship-correction span,
+.memory-relationship-feedback-status,
+.memory-relationship-empty {
+  color: rgba(70, 58, 42, 0.58);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.memory-constellation h3,
+.memory-relationship-detail h3 {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: 0;
+  margin: 4px 0 0;
+}
+
+.memory-constellation h3 {
+  font-size: clamp(25px, 4vw, 42px);
+}
+
+.memory-constellation > header p,
+.memory-relationship-detail p {
+  color: rgba(59, 49, 35, 0.68);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 420px;
+}
+
+.memory-constellation-board {
+  background:
+    linear-gradient(rgba(87, 72, 48, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 72, 48, 0.04) 1px, transparent 1px),
+    rgba(252, 247, 233, 0.72);
+  background-size: 28px 28px;
+  border: 1px solid rgba(72, 58, 40, 0.13);
+  min-height: 430px;
+  overflow: hidden;
+  position: relative;
+}
+
+.memory-constellation-lines {
+  height: 100%;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+}
+
+.memory-constellation-line {
+  stroke: rgba(99, 82, 52, 0.34);
+  stroke-dasharray: 7 8;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.memory-constellation-label {
+  background: rgba(246, 229, 164, 0.88);
+  border: 1px solid rgba(82, 65, 43, 0.18);
+  box-shadow: 0 8px 18px rgba(82, 66, 43, 0.09);
+  color: rgba(62, 49, 31, 0.86);
+  cursor: pointer;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.1;
+  min-height: 34px;
+  padding: 5px 8px;
+  pointer-events: auto;
+  text-align: center;
+  width: 100%;
+}
+
+.memory-constellation-node {
+  border: 1px solid rgba(62, 51, 35, 0.16);
+  box-shadow: 0 16px 30px rgba(70, 57, 39, 0.12);
+  color: rgba(54, 45, 32, 0.9);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  left: var(--x);
+  min-height: 112px;
+  position: absolute;
+  text-align: left;
+  top: var(--y);
+  transform: translate(-50%, -50%) rotate(-1deg);
+  width: 180px;
+}
+
+.memory-constellation-node--selected {
+  outline: 2px solid rgba(80, 118, 111, 0.58);
+  outline-offset: 3px;
+}
+
+.memory-constellation-node--note {
+  background: #f5e9bd;
+  font-family: var(--font-serif);
+  padding: 15px;
+}
+
+.memory-constellation-node--link {
+  background: #e5edf0;
+  border-left: 8px solid rgba(78, 118, 128, 0.38);
+  padding: 13px;
+}
+
+.memory-constellation-node--image {
+  background: #f7f2e8;
+  border: 8px solid #fffaf0;
+  min-height: 138px;
+  padding: 12px;
+  transform: translate(-50%, -50%) rotate(1.2deg);
+}
+
+.memory-constellation-node--image::before {
+  background: linear-gradient(135deg, rgba(105, 127, 111, 0.42), rgba(196, 154, 109, 0.3));
+  content: "";
+  display: block;
+  margin-bottom: 4px;
+  min-height: 42px;
+}
+
+.memory-constellation-node--mixed {
+  background: #ead8ce;
+  padding: 15px;
+  transform: translate(-50%, -50%) rotate(1deg);
+}
+
+.memory-constellation-node--mixed::after {
+  background: rgba(230, 222, 196, 0.84);
+  border: 1px solid rgba(62, 51, 35, 0.12);
+  content: "";
+  inset: 10px -8px -8px 12px;
+  position: absolute;
+  z-index: -1;
+}
+
+.memory-constellation-node-kind {
+  color: rgba(55, 47, 35, 0.56);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.memory-constellation-node strong {
+  font-size: 16px;
+  letter-spacing: 0;
+  line-height: 1.16;
+}
+
+.memory-constellation-node blockquote {
+  border-left: 2px solid rgba(70, 58, 40, 0.22);
+  color: rgba(59, 49, 35, 0.68);
+  font-size: 13px;
+  line-height: 1.25;
+  margin: 0;
+  padding-left: 10px;
+}
+
+.memory-relationship-detail {
+  background: rgba(255, 250, 235, 0.86);
+  border: 1px solid rgba(72, 58, 40, 0.14);
+  margin-top: 14px;
+  padding: 16px;
+}
+
+.memory-relationship-sources {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 14px 0;
+}
+
+.memory-relationship-sources section {
+  background: rgba(255, 255, 255, 0.46);
+  border: 1px solid rgba(72, 58, 40, 0.11);
+  padding: 12px;
+}
+
+.memory-relationship-sources blockquote {
+  color: rgba(53, 44, 32, 0.78);
+  font-size: 14px;
+  line-height: 1.35;
+  margin: 6px 0 0;
+}
+
+.memory-relationship-correction {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.memory-relationship-correction input {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(72, 58, 40, 0.18);
+  color: var(--ink);
+  min-height: 38px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.memory-relationship-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-relationship-feedback button {
+  background: rgba(250, 239, 199, 0.7);
+  border: 1px solid rgba(72, 58, 40, 0.18);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 8px 11px;
+}
+
+.memory-relationship-feedback-status,
+.memory-relationship-empty {
+  margin-top: 10px;
+}
+
 .signal-memory-lenses {
   display: flex;
   flex-wrap: wrap;
@@ -1827,6 +2071,41 @@
   }
 
   .signal-revisit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-constellation > header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .memory-constellation-board {
+    display: grid;
+    gap: 12px;
+    min-height: auto;
+    overflow: visible;
+    padding: 12px;
+  }
+
+  .memory-constellation-lines {
+    display: none;
+  }
+
+  .memory-constellation-node {
+    left: auto;
+    min-height: 0;
+    position: relative;
+    top: auto;
+    transform: none;
+    width: 100%;
+  }
+
+  .memory-constellation-node--image,
+  .memory-constellation-node--mixed {
+    transform: none;
+  }
+
+  .memory-relationship-sources {
     grid-template-columns: 1fr;
   }
 

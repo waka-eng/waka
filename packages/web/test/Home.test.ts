@@ -1053,6 +1053,137 @@ describe("HomePage current home experience", () => {
     expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("advanced search");
   });
 
+  it("renders a sparse Memory Drawer constellation with different signal materials", async () => {
+    const constellationSignals: ApiSavedSignalSearchResult[] = [
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-note",
+        textPreview: "Handwritten thought about rooms where making feels public",
+        kind: "note",
+        relatedContextTerms: ["public making rooms"],
+        relatedTopOfMindNoteTitles: ["public before perfect"],
+        attachmentSummary: [],
+      },
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-link",
+        textPreview: "Essay link about people who build in public",
+        kind: "link",
+        relatedContextTerms: ["public making rooms"],
+        attachmentSummary: [
+          { id: "att-link", type: "link", label: "https://example.com/public-building" },
+        ],
+      },
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-image",
+        textPreview: "Image signal",
+        kind: "image",
+        relatedContextTerms: ["studio wall"],
+        attachmentSummary: [
+          { id: "att-image", type: "image", label: "studio-wall.png" },
+        ],
+      },
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-mixed",
+        textPreview: "Mixed save with a note and a link about collaborators",
+        kind: "mixed",
+        relatedContextTerms: ["collaborators"],
+        attachmentSummary: [
+          { id: "att-mixed-link", type: "link", label: "https://example.com/collab" },
+          { id: "att-mixed-file", type: "file", label: "notes.pdf" },
+        ],
+      },
+    ];
+    setApiFixtures({
+      inspirations: constellationSignals.map((signal) => ({
+        ...sampleInspirations[0],
+        id: signal.id,
+        text: signal.textPreview,
+        kind: signal.kind,
+        createdAt: signal.capturedAt,
+        updatedAt: signal.updatedAt,
+      })),
+      savedSignals: constellationSignals,
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          relatedSignalIds: ["sig-note", "sig-link"],
+          evidencePreviews: [],
+          relatedSignals: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container, 4);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const constellation = container.querySelector<HTMLElement>(".memory-constellation");
+    expect(constellation).not.toBeNull();
+    expect(constellation?.textContent).toContain("relationship constellation");
+    expect(constellation?.querySelector(".memory-constellation-node--note")?.textContent).toContain("scrap");
+    expect(constellation?.querySelector(".memory-constellation-node--link")?.textContent).toContain("example.com");
+    expect(constellation?.querySelector(".memory-constellation-node--image")?.textContent).toContain("photo");
+    expect(constellation?.querySelector(".memory-constellation-node--mixed")?.textContent).toContain("layered");
+    expect(constellation?.textContent).toContain("both point at the same post-it");
+    expect(constellation?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
+  });
+
+  it("opens relationship explanations and records relationship feedback", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          id: "sig-a",
+          textPreview: "A save about public work rooms",
+          relatedContextTerms: ["public work"],
+          attachmentSummary: [],
+        },
+        {
+          ...sampleSavedSignals[1],
+          id: "sig-b",
+          textPreview: "A later save about public work peers",
+          relatedContextTerms: ["public work"],
+          attachmentSummary: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    const relationshipLabel = container.querySelector<HTMLButtonElement>(".memory-constellation-label");
+    expect(relationshipLabel).not.toBeNull();
+    await act(async () => {
+      relationshipLabel?.click();
+    });
+    const correction = container.querySelector<HTMLInputElement>(".memory-relationship-correction input");
+    expect(correction).not.toBeNull();
+    await act(async () => {
+      setInputValue(correction!, "both want public rooms");
+    });
+    const betterLabel = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-relationship-feedback button")).find(
+      (button) => button.textContent === "better label",
+    );
+    await act(async () => {
+      betterLabel?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".memory-relationship-detail")?.textContent).toContain("why these sit near each other");
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "sig-a",
+      value: "partly",
+      correctionText: expect.stringContaining("correction=both want public rooms"),
+    });
+    expect(container.textContent).toContain("Saved: better label");
+  });
+
   it("searches the current all-inspirations list", async () => {
     setApiFixtures();
     const container = await renderHomePage();

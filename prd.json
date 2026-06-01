@@ -595,6 +595,47 @@
       "priority": 35,
       "passes": true,
       "notes": "Product correction: first-person notes like \"I need rooms where...\" and \"I want peers who...\" sound unnatural when forced. Top of Mind should read like a sticky note from the user's inner weather: \"people who make courage normal\", \"not another impressive path\", \"softness without losing intensity\", \"what does this envy know?\", \"make the thing before explaining it\". The post-it should feel compressed, specific, replaceable, and ambition-relevant without sounding like a generated affirmation."
+    },
+    {
+      "id": "US-033",
+      "title": "Add Memory Drawer relationship constellation",
+      "description": "As a user, I want the Memory Drawer to show how saved inspirations are secretly talking to each other, with distinct visual forms for notes, links, images, and other signal types.",
+      "acceptanceCriteria": [
+        "Add a Memory Drawer constellation mode or section that visually connects related saved signals instead of presenting only a linear list/search experience",
+        "Represent different saved signal input types with distinct paper-like visual treatments: typed notes as small handwritten scraps, links as quote/link cards with source/hostname, images as photo-like tiles, mixed/file signals as layered scraps",
+        "Use existing signal kind, attachments, highlighted snippets, and saved-signal detail data to decide each visual treatment; do not make every inspiration look like the same card",
+        "Draw soft relationship lines or arrows between related signals using existing meaning edges, related context terms, related Top of Mind notes, or bounded relationship synthesis where available",
+        "Relationship labels must use post-it thought language, not graph/admin language; examples include \"same room, different mask\", \"this came back later\", \"the envy points here\", \"old self arguing with new self\", or \"both want the same people\"",
+        "Clicking a relationship should open a calm explanation of why those memories are connected, including the two or more source inspirations, highlighted parts, and the relationship label",
+        "Allow lightweight user feedback on a relationship: true, not connected, better label; corrections should feed relationship quality or future synthesis where possible",
+        "Keep the constellation emotionally readable and sparse on desktop and mobile; avoid dense network graph aesthetics, node jargon, force-directed admin visuals, overlapping text, or tiny unreadable labels",
+        "Keep search/list as secondary support inside Memory Drawer, not the primary emotional posture",
+        "Add targeted web tests proving typed note, link, image, and mixed signal visuals render differently, relationship labels render without graph terminology, and relationship feedback can be submitted",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification of the Memory Drawer constellation on desktop and mobile"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": "Product direction: Memory Drawer should become a constellation of saved moments, like a quote card connected by a soft arrow to a post-it that names the relationship. This is not an admin graph. It should feel like the user's saved notes, links, images, and screenshots are starting to speak to each other. Different input types should look materially different so a typed thought, a link, and an image are emotionally legible at a glance."
+    },
+    {
+      "id": "US-034",
+      "title": "Make post-it thought language interpretable",
+      "description": "As a user, I want Top of Mind post-its to stay natural and quick-jotted without becoming overly short slogans that no longer explain my ambition.",
+      "acceptanceCriteria": [
+        "Update Top of Mind generation and fallback rules so post-it thought language is compressed but interpretable, not short at all costs",
+        "Primary post-it text should usually be 6-14 words; allow shorter only when the phrase is still concretely meaningful",
+        "Avoid ultra-short slogan outputs such as \"public before perfect\", \"taste as default\", \"test it outside\", or \"courage normal\" when they do not carry enough personal meaning",
+        "Each post-it should include or imply a concrete ambition object such as people, room, city, work, path, taste, life, self, standard, or experiment",
+        "Each post-it should imply a reason, contrast, or tension, not only a vibe or abstract value",
+        "Keep the post-it voice natural: fragments, imperatives, questions, and tensions are allowed, but avoid forced starts like \"I want\", \"I need\", and \"I am done with\" unless genuinely natural",
+        "Keep banning outside diagnostic voice such as \"you seem\", \"you may\", \"this person\", \"WAKA thinks\", and generic AI summary language",
+        "Replace deterministic examples with more interpretable phrases such as \"make the thing before explaining it\", \"people who make courage feel normal\", \"a room where unfinished ambition is allowed\", \"stop mistaking safety for clarity\", \"not another impressive path that feels dead\", or \"find people who make building feel less lonely\"",
+        "Update tests so slogan-like, too-short, or vague post-its fail while natural 6-14 word private notes pass",
+        "Run API/web typechecks, targeted Top of Mind generation tests, targeted Home tests, and browser verification of the Home Top of Mind path"
+      ],
+      "priority": 37,
+      "passes": false,
+      "notes": "Product correction after US-032: the app overcorrected from forced first-person sentences into phrases that can be too short to be useful. The target is not slogans. A good post-it should be short enough to feel quickly jotted, but complete enough to help the user recognize themself."
     }
   ]
 }

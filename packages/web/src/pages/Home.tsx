@@ -136,6 +136,8 @@ type MemoryMovementLabel =
   | "fading"
   | "tension"
   | "needs testing";
+type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
+type MemoryRelationshipFeedbackAction = "true" | "not_connected" | "better_label";
 
 const TOP_OF_MIND_NOTE_LIMIT = 5;
 
@@ -478,6 +480,25 @@ interface HomeThoughtCard {
   }>;
 }
 
+interface MemoryConstellationNode {
+  signal: ApiSavedSignalSearchResult;
+  visual: MemoryConstellationVisual;
+  x: number;
+  y: number;
+}
+
+interface MemoryConstellationRelationship {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  label: string;
+  reason: string;
+  sourceTerms: string[];
+  targetTerms: string[];
+  sourceSignal: ApiSavedSignalSearchResult;
+  targetSignal: ApiSavedSignalSearchResult;
+}
+
 function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
   return {
     id: signal.nodeId,
@@ -646,6 +667,120 @@ function memoryDrawerSectionDescription(section: MemoryDrawerLens): string {
   if (section === "keeps_returning") return "patterns that keep writing their way back to the five post-its";
   if (section === "tensions") return "live contradictions WAKA should not smooth away";
   return "everything in the drawer";
+}
+
+function signalVisualTreatment(signal: ApiSavedSignalSearchResult): MemoryConstellationVisual {
+  const attachmentTypes = new Set(signal.attachmentSummary.map((attachment) => attachment.type));
+  if (signal.kind === "image" || attachmentTypes.has("image")) return "image";
+  if (
+    signal.kind === "mixed" ||
+    attachmentTypes.size > 1 ||
+    signal.attachmentSummary.length > 1 ||
+    attachmentTypes.has("file")
+  ) {
+    return "mixed";
+  }
+  if (signal.kind === "link" || attachmentTypes.has("link")) return "link";
+  return "note";
+}
+
+function signalSourceLabel(signal: ApiSavedSignalSearchResult): string | null {
+  const linkAttachment = signal.attachmentSummary.find((attachment) => attachment.type === "link");
+  if (!linkAttachment) return null;
+  const label = linkAttachment.label.trim();
+  if (!label) return null;
+  try {
+    return new URL(label).hostname.replace(/^www\./, "");
+  } catch {
+    return label.replace(/^https?:\/\//, "").split(/[/?#]/)[0].replace(/^www\./, "");
+  }
+}
+
+function relationshipTerms(signal: ApiSavedSignalSearchResult): string[] {
+  return [
+    ...signal.relatedTopOfMindNoteTitles,
+    ...signal.relatedContextTerms,
+    ...signal.relevanceReasons,
+    ...signal.matchingSnippets,
+  ]
+    .map((term) => normalizeMeaningLabel(term))
+    .filter(Boolean);
+}
+
+function relationshipLabelForSignals(
+  source: ApiSavedSignalSearchResult,
+  target: ApiSavedSignalSearchResult,
+  sharedTerms: string[],
+): string {
+  const combined = `${source.textPreview} ${target.textPreview} ${sharedTerms.join(" ")}`.toLowerCase();
+  if (combined.includes("envy")) return "the envy points here";
+  if (combined.includes("tension") || combined.includes("not anymore") || combined.includes("bothers")) {
+    return "old self arguing with new self";
+  }
+  if (combined.includes("people") || combined.includes("collaborator") || combined.includes("peer")) {
+    return "both want the same people";
+  }
+  if (Math.abs(signalAgeDays(source) - signalAgeDays(target)) >= 21) return "this came back later";
+  return sharedTerms.length > 0 ? "same room, different mask" : "two saves touching";
+}
+
+function buildMemoryConstellationRelationships(
+  signals: ApiSavedSignalSearchResult[],
+  notes: ApiTopOfMindNoteSurface[],
+): MemoryConstellationRelationship[] {
+  const relationships: MemoryConstellationRelationship[] = [];
+  const topSignals = signals.slice(0, 8);
+  const termsBySignal = new Map(topSignals.map((signal) => [signal.id, relationshipTerms(signal)] as const));
+
+  for (let i = 0; i < topSignals.length; i += 1) {
+    for (let j = i + 1; j < topSignals.length; j += 1) {
+      const source = topSignals[i];
+      const target = topSignals[j];
+      const sourceTerms = termsBySignal.get(source.id) ?? [];
+      const targetTerms = termsBySignal.get(target.id) ?? [];
+      const sharedTerms = sourceTerms.filter((term) => targetTerms.includes(term));
+      const sharedNote = notes.find(
+        (note) => note.relatedSignalIds.includes(source.id) && note.relatedSignalIds.includes(target.id),
+      );
+      if (sharedTerms.length === 0 && !sharedNote) continue;
+      const label = sharedNote?.ambientSignal
+        ? "both point at the same post-it"
+        : relationshipLabelForSignals(source, target, sharedTerms);
+      relationships.push({
+        id: `${source.id}-${target.id}`,
+        sourceId: source.id,
+        targetId: target.id,
+        label,
+        reason: sharedNote
+          ? `Both saved moments are supporting "${sharedNote.ambientSignal || sharedNote.title}".`
+          : `These saves share ${sharedTerms.slice(0, 2).join(" and ")}.`,
+        sourceTerms,
+        targetTerms,
+        sourceSignal: source,
+        targetSignal: target,
+      });
+    }
+  }
+
+  if (relationships.length > 0) return relationships.slice(0, 5);
+
+  return topSignals.slice(0, 4).flatMap((source, index) => {
+    const target = topSignals[index + 1];
+    if (!target) return [];
+    return [
+      {
+        id: `${source.id}-${target.id}`,
+        sourceId: source.id,
+        targetId: target.id,
+        label: relationshipLabelForSignals(source, target, []),
+        reason: "These saves sit close together in the drawer while WAKA looks for a sharper connection.",
+        sourceTerms: termsBySignal.get(source.id) ?? [],
+        targetTerms: termsBySignal.get(target.id) ?? [],
+        sourceSignal: source,
+        targetSignal: target,
+      },
+    ];
+  });
 }
 
 function replaceabilityLine(label: MemoryMovementLabel): string {
@@ -894,6 +1029,14 @@ export function HomePage(): JSX.Element {
     | { status: "error"; message: string }
   >({ status: "idle" });
   const [savedSignalChangeText, setSavedSignalChangeText] = useState("");
+  const [selectedMemoryRelationshipId, setSelectedMemoryRelationshipId] = useState<string | null>(null);
+  const [relationshipCorrectionText, setRelationshipCorrectionText] = useState("");
+  const [relationshipFeedback, setRelationshipFeedback] = useState<
+    | { status: "idle" }
+    | { status: "saving" }
+    | { status: "saved"; label: string }
+    | { status: "error"; message: string }
+  >({ status: "idle" });
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -1388,6 +1531,30 @@ export function HomePage(): JSX.Element {
       signals: inPlaceSignals.filter((signal) => memoryDrawerSectionForSignal(signal) === section.id),
     }))
     .filter((section) => section.signals.length > 0);
+  const constellationNodes: MemoryConstellationNode[] = inPlaceSignals.slice(0, 8).map((signal, index) => {
+    const positions = [
+      { x: 14, y: 18 },
+      { x: 54, y: 10 },
+      { x: 76, y: 34 },
+      { x: 38, y: 42 },
+      { x: 12, y: 62 },
+      { x: 60, y: 66 },
+      { x: 82, y: 72 },
+      { x: 30, y: 78 },
+    ];
+    const position = positions[index] ?? { x: 18 + index * 8, y: 22 + index * 6 };
+    return {
+      signal,
+      visual: signalVisualTreatment(signal),
+      x: position.x,
+      y: position.y,
+    };
+  });
+  const constellationRelationships = buildMemoryConstellationRelationships(inPlaceSignals, topOfMindNotes);
+  const selectedMemoryRelationship =
+    constellationRelationships.find((relationship) => relationship.id === selectedMemoryRelationshipId) ??
+    constellationRelationships[0] ??
+    null;
 
   const selectedSavedSignal = useMemo(() => {
     return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? inPlaceSignals[0] ?? null;
@@ -1695,6 +1862,35 @@ export function HomePage(): JSX.Element {
     }
   };
 
+  const submitRelationshipFeedback = async (
+    relationship: MemoryConstellationRelationship,
+    action: MemoryRelationshipFeedbackAction,
+  ) => {
+    const label =
+      action === "true" ? "true" : action === "not_connected" ? "not connected" : "better label";
+    setRelationshipFeedback({ status: "saving" });
+    try {
+      await createFeedback({
+        targetType: "signal",
+        targetId: relationship.sourceId,
+        value: action === "true" ? "true" : action === "not_connected" ? "not_true" : "partly",
+        correctionText: [
+          `relationship_feedback:v1:${relationship.id}`,
+          `label=${relationship.label}`,
+          relationshipCorrectionText.trim() ? `correction=${relationshipCorrectionText.trim()}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+      setRelationshipFeedback({ status: "saved", label });
+    } catch (caught) {
+      setRelationshipFeedback({
+        status: "error",
+        message: caught instanceof Error ? caught.message : "Relationship feedback did not save",
+      });
+    }
+  };
+
   const packetSummary = (packetText: string): string => {
     return packetText
       .split("\n")
@@ -1761,6 +1957,73 @@ export function HomePage(): JSX.Element {
           </p>
         ) : null}
       </div>
+    );
+  };
+
+  const renderConstellationNode = (node: MemoryConstellationNode): JSX.Element => {
+    const sourceLabel = signalSourceLabel(node.signal);
+    return (
+      <button
+        key={node.signal.id}
+        type="button"
+        className={`memory-constellation-node memory-constellation-node--${node.visual}${
+          selectedSavedSignal?.id === node.signal.id ? " memory-constellation-node--selected" : ""
+        }`}
+        style={{
+          ["--x" as string]: `${node.x}%`,
+          ["--y" as string]: `${node.y}%`,
+        }}
+        onClick={() => {
+          setSelectedSavedSignalId(node.signal.id);
+          recordRevisit(node.signal.id, "detail_opened");
+        }}
+      >
+        <span className="memory-constellation-node-kind">
+          {node.visual === "note"
+            ? "scrap"
+            : node.visual === "link"
+              ? sourceLabel || "link"
+              : node.visual === "image"
+                ? "photo"
+                : "layered"}
+        </span>
+        <strong>{shortText(node.signal.textPreview, node.visual === "image" ? 70 : 96)}</strong>
+        {node.signal.highlightedSnippets[0] ? (
+          <blockquote>{shortText(node.signal.highlightedSnippets[0].text, 72)}</blockquote>
+        ) : null}
+      </button>
+    );
+  };
+
+  const renderConstellationLine = (relationship: MemoryConstellationRelationship): JSX.Element | null => {
+    const source = constellationNodes.find((node) => node.signal.id === relationship.sourceId);
+    const target = constellationNodes.find((node) => node.signal.id === relationship.targetId);
+    if (!source || !target) return null;
+    const midX = (source.x + target.x) / 2;
+    const midY = (source.y + target.y) / 2;
+    return (
+      <g key={relationship.id}>
+        <line
+          x1={`${source.x}%`}
+          y1={`${source.y}%`}
+          x2={`${target.x}%`}
+          y2={`${target.y}%`}
+          className="memory-constellation-line"
+        />
+        <foreignObject x={`${midX - 12}%`} y={`${midY - 5}%`} width="24%" height="44">
+          <button
+            type="button"
+            className="memory-constellation-label"
+            onClick={() => {
+              setSelectedMemoryRelationshipId(relationship.id);
+              setRelationshipFeedback({ status: "idle" });
+              setRelationshipCorrectionText("");
+            }}
+          >
+            {relationship.label}
+          </button>
+        </foreignObject>
+      </g>
     );
   };
 
@@ -2175,6 +2438,77 @@ export function HomePage(): JSX.Element {
                 </label>
               </details>
             </header>
+
+            <section className="memory-constellation" aria-label="memory relationship constellation">
+              <header>
+                <div>
+                  <span>relationship constellation</span>
+                  <h3>See which saved moments are quietly talking.</h3>
+                </div>
+                <p>Different scraps keep their own material: notes, links, images, and mixed saves should not all feel like the same card.</p>
+              </header>
+              <div className="memory-constellation-board">
+                <svg className="memory-constellation-lines" aria-hidden="true">
+                  {constellationRelationships.map(renderConstellationLine)}
+                </svg>
+                {constellationNodes.map(renderConstellationNode)}
+              </div>
+              {selectedMemoryRelationship ? (
+                <article className="memory-relationship-detail" aria-label="memory relationship detail">
+                  <header>
+                    <span>why these sit near each other</span>
+                    <h3>{selectedMemoryRelationship.label}</h3>
+                    <p>{selectedMemoryRelationship.reason}</p>
+                  </header>
+                  <div className="memory-relationship-sources">
+                    {[selectedMemoryRelationship.sourceSignal, selectedMemoryRelationship.targetSignal].map((signal) => (
+                      <section key={signal.id}>
+                        <span>{signalSourceLabel(signal) ?? memoryDrawerSectionLabel(memoryDrawerSectionForSignal(signal))}</span>
+                        <blockquote>{shortText(signal.highlightedSnippets[0]?.text ?? signal.textPreview, 180)}</blockquote>
+                      </section>
+                    ))}
+                  </div>
+                  <label className="memory-relationship-correction">
+                    <span>better label, optional</span>
+                    <input
+                      type="text"
+                      value={relationshipCorrectionText}
+                      placeholder="what should this connection be called?"
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        setRelationshipCorrectionText(event.target.value)
+                      }
+                    />
+                  </label>
+                  <div className="memory-relationship-feedback" role="group" aria-label="relationship feedback">
+                    {[
+                      { action: "true" as const, label: "true" },
+                      { action: "not_connected" as const, label: "not connected" },
+                      { action: "better_label" as const, label: "better label" },
+                    ].map((item) => (
+                      <button
+                        key={item.action}
+                        type="button"
+                        disabled={relationshipFeedback.status === "saving"}
+                        onClick={() => void submitRelationshipFeedback(selectedMemoryRelationship, item.action)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                  {relationshipFeedback.status === "saved" ? (
+                    <p className="memory-relationship-feedback-status">Saved: {relationshipFeedback.label}</p>
+                  ) : relationshipFeedback.status === "saving" ? (
+                    <p className="memory-relationship-feedback-status">Saving...</p>
+                  ) : relationshipFeedback.status === "error" ? (
+                    <p className="memory-relationship-feedback-status">{relationshipFeedback.message}</p>
+                  ) : null}
+                </article>
+              ) : (
+                <p className="memory-relationship-empty">
+                  Save a few more signals and WAKA will start drawing gentle relationships here.
+                </p>
+              )}
+            </section>
 
             <div className="signal-revisit-layout">
               <div className="signal-memory-lenses" aria-label="memory drawer sections">
