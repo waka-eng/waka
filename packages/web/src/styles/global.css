@@ -1230,12 +1230,12 @@
 }
 
 .signal-revisit-page {
-  width: min(1180px, calc(100vw - 36px));
-  padding-top: 34px;
+  width: min(1120px, calc(100vw - 36px));
+  padding-top: 22px;
 }
 
 .signal-revisit-header {
-  align-items: end;
+  align-items: center;
 }
 
 .signal-revisit-header > div {
@@ -1257,7 +1257,7 @@
   margin: 8px 0 0;
   color: #191817;
   font-family: var(--font-serif);
-  font-size: clamp(38px, 6vw, 72px);
+  font-size: clamp(32px, 5vw, 56px);
   font-weight: 400;
   line-height: 0.98;
   letter-spacing: 0;
@@ -1358,6 +1358,17 @@
   display: grid;
   gap: 18px;
   position: relative;
+}
+
+.memory-drawer-workspace {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(36, 33, 27, 0.1);
+  box-shadow:
+    0 22px 60px rgba(41, 35, 24, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  min-height: min(66dvh, 620px);
+  overflow: hidden;
+  padding: clamp(14px, 2vw, 22px);
 }
 
 .memory-window-layer {
@@ -1491,15 +1502,15 @@
 }
 
 .memory-group-board {
-  background:
-    linear-gradient(90deg, rgba(76, 61, 36, 0.045) 1px, transparent 1px),
-    linear-gradient(rgba(76, 61, 36, 0.035) 1px, transparent 1px),
-    #fbf6ea;
-  background-size: 28px 28px;
-  border: 1px solid rgba(62, 53, 36, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.48);
-  min-height: 560px;
-  overflow: auto;
+  align-content: start;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  min-height: 0;
+  overflow: visible;
   position: relative;
 }
 
@@ -1507,11 +1518,11 @@
   color: #312b20;
   display: grid;
   gap: 8px;
-  left: var(--x);
-  position: absolute;
-  top: var(--y);
-  transform: rotate(var(--tilt));
-  width: 230px;
+  left: auto !important;
+  position: relative;
+  top: auto !important;
+  transform: none;
+  width: 100%;
   z-index: 1;
 }
 
@@ -1524,13 +1535,15 @@
 }
 
 .memory-group-hitarea {
-  background: transparent;
-  border: 0;
+  background: #fffdf8;
+  border: 1px solid rgba(62, 53, 36, 0.12);
+  border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(42, 35, 21, 0.06);
   color: inherit;
   cursor: grab;
   display: grid;
-  min-height: 150px;
-  padding: 0;
+  min-height: 118px;
+  padding: 16px;
   position: relative;
   text-align: left;
   touch-action: manipulation;
@@ -1542,9 +1555,7 @@
 
 .mac-folder-back,
 .mac-folder-front {
-  border: 1px solid rgba(71, 58, 35, 0.18);
-  border-radius: 6px 6px 4px 4px;
-  display: block;
+  display: none;
   position: absolute;
 }
 
@@ -1603,7 +1614,7 @@
 
 .folder-icon {
   align-items: center;
-  background: rgba(48, 41, 28, 0.88);
+  background: rgba(48, 41, 28, 0.78);
   border-radius: 999px;
   color: #fffaf0;
   display: inline-flex;
@@ -1611,17 +1622,17 @@
   font-size: 11px;
   height: 26px;
   justify-content: center;
-  left: 18px;
+  left: 16px;
   position: absolute;
-  top: 58px;
+  top: 16px;
   width: 26px;
   z-index: 2;
 }
 
 .memory-group-hitarea strong,
 .memory-group-hitarea small {
-  left: 54px;
-  max-width: 144px;
+  left: 52px;
+  max-width: calc(100% - 68px);
   position: absolute;
   z-index: 2;
 }
@@ -1632,7 +1643,7 @@
   font-weight: 650;
   letter-spacing: 0;
   line-height: 1.05;
-  top: 58px;
+  top: 17px;
 }
 
 .memory-group-hitarea small {
@@ -1641,7 +1652,7 @@
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  top: 116px;
+  top: 80px;
 }
 
 .memory-group-object p {
@@ -1678,17 +1689,18 @@
 }
 
 .memory-bulletin-object {
-  background: #f4e2b7;
-  box-shadow: 0 14px 26px rgba(62, 51, 32, 0.13);
+  background: #fffaf0;
+  border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(62, 51, 32, 0.08);
   display: grid;
   gap: 5px;
-  left: 810px;
+  left: auto;
   padding: 18px 20px;
-  position: absolute;
+  position: relative;
   text-align: left;
-  top: 72px;
-  transform: rotate(2deg);
-  width: 150px;
+  top: auto;
+  transform: none;
+  width: 100%;
 }
 
 .memory-bulletin-object span {
@@ -1704,15 +1716,15 @@
 }
 
 .memory-group-contents {
-  background: rgba(255, 253, 247, 0.68);
-  border: 1px solid rgba(62, 53, 36, 0.12);
+  background: transparent;
+  border: 0;
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 16px;
+  padding: 0;
 }
 
 .memory-group-contents > header {
-  align-items: end;
+  align-items: center;
   display: flex;
   gap: 16px;
   justify-content: space-between;
@@ -1738,7 +1750,7 @@
   border-bottom: 1px solid rgba(62, 53, 36, 0.18);
   color: #2f291f;
   font-family: var(--font-serif);
-  font-size: clamp(24px, 4vw, 38px);
+  font-size: clamp(24px, 4vw, 34px);
   letter-spacing: 0;
   max-width: min(70vw, 620px);
   padding: 2px 0 6px;
@@ -1760,6 +1772,18 @@
 .memory-view-switcher {
   display: inline-flex;
   gap: 6px;
+}
+
+.memory-workspace-back {
+  background: #fffdf8;
+  border: 1px solid rgba(62, 53, 36, 0.14);
+  color: #332d20;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 8px 10px;
+  text-transform: uppercase;
 }
 
 .memory-order-switcher button,
@@ -1930,19 +1954,21 @@
 
 .memory-list-stack {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
 
 .memory-signal-card {
-  border: 1px solid rgba(62, 53, 36, 0.18);
-  border-radius: 6px;
-  box-shadow: 0 12px 26px rgba(42, 35, 21, 0.08);
+  background: #fffefc;
+  border: 1px solid rgba(42, 36, 27, 0.1);
+  border-radius: 4px;
+  box-shadow: 0 10px 22px rgba(42, 35, 21, 0.055);
   color: #342f23;
   cursor: pointer;
   display: grid;
   gap: 7px;
-  max-width: 320px;
-  min-height: 132px;
+  max-width: 360px;
+  min-height: 124px;
   overflow: hidden;
   padding: 12px;
   position: relative;
@@ -1950,7 +1976,7 @@
 }
 
 .memory-signal-card--list {
-  max-width: none;
+  max-width: 360px;
   padding: 0;
   width: 100%;
 }
@@ -2064,19 +2090,19 @@
 }
 
 .memory-signal-card--note {
-  background: #f3ead0;
+  background: #fffefc;
 }
 
 .memory-signal-card--link {
-  background: #e9efe7;
+  background: #fbfdf9;
 }
 
 .memory-signal-card--image {
-  background: #efe8e1;
+  background: #fcfbfa;
 }
 
 .memory-signal-card--mixed {
-  background: #ece9f0;
+  background: #fdfbfd;
 }
 
 .memory-signal-card-kind,

@@ -868,6 +868,29 @@
       "priority": 48,
       "passes": true,
       "notes": "Core product sentence: this helps me see what I keep caring about before I can explain it, and helps me revisit/search the inspirations that mattered so they do not disappear."
+    },
+    {
+      "id": "US-046",
+      "title": "Simplify drawer workspace and restore action checklist",
+      "description": "As a user, I want the main wall and drawer to feel minimal, clean, and intuitive, with the action checklist still visible on the wall and the drawer opening as a quiet white workspace instead of a complicated multi-section page.",
+      "acceptanceCriteria": [
+        "Restore the action checklist post-it on the main wall when meaningful actions exist; it must not disappear as a side effect of the drawer/navigation rebuild",
+        "The action checklist should remain visually draggable like the Top of Mind post-its and should not require entering the drawer to see it",
+        "Opening the drawer from the wall must stay in-place on the same route and should feel like entering a clean white drawer workspace, not navigating to a new page",
+        "The drawer should not require scrolling down past unrelated sections to understand what to do; the first drawer viewport should contain the primary interaction",
+        "Remove or collapse redundant drawer sections, mode descriptions, instructional copy, and stacked panels that make the experience feel complicated",
+        "Reduce the drawer to one simple mental model: choose a proposed grouping or all inspirations, then see clean inspiration cards in that workspace",
+        "Inspiration cards should be redesigned to be more minimal and clean: white or very light paper, bounded max size, clear source/type cue, short excerpt, quiet timestamp/source, and no heavy borders or dense metadata",
+        "Do not show both folder/grouping navigation and a long card list in separate vertical sections at the same time if it creates scroll confusion; use a single workspace with a focused selected state",
+        "Keep WAKA's opinionated divergent groupings, but present them as quiet entry objects rather than a busy folder wall",
+        "If a grouping is selected, show only that grouping's cards and a small way back to all groupings; avoid sidebars, admin panels, dense graph/canvas labels, and leftover content below the workspace",
+        "Search should be a small optional control and must not add another large section",
+        "Add tests proving the action checklist renders on the wall with meaningful actions, the drawer opens in-place, the first drawer viewport has one primary workspace, inspiration cards use the minimal card treatment, and old stacked drawer sections do not render",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 49,
+      "passes": true,
+      "notes": "Correction after US-038 through US-045: the result over-added structure and regressed the action checklist. The drawer should become simpler, cleaner, and whiter. The experience should be wall -> drawer workspace -> grouping/all inspirations -> minimal cards, not a new page, not a scroll stack, and not several competing sections."
     }
   ]
 }

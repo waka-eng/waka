@@ -48,6 +48,37 @@
 - Top of Mind correction should use the wall metaphor: edit/pin the post-it wording or pull it down, persist through `/api/feedback`, and avoid visible true/partly/not-this reaction controls on user-facing note surfaces.
 - Capture UI should call saved things inspirations and avoid internal/clinical terms such as signal, graph, node, memory movement, resonance, and analysis; quick save should feel safe first, with deeper reflection optional.
 - Home user-facing surfaces should sanitize backend-provided Top of Mind, evidence, and action copy before rendering so internal terms such as signal, graph, node, resonance, analysis, and AI do not leak outside admin/debug surfaces.
+- Main wall actions are independent paper objects: keep the action checklist visible and draggable on the wall whenever meaningful actions exist, even if Top of Mind notes are empty or the drawer UI changes.
+- Memory Drawer should open to one clean white workspace with quiet grouping/all-inspirations entry objects; selecting one swaps to that focused card workspace with a small way back, rather than stacking grouping navigation and long card lists in separate vertical sections.
+
+---
+
+## 2026-06-01 13:01 PDT - US-046
+
+- What was implemented
+  - Restored the action checklist as an independent draggable wall post-it whenever active action recommendations exist.
+  - Simplified Memory Drawer into a single white workspace that opens to quiet grouping/all-inspirations entry objects.
+  - Changed drawer selection so choosing a grouping or all inspirations swaps into a focused card workspace with a small back-to-piles control, instead of showing folder navigation and a separate card list at the same time.
+  - Lightened saved-inspiration card styling with bounded white/light cards, short excerpts, quiet material/date cues, and fewer heavy surfaces.
+  - Updated Home tests for the new drawer path and added a regression that actions remain visible without Top of Mind post-its.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 51 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, and saved-inspiration APIs. Verified wall action checklist, in-place drawer entry, single workspace first viewport, all-inspirations selection, minimal bounded cards, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Main wall action recommendations should not be structurally nested under Top of Mind note rendering.
+    - Drawer simplification works best as a state swap inside one workspace: entry objects first, selected inspiration cards second.
+  - Gotchas encountered
+    - Home tests that inspect saved inspiration cards now need to explicitly open the all-inspirations pile unless search selects it.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 

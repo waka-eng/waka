@@ -1214,7 +1214,7 @@ export function HomePage(): JSX.Element {
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
-  const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string>("all");
+  const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
   const [memoryBrowseOrder, setMemoryBrowseOrder] = useState<MemoryBrowseOrder>("newest");
   const [memoryFolderView, setMemoryFolderView] = useState<MemoryFolderView>("grid");
   const [memoryFlowIndex, setMemoryFlowIndex] = useState(0);
@@ -1888,7 +1888,9 @@ export function HomePage(): JSX.Element {
     [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, topOfMindNotes, userMemoryGroups],
   );
   const selectedMemoryGroup =
-    memoryGroupings.find((group) => group.id === selectedMemoryGroupId) ?? memoryGroupings[0] ?? null;
+    selectedMemoryGroupId === null
+      ? null
+      : memoryGroupings.find((group) => group.id === selectedMemoryGroupId) ?? null;
   const selectedMemoryGroupSignals = selectedMemoryGroup
     ? sortSignalsForGrouping(selectedMemoryGroup.signals, selectedMemoryGroup.terms, memoryBrowseOrder)
     : [];
@@ -1941,9 +1943,9 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     if (homeMode !== "memoryDrawer") return;
-    if (memoryGroupings.length === 0) return;
+    if (selectedMemoryGroupId === null) return;
     if (!memoryGroupings.some((group) => group.id === selectedMemoryGroupId)) {
-      setSelectedMemoryGroupId(memoryGroupings[0].id);
+      setSelectedMemoryGroupId(null);
     }
   }, [homeMode, memoryGroupings, selectedMemoryGroupId]);
 
@@ -2117,6 +2119,12 @@ export function HomePage(): JSX.Element {
   }, [initialLoading, topOfMindLoading, topOfMindNotesLoading]);
 
   const chooseHomeMode = (mode: HomeMode) => {
+    if (mode === "memoryDrawer") {
+      setSelectedMemoryGroupId(null);
+      setSelectedSavedSignalId(null);
+      setSavedSignalDetail(null);
+      setMemoryWindows([]);
+    }
     setHomeMode(mode);
   };
 
@@ -2482,7 +2490,6 @@ export function HomePage(): JSX.Element {
           <strong>{group.name}</strong>
           <small>{group.signals.length} saved</small>
         </button>
-        <p>{group.explanation}</p>
         <div className="memory-group-actions">
           {group.source === "proposed" ? (
             <>
@@ -3496,13 +3503,11 @@ export function HomePage(): JSX.Element {
               ) : topOfMindError ? (
                 <p className="nc-loading">{topOfMindError}</p>
               ) : meaningfulThoughtCards.length > 0 ? (
-                <>
-                  {meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))}
-                  {renderActionPostIt()}
-                </>
+                meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
               ) : (
                 <p className="nc-loading">{copy.emptyThoughts}</p>
               )}
+              {renderActionPostIt()}
               <button
                 type="button"
                 className="nc-drawer-object"
@@ -3542,8 +3547,7 @@ export function HomePage(): JSX.Element {
             <header className="signal-revisit-header">
               <div>
                 <span>{PRODUCT_SPACES.memoryDrawer}</span>
-                <h2>Open the piles that seem to belong together.</h2>
-                <p>Original inspirations stay intact. These groupings are easy to keep, rename, or dismiss.</p>
+                <h2>Choose a pile, or open everything.</h2>
               </div>
               <button
                 type="button"
@@ -3561,6 +3565,7 @@ export function HomePage(): JSX.Element {
                   value={inspirationFilters.search}
                   onChange={(event: ChangeEvent<HTMLInputElement>) => {
                     setInspirationFilters({ search: event.target.value });
+                    setSelectedMemoryGroupId("all");
                     setSelectedSavedSignalId(null);
                     setSavedSignalDetail(null);
                   }}
@@ -3574,84 +3579,103 @@ export function HomePage(): JSX.Element {
               <div className="memory-window-layer" aria-label="open inspiration windows">
                 {visibleMemoryWindows.map(renderMemoryWindow)}
               </div>
-              <section className="memory-group-board" aria-label="proposed inspiration groupings">
-                {memoryGroupings.map(renderMemoryGroupObject)}
-                <button
-                  type="button"
-                  className="memory-bulletin-object"
-                  onClick={createUserMemoryGroup}
-                >
-                  <span>new pile</span>
-                  <strong>make my own</strong>
-                </button>
-                {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
-                {savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p className="memory-relationship-empty">{copy.loadingSaves}</p>
-                ) : null}
-                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-                ) : null}
-              </section>
-
-              <section className="memory-group-contents" aria-label="grouping contents">
-                <header>
-                  <div>
-                    <span>{selectedMemoryGroup?.source === "all" ? "chronological path" : "selected grouping"}</span>
-                    <label className="memory-group-name-edit">
-                      <span>name</span>
-                      <input
-                        value={selectedMemoryGroup?.name ?? ""}
-                        onChange={(event) => {
-                          if (selectedMemoryGroup) renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
-                        }}
-                        disabled={!selectedMemoryGroup}
-                      />
-                    </label>
-                    {selectedMemoryGroup ? <p>{selectedMemoryGroup.explanation}</p> : null}
-                  </div>
-                  <div className="memory-order-switcher" role="group" aria-label="browse order">
-                    {[
-                      { id: "newest" as const, label: "newest first" },
-                      { id: "relevance" as const, label: "strongest fit" },
-                    ].map((order) => (
+              <section
+                className={`memory-drawer-workspace${
+                  selectedMemoryGroup ? " memory-drawer-workspace--selected" : ""
+                }`}
+                aria-label="drawer workspace"
+              >
+                {selectedMemoryGroup ? (
+                  <div className="memory-group-contents" aria-label="grouping contents">
+                    <header>
                       <button
-                        key={order.id}
                         type="button"
-                        className={memoryBrowseOrder === order.id ? "is-active" : ""}
-                        aria-pressed={memoryBrowseOrder === order.id}
-                        onClick={() => setMemoryBrowseOrder(order.id)}
-                      >
-                        {order.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="memory-view-switcher" role="group" aria-label="pile view">
-                    {[
-                      { id: "grid" as const, label: "grid" },
-                      { id: "vertical" as const, label: "vertical flow" },
-                      { id: "horizontal" as const, label: "horizontal flow" },
-                    ].map((view) => (
-                      <button
-                        key={view.id}
-                        type="button"
-                        className={memoryFolderView === view.id ? "is-active" : ""}
-                        aria-pressed={memoryFolderView === view.id}
+                        className="memory-workspace-back"
                         onClick={() => {
-                          setMemoryFolderView(view.id);
-                          setMemoryFlowIndex(0);
+                          setSelectedMemoryGroupId(null);
+                          setSelectedSavedSignalId(null);
+                          setSavedSignalDetail(null);
+                          setMemoryWindows([]);
                         }}
                       >
-                        {view.label}
+                        all piles
                       </button>
-                    ))}
-                  </div>
-                </header>
-                {memoryFolderView === "grid" ? (
-                  <div className="memory-list-stack">
-                    {selectedMemoryGroupSignals.map((signal) => renderMemorySignalCard(signal))}
+                      <div>
+                        <span>{selectedMemoryGroup.source === "all" ? "all inspirations" : "selected pile"}</span>
+                        <label className="memory-group-name-edit">
+                          <span>name</span>
+                          <input
+                            value={selectedMemoryGroup.name}
+                            onChange={(event) => {
+                              renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="memory-order-switcher" role="group" aria-label="browse order">
+                        {[
+                          { id: "newest" as const, label: "newest first" },
+                          { id: "relevance" as const, label: "strongest fit" },
+                        ].map((order) => (
+                          <button
+                            key={order.id}
+                            type="button"
+                            className={memoryBrowseOrder === order.id ? "is-active" : ""}
+                            aria-pressed={memoryBrowseOrder === order.id}
+                            onClick={() => setMemoryBrowseOrder(order.id)}
+                          >
+                            {order.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="memory-view-switcher" role="group" aria-label="pile view">
+                        {[
+                          { id: "grid" as const, label: "grid" },
+                          { id: "vertical" as const, label: "vertical flow" },
+                          { id: "horizontal" as const, label: "horizontal flow" },
+                        ].map((view) => (
+                          <button
+                            key={view.id}
+                            type="button"
+                            className={memoryFolderView === view.id ? "is-active" : ""}
+                            aria-pressed={memoryFolderView === view.id}
+                            onClick={() => {
+                              setMemoryFolderView(view.id);
+                              setMemoryFlowIndex(0);
+                            }}
+                          >
+                            {view.label}
+                          </button>
+                        ))}
+                      </div>
+                    </header>
+                    {memoryFolderView === "grid" ? (
+                      <div className="memory-list-stack">
+                        {selectedMemoryGroupSignals.map((signal) => renderMemorySignalCard(signal))}
+                      </div>
+                    ) : (
+                      renderMemoryFlow()
+                    )}
                   </div>
                 ) : (
-                  renderMemoryFlow()
+                  <div className="memory-group-board" aria-label="proposed inspiration groupings">
+                    {memoryGroupings.map(renderMemoryGroupObject)}
+                    <button
+                      type="button"
+                      className="memory-bulletin-object"
+                      onClick={createUserMemoryGroup}
+                    >
+                      <span>new pile</span>
+                      <strong>make my own</strong>
+                    </button>
+                    {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+                    {savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                      <p className="memory-relationship-empty">{copy.loadingSaves}</p>
+                    ) : null}
+                    {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                      <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+                    ) : null}
+                  </div>
                 )}
               </section>
             </div>
