@@ -693,6 +693,39 @@ routes.post("/:id/sparks", async (c) => {
   }, 201);
 });
 
+routes.delete("/:id/sparks/:sparkId", async (c) => {
+  const inspirationId = c.req.param("id");
+  const sparkId = c.req.param("sparkId");
+  const idCheck = z.string().uuid().safeParse(inspirationId);
+  const sparkIdCheck = z.string().uuid().safeParse(sparkId);
+  if (!idCheck.success || !sparkIdCheck.success) {
+    return c.json({ error: "Invalid spark id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const [deleted] = await db
+    .delete(inspirationSparks)
+    .where(
+      and(
+        eq(inspirationSparks.id, sparkIdCheck.data),
+        eq(inspirationSparks.inspirationId, idCheck.data),
+        eq(inspirationSparks.userId, user.id),
+      ),
+    )
+    .returning({ id: inspirationSparks.id });
+
+  if (!deleted) return c.json({ error: "Spark not found" }, 404);
+
+  await persistSignalPacketForSignal({
+    db,
+    userId: user.id,
+    signalId: idCheck.data,
+  });
+
+  return c.json({ ok: true }, 200);
+});
+
 // ---------------------------------------------------------------------------
 // GET /api/inspirations/:id/score-breakdown
 // ---------------------------------------------------------------------------

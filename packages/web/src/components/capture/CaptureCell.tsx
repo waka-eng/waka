@@ -118,6 +118,8 @@ export interface CaptureCellProps {
 
   /** Controlled textarea value for the capture note. */
   noteValue?: string;
+  /** Optional selected range to render as an in-text highlight behind the textarea. */
+  noteHighlight?: { startOffset: number; endOffset: number; text: string } | null;
   /** Fires on every textarea keystroke. */
   onNoteChange?: (value: string) => void;
   /** Fires when text is pasted into the universal composer. */
@@ -250,6 +252,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       view = "note",
       visualState = {},
       noteValue,
+      noteHighlight,
       onNoteChange,
       onNotePaste,
       onNoteSelect,
@@ -287,6 +290,23 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
     ref,
   ): JSX.Element {
     const [dragActive, setDragActive] = useState(false);
+    const noteText = noteValue ?? "";
+    const visibleNoteHighlight =
+      noteHighlight &&
+      noteText &&
+      noteHighlight.startOffset >= 0 &&
+      noteHighlight.endOffset > noteHighlight.startOffset &&
+      noteText.slice(noteHighlight.startOffset, noteHighlight.endOffset) === noteHighlight.text
+        ? noteHighlight
+        : null;
+    const noteHighlightLayer = visibleNoteHighlight ? (
+      <div className="cap-note-highlight-layer" aria-hidden="true">
+        <span>{noteText.slice(0, visibleNoteHighlight.startOffset)}</span>
+        <mark>{visibleNoteHighlight.text}</mark>
+        <span>{noteText.slice(visibleNoteHighlight.endOffset) || "\n"}</span>
+      </div>
+    ) : null;
+
     const handleNoteChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
       onNoteChange?.(event.target.value);
     };
@@ -369,7 +389,9 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           transition smooth.
         */}
         <div className="cap-body" id="capBody" hidden={isReflectView}>
+          {noteHighlightLayer}
           <textarea
+            className={visibleNoteHighlight ? "cap-note-input cap-note-input--has-highlight" : "cap-note-input"}
             id="capNote"
             placeholder={notePlaceholder}
             spellCheck={false}
@@ -417,8 +439,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
+              <path d="M21.4 11.6 12.2 20.8a6 6 0 0 1-8.5-8.5l9.8-9.8a4 4 0 0 1 5.7 5.7l-9.8 9.8a2 2 0 1 1-2.8-2.8l9.2-9.2" />
             </svg>
           </label>
           <input

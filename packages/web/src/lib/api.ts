@@ -554,6 +554,44 @@ export async function createInspirationSpark(
   return body.spark;
 }
 
+export async function deleteInspirationSpark(
+  inspirationId: string,
+  sparkId: string,
+): Promise<void> {
+  const path = apiPath(
+    `/inspirations/${encodeURIComponent(inspirationId)}/sparks/${encodeURIComponent(sparkId)}`,
+  );
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while removing highlight",
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+  const errorBody = (body ?? {}) as { error?: string };
+  throw new ApiError({
+    status: res.status,
+    message:
+      errorBody.error ??
+      `Failed to remove highlight (HTTP ${res.status}). Please try again.`,
+  });
+}
+
 export async function fetchInspirationScoreBreakdown(
   id: string,
 ): Promise<ApiInspirationScoreBreakdown> {

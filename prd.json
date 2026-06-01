@@ -663,6 +663,27 @@
       "priority": 38,
       "passes": true,
       "notes": "Product correction after seeing the Memory Drawer result: the current version gives the user too much to parse and too little to feel. The target has two modes. List mode is the clean chronological way to revisit what was saved in the order it entered WAKA. Canvas mode is the lower-fidelity evidence board where small bounded inspiration cards connect to each other. Top of Mind is polished post-its for current ambition; Memory Drawer is the evidence underneath. No memory movement taxonomy should be visible here."
+    },
+    {
+      "id": "US-036",
+      "title": "Generate meaningful action checklist post-it from Top of Mind evidence",
+      "description": "As a user, I want WAKA to turn my current Top of Mind into a small draggable action post-it with concrete real-world experiments that actually help me learn about my ambition.",
+      "acceptanceCriteria": [
+        "Replace the current shallow actionForThoughtCard title/dimension template fallback with a grounded action generation layer that uses Top of Mind note evidence, saved signal previews, highlights, ambient signal, matched environment, anti-environment, evidence rationale, and ambition dimension",
+        "Generated actions must be concrete, small, and real-world rather than reflective homework; valid actions include messaging a specific kind of person, visiting or testing a type of room/city/environment, making or sharing a rough artifact, removing one environmental pull, or running a career/build experiment",
+        "Reject generic actions such as \"do one tiny test\", \"explore this more\", \"reflect on this\", \"journal about this\", \"learn more\", \"think about\", \"research\", or actions that simply repeat the post-it title",
+        "Each action must be visibly connected to one Top of Mind post-it or its supporting evidence, but the action text should stand alone and feel useful without exposing admin graph language",
+        "Action text should be specific enough that the user can do it within 24-72 hours; avoid broad life advice, vague self-improvement language, and corporate productivity phrasing",
+        "Show at most five active actions globally on the Top of Mind page; do not render weak, empty, duplicate, or low-confidence action slots",
+        "Make the action checklist its own draggable paper object on the Top of Mind wall, using the same drag behavior as the Top of Mind post-its",
+        "Users must be able to mark an action done or remove it from the active list; completed and removed actions should disappear from the visible active checklist",
+        "Add deterministic API/unit or web tests that fail when action generation returns generic/template actions or actions disconnected from evidence",
+        "Add Home tests proving the action checklist renders only meaningful actions, supports done/remove, is draggable, and no longer uses the old shallow template outputs",
+        "Run API/web typechecks, targeted action generation tests, targeted Home tests, and browser verification of the Top of Mind action post-it on desktop and mobile"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Product correction: the current action checklist is a placeholder UI built from actionForThoughtCard(card), so the actions can feel weird and generic. This must become a real ambition-learning loop: actions are not productivity tasks, they are small real-world experiments that create new personal context. They should feel like the next thing a reflective person would actually try after noticing a pattern in their saved inspirations."
     }
   ]
 }

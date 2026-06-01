@@ -28,6 +28,7 @@ import {
   useState,
   type ChangeEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
 
@@ -54,11 +55,14 @@ import {
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
+  type ApiInspirationSpark,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
   type ClusterKind,
   createFeedback,
+  createInspirationSpark,
+  deleteInspirationSpark,
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
@@ -130,15 +134,7 @@ type TopOfMindFeedbackValue = Extract<
 >;
 type TopOfMindFeedbackAction = TopOfMindFeedbackValue | "rewrite";
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
-type MemoryMovementLabel =
-  | "keeps returning"
-  | "newly forming"
-  | "came back"
-  | "fading"
-  | "tension"
-  | "needs testing";
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
-type MemoryRelationshipFeedbackAction = "true" | "not_connected" | "better_label";
 
 const TOP_OF_MIND_NOTE_LIMIT = 5;
 
@@ -425,6 +421,55 @@ function shortText(value: string, maxLength = 220): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
+type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text">;
+
+function renderHighlightedInspirationText(
+  text: string,
+  highlights: HighlightableSnippet[],
+  onRemove: (highlight: HighlightableSnippet) => void,
+): ReactNode {
+  const usableHighlights = highlights
+    .filter((highlight) => highlight.text.trim().length > 0)
+    .map((highlight) => ({ ...highlight, text: highlight.text.trim() }))
+    .sort((a, b) => (b.text.length - a.text.length));
+  if (usableHighlights.length === 0) return text;
+
+  const chunks: ReactNode[] = [];
+  let cursor = 0;
+  let key = 0;
+  while (cursor < text.length) {
+    const next = usableHighlights
+      .map((highlight) => ({ highlight, index: text.indexOf(highlight.text, cursor) }))
+      .filter((candidate) => candidate.index >= 0)
+      .sort((a, b) => a.index - b.index || b.highlight.text.length - a.highlight.text.length)[0];
+
+    if (!next) {
+      chunks.push(text.slice(cursor));
+      break;
+    }
+
+    if (next.index > cursor) chunks.push(text.slice(cursor, next.index));
+    chunks.push(
+      <mark className="memory-inline-highlight" key={next.highlight.id || key++}>
+        {next.highlight.text}
+        <button
+          type="button"
+          aria-label="remove highlight"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(next.highlight);
+          }}
+        >
+          remove
+        </button>
+      </mark>,
+    );
+    cursor = next.index + next.highlight.text.length;
+  }
+
+  return chunks;
+}
+
 function meaningTypeLabel(type: string): string {
   return type.replace(/_/g, " ");
 }
@@ -470,6 +515,13 @@ interface HomeThoughtCard {
     label: string;
     type: string;
   }>;
+}
+
+interface HomeActionItem {
+  id: string;
+  text: string;
+  source: string;
+  evidence: string | null;
 }
 
 interface MemoryConstellationNode {
@@ -536,7 +588,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
   return {
     id: note.id,
     feedbackTargetId: note.id,
-    label: note.ambientSignal || note.title,
+    label: note.title || note.ambientSignal,
     ambitionDimension: note.ambitionDimension,
     ambientSignal: note.ambientSignal,
     matchedEnvironment: note.matchedEnvironment,
@@ -564,6 +616,123 @@ function isMeaningfulThoughtCard(card: HomeThoughtCard): boolean {
   return true;
 }
 
+function uniqueThoughtCards(cards: HomeThoughtCard[]): HomeThoughtCard[] {
+  const seen = new Set<string>();
+  const out: HomeThoughtCard[] = [];
+  for (const card of cards) {
+    const key = normalizeMeaningLabel(card.label)
+      .replace(/\b(i|me|my|the|a|an|to|of|and|or|for|with|where)\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const dimensionKey = `${card.ambitionDimension ?? card.type}:${key}`;
+    if (seen.has(key) || seen.has(dimensionKey)) continue;
+    seen.add(key);
+    seen.add(dimensionKey);
+    out.push(card);
+  }
+  return out;
+}
+
+function explainThoughtCard(card: HomeThoughtCard): string {
+  const reason = shortText(card.reason || card.evidenceRationale || "", 135);
+  const context = card.matchedEnvironment || card.ambientSignal;
+  if (reason && context) {
+    return `${reason} It keeps pointing toward ${shortText(context, 72)}.`;
+  }
+  if (reason) return reason;
+  if (context) return `This keeps surfacing around ${shortText(context, 96)}.`;
+  return "This is provisional. New saves can replace it.";
+}
+
+const GENERIC_ACTION_PATTERN =
+  /\b(do one tiny|tiny test|smallest test|explore this|explore it|reflect on|journal|learn more|think about|research|dig deeper|look into|productivity|optimize)\b/i;
+
+function actionObject(value: string | null | undefined, fallback: string): string {
+  const cleaned = (value ?? "")
+    .replace(/["“”]/g, "")
+    .replace(/[.?!:;]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return fallback;
+  return shortText(cleaned, 70).replace(/[.?!:;]+$/g, "");
+}
+
+function evidencePhrase(card: HomeThoughtCard): string | null {
+  const evidence = card.supportingSignals.find((signal) => signal.preview.trim());
+  if (!evidence) return null;
+  return actionObject(evidence.preview, "the saved signal");
+}
+
+function actionTextForThoughtCard(card: HomeThoughtCard): string | null {
+  const dimension = card.ambitionDimension ?? card.type;
+  const label = actionObject(card.label || card.ambientSignal, "this post-it");
+  const environment = actionObject(card.matchedEnvironment || card.ambientSignal, label);
+  const antiEnvironment = actionObject(card.antiEnvironment, label);
+  const evidence = evidencePhrase(card);
+
+  if (dimension === "people") {
+    return `Message one person who makes ${label.toLowerCase()} feel normal and ask for a 20-minute exchange.`;
+  }
+  if (dimension === "place") {
+    return `Spend one hour in a room that matches ${environment.toLowerCase()}, then save what shifts.`;
+  }
+  if (dimension === "work") {
+    if (/make the thing before explaining it/i.test(label)) {
+      return "Make the rough thing first, then show one person before explaining it.";
+    }
+    return `Make a rough artifact from ${evidence?.toLowerCase() ?? label.toLowerCase()} and show one person.`;
+  }
+  if (dimension === "taste") {
+    return `Make one version using the standard in ${evidence?.toLowerCase() ?? label.toLowerCase()} and compare it out loud.`;
+  }
+  if (dimension === "rejection") {
+    return `Remove one pull toward ${antiEnvironment.toLowerCase()} for the next 48 hours.`;
+  }
+  if (dimension === "tension") {
+    return `Put ${label.toLowerCase()} in front of one trusted person and ask what feels false.`;
+  }
+  if (dimension === "identity") {
+    return `Do one visible act from ${label.toLowerCase()} before you can fully explain it.`;
+  }
+  if (dimension === "next_experiment" || card.type === "question" || card.type === "hypothesis") {
+    return `Ask one person to try the rough version of ${label.toLowerCase()} this week.`;
+  }
+  if (!evidence && !card.evidenceRationale && !card.matchedEnvironment) return null;
+  return `Share one rough artifact connected to ${label.toLowerCase()} with one real person.`;
+}
+
+function isUsefulActionText(text: string, card: HomeThoughtCard): boolean {
+  const normalizedText = normalizeMeaningLabel(text);
+  const normalizedLabel = normalizeMeaningLabel(card.label);
+  if (GENERIC_ACTION_PATTERN.test(text)) return false;
+  if (normalizedText === normalizedLabel) return false;
+  if (!/\b(message|spend|make|show|remove|put|ask|do|share|visit|send|invite)\b/i.test(text)) return false;
+  if (!/\b(person|people|room|hour|artifact|version|pull|trusted|visible|rough|week|48 hours|exchange)\b/i.test(text)) {
+    return false;
+  }
+  return text.split(/\s+/).length >= 8;
+}
+
+function actionItemsForThoughtCards(cards: HomeThoughtCard[]): HomeActionItem[] {
+  const seen = new Set<string>();
+  const items: HomeActionItem[] = [];
+  for (const card of cards) {
+    const text = actionTextForThoughtCard(card);
+    if (!text || !isUsefulActionText(text, card)) continue;
+    const key = normalizeMeaningLabel(text);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      id: `action-${card.id}`,
+      text,
+      source: card.label,
+      evidence: evidencePhrase(card),
+    });
+    if (items.length >= 5) break;
+  }
+  return items;
+}
+
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
   { top: "24px", left: "calc(50% - 200px)", tilt: -1.4, w: "400px" },
   { top: "74px", left: "calc(50% - 520px)", tilt: -2.2, w: "260px" },
@@ -579,21 +748,6 @@ const NOTE_COLORS = [
   { hue: "#cdd3df", ink: "#3a4456" },
   { hue: "#f1d7a8", ink: "#4f3921" },
 ];
-
-function memoryMovementForThoughtCard(signal: HomeThoughtCard, index: number): MemoryMovementLabel {
-  if (signal.status === "stale" || signal.status === "replaced") return "fading";
-  if (signal.type === "tension" || signal.ambitionDimension === "tension") return "tension";
-  if (signal.type === "question" || signal.type === "hypothesis" || signal.ambitionDimension === "next_experiment") {
-    return "needs testing";
-  }
-  if ((signal.supportingSignals.length >= 3 || (signal.confidence ?? 0) >= 0.8) && index < 2) {
-    return "keeps returning";
-  }
-  if (signal.supportingSignals.some((support) => Date.now() - new Date(support.createdAt).getTime() > 1000 * 60 * 60 * 24 * 30)) {
-    return "came back";
-  }
-  return "newly forming";
-}
 
 function capturedAtMs(signal: ApiSavedSignalSearchResult): number {
   const parsed = new Date(signal.capturedAt).getTime();
@@ -729,15 +883,6 @@ function buildMemoryConstellationRelationships(
       },
     ];
   });
-}
-
-function replaceabilityLine(label: MemoryMovementLabel): string {
-  if (label === "keeps returning") return "still here because the evidence keeps returning";
-  if (label === "came back") return "came back after going quiet";
-  if (label === "fading") return "may be replaced if new signals stop supporting it";
-  if (label === "tension") return "kept visible until the tension changes shape";
-  if (label === "needs testing") return "not final; asks for a small test";
-  return "newly forming; changed by new signals";
 }
 
 const HOME_COPY = {
@@ -963,19 +1108,24 @@ export function HomePage(): JSX.Element {
   >({});
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [actionDrag, setActionDrag] = useState({ x: 0, y: 0 });
+  const [actionDragging, setActionDragging] = useState(false);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
+  const [completedActions, setCompletedActions] = useState<Set<string>>(() => new Set());
+  const [removedActions, setRemovedActions] = useState<Set<string>>(() => new Set());
   const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
   const [selectedSavedSignalId, setSelectedSavedSignalId] = useState<string | null>(null);
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
-  const [selectedMemoryRelationshipId, setSelectedMemoryRelationshipId] = useState<string | null>(null);
-  const [relationshipCorrectionText, setRelationshipCorrectionText] = useState("");
-  const [relationshipFeedback, setRelationshipFeedback] = useState<
+  const [selectedInspirationText, setSelectedInspirationText] = useState<{
+    signalId: string;
+    text: string;
+  } | null>(null);
+  const [highlightStatus, setHighlightStatus] = useState<
     | { status: "idle" }
     | { status: "saving" }
-    | { status: "saved"; label: string }
     | { status: "error"; message: string }
   >({ status: "idle" });
   /**
@@ -1006,6 +1156,7 @@ export function HomePage(): JSX.Element {
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
+  const actionDragStartRef = useRef<{ x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
 
@@ -1311,6 +1462,87 @@ export function HomePage(): JSX.Element {
     [],
   );
 
+  const handleMemoryTextSelection = useCallback((signalId: string): void => {
+    const selection = window.getSelection();
+    const selected = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
+    if (selected.length < 2) {
+      setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
+      return;
+    }
+    setSelectedInspirationText({ signalId, text: selected.slice(0, 4096) });
+    setHighlightStatus({ status: "idle" });
+  }, []);
+
+  const addMemoryHighlight = useCallback(
+    async (signalId: string): Promise<void> => {
+      if (!selectedInspirationText || selectedInspirationText.signalId !== signalId) return;
+      setHighlightStatus({ status: "saving" });
+      try {
+        const spark = await createInspirationSpark(signalId, {
+          text: selectedInspirationText.text,
+          source: "user_selected",
+          confidence: 100,
+          isPrimary: false,
+        });
+        setSavedSignalDetail((current) =>
+          current && current.id === signalId
+            ? { ...current, highlightedSnippets: [spark, ...current.highlightedSnippets] }
+            : current,
+        );
+        setSavedSignals((current) =>
+          current.map((signal) =>
+            signal.id === signalId
+              ? { ...signal, highlightedSnippets: [spark, ...signal.highlightedSnippets] }
+              : signal,
+          ),
+        );
+        setSelectedInspirationText(null);
+        setHighlightStatus({ status: "idle" });
+        window.getSelection()?.removeAllRanges();
+      } catch (caught) {
+        setHighlightStatus({
+          status: "error",
+          message: caught instanceof Error ? caught.message : "Highlight did not save",
+        });
+      }
+    },
+    [selectedInspirationText],
+  );
+
+  const removeMemoryHighlight = useCallback(
+    async (signalId: string, highlight: HighlightableSnippet): Promise<void> => {
+      const removeLocal = (): void => {
+        setSavedSignalDetail((current) =>
+          current && current.id === signalId
+            ? {
+                ...current,
+                highlightedSnippets: current.highlightedSnippets.filter((snippet) => snippet.id !== highlight.id),
+              }
+            : current,
+        );
+        setSavedSignals((current) =>
+          current.map((signal) =>
+            signal.id === signalId
+              ? {
+                  ...signal,
+                  highlightedSnippets: signal.highlightedSnippets.filter((snippet) => snippet.id !== highlight.id),
+                }
+              : signal,
+          ),
+        );
+      };
+
+      removeLocal();
+      try {
+        await deleteInspirationSpark(signalId, highlight.id);
+      } catch {
+        // Removing highlight UI should feel reversible and light; a future
+        // sync can reconcile if the best-effort delete fails.
+      }
+    },
+    [],
+  );
+
   const handleSelectInspiration = useCallback(
     (id: string) => {
       // Sub-AC 9.5 — open the detail view for the activated row. The
@@ -1464,16 +1696,16 @@ export function HomePage(): JSX.Element {
   const inPlaceSignals = [...searchedSignals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
   const constellationNodes: MemoryConstellationNode[] = inPlaceSignals.slice(0, 8).map((signal, index) => {
     const positions = [
-      { x: 14, y: 18 },
-      { x: 54, y: 10 },
-      { x: 76, y: 34 },
-      { x: 38, y: 42 },
-      { x: 12, y: 62 },
-      { x: 60, y: 66 },
-      { x: 82, y: 72 },
-      { x: 30, y: 78 },
+      { x: 70, y: 92 },
+      { x: 650, y: 210 },
+      { x: 405, y: 18 },
+      { x: 162, y: 430 },
+      { x: 720, y: 468 },
+      { x: 782, y: 68 },
+      { x: 430, y: 432 },
+      { x: 840, y: 332 },
     ];
-    const position = positions[index] ?? { x: 18 + index * 8, y: 22 + index * 6 };
+    const position = positions[index] ?? { x: 90 + (index % 3) * 330, y: 80 + Math.floor(index / 3) * 220 };
     return {
       signal,
       visual: signalVisualTreatment(signal),
@@ -1482,13 +1714,10 @@ export function HomePage(): JSX.Element {
     };
   });
   const constellationRelationships = buildMemoryConstellationRelationships(inPlaceSignals, topOfMindNotes);
-  const selectedMemoryRelationship =
-    constellationRelationships.find((relationship) => relationship.id === selectedMemoryRelationshipId) ??
-    constellationRelationships[0] ??
-    null;
+  const selectedMemoryRelationship = constellationRelationships[0] ?? null;
 
   const selectedSavedSignal = useMemo(() => {
-    return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? inPlaceSignals[0] ?? null;
+    return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? null;
   }, [inPlaceSignals, selectedSavedSignalId]);
 
   useEffect(() => {
@@ -1497,8 +1726,8 @@ export function HomePage(): JSX.Element {
       if (selectedSavedSignalId !== null) setSelectedSavedSignalId(null);
       return;
     }
-    if (!selectedSavedSignalId || !inPlaceSignals.some((signal) => signal.id === selectedSavedSignalId)) {
-      setSelectedSavedSignalId(inPlaceSignals[0].id);
+    if (selectedSavedSignalId && !inPlaceSignals.some((signal) => signal.id === selectedSavedSignalId)) {
+      setSelectedSavedSignalId(null);
     }
   }, [homeMode, inPlaceSignals, selectedSavedSignalId]);
 
@@ -1518,7 +1747,9 @@ export function HomePage(): JSX.Element {
           if (cancelled) return;
           const ownRows = rows.filter((row) => row.userId === user.id);
           setSavedSignals(ownRows);
-          setSelectedSavedSignalId((current) => current ?? ownRows[0]?.id ?? null);
+          setSelectedSavedSignalId((current) =>
+            current && ownRows.some((row) => row.id === current) ? current : null,
+          );
         } catch (caught) {
           if (cancelled) return;
           setSavedSignalsError(caught instanceof Error ? caught.message : "Failed to load saved signals");
@@ -1655,7 +1886,10 @@ export function HomePage(): JSX.Element {
   const thoughtCards = topOfMindNotes.length > 0
     ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
-  const meaningfulThoughtCards = thoughtCards.filter(isMeaningfulThoughtCard);
+  const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
+  const visibleActionItems = actionItemsForThoughtCards(meaningfulThoughtCards)
+    .filter((item) => !removedActions.has(item.id))
+    .slice(0, 5);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
   const dateLabel = new Date().toLocaleDateString("en-US", {
@@ -1769,35 +2003,6 @@ export function HomePage(): JSX.Element {
     }
   };
 
-  const submitRelationshipFeedback = async (
-    relationship: MemoryConstellationRelationship,
-    action: MemoryRelationshipFeedbackAction,
-  ) => {
-    const label =
-      action === "true" ? "true" : action === "not_connected" ? "not connected" : "better label";
-    setRelationshipFeedback({ status: "saving" });
-    try {
-      await createFeedback({
-        targetType: "signal",
-        targetId: relationship.sourceId,
-        value: action === "true" ? "true" : action === "not_connected" ? "not_true" : "partly",
-        correctionText: [
-          `relationship_feedback:v1:${relationship.id}`,
-          `label=${relationship.label}`,
-          relationshipCorrectionText.trim() ? `correction=${relationshipCorrectionText.trim()}` : null,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-      });
-      setRelationshipFeedback({ status: "saved", label });
-    } catch (caught) {
-      setRelationshipFeedback({
-        status: "error",
-        message: caught instanceof Error ? caught.message : "Relationship feedback did not save",
-      });
-    }
-  };
-
   const renderFeedbackControls = (
     signal: HomeThoughtCard,
     options: { expanded?: boolean } = {},
@@ -1873,32 +2078,25 @@ export function HomePage(): JSX.Element {
   ): JSX.Element => {
     const visual = options.node?.visual ?? signalVisualTreatment(signal);
     const isSelected = selectedSavedSignal?.id === signal.id;
+    const isListCard = !options.node;
+    const isExpanded = isListCard && isSelected;
+    const detailText = isExpanded ? savedSignalDetail?.rawText ?? signal.textPreview : signal.textPreview;
+    const detailHighlights = isExpanded
+      ? (savedSignalDetail?.highlightedSnippets ?? signal.highlightedSnippets)
+      : signal.highlightedSnippets;
     const style = options.node
       ? {
-          ["--x" as string]: `${options.node.x}%`,
-          ["--y" as string]: `${options.node.y}%`,
+          ["--x" as string]: `${options.node.x}px`,
+          ["--y" as string]: `${options.node.y}px`,
         }
       : undefined;
-    return (
-      <button
-        key={signal.id}
-        type="button"
-        className={`reference-save signal-revisit-card memory-signal-card memory-signal-card--${visual}${
-          options.node ? ` memory-constellation-node memory-constellation-node--${visual}` : ""
-        }${isSelected ? " signal-revisit-card--selected memory-signal-card--selected" : ""}${
-          options.node ? " memory-signal-card--canvas" : " memory-signal-card--list"
-        }`}
-        style={style}
-        onClick={() => {
-          setSelectedSavedSignalId(signal.id);
-          recordRevisit(signal.id, "detail_opened");
-        }}
-      >
+    const cardInner = (
+      <>
         <span className="memory-signal-card-kind">
           {signalMaterialLabel(signal)}
         </span>
         <strong>{shortText(signal.textPreview, options.compact ? 96 : 180)}</strong>
-        {signal.highlightedSnippets[0] ? (
+        {signal.highlightedSnippets[0] && !isExpanded ? (
           <blockquote>{shortText(signal.highlightedSnippets[0].text, options.compact ? 72 : 120)}</blockquote>
         ) : null}
         {signal.attachmentSummary.slice(0, 2).map((attachment) => (
@@ -1915,7 +2113,117 @@ export function HomePage(): JSX.Element {
           </span>
         ) : null}
         <span className="memory-signal-card-date">{formatTimestamp(signal.capturedAt)}</span>
+      </>
+    );
+
+    if (options.node) {
+      return (
+      <button
+        key={signal.id}
+        type="button"
+        className={`reference-save signal-revisit-card memory-signal-card memory-signal-card--${visual} memory-constellation-node memory-constellation-node--${visual}${
+          isSelected ? " signal-revisit-card--selected memory-signal-card--selected" : ""
+        } memory-signal-card--canvas`}
+        style={style}
+        onClick={() => {
+          setSelectedSavedSignalId(signal.id);
+          recordRevisit(signal.id, "detail_opened");
+        }}
+      >
+        {cardInner}
       </button>
+      );
+    }
+
+    return (
+      <article
+        key={signal.id}
+        className={`reference-save signal-revisit-card memory-signal-card memory-signal-card--${visual}${
+          isSelected ? " signal-revisit-card--selected memory-signal-card--selected" : ""
+        } memory-signal-card--list${isExpanded ? " memory-signal-card--expanded" : ""}`}
+      >
+        <button
+          type="button"
+          className="memory-signal-card-summary"
+          aria-expanded={isExpanded}
+          onClick={() => {
+            setSelectedSavedSignalId(isExpanded ? null : signal.id);
+            setSelectedInspirationText(null);
+            if (!isExpanded) recordRevisit(signal.id, "detail_opened");
+          }}
+        >
+          {cardInner}
+        </button>
+        {isExpanded ? (
+          <div className="memory-signal-card-detail signal-revisit-detail signal-revisit-detail--open">
+            {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the signal...</p> : null}
+            <section>
+              <span>original signal</span>
+            <p
+              className="signal-revisit-raw memory-readable-signal"
+              onMouseUp={() => handleMemoryTextSelection(signal.id)}
+              onKeyUp={() => handleMemoryTextSelection(signal.id)}
+            >
+              {renderHighlightedInspirationText(detailText, detailHighlights, (highlight) => {
+                void removeMemoryHighlight(signal.id, highlight);
+              })}
+            </p>
+            </section>
+            {selectedInspirationText?.signalId === signal.id ? (
+              <div className="memory-highlight-popover">
+                <span>{shortText(selectedInspirationText.text, 90)}</span>
+                <button
+                  type="button"
+                  disabled={highlightStatus.status === "saving"}
+                  onClick={() => void addMemoryHighlight(signal.id)}
+                >
+                  {highlightStatus.status === "saving" ? "adding..." : "add highlight"}
+                </button>
+              </div>
+            ) : null}
+            {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
+              <p className="signal-revisit-state">{highlightStatus.message}</p>
+            ) : null}
+            {(savedSignalDetail?.attachments.length ?? 0) > 0 || signal.attachmentSummary.length > 0 ? (
+              <section>
+                <span>attachment context</span>
+                <ul className="signal-revisit-notes">
+                  {(savedSignalDetail?.attachments.length
+                    ? savedSignalDetail.attachments.map((attachment) => ({
+                        id: attachment.id,
+                        label: `${attachment.label}${
+                          attachment.contentType || attachment.size
+                            ? ` · ${[attachment.contentType, attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : null]
+                                .filter(Boolean)
+                                .join(" · ")}`
+                            : ""
+                        }`,
+                      }))
+                    : signal.attachmentSummary
+                  ).map((attachment) => (
+                    <li key={attachment.id}>
+                      <strong>{attachment.label}</strong>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            <section>
+              <span>why it sits near other saves</span>
+              {selectedMemoryRelationship &&
+              [selectedMemoryRelationship.sourceId, selectedMemoryRelationship.targetId].includes(signal.id) ? (
+                <p>{selectedMemoryRelationship.reason}</p>
+              ) : signal.relatedTopOfMindNoteTitles[0] ? (
+                <p>It points toward "{signal.relatedTopOfMindNoteTitles[0]}".</p>
+              ) : signal.relatedContextTerms[0] ? (
+                <p>It shares language with "{signal.relatedContextTerms[0]}".</p>
+              ) : (
+                <p>No strong connection has earned a label yet.</p>
+              )}
+            </section>
+          </div>
+        ) : null}
+      </article>
     );
   };
 
@@ -1928,28 +2236,19 @@ export function HomePage(): JSX.Element {
     if (!source || !target) return null;
     const midX = (source.x + target.x) / 2;
     const midY = (source.y + target.y) / 2;
+    const sourceCenterX = source.x + 145;
+    const sourceCenterY = source.y + 80;
+    const targetCenterX = target.x + 135;
+    const targetCenterY = target.y + 78;
+    const controlX = midX - 70;
+    const controlY = midY + 118;
     return (
       <g key={relationship.id}>
-        <line
-          x1={`${source.x}%`}
-          y1={`${source.y}%`}
-          x2={`${target.x}%`}
-          y2={`${target.y}%`}
+        <title>{relationship.label}: {relationship.reason}</title>
+        <path
+          d={`M ${sourceCenterX} ${sourceCenterY} Q ${controlX} ${controlY} ${targetCenterX} ${targetCenterY}`}
           className="memory-constellation-line"
         />
-        <foreignObject x={`${midX - 12}%`} y={`${midY - 5}%`} width="24%" height="44">
-          <button
-            type="button"
-            className="memory-constellation-label"
-            onClick={() => {
-              setSelectedMemoryRelationshipId(relationship.id);
-              setRelationshipFeedback({ status: "idle" });
-              setRelationshipCorrectionText("");
-            }}
-          >
-            {relationship.label}
-          </button>
-        </foreignObject>
       </g>
     );
   };
@@ -2001,6 +2300,33 @@ export function HomePage(): JSX.Element {
     };
   }, [draggingIndex]);
 
+  useEffect(() => {
+    if (!actionDragging) return undefined;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = actionDragStartRef.current;
+      if (!start) return;
+      setActionDrag({
+        x: start.baseX + event.clientX - start.x,
+        y: start.baseY + event.clientY - start.y,
+      });
+    };
+
+    const handlePointerUp = () => {
+      actionDragStartRef.current = null;
+      setActionDragging(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [actionDragging]);
+
   const onNotePointerDown = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, a, input, textarea")) return;
@@ -2017,6 +2343,18 @@ export function HomePage(): JSX.Element {
     setDraggingIndex(index);
   };
 
+  const onActionPadPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, textarea")) return;
+    actionDragStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      baseX: actionDrag.x,
+      baseY: actionDrag.y,
+    };
+    setActionDragging(true);
+  };
+
   const onNoteClick = (index: number) => () => {
     if (dragMovedRef.current) {
       dragMovedRef.current = false;
@@ -2029,8 +2367,72 @@ export function HomePage(): JSX.Element {
     setExpandedNoteIndex(null);
   };
 
+  const toggleActionDone = (actionId: string): void => {
+    setCompletedActions((current) => {
+      const next = new Set(current);
+      if (next.has(actionId)) next.delete(actionId);
+      else next.add(actionId);
+      return next;
+    });
+  };
+
+  const removeActionItem = (actionId: string): void => {
+    setRemovedActions((current) => new Set(current).add(actionId));
+  };
+
+  const renderActionPostIt = (): JSX.Element | null => {
+    const activeItems = visibleActionItems.filter((item) => !completedActions.has(item.id));
+    if (visibleActionItems.length === 0 || activeItems.length === 0) return null;
+    return (
+      <aside
+        className={`nc-action-pad${actionDragging ? " nc-action-pad--dragging" : ""}`}
+        aria-label="suggested actions"
+        style={{
+          ["--action-dx" as string]: `${actionDrag.x}px`,
+          ["--action-dy" as string]: `${actionDrag.y}px`,
+        }}
+        onPointerDown={onActionPadPointerDown}
+      >
+        <header>
+          <span>try next</span>
+          <strong>get one signal from the real world</strong>
+        </header>
+        <ul>
+          {visibleActionItems.map((item) => {
+            const done = completedActions.has(item.id);
+            if (done) return null;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="nc-action-check"
+                  aria-label={`mark done: ${item.text}`}
+                  onClick={() => toggleActionDone(item.id)}
+                />
+                <span>
+                  <strong>{item.text}</strong>
+                  <small>
+                    from "{shortText(item.source, 54)}"
+                    {item.evidence ? ` · evidence: ${shortText(item.evidence, 54)}` : ""}
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  className="nc-action-remove"
+                  aria-label={`remove action: ${item.text}`}
+                  onClick={() => removeActionItem(item.id)}
+                >
+                  ×
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </aside>
+    );
+  };
+
   const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
-    const source = signal.supportingSignals[0];
     const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
     return (
@@ -2057,18 +2459,9 @@ export function HomePage(): JSX.Element {
           : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
       </p>
 
-      <div className="nc-note-reveal">
-        <div className="nc-note-evidence">
-          <span className="nc-note-evidence-label">ambition signal</span>
-          <p className="nc-note-evidence-quote">
-            "{shortText(source?.preview || signal.reason, 120)}"
-          </p>
-        <span className="nc-note-evidence-source">
-            — {signal.ambitionDimension?.replace(/_/g, " ") ?? meaningTypeLabel(signal.type)}
-          </span>
-        </div>
+      <div className="nc-note-explain">
+        <p>{explainThoughtCard(signal)}</p>
       </div>
-      {renderFeedbackControls(signal)}
     </article>
   );
   };
@@ -2076,7 +2469,6 @@ export function HomePage(): JSX.Element {
   const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
     const signal = meaningfulThoughtCards[index];
     if (!signal) return null;
-    const memoryMovement = memoryMovementForThoughtCard(signal, index);
     const relatedLabels = relatedMeaningLabels(signal);
     const source = signal.supportingSignals[0];
     const contextNodes =
@@ -2110,10 +2502,9 @@ export function HomePage(): JSX.Element {
 
         <header className="nc-note-peel-head">
           <div>
-            <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
-            <span className="nc-note-shifted">{memoryMovement}</span>
+            <span className="nc-note-title">opened post-it</span>
           </div>
-          <p>peeled open from the current five post-its</p>
+          <p>the short note, with just enough context to understand why it surfaced</p>
         </header>
 
         <div className="nc-note-expanded-content">
@@ -2129,30 +2520,26 @@ export function HomePage(): JSX.Element {
           <div className="nc-note-peel-grid">
             <section className="nc-note-context-panel" aria-labelledby={`top-of-mind-frequency-${signal.id}`}>
               <div className="nc-note-evidence-header">
-                <span>memory movement</span>
+                <span>why this matters</span>
                 <strong id={`top-of-mind-frequency-${signal.id}`}>
-                  {memoryMovement}
+                  current read
                 </strong>
               </div>
               <dl className="nc-note-frequency-list">
                 <div>
-                  <dt>why it is here now</dt>
-                  <dd>{replaceabilityLine(memoryMovement)}.</dd>
-                </div>
-                <div>
-                  <dt>what this points toward</dt>
+                  <dt>points toward</dt>
                   <dd>{signal.matchedEnvironment ?? "WAKA is still inferring the surrounding signal."}</dd>
                 </div>
                 <div>
-                  <dt>what it rejects</dt>
+                  <dt>pushes away from</dt>
                   <dd>{signal.antiEnvironment ?? "No rejected context has surfaced clearly yet."}</dd>
                 </div>
                 <div>
-                  <dt>what changed recently</dt>
+                  <dt>why now</dt>
                   <dd>{signal.evidenceRationale ?? "This read is provisional and should be corrected if it misses."}</dd>
                 </div>
                 <div>
-                  <dt>rejected alternate read</dt>
+                  <dt>not this</dt>
                   <dd>
                     {signal.rejectedAlternativeInterpretation ??
                       "No competing interpretation has been strong enough to name yet."}
@@ -2329,7 +2716,10 @@ export function HomePage(): JSX.Element {
               ) : topOfMindError ? (
                 <p className="nc-loading">{topOfMindError}</p>
               ) : meaningfulThoughtCards.length > 0 ? (
-                meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
+                <>
+                  {meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))}
+                  {renderActionPostIt()}
+                </>
               ) : (
                 <p className="nc-loading">{copy.emptyThoughts}</p>
               )}
@@ -2386,66 +2776,16 @@ export function HomePage(): JSX.Element {
               {memoryDrawerMode === "canvas" ? (
                 <section className="memory-constellation memory-canvas-mode" aria-label="memory canvas">
                   <div className="memory-constellation-board">
-                    <svg className="memory-constellation-lines" aria-hidden="true">
+                    <svg className="memory-constellation-lines" aria-hidden="true" viewBox="0 0 1040 650" preserveAspectRatio="xMinYMin meet">
                       {constellationRelationships.map(renderConstellationLine)}
                     </svg>
                     {constellationNodes.map(renderConstellationNode)}
                   </div>
-                  {selectedMemoryRelationship ? (
-                    <article className="memory-relationship-detail" aria-label="memory relationship detail">
-                      <header>
-                        <span>why these sit near each other</span>
-                        <h3>{selectedMemoryRelationship.label}</h3>
-                        <p>{selectedMemoryRelationship.reason}</p>
-                      </header>
-                      <div className="memory-relationship-sources">
-                        {[selectedMemoryRelationship.sourceSignal, selectedMemoryRelationship.targetSignal].map((signal) => (
-                          <section key={signal.id}>
-                            <span>{signalMaterialLabel(signal)}</span>
-                            <blockquote>{shortText(signal.highlightedSnippets[0]?.text ?? signal.textPreview, 180)}</blockquote>
-                          </section>
-                        ))}
-                      </div>
-                      <label className="memory-relationship-correction">
-                        <span>better label, optional</span>
-                        <input
-                          type="text"
-                          value={relationshipCorrectionText}
-                          placeholder="what should this connection be called?"
-                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                            setRelationshipCorrectionText(event.target.value)
-                          }
-                        />
-                      </label>
-                      <div className="memory-relationship-feedback" role="group" aria-label="relationship feedback">
-                        {[
-                          { action: "true" as const, label: "true" },
-                          { action: "not_connected" as const, label: "not connected" },
-                          { action: "better_label" as const, label: "better label" },
-                        ].map((item) => (
-                          <button
-                            key={item.action}
-                            type="button"
-                            disabled={relationshipFeedback.status === "saving"}
-                            onClick={() => void submitRelationshipFeedback(selectedMemoryRelationship, item.action)}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                      {relationshipFeedback.status === "saved" ? (
-                        <p className="memory-relationship-feedback-status">Saved: {relationshipFeedback.label}</p>
-                      ) : relationshipFeedback.status === "saving" ? (
-                        <p className="memory-relationship-feedback-status">Saving...</p>
-                      ) : relationshipFeedback.status === "error" ? (
-                        <p className="memory-relationship-feedback-status">{relationshipFeedback.message}</p>
-                      ) : null}
-                    </article>
-                  ) : (
+                  {!selectedMemoryRelationship ? (
                     <p className="memory-relationship-empty">
                       Save a few more signals and WAKA will draw a few gentle lines here.
                     </p>
-                  )}
+                  ) : null}
                 </section>
               ) : (
                 <section className="memory-list-mode" aria-label="memory list">
@@ -2459,85 +2799,6 @@ export function HomePage(): JSX.Element {
                   </div>
                 </section>
               )}
-
-              <article className="signal-revisit-detail signal-revisit-detail--open memory-open-card" aria-label="signal revisit">
-                {savedSignalsError ? <p>{savedSignalsError}</p> : null}
-                {savedSignalsLoading && inPlaceSignals.length === 0 ? <p>{copy.loadingSaves}</p> : null}
-                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-                ) : null}
-                {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the signal...</p> : null}
-                {!savedSignalDetailLoading && selectedSavedSignal ? (
-                  <>
-                    <header>
-                      <span>{signalMaterialLabel(selectedSavedSignal)} · {formatTimestamp(selectedSavedSignal.capturedAt)}</span>
-                      <h3>{shortText(savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview, 180)}</h3>
-                    </header>
-
-                    <section>
-                      <span>original signal</span>
-                      <p className="signal-revisit-raw">{savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview}</p>
-                    </section>
-
-                    <section>
-                      <span>what once hit · highlighted part</span>
-                      {(savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets).length > 0 ? (
-                        <ul className="signal-revisit-highlights">
-                          {(savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets)
-                            .slice(0, 3)
-                            .map((snippet) => (
-                              <li key={snippet.id}>
-                                <blockquote>{snippet.text}</blockquote>
-                              </li>
-                            ))}
-                        </ul>
-                      ) : (
-                        <p>No highlight yet. The whole signal can still be the part worth returning to.</p>
-                      )}
-                    </section>
-
-                    {(savedSignalDetail?.attachments.length ?? 0) > 0 || selectedSavedSignal.attachmentSummary.length > 0 ? (
-                      <section>
-                        <span>attachment context</span>
-                        <ul className="signal-revisit-notes">
-                          {(savedSignalDetail?.attachments.length
-                            ? savedSignalDetail.attachments.map((attachment) => ({
-                                id: attachment.id,
-                                label: `${attachment.label}${
-                                  attachment.contentType || attachment.size
-                                    ? ` · ${[attachment.contentType, attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : null]
-                                        .filter(Boolean)
-                                        .join(" · ")}`
-                                    : ""
-                                }`,
-                              }))
-                            : selectedSavedSignal.attachmentSummary
-                          ).map((attachment) => (
-                            <li key={attachment.id}>
-                              <strong>{attachment.label}</strong>
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    ) : null}
-
-                    <section>
-                      <span>why it sits near other saves</span>
-                      {(selectedMemoryRelationship &&
-                      [selectedMemoryRelationship.sourceId, selectedMemoryRelationship.targetId].includes(selectedSavedSignal.id)) ? (
-                        <p>{selectedMemoryRelationship.reason}</p>
-                      ) : selectedSavedSignal.relatedTopOfMindNoteTitles[0] ? (
-                        <p>It points toward "{selectedSavedSignal.relatedTopOfMindNoteTitles[0]}".</p>
-                      ) : selectedSavedSignal.relatedContextTerms[0] ? (
-                        <p>It shares language with "{selectedSavedSignal.relatedContextTerms[0]}".</p>
-                      ) : (
-                        <p>No strong connection has earned a label yet.</p>
-                      )}
-                    </section>
-
-                  </>
-                ) : null}
-              </article>
             </div>
           </section>
         )}

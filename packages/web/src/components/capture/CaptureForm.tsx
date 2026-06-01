@@ -46,6 +46,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -210,6 +211,31 @@ const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string; ic
   { value: "not_sure", label: "I don't know yet", icon: "...", prompt: "What is the first clue?" },
 ];
 
+function suggestedResonanceOptions(text: string): typeof resonanceOptions {
+  const normalized = text.toLowerCase();
+  const scored = resonanceOptions.map((option, index) => {
+    let score = resonanceOptions.length - index;
+    if (option.value === "want" && /\b(want|need|wish|desire|hope|more|beautiful|love)\b/.test(normalized)) score += 12;
+    if (option.value === "envy" && /\b(envy|jealous|they have|someone else|wish i had)\b/.test(normalized)) score += 12;
+    if (option.value === "hurt" && /\b(hurt|pain|grief|sad|lonely|rejected|lost)\b/.test(normalized)) score += 12;
+    if (option.value === "scared" && /\b(scared|fear|risk|stakes|uncertain|danger|terrifying)\b/.test(normalized)) score += 12;
+    if (option.value === "want_people_like_this" && /\b(people|friend|founder|builder|mentor|room|community|together)\b/.test(normalized)) score += 12;
+    if (option.value === "build_toward_this" && /\b(build|make|create|company|product|work|ship)\b/.test(normalized)) score += 12;
+    if (option.value === "live_near_this" && /\b(city|place|where|room|environment|home|studio|live)\b/.test(normalized)) score += 12;
+    if (option.value === "not_me_anymore" && /\b(done|not me|anymore|leave|reject|outgrow|never again)\b/.test(normalized)) score += 12;
+    if (option.value === "miss" && /\b(miss|nostalgia|again|used to|remember)\b/.test(normalized)) score += 12;
+    if (option.value === "feels_like_me" && /\b(me|myself|identity|recognize|true)\b/.test(normalized)) score += 12;
+    return { option, score };
+  });
+
+  const top = scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map((item) => item.option);
+  if (!top.some((option) => option.value === "not_sure")) top.push(resonanceOptions[resonanceOptions.length - 1]);
+  return top;
+}
+
 export function extractUrlsFromText(text: string): string[] {
   const matches = text.match(URL_REGEX) ?? [];
   const out: string[] = [];
@@ -369,7 +395,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [highlight, setHighlight] = useState<HighlightedSignalText | null>(null);
-    const [latestSelection, setLatestSelection] = useState<HighlightedSignalText | null>(null);
+    const [pendingHighlight, setPendingHighlight] = useState<HighlightedSignalText | null>(null);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [resonanceNote, setResonanceNote] = useState("");
     const [saving, setSaving] = useState(false);
@@ -383,6 +409,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
+    const pullOptions = useMemo(
+      () => suggestedResonanceOptions(highlight?.text ?? note).slice(0, 6),
+      [highlight?.text, note],
+    );
 
     useEffect(() => {
       const draft = readStoredCaptureDraft();
@@ -489,8 +519,11 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
     const handleNoteChange = useCallback((next: string): void => {
       setNote(next);
-      setLatestSelection(null);
       setHighlight((current) => {
+        if (!current) return current;
+        return next.slice(current.startOffset, current.endOffset) === current.text ? current : null;
+      });
+      setPendingHighlight((current) => {
         if (!current) return current;
         return next.slice(current.startOffset, current.endOffset) === current.text ? current : null;
       });
@@ -502,20 +535,17 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const end = target.selectionEnd;
       const text = target.value.slice(start, end).trim();
       if (!text || start === end) {
-        setLatestSelection(null);
         return;
       }
-      setLatestSelection({ text, startOffset: start, endOffset: end });
+      const rawSelection = target.value.slice(start, end);
+      const leadingWhitespace = rawSelection.match(/^\s*/)?.[0].length ?? 0;
+      const trailingWhitespace = rawSelection.match(/\s*$/)?.[0].length ?? 0;
+      setPendingHighlight({
+        text,
+        startOffset: start + leadingWhitespace,
+        endOffset: end - trailingWhitespace,
+      });
     }, []);
-
-    const markLatestSelection = useCallback((): void => {
-      if (!latestSelection) {
-        flashConfirm("Select the part that hit, then mark it.", 2200);
-        return;
-      }
-      setHighlight(latestSelection);
-      flashConfirm("Marked as the part that hit.", 1600);
-    }, [flashConfirm, latestSelection]);
 
     const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
       const pasted = event.clipboardData.getData("text/plain") || event.clipboardData.getData("text");
@@ -759,7 +789,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }
         setNote("");
         setHighlight(null);
-        setLatestSelection(null);
+        setPendingHighlight(null);
         setResonance(null);
         setResonanceNote("");
         setReflectionAnswer("");
@@ -788,20 +818,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
               <div className="cap-save-mirror-actions" role="group" aria-label="post-save mirror actions">
                 <button type="button" onClick={() => {
                   setConfirmVisible(false);
-                  onDismissAfterSave?.();
-                }}>keep</button>
-                <button type="button" onClick={() => {
-                  setNote(inspirationText);
-                  setConfirmVisible(false);
                   queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#capNote")?.focus());
-                }}>adjust</button>
+                }}>new note</button>
                 <button type="button" onClick={() => {
                   setConfirmVisible(false);
                   onDismissAfterSave?.();
-                }}>just save</button>
+                }}>close</button>
               </div>
             </div>,
-            9000,
+            4200,
           );
         }
       } catch (err) {
@@ -876,6 +901,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         view={activeView}
         visualState={{ ...visualState, reflectGlow }}
         noteValue={note}
+        noteHighlight={highlight}
         notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
         onNotePaste={handleNotePaste}
@@ -903,61 +929,70 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         captureMeta={
           <div className="cap-meta" id="capMeta">
             <div className="cap-highlight-row">
-              <button
-                type="button"
-                className="cap-highlight-btn"
-                id="capHighlight"
-                onClick={markLatestSelection}
-                disabled={!latestSelection}
-              >
-                {t(locale, "markWhatHit")}
-              </button>
               {highlight ? (
-                <span className="cap-highlight-chip" id="capHighlightChip">
-                  <span>{highlight.text}</span>
+                <span className="cap-highlight-state" id="capHighlightState">
+                  highlighted in text
                   <button
                     type="button"
                     aria-label={t(locale, "removeHighlight")}
-                    onClick={() => setHighlight(null)}
+                    onClick={() => {
+                      setHighlight(null);
+                      setResonance(null);
+                    }}
                   >
-                    x
+                    clear
+                  </button>
+                </span>
+              ) : pendingHighlight ? (
+                <span className="cap-highlight-state cap-highlight-state--pending" id="capHighlightState">
+                  {pendingHighlight.text}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHighlight(pendingHighlight);
+                      setPendingHighlight(null);
+                    }}
+                  >
+                    add highlight
                   </button>
                 </span>
               ) : (
-                <span className="cap-draft-state" id="capDraftState">{t(locale, "autosavedLocally")}</span>
+                <span className="cap-draft-state" id="capDraftState">Select a phrase, then add a highlight. {t(locale, "autosavedLocally")}</span>
               )}
             </div>
-            <fieldset className="cap-resonance" id="capResonance">
-              <legend>{t(locale, "resonanceQuestion")}</legend>
-              <div className="cap-resonance-options">
-                {resonanceOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={resonance === option.value ? "selected" : ""}
-                    aria-pressed={resonance === option.value}
-                    onClick={() => setResonance((current) => (current === option.value ? null : option.value))}
-                  >
-                    <span className="cap-resonance-icon" aria-hidden="true">{option.icon}</span>
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
-              {resonance ? (
-                <label className="cap-resonance-note" htmlFor="capResonanceNote">
-                  <span>{resonancePrompt(resonance)}</span>
-                  <input
-                    id="capResonanceNote"
-                    ref={resonanceNoteInputRef}
-                    type="text"
-                    value={resonanceNote}
-                    onChange={(event) => setResonanceNote(event.currentTarget.value)}
-                    onInput={(event) => setResonanceNote(event.currentTarget.value)}
-                    placeholder={t(locale, "resonanceNotePlaceholder")}
-                  />
-                </label>
-              ) : null}
-            </fieldset>
+            {highlight ? (
+              <fieldset className="cap-resonance" id="capResonance">
+                <legend>suggested pulls for this highlight</legend>
+                <div className="cap-resonance-options">
+                  {pullOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={resonance === option.value ? "selected" : ""}
+                      aria-pressed={resonance === option.value}
+                      onClick={() => setResonance((current) => (current === option.value ? null : option.value))}
+                    >
+                      <span className="cap-resonance-icon" aria-hidden="true">{option.icon}</span>
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {resonance ? (
+                  <label className="cap-resonance-note" htmlFor="capResonanceNote">
+                    <span>{resonancePrompt(resonance)}</span>
+                    <input
+                      id="capResonanceNote"
+                      ref={resonanceNoteInputRef}
+                      type="text"
+                      value={resonanceNote}
+                      onChange={(event) => setResonanceNote(event.currentTarget.value)}
+                      onInput={(event) => setResonanceNote(event.currentTarget.value)}
+                      placeholder={t(locale, "resonanceNotePlaceholder")}
+                    />
+                  </label>
+                ) : null}
+              </fieldset>
+            ) : null}
           </div>
         }
         reflectQuestion={

@@ -185,9 +185,8 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.placeholder).toBe(
       "What almost slipped away?",
     );
-    expect(container?.querySelector("#capResonance")?.textContent).toContain("What pull does it have?");
-    expect(container?.querySelector("#capResonance")?.textContent).toContain("I want people like this");
-    expect(container?.querySelector("#capResonance")?.textContent).toContain("I don't know yet");
+    expect(container?.querySelector("#capResonance")).toBeNull();
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Select a phrase, then add a highlight.");
   });
 
   it("autosaves draft text locally and restores it on the next mount", async () => {
@@ -223,9 +222,14 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.setSelectionRange(20, 58);
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
+    expect(container?.querySelector("#capHighlightState")?.textContent).toContain("add highlight");
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>("#capHighlight")?.click();
+      container?.querySelector<HTMLButtonElement>("#capHighlightState button")?.click();
     });
+    expect(container?.querySelector("#capHighlightState")?.textContent).toContain("highlighted in text");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe(
+      "studios with huge north-facing windows",
+    );
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
         .find((button) => button.textContent?.includes("I want this"))
@@ -263,7 +267,15 @@ describe("CaptureForm multi-input quick capture", () => {
   it("offers a one-tap reason and optional micro-answer without blocking save", async () => {
     await renderCaptureForm();
     await act(async () => {
-      setText("A tiny studio ritual I want to borrow");
+      setText("This scared me because it feels high stakes");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(0, "This scared me".length);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capHighlightState button")?.click();
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
@@ -281,15 +293,15 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
 
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "A tiny studio ritual I want to borrow",
+      text: "This scared me because it feels high stakes",
       kind: "note",
       sparks: [
         {
-          text: "A tiny studio ritual I want to borrow",
-          source: "user_written",
-          startOffset: undefined,
-          endOffset: undefined,
-          confidence: 90,
+          text: "This scared me",
+          source: "user_selected",
+          startOffset: 0,
+          endOffset: 14,
+          confidence: 100,
           isPrimary: true,
           note: `capture_metadata:v1:${JSON.stringify({
             reason: "scared",
@@ -301,14 +313,13 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     expect(createReflection).not.toHaveBeenCalled();
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Tiny mirror, not a verdict: this reads like this scared me.",
+      "Tiny mirror, not a verdict: the marked part is carrying the charge.",
     );
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("keep");
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("adjust");
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("just save");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("new note");
+    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("close");
   });
 
-  it("lets the user adjust after the non-final mirror without losing the saved text", async () => {
+  it("lets the user keep writing after the non-final mirror", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("This private weather needs one more pass");
@@ -317,19 +328,25 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button") ?? [])
-        .find((button) => button.textContent === "adjust")
+        .find((button) => button.textContent === "new note")
         ?.click();
     });
 
-    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
-      "This private weather needs one more pass",
-    );
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
   });
 
   it("persists the optional reason note as stronger user-provided capture metadata", async () => {
     await renderCaptureForm();
     await act(async () => {
-      setText("This operating cadence feels expensive but clarifying");
+      setText("I want to build toward this operating cadence");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(0, "I want to build toward this".length);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capHighlightState button")?.click();
     });
     await act(async () => {
       Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
@@ -347,18 +364,22 @@ describe("CaptureForm multi-input quick capture", () => {
     await clickQuickSave();
 
     expect(createInspiration).toHaveBeenCalledWith({
-      text: "This operating cadence feels expensive but clarifying",
+      text: "I want to build toward this operating cadence",
       kind: "note",
       sparks: [
-        expect.objectContaining({
-          source: "user_written",
-          confidence: 90,
+        {
+          text: "I want to build toward this",
+          source: "user_selected",
+          startOffset: 0,
+          endOffset: 27,
+          confidence: 100,
+          isPrimary: true,
           note: `capture_metadata:v1:${JSON.stringify({
             reason: "build_toward_this",
             reasonLabel: "I want to build toward this",
             userReason: "This might change what I commit to next.",
           })}`,
-        }),
+        },
       ],
     });
   });

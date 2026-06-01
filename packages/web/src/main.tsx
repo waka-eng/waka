@@ -34,8 +34,6 @@ import AdminWowStatusPage from "./pages/AdminWowStatus";
 import HomePage from "./pages/Home";
 import LoginPage from "./pages/Login";
 import MeaningGraphPage from "./pages/MeaningGraph";
-import SavedSignalsArchivePage from "./pages/SavedSignalsArchive";
-import TopOfMindSharePage from "./pages/TopOfMindShare";
 import "./styles/global.css";
 
 const root = document.getElementById("root");
@@ -67,22 +65,6 @@ ReactDOM.createRoot(root).render(
             element={
               <RequireAuth>
                 <HomePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/signals"
-            element={
-              <RequireAuth>
-                <SavedSignalsArchivePage />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/top-of-mind/share"
-            element={
-              <RequireAuth>
-                <TopOfMindSharePage />
               </RequireAuth>
             }
           />

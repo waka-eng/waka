@@ -39,6 +39,7 @@
 - Memory Drawer constellation relationships are currently derived in Home from saved-signal overlap in related Top of Mind notes, context terms, relevance reasons, and matching snippets; relationship feedback is stored as `targetType: "signal"` with `relationship_feedback:v1` correction text until a dedicated relationship feedback target exists.
 - Top-of-mind primary text should be compressed but interpretable, usually 6-14 words, with a concrete ambition object plus a reason, contrast, or tension; reject ultra-short slogans such as "public before perfect", "taste as default", "test it outside", and "courage normal".
 - Memory Drawer should stay as two modes inside Home: chronological List and relationship Canvas. Do not reintroduce memory-movement sections, dense sidebars, search-first structure, or graph/admin vocabulary into this user-facing revisit surface.
+- Top of Mind action checklist items should be generated from post-it evidence, ambient/environment fields, and ambition dimension. Reject generic reflective homework such as "do one tiny test", "explore", "journal", "learn more", or actions that simply repeat the post-it title.
 
 ---
 
@@ -1299,5 +1300,32 @@
     - Browser verification needs to mock the best-effort `/api/inspirations/:id/revisits` endpoint if logs matter; missing it only produced Vite proxy noise because revisit recording is non-blocking.
   - Useful context
     - Optional what-changed text rides through `createFeedback` as `correctionText` on `targetType: "signal"`.
+
+---
+
+## 2026-06-01 00:00 PDT - US-036
+
+- What was implemented
+  - Replaced the shallow `actionForThoughtCard` template fallback with bounded action generation that uses each Top of Mind note's title, evidence preview, matched/anti-environment fields, and ambition dimension.
+  - Filtered out generic/template actions and duplicate weak actions before rendering the active checklist.
+  - Made the action checklist its own draggable paper object and kept done/remove actions hiding items from the active checklist.
+  - Added visible post-it and evidence provenance to each action without exposing graph/admin language.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 44 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, and Top of Mind API responses. Verified grounded action copy, no generic placeholders, done hides the checklist, and pointer dragging updates the action paper position.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Action post-its need real-world verbs plus evidence linkage; reflective homework should be treated as a failed generation.
+  - Gotchas encountered
+    - Browser verification must mock `/api/*` paths, not unprefixed API paths.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
