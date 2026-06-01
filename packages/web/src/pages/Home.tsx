@@ -137,14 +137,12 @@ type MemoryMovementLabel =
   | "tension"
   | "needs testing";
 
-const TOP_OF_MIND_SIGNAL_THRESHOLD = 2;
 const TOP_OF_MIND_NOTE_LIMIT = 5;
 
 const PRODUCT_SPACES = {
   capture: "Capture",
   topOfMind: "Five Top of Mind post-its",
   memoryDrawer: "Memory Drawer",
-  share: "Share",
   internalDebug: "Internal Debug",
 } as const;
 
@@ -545,6 +543,14 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
   };
 }
 
+function isMeaningfulThoughtCard(card: HomeThoughtCard): boolean {
+  const label = normalizeMeaningLabel(card.label);
+  if (!label) return false;
+  if (/waiting for a stronger signal|stronger signal to earn this spot/.test(label)) return false;
+  if (card.status && card.status !== "active") return false;
+  return true;
+}
+
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
   { top: "24px", left: "calc(50% - 200px)", tilt: -1.4, w: "400px" },
   { top: "74px", left: "calc(50% - 520px)", tilt: -2.2, w: "260px" },
@@ -560,8 +566,6 @@ const NOTE_COLORS = [
   { hue: "#cdd3df", ink: "#3a4456" },
   { hue: "#f1d7a8", ink: "#4f3921" },
 ];
-
-const EMPTY_TOP_OF_MIND_SLOTS = Array.from({ length: TOP_OF_MIND_NOTE_LIMIT }, (_, index) => index);
 
 const MEMORY_DRAWER_LENSES: Array<{ id: MemoryDrawerLens; label: string }> = [
   { id: "all", label: "all" },
@@ -657,7 +661,6 @@ const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "top of mind",
     savesTab: "memory drawer",
-    shareTab: "share",
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
@@ -725,7 +728,6 @@ const HOME_COPY = {
   "en-US": {
     thoughtTab: "top of mind",
     savesTab: "memory drawer",
-    shareTab: "share",
     room: "my room",
     titleLineOne: (name: string) => (
       <>
@@ -797,7 +799,6 @@ const HOME_COPY = {
   {
     thoughtTab: string;
     savesTab: string;
-    shareTab: string;
     room: string;
     titleLineOne: (name: string) => JSX.Element;
     titleLineTwo: string;
@@ -1558,6 +1559,7 @@ export function HomePage(): JSX.Element {
   const thoughtCards = topOfMindNotes.length > 0
     ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
+  const meaningfulThoughtCards = thoughtCards.filter(isMeaningfulThoughtCard);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
   const dateLabel = new Date().toLocaleDateString("en-US", {
@@ -1566,14 +1568,11 @@ export function HomePage(): JSX.Element {
     day: "numeric",
   });
   const copy = HOME_COPY[locale];
-  const hasEnoughSignalsForTopOfMind =
-    entries.length >= TOP_OF_MIND_SIGNAL_THRESHOLD || thoughtCards.length > 0;
 
   useEffect(() => {
     if (homeModeChosen || initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
     setHomeMode("topOfMind");
   }, [
-    hasEnoughSignalsForTopOfMind,
     homeModeChosen,
     initialLoading,
     topOfMindLoading,
@@ -1844,7 +1843,6 @@ export function HomePage(): JSX.Element {
     const source = signal.supportingSignals[0];
     const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
-    const memoryMovement = memoryMovementForThoughtCard(signal, index);
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
@@ -1863,11 +1861,6 @@ export function HomePage(): JSX.Element {
       onPointerDown={onNotePointerDown(index)}
       onClick={onNoteClick(index)}
     >
-      <header className="nc-note-head">
-        <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
-        <span className="nc-note-shifted">{memoryMovement}</span>
-      </header>
-
       <p className="nc-note-body">
         {locale === "en-US"
           ? signal.label
@@ -1880,48 +1873,18 @@ export function HomePage(): JSX.Element {
           <p className="nc-note-evidence-quote">
             "{shortText(source?.preview || signal.reason, 120)}"
           </p>
-          <span className="nc-note-evidence-source">
+        <span className="nc-note-evidence-source">
             — {signal.ambitionDimension?.replace(/_/g, " ") ?? meaningTypeLabel(signal.type)}
           </span>
         </div>
-        <span className="nc-note-replaceability">{replaceabilityLine(memoryMovement)}</span>
       </div>
       {renderFeedbackControls(signal)}
     </article>
   );
   };
 
-  const renderEmptyTopOfMindSlot = (index: number): JSX.Element => {
-    const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
-    return (
-      <article
-        className="nc-note nc-note--empty"
-        key={`empty-top-of-mind-${index}`}
-        aria-label={`empty Top of Mind slot ${index + 1}`}
-        style={{
-          ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
-          ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
-          ["--tilt" as string]: `${position.tilt}deg`,
-          ["--w" as string]: position.w,
-          ["--top" as string]: position.top,
-          ["--left" as string]: position.left,
-          ["--dx" as string]: "0px",
-          ["--dy" as string]: "0px",
-          ["--decay" as string]: "0.42",
-        }}
-      >
-        <header className="nc-note-head">
-          <span className="nc-note-title">no. {String(index + 1).padStart(2, "0")}</span>
-          <span className="nc-note-shifted">waiting</span>
-        </header>
-        <p className="nc-note-body">Waiting for a stronger signal to earn this spot.</p>
-        <span className="nc-note-replaceability">empty on purpose; replaced when memory moves</span>
-      </article>
-    );
-  };
-
   const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
-    const signal = thoughtCards[index];
+    const signal = meaningfulThoughtCards[index];
     if (!signal) return null;
     const memoryMovement = memoryMovementForThoughtCard(signal, index);
     const relatedLabels = relatedMeaningLabels(signal);
@@ -2130,9 +2093,6 @@ export function HomePage(): JSX.Element {
             >
               {copy.savesTab} ({entries.length})
             </button>
-            <Link to="/top-of-mind/share" className="nc-mode-link" aria-label={PRODUCT_SPACES.share}>
-              {copy.shareTab}
-            </Link>
             </div>
           </div>
           <span className="nc-meta">{dateLabel}</span>
@@ -2178,12 +2138,8 @@ export function HomePage(): JSX.Element {
                 <p className="nc-loading">{copy.loadingThoughts}</p>
               ) : topOfMindError ? (
                 <p className="nc-loading">{topOfMindError}</p>
-              ) : hasEnoughSignalsForTopOfMind ? (
-                EMPTY_TOP_OF_MIND_SLOTS.map((slotIndex) =>
-                  thoughtCards[slotIndex]
-                    ? renderThoughtCard(thoughtCards[slotIndex], slotIndex)
-                    : renderEmptyTopOfMindSlot(slotIndex),
-                )
+              ) : meaningfulThoughtCards.length > 0 ? (
+                meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
               ) : (
                 <p className="nc-loading">{copy.emptyThoughts}</p>
               )}
@@ -2217,9 +2173,6 @@ export function HomePage(): JSX.Element {
                   placeholder={copy.searchPlaceholder}
                 />
                 </label>
-                <Link to="/signals" className="reference-saves-archive-link">
-                  older archive view
-                </Link>
               </details>
             </header>
 

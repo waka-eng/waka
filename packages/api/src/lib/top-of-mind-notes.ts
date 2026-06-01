@@ -117,39 +117,55 @@ function ambitionDimensionFromMoment(moment: TopOfMindNoteWowMoment): AmbitionDi
 function mirrorTitleFromLegacyLabel(_label: string, dimension: AmbitionDimension): string {
   switch (dimension) {
     case "place":
-      return "I need places that quietly tell me to be braver.";
+      return "places that make courage normal";
     case "people":
-      return "I want peers who make fast, public building feel normal.";
+      return "people who make courage normal";
     case "work":
-      return "I need workrooms where making the thing is the default temperature.";
+      return "public before perfect";
     case "taste":
-      return "I want standards that make sharper taste feel ordinary.";
+      return "sharper taste as the default";
     case "tension":
     case "rejection":
-      return "I am done with rooms that reward consensus over aliveness.";
+      return "consensus rooms make me go quiet";
     case "next_experiment":
-      return "I need a small real-world test, not another private theory.";
+      return "test it in public";
     case "identity":
     default:
-      return "I need surroundings that make this emerging self-image feel normal.";
+      return "this self-image needs a room";
   }
 }
 
-function isFirstPersonPostIt(value: string): boolean {
-  return /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i.test(
-    normalizeTitleText(value),
-  );
+function isForcedFirstPersonTemplate(value: string): boolean {
+  return /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i.test(normalizeTitleText(value));
 }
 
 function isOutsideVoicePostIt(value: string): boolean {
   return /^(you|your|this person|waka)\b/i.test(normalizeTitleText(value));
 }
 
+function isWeakPostItThought(value: string): boolean {
+  const normalized = normalizeTitleText(value);
+  if (/\b(i think|maybe|might|probably|seems|kind of)\b/i.test(normalized)) return true;
+  if (/^(this may point to|this points to|the pattern is|a theme of)\b/i.test(normalized)) return true;
+  if (/^you keep circling\b/i.test(normalized)) return true;
+  if (/rooms where .+ can become normal|work that turns .+ visible/i.test(normalized)) return true;
+  return false;
+}
+
+function isPostItThought(value: string): boolean {
+  const normalized = normalizeTitleText(value);
+  if (!normalized) return false;
+  if (isOutsideVoicePostIt(normalized) || isForcedFirstPersonTemplate(normalized) || isWeakPostItThought(normalized)) {
+    return false;
+  }
+  return normalized.split(/\s+/).length <= 12;
+}
+
 function primaryPostItText(value: string | null | undefined, dimension: AmbitionDimension): string | null {
   const normalized = (value ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
   if (isOutsideVoicePostIt(normalized)) return mirrorTitleFromLegacyLabel(normalized, dimension);
-  if (isFirstPersonPostIt(normalized)) return normalized;
+  if (isPostItThought(normalized)) return normalizeTitleText(normalized);
   return null;
 }
 

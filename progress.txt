@@ -35,6 +35,36 @@
 - Ambition synthesis is a bounded layer after deterministic Top of Mind ranking: use `packages/api/src/lib/ambition-synthesis.ts` for trigger gating, compact evidence inputs, prior feedback/rewrites, rejected alternatives, generic-output rejection, and deterministic fallback.
 - Shareable Top of Mind surfaces can show generated post-its and provenance counts, but raw saved-signal text should stay private until an explicit sharing permission model exists.
 - Internal context debugging should use `/api/admin/meaning-graph` as the diagnostic surface for memory movement, synthesis quality, Top of Mind provenance, and user corrections; keep this admin-only and out of the primary user experience.
+- Primary Top of Mind post-it text should use compressed sticky-note thought language, usually 3-9 words and no more than 12, without forced `I need`/`I want`/`I am done with` starts; keep memory/status metadata in peel-open detail or internal debug, not on the visible card.
+
+---
+
+## 2026-05-31 21:13 PDT - US-032
+
+- What was implemented
+  - Changed deterministic Top of Mind generation and legacy note normalization from forced first-person sentences to concise sticky-note thought language such as "public before perfect" and "people who make courage normal".
+  - Updated ambition synthesis and Top of Mind judge validation/prompt guidance so outside diagnostic voice, weak hedges, and template-like first-person starts are rejected for primary post-it text.
+  - Removed memory/status metadata from the visible Home post-it card surface while keeping it available in the peel-open detail view.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/ambition-synthesis.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - Targeted API/web tests and `prd.json`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/lib/ambition-synthesis.test.ts src/lib/model-provider.test.ts` passed: 19 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 41 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, and Top of Mind API responses. Verified one meaningful post-it, no forced first-person card text, no visible card metadata, and peel-open detail retains memory movement.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Primary post-it text should be treated as a thought fragment, not a sentence template; word count and voice checks belong in generation, serialization, synthesis quality gates, and UI tests.
+  - Gotchas encountered
+    - Browser verification mocks need broad `/api/**` fallbacks registered before specific routes so the specific Top of Mind mock wins.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 

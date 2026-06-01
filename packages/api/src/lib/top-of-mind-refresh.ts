@@ -202,6 +202,26 @@ function displayLabel(value: string): string {
   return `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
 }
 
+function postItThoughtForDimension(dimension: AmbitionDimension): string {
+  switch (dimension) {
+    case "place":
+      return "places that make courage normal";
+    case "people":
+      return "people who make courage normal";
+    case "work":
+      return "public before perfect";
+    case "taste":
+      return "sharper taste as the default";
+    case "tension":
+    case "rejection":
+      return "consensus rooms make me go quiet";
+    case "identity":
+      return "this self-image needs a room";
+    case "next_experiment":
+      return "test it in public";
+  }
+}
+
 function ambitionDimensionForContextType(type: ContextNodeType): AmbitionDimension {
   switch (type) {
     case "environment":
@@ -248,28 +268,28 @@ function buildInternalFrequency(
   switch (dimension) {
     case "place":
       return {
-        ambientSignal: "I need places that quietly tell me to be braver.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `A city, studio, or room where ${label} feels publicly reinforced.`,
         antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
         evidenceRationale: evidencePhrase,
       };
     case "people":
       return {
-        ambientSignal: "I want peers who make fast, public building feel normal.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `People who make ${label} feel like a shared operating rhythm.`,
         antiEnvironment: "Circles where permission, polish, or social caution arrives before motion.",
         evidenceRationale: evidencePhrase,
       };
     case "work":
       return {
-        ambientSignal: "I need workrooms where making the thing is the default temperature.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `A working culture where ${label} becomes visible through repeated making.`,
         antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
         evidenceRationale: evidencePhrase,
       };
     case "taste":
       return {
-        ambientSignal: "I want standards that make sharper taste feel ordinary.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `Surroundings where ${label} is treated as a standard, not decoration.`,
         antiEnvironment: "Rooms that flatten taste into trend, convenience, or generic approval.",
         evidenceRationale: evidencePhrase,
@@ -277,21 +297,21 @@ function buildInternalFrequency(
     case "tension":
     case "rejection":
       return {
-        ambientSignal: "I am done with rooms that reward consensus over aliveness.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `A surrounding culture that lets the tension around ${label} stay visible long enough to choose from it.`,
         antiEnvironment: "Rooms that smooth over the live part so everyone can keep performing agreement.",
         evidenceRationale: evidencePhrase,
       };
     case "identity":
       return {
-        ambientSignal: "I need surroundings that make this emerging self-image feel normal.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `An environment where ${label} is mirrored back as normal behavior.`,
         antiEnvironment: "Contexts that make the emerging version of you feel like a private exception.",
         evidenceRationale: evidencePhrase,
       };
     case "next_experiment":
       return {
-        ambientSignal: "I need a small real-world test, not another private theory.",
+        ambientSignal: postItThoughtForDimension(dimension),
         matchedEnvironment: `A practical setting where ${label} can be tested in public conditions.`,
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale: evidencePhrase,
@@ -313,7 +333,7 @@ function buildWhy(
     .map((row) => evidencePreview(row))
     .filter((preview) => preview.length > 0)
     .slice(0, 5);
-  const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings I need.`;
+  const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings this note is trying to find.`;
   const memoryText = ` Memory movement: ${node.evidenceCount} reinforcement${node.evidenceCount === 1 ? "" : "s"}; current state is derived from recurrence, recency, decay, and reactivation.`;
   const descriptionText = description ? ` ${description}` : "";
   const signalText =

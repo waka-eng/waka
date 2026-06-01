@@ -575,6 +575,26 @@
       "priority": 34,
       "passes": true,
       "notes": "Internal debug should serve product truth: is WAKA learning what actually moves the user, or just generating aesthetic summaries? This should help inspect the memory loop and ambition synthesis loop without leaking machinery into the user experience."
+    },
+    {
+      "id": "US-032",
+      "title": "Generate Top of Mind in post-it thought language",
+      "description": "As a user, I want Top of Mind post-its to sound like compressed private thoughts I might quickly jot down, not forced first-person AI insight sentences.",
+      "acceptanceCriteria": [
+        "Replace the primary Top of Mind voice rule from forced first-person sentence starts to post-it thought language: fragments, questions, imperatives, tensions, and shorthand are allowed",
+        "Primary post-it text should usually be concise, preferably 3-9 words and no more than 12 words unless the evidence genuinely requires it",
+        "Avoid forced starts such as \"I need\", \"I want\", and \"I am done with\" in generated primary post-it text unless they sound natural and are not template-like",
+        "Continue banning outside diagnostic voice such as \"you seem\", \"you may\", \"this person\", \"WAKA thinks\", and generic AI framing",
+        "Generated post-its must still point at ambition context such as people, place, work, taste, rejection, identity, tension, or next experiment",
+        "Replace deterministic fallback templates with natural sticky-note phrasing such as \"people who make courage normal\", \"public before perfect\", \"consensus rooms make me go quiet\", \"sharper taste as the default\", or \"test it in public\"",
+        "Remove visible top metadata from post-it cards such as \"no. 01\", \"keeps returning\", or other status labels; keep any memory movement metadata inside the opened detail view or internal debug only",
+        "Do not render empty or weak Top of Mind slots at all; show only meaningful post-its that have earned the surface",
+        "Update generation, serialization/normalization, Home rendering, tests, and internal quality checks so summary-like, overly polished, or template-like post-it text fails",
+        "Run API/web typechecks, targeted Top of Mind generation tests, targeted Home tests, and browser verification of the Home Top of Mind path"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": "Product correction: first-person notes like \"I need rooms where...\" and \"I want peers who...\" sound unnatural when forced. Top of Mind should read like a sticky note from the user's inner weather: \"people who make courage normal\", \"not another impressive path\", \"softness without losing intensity\", \"what does this envy know?\", \"make the thing before explaining it\". The post-it should feel compressed, specific, replaceable, and ambition-relevant without sounding like a generated affirmation."
     }
   ]
 }

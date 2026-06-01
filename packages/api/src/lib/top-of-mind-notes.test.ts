@@ -66,9 +66,9 @@ describe("top-of-mind note compatibility model", () => {
     expect(note).toEqual({
       id: baseMoment.id,
       userId: baseMoment.userId,
-      title: "I need places that quietly tell me to be braver.",
+      title: "places that make courage normal",
       ambitionDimension: "place",
-      ambientSignal: "I need places that quietly tell me to be braver.",
+      ambientSignal: "places that make courage normal",
       matchedEnvironment:
         "A city, studio, or room where a provisional reflection feels publicly reinforced.",
       antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
@@ -104,7 +104,7 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("I need places that quietly tell me to be braver.");
+    expect(note.title).toBe("places that make courage normal");
     expect(note.title).not.toBe("founder cities");
     expect(note.title).not.toMatch(/^You keep circling\b/);
     expect(note.title).not.toMatch(/rooms where .+ can become normal/i);
@@ -115,19 +115,19 @@ describe("top-of-mind note compatibility model", () => {
     const note = topOfMindNoteFromWowMoment({
       moment: {
         ...baseMoment,
-        title: "I want peers who make fast, public building feel normal.",
+        title: "people who make courage normal",
         why:
-          "Ambient signal: I want peers who make fast, public building feel normal. " +
+          "Ambient signal: people who make courage normal. " +
           "Matched environment: People who make publishing early feel ordinary. " +
           "Anti-environment: Circles where permission arrives before motion. " +
           "Evidence rationale: Three saved signals are clustering around this frequency. " +
           "This may matter for ambition because it points at a people frequency.",
-        beliefStatement: "I want peers who make fast, public building feel normal.",
+        beliefStatement: "people who make courage normal",
       },
     });
 
     expect(note).toMatchObject({
-      ambientSignal: "I want peers who make fast, public building feel normal.",
+      ambientSignal: "people who make courage normal",
       matchedEnvironment: "People who make publishing early feel ordinary.",
       antiEnvironment: "Circles where permission arrives before motion.",
       evidenceRationale: "Three saved signals are clustering around this frequency.",
@@ -135,7 +135,7 @@ describe("top-of-mind note compatibility model", () => {
     });
   });
 
-  it("rewrites older outside-voice primary post-it text into first-person jotting", () => {
+  it("rewrites older outside-voice primary post-it text into sticky-note thought language", () => {
     const note = topOfMindNoteFromWowMoment({
       moment: {
         ...baseMoment,
@@ -150,11 +150,14 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("I want peers who make fast, public building feel normal.");
-    expect(note.ambientSignal).toBe("I want peers who make fast, public building feel normal.");
+    expect(note.title).toBe("people who make courage normal");
+    expect(note.ambientSignal).toBe("people who make courage normal");
     expect(note.title).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
     expect(note.ambientSignal).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
+    expect(note.title).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
+    expect(note.ambientSignal).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
     expect(note.title).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
     expect(note.ambientSignal).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
+    expect(note.title.split(/\s+/).length).toBeLessThanOrEqual(12);
   });
 });

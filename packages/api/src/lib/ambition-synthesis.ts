@@ -83,7 +83,10 @@ const MAX_FIELD_CHARS = 420;
 const SHALLOW_CATEGORY_PATTERN =
   /\b(startups?|comedy|cities|ai|inspiration|productivity)\b/i;
 const PERSONAL_EDGE_PATTERN =
-  /\b(because|so I can|rooms?|peers?|work|standards?|surroundings?|environment|reject|done with|aliveness|public|braver|build|courage|normalizes?|private planning|visible)\b/i;
+  /\b(because|so I can|rooms?|places?|peers?|people|work|standards?|taste|surroundings?|environment|reject|done with|aliveness|public|braver|build|courage|normalizes?|private planning|visible|self-image|test|consensus)\b/i;
+const OUTSIDE_VOICE_PATTERN = /^(you|your|this person|waka)\b/i;
+const FORCED_TEMPLATE_PATTERN = /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i;
+const WEAK_HEDGE_PATTERN = /\b(i think|maybe|might|probably|seems|kind of)\b/i;
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -286,17 +289,20 @@ export function shouldRunAmbitionSynthesis(input: {
 export function isSpecificAmbitionSynthesisOutput(
   output: AmbitionSynthesisOutput,
 ): boolean {
+  const candidateText = normalizeWhitespace(output.firstPersonPostItCandidate);
   const text = [
-    output.firstPersonPostItCandidate,
+    candidateText,
     output.environmentDirection,
     output.rejectedEnvironment,
     output.evidenceRationale,
   ].join(" ");
-  if (!/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i.test(output.firstPersonPostItCandidate)) {
-    return false;
-  }
+  const wordCount = candidateText.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 3 || wordCount > 12) return false;
+  if (OUTSIDE_VOICE_PATTERN.test(candidateText)) return false;
+  if (FORCED_TEMPLATE_PATTERN.test(candidateText)) return false;
+  if (WEAK_HEDGE_PATTERN.test(candidateText)) return false;
   if (
-    SHALLOW_CATEGORY_PATTERN.test(output.firstPersonPostItCandidate) &&
+    SHALLOW_CATEGORY_PATTERN.test(candidateText) &&
     !PERSONAL_EDGE_PATTERN.test(text)
   ) {
     return false;

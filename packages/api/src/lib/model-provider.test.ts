@@ -78,7 +78,7 @@ describe("model provider abstraction", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({
       contextType: "project",
-      title: "I need workrooms where making the thing is the default temperature.",
+      title: "public before perfect",
     });
 
     await expect(
@@ -102,8 +102,7 @@ describe("model provider abstraction", () => {
         tokenBudget: 2400,
         estimatedTokens: 100,
         fallback: {
-          firstPersonPostItCandidate:
-            "I need workrooms where making the thing is the default temperature.",
+          firstPersonPostItCandidate: "public before perfect",
           memoryState: "active",
           environmentDirection:
             "A working culture where humane ambition becomes visible through repeated making.",
@@ -117,8 +116,7 @@ describe("model provider abstraction", () => {
         },
       }),
     ).resolves.toMatchObject({
-      firstPersonPostItCandidate:
-        "I need workrooms where making the thing is the default temperature.",
+      firstPersonPostItCandidate: "public before perfect",
       rejectedAlternativeInterpretation: expect.stringContaining("shallow read"),
     });
   });

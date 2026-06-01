@@ -130,8 +130,8 @@ describe("rankTopOfMindRefreshCandidates", () => {
       contextType: "open_question",
       ambitionDimension: "next_experiment",
       kind: "outlier",
-      title: "I need a small real-world test, not another private theory.",
-      ambientSignal: "I need a small real-world test, not another private theory.",
+      title: "test it in public",
+      ambientSignal: "test it in public",
       matchedEnvironment:
         "A practical setting where what kind of ambition still leaves room for life can be tested in public conditions.",
       reflectionQuestion: "what kind of ambition still leaves room for life?",
@@ -227,14 +227,17 @@ describe("rankTopOfMindRefreshCandidates", () => {
     });
 
     const titles = candidates.map((candidate) => candidate.title);
-    expect(titles).toContain("I need workrooms where making the thing is the default temperature.");
-    expect(titles).toContain("I am done with rooms that reward consensus over aliveness.");
+    expect(titles).toContain("public before perfect");
+    expect(titles).toContain("consensus rooms make me go quiet");
     for (const candidate of candidates) {
       expect(candidate.title).not.toBe(candidate.node.label);
       expect(candidate.title).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
       expect(candidate.ambientSignal).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
+      expect(candidate.title).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
+      expect(candidate.ambientSignal).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
       expect(candidate.title).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
       expect(candidate.ambientSignal).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
+      expect(candidate.title.split(/\s+/).length).toBeLessThanOrEqual(12);
       expect(candidate.title).not.toMatch(/^You keep circling\b/);
       expect(candidate.title).not.toMatch(/rooms where .+ can become normal/i);
       expect(candidate.title).not.toMatch(/work that turns .+ visible/i);

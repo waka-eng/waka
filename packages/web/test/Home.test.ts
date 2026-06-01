@@ -185,7 +185,7 @@ const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
     ],
     matchingSnippets: ["bridge rhythms"],
     relatedContextTerms: ["places that make movement visible"],
-    relatedTopOfMindNoteTitles: ["I need workrooms where making the thing is the default temperature."],
+    relatedTopOfMindNoteTitles: ["public before perfect"],
     attachmentSummary: [],
     relevanceReasons: ["highlighted"],
   },
@@ -238,7 +238,7 @@ const sampleSavedSignalDetail: ApiSavedSignalDetail = {
   relatedTopOfMindNotes: [
     {
       id: "note-1",
-      title: "I need workrooms where making the thing is the default temperature.",
+      title: "public before perfect",
       type: "pattern",
       body: "The signal keeps pointing toward environments where movement becomes a public artifact.",
       confidence: 0.82,
@@ -250,9 +250,9 @@ const sampleSavedSignalDetail: ApiSavedSignalDetail = {
 const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
   userId: "user-1",
-  title: "I need workrooms where making the thing is the default temperature.",
+  title: "public before perfect",
   ambitionDimension: "work",
-  ambientSignal: "I need workrooms where making the thing is the default temperature.",
+  ambientSignal: "public before perfect",
   matchedEnvironment: "A working culture where bridge rhythms become visible through repeated making.",
   antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
   evidenceRationale: "Several saved signals cluster around city walks, architecture, and jazz history.",
@@ -298,7 +298,7 @@ const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
 
 const sampleTopOfMind: ApiTopOfMind = {
   generatedAt: "2026-05-12T12:00:00.000Z",
-  headline: "I need workrooms where making the thing is the default temperature.",
+  headline: "public before perfect",
   activeThemes: [
     {
       nodeId: "theme-1",
@@ -735,9 +735,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("top of mind");
     expect(container.textContent).toContain("memory drawer (2)");
-    expect(container.querySelector<HTMLAnchorElement>("a[aria-label='Share']")?.getAttribute("href")).toBe(
-      "/top-of-mind/share",
-    );
+    expect(container.querySelector("a[href='/top-of-mind/share']")).toBeNull();
     expect(container.querySelector(".admin-entry-pill")?.textContent).toBe("Debug");
     expect(container.textContent).not.toContain("meaning graph");
     expect(container.textContent).not.toContain("compatibility archive");
@@ -749,13 +747,13 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
-    expect(container.querySelectorAll(".nc-note")).toHaveLength(5);
-    expect(container.textContent).toContain("I need workrooms where making the thing is the default temperature.");
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
+    expect(container.textContent).toContain("public before perfect");
     expect(container.textContent).toContain("ambition signal");
-    expect(container.textContent).toContain("keeps returning");
-    expect(container.textContent).toContain("not final");
-    expect(container.textContent).toContain("changed by new signals");
-    expect(container.textContent).toContain("Waiting for a stronger signal to earn this spot.");
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("not final");
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("changed by new signals");
+    expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
@@ -768,7 +766,9 @@ describe("HomePage current home experience", () => {
     );
 
     expect(postitBodies).toHaveLength(1);
-    expect(postitBodies[0]).toMatch(/^I (need|want|am done with)\b/);
+    expect(postitBodies[0]).toBe("public before perfect");
+    expect(postitBodies[0]).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
+    expect(postitBodies[0].split(/\s+/).length).toBeLessThanOrEqual(12);
     expect(postitBodies.join(" ")).not.toMatch(/\b(startups|comedy|cities|AI|inspiration|productivity)\b/i);
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
@@ -804,7 +804,7 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
     expect(expanded?.textContent).toContain("ambition dimension");
     expect(expanded?.textContent).toContain("work");
-    expect(expanded?.textContent).toContain("I need workrooms where making the thing is the default temperature.");
+    expect(expanded?.textContent).toContain("public before perfect");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
   });
@@ -982,7 +982,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("I need workrooms where making the thing is the default temperature.");
+    expect(container.textContent).toContain("public before perfect");
   });
 
   it("localizes the logout affordance in Korean", async () => {
@@ -1108,7 +1108,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("emotional pull at capture time");
     expect(detail.textContent).toContain("what it may reveal now");
     expect(detail.textContent).toContain("related context");
-    expect(detail.textContent).toContain("I need workrooms where making the thing is the default temperature.");
+    expect(detail.textContent).toContain("public before perfect");
     expect(detail.textContent).toContain("what did this mean then?");
     expect(detail.textContent).toContain("what does it mean now?");
     expect(detail.textContent).toContain("is this still me?");
