@@ -87,6 +87,12 @@ const PERSONAL_EDGE_PATTERN =
 const OUTSIDE_VOICE_PATTERN = /^(you|your|this person|waka)\b/i;
 const FORCED_TEMPLATE_PATTERN = /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i;
 const WEAK_HEDGE_PATTERN = /\b(i think|maybe|might|probably|seems|kind of)\b/i;
+const SLOGAN_LIKE_POST_IT_PATTERN =
+  /^(public before perfect|taste as default|test it outside|test it in public|courage normal|places that make courage normal|people who make courage normal|sharper taste as the default)$/i;
+const CONCRETE_AMBITION_OBJECT_PATTERN =
+  /\b(people|peers|rooms?|places?|city|cities|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b/i;
+const INTERPRETABLE_POST_IT_PATTERN =
+  /\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b/i;
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -297,7 +303,10 @@ export function isSpecificAmbitionSynthesisOutput(
     output.evidenceRationale,
   ].join(" ");
   const wordCount = candidateText.split(/\s+/).filter(Boolean).length;
-  if (wordCount < 3 || wordCount > 12) return false;
+  if (wordCount < 5 || wordCount > 14) return false;
+  if (SLOGAN_LIKE_POST_IT_PATTERN.test(candidateText)) return false;
+  if (!CONCRETE_AMBITION_OBJECT_PATTERN.test(candidateText)) return false;
+  if (!INTERPRETABLE_POST_IT_PATTERN.test(candidateText)) return false;
   if (OUTSIDE_VOICE_PATTERN.test(candidateText)) return false;
   if (FORCED_TEMPLATE_PATTERN.test(candidateText)) return false;
   if (WEAK_HEDGE_PATTERN.test(candidateText)) return false;

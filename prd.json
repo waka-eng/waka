@@ -634,7 +634,7 @@
         "Run API/web typechecks, targeted Top of Mind generation tests, targeted Home tests, and browser verification of the Home Top of Mind path"
       ],
       "priority": 37,
-      "passes": false,
+      "passes": true,
       "notes": "Product correction after US-032: the app overcorrected from forced first-person sentences into phrases that can be too short to be useful. The target is not slogans. A good post-it should be short enough to feel quickly jotted, but complete enough to help the user recognize themself."
     }
   ]

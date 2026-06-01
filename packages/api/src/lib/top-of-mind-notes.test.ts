@@ -66,9 +66,9 @@ describe("top-of-mind note compatibility model", () => {
     expect(note).toEqual({
       id: baseMoment.id,
       userId: baseMoment.userId,
-      title: "places that make courage normal",
+      title: "a room where unfinished ambition is allowed",
       ambitionDimension: "place",
-      ambientSignal: "places that make courage normal",
+      ambientSignal: "a room where unfinished ambition is allowed",
       matchedEnvironment:
         "A city, studio, or room where a provisional reflection feels publicly reinforced.",
       antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
@@ -104,7 +104,7 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("places that make courage normal");
+    expect(note.title).toBe("a room where unfinished ambition is allowed");
     expect(note.title).not.toBe("founder cities");
     expect(note.title).not.toMatch(/^You keep circling\b/);
     expect(note.title).not.toMatch(/rooms where .+ can become normal/i);
@@ -115,19 +115,19 @@ describe("top-of-mind note compatibility model", () => {
     const note = topOfMindNoteFromWowMoment({
       moment: {
         ...baseMoment,
-        title: "people who make courage normal",
+        title: "people who make courage feel normal",
         why:
-          "Ambient signal: people who make courage normal. " +
+          "Ambient signal: people who make courage feel normal. " +
           "Matched environment: People who make publishing early feel ordinary. " +
           "Anti-environment: Circles where permission arrives before motion. " +
           "Evidence rationale: Three saved signals are clustering around this frequency. " +
           "This may matter for ambition because it points at a people frequency.",
-        beliefStatement: "people who make courage normal",
+        beliefStatement: "people who make courage feel normal",
       },
     });
 
     expect(note).toMatchObject({
-      ambientSignal: "people who make courage normal",
+      ambientSignal: "people who make courage feel normal",
       matchedEnvironment: "People who make publishing early feel ordinary.",
       antiEnvironment: "Circles where permission arrives before motion.",
       evidenceRationale: "Three saved signals are clustering around this frequency.",
@@ -150,14 +150,37 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("people who make courage normal");
-    expect(note.ambientSignal).toBe("people who make courage normal");
+    expect(note.title).toBe("people who make courage feel normal");
+    expect(note.ambientSignal).toBe("people who make courage feel normal");
     expect(note.title).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
     expect(note.ambientSignal).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
     expect(note.title).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
     expect(note.ambientSignal).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
     expect(note.title).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
     expect(note.ambientSignal).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
-    expect(note.title.split(/\s+/).length).toBeLessThanOrEqual(12);
+    expect(note.title.split(/\s+/).length).toBeGreaterThanOrEqual(5);
+    expect(note.title.split(/\s+/).length).toBeLessThanOrEqual(14);
+  });
+
+  it("rejects slogan-like legacy post-it text and replaces it with interpretable thought language", () => {
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        title: "build in public",
+        why:
+          "Ambient signal: public before perfect. " +
+          "Matched environment: A working culture where making comes before polish. " +
+          "Anti-environment: Work contexts that keep the real object abstract. " +
+          "Evidence rationale: Two saved signals support this work direction. " +
+          "This may matter for ambition because it points at a work frequency.",
+        beliefStatement: "public before perfect",
+      },
+    });
+
+    expect(note.title).toBe("a room where unfinished ambition is allowed");
+    expect(note.ambientSignal).toBe("a room where unfinished ambition is allowed");
+    expect(note.title).not.toMatch(
+      /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
+    );
   });
 });

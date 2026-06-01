@@ -185,7 +185,7 @@ const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
     ],
     matchingSnippets: ["bridge rhythms"],
     relatedContextTerms: ["places that make movement visible"],
-    relatedTopOfMindNoteTitles: ["public before perfect"],
+    relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
     attachmentSummary: [],
     relevanceReasons: ["highlighted"],
   },
@@ -238,7 +238,7 @@ const sampleSavedSignalDetail: ApiSavedSignalDetail = {
   relatedTopOfMindNotes: [
     {
       id: "note-1",
-      title: "public before perfect",
+      title: "make the thing before explaining it",
       type: "pattern",
       body: "The signal keeps pointing toward environments where movement becomes a public artifact.",
       confidence: 0.82,
@@ -250,9 +250,9 @@ const sampleSavedSignalDetail: ApiSavedSignalDetail = {
 const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
   id: "note-1",
   userId: "user-1",
-  title: "public before perfect",
+  title: "make the thing before explaining it",
   ambitionDimension: "work",
-  ambientSignal: "public before perfect",
+  ambientSignal: "make the thing before explaining it",
   matchedEnvironment: "A working culture where bridge rhythms become visible through repeated making.",
   antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
   evidenceRationale: "Several saved signals cluster around city walks, architecture, and jazz history.",
@@ -298,7 +298,7 @@ const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
 
 const sampleTopOfMind: ApiTopOfMind = {
   generatedAt: "2026-05-12T12:00:00.000Z",
-  headline: "public before perfect",
+  headline: "make the thing before explaining it",
   activeThemes: [
     {
       nodeId: "theme-1",
@@ -748,7 +748,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-stage")).not.toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("top of mind");
     expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
-    expect(container.textContent).toContain("public before perfect");
+    expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).toContain("ambition signal");
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("not final");
@@ -766,9 +766,14 @@ describe("HomePage current home experience", () => {
     );
 
     expect(postitBodies).toHaveLength(1);
-    expect(postitBodies[0]).toBe("public before perfect");
+    expect(postitBodies[0]).toBe("make the thing before explaining it");
     expect(postitBodies[0]).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
-    expect(postitBodies[0].split(/\s+/).length).toBeLessThanOrEqual(12);
+    expect(postitBodies[0].split(/\s+/).length).toBeGreaterThanOrEqual(5);
+    expect(postitBodies[0].split(/\s+/).length).toBeLessThanOrEqual(14);
+    expect(postitBodies[0]).toMatch(/\b(people|room|work|thing|path|taste|self|question|experiment)\b/i);
+    expect(postitBodies[0]).not.toMatch(
+      /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
+    );
     expect(postitBodies.join(" ")).not.toMatch(/\b(startups|comedy|cities|AI|inspiration|productivity)\b/i);
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
@@ -804,7 +809,7 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("Several saved signals cluster around city walks");
     expect(expanded?.textContent).toContain("ambition dimension");
     expect(expanded?.textContent).toContain("work");
-    expect(expanded?.textContent).toContain("public before perfect");
+    expect(expanded?.textContent).toContain("make the thing before explaining it");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
   });
@@ -982,7 +987,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("public before perfect");
+    expect(container.textContent).toContain("make the thing before explaining it");
   });
 
   it("localizes the logout affordance in Korean", async () => {
@@ -1061,7 +1066,7 @@ describe("HomePage current home experience", () => {
         textPreview: "Handwritten thought about rooms where making feels public",
         kind: "note",
         relatedContextTerms: ["public making rooms"],
-        relatedTopOfMindNoteTitles: ["public before perfect"],
+        relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
         attachmentSummary: [],
       },
       {
@@ -1239,7 +1244,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("emotional pull at capture time");
     expect(detail.textContent).toContain("what it may reveal now");
     expect(detail.textContent).toContain("related context");
-    expect(detail.textContent).toContain("public before perfect");
+    expect(detail.textContent).toContain("make the thing before explaining it");
     expect(detail.textContent).toContain("what did this mean then?");
     expect(detail.textContent).toContain("what does it mean now?");
     expect(detail.textContent).toContain("is this still me?");

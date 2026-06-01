@@ -143,7 +143,7 @@ describe("bounded ambition synthesis", () => {
 
   it("uses mocked provider synthesis when it states the user's personal edge", async () => {
     const output: AmbitionSynthesisOutput = {
-      firstPersonPostItCandidate: "people who make courage normal",
+      firstPersonPostItCandidate: "people who make courage feel normal",
       memoryState: "active",
       environmentDirection:
         "People and rooms where shipping in public feels like the expected rhythm.",
@@ -171,7 +171,7 @@ describe("bounded ambition synthesis", () => {
       skipped: 0,
     });
     expect(result.candidates[0]).toMatchObject({
-      title: "people who make courage normal",
+      title: "people who make courage feel normal",
       matchedEnvironment:
         "People and rooms where shipping in public feels like the expected rhythm.",
       rejectedAlternativeInterpretation:
@@ -208,7 +208,7 @@ describe("bounded ambition synthesis", () => {
       fellBack: 1,
     });
     expect(result.candidates[0]?.title).toBe(
-      "places that make courage normal",
+      "a room where unfinished ambition is allowed",
     );
     expect(result.candidates[0]?.rejectedAlternativeInterpretation).toContain(
       "shallow read",

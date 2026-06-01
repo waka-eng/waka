@@ -117,21 +117,21 @@ function ambitionDimensionFromMoment(moment: TopOfMindNoteWowMoment): AmbitionDi
 function mirrorTitleFromLegacyLabel(_label: string, dimension: AmbitionDimension): string {
   switch (dimension) {
     case "place":
-      return "places that make courage normal";
+      return "a room where unfinished ambition is allowed";
     case "people":
-      return "people who make courage normal";
+      return "people who make courage feel normal";
     case "work":
-      return "public before perfect";
+      return "make the thing before explaining it";
     case "taste":
-      return "sharper taste as the default";
+      return "sharper taste than the room expects";
     case "tension":
     case "rejection":
-      return "consensus rooms make me go quiet";
+      return "not another impressive path that feels dead";
     case "next_experiment":
-      return "test it in public";
+      return "test the question where it can cost something";
     case "identity":
     default:
-      return "this self-image needs a room";
+      return "a self that gets braver in public";
   }
 }
 
@@ -145,10 +145,25 @@ function isOutsideVoicePostIt(value: string): boolean {
 
 function isWeakPostItThought(value: string): boolean {
   const normalized = normalizeTitleText(value);
+  const lower = normalized.toLowerCase();
   if (/\b(i think|maybe|might|probably|seems|kind of)\b/i.test(normalized)) return true;
   if (/^(this may point to|this points to|the pattern is|a theme of)\b/i.test(normalized)) return true;
   if (/^you keep circling\b/i.test(normalized)) return true;
   if (/rooms where .+ can become normal|work that turns .+ visible/i.test(normalized)) return true;
+  if (
+    [
+      "public before perfect",
+      "taste as default",
+      "test it outside",
+      "test it in public",
+      "courage normal",
+      "places that make courage normal",
+      "people who make courage normal",
+      "sharper taste as the default",
+    ].includes(lower)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -158,7 +173,12 @@ function isPostItThought(value: string): boolean {
   if (isOutsideVoicePostIt(normalized) || isForcedFirstPersonTemplate(normalized) || isWeakPostItThought(normalized)) {
     return false;
   }
-  return normalized.split(/\s+/).length <= 12;
+  const wordCount = normalized.split(/\s+/).length;
+  if (wordCount < 5 || wordCount > 14) return false;
+  if (!/\b(people|peers|room|rooms|place|places|city|cities|work|build|building|thing|path|taste|life|self|standard|experiment|question|environment)\b/i.test(normalized)) {
+    return false;
+  }
+  return /\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b/i.test(normalized);
 }
 
 function primaryPostItText(value: string | null | undefined, dimension: AmbitionDimension): string | null {

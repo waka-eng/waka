@@ -205,20 +205,20 @@ function displayLabel(value: string): string {
 function postItThoughtForDimension(dimension: AmbitionDimension): string {
   switch (dimension) {
     case "place":
-      return "places that make courage normal";
+      return "a room where unfinished ambition is allowed";
     case "people":
-      return "people who make courage normal";
+      return "people who make courage feel normal";
     case "work":
-      return "public before perfect";
+      return "make the thing before explaining it";
     case "taste":
-      return "sharper taste as the default";
+      return "sharper taste than the room expects";
     case "tension":
     case "rejection":
-      return "consensus rooms make me go quiet";
+      return "not another impressive path that feels dead";
     case "identity":
-      return "this self-image needs a room";
+      return "a self that gets braver in public";
     case "next_experiment":
-      return "test it in public";
+      return "test the question where it can cost something";
   }
 }
 
