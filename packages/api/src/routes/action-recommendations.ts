@@ -50,6 +50,11 @@ const updateActionRecommendationSchema = z
       (status) => status !== "active",
       "status must be completed or removed",
     ),
+    outcomeText: z.string().trim().max(1000).optional(),
+    relatedSignalIds: z
+      .array(z.string().uuid("relatedSignalIds must contain uuids"))
+      .max(10)
+      .optional(),
   })
   .strict();
 
@@ -65,6 +70,8 @@ export interface SaveActionRecommendationStateInput {
   actionId: string;
   sourceTopOfMindId: string;
   status: Exclude<ActionRecommendationStatus, "active">;
+  outcomeText?: string;
+  relatedSignalIds?: string[];
 }
 
 export interface ActionRecommendationsRouteDependencies {
@@ -101,6 +108,15 @@ function parseActionStateMetadata(row: {
     actionId: raw.actionId,
     sourceTopOfMindId: row.targetId,
     status: raw.status as ActionRecommendationStatus,
+    outcomeText:
+      typeof raw.outcomeText === "string" && raw.outcomeText.trim()
+        ? raw.outcomeText.trim()
+        : null,
+    relatedSignalIds: Array.isArray(raw.relatedSignalIds)
+      ? raw.relatedSignalIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
     updatedAt: row.updatedAt ?? row.createdAt,
   };
 }
@@ -155,6 +171,8 @@ export async function saveActionRecommendationStateForUser(
   if (!sourceNote) return null;
 
   const now = new Date();
+  const outcomeText = input.outcomeText?.trim();
+  const relatedSignalIds = input.relatedSignalIds ?? [];
   const [row] = await db
     .insert(feedback)
     .values({
@@ -162,11 +180,14 @@ export async function saveActionRecommendationStateForUser(
       targetType: "top_of_mind_note",
       targetId: input.sourceTopOfMindId,
       value: input.status === "completed" ? "important" : "not_important",
+      correctionText: outcomeText || null,
       source: ACTION_FEEDBACK_SOURCE,
       metadata: {
         actionRecommendation: {
           actionId: input.actionId,
           status: input.status,
+          ...(outcomeText ? { outcomeText } : {}),
+          ...(relatedSignalIds.length > 0 ? { relatedSignalIds } : {}),
         },
       },
       updatedAt: now,
@@ -246,12 +267,20 @@ export function createActionRecommendationsRoutes(
       );
     }
 
-    const state = await saveState(getDatabase(), {
+    const saveInput: SaveActionRecommendationStateInput = {
       userId: c.get("user").id,
       actionId: parsed.data.actionId,
       sourceTopOfMindId: parsed.data.sourceTopOfMindId,
       status: parsed.data.status as Exclude<ActionRecommendationStatus, "active">,
-    });
+    };
+    if (parsed.data.outcomeText?.trim()) {
+      saveInput.outcomeText = parsed.data.outcomeText.trim();
+    }
+    if (parsed.data.relatedSignalIds?.length) {
+      saveInput.relatedSignalIds = parsed.data.relatedSignalIds;
+    }
+
+    const state = await saveState(getDatabase(), saveInput);
 
     if (!state) {
       return c.json({ error: "Action recommendation source not found" }, 404);
@@ -266,4 +295,3 @@ export function createActionRecommendationsRoutes(
 export const actionRecommendationsRoutes = createActionRecommendationsRoutes();
 
 export type { RecommendedAction };
-

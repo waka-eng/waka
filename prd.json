@@ -849,7 +849,7 @@
         "Run API/web typechecks, targeted action loop tests, and browser verification on desktop and mobile"
       ],
       "priority": 47,
-      "passes": false,
+      "passes": true,
       "notes": "Actions are WAKA's coaching edge. They should be straightforward commands, and the result of doing them should become new personal context."
     },
     {

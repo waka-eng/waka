@@ -823,7 +823,7 @@ describe("HomePage current home experience", () => {
     expect(fetchActionRecommendations).toHaveBeenCalled();
   });
 
-  it("lets action checklist items disappear when done or removed", async () => {
+  it("asks for an optional action outcome before a done item disappears", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -831,6 +831,44 @@ describe("HomePage current home experience", () => {
     expect(markDone?.getAttribute("aria-label")).toContain("mark done:");
     await act(async () => {
       markDone?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(container.textContent).toContain("what happened?");
+
+    const outcome = container.querySelector<HTMLTextAreaElement>(".nc-action-outcome textarea");
+    expect(outcome).not.toBeNull();
+    await act(async () => {
+      setInputValue(outcome!, "It showed the rough version was ready enough to start a conversation.");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-action-outcome button[type='submit']")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-action-pad")).toBeNull();
+    expect(updateActionRecommendationState).toHaveBeenCalledWith(
+      sampleActionRecommendation.id,
+      {
+        sourceTopOfMindId: sampleActionRecommendation.sourceTopOfMindId,
+        status: "completed",
+        outcomeText: "It showed the rough version was ready enough to start a conversation.",
+      },
+    );
+  });
+
+  it("lets action checklist items disappear when done without an outcome or removed", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const markDone = container.querySelector<HTMLButtonElement>(".nc-action-check");
+    await act(async () => {
+      markDone?.click();
+    });
+    await flushReactWork();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".nc-action-outcome button")].find(
+        (button) => button.textContent === "skip",
+      )?.click();
     });
     await flushReactWork();
     expect(container.querySelector(".nc-action-pad")).toBeNull();

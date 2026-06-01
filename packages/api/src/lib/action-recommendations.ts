@@ -25,6 +25,8 @@ export interface ActionRecommendationState {
   actionId: string;
   sourceTopOfMindId: string;
   status: ActionRecommendationStatus;
+  outcomeText: string | null;
+  relatedSignalIds: string[];
   updatedAt: Date;
 }
 
@@ -179,6 +181,25 @@ function scoreAction(note: TopOfMindNoteSurface, text: string): number {
   return Math.min(Math.max(score, 0), 100);
 }
 
+function hasOutcomeEvidence(state: ActionRecommendationState): boolean {
+  return Boolean(
+    state.status === "completed" &&
+      ((state.outcomeText ?? "").trim() || state.relatedSignalIds.length > 0),
+  );
+}
+
+function scoreOutcomeEvidence(
+  note: TopOfMindNoteSurface,
+  states: ActionRecommendationState[],
+): number {
+  const completedOutcomes = states.filter(
+    (state) =>
+      state.sourceTopOfMindId === note.id && hasOutcomeEvidence(state),
+  );
+  if (completedOutcomes.length === 0) return 0;
+  return Math.min(12, completedOutcomes.length * 8);
+}
+
 export function recommendActionsFromTopOfMind(input: {
   notes: TopOfMindNoteSurface[];
   states?: ActionRecommendationState[];
@@ -189,6 +210,7 @@ export function recommendActionsFromTopOfMind(input: {
   const statesById = new Map(
     (input.states ?? []).map((state) => [state.actionId, state]),
   );
+  const states = input.states ?? [];
   const seenText = new Set<string>();
 
   const candidates = input.notes
@@ -203,7 +225,10 @@ export function recommendActionsFromTopOfMind(input: {
       const id = `action-${note.id}-${stableHash(action.text)}`;
       const state = statesById.get(id);
       const status = state?.status ?? "active";
-      const confidence = scoreAction(note, action.text);
+      const confidence = Math.min(
+        scoreAction(note, action.text) + scoreOutcomeEvidence(note, states),
+        100,
+      );
       if (confidence < 60) return [];
 
       return [
@@ -232,4 +257,3 @@ export function recommendActionsFromTopOfMind(input: {
 
   return candidates.slice(0, input.limit ?? 5);
 }
-

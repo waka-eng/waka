@@ -862,12 +862,16 @@ export interface ListActionRecommendationsResponse {
 export interface UpdateActionRecommendationStateRequest {
   sourceTopOfMindId: string;
   status: Exclude<ApiActionRecommendationStatus, "active">;
+  outcomeText?: string;
+  relatedSignalIds?: string[];
 }
 
 export interface ApiActionRecommendationState {
   actionId: string;
   sourceTopOfMindId: string;
   status: ApiActionRecommendationStatus;
+  outcomeText?: string | null;
+  relatedSignalIds?: string[];
   updatedAt: string;
 }
 

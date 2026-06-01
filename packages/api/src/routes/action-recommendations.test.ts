@@ -70,6 +70,8 @@ describe("GET /api/action-recommendations", () => {
           actionId: input.actionId,
           sourceTopOfMindId: input.sourceTopOfMindId,
           status: input.status,
+          outcomeText: input.outcomeText ?? null,
+          relatedSignalIds: input.relatedSignalIds ?? [],
           updatedAt: new Date("2026-06-01T10:00:00.000Z"),
         };
         states.unshift(state);
@@ -133,6 +135,64 @@ describe("GET /api/action-recommendations", () => {
     const secondResponse = await app.request("/api/action-recommendations");
     await expect(secondResponse.json()).resolves.toEqual({
       actionRecommendations: [],
+    });
+  });
+
+  it("persists optional completion outcomes with the completed action", async () => {
+    const db = {};
+    const saveState = vi.fn(
+      async (_db: unknown, input: SaveActionRecommendationStateInput) => ({
+        actionId: input.actionId,
+        sourceTopOfMindId: input.sourceTopOfMindId,
+        status: input.status,
+        outcomeText: input.outcomeText ?? null,
+        relatedSignalIds: input.relatedSignalIds ?? [],
+        updatedAt: new Date("2026-06-01T10:00:00.000Z"),
+      }),
+    );
+    const app = new Hono();
+    app.route(
+      "/api/action-recommendations",
+      createActionRecommendationsRoutes({
+        getDatabase: () => db as any,
+        authMiddleware: authMiddleware(),
+        listTopOfMindNotes: vi.fn(async () => [note]),
+        listStates: vi.fn(async () => []),
+        saveState,
+      }),
+    );
+
+    const response = await app.request(
+      "/api/action-recommendations/action-note-1-rough/state",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceTopOfMindId: note.id,
+          status: "completed",
+          outcomeText: "It showed the rough version was enough to start the conversation.",
+          relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      actionRecommendationState: {
+        actionId: "action-note-1-rough",
+        sourceTopOfMindId: note.id,
+        status: "completed",
+        outcomeText: "It showed the rough version was enough to start the conversation.",
+        relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
+      },
+    });
+    expect(saveState).toHaveBeenCalledWith(db, {
+      userId: user.id,
+      actionId: "action-note-1-rough",
+      sourceTopOfMindId: note.id,
+      status: "completed",
+      outcomeText: "It showed the rough version was enough to start the conversation.",
+      relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
     });
   });
 });

@@ -3535,6 +3535,53 @@
   text-transform: none;
 }
 
+.nc-action-outcome {
+  display: grid;
+  gap: 7px;
+  margin-top: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.nc-action-outcome label {
+  color: rgba(22, 97, 70, 0.78);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.nc-action-outcome textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid rgba(22, 97, 70, 0.28);
+  border-radius: 4px;
+  background: rgba(255, 252, 230, 0.76);
+  color: inherit;
+  font: 12px/1.35 "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  padding: 7px 8px;
+}
+
+.nc-action-outcome div {
+  display: flex;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.nc-action-outcome button {
+  border: 1px solid rgba(22, 97, 70, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 252, 230, 0.78);
+  color: inherit;
+  cursor: pointer;
+  font: 650 11px/1 "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  padding: 6px 10px;
+}
+
+.nc-action-outcome button:hover {
+  border-color: rgba(22, 97, 70, 0.48);
+}
+
 .nc-note-reactions {
   display: flex;
   gap: 4px;

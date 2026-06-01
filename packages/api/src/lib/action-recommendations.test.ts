@@ -85,6 +85,8 @@ describe("recommendActionsFromTopOfMind", () => {
           actionId: action.id,
           sourceTopOfMindId: baseNote.id,
           status: "completed",
+          outcomeText: null,
+          relatedSignalIds: [],
           updatedAt: new Date("2026-06-01T09:00:00.000Z"),
         },
       ],
@@ -92,5 +94,42 @@ describe("recommendActionsFromTopOfMind", () => {
 
     expect(actions).toEqual([]);
   });
-});
 
+  it("strengthens future actions only when a completed action has an outcome", () => {
+    const lowConfidenceNote = {
+      ...baseNote,
+      confidence: 49,
+      evidencePreviews: [],
+    };
+    const emptyCompletion = {
+      actionId: "previous-empty-action",
+      sourceTopOfMindId: baseNote.id,
+      status: "completed" as const,
+      outcomeText: null,
+      relatedSignalIds: [],
+      updatedAt: new Date("2026-06-01T09:00:00.000Z"),
+    };
+    const outcomeCompletion = {
+      ...emptyCompletion,
+      actionId: "previous-outcome-action",
+      outcomeText: "Showing the rough version led to a concrete invitation.",
+    };
+
+    expect(
+      recommendActionsFromTopOfMind({
+        notes: [lowConfidenceNote],
+        states: [emptyCompletion],
+      }),
+    ).toEqual([]);
+
+    const [action] = recommendActionsFromTopOfMind({
+      notes: [lowConfidenceNote],
+      states: [outcomeCompletion],
+    });
+    expect(action).toMatchObject({
+      sourceTopOfMindId: baseNote.id,
+      status: "active",
+    });
+    expect(action.confidence).toBeGreaterThanOrEqual(60);
+  });
+});

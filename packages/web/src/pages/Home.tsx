@@ -1242,6 +1242,8 @@ export function HomePage(): JSX.Element {
   const [actionRecommendations, setActionRecommendations] = useState<
     ApiActionRecommendation[]
   >([]);
+  const [actionOutcomeDrafts, setActionOutcomeDrafts] = useState<Record<string, string>>({});
+  const [pendingActionOutcomeId, setPendingActionOutcomeId] = useState<string | null>(null);
   const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
@@ -3097,19 +3099,43 @@ export function HomePage(): JSX.Element {
     setExpandedNoteIndex(null);
   };
 
-  const completeActionItem = (item: ApiActionRecommendation): void => {
+  const beginActionOutcome = (item: ApiActionRecommendation): void => {
+    setPendingActionOutcomeId(item.id);
+    setActionOutcomeDrafts((current) => ({
+      ...current,
+      [item.id]: current[item.id] ?? "",
+    }));
+  };
+
+  const completeActionItem = (
+    item: ApiActionRecommendation,
+    outcomeText?: string,
+  ): void => {
     setActionRecommendations((current) =>
       current.filter((action) => action.id !== item.id),
     );
+    setPendingActionOutcomeId((current) => (current === item.id ? null : current));
+    setActionOutcomeDrafts((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
+    const trimmedOutcome = outcomeText?.trim();
     void updateActionRecommendationState(item.id, {
       sourceTopOfMindId: item.sourceTopOfMindId,
       status: "completed",
+      ...(trimmedOutcome ? { outcomeText: trimmedOutcome } : {}),
     }).catch(() => {
       setActionRecommendations((current) =>
         current.some((action) => action.id === item.id)
           ? current
           : [...current, item].sort((a, b) => b.confidence - a.confidence),
       );
+      setPendingActionOutcomeId(item.id);
+      setActionOutcomeDrafts((current) => ({
+        ...current,
+        [item.id]: outcomeText ?? "",
+      }));
     });
   };
 
@@ -3147,13 +3173,15 @@ export function HomePage(): JSX.Element {
         </header>
         <ul>
           {visibleActionItems.map((item) => {
+            const isOutcomePending = pendingActionOutcomeId === item.id;
+            const outcomeDraft = actionOutcomeDrafts[item.id] ?? "";
             return (
               <li key={item.id}>
                 <button
                   type="button"
                   className="nc-action-check"
                   aria-label={`mark done: ${item.text}`}
-                  onClick={() => completeActionItem(item)}
+                  onClick={() => beginActionOutcome(item)}
                 />
                 <span>
                   <strong>{item.text}</strong>
@@ -3163,6 +3191,37 @@ export function HomePage(): JSX.Element {
                       ? ` · evidence: ${shortText(item.evidenceSnippets[0], 54)}`
                       : ""}
                   </small>
+                  {isOutcomePending ? (
+                    <form
+                      className="nc-action-outcome"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        completeActionItem(item, outcomeDraft);
+                      }}
+                    >
+                      <label htmlFor={`action-outcome-${item.id}`}>what happened?</label>
+                      <textarea
+                        id={`action-outcome-${item.id}`}
+                        value={outcomeDraft}
+                        onChange={(event) =>
+                          setActionOutcomeDrafts((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))
+                        }
+                        rows={2}
+                      />
+                      <div>
+                        <button type="submit">save</button>
+                        <button
+                          type="button"
+                          onClick={() => completeActionItem(item)}
+                        >
+                          skip
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
                 </span>
                 <button
                   type="button"
