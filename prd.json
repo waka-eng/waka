@@ -636,6 +636,33 @@
       "priority": 37,
       "passes": true,
       "notes": "Product correction after US-032: the app overcorrected from forced first-person sentences into phrases that can be too short to be useful. The target is not slogans. A good post-it should be short enough to feel quickly jotted, but complete enough to help the user recognize themself."
+    },
+    {
+      "id": "US-035",
+      "title": "Rebuild Memory Drawer with canvas and chronological card modes",
+      "description": "As a user, I want the Memory Drawer to let me either revisit saved inspirations as a simple chronological card stack or explore how those inspirations connect on a low-fidelity relationship canvas.",
+      "acceptanceCriteria": [
+        "Replace the current Memory Drawer layout with two clear modes: a chronological card mode and a relationship canvas mode",
+        "Provide an obvious, lightweight mode switcher for List and Graph/Canvas without navigating away from the Top of Mind experience",
+        "List mode should show saved inspirations as clean bounded cards ordered by when they were added, newest first by default",
+        "List mode should preserve the same card visual language as canvas mode, but arranged in a calm readable stream for scanning what was saved over time",
+        "Canvas mode should show a board experience where each saved inspiration is its own bounded card",
+        "Every inspiration card must have a max visual size and truncate long text after a few lines, with a clear way to open the full memory without expanding the entire board",
+        "Cards should feel lower-fidelity than Top of Mind post-its: small scraps, clipped notes, quote cards, link slips, image tiles, or layered paper depending on the saved signal type",
+        "Differentiate user-typed notes, links, images, mixed/file saves, and highlighted excerpts using existing saved signal fields and attachments where available",
+        "In Canvas mode, show relationships directly with soft arrows, lines, or nearby connector labels between inspiration cards; the board should make the user see why saved moments belong near each other",
+        "Relationship labels must be sparse, human, and optional; avoid graph terms, model terms, confidence scores, node jargon, cluster names, and category headings",
+        "Remove memory movement as a user-facing categorization method from the Memory Drawer, including labels, filters, sections, or explanatory copy",
+        "Remove dense sidebars, narrow detail panes, multi-column admin panels, and search-first navigation from both Memory Drawer modes",
+        "Search may remain as a small supporting control in either mode, but it must not become the primary structure of the experience",
+        "Opening a card should show only the full saved inspiration, its user note/highlights if present, and the few relationship explanations needed to understand why it is connected",
+        "The canvas should remain emotionally readable on desktop and mobile: no overlapping text, no tiny nodes, no force-directed graph behavior, and no unreadable relationship tangles",
+        "Add targeted Home/Memory Drawer tests proving List and Canvas modes switch correctly, chronological ordering is respected, cards are bounded/truncated, signal types render differently, relationship connectors render, and memory movement copy does not render",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification of both Memory Drawer modes on desktop and mobile"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": "Product correction after seeing the Memory Drawer result: the current version gives the user too much to parse and too little to feel. The target has two modes. List mode is the clean chronological way to revisit what was saved in the order it entered WAKA. Canvas mode is the lower-fidelity evidence board where small bounded inspiration cards connect to each other. Top of Mind is polished post-its for current ambition; Memory Drawer is the evidence underneath. No memory movement taxonomy should be visible here."
     }
   ]
 }

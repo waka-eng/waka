@@ -1025,8 +1025,10 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
     expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("memory drawer (2)");
-    expect(container.textContent).toContain("Return to what once moved you.");
-    expect(container.textContent).toContain("This is the drawer beneath the post-its");
+    expect(container.textContent).toContain("Return to what you saved.");
+    expect(container.textContent).toContain("List scans the timeline");
+    expect(container.querySelector(".memory-mode-switcher")?.textContent).toContain("List");
+    expect(container.querySelector(".memory-mode-switcher")?.textContent).toContain("Canvas");
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -1041,7 +1043,7 @@ describe("HomePage current home experience", () => {
     expect(savesPage?.textContent).not.toContain("Other user save should never render");
   });
 
-  it("organizes saved signals into soft memory drawer sections with search secondary", async () => {
+  it("shows a chronological Memory Drawer list with search secondary", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1050,12 +1052,15 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const drawer = container.querySelector<HTMLElement>(".signal-revisit-page");
-    expect(drawer?.textContent).toContain("still alive");
-    expect(drawer?.textContent).toContain("keeps coming back");
-    expect(drawer?.textContent).toContain("signals that still have heat");
-    expect(drawer?.textContent).toContain("patterns that keep writing their way back");
-    expect(drawer?.querySelector(".signal-memory-lenses")).not.toBeNull();
-    expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("advanced search");
+    const list = drawer?.querySelector<HTMLElement>(".memory-list-mode");
+    expect(list).not.toBeNull();
+    expect(list?.textContent?.indexOf("Architecture essay")).toBeLessThan(
+      list?.textContent?.indexOf("Synthetic memory note") ?? 9999,
+    );
+    expect(drawer?.querySelector(".signal-memory-lenses")).toBeNull();
+    expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("search");
+    expect(drawer?.textContent?.toLowerCase()).not.toContain("keeps coming back");
+    expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
   it("renders a sparse Memory Drawer constellation with different signal materials", async () => {
@@ -1125,16 +1130,23 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 4);
     await waitForTimers(130);
     await flushReactWork();
+    const canvasButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-mode-switcher button")).find(
+      (button) => button.textContent === "Canvas",
+    );
+    await act(async () => {
+      canvasButton?.click();
+    });
 
     const constellation = container.querySelector<HTMLElement>(".memory-constellation");
     expect(constellation).not.toBeNull();
-    expect(constellation?.textContent).toContain("relationship constellation");
+    expect(container.querySelector<HTMLElement>(".memory-canvas-mode")).not.toBeNull();
     expect(constellation?.querySelector(".memory-constellation-node--note")?.textContent).toContain("scrap");
     expect(constellation?.querySelector(".memory-constellation-node--link")?.textContent).toContain("example.com");
-    expect(constellation?.querySelector(".memory-constellation-node--image")?.textContent).toContain("photo");
+    expect(constellation?.querySelector(".memory-constellation-node--image")?.textContent).toContain("image tile");
     expect(constellation?.querySelector(".memory-constellation-node--mixed")?.textContent).toContain("layered");
     expect(constellation?.textContent).toContain("both point at the same post-it");
     expect(constellation?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
+    expect(constellation?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
   it("opens relationship explanations and records relationship feedback", async () => {
@@ -1161,6 +1173,12 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container);
     await waitForTimers(130);
     await flushReactWork();
+    const canvasButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-mode-switcher button")).find(
+      (button) => button.textContent === "Canvas",
+    );
+    await act(async () => {
+      canvasButton?.click();
+    });
     const relationshipLabel = container.querySelector<HTMLButtonElement>(".memory-constellation-label");
     expect(relationshipLabel).not.toBeNull();
     await act(async () => {
@@ -1231,7 +1249,7 @@ describe("HomePage current home experience", () => {
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
-  it("shows the raw signal, highlights, interpretation, and related top-of-mind notes in-place", async () => {
+  it("shows the full saved signal, highlights, and relationship explanation in-place", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1241,63 +1259,12 @@ describe("HomePage current home experience", () => {
     expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
-    expect(detail.textContent).toContain("emotional pull at capture time");
-    expect(detail.textContent).toContain("what it may reveal now");
-    expect(detail.textContent).toContain("related context");
+    expect(detail.textContent).toContain("why it sits near other saves");
     expect(detail.textContent).toContain("make the thing before explaining it");
-    expect(detail.textContent).toContain("what did this mean then?");
-    expect(detail.textContent).toContain("what does it mean now?");
-    expect(detail.textContent).toContain("is this still me?");
-  });
-
-  it("lets users mark whether a revisited signal still matters", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    const detail = await openBridgeDetail(container);
-    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Still alive",
-    );
-    expect(stillAlive).not.toBeNull();
-    await act(async () => {
-      stillAlive?.click();
-    });
-    await flushReactWork();
-
-    expect(createFeedback).toHaveBeenCalledWith({
-      targetType: "signal",
-      targetId: "insp-1",
-      value: "important",
-    });
-    expect(detail.textContent).toContain("Saved: Still alive");
-  });
-
-  it("persists changed-shape feedback with optional what-changed text", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    const detail = await openBridgeDetail(container);
-    const changeNote = detail.querySelector<HTMLTextAreaElement>(".signal-revisit-change-note textarea");
-    expect(changeNote).not.toBeNull();
-    await act(async () => {
-      setInputValue(changeNote!, "It feels less like architecture now and more like choosing collaborators.");
-    });
-    const changedShape = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Changed shape",
-    );
-    expect(changedShape).not.toBeNull();
-    await act(async () => {
-      changedShape?.click();
-    });
-    await flushReactWork();
-
-    expect(createFeedback).toHaveBeenCalledWith({
-      targetType: "signal",
-      targetId: "insp-1",
-      value: "partly",
-      correctionText: "It feels less like architecture now and more like choosing collaborators.",
-    });
-    expect(detail.textContent).toContain("Saved: Changed shape");
+    expect(detail.textContent).not.toContain("is this still me?");
+    expect(detail.textContent).not.toContain("Still alive");
+    expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
+    expect(detail.textContent).not.toContain("related context");
   });
 
   it("opens capture from the floating action", async () => {

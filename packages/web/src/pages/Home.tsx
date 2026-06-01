@@ -123,6 +123,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  */
 type InspirationStatus = "saving" | "saved" | "error";
 type HomeMode = "topOfMind" | "memoryDrawer";
+type MemoryDrawerMode = "list" | "canvas";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "true" | "partly" | "not_true"
@@ -392,22 +393,13 @@ function applyUpdatedInspiration(
   };
 }
 
-interface InspirationDiscoveryFilters {
-  search: string;
-}
-
-type MemoryDrawerLens =
-  | "all"
-  | "still_alive"
-  | "changed_shape"
-  | "returning"
-  | "older_self"
-  | "keeps_returning"
-  | "tensions";
-
 const DEFAULT_INSPIRATION_FILTERS: InspirationDiscoveryFilters = {
   search: "",
 };
+
+interface InspirationDiscoveryFilters {
+  search: string;
+}
 
 function createdAtMs(entry: InspirationListEntry): number {
   const parsed = new Date(entry.createdAt).getTime();
@@ -588,16 +580,6 @@ const NOTE_COLORS = [
   { hue: "#f1d7a8", ink: "#4f3921" },
 ];
 
-const MEMORY_DRAWER_LENSES: Array<{ id: MemoryDrawerLens; label: string }> = [
-  { id: "all", label: "all" },
-  { id: "still_alive", label: "still alive" },
-  { id: "changed_shape", label: "changed shape" },
-  { id: "returning", label: "forgotten but returning" },
-  { id: "older_self", label: "older version of me" },
-  { id: "keeps_returning", label: "keeps coming back" },
-  { id: "tensions", label: "tensions" },
-];
-
 function memoryMovementForThoughtCard(signal: HomeThoughtCard, index: number): MemoryMovementLabel {
   if (signal.status === "stale" || signal.status === "replaced") return "fading";
   if (signal.type === "tension" || signal.ambitionDimension === "tension") return "tension";
@@ -633,40 +615,6 @@ function signalTextHaystack(signal: ApiSavedSignalSearchResult): string {
     ...signal.relatedTopOfMindNoteTitles,
     ...signal.relevanceReasons,
   ].join(" ").toLowerCase();
-}
-
-function memoryDrawerSectionForSignal(signal: ApiSavedSignalSearchResult): MemoryDrawerLens {
-  const haystack = signalTextHaystack(signal);
-  if (haystack.includes("tension") || haystack.includes("bothers") || haystack.includes("not anymore")) {
-    return "tensions";
-  }
-  if (signal.relatedTopOfMindNoteTitles.length > 0 || signal.signalScores.recurrence >= 6) {
-    return "keeps_returning";
-  }
-  if (signal.highlightedSnippets.length > 0 || signal.resonanceScore >= 7) {
-    return "still_alive";
-  }
-  if (signalAgeDays(signal) >= 45) {
-    return "older_self";
-  }
-  if (signal.relatedContextTerms.length > 0 || signal.matchingSnippets.length > 0) {
-    return "returning";
-  }
-  return "changed_shape";
-}
-
-function memoryDrawerSectionLabel(section: MemoryDrawerLens): string {
-  return MEMORY_DRAWER_LENSES.find((lens) => lens.id === section)?.label ?? section.replace(/_/g, " ");
-}
-
-function memoryDrawerSectionDescription(section: MemoryDrawerLens): string {
-  if (section === "still_alive") return "signals that still have heat when you touch them again";
-  if (section === "changed_shape") return "saved moments whose meaning is allowed to move";
-  if (section === "returning") return "fragments that went quiet and are starting to reappear";
-  if (section === "older_self") return "older saves from a version of you worth meeting gently";
-  if (section === "keeps_returning") return "patterns that keep writing their way back to the five post-its";
-  if (section === "tensions") return "live contradictions WAKA should not smooth away";
-  return "everything in the drawer";
 }
 
 function signalVisualTreatment(signal: ApiSavedSignalSearchResult): MemoryConstellationVisual {
@@ -994,7 +942,7 @@ export function HomePage(): JSX.Element {
   const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
-  const [memoryDrawerLens, setMemoryDrawerLens] = useState<MemoryDrawerLens>("all");
+  const [memoryDrawerMode, setMemoryDrawerMode] = useState<MemoryDrawerMode>("list");
   const [captureFocused, setCaptureFocused] = useState(false);
   const [captureSaveFlash, setCaptureSaveFlash] = useState(false);
   const [captureView] = useState<CaptureView>("note");
@@ -1022,13 +970,6 @@ export function HomePage(): JSX.Element {
   const [selectedSavedSignalId, setSelectedSavedSignalId] = useState<string | null>(null);
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
-  const [savedSignalFeedback, setSavedSignalFeedback] = useState<
-    | { status: "idle" }
-    | { status: "saving" }
-    | { status: "saved"; label: string }
-    | { status: "error"; message: string }
-  >({ status: "idle" });
-  const [savedSignalChangeText, setSavedSignalChangeText] = useState("");
   const [selectedMemoryRelationshipId, setSelectedMemoryRelationshipId] = useState<string | null>(null);
   const [relationshipCorrectionText, setRelationshipCorrectionText] = useState("");
   const [relationshipFeedback, setRelationshipFeedback] = useState<
@@ -1520,17 +1461,7 @@ export function HomePage(): JSX.Element {
     if (!savedSignalQuery) return true;
     return signalTextHaystack(signal).includes(savedSignalQuery);
   });
-  const inPlaceSignals = searchedSignals.filter(
-    (signal) =>
-      memoryDrawerLens === "all" || memoryDrawerSectionForSignal(signal) === memoryDrawerLens,
-  );
-  const memoryDrawerSections = MEMORY_DRAWER_LENSES.filter((section) => section.id !== "all")
-    .map((section) => ({
-      ...section,
-      description: memoryDrawerSectionDescription(section.id),
-      signals: inPlaceSignals.filter((signal) => memoryDrawerSectionForSignal(signal) === section.id),
-    }))
-    .filter((section) => section.signals.length > 0);
+  const inPlaceSignals = [...searchedSignals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
   const constellationNodes: MemoryConstellationNode[] = inPlaceSignals.slice(0, 8).map((signal, index) => {
     const positions = [
       { x: 14, y: 18 },
@@ -1612,8 +1543,6 @@ export function HomePage(): JSX.Element {
 
     let cancelled = false;
     setSavedSignalDetailLoading(true);
-    setSavedSignalFeedback({ status: "idle" });
-    setSavedSignalChangeText("");
     void (async () => {
       try {
         const detail = await fetchSavedSignalDetail(selectedSavedSignal.id);
@@ -1840,28 +1769,6 @@ export function HomePage(): JSX.Element {
     }
   };
 
-  const submitSavedSignalFeedback = async (value: ApiFeedbackValue, label: string) => {
-    const targetId = savedSignalDetail?.id ?? selectedSavedSignal?.id;
-    if (!targetId) return;
-    setSavedSignalFeedback({ status: "saving" });
-    try {
-      await createFeedback({
-        targetType: "signal",
-        targetId,
-        value,
-        ...(savedSignalChangeText.trim()
-          ? { correctionText: savedSignalChangeText.trim() }
-          : {}),
-      });
-      setSavedSignalFeedback({ status: "saved", label });
-    } catch (caught) {
-      setSavedSignalFeedback({
-        status: "error",
-        message: caught instanceof Error ? caught.message : "Feedback did not save",
-      });
-    }
-  };
-
   const submitRelationshipFeedback = async (
     relationship: MemoryConstellationRelationship,
     action: MemoryRelationshipFeedbackAction,
@@ -1889,15 +1796,6 @@ export function HomePage(): JSX.Element {
         message: caught instanceof Error ? caught.message : "Relationship feedback did not save",
       });
     }
-  };
-
-  const packetSummary = (packetText: string): string => {
-    return packetText
-      .split("\n")
-      .filter((line) => !line.startsWith("waka.signal_packet"))
-      .join(" ")
-      .replace(/^[A-Z_]+:\s*/, "")
-      .trim();
   };
 
   const renderFeedbackControls = (
@@ -1960,40 +1858,69 @@ export function HomePage(): JSX.Element {
     );
   };
 
-  const renderConstellationNode = (node: MemoryConstellationNode): JSX.Element => {
-    const sourceLabel = signalSourceLabel(node.signal);
+  const signalMaterialLabel = (signal: ApiSavedSignalSearchResult): string => {
+    const visual = signalVisualTreatment(signal);
+    const sourceLabel = signalSourceLabel(signal);
+    if (visual === "note") return signal.highlightedSnippets.length > 0 ? "highlighted scrap" : "note scrap";
+    if (visual === "link") return sourceLabel || "link slip";
+    if (visual === "image") return "image tile";
+    return "layered save";
+  };
+
+  const renderMemorySignalCard = (
+    signal: ApiSavedSignalSearchResult,
+    options: { node?: MemoryConstellationNode; compact?: boolean } = {},
+  ): JSX.Element => {
+    const visual = options.node?.visual ?? signalVisualTreatment(signal);
+    const isSelected = selectedSavedSignal?.id === signal.id;
+    const style = options.node
+      ? {
+          ["--x" as string]: `${options.node.x}%`,
+          ["--y" as string]: `${options.node.y}%`,
+        }
+      : undefined;
     return (
       <button
-        key={node.signal.id}
+        key={signal.id}
         type="button"
-        className={`memory-constellation-node memory-constellation-node--${node.visual}${
-          selectedSavedSignal?.id === node.signal.id ? " memory-constellation-node--selected" : ""
+        className={`reference-save signal-revisit-card memory-signal-card memory-signal-card--${visual}${
+          options.node ? ` memory-constellation-node memory-constellation-node--${visual}` : ""
+        }${isSelected ? " signal-revisit-card--selected memory-signal-card--selected" : ""}${
+          options.node ? " memory-signal-card--canvas" : " memory-signal-card--list"
         }`}
-        style={{
-          ["--x" as string]: `${node.x}%`,
-          ["--y" as string]: `${node.y}%`,
-        }}
+        style={style}
         onClick={() => {
-          setSelectedSavedSignalId(node.signal.id);
-          recordRevisit(node.signal.id, "detail_opened");
+          setSelectedSavedSignalId(signal.id);
+          recordRevisit(signal.id, "detail_opened");
         }}
       >
-        <span className="memory-constellation-node-kind">
-          {node.visual === "note"
-            ? "scrap"
-            : node.visual === "link"
-              ? sourceLabel || "link"
-              : node.visual === "image"
-                ? "photo"
-                : "layered"}
+        <span className="memory-signal-card-kind">
+          {signalMaterialLabel(signal)}
         </span>
-        <strong>{shortText(node.signal.textPreview, node.visual === "image" ? 70 : 96)}</strong>
-        {node.signal.highlightedSnippets[0] ? (
-          <blockquote>{shortText(node.signal.highlightedSnippets[0].text, 72)}</blockquote>
+        <strong>{shortText(signal.textPreview, options.compact ? 96 : 180)}</strong>
+        {signal.highlightedSnippets[0] ? (
+          <blockquote>{shortText(signal.highlightedSnippets[0].text, options.compact ? 72 : 120)}</blockquote>
         ) : null}
+        {signal.attachmentSummary.slice(0, 2).map((attachment) => (
+          <span
+            key={attachment.id}
+            className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
+          >
+            {attachment.label}
+          </span>
+        ))}
+        {signal.relevanceReasons.find((reason) => reason.includes("failed to upload")) ? (
+          <span className="reference-save-attachment">
+            {signal.relevanceReasons.find((reason) => reason.includes("failed to upload"))}
+          </span>
+        ) : null}
+        <span className="memory-signal-card-date">{formatTimestamp(signal.capturedAt)}</span>
       </button>
     );
   };
+
+  const renderConstellationNode = (node: MemoryConstellationNode): JSX.Element =>
+    renderMemorySignalCard(node.signal, { node, compact: true });
 
   const renderConstellationLine = (relationship: MemoryConstellationRelationship): JSX.Element | null => {
     const source = constellationNodes.find((node) => node.signal.id === relationship.sourceId);
@@ -2418,11 +2345,27 @@ export function HomePage(): JSX.Element {
             <header className="signal-revisit-header">
               <div>
                 <span>{PRODUCT_SPACES.memoryDrawer}</span>
-                <h2>Return to what once moved you.</h2>
-                <p>This is the drawer beneath the post-its: saved moments first, search only when you need it.</p>
+                <h2>Return to what you saved.</h2>
+                <p>List scans the timeline. Canvas keeps the scraps near the moments they seem to touch.</p>
+              </div>
+              <div className="memory-mode-switcher" role="group" aria-label="memory drawer mode">
+                {[
+                  { id: "list" as const, label: "List" },
+                  { id: "canvas" as const, label: "Canvas" },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    className={memoryDrawerMode === mode.id ? "is-active" : ""}
+                    aria-pressed={memoryDrawerMode === mode.id}
+                    onClick={() => setMemoryDrawerMode(mode.id)}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
               </div>
               <details className="signal-revisit-search">
-                <summary>advanced search</summary>
+                <summary>search</summary>
                 <label>
                   <span>{copy.searchLabel}</span>
                   <input
@@ -2439,164 +2382,96 @@ export function HomePage(): JSX.Element {
               </details>
             </header>
 
-            <section className="memory-constellation" aria-label="memory relationship constellation">
-              <header>
-                <div>
-                  <span>relationship constellation</span>
-                  <h3>See which saved moments are quietly talking.</h3>
-                </div>
-                <p>Different scraps keep their own material: notes, links, images, and mixed saves should not all feel like the same card.</p>
-              </header>
-              <div className="memory-constellation-board">
-                <svg className="memory-constellation-lines" aria-hidden="true">
-                  {constellationRelationships.map(renderConstellationLine)}
-                </svg>
-                {constellationNodes.map(renderConstellationNode)}
-              </div>
-              {selectedMemoryRelationship ? (
-                <article className="memory-relationship-detail" aria-label="memory relationship detail">
-                  <header>
-                    <span>why these sit near each other</span>
-                    <h3>{selectedMemoryRelationship.label}</h3>
-                    <p>{selectedMemoryRelationship.reason}</p>
-                  </header>
-                  <div className="memory-relationship-sources">
-                    {[selectedMemoryRelationship.sourceSignal, selectedMemoryRelationship.targetSignal].map((signal) => (
-                      <section key={signal.id}>
-                        <span>{signalSourceLabel(signal) ?? memoryDrawerSectionLabel(memoryDrawerSectionForSignal(signal))}</span>
-                        <blockquote>{shortText(signal.highlightedSnippets[0]?.text ?? signal.textPreview, 180)}</blockquote>
-                      </section>
-                    ))}
+            <div className="memory-drawer-modes">
+              {memoryDrawerMode === "canvas" ? (
+                <section className="memory-constellation memory-canvas-mode" aria-label="memory canvas">
+                  <div className="memory-constellation-board">
+                    <svg className="memory-constellation-lines" aria-hidden="true">
+                      {constellationRelationships.map(renderConstellationLine)}
+                    </svg>
+                    {constellationNodes.map(renderConstellationNode)}
                   </div>
-                  <label className="memory-relationship-correction">
-                    <span>better label, optional</span>
-                    <input
-                      type="text"
-                      value={relationshipCorrectionText}
-                      placeholder="what should this connection be called?"
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        setRelationshipCorrectionText(event.target.value)
-                      }
-                    />
-                  </label>
-                  <div className="memory-relationship-feedback" role="group" aria-label="relationship feedback">
-                    {[
-                      { action: "true" as const, label: "true" },
-                      { action: "not_connected" as const, label: "not connected" },
-                      { action: "better_label" as const, label: "better label" },
-                    ].map((item) => (
-                      <button
-                        key={item.action}
-                        type="button"
-                        disabled={relationshipFeedback.status === "saving"}
-                        onClick={() => void submitRelationshipFeedback(selectedMemoryRelationship, item.action)}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                  {relationshipFeedback.status === "saved" ? (
-                    <p className="memory-relationship-feedback-status">Saved: {relationshipFeedback.label}</p>
-                  ) : relationshipFeedback.status === "saving" ? (
-                    <p className="memory-relationship-feedback-status">Saving...</p>
-                  ) : relationshipFeedback.status === "error" ? (
-                    <p className="memory-relationship-feedback-status">{relationshipFeedback.message}</p>
-                  ) : null}
-                </article>
+                  {selectedMemoryRelationship ? (
+                    <article className="memory-relationship-detail" aria-label="memory relationship detail">
+                      <header>
+                        <span>why these sit near each other</span>
+                        <h3>{selectedMemoryRelationship.label}</h3>
+                        <p>{selectedMemoryRelationship.reason}</p>
+                      </header>
+                      <div className="memory-relationship-sources">
+                        {[selectedMemoryRelationship.sourceSignal, selectedMemoryRelationship.targetSignal].map((signal) => (
+                          <section key={signal.id}>
+                            <span>{signalMaterialLabel(signal)}</span>
+                            <blockquote>{shortText(signal.highlightedSnippets[0]?.text ?? signal.textPreview, 180)}</blockquote>
+                          </section>
+                        ))}
+                      </div>
+                      <label className="memory-relationship-correction">
+                        <span>better label, optional</span>
+                        <input
+                          type="text"
+                          value={relationshipCorrectionText}
+                          placeholder="what should this connection be called?"
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            setRelationshipCorrectionText(event.target.value)
+                          }
+                        />
+                      </label>
+                      <div className="memory-relationship-feedback" role="group" aria-label="relationship feedback">
+                        {[
+                          { action: "true" as const, label: "true" },
+                          { action: "not_connected" as const, label: "not connected" },
+                          { action: "better_label" as const, label: "better label" },
+                        ].map((item) => (
+                          <button
+                            key={item.action}
+                            type="button"
+                            disabled={relationshipFeedback.status === "saving"}
+                            onClick={() => void submitRelationshipFeedback(selectedMemoryRelationship, item.action)}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                      {relationshipFeedback.status === "saved" ? (
+                        <p className="memory-relationship-feedback-status">Saved: {relationshipFeedback.label}</p>
+                      ) : relationshipFeedback.status === "saving" ? (
+                        <p className="memory-relationship-feedback-status">Saving...</p>
+                      ) : relationshipFeedback.status === "error" ? (
+                        <p className="memory-relationship-feedback-status">{relationshipFeedback.message}</p>
+                      ) : null}
+                    </article>
+                  ) : (
+                    <p className="memory-relationship-empty">
+                      Save a few more signals and WAKA will draw a few gentle lines here.
+                    </p>
+                  )}
+                </section>
               ) : (
-                <p className="memory-relationship-empty">
-                  Save a few more signals and WAKA will start drawing gentle relationships here.
-                </p>
+                <section className="memory-list-mode" aria-label="memory list">
+                  {savedSignalsError ? <p>{savedSignalsError}</p> : null}
+                  {savedSignalsLoading && inPlaceSignals.length === 0 ? <p>{copy.loadingSaves}</p> : null}
+                  {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
+                    <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+                  ) : null}
+                  <div className="memory-list-stack">
+                    {inPlaceSignals.map((signal) => renderMemorySignalCard(signal))}
+                  </div>
+                </section>
               )}
-            </section>
 
-            <div className="signal-revisit-layout">
-              <div className="signal-memory-lenses" aria-label="memory drawer sections">
-                {MEMORY_DRAWER_LENSES.map((lens) => (
-                  <button
-                    key={lens.id}
-                    type="button"
-                    className={memoryDrawerLens === lens.id ? "is-active" : ""}
-                    aria-pressed={memoryDrawerLens === lens.id}
-                    onClick={() => {
-                      setMemoryDrawerLens(lens.id);
-                      setSelectedSavedSignalId(null);
-                      setSavedSignalDetail(null);
-                    }}
-                  >
-                    {lens.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="signal-memory-shelves" aria-label="memory sections">
+              <article className="signal-revisit-detail signal-revisit-detail--open memory-open-card" aria-label="signal revisit">
                 {savedSignalsError ? <p>{savedSignalsError}</p> : null}
                 {savedSignalsLoading && inPlaceSignals.length === 0 ? <p>{copy.loadingSaves}</p> : null}
                 {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
                   <p>{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
                 ) : null}
-                {memoryDrawerSections.map((section) => (
-                  <section key={section.id} className="signal-memory-section">
-                    <header>
-                      <div>
-                        <span>{section.label}</span>
-                        <p>{section.description}</p>
-                      </div>
-                      <strong>{section.signals.length}</strong>
-                    </header>
-                    <div className="reference-save-list signal-revisit-list">
-                      {section.signals.map((signal) => (
-                        <button
-                          type="button"
-                          key={signal.id}
-                          onClick={() => {
-                            setSelectedSavedSignalId(signal.id);
-                            recordRevisit(signal.id, "detail_opened");
-                          }}
-                          className={`reference-save signal-revisit-card${
-                            selectedSavedSignal?.id === signal.id ? " signal-revisit-card--selected" : ""
-                          }`}
-                        >
-                          <span>{formatTimestamp(signal.capturedAt)}</span>
-                          <strong>{shortText(signal.textPreview, 280)}</strong>
-                          {signal.highlightedSnippets[0] ? (
-                            <blockquote>{shortText(signal.highlightedSnippets[0].text, 150)}</blockquote>
-                          ) : null}
-                          <div className="signal-revisit-card-tags">
-                            <span>{memoryDrawerSectionLabel(memoryDrawerSectionForSignal(signal))}</span>
-                            {[...signal.relevanceReasons, ...signal.relatedContextTerms].slice(0, 2).map((tag) => (
-                              <span key={tag}>{tag}</span>
-                            ))}
-                          </div>
-                          {signal.attachmentSummary.map((attachment) => (
-                            <span
-                              key={attachment.id}
-                              className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
-                            >
-                              {attachment.label}
-                            </span>
-                          ))}
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                ))}
-              </div>
-
-              <article className="signal-revisit-detail signal-revisit-detail--open" aria-label="signal revisit">
                 {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the signal...</p> : null}
                 {!savedSignalDetailLoading && selectedSavedSignal ? (
                   <>
                     <header>
-                      <span>
-                        {memoryDrawerSectionLabel(memoryDrawerSectionForSignal(selectedSavedSignal))} ·{" "}
-                        {formatTimestamp(selectedSavedSignal.capturedAt)}
-                      </span>
+                      <span>{signalMaterialLabel(selectedSavedSignal)} · {formatTimestamp(selectedSavedSignal.capturedAt)}</span>
                       <h3>{shortText(savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview, 180)}</h3>
-                      <p>
-                        A saved signal opened from the drawer, not a database record. The question is what it
-                        meant then, what it means now, and whether it still feels like you.
-                      </p>
                     </header>
 
                     <section>
@@ -2619,17 +2494,6 @@ export function HomePage(): JSX.Element {
                       ) : (
                         <p>No highlight yet. The whole signal can still be the part worth returning to.</p>
                       )}
-                    </section>
-
-                    <section>
-                      <span>emotional pull at capture time</span>
-                      <p>
-                        {selectedSavedSignal.relevanceReasons.length > 0
-                          ? selectedSavedSignal.relevanceReasons.join(" · ")
-                          : selectedSavedSignal.resonanceScore > 0
-                            ? `resonance ${Math.round(selectedSavedSignal.resonanceScore)}`
-                            : "No explicit pull was named then. Revisit feedback can teach WAKA what it was."}
-                      </p>
                     </section>
 
                     {(savedSignalDetail?.attachments.length ?? 0) > 0 || selectedSavedSignal.attachmentSummary.length > 0 ? (
@@ -2658,116 +2522,19 @@ export function HomePage(): JSX.Element {
                     ) : null}
 
                     <section>
-                      <span>what it may reveal now</span>
-                      {savedSignalDetail?.signalPacket ? (
-                        <p>{shortText(packetSummary(savedSignalDetail.signalPacket.text), 360)}</p>
+                      <span>why it sits near other saves</span>
+                      {(selectedMemoryRelationship &&
+                      [selectedMemoryRelationship.sourceId, selectedMemoryRelationship.targetId].includes(selectedSavedSignal.id)) ? (
+                        <p>{selectedMemoryRelationship.reason}</p>
+                      ) : selectedSavedSignal.relatedTopOfMindNoteTitles[0] ? (
+                        <p>It points toward "{selectedSavedSignal.relatedTopOfMindNoteTitles[0]}".</p>
+                      ) : selectedSavedSignal.relatedContextTerms[0] ? (
+                        <p>It shares language with "{selectedSavedSignal.relatedContextTerms[0]}".</p>
                       ) : (
-                        <p>WAKA has not written a signal packet for this yet.</p>
+                        <p>No strong connection has earned a label yet.</p>
                       )}
                     </section>
 
-                    <section>
-                      <span>related context</span>
-                      {(savedSignalDetail?.relatedContextNodes ?? []).length > 0 ? (
-                        <ul className="signal-revisit-notes">
-                          {savedSignalDetail!.relatedContextNodes.slice(0, 3).map((node) => (
-                            <li key={node.id}>
-                              <strong>{node.label}</strong>
-                              <p>{node.evidenceReason || node.description}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : selectedSavedSignal.relatedContextTerms.length > 0 ? (
-                        <ul className="signal-revisit-notes">
-                          {selectedSavedSignal.relatedContextTerms.slice(0, 3).map((term) => (
-                            <li key={term}>
-                              <strong>{term}</strong>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No durable context has attached itself to this signal yet.</p>
-                      )}
-                    </section>
-
-                    <section>
-                      <span>nearby ambition reads</span>
-                      {(savedSignalDetail?.relatedTopOfMindNotes ?? []).length > 0 ? (
-                        <ul className="signal-revisit-notes">
-                          {savedSignalDetail!.relatedTopOfMindNotes.slice(0, 3).map((note) => (
-                            <li key={note.id}>
-                              <strong>{note.title}</strong>
-                              <p>{note.body}</p>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : selectedSavedSignal.relatedTopOfMindNoteTitles.length > 0 ? (
-                        <ul className="signal-revisit-notes">
-                          {selectedSavedSignal.relatedTopOfMindNoteTitles.slice(0, 3).map((title) => (
-                            <li key={title}>
-                              <strong>{title}</strong>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>No top-of-mind post-it points back here yet.</p>
-                      )}
-                    </section>
-
-                    <section>
-                      <span>what did this mean then?</span>
-                      <p>
-                        It was saved because something in it had charge. The exact charge can stay messy; WAKA
-                        treats the saved moment and highlight as evidence before it asks for structure.
-                      </p>
-                    </section>
-
-                    <section>
-                      <span>what does it mean now?</span>
-                      <p>
-                        {selectedSavedSignal.relatedTopOfMindNoteTitles[0] ??
-                          selectedSavedSignal.relatedContextTerms[0] ??
-                          "Its current shape is still open. Marking what changed will move the memory model."}
-                      </p>
-                    </section>
-
-                    <section>
-                      <span>is this still me?</span>
-                      <label className="signal-revisit-change-note">
-                        <span>optional what changed</span>
-                        <textarea
-                          value={savedSignalChangeText}
-                          rows={3}
-                          placeholder="what changed since you saved this?"
-                          onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                            setSavedSignalChangeText(event.target.value)
-                          }
-                        />
-                      </label>
-                      <div className="signal-revisit-feedback" role="group" aria-label="mark whether this signal still matters">
-                        {[
-                          { value: "important" as const, label: "Still alive" },
-                          { value: "partly" as const, label: "Changed shape" },
-                          { value: "not_important" as const, label: "Not anymore" },
-                        ].map((action) => (
-                          <button
-                            key={action.value}
-                            type="button"
-                            disabled={savedSignalFeedback.status === "saving"}
-                            onClick={() => void submitSavedSignalFeedback(action.value, action.label)}
-                          >
-                            {action.label}
-                          </button>
-                        ))}
-                      </div>
-                      {savedSignalFeedback.status === "saved" ? (
-                        <p className="signal-revisit-feedback-status">Saved: {savedSignalFeedback.label}</p>
-                      ) : savedSignalFeedback.status === "saving" ? (
-                        <p className="signal-revisit-feedback-status">Saving...</p>
-                      ) : savedSignalFeedback.status === "error" ? (
-                        <p className="signal-revisit-feedback-status">{savedSignalFeedback.message}</p>
-                      ) : null}
-                    </section>
                   </>
                 ) : null}
               </article>

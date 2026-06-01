@@ -38,6 +38,34 @@
 - Primary Top of Mind post-it text should use compressed sticky-note thought language, usually 3-9 words and no more than 12, without forced `I need`/`I want`/`I am done with` starts; keep memory/status metadata in peel-open detail or internal debug, not on the visible card.
 - Memory Drawer constellation relationships are currently derived in Home from saved-signal overlap in related Top of Mind notes, context terms, relevance reasons, and matching snippets; relationship feedback is stored as `targetType: "signal"` with `relationship_feedback:v1` correction text until a dedicated relationship feedback target exists.
 - Top-of-mind primary text should be compressed but interpretable, usually 6-14 words, with a concrete ambition object plus a reason, contrast, or tension; reject ultra-short slogans such as "public before perfect", "taste as default", "test it outside", and "courage normal".
+- Memory Drawer should stay as two modes inside Home: chronological List and relationship Canvas. Do not reintroduce memory-movement sections, dense sidebars, search-first structure, or graph/admin vocabulary into this user-facing revisit surface.
+
+---
+
+## 2026-05-31 21:49 PDT - US-035
+
+- What was implemented
+  - Rebuilt the Home Memory Drawer around two in-place modes: a newest-first chronological List and a low-fidelity relationship Canvas.
+  - Reused bounded scrap-card visual language across List and Canvas, with material labels for note scraps, link slips, image tiles, layered saves, and highlighted scraps.
+  - Removed user-facing Memory Drawer movement sections/lenses and the dense side-detail flow; opening a card now shows the saved signal, highlights/attachments, and concise relationship context.
+  - Kept sparse human relationship labels/lines in Canvas and retained relationship feedback without exposing graph/admin terms.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 41 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for Memory Drawer List and Canvas modes on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, signal detail, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer should be mode-based, not taxonomy-based: List for chronological revisiting, Canvas for sparse relationships.
+  - Gotchas encountered
+    - The old revisit feedback controls made the opened-card panel too broad for this story; keep feedback on relationship labels or purpose-built controls, not in the opened memory detail.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 
