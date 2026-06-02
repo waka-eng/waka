@@ -2287,47 +2287,90 @@
   position: relative;
 }
 
-.memory-inline-highlight button {
-  background: rgba(48, 42, 30, 0.88);
-  border: 0;
-  border-radius: 999px;
-  color: #fffaf0;
-  cursor: pointer;
-  display: none;
-  font-size: 9px;
-  margin-left: 5px;
-  padding: 2px 6px;
-}
-
-.memory-inline-highlight:hover button,
-.memory-inline-highlight:focus-within button {
-  display: inline-flex;
+.memory-inline-highlight:focus {
+  outline: 1px solid rgba(31, 29, 24, 0.36);
+  outline-offset: 2px;
 }
 
 .memory-highlight-popover {
   align-items: center;
-  background: rgba(255, 250, 235, 0.96);
-  border: 1px solid rgba(62, 53, 36, 0.16);
-  box-shadow: 0 12px 28px rgba(42, 35, 21, 0.11);
+  background: rgba(255, 253, 247, 0.97);
+  border: 1px solid rgba(31, 29, 24, 0.16);
+  border-radius: 6px;
+  box-shadow: 0 14px 26px -22px rgba(0, 0, 0, 0.35);
   display: flex;
-  gap: 10px;
-  justify-content: space-between;
-  padding: 9px 10px;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-start;
+  left: min(var(--memory-highlight-left), calc(100vw - 292px));
+  padding: 7px 8px;
+  position: fixed;
+  top: var(--memory-highlight-top);
+  width: min(280px, calc(100vw - 16px));
+  z-index: 80;
 }
 
 .memory-highlight-popover span {
-  color: rgba(54, 47, 31, 0.7);
-  font-size: 12px;
+  color: var(--ink);
+  flex: 1 1 100%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.memory-highlight-popover button {
-  background: #2d281d;
-  border: 0;
-  color: #fffaf0;
+.memory-highlight-popover button,
+.memory-highlight-popover input {
+  background: transparent;
+  border: 1px solid rgba(31, 29, 24, 0.18);
+  border-radius: 999px;
+  color: var(--ink);
   cursor: pointer;
-  font-size: 11px;
-  padding: 7px 10px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  padding: 5px 8px;
+}
+
+.memory-highlight-popover button.selected {
+  background: rgba(31, 29, 24, 0.08);
+  border-color: rgba(31, 29, 24, 0.32);
+}
+
+.memory-highlight-popover label {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memory-highlight-popover label span {
+  flex: 0 0 auto;
+  font-size: 9px;
   text-transform: uppercase;
+}
+
+.memory-highlight-popover input {
+  border-radius: 4px;
+  cursor: text;
+  width: 100%;
+}
+
+.memory-highlight-reactions {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.memory-highlight-reactions--edit small {
+  color: var(--muted);
+  flex: 1 1 100%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
 }
 
 .memory-signal-card--selected {
@@ -6617,6 +6660,7 @@ body.dragging .drop-overlay {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   padding: 7px 8px;
 }
 
@@ -6641,6 +6685,18 @@ body.dragging .drop-overlay {
   font-size: 9px;
   line-height: 1;
   padding: 5px 8px;
+}
+
+.cap-highlight-popover-reactions {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cap-highlight-popover-reactions button {
+  font-size: 9px;
+  padding: 4px 7px;
 }
 
 .cap-highlight-popover .cap-highlight-chip {

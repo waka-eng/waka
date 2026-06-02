@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createFeedback,
   createInspiration,
+  createInspirationSpark,
+  deleteInspirationSpark,
   finalizeAttachment,
   fetchActionRecommendations,
   fetchInspirations,
@@ -109,6 +111,27 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     updateInspiration: vi.fn(async () => {
       throw new Error("updateInspiration mock not configured");
     }),
+    createInspirationSpark: vi.fn(async (_inspirationId: string, input: any) => ({
+      id: "spark-new",
+      userId: "user-1",
+      inspirationId: _inspirationId,
+      text: input.text,
+      source: input.source ?? "user_selected",
+      startOffset: input.startOffset ?? null,
+      endOffset: input.endOffset ?? null,
+      confidence: input.confidence ?? 100,
+      isPrimary: input.isPrimary ?? false,
+      note: input.note ?? null,
+      whatMovedUser: null,
+      impliedValues: [],
+      worldviewClaims: [],
+      tensions: [],
+      decisionRelevance: [],
+      emotionalCharge: [],
+      createdAt: "2026-06-01T10:00:00.000Z",
+      updatedAt: "2026-06-01T10:00:00.000Z",
+    })),
+    deleteInspirationSpark: vi.fn(async () => undefined),
     deleteInspiration: vi.fn(async () => undefined),
     recordInspirationRevisit: vi.fn(async () => ({
       revisit: {
@@ -1699,6 +1722,94 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).not.toContain("Still alive");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
+  });
+
+  it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {
+    const unhighlightedBridgeSignal = { ...sampleSavedSignals[0], highlightedSnippets: [] };
+    setApiFixtures({
+      savedSignals: [unhighlightedBridgeSignal, sampleSavedSignals[1]],
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        highlightedSnippets: [],
+      },
+    });
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const readable = detail.querySelector<HTMLElement>(".memory-readable-signal");
+    expect(readable).not.toBeNull();
+
+    const selection = {
+      rangeCount: 1,
+      toString: () => "bridge rhythms",
+      getRangeAt: () => ({
+        getBoundingClientRect: () => ({
+          top: 120,
+          left: 80,
+          width: 120,
+          height: 18,
+          right: 200,
+          bottom: 138,
+          x: 80,
+          y: 120,
+          toJSON: () => ({}),
+        }),
+      }),
+      removeAllRanges: vi.fn(),
+    } as unknown as Selection;
+    const getSelectionSpy = vi.spyOn(window, "getSelection").mockImplementation(() => selection);
+
+    await act(async () => {
+      readable?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    const popover = container.querySelector<HTMLElement>(".memory-highlight-popover--selection");
+    expect(popover).not.toBeNull();
+    expect(popover?.style.getPropertyValue("--memory-highlight-top")).toBe("74px");
+    expect(popover?.textContent).toContain("bridge rhythms");
+    expect(popover?.textContent).toContain("taste");
+    expect(container.querySelector(".signal-revisit-highlights")).toBeNull();
+
+    await act(async () => {
+      Array.from(popover?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+        .find((button) => button.textContent === "taste")
+        ?.click();
+    });
+    const noteInput = popover?.querySelector<HTMLInputElement>("input");
+    expect(noteInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(noteInput!, "This is the standard I keep noticing.");
+    });
+    await act(async () => {
+      popover?.querySelector<HTMLButtonElement>("button")?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspirationSpark).toHaveBeenCalledWith("insp-1", {
+      text: "bridge rhythms",
+      source: "user_selected",
+      confidence: 100,
+      isPrimary: false,
+      note: `highlight_reaction:v1:${JSON.stringify({
+        reaction: "taste",
+        note: "This is the standard I keep noticing.",
+      })}`,
+    });
+    expect(detail.querySelector(".memory-inline-highlight")?.textContent).toBe("bridge rhythms");
+
+    const mark = detail.querySelector<HTMLElement>(".memory-inline-highlight");
+    await act(async () => {
+      mark?.focus();
+    });
+    const savedPopover = container.querySelector<HTMLElement>(".memory-highlight-popover--saved");
+    expect(savedPopover?.textContent).toContain("edit reaction");
+    expect(savedPopover?.textContent).toContain("expand note");
+    await act(async () => {
+      Array.from(savedPopover?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+        .find((button) => button.textContent === "remove")
+        ?.click();
+    });
+    expect(deleteInspirationSpark).toHaveBeenCalledWith("insp-1", "spark-new");
+
+    getSelectionSpy.mockRestore();
   });
 
   it("replaces one stack inspiration detail with another without opening windows", async () => {

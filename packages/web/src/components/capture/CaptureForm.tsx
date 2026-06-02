@@ -171,9 +171,15 @@ const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
 
 type CaptureResonanceAnswer =
+  | "pulled_me"
   | "want"
   | "miss"
   | "envy"
+  | "taste"
+  | "reject"
+  | "person"
+  | "place"
+  | "work"
   | "hurt"
   | "scared"
   | "feels_like_me"
@@ -203,9 +209,15 @@ interface StoredCaptureDraft {
 }
 
 const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string; icon: string; prompt: string }> = [
+  { value: "pulled_me", label: "pulled me", icon: "*", prompt: "What pulled me here?" },
   { value: "want", label: "I want this", icon: "+", prompt: "What do I want more of here?" },
   { value: "miss", label: "I miss this", icon: "<", prompt: "What does this make me miss?" },
   { value: "envy", label: "I envy this", icon: "~", prompt: "What does the envy point toward?" },
+  { value: "taste", label: "taste", icon: ".", prompt: "What taste or standard is this marking?" },
+  { value: "reject", label: "reject", icon: "-", prompt: "What am I refusing here?" },
+  { value: "person", label: "person", icon: "p", prompt: "Who does this make me want near?" },
+  { value: "place", label: "place", icon: "m", prompt: "What place or room does this point toward?" },
+  { value: "work", label: "work", icon: "w", prompt: "What kind of work does this point toward?" },
   { value: "hurt", label: "this hurt", icon: "!", prompt: "What did this touch?" },
   { value: "scared", label: "this scared me", icon: "^", prompt: "What feels at stake?" },
   { value: "feels_like_me", label: "this feels like me", icon: "=", prompt: "What feels like me here?" },
@@ -221,7 +233,13 @@ function suggestedResonanceOptions(text: string): typeof resonanceOptions {
   const scored = resonanceOptions.map((option, index) => {
     let score = resonanceOptions.length - index;
     if (option.value === "want" && /\b(want|need|wish|desire|hope|more|beautiful|love)\b/.test(normalized)) score += 12;
+    if (option.value === "pulled_me" && /\b(pulled|hit|kept|return|drawn|magnet|noticed)\b/.test(normalized)) score += 12;
     if (option.value === "envy" && /\b(envy|jealous|they have|someone else|wish i had)\b/.test(normalized)) score += 12;
+    if (option.value === "taste" && /\b(taste|standard|beautiful|style|aesthetic|design)\b/.test(normalized)) score += 12;
+    if (option.value === "reject" && /\b(reject|refuse|done|not me|anymore|leave|outgrow|never again)\b/.test(normalized)) score += 12;
+    if (option.value === "person" && /\b(person|people|friend|founder|builder|mentor|community|together)\b/.test(normalized)) score += 12;
+    if (option.value === "place" && /\b(city|place|where|room|environment|home|studio|live)\b/.test(normalized)) score += 12;
+    if (option.value === "work" && /\b(work|build|make|create|company|product|ship)\b/.test(normalized)) score += 12;
     if (option.value === "hurt" && /\b(hurt|pain|grief|sad|lonely|rejected|lost)\b/.test(normalized)) score += 12;
     if (option.value === "scared" && /\b(scared|fear|risk|stakes|uncertain|danger|terrifying)\b/.test(normalized)) score += 12;
     if (option.value === "want_people_like_this" && /\b(people|friend|founder|builder|mentor|room|community|together)\b/.test(normalized)) score += 12;
@@ -429,8 +447,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
     const pullOptions = useMemo(
-      () => suggestedResonanceOptions(highlight?.text ?? note).slice(0, 6),
-      [highlight?.text, note],
+      () => suggestedResonanceOptions(highlight?.text ?? pendingHighlight?.text ?? note).slice(0, 8),
+      [highlight?.text, pendingHighlight?.text, note],
+    );
+    const quickPullOptions = useMemo(
+      () =>
+        resonanceOptions.filter((option) =>
+          ["pulled_me", "envy", "taste", "reject", "person", "place", "work"].includes(option.value),
+        ),
+      [],
     );
 
     useEffect(() => {
@@ -1067,6 +1092,40 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 >
                   add highlight
                 </button>
+                <div className="cap-highlight-popover-reactions" aria-label="why this selection mattered">
+                  {quickPullOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setHighlight(pendingHighlight);
+                        setPendingHighlight(null);
+                        setResonance(option.value);
+                        setHighlightPopoverPosition(
+                          approximateSelectionPopoverPosition(note, pendingHighlight.startOffset),
+                        );
+                        setHighlightDetailsOpen(true);
+                        queueMicrotask(() => resonanceNoteInputRef.current?.focus());
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHighlight(pendingHighlight);
+                      setPendingHighlight(null);
+                      setHighlightPopoverPosition(
+                        approximateSelectionPopoverPosition(note, pendingHighlight.startOffset),
+                      );
+                      setHighlightDetailsOpen(true);
+                      queueMicrotask(() => resonanceNoteInputRef.current?.focus());
+                    }}
+                  >
+                    my note
+                  </button>
+                </div>
               </div>
             ) : null}
             {highlight && highlightPopoverPosition ? (
@@ -1126,20 +1185,18 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                     </button>
                   ))}
                 </div>
-                {resonance ? (
-                  <label className="cap-resonance-note" htmlFor="capResonanceNote">
-                    <span>{resonancePrompt(resonance)}</span>
-                    <input
-                      id="capResonanceNote"
-                      ref={resonanceNoteInputRef}
-                      type="text"
-                      value={resonanceNote}
-                      onChange={(event) => setResonanceNote(event.currentTarget.value)}
-                      onInput={(event) => setResonanceNote(event.currentTarget.value)}
-                      placeholder={t(locale, "resonanceNotePlaceholder")}
-                    />
-                  </label>
-                ) : null}
+                <label className="cap-resonance-note" htmlFor="capResonanceNote">
+                  <span>{resonance ? resonancePrompt(resonance) : "Add my own note"}</span>
+                  <input
+                    id="capResonanceNote"
+                    ref={resonanceNoteInputRef}
+                    type="text"
+                    value={resonanceNote}
+                    onChange={(event) => setResonanceNote(event.currentTarget.value)}
+                    onInput={(event) => setResonanceNote(event.currentTarget.value)}
+                    placeholder={t(locale, "resonanceNotePlaceholder")}
+                  />
+                </label>
               </fieldset>
             ) : null}
           </div>

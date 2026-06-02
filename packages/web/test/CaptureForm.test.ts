@@ -327,6 +327,59 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("return later");
   });
 
+  it("creates an inline highlight from a selection reaction and custom note in the same popover", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("The quiet studio standards pulled me back");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(10, 26);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+
+    const selectionPopover = container?.querySelector<HTMLElement>(".cap-highlight-popover--selection");
+    expect(selectionPopover).not.toBeNull();
+    expect(selectionPopover?.style.getPropertyValue("--highlight-top")).not.toBe("");
+    await act(async () => {
+      Array.from(selectionPopover?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+        .find((button) => button.textContent === "taste")
+        ?.click();
+    });
+
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe("studio standards");
+    expect(container?.querySelector(".cap-highlight-row")).toBeNull();
+    const noteInput = container?.querySelector<HTMLInputElement>("#capResonanceNote");
+    expect(noteInput).not.toBeNull();
+    await act(async () => {
+      if (noteInput) noteInput.value = "This is the bar I want around me.";
+      noteInput?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
+      noteInput?.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "The quiet studio standards pulled me back",
+      kind: "note",
+      sparks: [
+        {
+          text: "studio standards",
+          source: "user_selected",
+          startOffset: 10,
+          endOffset: 26,
+          confidence: 100,
+          isPrimary: true,
+          note: `capture_metadata:v1:${JSON.stringify({
+            reason: "taste",
+            reasonLabel: "taste",
+            userReason: "This is the bar I want around me.",
+          })}`,
+        },
+      ],
+    });
+  });
+
   it("keeps highlight editing next to the highlighted text instead of a detached list", async () => {
     await renderCaptureForm();
     await act(async () => {

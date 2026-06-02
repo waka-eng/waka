@@ -27,6 +27,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type FocusEvent as ReactFocusEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -438,12 +439,77 @@ function userFacingCopy(value: string): string {
     .replace(/\bAI\b/g, "the read");
 }
 
-type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text">;
+type HighlightReaction = "pulled_me" | "envy" | "taste" | "reject" | "person" | "place" | "work";
+
+const highlightReactionOptions: Array<{ value: HighlightReaction; label: string }> = [
+  { value: "pulled_me", label: "pulled me" },
+  { value: "envy", label: "envy" },
+  { value: "taste", label: "taste" },
+  { value: "reject", label: "reject" },
+  { value: "person", label: "person" },
+  { value: "place", label: "place" },
+  { value: "work", label: "work" },
+];
+
+type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text"> & { note?: string | null };
+
+interface MemoryHighlightSelection {
+  signalId: string;
+  text: string;
+  position: { top: number; left: number };
+  reaction: HighlightReaction | null;
+  note: string;
+}
+
+interface ActiveMemoryHighlightControls {
+  signalId: string;
+  highlight: HighlightableSnippet;
+  position: { top: number; left: number };
+  editing: boolean;
+}
+
+function buildHighlightMetadata(input: {
+  reaction: HighlightReaction | null;
+  note: string;
+}): string | undefined {
+  if (!input.reaction && input.note.trim().length === 0) return undefined;
+  return `highlight_reaction:v1:${JSON.stringify({
+    reaction: input.reaction,
+    note: input.note.trim() || null,
+  })}`;
+}
+
+function parseHighlightMetadata(note: string | null | undefined): { reaction: string | null; note: string | null } {
+  if (!note?.startsWith("highlight_reaction:v1:")) return { reaction: null, note: null };
+  try {
+    const parsed = JSON.parse(note.slice("highlight_reaction:v1:".length)) as {
+      reaction?: unknown;
+      note?: unknown;
+    };
+    return {
+      reaction: typeof parsed.reaction === "string" ? parsed.reaction : null,
+      note: typeof parsed.note === "string" ? parsed.note : null,
+    };
+  } catch {
+    return { reaction: null, note: null };
+  }
+}
+
+function selectionPopoverPosition(): { top: number; left: number } {
+  const selection = window.getSelection();
+  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+  const rect = range?.getBoundingClientRect();
+  if (!rect || (rect.width === 0 && rect.height === 0)) return { top: 24, left: 24 };
+  return {
+    top: Math.max(8, rect.top - 46),
+    left: Math.max(8, Math.min(rect.left, window.innerWidth - 292)),
+  };
+}
 
 function renderHighlightedInspirationText(
   text: string,
   highlights: HighlightableSnippet[],
-  onRemove: (highlight: HighlightableSnippet) => void,
+  onShowControls: (highlight: HighlightableSnippet, event: ReactMouseEvent<HTMLElement> | ReactFocusEvent<HTMLElement>) => void,
 ): ReactNode {
   const usableHighlights = highlights
     .filter((highlight) => highlight.text.trim().length > 0)
@@ -467,18 +533,14 @@ function renderHighlightedInspirationText(
 
     if (next.index > cursor) chunks.push(text.slice(cursor, next.index));
     chunks.push(
-      <mark className="memory-inline-highlight" key={next.highlight.id || key++}>
+      <mark
+        className="memory-inline-highlight"
+        key={next.highlight.id || key++}
+        tabIndex={0}
+        onMouseEnter={(event) => onShowControls(next.highlight, event)}
+        onFocus={(event) => onShowControls(next.highlight, event)}
+      >
         {next.highlight.text}
-        <button
-          type="button"
-          aria-label="remove highlight"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove(next.highlight);
-          }}
-        >
-          remove
-        </button>
       </mark>,
     );
     cursor = next.index + next.highlight.text.length;
@@ -1259,10 +1321,9 @@ export function HomePage(): JSX.Element {
   const [selectedSavedSignalId, setSelectedSavedSignalId] = useState<string | null>(null);
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
-  const [selectedInspirationText, setSelectedInspirationText] = useState<{
-    signalId: string;
-    text: string;
-  } | null>(null);
+  const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
+  const [activeMemoryHighlightControls, setActiveMemoryHighlightControls] =
+    useState<ActiveMemoryHighlightControls | null>(null);
   const [highlightStatus, setHighlightStatus] = useState<
     | { status: "idle" }
     | { status: "saving" }
@@ -1625,9 +1686,38 @@ export function HomePage(): JSX.Element {
       setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
       return;
     }
-    setSelectedInspirationText({ signalId, text: selected.slice(0, 4096) });
+    setSelectedInspirationText({
+      signalId,
+      text: selected.slice(0, 4096),
+      position: selectionPopoverPosition(),
+      reaction: null,
+      note: "",
+    });
+    setActiveMemoryHighlightControls(null);
     setHighlightStatus({ status: "idle" });
   }, []);
+
+  const showMemoryHighlightControls = useCallback(
+    (
+      signalId: string,
+      highlight: HighlightableSnippet,
+      event: ReactMouseEvent<HTMLElement> | ReactFocusEvent<HTMLElement>,
+    ): void => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setActiveMemoryHighlightControls({
+        signalId,
+        highlight,
+        position: {
+          top: Math.max(8, rect.top - 44),
+          left: Math.max(8, Math.min(rect.left, window.innerWidth - 292)),
+        },
+        editing: false,
+      });
+      setSelectedInspirationText(null);
+      setHighlightStatus({ status: "idle" });
+    },
+    [],
+  );
 
   const addMemoryHighlight = useCallback(
     async (signalId: string): Promise<void> => {
@@ -1639,6 +1729,10 @@ export function HomePage(): JSX.Element {
           source: "user_selected",
           confidence: 100,
           isPrimary: false,
+          note: buildHighlightMetadata({
+            reaction: selectedInspirationText.reaction,
+            note: selectedInspirationText.note,
+          }),
         });
         setSavedSignalDetail((current) =>
           current && current.id === signalId
@@ -1720,6 +1814,122 @@ export function HomePage(): JSX.Element {
     },
     [],
   );
+
+  const renderMemorySelectionPopover = (signalId: string): JSX.Element | null => {
+    if (!selectedInspirationText || selectedInspirationText.signalId !== signalId) return null;
+    return (
+      <div
+        className="memory-highlight-popover memory-highlight-popover--selection"
+        style={{
+          ["--memory-highlight-top" as string]: `${selectedInspirationText.position.top}px`,
+          ["--memory-highlight-left" as string]: `${selectedInspirationText.position.left}px`,
+        }}
+      >
+        <span>{shortText(selectedInspirationText.text, 90)}</span>
+        <div className="memory-highlight-reactions" aria-label="why this selection mattered">
+          <button
+            type="button"
+            disabled={highlightStatus.status === "saving"}
+            onClick={() => void addMemoryHighlight(signalId)}
+          >
+            {highlightStatus.status === "saving" ? "adding..." : "highlight"}
+          </button>
+          {highlightReactionOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={selectedInspirationText.reaction === option.value ? "selected" : ""}
+              aria-pressed={selectedInspirationText.reaction === option.value}
+              onClick={() =>
+                setSelectedInspirationText((current) =>
+                  current && current.signalId === signalId
+                    ? {
+                        ...current,
+                        reaction: current.reaction === option.value ? null : option.value,
+                      }
+                    : current,
+                )
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <label>
+          <span>my own note</span>
+          <input
+            type="text"
+            value={selectedInspirationText.note}
+            onChange={(event) => {
+              const next = event.currentTarget.value;
+              setSelectedInspirationText((current) =>
+                current && current.signalId === signalId ? { ...current, note: next } : current,
+              );
+            }}
+            placeholder="Optional. Keep it tiny."
+          />
+        </label>
+      </div>
+    );
+  };
+
+  const renderExistingMemoryHighlightPopover = (signalId: string): JSX.Element | null => {
+    if (!activeMemoryHighlightControls || activeMemoryHighlightControls.signalId !== signalId) return null;
+    const metadata = parseHighlightMetadata(activeMemoryHighlightControls.highlight.note);
+    return (
+      <div
+        className="memory-highlight-popover memory-highlight-popover--saved"
+        style={{
+          ["--memory-highlight-top" as string]: `${activeMemoryHighlightControls.position.top}px`,
+          ["--memory-highlight-left" as string]: `${activeMemoryHighlightControls.position.left}px`,
+        }}
+      >
+        <span>{metadata.reaction ?? "highlighted"}{metadata.note ? ` · ${metadata.note}` : ""}</span>
+        <div className="memory-highlight-reactions" aria-label="highlight controls">
+          <button
+            type="button"
+            onClick={() =>
+              setActiveMemoryHighlightControls((current) =>
+                current && current.signalId === signalId ? { ...current, editing: !current.editing } : current,
+              )
+            }
+          >
+            edit reaction
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setActiveMemoryHighlightControls((current) =>
+                current && current.signalId === signalId ? { ...current, editing: !current.editing } : current,
+              )
+            }
+          >
+            expand note
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const highlight = activeMemoryHighlightControls.highlight;
+              setActiveMemoryHighlightControls(null);
+              void removeMemoryHighlight(signalId, highlight);
+            }}
+          >
+            remove
+          </button>
+        </div>
+        {activeMemoryHighlightControls.editing ? (
+          <div className="memory-highlight-reactions memory-highlight-reactions--edit">
+            {highlightReactionOptions.map((option) => (
+              <button key={option.value} type="button" disabled>
+                {option.label}
+              </button>
+            ))}
+            <small>{metadata.note ?? "No note yet."}</small>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   const handleSelectInspiration = useCallback(
     (id: string) => {
@@ -2571,23 +2781,13 @@ export function HomePage(): JSX.Element {
               onMouseUp={() => handleMemoryTextSelection(signal.id)}
               onKeyUp={() => handleMemoryTextSelection(signal.id)}
             >
-              {renderHighlightedInspirationText(detailText, detailHighlights, (highlight) => {
-                void removeMemoryHighlight(signal.id, highlight);
+              {renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
+                showMemoryHighlightControls(signal.id, highlight, event);
               })}
             </p>
             </section>
-            {selectedInspirationText?.signalId === signal.id ? (
-              <div className="memory-highlight-popover">
-                <span>{shortText(selectedInspirationText.text, 90)}</span>
-                <button
-                  type="button"
-                  disabled={highlightStatus.status === "saving"}
-                  onClick={() => void addMemoryHighlight(signal.id)}
-                >
-                  {highlightStatus.status === "saving" ? "adding..." : "add highlight"}
-                </button>
-              </div>
-            ) : null}
+            {renderMemorySelectionPopover(signal.id)}
+            {renderExistingMemoryHighlightPopover(signal.id)}
             {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
               <p className="signal-revisit-state">{highlightStatus.message}</p>
             ) : null}
@@ -2702,23 +2902,13 @@ export function HomePage(): JSX.Element {
             onMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
             onKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
           >
-            {renderHighlightedInspirationText(detailText, detailHighlights, (highlight) => {
-              void removeMemoryHighlight(selectedSavedSignal.id, highlight);
+            {renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
+              showMemoryHighlightControls(selectedSavedSignal.id, highlight, event);
             })}
           </p>
         </section>
-        {selectedInspirationText?.signalId === selectedSavedSignal.id ? (
-          <div className="memory-highlight-popover">
-            <span>{shortText(selectedInspirationText.text, 90)}</span>
-            <button
-              type="button"
-              disabled={highlightStatus.status === "saving"}
-              onClick={() => void addMemoryHighlight(selectedSavedSignal.id)}
-            >
-              {highlightStatus.status === "saving" ? "adding..." : "add highlight"}
-            </button>
-          </div>
-        ) : null}
+        {renderMemorySelectionPopover(selectedSavedSignal.id)}
+        {renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
         {highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id ? (
           <p className="signal-revisit-state">{highlightStatus.message}</p>
         ) : null}
@@ -2913,23 +3103,13 @@ export function HomePage(): JSX.Element {
                 onMouseUp={() => handleMemoryTextSelection(signal.id)}
                 onKeyUp={() => handleMemoryTextSelection(signal.id)}
               >
-                {renderHighlightedInspirationText(detailText, detailHighlights, (highlight) => {
-                  void removeMemoryHighlight(signal.id, highlight);
+                {renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
+                  showMemoryHighlightControls(signal.id, highlight, event);
                 })}
               </p>
             </section>
-            {selectedInspirationText?.signalId === signal.id ? (
-              <div className="memory-highlight-popover">
-                <span>{shortText(selectedInspirationText.text, 90)}</span>
-                <button
-                  type="button"
-                  disabled={highlightStatus.status === "saving"}
-                  onClick={() => void addMemoryHighlight(signal.id)}
-                >
-                  {highlightStatus.status === "saving" ? "adding..." : "add highlight"}
-                </button>
-              </div>
-            ) : null}
+            {renderMemorySelectionPopover(signal.id)}
+            {renderExistingMemoryHighlightPopover(signal.id)}
             {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
               <p className="signal-revisit-state">{highlightStatus.message}</p>
             ) : null}

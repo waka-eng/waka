@@ -979,7 +979,7 @@
         "Run web typecheck, targeted capture/highlight tests, and browser verification on desktop and mobile"
       ],
       "priority": 53,
-      "passes": false,
+      "passes": true,
       "notes": "Product correction: the user wants the literal selection UX where selecting text summons nearby highlight/reaction controls. Highlighting should feel like marking a sentence in place, not managing highlights elsewhere."
     }
   ]

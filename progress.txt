@@ -53,6 +53,37 @@
 - Opened Top of Mind post-its should stay minimal: post-it text, one short explanatory paragraph, private-drawer evidence handoff, and physical edit/pull-down controls only.
 - Capture highlight controls should be proximity-based inside the writing area; selected text gets an inline add-highlight popover and saved highlights expose nearby edit/remove/reason controls instead of detached bottom lists.
 - Memory Drawer stack cards should stay neutral and evidence-like: white/off-white slips, quiet source/date metadata, no folder/icon chrome, no type badges, and no legacy colorful `memory-signal-card--*` treatment inside `.memory-drawer-stack`.
+- Opened-inspiration highlight reactions currently persist on `inspiration_sparks.note` as `highlight_reaction:v1:{...}` metadata; capture-save highlight reactions still use `capture_metadata:v1:{...}` on the primary spark.
+
+---
+
+## 2026-06-01 19:03 PDT - US-050
+
+- What was implemented
+  - Added compact reaction choices and a same-popover custom note path when selecting text in capture.
+  - Made opened inspiration selections create fixed-position highlight popovers from the actual selection range, with reaction/note metadata persisted through inspiration sparks.
+  - Replaced inline remove buttons and detached opened-inspiration add-highlight panels with focus/hover highlight controls for edit reaction, expand note, and remove.
+  - Kept capture and Memory Drawer highlight controls visually quiet with neutral backgrounds, small shadows, and compact text buttons.
+- Files changed
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 77 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspiration, Top of Mind, action recommendation, saved-inspiration, spark-create, and spark-delete APIs. Verified capture selection popover, inline capture mark, opened-inspiration selection popover from range rect, reaction/note spark persistence, focused existing-highlight controls, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Opened-inspiration highlight reactions currently persist on `inspiration_sparks.note` as `highlight_reaction:v1:{...}` metadata; capture-save highlight reactions still use `capture_metadata:v1:{...}` on the primary spark.
+  - Gotchas encountered
+    - Capture textareas still need an approximated textarea-relative position because browser selection ranges are not available inside a native textarea; opened inspiration text uses the actual `Range.getBoundingClientRect()`.
+    - React `onMouseEnter` is awkward to trigger in jsdom; focus on the inline mark is a better regression path for existing-highlight controls.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 
