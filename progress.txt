@@ -52,6 +52,35 @@
 - Memory Drawer should open to one clean white workspace with quiet grouping/all-inspirations entry objects; selecting one swaps to that focused card workspace with a small way back, rather than stacking grouping navigation and long card lists in separate vertical sections.
 - Opened Top of Mind post-its should stay minimal: post-it text, one short explanatory paragraph, private-drawer evidence handoff, and physical edit/pull-down controls only.
 - Capture highlight controls should be proximity-based inside the writing area; selected text gets an inline add-highlight popover and saved highlights expose nearby edit/remove/reason controls instead of detached bottom lists.
+- Memory Drawer stack cards should stay neutral and evidence-like: white/off-white slips, quiet source/date metadata, no folder/icon chrome, no type badges, and no legacy colorful `memory-signal-card--*` treatment inside `.memory-drawer-stack`.
+
+---
+
+## 2026-06-01 18:49 PDT - US-049
+
+- What was implemented
+  - Simplified the anchored Memory Drawer stack into neutral white/off-white slips and quote-style inspiration cards.
+  - Removed folder/icon chrome from stack groupings and removed legacy colorful stack-card classes, material badges, attachment chips, and noisy type labels from drawer-stack inspiration cards.
+  - Kept source/date/attachment context as quiet metadata and made opened inspiration detail use neutral "saved" header language.
+  - Kept user-created pile rename behavior while showing proposed/all pile titles as plain text in drill-down views.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 53 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, saved-inspiration, and reflection APIs. Verified neutral drawer slips, no folder chrome, no loud stack card classes, quiet attachment metadata, neutral opened detail, anchored drill-down, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer stack cards should stay neutral and evidence-like: white/off-white slips, quiet source/date metadata, no folder/icon chrome, no type badges, and no legacy colorful `memory-signal-card--*` treatment inside `.memory-drawer-stack`.
+  - Gotchas encountered
+    - Browser verification needs to wait for saved-inspiration groupings before asserting drawer-stack contents; opening the drawer immediately can briefly show the zero-save state.
+    - Rendered text from CSS-transformed uppercase labels should be case-normalized in Playwright checks.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
 
 ---
 

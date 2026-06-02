@@ -2431,7 +2431,7 @@ export function HomePage(): JSX.Element {
     return (
       <article
         key={group.id}
-        className={`memory-group-object mac-folder memory-group-object--${group.icon}${
+        className={`memory-group-object memory-group-object--slip memory-group-object--${group.icon}${
           selected ? " memory-group-object--selected selected" : ""
         }${draggingMemoryGroupId === group.id ? " memory-group-object--dragging" : ""}`}
         style={{
@@ -2467,11 +2467,6 @@ export function HomePage(): JSX.Element {
             setMemoryFlowIndex(0);
           }}
         >
-          <span className="mac-folder-back" aria-hidden="true" />
-          <span className="mac-folder-front" aria-hidden="true" />
-          <span className="folder-icon" data-icon={group.icon} aria-hidden="true">
-            {group.icon === "pin" ? "*" : group.icon === "image" ? "I" : group.icon === "link" ? "L" : "F"}
-          </span>
           <strong>{group.name}</strong>
           <small>{group.signals.length} saved</small>
         </button>
@@ -2646,33 +2641,28 @@ export function HomePage(): JSX.Element {
   };
 
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
-    const visual = signalVisualTreatment(signal);
+    const sourceLabel = signalSourceLabel(signal);
+    const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
+    const metaItems = [
+      sourceLabel,
+      ...signal.attachmentSummary.slice(0, 2).map((attachment) => attachment.label),
+      failedUploadReason,
+      formatTimestamp(signal.capturedAt),
+    ].filter(Boolean);
     return (
       <button
         key={signal.id}
         type="button"
-        className={`reference-save signal-revisit-card memory-signal-card memory-signal-card--${visual} memory-stack-signal`}
+        className="memory-stack-signal memory-stack-quote-card"
         onClick={() => openStackSignal(signal)}
       >
-        <span className="memory-signal-card-kind">{signalMaterialLabel(signal)}</span>
         <strong>{shortText(signal.textPreview, 142)}</strong>
         {signal.highlightedSnippets[0] ? (
           <blockquote>{shortText(signal.highlightedSnippets[0].text, 96)}</blockquote>
         ) : null}
-        {signal.attachmentSummary.slice(0, 2).map((attachment) => (
-          <span
-            key={attachment.id}
-            className={attachment.type === "link" ? "reference-save-link" : "reference-save-attachment"}
-          >
-            {attachment.label}
-          </span>
-        ))}
-        {signal.relevanceReasons.find((reason) => reason.includes("failed to upload")) ? (
-          <span className="reference-save-attachment">
-            {signal.relevanceReasons.find((reason) => reason.includes("failed to upload"))}
-          </span>
-        ) : null}
-        <span className="memory-signal-card-date">{formatTimestamp(signal.capturedAt)}</span>
+        <span className="memory-stack-card-meta">
+          {metaItems.join(" · ")}
+        </span>
       </button>
     );
   };
@@ -2700,7 +2690,7 @@ export function HomePage(): JSX.Element {
             back
           </button>
           <div>
-            <span>{signalMaterialLabel(selectedSavedSignal)}</span>
+            <span>saved</span>
             <strong>{shortText(selectedSavedSignal.textPreview, 56)}</strong>
           </div>
         </header>
@@ -3590,15 +3580,19 @@ export function HomePage(): JSX.Element {
                 </button>
                 <div>
                   <span>{selectedMemoryGroup.source === "all" ? "all inspirations" : "selected pile"}</span>
-                  <label className="memory-group-name-edit">
-                    <span>name</span>
-                    <input
-                      value={selectedMemoryGroup.name}
-                      onChange={(event) => {
-                        renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
-                      }}
-                    />
-                  </label>
+                  {selectedMemoryGroup.source === "user" ? (
+                    <label className="memory-group-name-edit">
+                      <span>name</span>
+                      <input
+                        value={selectedMemoryGroup.name}
+                        onChange={(event) => {
+                          renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
+                        }}
+                      />
+                    </label>
+                  ) : (
+                    <strong>{selectedMemoryGroup.name}</strong>
+                  )}
                 </div>
                 <div className="memory-order-switcher" role="group" aria-label="browse order">
                   {[

@@ -1494,9 +1494,41 @@ describe("HomePage current home experience", () => {
     expect(board).not.toBeNull();
     expect(board?.querySelector(".memory-group-object--pin")?.textContent).toContain("highlighted by me");
     expect(board?.querySelector(".memory-group-object--image")?.textContent).toContain("work i keep circling");
-    expect(board?.querySelector(".folder-icon")).not.toBeNull();
+    expect(board?.querySelector(".folder-icon")).toBeNull();
+    expect(board?.querySelector(".mac-folder-front")).toBeNull();
     expect(board?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
     expect(board?.textContent?.toLowerCase()).not.toContain("memory movement");
+  });
+
+  it("keeps the drawer stack visually neutral without decorative folder chrome or loud stack cards", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
+    expect(stack).not.toBeNull();
+    expect(stack?.querySelector(".folder-icon")).toBeNull();
+    expect(stack?.querySelector(".mac-folder-front")).toBeNull();
+    expect(stack?.querySelector(".mac-folder-back")).toBeNull();
+    expect(stack?.querySelector(".memory-group-object--slip")).not.toBeNull();
+
+    await openAllInspirations(container);
+
+    const contents = container.querySelector<HTMLElement>(".memory-group-contents");
+    expect(contents).not.toBeNull();
+    expect(contents?.querySelectorAll(".memory-order-switcher").length).toBeLessThanOrEqual(1);
+
+    const stackCard = contents?.querySelector<HTMLElement>(".memory-stack-signal");
+    expect(stackCard).not.toBeNull();
+    expect(stackCard?.classList.contains("memory-stack-quote-card")).toBe(true);
+    expect(stackCard?.className).not.toMatch(/reference-save|signal-revisit-card|memory-signal-card--(note|link|image|mixed)/);
+    expect(stackCard?.querySelector(".memory-signal-card-kind")).toBeNull();
+    expect(stackCard?.querySelector(".reference-save-link")).toBeNull();
+    expect(stackCard?.querySelector(".reference-save-attachment")).toBeNull();
+    expect(stackCard?.querySelector(".memory-stack-card-meta")).not.toBeNull();
   });
 
   it("allows user-created groupings and renaming or dismissing proposed groupings", async () => {
@@ -1656,7 +1688,7 @@ describe("HomePage current home experience", () => {
     const detail = await openBridgeDetail(container);
 
     expect(container.querySelector(".memory-window")).toBeNull();
-    expect(detail.textContent).toContain("highlighted scrap");
+    expect(detail.textContent).not.toContain("highlighted scrap");
     expect(detail.textContent).toContain("saved inspiration");
     expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
@@ -1846,7 +1878,7 @@ describe("HomePage current home experience", () => {
       url: "https://example.com/article",
       name: "example.com/article",
     });
-    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal")).find((save) =>
       save.textContent?.includes("Read https://example.com/article before the next salon"),
     );
     expect(newSave?.textContent).toContain("Read https://example.com/article before the next salon");
@@ -1940,7 +1972,7 @@ describe("HomePage current home experience", () => {
       contentType: "image/png",
       size: 5,
     });
-    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal")).find((save) =>
       save.textContent?.includes("Image inspiration"),
     );
     expect(newSave?.textContent).toContain("Image inspiration");
@@ -2021,7 +2053,7 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 3);
     await openAllInspirations(container);
 
-    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".reference-save")).find((save) =>
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal")).find((save) =>
       save.textContent?.includes("Image with local upload trouble"),
     );
     expect(newSave?.textContent).toContain("Image with local upload trouble");

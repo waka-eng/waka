@@ -938,6 +938,49 @@
       "priority": 51,
       "passes": true,
       "notes": "Product correction: even the simplified white overlay still feels too page-like. The target is closer to macOS Downloads stack behavior: object on wall -> glass stack opens from that object -> drill into grouping -> drill into inspiration -> back, all while the wall remains the context."
+    },
+    {
+      "id": "US-049",
+      "title": "Simplify drawer stack visual language",
+      "description": "As a user, I want the drawer and inspiration cards to feel neutral, minimal, and quiet, closer to simple white quote cards than colorful UI widgets.",
+      "acceptanceCriteria": [
+        "Redesign the drawer stack to use a minimal neutral visual language: white or off-white cards, black/charcoal text, subtle shadows, no bright yellow inspiration cards, no loud highlights, and no busy decorative controls",
+        "Remove the top-left circle/dot controls from the drawer stack if they are purely decorative or make the drawer feel like complex app chrome",
+        "Avoid putting multiple button groups inside the drawer stack; keep controls sparse and text-based only where necessary",
+        "The first drawer stack view should feel like a simple set of neutral cards or slips, not a colorful folder dashboard",
+        "After clicking a specific grouping, the inside view should remain calm: one quiet back affordance, the grouping title, and clean inspiration cards with minimal metadata",
+        "Remove or hide noisy chips such as highlighted/type badges/yellow labels unless the information is essential for understanding the inspiration",
+        "Inspiration cards should look closer to the provided reference: simple white rectangular quote/content cards with centered or well-composed text, restrained spacing, and only subtle source/date context",
+        "Different inspiration types may still be distinguishable, but through subtle layout differences rather than loud color blocks or labels",
+        "Long inspiration text should be truncated cleanly without dense metadata, and opening the card should show the full text in the same neutral style",
+        "Maintain the anchored stack drill-down behavior from US-048; do not reintroduce page navigation, full-screen drawer overlays, or scroll-heavy stacked sections",
+        "Add tests proving decorative circle controls do not render, yellow/loud inspiration card classes are not used in the drawer stack, grouping contents render with minimal controls, and inspiration cards use the neutral card treatment",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 52,
+      "passes": true,
+      "notes": "Visual correction after seeing the anchored stack: it still feels too UI-heavy. Use the provided reference image as the tone: a simple white card with quiet typography and subtle presence. The drawer should feel like opening calm evidence cards, not operating a colorful folder dashboard."
+    },
+    {
+      "id": "US-050",
+      "title": "Make text selection create inline highlight reactions",
+      "description": "As a user, I want highlighting text to immediately show a small contextual control near my selection, so I can mark why that exact text mattered without leaving the text.",
+      "acceptanceCriteria": [
+        "When a user selects text inside capture or an opened inspiration, show a small floating popover near the selected text, preferably above the selection when space allows",
+        "The popover should include a direct highlight action and a few compact reaction choices for why the selection mattered, such as pulled me, envy, taste, reject, person, place, work, or my own note",
+        "The popover must be positioned from the actual selection bounding rectangle, not fixed to the bottom or a separate panel",
+        "Clicking a reaction should apply the highlight inline to the selected text and associate that reaction/note with the highlight",
+        "The user should be able to add a short custom note from the same popover without moving to another section",
+        "Existing highlights should render directly on the text; hovering or focusing a highlight should show a nearby popover with edit reaction, expand note, and remove controls",
+        "Remove detached highlight lists, separate highlighted-text sections, and distant clear buttons from the capture and inspiration detail experiences",
+        "The highlight popover should remain visually quiet: neutral background, small shadow, compact text buttons, no loud badges or colorful chips",
+        "The experience must work in the expanded full-page capture environment and in opened inspiration details on desktop and mobile",
+        "Add tests proving text selection opens a nearby popover, reaction click creates an inline highlight, custom note can be added from the popover, existing highlight hover/focus exposes nearby edit/remove controls, and no detached highlight list renders",
+        "Run web typecheck, targeted capture/highlight tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 53,
+      "passes": false,
+      "notes": "Product correction: the user wants the literal selection UX where selecting text summons nearby highlight/reaction controls. Highlighting should feel like marking a sentence in place, not managing highlights elsewhere."
     }
   ]
 }
