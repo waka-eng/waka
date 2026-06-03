@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import {
   feedback,
@@ -7,7 +7,6 @@ import {
   wowMomentInspirations,
   wowMoments,
   type FeedbackValue,
-  type MeaningNode,
 } from "../db/index.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import {
@@ -109,16 +108,6 @@ export function readAppliedTopOfMindStatus(
   return status as TopOfMindNoteStatus;
 }
 
-function applyPlanToNode(
-  node: Pick<MeaningNode, "weight" | "confidence">,
-  plan: FeedbackApplicationPlan,
-): Pick<MeaningNode, "weight" | "confidence"> {
-  return {
-    weight: clampInt(node.weight + plan.weightDelta, 0, 1000),
-    confidence: clampInt(node.confidence + plan.confidenceDelta, 0, 100),
-  };
-}
-
 async function findRelatedContextNodeIds(
   db: WakaDb,
   input: FeedbackApplicationTarget,
@@ -171,30 +160,22 @@ async function applyPlanToContextNodes(
 ): Promise<void> {
   if (input.nodeIds.length === 0) return;
 
-  const nodes = await db
-    .select()
-    .from(meaningNodes)
+  const now = new Date();
+  await db
+    .update(meaningNodes)
+    .set({
+      weight: sql<number>`least(1000, greatest(0, ${meaningNodes.weight} + ${input.plan.weightDelta}))`,
+      confidence: sql<number>`least(100, greatest(0, ${meaningNodes.confidence} + ${input.plan.confidenceDelta}))`,
+      status: input.plan.nodeStatus,
+      ...(input.plan.nodeStatus === "active" ? { lastReinforcedAt: now } : {}),
+      updatedAt: now,
+    })
     .where(
       and(
         eq(meaningNodes.userId, input.userId),
         inArray(meaningNodes.id, input.nodeIds),
       ),
     );
-
-  const now = new Date();
-  for (const node of nodes) {
-    const patch = applyPlanToNode(node, input.plan);
-    await db
-      .update(meaningNodes)
-      .set({
-        ...patch,
-        status: input.plan.nodeStatus,
-        lastReinforcedAt:
-          input.plan.nodeStatus === "active" ? now : node.lastReinforcedAt,
-        updatedAt: now,
-      })
-      .where(and(eq(meaningNodes.userId, input.userId), eq(meaningNodes.id, node.id)));
-  }
 }
 
 async function applyPlanToTopOfMindNoteConfidence(
@@ -205,20 +186,21 @@ async function applyPlanToTopOfMindNoteConfidence(
     plan: FeedbackApplicationPlan;
   },
 ): Promise<number> {
+  const noteConfidenceDelta =
+    input.plan.topOfMindNoteStatus === "dismissed"
+      ? -12
+      : input.plan.confidenceDelta;
   const [moment] = await db
     .select({ wowScore: wowMoments.wowScore })
     .from(wowMoments)
     .where(
       and(eq(wowMoments.userId, input.userId), eq(wowMoments.id, input.noteId)),
     )
+    .for("update")
     .limit(1);
 
   if (!moment) return 0;
 
-  const noteConfidenceDelta =
-    input.plan.topOfMindNoteStatus === "dismissed"
-      ? -12
-      : input.plan.confidenceDelta;
   const nextWowScore = clampInt(moment.wowScore + noteConfidenceDelta, 0, 100);
 
   await db

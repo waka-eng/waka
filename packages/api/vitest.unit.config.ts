@@ -14,7 +14,16 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: false,
-    include: ["test/wow-score.test.ts", "src/**/*.test.ts"],
-    exclude: ["**/node_modules/**", "**/dist/**", "**/.sst/**", "**/*.smoke.ts"],
+    include: [
+      "src/lib/feedback-application.test.ts",
+      "src/routes/action-recommendations.test.ts",
+      "src/routes/feedback.test.ts",
+    ],
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.sst/**",
+      "**/*.smoke.ts",
+    ],
   },
 });

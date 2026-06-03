@@ -248,4 +248,76 @@ describe("GET /api/action-recommendations", () => {
     expect(unknownResponse.status).toBe(404);
     expect(saveState).not.toHaveBeenCalled();
   });
+
+  it("returns an existing terminal action state idempotently on retry", async () => {
+    const db = {};
+    const states: ActionRecommendationState[] = [];
+    const saveState = vi.fn(
+      async (_db: unknown, input: SaveActionRecommendationStateInput) => {
+        const state: ActionRecommendationState = {
+          actionId: input.actionId,
+          sourceTopOfMindId: input.sourceTopOfMindId,
+          status: input.status,
+          outcomeText: input.outcomeText ?? null,
+          relatedSignalIds: input.relatedSignalIds ?? [],
+          updatedAt: new Date("2026-06-01T10:00:00.000Z"),
+        };
+        states.unshift(state);
+        return state;
+      },
+    );
+    const app = new Hono();
+    app.route(
+      "/api/action-recommendations",
+      createActionRecommendationsRoutes({
+        getDatabase: () => db as any,
+        authMiddleware: authMiddleware(),
+        listTopOfMindNotes: vi.fn(async () => [note]),
+        listStates: vi.fn(async () => states),
+        saveState,
+      }),
+    );
+
+    const listResponse = await app.request("/api/action-recommendations");
+    const listBody = (await listResponse.json()) as {
+      actionRecommendations: Array<{ id: string }>;
+    };
+    const actionId = listBody.actionRecommendations[0]?.id;
+    expect(actionId).toBeTruthy();
+
+    const payload = {
+      sourceTopOfMindId: note.id,
+      status: "completed",
+      outcomeText: "The rough version started the conversation.",
+    };
+    const firstResponse = await app.request(
+      `/api/action-recommendations/${actionId}/state`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    expect(firstResponse.status).toBe(200);
+    expect(saveState).toHaveBeenCalledTimes(1);
+
+    const retryResponse = await app.request(
+      `/api/action-recommendations/${actionId}/state`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
+    expect(retryResponse.status).toBe(200);
+    expect(saveState).toHaveBeenCalledTimes(1);
+    await expect(retryResponse.json()).resolves.toMatchObject({
+      actionRecommendationState: {
+        actionId,
+        sourceTopOfMindId: note.id,
+        status: "completed",
+        outcomeText: "The rough version started the conversation.",
+      },
+    });
+  });
 });

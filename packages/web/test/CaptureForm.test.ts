@@ -56,6 +56,12 @@ async function flushReactWork(): Promise<void> {
   });
 }
 
+async function flushDraftAutosave(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
+}
+
 async function renderCaptureForm(props: ComponentProps<typeof CaptureForm> = {}): Promise<HTMLDivElement> {
   container = document.createElement("div");
   document.body.append(container);
@@ -200,6 +206,7 @@ describe("CaptureForm multi-input quick capture", () => {
       setText("A private draft that should not disappear");
     });
     await flushReactWork();
+    await flushDraftAutosave();
 
     act(() => {
       root?.unmount();
@@ -540,6 +547,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await act(async () => {
       setText("Do not clear this draft");
     });
+    await flushDraftAutosave();
 
     await clickQuickSave();
 

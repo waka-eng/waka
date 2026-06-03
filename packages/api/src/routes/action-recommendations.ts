@@ -109,6 +109,24 @@ function findMatchingActionRecommendation(
   );
 }
 
+function findMatchingTerminalState(
+  states: ActionRecommendationState[],
+  input: {
+    actionId: string;
+    sourceTopOfMindId: string;
+    status: Exclude<ActionRecommendationStatus, "active">;
+  },
+): ActionRecommendationState | null {
+  return (
+    states.find(
+      (state) =>
+        state.actionId === input.actionId &&
+        state.sourceTopOfMindId === input.sourceTopOfMindId &&
+        state.status === input.status,
+    ) ?? null
+  );
+}
+
 function parseActionStateMetadata(row: {
   targetId: string;
   metadata: Record<string, unknown>;
@@ -295,9 +313,18 @@ export function createActionRecommendationsRoutes(
       userId,
       sourceTopOfMindIds: notes.map((note) => note.id),
     });
+    const matchingState = findMatchingTerminalState(states, {
+      actionId: parsedParams.data.actionId,
+      sourceTopOfMindId: parsedBody.data.sourceTopOfMindId,
+      status: parsedBody.data.status as Exclude<ActionRecommendationStatus, "active">,
+    });
+    if (matchingState) {
+      return c.json({ actionRecommendationState: matchingState });
+    }
+
     const actionRecommendations = recommendActionsFromTopOfMind({
       notes,
-      states,
+      states: [],
       limit: MAX_ACTION_RECOMMENDATION_LIMIT,
     });
     const matchingAction = findMatchingActionRecommendation(actionRecommendations, {

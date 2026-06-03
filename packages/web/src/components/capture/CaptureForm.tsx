@@ -175,6 +175,7 @@ const TRAILING_PUNCT = /[.,)\]>;'"]+$/;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
 const CAPTURE_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
+const CAPTURE_DRAFT_WRITE_DEBOUNCE_MS = 300;
 
 type CaptureResonanceAnswer =
   | "pulled_me"
@@ -421,6 +422,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [confirmVisible, setConfirmVisible] = useState(false);
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const draftWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -452,7 +454,17 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const links = pending
         .filter((att) => att.kind === "link" && att.url)
         .map((att) => ({ url: att.url as string, name: att.name }));
-      writeStoredCaptureDraft({ note, resonance, resonanceNote, highlights, links });
+      if (draftWriteTimerRef.current) clearTimeout(draftWriteTimerRef.current);
+      draftWriteTimerRef.current = setTimeout(() => {
+        writeStoredCaptureDraft({ note, resonance, resonanceNote, highlights, links });
+        draftWriteTimerRef.current = null;
+      }, CAPTURE_DRAFT_WRITE_DEBOUNCE_MS);
+      return () => {
+        if (draftWriteTimerRef.current) {
+          clearTimeout(draftWriteTimerRef.current);
+          draftWriteTimerRef.current = null;
+        }
+      };
     }, [note, resonance, resonanceNote, highlights, pending]);
 
     // Cleanup timers when the component unmounts. Without this an
@@ -461,6 +473,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       return () => {
         if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
         if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
+        if (draftWriteTimerRef.current) clearTimeout(draftWriteTimerRef.current);
       };
     }, []);
 
@@ -847,6 +860,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           }, 1800);
         }
         setPending([]);
+        if (draftWriteTimerRef.current) {
+          clearTimeout(draftWriteTimerRef.current);
+          draftWriteTimerRef.current = null;
+        }
         clearStoredCaptureDraft();
         if (failed.length > 0) {
           // Partial save: keep the surface open so the user sees the warning.
