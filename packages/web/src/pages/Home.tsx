@@ -47,6 +47,12 @@ import {
   InspirationDetail,
   type InspirationDetailData,
 } from "../components/history";
+import {
+  ActionChecklist,
+  SavedInspirationDetail,
+  type SavedDetailFeedbackState,
+  type SavedDetailFeedbackValue,
+} from "../components/home-surfaces";
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
@@ -142,6 +148,7 @@ type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
 
 const TOP_OF_MIND_NOTE_LIMIT = 5;
+const MEMORY_DRAWER_CLOSE_MS = 360;
 
 const PRODUCT_SPACES = {
   capture: "Capture",
@@ -742,9 +749,9 @@ function explainThoughtCard(card: HomeThoughtCard): string {
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
   { top: "24px", left: "calc(50% - 200px)", tilt: -1.4, w: "400px" },
   { top: "74px", left: "calc(50% - 520px)", tilt: -2.2, w: "260px" },
-  { top: "270px", left: "calc(50% + 80px)", tilt: 1.8, w: "280px" },
-  { top: "268px", left: "calc(50% - 470px)", tilt: 1.2, w: "260px" },
-  { top: "438px", left: "calc(50% - 110px)", tilt: -0.8, w: "300px" },
+  { top: "246px", left: "calc(50% + 66px)", tilt: 1.8, w: "280px" },
+  { top: "250px", left: "calc(50% - 444px)", tilt: 1.2, w: "260px" },
+  { top: "410px", left: "calc(50% - 96px)", tilt: -0.8, w: "300px" },
 ];
 
 const NOTE_COLORS = [
@@ -1374,11 +1381,13 @@ export function HomePage(): JSX.Element {
   const [captureView] = useState<CaptureView>("note");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [homeMode, setHomeMode] = useState<HomeMode>("topOfMind");
+  const [drawerClosing, setDrawerClosing] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureClosing, setCaptureClosing] = useState(false);
   const [captureSaved, setCaptureSaved] = useState(false);
   const [captureHasDraft, setCaptureHasDraft] = useState<boolean>(() => captureDraftHasContent());
   const captureSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [noteFeedback, setNoteFeedback] = useState<
     Record<
       string,
@@ -1390,6 +1399,7 @@ export function HomePage(): JSX.Element {
       }
     >
   >({});
+  const [savedDetailFeedback, setSavedDetailFeedback] = useState<Record<string, SavedDetailFeedbackState>>({});
   const [removedTopOfMindNoteIds, setRemovedTopOfMindNoteIds] = useState<Set<string>>(() => new Set());
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
@@ -1451,6 +1461,12 @@ export function HomePage(): JSX.Element {
   const memoryWindowDragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
 
+  const clearDrawerCloseTimer = () => {
+    if (drawerCloseTimerRef.current === null) return;
+    clearTimeout(drawerCloseTimerRef.current);
+    drawerCloseTimerRef.current = null;
+  };
+
   const handleLocaleChange = useCallback(
     (nextLocale: SupportedLocale) => {
       setLocale(nextLocale);
@@ -1472,6 +1488,7 @@ export function HomePage(): JSX.Element {
       if (captureSaveFlashTimerRef.current !== null) {
         window.clearTimeout(captureSaveFlashTimerRef.current);
       }
+      clearDrawerCloseTimer();
     };
   }, []);
 
@@ -2416,14 +2433,35 @@ export function HomePage(): JSX.Element {
   }, [initialLoading, topOfMindLoading, topOfMindNotesLoading]);
 
   const chooseHomeMode = (mode: HomeMode) => {
+    clearDrawerCloseTimer();
     if (mode === "memoryDrawer") {
+      setDrawerClosing(false);
       setSelectedMemoryGroupId(null);
       setSelectedSavedSignalId(null);
       setSavedSignalDetail(null);
       setMemoryWindows([]);
       setMemoryGroupDrags({});
+      setSeenMemoryGroupIds(new Set());
+    } else {
+      setDrawerClosing(false);
+      setSeenMemoryGroupIds(new Set());
     }
     setHomeMode(mode);
+  };
+
+  const closeMemoryDrawer = () => {
+    clearDrawerCloseTimer();
+    setDrawerClosing(true);
+    drawerCloseTimerRef.current = setTimeout(() => {
+      drawerCloseTimerRef.current = null;
+      setDrawerClosing(false);
+      setSeenMemoryGroupIds(new Set());
+      setHomeMode("topOfMind");
+    }, MEMORY_DRAWER_CLOSE_MS);
+  };
+
+  const closeMemoryDrawerFromBackdrop = (event: ReactMouseEvent<HTMLElement>) => {
+    if (event.target === event.currentTarget) closeMemoryDrawer();
   };
 
   const openCapture = () => {
@@ -2586,6 +2624,48 @@ export function HomePage(): JSX.Element {
           ...previousFeedback,
           status: "error",
           error: copy.feedbackError,
+        },
+      }));
+    }
+  };
+
+  const submitSavedDetailFeedback = async (signalId: string, value: SavedDetailFeedbackValue) => {
+    const previousFeedback = savedDetailFeedback[signalId] ?? {
+      value: null,
+      status: "idle" as FeedbackStatus,
+      error: null,
+    };
+
+    setSavedDetailFeedback((prev) => ({
+      ...prev,
+      [signalId]: { value, status: "saving", error: null },
+    }));
+
+    try {
+      const feedback = await createFeedback({
+        targetType: "signal",
+        targetId: signalId,
+        value,
+      });
+      setSavedSignalDetail((current) =>
+        current?.id === signalId
+          ? {
+              ...current,
+              resonanceFeedback: [feedback, ...current.resonanceFeedback.filter((item) => item.id !== feedback.id)],
+            }
+          : current,
+      );
+      setSavedDetailFeedback((prev) => ({
+        ...prev,
+        [signalId]: { value, status: "saved", error: null },
+      }));
+    } catch {
+      setSavedDetailFeedback((prev) => ({
+        ...prev,
+        [signalId]: {
+          ...previousFeedback,
+          status: "error",
+          error: "could not save that yet",
         },
       }));
     }
@@ -3003,80 +3083,40 @@ export function HomePage(): JSX.Element {
     if (!selectedSavedSignal) return null;
     const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
     const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
+    const activeFeedback = savedDetailFeedback[selectedSavedSignal.id];
     const relatedGroupNames = memoryGroupings
       .filter((group) => group.signals.some((signal) => signal.id === selectedSavedSignal.id))
       .map((group) => group.name)
       .slice(0, 3);
-
     return (
-      <div className="memory-stack-detail signal-revisit-detail signal-revisit-detail--open" aria-label="opened inspiration">
-        <header className="memory-stack-header">
-          <button
-            type="button"
-            className="memory-workspace-back"
-            onClick={() => {
-              setSelectedSavedSignalId(null);
-              setSavedSignalDetail(null);
-            }}
-          >
-            back
-          </button>
-          <div>
-            <span>saved</span>
-            <strong>{shortText(selectedSavedSignal.textPreview, 56)}</strong>
-          </div>
-        </header>
-        {savedSignalDetailLoading ? <p className="signal-revisit-state">Opening the inspiration...</p> : null}
-        <section className="memory-stack-readable">
-          <span>saved inspiration</span>
-          <p
-            className="signal-revisit-raw memory-readable-signal"
-            onMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
-            onKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
-          >
-            {renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
-              showMemoryHighlightControls(selectedSavedSignal.id, highlight, event);
-            })}
-          </p>
-        </section>
-        {renderMemorySelectionPopover(selectedSavedSignal.id)}
-        {renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
-        {highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id ? (
-          <p className="signal-revisit-state">{highlightStatus.message}</p>
-        ) : null}
-        {(savedSignalDetail?.attachments.length ?? 0) > 0 || selectedSavedSignal.attachmentSummary.length > 0 ? (
-          <section>
-            <span>attachment details</span>
-            <ul className="signal-revisit-notes">
-              {(savedSignalDetail?.attachments.length
-                ? savedSignalDetail.attachments.map((attachment) => ({
-                    id: attachment.id,
-                    label: `${attachment.label}${
-                      attachment.contentType || attachment.size
-                        ? ` · ${[attachment.contentType, attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : null]
-                            .filter(Boolean)
-                            .join(" · ")}`
-                        : ""
-                    }`,
-                  }))
-                : selectedSavedSignal.attachmentSummary
-              ).map((attachment) => (
-                <li key={attachment.id}>
-                  <strong>{attachment.label}</strong>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        <section>
-          <span>nearby piles</span>
-          <p>
-            {relatedGroupNames.length > 0
-              ? relatedGroupNames.join(", ")
-              : "No clear pile has claimed this yet."}
-          </p>
-        </section>
-      </div>
+      <SavedInspirationDetail
+        signal={selectedSavedSignal}
+        detail={savedSignalDetail}
+        loading={savedSignalDetailLoading}
+        relatedGroupNames={relatedGroupNames}
+        backLabel={selectedMemoryGroup ? "list" : "map"}
+        activeFeedback={activeFeedback}
+        highlightError={
+          highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id
+            ? highlightStatus.message
+            : null
+        }
+        sourceText={renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
+          showMemoryHighlightControls(selectedSavedSignal.id, highlight, event);
+        })}
+        selectionPopover={renderMemorySelectionPopover(selectedSavedSignal.id)}
+        existingHighlightPopover={renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
+        onBack={() => {
+          setSelectedSavedSignalId(null);
+          setSavedSignalDetail(null);
+        }}
+        onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
+        onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
+        onSubmitFeedback={(value) => void submitSavedDetailFeedback(selectedSavedSignal.id, value)}
+        formatTimestamp={formatTimestamp}
+        signalSourceLabel={signalSourceLabel}
+        shortText={shortText}
+      />
     );
   };
 
@@ -3585,87 +3625,26 @@ export function HomePage(): JSX.Element {
     });
   };
 
-  const renderActionPostIt = (): JSX.Element | null => {
-    if (visibleActionItems.length === 0) return null;
+  const renderActionPostIt = (): JSX.Element => {
     return (
-      <aside
-        className={`nc-action-pad${actionDragging ? " nc-action-pad--dragging" : ""}`}
-        aria-label="suggested actions"
-        style={{
-          ["--action-dx" as string]: `${actionDrag.x}px`,
-          ["--action-dy" as string]: `${actionDrag.y}px`,
-        }}
+      <ActionChecklist
+        items={visibleActionItems}
+        dragging={actionDragging}
+        dragOffset={actionDrag}
+        pendingOutcomeId={pendingActionOutcomeId}
+        outcomeDrafts={actionOutcomeDrafts}
         onPointerDown={onActionPadPointerDown}
-      >
-        <header>
-          <span>try next</span>
-          <strong>try one small thing in the real world</strong>
-        </header>
-        <ul>
-          {visibleActionItems.map((item) => {
-            const isOutcomePending = pendingActionOutcomeId === item.id;
-            const outcomeDraft = actionOutcomeDrafts[item.id] ?? "";
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className="nc-action-check"
-                  aria-label={`mark done: ${item.text}`}
-                  onClick={() => beginActionOutcome(item)}
-                />
-                <span>
-                  <strong>{item.text}</strong>
-                  <small>
-                    {shortText(userFacingCopy(item.whyNow), 54)}
-                    {item.evidenceSnippets[0]
-                      ? ` · evidence: ${shortText(userFacingCopy(item.evidenceSnippets[0]), 54)}`
-                      : ""}
-                  </small>
-                  {isOutcomePending ? (
-                    <form
-                      className="nc-action-outcome"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        completeActionItem(item, outcomeDraft);
-                      }}
-                    >
-                      <label htmlFor={`action-outcome-${item.id}`}>what happened?</label>
-                      <textarea
-                        id={`action-outcome-${item.id}`}
-                        value={outcomeDraft}
-                        onChange={(event) =>
-                          setActionOutcomeDrafts((current) => ({
-                            ...current,
-                            [item.id]: event.target.value,
-                          }))
-                        }
-                        rows={2}
-                      />
-                      <div>
-                        <button type="submit">save</button>
-                        <button
-                          type="button"
-                          onClick={() => completeActionItem(item)}
-                        >
-                          skip
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-                </span>
-                <button
-                  type="button"
-                  className="nc-action-remove"
-                  aria-label={`remove action: ${item.text}`}
-                  onClick={() => removeActionItem(item)}
-                >
-                  ×
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      </aside>
+        onBeginOutcome={beginActionOutcome}
+        onComplete={completeActionItem}
+        onRemove={removeActionItem}
+        onOutcomeDraftChange={(itemId, value) =>
+          setActionOutcomeDrafts((current) => ({
+            ...current,
+            [itemId]: value,
+          }))
+        }
+        formatSupportingCopy={(text) => shortText(userFacingCopy(text), 54)}
+      />
     );
   };
 
@@ -3850,7 +3829,12 @@ export function HomePage(): JSX.Element {
       </main>
 
       {homeMode === "memoryDrawer" ? (
-        <section className="reference-saves-page signal-revisit-page memory-drawer-stack" aria-label={copy.savesTitle}>
+        <section
+          className={`reference-saves-page signal-revisit-page memory-drawer-stack${
+            drawerClosing ? " memory-drawer-stack--closing" : ""
+          }`}
+          aria-label={copy.savesTitle}
+        >
           <span className="memory-stack-glass" aria-hidden="true" />
           {selectedSavedSignal ? (
             renderMemoryStackDetail()
@@ -3885,8 +3869,15 @@ export function HomePage(): JSX.Element {
               </ul>
             </div>
           ) : (
-            <div className="memory-stack-level">
-              <div className="memory-group-board memory-map-board" aria-label="proposed inspiration groupings">
+            <div
+              className="memory-stack-level"
+              onClick={closeMemoryDrawerFromBackdrop}
+            >
+              <div
+                className="memory-group-board memory-map-board"
+                aria-label="proposed inspiration groupings"
+                onClick={closeMemoryDrawerFromBackdrop}
+              >
                 {memoryGroupings.map(renderMemoryGroupObject)}
                 <button
                   type="button"
@@ -3912,7 +3903,7 @@ export function HomePage(): JSX.Element {
       {expandedNoteIndex === null ? (
         <div className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`} aria-label="bottom actions">
           {homeMode === "memoryDrawer" ? (
-            <label className="nc-drawer-search">
+            <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
               <span className="sr-only">{copy.searchLabel}</span>
               <input
                 type="search"
@@ -3946,7 +3937,7 @@ export function HomePage(): JSX.Element {
             className={`nc-drawer-object${homeMode === "memoryDrawer" ? " nc-drawer-object--close" : ""}`}
             onClick={() => {
               if (homeMode === "memoryDrawer") {
-                chooseHomeMode("topOfMind");
+                closeMemoryDrawer();
               } else {
                 chooseHomeMode("memoryDrawer");
               }

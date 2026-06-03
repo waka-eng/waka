@@ -1824,3 +1824,91 @@
 - Verification: typecheck clean; full web suite 156/156. Browser-verified via Vite + mocked APIs: drawer tags collision-free on a clean field with no white box (boxShadow computed "none", background transparent, opacity 1, no overlapping rects); capture modal close centered, attach+expand bottom-left, save/reflect bottom-right, no bar, smaller; search focus amber ring; draft "···" hint. Rebuilt dist for :3030.
 
 ---
+
+## 2026-06-02 20:22 PDT - Saved-inspiration detail redesign + verification
+
+- What was implemented
+  - Redesigned the saved-inspiration detail inside the drawer stack to match the calmer category contents language: centered text-forward flow, no card/shadow panel, quiet metadata, readable source text, hairline-separated sections, and the same light reveal animation.
+  - Added the US-029 reflection prompts directly to the detail: "what did this mean then?", "what does it mean now?", and "is this still me?".
+  - Added lightweight detail feedback controls: "still alive", "changed shape", and "not anymore". These persist through the existing `/feedback` client with `targetType: "signal"` and update the local detail feedback state.
+  - Fixed a real browser hit-testing bug from the drawer stack pivot: `.memory-drawer-stack` has `pointer-events: none`, so the new contents/detail flows now explicitly opt back in with `pointer-events: auto`.
+  - Rebuilt the web dist so the static-served bundle reflects the latest source.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 56 tests.
+  - `pnpm --filter @waka/web test` passed: 157 tests.
+  - `pnpm --filter @waka/web build` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, saved signals, Top of Mind, action recommendations, saved-signal detail, and feedback APIs. Verified capture close applies `reference-capture-modal--closing` and `captureSheetToPill` mid-flight, detail prompts/feedback render, feedback saves, detail stays in frame, and no horizontal overflow.
+  - `pnpm --filter @waka/api test` no longer failed at DB setup and completed several DB-backed files, but then stalled silently in the remaining API file startup phase; I terminated the parent process with SIGTERM. Treat this as inconclusive, not a pass.
+- Learnings for future iterations
+  - Patterns discovered
+    - Drawer stack child screens need their own `pointer-events: auto` because the full-screen stack shell is intentionally pointer-transparent for the constellation treatment.
+  - Gotchas encountered
+    - Playwright pointer clicks exposed the pointer-events regression that jsdom tests could not see.
+    - Capture close animation is better verified by computed `animationName`, `transform`, and `opacity` than by bounding boxes; transformed box dimensions were not a reliable signal during the overlapping open/close animation.
+
+---
+
+## 2026-06-02 20:31 PDT - Drawer overlay + bottom-bar parity
+
+- What was implemented
+  - Changed the Memory Drawer/lightbulb view from an opaque page replacement to a translucent overlay over the Top of Mind wall, with a slight 2px blur and much lighter wall dimming.
+  - Added a closing state for the drawer so the search pill animates back with `drawerSearchMorphOut` before returning to the capture button.
+  - Matched capture and search typography across desktop/mobile: same Inter Tight font, 13px size, 560 weight, normal letter spacing; search text stays lower opacity.
+  - Kept the previously added saved-inspiration detail redesign and feedback controls intact.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 56 tests.
+  - `pnpm --filter @waka/web test` passed: 157 tests.
+  - `pnpm --filter @waka/web build` passed after the final CSS change.
+  - Browser verification with Playwright + Vite passed for desktop `1280x850` and mobile `390x844`: drawer overlay is translucent, wall blur is 2px, capture/search font styles match, search text is lower opacity, and both search + drawer overlay animate closed.
+
+---
+
+## 2026-06-02 20:35 PDT - Always-visible action checklist empty state
+
+- What was implemented
+  - Kept the wall action checklist paper visible even when there are no active action recommendations.
+  - Added empty-state copy: "action items will show up once enough inspirations are reached".
+  - Preserved done/remove behavior so individual action items disappear after completion/removal, while the paper remains visible with the empty state.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 57 tests.
+  - `pnpm --filter @waka/web test` passed: 158 tests.
+  - `pnpm --filter @waka/web build` passed.
+
+---
+
+## 2026-06-02 20:56 PDT - Word-cloud motion reduction + outside close
+
+- What was implemented
+  - Removed the word-cloud tag entrance animation so all inspiration group tags are visible together instead of popping in over time.
+  - Added outside-click close for the word-cloud drawer: clicking the empty cloud field/background closes the overlay, while clicking tag text still opens that group.
+  - Kept the existing X/lightbulb close path and reverse search/drawer close animation.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 58 tests.
+  - `pnpm --filter @waka/web test` passed: 159 tests.
+  - `pnpm --filter @waka/web build` passed.
+  - Browser verification with Playwright + Vite passed for desktop `1280x850` and mobile `390x844`: word-cloud tag `animationName` is `none`, background click closes the drawer, and the close animation still runs.
+
+---

@@ -1600,6 +1600,7 @@
   padding: clamp(72px, 12vh, 130px) 8px 120px;
   overflow: auto;
   min-height: 0;
+  pointer-events: auto;
   animation: contentsFlowIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -1708,28 +1709,138 @@
 }
 
 .memory-stack-detail {
-  color: #332d22;
-  padding-right: 10px;
+  width: min(680px, calc(100vw - 48px));
+  margin: 0 auto;
+  color: #2d2925;
+  padding: clamp(66px, 11vh, 120px) 8px 120px;
+  pointer-events: auto;
+  animation: contentsFlowIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .memory-drawer-stack .memory-stack-detail {
-  background: #fff;
-  border: 1px solid rgba(31, 29, 24, 0.1);
-  box-shadow: 0 12px 30px rgba(26, 23, 18, 0.07);
-  color: #171614;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #2d2925;
   min-height: 0;
-  padding: clamp(16px, 3vw, 28px);
+  padding: clamp(66px, 11vh, 120px) 8px 120px;
+}
+
+.memory-detail-head {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.memory-detail-head h2 {
+  margin: 0;
+  color: #2d2925;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(24px, 2.6vw, 38px);
+  font-weight: 640;
+  letter-spacing: -0.015em;
+  line-height: 1.08;
+}
+
+.memory-detail-head p {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.44);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.memory-detail-head > span {
+  color: rgba(45, 41, 37, 0.45);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .memory-stack-readable .memory-readable-signal {
-  font-family: var(--font-serif);
-  font-size: clamp(22px, 3vw, 34px);
-  line-height: 1.22;
+  color: #2d2925;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 520;
+  line-height: 1.42;
 }
 
 .memory-stack-detail section {
   display: grid;
+  gap: 10px;
+  border-top: 1px solid rgba(45, 41, 37, 0.1);
+  padding-top: 18px;
+}
+
+.memory-detail-prompts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+}
+
+.memory-detail-prompts p {
+  margin: 0;
+  padding: 0 14px;
+  color: rgba(45, 41, 37, 0.72);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(15px, 1.4vw, 18px);
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.memory-detail-prompts p:first-child {
+  padding-left: 0;
+}
+
+.memory-detail-prompts p + p {
+  border-left: 1px solid rgba(45, 41, 37, 0.1);
+}
+
+.memory-detail-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.memory-detail-feedback-actions button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(45, 41, 37, 0.12);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(45, 41, 37, 0.68);
+  cursor: pointer;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: 0;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.memory-detail-feedback-actions button:hover,
+.memory-detail-feedback-actions button:focus-visible,
+.memory-detail-feedback-actions .memory-detail-feedback-choice--active {
+  border-color: rgba(45, 41, 37, 0.24);
+  background: rgba(45, 41, 37, 0.08);
+  color: #2d2925;
+  outline: 0;
+}
+
+.memory-detail-feedback-actions button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.memory-detail-feedback > p,
+.memory-detail-nearby p {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.54);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .memory-drawer-desk {
@@ -3879,11 +3990,11 @@
 
 .nc-action-pad {
   position: absolute;
-  top: 500px;
-  left: calc(50% + 250px);
-  z-index: 4;
-  width: 300px;
-  min-height: 270px;
+  top: clamp(208px, 34vh, 300px);
+  left: calc(50% + 302px);
+  z-index: 3;
+  width: 286px;
+  min-height: 238px;
   background: #f6efc8;
   color: #166146;
   border: 1px solid rgba(22, 97, 70, 0.22);
@@ -3928,21 +4039,13 @@
 
 .nc-action-pad header {
   display: grid;
-  gap: 7px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   text-align: center;
-}
-
-.nc-action-pad header span {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
 }
 
 .nc-action-pad header strong {
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1.05;
@@ -4013,6 +4116,18 @@
   letter-spacing: 0;
   line-height: 1.35;
   text-transform: none;
+}
+
+.nc-action-empty {
+  margin: 28px 4px 0;
+  border-top: 1px solid rgba(22, 97, 70, 0.28);
+  padding-top: 14px;
+  color: rgba(22, 97, 70, 0.7);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 540;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .nc-action-outcome {
@@ -11356,10 +11471,10 @@ body.reflect-bg {
   background: rgba(255, 255, 255, 0.96);
   border-radius: 999px;
   color: #2d2925;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.005em;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: 0;
   line-height: 1;
 }
 
@@ -11806,13 +11921,15 @@ body.reflect-bg {
 }
 
 .nc-canvas--drawer-open {
-  filter: saturate(0.96) blur(7px);
+  filter: saturate(0.96) blur(2px);
+  transition: filter 260ms ease;
 }
 
 .nc-canvas--drawer-open .nc-stage,
 .nc-canvas--drawer-open .nc-titlecard,
 .nc-canvas--drawer-open .nc-footnote {
-  opacity: 0.56;
+  opacity: 0.78;
+  transition: opacity 260ms ease;
 }
 
 .memory-drawer-stack {
@@ -11824,12 +11941,17 @@ body.reflect-bg {
   height: 100dvh;
   min-height: 0;
   padding: 0;
-  background: #f4f2ee;
+  background: rgba(244, 242, 238, 0.42);
   border: 0;
   box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  backdrop-filter: blur(2px) saturate(0.96);
+  -webkit-backdrop-filter: blur(2px) saturate(0.96);
   pointer-events: none;
+  animation: memoryDrawerOverlayIn 240ms ease both;
+}
+
+.memory-drawer-stack--closing {
+  animation: memoryDrawerOverlayOut 320ms ease both;
 }
 
 .memory-drawer-stack::after,
@@ -11925,7 +12047,7 @@ body.reflect-bg {
   transform-origin: center;
   z-index: 2;
   opacity: 1;
-  animation: memorySkillTagIn 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: none;
 }
 
 .memory-bulletin-object.memory-map-node {
@@ -12043,17 +12165,6 @@ body.reflect-bg {
     transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes memorySkillTagIn {
-  from {
-    opacity: 0;
-    transform: rotate(var(--tilt, 0deg)) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(var(--tilt, 0deg)) translateY(0);
-  }
-}
-
 .nc-action-pad {
   z-index: 18;
 }
@@ -12076,9 +12187,6 @@ body.reflect-bg {
 .nc-drawer-search {
   width: min(360px, calc(100vw - 118px));
   min-height: 54px;
-}
-
-.nc-drawer-search {
   display: grid;
   align-items: center;
   padding: 6px;
@@ -12091,6 +12199,11 @@ body.reflect-bg {
   transform-origin: right center;
   animation: drawerSearchMorph 440ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   transition: background 200ms ease, box-shadow 200ms ease;
+}
+
+.nc-drawer-search--closing {
+  pointer-events: none;
+  animation: drawerSearchMorphOut 320ms cubic-bezier(0.34, 0, 0.2, 1) both;
 }
 
 /* While typing/focused, the surround picks up a warm accent ring. */
@@ -12109,16 +12222,21 @@ body.reflect-bg {
   border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.96);
-  color: #2d2925;
+  color: rgba(45, 41, 37, 0.64);
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.005em;
+  font-size: 13px;
+  font-weight: 560;
+  letter-spacing: 0;
   outline: 0;
+  transition: color 160ms ease;
+}
+
+.nc-drawer-search:focus-within input {
+  color: rgba(45, 41, 37, 0.86);
 }
 
 .nc-drawer-search input::placeholder {
-  color: rgba(45, 41, 37, 0.42);
+  color: rgba(45, 41, 37, 0.34);
 }
 
 .nc-drawer-object {
@@ -12276,6 +12394,45 @@ body.reflect-bg {
   }
 }
 
+@keyframes drawerSearchMorphOut {
+  from {
+    opacity: 1;
+    width: min(360px, calc(100vw - 118px));
+    transform: scaleX(1);
+  }
+  to {
+    opacity: 0.72;
+    width: min(220px, calc(100vw - 118px));
+    transform: scaleX(0.72);
+  }
+}
+
+@keyframes memoryDrawerOverlayIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0) saturate(1);
+    -webkit-backdrop-filter: blur(0) saturate(1);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(2px) saturate(0.96);
+    -webkit-backdrop-filter: blur(2px) saturate(0.96);
+  }
+}
+
+@keyframes memoryDrawerOverlayOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(2px) saturate(0.96);
+    -webkit-backdrop-filter: blur(2px) saturate(0.96);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0) saturate(1);
+    -webkit-backdrop-filter: blur(0) saturate(1);
+  }
+}
+
 @keyframes drawerIconTurn {
   from {
     transform: rotate(-160deg) scale(0.92);
@@ -12285,8 +12442,7 @@ body.reflect-bg {
   }
 }
 
-.memory-group-contents.memory-stack-level,
-.memory-stack-detail {
+.memory-group-contents.memory-stack-level {
   position: fixed;
   inset: clamp(42px, 7vh, 86px) clamp(24px, 7vw, 120px);
   z-index: 6;
@@ -12316,10 +12472,10 @@ body.reflect-bg {
 
 @media (max-width: 760px) {
   .nc-save-cta {
-    min-height: 50px;
+    min-height: 42px;
     min-width: min(230px, calc(100vw - 96px));
-    padding: 0 22px;
-    font-size: 17px;
+    padding: 0 18px;
+    font-size: 13px;
   }
 
   .nc-save-icon {
@@ -12398,9 +12554,27 @@ body.reflect-bg {
     transform: translate(-50%, -50%) scale(1);
   }
 
-  .memory-group-contents.memory-stack-level,
-  .memory-stack-detail {
+  .memory-group-contents.memory-stack-level {
     inset: 18px;
     padding: 24px;
+  }
+
+  .memory-stack-detail,
+  .memory-drawer-stack .memory-stack-detail {
+    width: min(100%, calc(100vw - 36px));
+    padding: 72px 0 108px;
+  }
+
+  .memory-detail-prompts {
+    grid-template-columns: 1fr;
+  }
+
+  .memory-detail-prompts p {
+    padding: 12px 0;
+  }
+
+  .memory-detail-prompts p + p {
+    border-top: 1px solid rgba(45, 41, 37, 0.1);
+    border-left: 0;
   }
 }

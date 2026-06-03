@@ -16,7 +16,6 @@ import {
   type MeaningPacket,
 } from "../db/index.js";
 import {
-  calculateRuntimeCandidateScore,
   clamp01,
   fromPersistedScore,
   logNormalize,

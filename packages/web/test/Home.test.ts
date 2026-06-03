@@ -856,7 +856,8 @@ describe("HomePage current home experience", () => {
     expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).not.toContain("ambition signal");
-    expect(container.textContent).toContain("try next");
+    expect(container.textContent).toContain("action items");
+    expect(container.textContent).not.toContain("try one small thing in the real world");
     expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("not final");
@@ -898,6 +899,20 @@ describe("HomePage current home experience", () => {
     expect(fetchActionRecommendations).toHaveBeenCalled();
   });
 
+  it("keeps the action checklist visible with empty-state copy before enough recommendations exist", async () => {
+    setApiFixtures({
+      actionRecommendations: [],
+    });
+    const container = await renderHomePage();
+    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
+
+    expect(actionPad).not.toBeNull();
+    expect(actionPad?.textContent).toContain("action items");
+    expect(actionPad?.textContent).not.toContain("try one small thing in the real world");
+    expect(actionPad?.textContent).toContain("action items will show up once enough inspirations are reached");
+    expect(actionPad?.querySelector(".nc-action-check")).toBeNull();
+  });
+
   it("keeps the action checklist on the wall even without top-of-mind post-its", async () => {
     setApiFixtures({
       topOfMind: { activeThemes: [], activeQuestions: [], topOfMind: null },
@@ -934,7 +949,9 @@ describe("HomePage current home experience", () => {
       container.querySelector<HTMLButtonElement>(".nc-action-outcome button[type='submit']")?.click();
     });
     await flushReactWork();
-    expect(container.querySelector(".nc-action-pad")).toBeNull();
+    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(container.querySelector(".nc-action-check")).toBeNull();
+    expect(container.textContent).toContain("action items will show up once enough inspirations are reached");
     expect(updateActionRecommendationState).toHaveBeenCalledWith(
       sampleActionRecommendation.id,
       {
@@ -960,7 +977,9 @@ describe("HomePage current home experience", () => {
       )?.click();
     });
     await flushReactWork();
-    expect(container.querySelector(".nc-action-pad")).toBeNull();
+    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(container.querySelector(".nc-action-check")).toBeNull();
+    expect(container.textContent).toContain("action items will show up once enough inspirations are reached");
     expect(updateActionRecommendationState).toHaveBeenCalledWith(
       sampleActionRecommendation.id,
       {
@@ -991,7 +1010,9 @@ describe("HomePage current home experience", () => {
       remove?.click();
     });
     await flushReactWork();
-    expect(nextContainer.querySelector(".nc-action-pad")).toBeNull();
+    expect(nextContainer.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(nextContainer.querySelector(".nc-action-remove")).toBeNull();
+    expect(nextContainer.textContent).toContain("action items will show up once enough inspirations are reached");
     expect(updateActionRecommendationState).toHaveBeenCalledWith(
       "action-remove",
       {
@@ -1273,7 +1294,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
-    expect(container.textContent).toContain("try next");
+    expect(container.textContent).toContain("action items");
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
@@ -1407,6 +1428,66 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(stack?.querySelector(".memory-group-board")).not.toBeNull();
+  });
+
+  it("closes the word-cloud drawer when the user clicks outside a tag", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    const board = container.querySelector<HTMLElement>(".memory-map-board");
+    expect(board).not.toBeNull();
+
+    await act(async () => {
+      board?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".memory-drawer-stack--closing")).not.toBeNull();
+
+    await waitForTimers(380);
+    await flushReactWork();
+    expect(container.querySelector(".memory-drawer-stack")).toBeNull();
+    expect(container.querySelector(".nc-save")).not.toBeNull();
+  });
+
+  it("resets word-cloud seen opacity after the drawer closes and reopens", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const firstTag = container.querySelector<HTMLElement>(".memory-map-node");
+    const firstHitarea = firstTag?.querySelector<HTMLButtonElement>(".memory-group-hitarea");
+    expect(firstTag).not.toBeNull();
+    expect(firstTag?.dataset.state).toBe("idle");
+
+    await act(async () => {
+      firstHitarea?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(firstTag?.dataset.state).toBe("seen");
+    expect(firstTag?.classList.contains("memory-map-node--seen")).toBe(true);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.click();
+    });
+    await flushReactWork();
+    await waitForTimers(380);
+    await flushReactWork();
+    expect(container.querySelector(".memory-drawer-stack")).toBeNull();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const reopenedFirstTag = container.querySelector<HTMLElement>(".memory-map-node");
+    expect(reopenedFirstTag?.dataset.state).toBe("idle");
+    expect(reopenedFirstTag?.classList.contains("memory-map-node--seen")).toBe(false);
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -1712,10 +1793,37 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).toContain("nearby piles");
     expect(detail.textContent).toContain("highlighted by me");
-    expect(detail.textContent).not.toContain("is this still me?");
-    expect(detail.textContent).not.toContain("Still alive");
+    expect(detail.textContent).toContain("what did this mean then?");
+    expect(detail.textContent).toContain("what does it mean now?");
+    expect(detail.textContent).toContain("is this still me?");
+    expect(detail.textContent).toContain("still alive");
+    expect(detail.textContent).toContain("changed shape");
+    expect(detail.textContent).toContain("not anymore");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
+  });
+
+  it("saves still-alive feedback from the opened inspiration detail", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    const detail = await openBridgeDetail(container);
+    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-detail-feedback-actions button")).find(
+      (button) => button.textContent === "still alive",
+    );
+    expect(stillAlive).not.toBeNull();
+
+    await act(async () => {
+      stillAlive?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "important",
+    });
+    expect(detail.textContent).toContain("saved");
   });
 
   it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {

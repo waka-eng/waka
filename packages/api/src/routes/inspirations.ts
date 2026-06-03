@@ -883,8 +883,6 @@ const updateInspirationSchema = z
     },
   );
 
-type UpdateInspirationInput = z.infer<typeof updateInspirationSchema>;
-
 /**
  * PATCH /api/inspirations/:id
  *
@@ -1056,8 +1054,6 @@ const createReflectionSchema = z.object({
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   skipped: z.boolean().optional(),
 });
-
-type CreateReflectionInput = z.infer<typeof createReflectionSchema>;
 
 /**
  * POST /api/inspirations/:id/reflections
