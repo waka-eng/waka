@@ -1753,3 +1753,74 @@
     - Vite served browser verification at `http://localhost:5173/`.
 
 ---
+
+## 2026-06-01 21:45 PDT - Drawer hover-reveal redesign + regression cleanup
+
+- What was implemented
+  - Memory-drawer constellation finished toward the Shopify Editions reference: hover-reveal card is now anchored beneath the hovered /label (counter-scaled to a stable size) and shows a tight blurb + "open these N saves" CTA + /label, instead of a screen-centered paragraph.
+  - "Seen/peeked" feedback: dimmed label now also carries a small filled dot before the slug.
+  - Constellation connecting lines are now real (generated from a shared MEMORY_MAP_SLOTS constant from the hub to each rendered node) and faintly visible, replacing the 4 hardcoded display:none paths.
+  - Bottom bar unified: search pill and capture pill share one translucent-glass construction, and the close (X) circle uses the same translucent ring + white inner as the lightbulb, so capture/search read as two states of one component.
+  - Action checklist no longer fabricates client-side fallback actions; it renders only the server recommender's grounded, learning-loop-connected actions (removed fallbackActionItems, hasServerActionRecommendations, and the fallback-action- early returns that broke persistence).
+  - PRD US-050 annotated: highlight-only capture (no reaction chips) is an intentional design decision, not a regression.
+  - Test/rename drift fixed so the full web suite is green:
+    - Login subtitle "your signals" -> "your inspirations" (user-facing noun is inspiration).
+    - i18n test updated to the app's inspiration/영감 count phrasing (was stale signal/신호).
+    - InspirationCard Korean attachment aria-label expectation "첨부 맥락" -> "첨부 정보".
+    - WowMomentsSection dev-panel labels "Source signal"/"출처 신호" -> "Source inspiration"/"출처 영감" (renamed in US-045) and section copy "What WAKA noticed" -> "Why WAKA noticed this".
+- Files changed
+  - packages/web/src/pages/Home.tsx
+  - packages/web/src/pages/Login.tsx
+  - packages/web/src/styles/global.css
+  - packages/web/test/i18n.test.ts
+  - packages/web/test/InspirationCard.test.ts
+  - packages/web/test/WowMomentsSection.test.ts
+  - prd.json
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test` passed: 155 tests, 9 files (previously 8 failing across 4 files).
+  - Visual states (hover card anchoring, bottom-bar parity) still pending in-browser confirmation at localhost:3030.
+- Learnings for future iterations
+  - Per-story verification only ran the story's own test file, so 8 failures accumulated unseen in auth-boundary/i18n/InspirationCard/WowMomentsSection. Run the full `@waka/web` suite before declaring a story done.
+  - The api suite cannot run locally: test/setup.ts connects to DB at import using the placeholder HOST.neon.tech in .env. "Verification passed" claims for api stories are only reproducible by bypassing that setup.
+  - User-facing noun is "inspiration"/"영감"; "signal" is internal/domain only. Login copy had leaked the internal term.
+
+---
+
+## 2026-06-01 22:40 PDT - Capture chrome reposition, sizing, and Shopify skill-tag interaction
+
+- What was implemented
+  - Moved the capture focus-mode (expand/collapse) control out of the bottom capture bar and up into the modal chrome next to the close button. The bottom bar now holds only attach + Reflect deeper + Save it now.
+  - Removed `#capExpand` (and its now-unused props) from `CaptureCell`; the minimize control is rendered in `Home` as `.reference-capture-min`, wired to `captureFocused`.
+  - Shrank the capture close button (62px + 12px ring -> 44px + 5px ring, X mark 16px -> 13px) and reduced the capture/reflect text size (clamp(18px,2vw,28px)/520 -> clamp(15px,1.35vw,20px)/480), keeping the highlight overlay font in lockstep.
+  - Gave the memory-map constellation tags the Shopify Editions skill-tag interaction: on hover/focus they morph in place (background-color + min-width/padding, 200ms ease-out) into a filled rounded pill, with a forgiving `::before` (inset -16px) hover hit-area so adjacent tags don't flicker. The anchored blurb + "open these N saves" card still reveals below.
+  - Diagnosed the user's "crammed top-left" report as a stale `:3030` build (current source reproduced clean); rebuilt `packages/web` dist twice so `:3030` reflects all recent fixes.
+- Files changed
+  - packages/web/src/components/capture/CaptureCell.tsx
+  - packages/web/src/pages/Home.tsx
+  - packages/web/src/styles/global.css
+  - packages/web/test/CaptureForm.test.ts
+  - packages/web/test/Home.test.ts
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test` passed: 156 tests, 9 files.
+  - Browser verification via Vite + mocked APIs: capture modal shows minimize+close clustered top-right with smaller close and smaller body text and a 3-item bottom bar; constellation tag fills/expands in place on hover with the reveal card below.
+  - Rebuilt dist served by `:3030` (static), so a refresh reflects current source.
+- Learnings for future iterations
+  - `:3030` serves the built `dist` statically; uncommitted source changes only appear there after `pnpm --filter @waka/web build`. "Still broken on :3030" usually means a stale bundle, not a live-source bug.
+  - The Shopify skill-tag feel is `transition-[background-color,min-width]` (in-place pill morph) plus a `before:-inset` forgiving hover zone, not a separate popup.
+
+---
+
+## 2026-06-01 23:30 PDT - Constellation cleanup + capture chrome rework (rapid design pass)
+
+- Constellation tags (Inspiration Drawer): removed the SVG relationship lines; switched from absolute fixed slots to a centered flex-wrap layout so tags can never overlap regardless of label length/count; shrank tag text (clamp 22-42px -> 14-20px); tags now render at full opacity and dim to 0.4 only after being hovered/opened (was per-node weighted opacity + a leading dot); removed the seen dot; cleared the inherited hitarea box-shadow/background so only the text shows (no white box); made the drawer backdrop an opaque clean field (#f4f2ee) so tags no longer sit over the blurred wall.
+- Capture modal chrome: close button is centered again (removed the top-right minimize+close cluster); the expand/focus control moved back into the capture bar next to the attach button (bottom-left), with the two save actions on the bottom-right; removed the enclosing pill so controls sit directly on the surface; lighter/smaller treatment (utility circles 42->34px, save buttons 14px/720 -> 13px/560, quick min-width dropped).
+- Expand now fills to the top (min-height calc(100dvh - clamp(96px,12vh,150px))) with padding.
+- Bottom bar: capture pill gains a morph-in entry animation (ncSaveMorphIn) so returning capture<-search animates like search<-capture.
+- Search bar: warm amber focus ring while typing (:focus-within).
+- Capture button shows a "···" hint when an unsaved draft is waiting (captureDraftHasContent from local storage), cleared on save.
+- Files: packages/web/src/pages/Home.tsx, packages/web/src/components/capture/CaptureCell.tsx, packages/web/src/styles/global.css, packages/web/test/CaptureForm.test.ts, packages/web/test/Home.test.ts
+- Verification: typecheck clean; full web suite 156/156. Browser-verified via Vite + mocked APIs: drawer tags collision-free on a clean field with no white box (boxShadow computed "none", background transparent, opacity 1, no overlapping rects); capture modal close centered, attach+expand bottom-left, save/reflect bottom-right, no bar, smaller; search focus amber ring; draft "···" hint. Rebuilt dist for :3030.
+
+---

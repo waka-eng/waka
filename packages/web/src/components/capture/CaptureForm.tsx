@@ -46,7 +46,6 @@ import {
   forwardRef,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -152,6 +151,12 @@ export interface CaptureFormProps {
   locale?: SupportedLocale;
   /** Parent can close the modal after the post-save mirror action. */
   onDismissAfterSave?: () => void;
+  /**
+   * Fires once a save fully succeeds. The parent uses this to close the
+   * capture surface and flash an ephemeral "saved" confirmation on the
+   * capture button, replacing the in-cell post-save mirror card.
+   */
+  onSaved?: () => void;
 }
 
 /* ============================================================
@@ -205,6 +210,7 @@ interface StoredCaptureDraft {
   resonance?: CaptureResonanceAnswer | null;
   resonanceNote?: string;
   highlight?: HighlightedSignalText | null;
+  highlights?: HighlightedSignalText[];
   links?: Array<{ url: string; name?: string }>;
 }
 
@@ -227,48 +233,6 @@ const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string; ic
   { value: "live_near_this", label: "I want to live near this", icon: "m", prompt: "What environment does this make me want?" },
   { value: "not_sure", label: "I don't know yet", icon: "...", prompt: "What is the first clue?" },
 ];
-
-function suggestedResonanceOptions(text: string): typeof resonanceOptions {
-  const normalized = text.toLowerCase();
-  const scored = resonanceOptions.map((option, index) => {
-    let score = resonanceOptions.length - index;
-    if (option.value === "want" && /\b(want|need|wish|desire|hope|more|beautiful|love)\b/.test(normalized)) score += 12;
-    if (option.value === "pulled_me" && /\b(pulled|hit|kept|return|drawn|magnet|noticed)\b/.test(normalized)) score += 12;
-    if (option.value === "envy" && /\b(envy|jealous|they have|someone else|wish i had)\b/.test(normalized)) score += 12;
-    if (option.value === "taste" && /\b(taste|standard|beautiful|style|aesthetic|design)\b/.test(normalized)) score += 12;
-    if (option.value === "reject" && /\b(reject|refuse|done|not me|anymore|leave|outgrow|never again)\b/.test(normalized)) score += 12;
-    if (option.value === "person" && /\b(person|people|friend|founder|builder|mentor|community|together)\b/.test(normalized)) score += 12;
-    if (option.value === "place" && /\b(city|place|where|room|environment|home|studio|live)\b/.test(normalized)) score += 12;
-    if (option.value === "work" && /\b(work|build|make|create|company|product|ship)\b/.test(normalized)) score += 12;
-    if (option.value === "hurt" && /\b(hurt|pain|grief|sad|lonely|rejected|lost)\b/.test(normalized)) score += 12;
-    if (option.value === "scared" && /\b(scared|fear|risk|stakes|uncertain|danger|terrifying)\b/.test(normalized)) score += 12;
-    if (option.value === "want_people_like_this" && /\b(people|friend|founder|builder|mentor|room|community|together)\b/.test(normalized)) score += 12;
-    if (option.value === "build_toward_this" && /\b(build|make|create|company|product|work|ship)\b/.test(normalized)) score += 12;
-    if (option.value === "live_near_this" && /\b(city|place|where|room|environment|home|studio|live)\b/.test(normalized)) score += 12;
-    if (option.value === "not_me_anymore" && /\b(done|not me|anymore|leave|reject|outgrow|never again)\b/.test(normalized)) score += 12;
-    if (option.value === "miss" && /\b(miss|nostalgia|again|used to|remember)\b/.test(normalized)) score += 12;
-    if (option.value === "feels_like_me" && /\b(me|myself|identity|recognize|true)\b/.test(normalized)) score += 12;
-    return { option, score };
-  });
-
-  const top = scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map((item) => item.option);
-  if (!top.some((option) => option.value === "not_sure")) top.push(resonanceOptions[resonanceOptions.length - 1]);
-  return top;
-}
-
-function approximateSelectionPopoverPosition(text: string, offset: number): CapturePopoverPosition {
-  const before = text.slice(0, Math.max(0, offset));
-  const lines = before.split("\n");
-  const line = Math.max(0, lines.length - 1);
-  const column = lines[lines.length - 1]?.length ?? 0;
-  return {
-    top: 18 + line * 24,
-    left: Math.min(420, 18 + column * 7.4),
-  };
-}
 
 export function extractUrlsFromText(text: string): string[] {
   const matches = text.match(URL_REGEX) ?? [];
@@ -359,6 +323,7 @@ function writeStoredCaptureDraft(draft: StoredCaptureDraft): void {
     Boolean(draft.resonance) ||
     (draft.resonanceNote?.trim().length ?? 0) > 0 ||
     Boolean(draft.highlight?.text) ||
+    (draft.highlights?.length ?? 0) > 0 ||
     (draft.links?.length ?? 0) > 0;
   try {
     if (!hasDraft) {
@@ -382,10 +347,6 @@ function clearStoredCaptureDraft(): void {
 
 function resonanceLabel(value: CaptureResonanceAnswer): string {
   return resonanceOptions.find((option) => option.value === value)?.label ?? value;
-}
-
-function resonancePrompt(value: CaptureResonanceAnswer): string {
-  return resonanceOptions.find((option) => option.value === value)?.prompt ?? "Why did this hit?";
 }
 
 function buildCaptureMetadataNote(input: {
@@ -416,6 +377,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       visualState,
       locale = DEFAULT_LOCALE,
       onDismissAfterSave,
+      onSaved,
     },
     ref,
   ): JSX.Element {
@@ -429,10 +391,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [postSaveReflectionTargetId, setPostSaveReflectionTargetId] = useState<string | null>(null);
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
-    const [highlight, setHighlight] = useState<HighlightedSignalText | null>(null);
+    const [highlights, setHighlights] = useState<HighlightedSignalText[]>([]);
     const [pendingHighlight, setPendingHighlight] = useState<HighlightedSignalText | null>(null);
     const [highlightPopoverPosition, setHighlightPopoverPosition] = useState<CapturePopoverPosition | null>(null);
-    const [highlightDetailsOpen, setHighlightDetailsOpen] = useState(false);
+    const [, setHighlightDetailsOpen] = useState(false);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [resonanceNote, setResonanceNote] = useState("");
     const [saving, setSaving] = useState(false);
@@ -446,25 +408,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
-    const pullOptions = useMemo(
-      () => suggestedResonanceOptions(highlight?.text ?? pendingHighlight?.text ?? note).slice(0, 8),
-      [highlight?.text, pendingHighlight?.text, note],
-    );
-    const quickPullOptions = useMemo(
-      () =>
-        resonanceOptions.filter((option) =>
-          ["pulled_me", "envy", "taste", "reject", "person", "place", "work"].includes(option.value),
-        ),
-      [],
-    );
 
     useEffect(() => {
       const draft = readStoredCaptureDraft();
       if (!draft) return;
       if (typeof draft.note === "string") setNote(draft.note);
-      if (draft.highlight?.text) {
-        setHighlight(draft.highlight);
-        setHighlightPopoverPosition(approximateSelectionPopoverPosition(draft.note ?? "", draft.highlight.startOffset));
+      if (Array.isArray(draft.highlights)) {
+        setHighlights(draft.highlights.filter((item) => item.text && item.endOffset > item.startOffset));
+      } else if (draft.highlight?.text) {
+        setHighlights([draft.highlight]);
       }
       if (draft.resonance) setResonance(draft.resonance);
       if (typeof draft.resonanceNote === "string") setResonanceNote(draft.resonanceNote);
@@ -486,8 +438,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const links = pending
         .filter((att) => att.kind === "link" && att.url)
         .map((att) => ({ url: att.url as string, name: att.name }));
-      writeStoredCaptureDraft({ note, resonance, resonanceNote, highlight, links });
-    }, [note, resonance, resonanceNote, highlight, pending]);
+      writeStoredCaptureDraft({ note, resonance, resonanceNote, highlights, links });
+    }, [note, resonance, resonanceNote, highlights, pending]);
 
     // Cleanup timers when the component unmounts. Without this an
     // in-flight setTimeout would fire `setState` on an unmounted instance.
@@ -566,15 +518,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
     const handleNoteChange = useCallback((next: string): void => {
       setNote(next);
-      setHighlight((current) => {
-        if (!current) return current;
-        const stillMatches = next.slice(current.startOffset, current.endOffset) === current.text;
-        if (!stillMatches) {
-          setHighlightPopoverPosition(null);
-          setHighlightDetailsOpen(false);
-        }
-        return stillMatches ? current : null;
-      });
+      setHighlights((current) =>
+        current.filter((item) => next.slice(item.startOffset, item.endOffset) === item.text),
+      );
       setPendingHighlight((current) => {
         if (!current) return current;
         const stillMatches = next.slice(current.startOffset, current.endOffset) === current.text;
@@ -589,18 +535,35 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const end = target.selectionEnd;
       const text = target.value.slice(start, end).trim();
       if (!text || start === end) {
+        setPendingHighlight(null);
+        setHighlightPopoverPosition(null);
         return;
       }
       const rawSelection = target.value.slice(start, end);
       const leadingWhitespace = rawSelection.match(/^\s*/)?.[0].length ?? 0;
       const trailingWhitespace = rawSelection.match(/\s*$/)?.[0].length ?? 0;
-      setPendingHighlight({
+      const selectionStart = start + leadingWhitespace;
+      const nextHighlight = {
         text,
-        startOffset: start + leadingWhitespace,
+        startOffset: selectionStart,
         endOffset: end - trailingWhitespace,
+      };
+      const beforeSelection = target.value.slice(0, selectionStart);
+      const lines = beforeSelection.split("\n");
+      const line = Math.max(0, lines.length - 1);
+      const column = lines[lines.length - 1]?.length ?? 0;
+      const computed = window.getComputedStyle(target);
+      const fontSize = Number.parseFloat(computed.fontSize) || 24;
+      const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.22;
+      const averageCharacterWidth = fontSize * 0.54;
+      const top = target.offsetTop + line * lineHeight - target.scrollTop - 10;
+      const left = target.offsetLeft + Math.min(column * averageCharacterWidth, target.clientWidth - 48) - target.scrollLeft;
+      setPendingHighlight(nextHighlight);
+      setHighlightPopoverPosition({
+        top: Math.max(12, top),
+        left: Math.max(12, left),
       });
-      setHighlightPopoverPosition(approximateSelectionPopoverPosition(target.value, start + leadingWhitespace));
-      setHighlightDetailsOpen(true);
+      setHighlightDetailsOpen(false);
     }, []);
 
     const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
@@ -772,18 +735,26 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         const currentResonanceNote = resonanceNoteInputRef.current?.value ?? resonanceNote;
         const captureMetadataNote = buildCaptureMetadataNote({ resonance, resonanceNote: currentResonanceNote });
         const captureSparks =
-          highlight || resonance || currentResonanceNote.trim().length > 0
-            ? [
-                {
-                  text: highlight?.text ?? inspirationText.slice(0, 4096),
-                  source: highlight ? ("user_selected" as const) : ("user_written" as const),
-                  startOffset: highlight?.startOffset,
-                  endOffset: highlight?.endOffset,
-                  confidence: highlight ? 100 : resonance ? 90 : 80,
-                  isPrimary: true,
-                  note: captureMetadataNote,
-                },
-              ]
+          highlights.length > 0 || resonance || currentResonanceNote.trim().length > 0
+            ? highlights.length > 0
+              ? highlights.map((item, index) => ({
+                  text: item.text,
+                  source: "user_selected" as const,
+                  startOffset: item.startOffset,
+                  endOffset: item.endOffset,
+                  confidence: 100,
+                  isPrimary: index === 0,
+                  note: index === 0 ? captureMetadataNote : undefined,
+                }))
+              : [
+                  {
+                    text: inspirationText.slice(0, 4096),
+                    source: "user_written" as const,
+                    confidence: resonance ? 90 : 80,
+                    isPrimary: true,
+                    note: captureMetadataNote,
+                  },
+                ]
             : undefined;
         const inspiration = await createInspiration({
           text: inspirationText,
@@ -844,7 +815,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
         }
         setNote("");
-        setHighlight(null);
+        setHighlights([]);
         setPendingHighlight(null);
         setHighlightPopoverPosition(null);
         setHighlightDetailsOpen(false);
@@ -864,36 +835,14 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setPending([]);
         clearStoredCaptureDraft();
         if (failed.length > 0) {
+          // Partial save: keep the surface open so the user sees the warning.
           flashConfirm(formatMessage(locale, "partialAttachmentFailure", { count: failed.length }), 2800);
         } else {
-          const noticed = highlight
-            ? "Saved safe. The marked part can help you understand why it mattered later."
-            : resonance
-              ? `Saved safe. You marked this as: ${resonanceLabel(resonance)}.`
-              : "Saved safe before it slipped away. It can become an ingredient for later understanding.";
-          flashConfirm(
-            <div className="cap-save-mirror">
-              <span>{t(locale, "saved")}. <small>{noticed}</small></span>
-              <div className="cap-save-mirror-actions" role="group" aria-label="post-save mirror actions">
-                <button type="button" onClick={() => {
-                  setConfirmVisible(false);
-                  setPostSaveReflectionTargetId(null);
-                  queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#capNote")?.focus());
-                }}>save another</button>
-                <button type="button" onClick={() => {
-                  setConfirmVisible(false);
-                  setActiveView("reflect");
-                  onToggleFocus?.(true);
-                  queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus());
-                }}>add a little more</button>
-                <button type="button" onClick={() => {
-                  setConfirmVisible(false);
-                  onDismissAfterSave?.();
-                }}>return later</button>
-              </div>
-            </div>,
-            4200,
-          );
+          // Full success: hand off to the parent, which closes the capture
+          // surface and flashes an ephemeral "saved" confirmation on the
+          // capture button (no in-cell post-save mirror).
+          setPostSaveReflectionTargetId(null);
+          onSaved?.();
         }
       } catch (err) {
         const error =
@@ -915,7 +864,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       locale,
       note,
       pending,
-      highlight,
+      highlights,
       resonance,
       saving,
       onOptimisticAdd,
@@ -923,6 +872,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       onPersistError,
       flashConfirm,
       onDismissAfterSave,
+      onSaved,
     ]);
 
     const handleStartReflectiveSave = useCallback((): void => {
@@ -960,22 +910,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           setReflectGlow(false);
           reflectGlowTimerRef.current = null;
         }, 1800);
-        flashConfirm(
-          <div className="cap-save-mirror">
-            <span>{t(locale, "savedWithReflection")}. <small>You can return from the drawer later.</small></span>
-            <div className="cap-save-mirror-actions" role="group" aria-label="post-save mirror actions">
-              <button type="button" onClick={() => {
-                setConfirmVisible(false);
-                queueMicrotask(() => document.querySelector<HTMLTextAreaElement>("#capNote")?.focus());
-              }}>save another</button>
-              <button type="button" onClick={() => {
-                setConfirmVisible(false);
-                onDismissAfterSave?.();
-              }}>return later</button>
-            </div>
-          </div>,
-          3600,
-        );
+        onSaved?.();
       } catch (err) {
         const error =
           err instanceof ApiError
@@ -995,6 +930,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       flashConfirm,
       locale,
       onDismissAfterSave,
+      onSaved,
       postSaveReflectionTargetId,
       reflectionAnswer,
       saving,
@@ -1039,7 +975,49 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         view={activeView}
         visualState={{ ...visualState, focused, reflectGlow }}
         noteValue={note}
-        noteHighlight={highlight}
+        noteHighlights={highlights}
+        onRemoveNoteHighlight={(index) => {
+          setHighlights((current) => current.filter((_, itemIndex) => itemIndex !== index));
+        }}
+        noteSelectionToolbar={
+          pendingHighlight && highlightPopoverPosition ? (
+            <div
+              className="cap-selection-toolbar"
+              style={{
+                ["--highlight-top" as string]: `${highlightPopoverPosition.top}px`,
+                ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
+              }}
+            >
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setHighlights((current) => {
+                    const withoutOverlaps = current.filter(
+                      (item) =>
+                        item.endOffset <= pendingHighlight.startOffset ||
+                        item.startOffset >= pendingHighlight.endOffset,
+                    );
+                    return [...withoutOverlaps, pendingHighlight].sort((a, b) => a.startOffset - b.startOffset);
+                  });
+                  const textarea = document.querySelector<HTMLTextAreaElement>("#capNote");
+                  textarea?.setSelectionRange(pendingHighlight.endOffset, pendingHighlight.endOffset);
+                  textarea?.focus();
+                  setPendingHighlight(null);
+                  setHighlightPopoverPosition(null);
+                }}
+                aria-label="highlight selected text"
+                title="highlight selected text"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="m9 11-6 6v4h4l6-6" />
+                  <path d="m22 12-7.5 7.5L4.5 9.5 12 2l10 10Z" />
+                </svg>
+                <span>highlight</span>
+              </button>
+            </div>
+          ) : null
+        }
         notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
         onNotePaste={handleNotePaste}
@@ -1067,138 +1045,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         captureMeta={
           <div className="cap-meta" id="capMeta">
             <span className="cap-draft-state" id="capDraftState">
-              Select the part that hit, if you want. {t(locale, "autosavedLocally")}
+              tip: highlight what inspired you the most
             </span>
-            {pendingHighlight && highlightPopoverPosition ? (
-              <div
-                className="cap-highlight-popover cap-highlight-popover--selection"
-                id="capHighlightPopover"
-                style={{
-                  ["--highlight-top" as string]: `${highlightPopoverPosition.top}px`,
-                  ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
-                }}
-              >
-                <span>{pendingHighlight.text}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHighlight(pendingHighlight);
-                    setPendingHighlight(null);
-                    setHighlightPopoverPosition(
-                      approximateSelectionPopoverPosition(note, pendingHighlight.startOffset),
-                    );
-                    setHighlightDetailsOpen(true);
-                  }}
-                >
-                  add highlight
-                </button>
-                <div className="cap-highlight-popover-reactions" aria-label="why this selection mattered">
-                  {quickPullOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setHighlight(pendingHighlight);
-                        setPendingHighlight(null);
-                        setResonance(option.value);
-                        setHighlightPopoverPosition(
-                          approximateSelectionPopoverPosition(note, pendingHighlight.startOffset),
-                        );
-                        setHighlightDetailsOpen(true);
-                        queueMicrotask(() => resonanceNoteInputRef.current?.focus());
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setHighlight(pendingHighlight);
-                      setPendingHighlight(null);
-                      setHighlightPopoverPosition(
-                        approximateSelectionPopoverPosition(note, pendingHighlight.startOffset),
-                      );
-                      setHighlightDetailsOpen(true);
-                      queueMicrotask(() => resonanceNoteInputRef.current?.focus());
-                    }}
-                  >
-                    my note
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            {highlight && highlightPopoverPosition ? (
-              <div
-                className="cap-highlight-popover cap-highlight-popover--saved"
-                id="capHighlightPopover"
-                style={{
-                  ["--highlight-top" as string]: `${highlightPopoverPosition.top}px`,
-                  ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
-                }}
-              >
-                <button
-                  type="button"
-                  className="cap-highlight-chip"
-                  aria-expanded={highlightDetailsOpen}
-                  onClick={() => setHighlightDetailsOpen((open) => !open)}
-                >
-                  highlighted in text
-                </button>
-                <button
-                  type="button"
-                  aria-label={t(locale, "removeHighlight")}
-                  onClick={() => {
-                    setHighlight(null);
-                    setPendingHighlight(null);
-                    setHighlightPopoverPosition(null);
-                    setHighlightDetailsOpen(false);
-                    setResonance(null);
-                    setResonanceNote("");
-                  }}
-                >
-                  remove
-                </button>
-              </div>
-            ) : null}
-            {highlight && highlightDetailsOpen && highlightPopoverPosition ? (
-              <fieldset
-                className="cap-resonance cap-resonance--popover"
-                id="capResonance"
-                style={{
-                  ["--highlight-top" as string]: `${highlightPopoverPosition.top + 36}px`,
-                  ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
-                }}
-              >
-                <legend>why this part mattered</legend>
-                <div className="cap-resonance-options">
-                  {pullOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={resonance === option.value ? "selected" : ""}
-                      aria-pressed={resonance === option.value}
-                      onClick={() => setResonance((current) => (current === option.value ? null : option.value))}
-                    >
-                      <span className="cap-resonance-icon" aria-hidden="true">{option.icon}</span>
-                      <span>{option.label}</span>
-                    </button>
-                  ))}
-                </div>
-                <label className="cap-resonance-note" htmlFor="capResonanceNote">
-                  <span>{resonance ? resonancePrompt(resonance) : "Add my own note"}</span>
-                  <input
-                    id="capResonanceNote"
-                    ref={resonanceNoteInputRef}
-                    type="text"
-                    value={resonanceNote}
-                    onChange={(event) => setResonanceNote(event.currentTarget.value)}
-                    onInput={(event) => setResonanceNote(event.currentTarget.value)}
-                    placeholder={t(locale, "resonanceNotePlaceholder")}
-                  />
-                </label>
-              </fieldset>
-            ) : null}
           </div>
         }
         reflectQuestion={

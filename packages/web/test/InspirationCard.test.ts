@@ -142,6 +142,6 @@ describe("InspirationCard attachment-first rendering", () => {
       "ko-KR",
     );
 
-    expect(container?.querySelector(".history-attachments")?.getAttribute("aria-label")).toBe("첨부 맥락");
+    expect(container?.querySelector(".history-attachments")?.getAttribute("aria-label")).toBe("첨부 정보");
   });
 });

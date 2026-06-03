@@ -559,12 +559,12 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container);
     await waitForTimers(130);
     await flushReactWork();
-    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    const search = container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
       setInputValue(search!, "bridge");
     });
-    const bridgeSave = container.querySelector<HTMLButtonElement>(".memory-stack-signal");
+    const bridgeSave = container.querySelector<HTMLButtonElement>(".memory-contents-item");
     expect(bridgeSave).not.toBeNull();
     expect(bridgeSave?.textContent).toContain("Architecture essay about bridge rhythms");
     await act(async () => {
@@ -656,7 +656,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("image.png · 4 KB");
 
-    const save = container.querySelector<HTMLButtonElement>(".memory-stack-signal");
+    const save = container.querySelector<HTMLButtonElement>(".memory-contents-item");
     await act(async () => {
       save?.click();
     });
@@ -839,7 +839,7 @@ describe("HomePage current home experience", () => {
     const drawerCopy = [
       container.querySelector(".signal-revisit-header")?.textContent,
       container.querySelector(".memory-group-board")?.textContent,
-      container.querySelector(".memory-group-contents > header")?.textContent,
+      container.querySelector(".memory-contents-flow")?.textContent,
     ].join(" ");
     expect(drawerCopy).not.toMatch(bannedInternalCopy);
     expect(drawerCopy).not.toMatch(/\bWAKA\b/);
@@ -1263,7 +1263,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
-    expect(container.querySelector(".nc-save")?.textContent).toContain("catch inspiration");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
   });
 
@@ -1277,12 +1277,14 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
-  it("renders the Home authorship footnote for the signed-in user", async () => {
+  it("removes the authorship footnote and keeps language switching top-right", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("This page was not written by river.");
-    expect(container.textContent).toContain("— Ⓒ 2026, for minds that wander");
+    expect(container.textContent).not.toContain("This page was not written by river.");
+    expect(container.textContent).not.toContain("— Ⓒ 2026, for minds that wander");
+    expect(container.querySelector(".nc-footnote")).toBeNull();
+    expect(container.querySelector(".nc-lang--top")).not.toBeNull();
   });
 
   it("filters server-returned inspirations down to the authenticated user", async () => {
@@ -1346,13 +1348,15 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
     expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
     expect(container.querySelector(".signal-archive-page")).toBeNull();
-    expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
+    expect(container.querySelector(".nc-drawer-object--close")).not.toBeNull();
+    expect(container.querySelector(".nc-bottom-bar--drawer")).not.toBeNull();
+    expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
     expect(container.querySelector(".memory-drawer-stack")).not.toBeNull();
     expect(container.querySelector(".memory-drawer-overlay")).toBeNull();
     expect(container.textContent).not.toContain("Choose a pile, or open everything.");
     expect(container.textContent).not.toContain("back to wall");
     expect(container.querySelector(".memory-group-board")).not.toBeNull();
-    expect(container.querySelector(".memory-group-contents")).toBeNull();
+    expect(container.querySelector(".memory-contents-flow")).toBeNull();
     expect(container.querySelector(".memory-mode-switcher")).toBeNull();
     expect(container.textContent).not.toContain("List scans the timeline");
   });
@@ -1368,23 +1372,23 @@ describe("HomePage current home experience", () => {
     const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
     expect(stack).not.toBeNull();
     expect(stack?.querySelector(".memory-group-board")).not.toBeNull();
-    expect(stack?.querySelector(".memory-group-contents")).toBeNull();
+    expect(stack?.querySelector(".memory-contents-flow")).toBeNull();
     expect(stack?.querySelector(".memory-stack-detail")).toBeNull();
 
     await openAllInspirations(container);
     expect(stack?.querySelector(".memory-group-board")).toBeNull();
-    const contents = stack?.querySelector<HTMLElement>(".memory-group-contents");
+    const contents = stack?.querySelector<HTMLElement>(".memory-contents-flow");
     expect(contents).not.toBeNull();
     expect(contents?.textContent).toContain("Architecture essay about bridge rhythms");
 
-    const firstInspiration = contents?.querySelector<HTMLButtonElement>(".memory-stack-signal");
+    const firstInspiration = contents?.querySelector<HTMLButtonElement>(".memory-contents-item");
     expect(firstInspiration).not.toBeNull();
     await act(async () => {
       firstInspiration?.click();
     });
     await flushReactWork();
 
-    expect(stack?.querySelector(".memory-group-contents")).toBeNull();
+    expect(stack?.querySelector(".memory-contents-flow")).toBeNull();
     const detail = stack?.querySelector<HTMLElement>(".memory-stack-detail");
     expect(detail).not.toBeNull();
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms");
@@ -1395,9 +1399,9 @@ describe("HomePage current home experience", () => {
       detailBack?.click();
     });
     await flushReactWork();
-    expect(stack?.querySelector(".memory-group-contents")).not.toBeNull();
+    expect(stack?.querySelector(".memory-contents-flow")).not.toBeNull();
 
-    const stackBack = stack?.querySelector<HTMLButtonElement>(".memory-group-contents .memory-workspace-back");
+    const stackBack = stack?.querySelector<HTMLButtonElement>(".memory-contents-flow .memory-contents-back");
     await act(async () => {
       stackBack?.click();
     });
@@ -1428,15 +1432,15 @@ describe("HomePage current home experience", () => {
 
     const drawer = container.querySelector<HTMLElement>(".signal-revisit-page");
     const board = drawer?.querySelector<HTMLElement>(".memory-group-board");
-    const contents = drawer?.querySelector<HTMLElement>(".memory-group-contents");
+    const contents = drawer?.querySelector<HTMLElement>(".memory-contents-flow");
     expect(board).not.toBeNull();
     expect(board?.textContent).toContain("all saved, newest first");
     expect(board?.textContent).toContain("highlighted by me");
     expect(board?.textContent).toContain("work i keep circling");
     expect(contents).toBeNull();
-    expect(drawer?.querySelector(".signal-revisit-search summary")?.textContent).toBe("search");
+    expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
     await openAllInspirations(container);
-    const openedContents = drawer?.querySelector<HTMLElement>(".memory-group-contents");
+    const openedContents = drawer?.querySelector<HTMLElement>(".memory-contents-flow");
     expect(openedContents?.textContent?.indexOf("Architecture essay")).toBeLessThan(
       openedContents?.textContent?.indexOf("Synthetic memory note") ?? 9999,
     );
@@ -1516,7 +1520,7 @@ describe("HomePage current home experience", () => {
     const board = container.querySelector<HTMLElement>(".memory-group-board");
     expect(board).not.toBeNull();
     expect(board?.querySelector(".memory-group-object--pin")?.textContent).toContain("highlighted by me");
-    expect(board?.querySelector(".memory-group-object--image")?.textContent).toContain("work i keep circling");
+    expect(board?.textContent).toContain("work i keep circling");
     expect(board?.querySelector(".folder-icon")).toBeNull();
     expect(board?.querySelector(".mac-folder-front")).toBeNull();
     expect(board?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
@@ -1540,21 +1544,21 @@ describe("HomePage current home experience", () => {
 
     await openAllInspirations(container);
 
-    const contents = container.querySelector<HTMLElement>(".memory-group-contents");
+    const contents = container.querySelector<HTMLElement>(".memory-contents-flow");
     expect(contents).not.toBeNull();
     expect(contents?.querySelectorAll(".memory-order-switcher").length).toBeLessThanOrEqual(1);
 
-    const stackCard = contents?.querySelector<HTMLElement>(".memory-stack-signal");
+    const stackCard = contents?.querySelector<HTMLElement>(".memory-contents-item");
     expect(stackCard).not.toBeNull();
-    expect(stackCard?.classList.contains("memory-stack-quote-card")).toBe(true);
+    expect(stackCard?.classList.contains("memory-contents-item")).toBe(true);
     expect(stackCard?.className).not.toMatch(/reference-save|signal-revisit-card|memory-signal-card--(note|link|image|mixed)/);
     expect(stackCard?.querySelector(".memory-signal-card-kind")).toBeNull();
     expect(stackCard?.querySelector(".reference-save-link")).toBeNull();
     expect(stackCard?.querySelector(".reference-save-attachment")).toBeNull();
-    expect(stackCard?.querySelector(".memory-stack-card-meta")).not.toBeNull();
+    expect(stackCard?.querySelector(".memory-contents-item-meta")).not.toBeNull();
   });
 
-  it("allows user-created groupings and renaming or dismissing proposed groupings", async () => {
+  it("allows user-created groupings and renaming while keeping proposed map nodes button-light", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1568,14 +1572,14 @@ describe("HomePage current home experience", () => {
       createButton?.click();
     });
 
-    const nameInput = container.querySelector<HTMLInputElement>(".memory-group-name-edit input");
+    const nameInput = container.querySelector<HTMLInputElement>(".memory-contents-rename input");
     expect(nameInput).not.toBeNull();
     expect(nameInput?.value).toBe("my own pile");
     await act(async () => {
       setInputValue(nameInput!, "places pulling me");
     });
     expect(nameInput?.value).toBe("places pulling me");
-    const backToPiles = container.querySelector<HTMLButtonElement>(".memory-workspace-back");
+    const backToPiles = container.querySelector<HTMLButtonElement>(".memory-contents-back");
     await act(async () => {
       backToPiles?.click();
     });
@@ -1584,16 +1588,14 @@ describe("HomePage current home experience", () => {
     const proposed = Array.from(container.querySelectorAll<HTMLElement>(".memory-group-object")).find((object) =>
       object.textContent?.includes("highlighted by me"),
     );
-    const dismissButton = Array.from(proposed?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(
-      (button) => button.textContent === "dismiss",
-    );
-    await act(async () => {
-      dismissButton?.click();
-    });
-    expect(container.querySelector(".memory-group-board")?.textContent).not.toContain("highlighted by me");
+    expect(proposed).not.toBeNull();
+    expect(proposed?.querySelector(".memory-map-preview")).not.toBeNull();
+    expect(proposed?.querySelectorAll("button")).toHaveLength(1);
+    expect(proposed?.textContent).not.toContain("dismiss");
+    expect(proposed?.textContent).not.toContain("keep");
   });
 
-  it("switches grouping contents between newest and strongest relevance", async () => {
+  it("lists grouping contents newest first", async () => {
     setApiFixtures({
       savedSignals: [
         {
@@ -1625,18 +1627,11 @@ describe("HomePage current home experience", () => {
     await act(async () => {
       highlightedGroup?.click();
     });
-    const contents = container.querySelector<HTMLElement>(".memory-group-contents");
+    const contents = container.querySelector<HTMLElement>(".memory-contents-flow");
+    // Contents always read newest-first now (the explicit sort toggle was
+    // removed in favor of the calmer text-forward layout).
     expect(contents?.textContent?.indexOf("Recent lightly relevant")).toBeLessThan(
       contents?.textContent?.indexOf("Old highlighted save") ?? 9999,
-    );
-    const relevanceButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-order-switcher button")).find(
-      (button) => button.textContent === "strongest fit",
-    );
-    await act(async () => {
-      relevanceButton?.click();
-    });
-    expect(contents?.textContent?.indexOf("Old highlighted save")).toBeLessThan(
-      contents?.textContent?.indexOf("Recent lightly relevant") ?? 9999,
     );
   });
 
@@ -1650,11 +1645,10 @@ describe("HomePage current home experience", () => {
     await openAllInspirations(container);
 
     const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
-    const contents = container.querySelector<HTMLElement>(".memory-group-contents");
+    const contents = container.querySelector<HTMLElement>(".memory-contents-flow");
     expect(stack).not.toBeNull();
     expect(contents).not.toBeNull();
-    expect(contents?.querySelector(".memory-list-stack")).not.toBeNull();
-    expect(contents?.textContent).toContain("newest first");
+    expect(contents?.querySelector(".memory-contents-list")).not.toBeNull();
     expect(contents?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(contents?.textContent).toContain("Synthetic memory note");
     expect(container.querySelector(".memory-view-switcher")).toBeNull();
@@ -1667,7 +1661,7 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
     await clickSavesTab(container);
 
-    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    const search = container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
       setInputValue(search!, "synthetic");
@@ -1683,7 +1677,7 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
     await clickSavesTab(container);
 
-    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    const search = container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
       setInputValue(search!, "bridge");
@@ -1827,7 +1821,7 @@ describe("HomePage current home experience", () => {
     await waitForTimers(130);
     await flushReactWork();
     await openAllInspirations(container);
-    const cards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal"));
+    const cards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item"));
     expect(cards.length).toBeGreaterThanOrEqual(2);
     await act(async () => {
       cards[0]?.click();
@@ -1840,7 +1834,7 @@ describe("HomePage current home experience", () => {
       back?.click();
     });
     await flushReactWork();
-    const nextCards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal"));
+    const nextCards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item"));
     await act(async () => {
       nextCards[1]?.click();
     });
@@ -1871,8 +1865,29 @@ describe("HomePage current home experience", () => {
       container.querySelector<HTMLButtonElement>(".reference-capture-close")?.click();
     });
 
+    expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
+    await waitForTimers(380);
+    await flushReactWork();
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
     expect(createInspiration).not.toHaveBeenCalled();
+  });
+
+  it("toggles focus mode from the expand control in the capture bar", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    expect(container.querySelector(".reference-capture-modal--expanded")).toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(container.querySelector(".reference-capture-modal--expanded")).not.toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(container.querySelector(".reference-capture-modal--expanded")).toBeNull();
   });
 
   it("persists a quick note capture through the current capture contract", async () => {
@@ -1898,7 +1913,7 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("keeps the post-save mirror open until the user closes it", async () => {
+  it("closes the surface and flashes the capture button after a quick save", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -1914,15 +1929,18 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
-    expect(container.querySelector(".cap-save-mirror")?.textContent).toContain("Saved safe before it slipped away");
-    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("3 saved");
-    await act(async () => {
-      Array.from(container.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button"))
-        .find((button) => button.textContent === "return later")
-        ?.click();
-    });
+    // No in-cell mirror; the surface begins closing immediately on a full save.
+    expect(container.querySelector(".cap-save-mirror")).toBeNull();
+    expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
+
+    await waitForTimers(380);
+    await flushReactWork();
+
+    // Surface is gone and the capture button flashes an ephemeral "saved".
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
+    const savedButton = container.querySelector(".nc-save--saved");
+    expect(savedButton).not.toBeNull();
+    expect(savedButton?.textContent).toContain("saved");
   });
 
   it("shows a newly persisted quick save in the inspiration drawer list", async () => {
@@ -1989,7 +2007,7 @@ describe("HomePage current home experience", () => {
       url: "https://example.com/article",
       name: "example.com/article",
     });
-    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal")).find((save) =>
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
       save.textContent?.includes("Read https://example.com/article before the next salon"),
     );
     expect(newSave?.textContent).toContain("Read https://example.com/article before the next salon");
@@ -2083,7 +2101,7 @@ describe("HomePage current home experience", () => {
       contentType: "image/png",
       size: 5,
     });
-    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal")).find((save) =>
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
       save.textContent?.includes("Image inspiration"),
     );
     expect(newSave?.textContent).toContain("Image inspiration");
@@ -2164,7 +2182,7 @@ describe("HomePage current home experience", () => {
     await clickSavesTab(container, 3);
     await openAllInspirations(container);
 
-    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-stack-signal")).find((save) =>
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
       save.textContent?.includes("Image with local upload trouble"),
     );
     expect(newSave?.textContent).toContain("Image with local upload trouble");
@@ -2209,6 +2227,6 @@ describe("HomePage current home experience", () => {
     expect(HomePage).toBeTypeOf("function");
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
-    expect(container.textContent).toContain("catch inspiration");
+    expect(container.textContent).toContain("capture inspiration");
   });
 });

@@ -226,7 +226,7 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("What WAKA noticed");
+    expect(html).toContain("Why WAKA noticed this");
     expect(html).toContain("1 best-recent mirror moments shown.");
     expect(html).not.toContain("Inspect all WOW moments (1)");
     expect(html).not.toContain("Dev-only inspect legacy fields");
@@ -1416,7 +1416,7 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).not.toContain("DEV WOW score");
     expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
     expect(dialog?.textContent).toContain("Source role / reason");
-    expect(dialog?.textContent).toContain("Source signal");
+    expect(dialog?.textContent).toContain("Source inspiration");
     expect(dialog?.textContent).toContain("Why this source matters");
     expect(dialog?.textContent).not.toContain("classifier score uuid rank 2026-05-01");
     expect(dialog?.textContent).not.toContain("runtimeCandidateScore rank id 2026-05-01 came from the classifier");
@@ -1468,7 +1468,7 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("간단 집계");
     expect(dialog?.textContent).toContain("1개 출처; 생성 필드 4개 있음");
     expect(dialog?.textContent).toContain("출처 역할 / 이유");
-    expect(dialog?.textContent).toContain("출처 신호");
+    expect(dialog?.textContent).toContain("출처 영감");
     expect(dialog?.textContent).toContain("이 출처가 중요한 이유");
     expect(dialog?.textContent).toContain("WOW card 10");
     expect(dialog?.textContent).toContain("Why WOW card 10 matters.");
@@ -1476,7 +1476,7 @@ describe("WowMomentsSection", () => {
     expect(dialog?.textContent).toContain("Related signal evidence 10");
     expect(dialog?.textContent).not.toContain("Temporary internal inspection");
     expect(dialog?.textContent).not.toContain("Title / headline");
-    expect(dialog?.textContent).not.toContain("Source signal");
+    expect(dialog?.textContent).not.toContain("Source inspiration");
     expect(dialog?.textContent).not.toContain("Why this source matters");
     expect(dialog?.textContent).not.toContain("classifier score uuid rank 2026-05-01");
     expect(dialog?.textContent).not.toContain("runtimeCandidateScore");

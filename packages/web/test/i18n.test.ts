@@ -48,13 +48,13 @@ describe("i18n catalogs", () => {
   });
 
   it("formats saved-count and result-count phrases per locale", () => {
-    expect(formatSavedCount("en-US", 1)).toBe("1 signal saved");
-    expect(formatSavedCount("en-US", 2)).toBe("2 signals saved");
-    expect(formatSavedCount("ko-KR", 2)).toBe("신호 2개 저장됨");
+    expect(formatSavedCount("en-US", 1)).toBe("1 inspiration saved");
+    expect(formatSavedCount("en-US", 2)).toBe("2 inspirations saved");
+    expect(formatSavedCount("ko-KR", 2)).toBe("영감 2개 저장됨");
 
-    expect(formatResultsCount("en-US", 1, 1)).toBe("1 of 1 signal");
-    expect(formatResultsCount("en-US", 8, 3)).toBe("3 of 8 signals");
-    expect(formatResultsCount("ko-KR", 8, 3)).toBe("전체 8개 중 3개 신호");
+    expect(formatResultsCount("en-US", 1, 1)).toBe("1 of 1 inspiration");
+    expect(formatResultsCount("en-US", 8, 3)).toBe("3 of 8 inspirations");
+    expect(formatResultsCount("ko-KR", 8, 3)).toBe("전체 8개 중 3개 영감");
   });
 
   it("formats WOW count helpers as complete locale-owned phrases", () => {

@@ -608,7 +608,7 @@ export default function LoginPage(): JSX.Element {
 
   const subtitle =
     mode === "login"
-      ? "Sign in to return to your signals."
+      ? "Sign in to return to your inspirations."
       : "Create an account to capture, cluster, and reflect on the things that move you.";
 
   return (

@@ -919,6 +919,73 @@ function groupNameFromLanguage(value: string): string {
   return words.length > 0 ? words.join(" ") : "inspirations touching";
 }
 
+function memoryMapLabel(value: string): string {
+  const label = normalizeMeaningLabel(value);
+  const knownLabels: Record<string, string> = {
+    "all saved, newest first": "all saved",
+    "highlighted by me": "highlights",
+    "recently saved": "recently saved",
+    "rooms i keep wanting": "wanted rooms",
+    "people i want near me": "wanted people",
+    "work i keep circling": "work orbit",
+    "things i am done with": "done with",
+    "taste with a pulse": "taste pulse",
+    "questions still open": "open questions",
+    "inspirations touching": "loose signals",
+  };
+  const shortLabel = knownLabels[label] ?? label;
+  const words = shortLabel
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9-]/g, ""))
+    .filter((word) => word.length > 0)
+    .slice(0, 4);
+  const slug = words.join("-");
+  return `/${slug || "inspirations"}`;
+}
+
+// Tight 1-2 sentence blurb for the hover-reveal card (Shopify-style).
+function memoryGroupBlurb(group: MemoryGrouping): string {
+  const raw = (group.explanation || "").trim();
+  if (!raw) return "Saved inspirations that keep touching the same thread.";
+  const sentences = raw.split(/(?<=[.?!])\s+/).filter((part) => part.trim().length > 0);
+  const blurb = sentences.slice(0, 2).join(" ").trim();
+  return blurb.length > 160 ? `${blurb.slice(0, 157).trimEnd()}…` : blurb;
+}
+
+// Constellation slot positions (percent of viewport). Shared by the rendered
+// nodes AND the connecting lines so the lines actually join the labels.
+// Whether an unsaved capture draft is sitting in local storage, so the home
+// capture button can hint that there's something still in progress.
+function captureDraftHasContent(): boolean {
+  try {
+    const raw = window.localStorage.getItem("waka.captureDraft.v1");
+    if (!raw) return false;
+    const draft = JSON.parse(raw) as {
+      note?: string;
+      highlights?: unknown[];
+      links?: unknown[];
+    };
+    return (
+      (draft.note?.trim().length ?? 0) > 0 ||
+      (draft.highlights?.length ?? 0) > 0 ||
+      (draft.links?.length ?? 0) > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+const MEMORY_MAP_SLOTS: Array<{ x: number; y: number }> = [
+  { x: 50, y: 39 },
+  { x: 23, y: 50 },
+  { x: 77, y: 50 },
+  { x: 33, y: 67 },
+  { x: 67, y: 67 },
+  { x: 50, y: 25 },
+  { x: 15, y: 67 },
+  { x: 85, y: 67 },
+];
+
 function groupingIconForSignals(signals: ApiSavedSignalSearchResult[]): MemoryGrouping["icon"] {
   if (signals.some((signal) => signalVisualTreatment(signal) === "image")) return "image";
   if (signals.some((signal) => signalVisualTreatment(signal) === "link")) return "link";
@@ -952,22 +1019,35 @@ function buildProposedMemoryGroupings(
   dismissedGroupIds: Set<string>,
 ): MemoryGrouping[] {
   const positions = [
-    { x: 42, y: 72, tilt: -2 },
-    { x: 330, y: 42, tilt: 1.5 },
-    { x: 638, y: 88, tilt: -0.8 },
-    { x: 148, y: 315, tilt: 2 },
-    { x: 480, y: 292, tilt: -1.4 },
-    { x: 760, y: 345, tilt: 1.2 },
+    { x: 49, y: 49, tilt: -0.5 },
+    { x: 30, y: 42, tilt: 0.7 },
+    { x: 69, y: 40, tilt: -0.7 },
+    { x: 38, y: 64, tilt: -0.2 },
+    { x: 61, y: 66, tilt: 0.5 },
+    { x: 23, y: 66, tilt: 0.4 },
+    { x: 78, y: 61, tilt: -0.4 },
+    { x: 53, y: 30, tilt: 0.3 },
   ];
   const groups: MemoryGrouping[] = [];
   const addGroup = (group: Omit<MemoryGrouping, "x" | "y" | "tilt">) => {
     if (group.signals.length === 0 || dismissedGroupIds.has(group.id) || groups.some((existing) => existing.id === group.id)) {
       return;
     }
+    const renamedName = renamedGroups[group.id] ?? group.name;
+    const label = memoryMapLabel(renamedName);
+    const existingSameLabel = groups.find((existing) => memoryMapLabel(existing.name) === label);
+    if (existingSameLabel) {
+      existingSameLabel.signals = uniqueSignals([...existingSameLabel.signals, ...group.signals]);
+      existingSameLabel.terms = Array.from(new Set([...existingSameLabel.terms, ...group.terms]));
+      if (existingSameLabel.explanation.length < group.explanation.length) {
+        existingSameLabel.explanation = group.explanation;
+      }
+      return;
+    }
     const position = positions[groups.length % positions.length];
     groups.push({
       ...group,
-      name: renamedGroups[group.id] ?? group.name,
+      name: renamedName,
       signals: uniqueSignals(group.signals),
       x: position.x,
       y: position.y,
@@ -1132,7 +1212,7 @@ const HOME_COPY = {
     loadingSaves: "저장본을 불러오는 중...",
     emptySaves: "아직 저장된 영감이 없습니다.",
     captureAria: "capture inspiration",
-    captureCta: "catch inspiration",
+    captureCta: "capture inspiration",
     captureHint: () => "",
     captureDialog: "capture inspiration",
     close: "close",
@@ -1199,7 +1279,7 @@ const HOME_COPY = {
     loadingSaves: "loading saved inspirations...",
     emptySaves: "no inspirations saved yet.",
     captureAria: "capture inspiration",
-    captureCta: "catch inspiration",
+    captureCta: "capture inspiration",
     captureHint: () => "",
     captureDialog: "capture inspiration",
     close: "close",
@@ -1273,14 +1353,16 @@ export function HomePage(): JSX.Element {
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
-  const [memoryBrowseOrder, setMemoryBrowseOrder] = useState<MemoryBrowseOrder>("newest");
+  // The cleaned-up contents view always reads newest-first; the explicit
+  // sort toggle was removed in favor of a calmer, text-forward layout.
+  const memoryBrowseOrder: MemoryBrowseOrder = "newest";
   const [memoryFolderView, setMemoryFolderView] = useState<MemoryFolderView>("grid");
   const [memoryFlowIndex, setMemoryFlowIndex] = useState(0);
   const [userMemoryGroups, setUserMemoryGroups] = useState<UserMemoryGrouping[]>([]);
   const [renamedMemoryGroups, setRenamedMemoryGroups] = useState<Record<string, string>>({});
-  const [dismissedMemoryGroupIds, setDismissedMemoryGroupIds] = useState<Set<string>>(() => new Set());
-  const [keptMemoryGroupIds, setKeptMemoryGroupIds] = useState<Set<string>>(() => new Set());
+  const [dismissedMemoryGroupIds] = useState<Set<string>>(() => new Set());
   const [memoryGroupDrags, setMemoryGroupDrags] = useState<Record<string, { x: number; y: number }>>({});
+  const [seenMemoryGroupIds, setSeenMemoryGroupIds] = useState<Set<string>>(() => new Set());
   const [draggingMemoryGroupId, setDraggingMemoryGroupId] = useState<string | null>(null);
   const [memoryWindows, setMemoryWindows] = useState<MemoryWindowState[]>([]);
   const [draggingMemoryWindowId, setDraggingMemoryWindowId] = useState<string | null>(null);
@@ -1293,6 +1375,10 @@ export function HomePage(): JSX.Element {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [homeMode, setHomeMode] = useState<HomeMode>("topOfMind");
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [captureClosing, setCaptureClosing] = useState(false);
+  const [captureSaved, setCaptureSaved] = useState(false);
+  const [captureHasDraft, setCaptureHasDraft] = useState<boolean>(() => captureDraftHasContent());
+  const captureSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [noteFeedback, setNoteFeedback] = useState<
     Record<
       string,
@@ -2312,6 +2398,11 @@ export function HomePage(): JSX.Element {
     ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
+  // Actions come only from the server recommender, which grounds them in note
+  // evidence, filters out generic/template phrasing, and learns from
+  // completion/dismissal. When it returns none, the checklist stays empty
+  // rather than fabricating ungrounded client-side actions that could never
+  // persist or feed the learning loop.
   const visibleActionItems = actionRecommendations
     .filter((item) => item.status === "active")
     .slice(0, 5);
@@ -2330,8 +2421,39 @@ export function HomePage(): JSX.Element {
       setSelectedSavedSignalId(null);
       setSavedSignalDetail(null);
       setMemoryWindows([]);
+      setMemoryGroupDrags({});
     }
     setHomeMode(mode);
+  };
+
+  const openCapture = () => {
+    setCaptureClosing(false);
+    setCaptureOpen(true);
+  };
+
+  const closeCapture = () => {
+    setCaptureFocused(false);
+    setCaptureClosing(true);
+    window.setTimeout(() => {
+      setCaptureOpen(false);
+      setCaptureClosing(false);
+      // The draft was autosaved while typing; reflect whether anything remains.
+      setCaptureHasDraft(captureDraftHasContent());
+    }, 360);
+  };
+
+  // On a successful save we close the capture surface and flash an ephemeral
+  // "saved" confirmation on the capture button (a yellow glow that fades),
+  // replacing the old in-cell post-save mirror card.
+  const handleCaptureSaved = () => {
+    closeCapture();
+    setCaptureHasDraft(false);
+    setCaptureSaved(true);
+    if (captureSavedTimerRef.current) clearTimeout(captureSavedTimerRef.current);
+    captureSavedTimerRef.current = setTimeout(() => {
+      setCaptureSaved(false);
+      captureSavedTimerRef.current = null;
+    }, 2600);
   };
 
   const updateCorrectionText = (noteId: string, correctionText: string) => {
@@ -2549,15 +2671,6 @@ export function HomePage(): JSX.Element {
     );
   };
 
-  const keepMemoryGroup = (groupId: string): void => {
-    setKeptMemoryGroupIds((current) => new Set([...current, groupId]));
-  };
-
-  const dismissMemoryGroup = (groupId: string): void => {
-    setDismissedMemoryGroupIds((current) => new Set([...current, groupId]));
-    if (selectedMemoryGroupId === groupId) setSelectedMemoryGroupId("all");
-  };
-
   const loadMemoryWindowDetail = (signalId: string): void => {
     if (memoryWindowDetails[signalId] !== undefined || memoryWindowLoadingIds.has(signalId)) return;
     setMemoryWindowLoadingIds((current) => new Set([...current, signalId]));
@@ -2637,23 +2750,53 @@ export function HomePage(): JSX.Element {
 
   const renderMemoryGroupObject = (group: MemoryGrouping): JSX.Element => {
     const selected = selectedMemoryGroup?.id === group.id;
-    const kept = keptMemoryGroupIds.has(group.id);
+    const seen = seenMemoryGroupIds.has(group.id);
+    const groupIndex = memoryGroupings.findIndex((item) => item.id === group.id);
+    const slot = MEMORY_MAP_SLOTS[Math.max(0, groupIndex) % MEMORY_MAP_SLOTS.length];
+    const weight = Math.min(1.12, Math.max(0.84, 0.88 + group.signals.length * 0.035));
+    const opacity = Math.min(0.82, Math.max(0.44, 0.48 + group.signals.length * 0.055));
+    const markSeen = () => {
+      setSeenMemoryGroupIds((current) => {
+        if (current.has(group.id)) return current;
+        const next = new Set(current);
+        next.add(group.id);
+        return next;
+      });
+    };
     return (
       <article
         key={group.id}
-        className={`memory-group-object memory-group-object--slip memory-group-object--${group.icon}${
+        data-skill-tag="true"
+        data-skill-id={group.id}
+        data-state={selected ? "selected" : seen ? "seen" : "idle"}
+        data-jitter-x={String(Math.round((group.x - 50) * 0.7))}
+        data-jitter-y={String(Math.round((group.y - 50) * 0.42))}
+        className={`memory-group-object memory-group-object--slip memory-group-object--${group.icon} memory-map-node memory-map-node--${group.icon}${
           selected ? " memory-group-object--selected selected" : ""
-        }${draggingMemoryGroupId === group.id ? " memory-group-object--dragging" : ""}`}
+        }${seen ? " memory-map-node--seen" : ""}${draggingMemoryGroupId === group.id ? " memory-group-object--dragging" : ""}`}
         style={{
-          ["--x" as string]: `${group.x + (memoryGroupDrags[group.id]?.x ?? 0)}px`,
-          ["--y" as string]: `${group.y + (memoryGroupDrags[group.id]?.y ?? 0)}px`,
+          ["--x" as string]: `${slot.x}%`,
+          ["--y" as string]: `${slot.y}%`,
+          ["--drag-x" as string]: `${memoryGroupDrags[group.id]?.x ?? 0}px`,
+          ["--drag-y" as string]: `${memoryGroupDrags[group.id]?.y ?? 0}px`,
           ["--tilt" as string]: `${group.tilt}deg`,
+          ["--memory-map-scale" as string]: `${weight}`,
+          ["--memory-map-opacity" as string]: `${opacity}`,
+          ["--skill-tag-dynamic-scale" as string]: `${weight}`,
+          ["--skill-tag-dynamic-opacity" as string]: `${opacity}`,
+          ["--popup-top" as string]: "98%",
+          ["--popup-left" as string]: "0%",
+          ["--popup-translate-y" as string]: "0%",
+          ["--popup-translate-x" as string]: "0%",
+          ["--popup-origin-y" as string]: "top",
         }}
       >
         <button
           type="button"
           className="memory-group-hitarea"
           aria-pressed={selected}
+          onMouseEnter={markSeen}
+          onFocus={markSeen}
           onPointerDown={(event) => {
             const drag = memoryGroupDrags[group.id] ?? { x: 0, y: 0 };
             memoryGroupDragStartRef.current = {
@@ -2677,20 +2820,15 @@ export function HomePage(): JSX.Element {
             setMemoryFlowIndex(0);
           }}
         >
-          <strong>{group.name}</strong>
-          <small>{group.signals.length} saved</small>
+          <strong>{memoryMapLabel(group.name)}</strong>
+          <span className="sr-only">{group.name}</span>
         </button>
-        <div className="memory-group-actions">
-          {group.source === "proposed" ? (
-            <>
-              <button type="button" onClick={() => keepMemoryGroup(group.id)}>
-                {kept ? "kept" : "keep"}
-              </button>
-              <button type="button" onClick={() => dismissMemoryGroup(group.id)}>
-                dismiss
-              </button>
-            </>
-          ) : null}
+        <div className="memory-map-preview" aria-hidden="true">
+          <p className="memory-map-preview-blurb">{memoryGroupBlurb(group)}</p>
+          <span className="memory-map-preview-cta">
+            open {group.signals.length === 1 ? "this 1 save" : `these ${group.signals.length} saves`}
+          </span>
+          <span className="memory-map-preview-label">{memoryMapLabel(group.name)}</span>
         </div>
       </article>
     );
@@ -2851,18 +2989,12 @@ export function HomePage(): JSX.Element {
     ].filter(Boolean);
     return (
       <button
-        key={signal.id}
         type="button"
-        className="memory-stack-signal memory-stack-quote-card"
+        className="memory-contents-item"
         onClick={() => openStackSignal(signal)}
       >
-        <strong>{shortText(signal.textPreview, 142)}</strong>
-        {signal.highlightedSnippets[0] ? (
-          <blockquote>{shortText(signal.highlightedSnippets[0].text, 96)}</blockquote>
-        ) : null}
-        <span className="memory-stack-card-meta">
-          {metaItems.join(" · ")}
-        </span>
+        <span className="memory-contents-item-text">{shortText(signal.textPreview, 160)}</span>
+        <span className="memory-contents-item-meta">{metaItems.join(" · ")}</span>
       </button>
     );
   };
@@ -3658,6 +3790,22 @@ export function HomePage(): JSX.Element {
     <>
       <BackgroundField />
       <DropOverlay />
+      <div className="nc-lang nc-lang--top" aria-label="language">
+        <button
+          type="button"
+          className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
+          onClick={() => handleLocaleChange("ko-KR")}
+        >
+          한
+        </button>
+        <button
+          type="button"
+          className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
+          onClick={() => handleLocaleChange("en-US")}
+        >
+          en
+        </button>
+      </div>
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -3698,134 +3846,55 @@ export function HomePage(): JSX.Element {
             <p className="nc-loading">{copy.emptyThoughts}</p>
           )}
           {renderActionPostIt()}
-          <button
-            type="button"
-            className="nc-drawer-object"
-            onClick={() => chooseHomeMode("memoryDrawer")}
-            aria-label={`${copy.drawerObjectBody}: ${copy.savesTitle}`}
-          >
-            <span className="nc-drawer-tab" aria-hidden="true" />
-            <span className="nc-drawer-title">{copy.drawerObjectTitle}</span>
-            <strong>{copy.drawerObjectBody}</strong>
-            <small>{entries.length} saved</small>
-          </button>
         </section>
-
-        <footer className="nc-footnote">
-          <p>{copy.footnote(displayHandle)}</p>
-          <p className="nc-footnote-credit">{copy.footnoteCredit}</p>
-          <div className="nc-lang nc-lang--footer" aria-label="language">
-            <button
-              type="button"
-              className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
-              onClick={() => handleLocaleChange("ko-KR")}
-            >
-              한
-            </button>
-            <button
-              type="button"
-              className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
-              onClick={() => handleLocaleChange("en-US")}
-            >
-              en
-            </button>
-          </div>
-        </footer>
       </main>
 
       {homeMode === "memoryDrawer" ? (
         <section className="reference-saves-page signal-revisit-page memory-drawer-stack" aria-label={copy.savesTitle}>
           <span className="memory-stack-glass" aria-hidden="true" />
-          <button
-            type="button"
-            className="memory-stack-close"
-            onClick={() => chooseHomeMode("topOfMind")}
-            aria-label="close inspiration drawer"
-          />
           {selectedSavedSignal ? (
             renderMemoryStackDetail()
           ) : selectedMemoryGroup ? (
-            <div className="memory-group-contents memory-stack-level" aria-label="grouping contents">
-              <header className="memory-stack-header">
-                <button
-                  type="button"
-                  className="memory-workspace-back"
-                  onClick={() => {
-                    setSelectedMemoryGroupId(null);
-                    setSelectedSavedSignalId(null);
-                    setSavedSignalDetail(null);
-                  }}
-                >
-                  all piles
-                </button>
-                <div>
-                  <span>{selectedMemoryGroup.source === "all" ? "all inspirations" : "selected pile"}</span>
-                  {selectedMemoryGroup.source === "user" ? (
-                    <label className="memory-group-name-edit">
-                      <span>name</span>
-                      <input
-                        value={selectedMemoryGroup.name}
-                        onChange={(event) => {
-                          renameMemoryGroup(selectedMemoryGroup.id, event.target.value);
-                        }}
-                      />
-                    </label>
-                  ) : (
-                    <strong>{selectedMemoryGroup.name}</strong>
-                  )}
-                </div>
-                <div className="memory-order-switcher" role="group" aria-label="browse order">
-                  {[
-                    { id: "newest" as const, label: "newest first" },
-                    { id: "relevance" as const, label: "strongest fit" },
-                  ].map((order) => (
-                    <button
-                      key={order.id}
-                      type="button"
-                      className={memoryBrowseOrder === order.id ? "is-active" : ""}
-                      aria-pressed={memoryBrowseOrder === order.id}
-                      onClick={() => setMemoryBrowseOrder(order.id)}
-                    >
-                      {order.label}
-                    </button>
-                  ))}
-                </div>
-              </header>
-              <div className="memory-list-stack">
-                {selectedMemoryGroupSignals.map((signal) => renderMemoryStackSignalCard(signal))}
-              </div>
+            <div className="memory-contents-flow" aria-label="grouping contents">
+              <button
+                type="button"
+                className="memory-contents-back"
+                onClick={() => {
+                  setSelectedMemoryGroupId(null);
+                  setSelectedSavedSignalId(null);
+                  setSavedSignalDetail(null);
+                }}
+              >
+                ← back to map
+              </button>
+              {selectedMemoryGroup.source === "user" ? (
+                <label className="memory-contents-rename">
+                  <span className="sr-only">name this collection</span>
+                  <input
+                    value={selectedMemoryGroup.name}
+                    onChange={(event) => renameMemoryGroup(selectedMemoryGroup.id, event.target.value)}
+                  />
+                </label>
+              ) : (
+                <h2 className="memory-contents-title">{memoryMapLabel(selectedMemoryGroup.name)}</h2>
+              )}
+              <ul className="memory-contents-list">
+                {selectedMemoryGroupSignals.map((signal) => (
+                  <li key={signal.id}>{renderMemoryStackSignalCard(signal)}</li>
+                ))}
+              </ul>
             </div>
           ) : (
             <div className="memory-stack-level">
-              <div className="memory-stack-entrybar">
-                <span>{PRODUCT_SPACES.memoryDrawer}</span>
-                <details className="signal-revisit-search">
-                  <summary>search</summary>
-                  <label>
-                    <span>{copy.searchLabel}</span>
-                    <input
-                      type="search"
-                      value={inspirationFilters.search}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                        setInspirationFilters({ search: event.target.value });
-                        setSelectedMemoryGroupId("all");
-                        setSelectedSavedSignalId(null);
-                        setSavedSignalDetail(null);
-                      }}
-                      placeholder={copy.searchPlaceholder}
-                    />
-                  </label>
-                </details>
-              </div>
-              <div className="memory-group-board" aria-label="proposed inspiration groupings">
+              <div className="memory-group-board memory-map-board" aria-label="proposed inspiration groupings">
                 {memoryGroupings.map(renderMemoryGroupObject)}
                 <button
                   type="button"
-                  className="memory-bulletin-object"
+                  className="memory-bulletin-object memory-map-node memory-map-node--new"
                   onClick={createUserMemoryGroup}
                 >
-                  <span>new pile</span>
-                  <strong>make my own</strong>
+                  <strong>/make-my-own</strong>
+                  <small>new collection</small>
                 </button>
                 {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
                 {savedSignalsLoading && inPlaceSignals.length === 0 ? (
@@ -3841,18 +3910,92 @@ export function HomePage(): JSX.Element {
       ) : null}
 
       {expandedNoteIndex === null ? (
-        <button type="button" className="nc-save" onClick={() => setCaptureOpen(true)} aria-label={copy.captureAria}>
-          <span className="nc-save-cta">{copy.captureCta}</span>
-        </button>
+        <div className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`} aria-label="bottom actions">
+          {homeMode === "memoryDrawer" ? (
+            <label className="nc-drawer-search">
+              <span className="sr-only">{copy.searchLabel}</span>
+              <input
+                type="search"
+                value={inspirationFilters.search}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setInspirationFilters({ search: event.target.value });
+                  setSelectedMemoryGroupId(event.target.value.trim().length > 0 ? "all" : null);
+                  setSelectedSavedSignalId(null);
+                  setSavedSignalDetail(null);
+                }}
+                placeholder={copy.searchPlaceholder}
+              />
+            </label>
+          ) : (
+            <button
+              type="button"
+              className={`nc-save${captureSaved ? " nc-save--saved" : ""}`}
+              onClick={openCapture}
+              aria-label={copy.captureAria}
+            >
+              <span className="nc-save-cta">
+                {captureSaved ? (locale === "ko-KR" ? "저장됨" : "saved") : copy.captureCta}
+                {!captureSaved && captureHasDraft ? (
+                  <span className="nc-save-draft" aria-hidden="true">···</span>
+                ) : null}
+              </span>
+            </button>
+          )}
+          <button
+            type="button"
+            className={`nc-drawer-object${homeMode === "memoryDrawer" ? " nc-drawer-object--close" : ""}`}
+            onClick={() => {
+              if (homeMode === "memoryDrawer") {
+                chooseHomeMode("topOfMind");
+              } else {
+                chooseHomeMode("memoryDrawer");
+              }
+            }}
+            aria-label={homeMode === "memoryDrawer" ? "close inspiration drawer" : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
+          >
+            {homeMode === "memoryDrawer" ? (
+              <span className="nc-drawer-icon" aria-hidden="true">
+                <span className="nc-drawer-close-mark" />
+              </span>
+            ) : (
+              <span className="nc-drawer-icon" aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 18h6" />
+                  <path d="M10 22h4" />
+                  <path d="M8.5 14.5c-1.6-1.2-2.5-3-2.5-5A6 6 0 0 1 18 9.5c0 2-.9 3.8-2.5 5-.8.6-1.2 1.4-1.2 2.5H9.7c0-1.1-.4-1.9-1.2-2.5Z" />
+                </svg>
+              </span>
+            )}
+            <span className="sr-only">{homeMode === "memoryDrawer" ? "close" : copy.drawerObjectTitle}</span>
+            <small className="sr-only">{entries.length} saved</small>
+          </button>
+        </div>
       ) : null}
 
       {captureOpen ? (
-        <div className="reference-capture-modal" role="dialog" aria-modal="true" aria-label={copy.captureDialog}>
-          <button type="button" className="reference-capture-close" onClick={() => setCaptureOpen(false)}>
+        <div
+          className={`reference-capture-modal${captureFocused ? " reference-capture-modal--expanded" : ""}${
+            captureClosing ? " reference-capture-modal--closing" : ""
+          }`}
+          role="dialog"
+          aria-modal="true"
+          aria-label={copy.captureDialog}
+        >
+          <button
+            type="button"
+            className="reference-capture-close"
+            onClick={closeCapture}
+          >
             {copy.close}
           </button>
           <div className="reference-capture-shell">
-            <div className="reference-capture-kicker">{copy.captureInlineKicker}</div>
           <CaptureForm
             view={captureView}
             visualState={{
@@ -3865,7 +4008,10 @@ export function HomePage(): JSX.Element {
             onPersisted={handleCapturePersisted}
             onPersistError={handlePersistError}
             locale={locale}
-            onDismissAfterSave={() => setCaptureOpen(false)}
+            onDismissAfterSave={() => {
+              closeCapture();
+            }}
+            onSaved={handleCaptureSaved}
           />
           </div>
         </div>

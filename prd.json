@@ -980,7 +980,7 @@
       ],
       "priority": 53,
       "passes": true,
-      "notes": "Product correction: the user wants the literal selection UX where selecting text summons nearby highlight/reaction controls. Highlighting should feel like marking a sentence in place, not managing highlights elsewhere."
+      "notes": "Product correction: the user wants the literal selection UX where selecting text summons nearby highlight/reaction controls. Highlighting should feel like marking a sentence in place, not managing highlights elsewhere. SUPERSEDED 2026-06-01 (design decision): capture was deliberately simplified to highlight-only. Selecting text now summons a single inline 'highlight' control and supports MULTIPLE in-place highlights; the reaction/emotion chip grid and the in-popover 'why this mattered' note were intentionally removed to keep capture low-friction. The reaction-choice and custom-note-in-popover criteria of this story are retired and should NOT be treated as a regression. Emotional-pull metadata is no longer collected at capture time by design."
     }
   ]
 }

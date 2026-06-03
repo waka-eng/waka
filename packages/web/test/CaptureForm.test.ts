@@ -186,7 +186,7 @@ describe("CaptureForm multi-input quick capture", () => {
       "What almost slipped away?",
     );
     expect(container?.querySelector("#capResonance")).toBeNull();
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Select the part that hit, if you want.");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect deeper");
     expect(container?.textContent?.toLowerCase()).not.toMatch(
@@ -213,11 +213,12 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
       "A private draft that should not disappear",
     );
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Private draft autosaved locally");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
   });
 
   it("persists marked text and the small why-it-mattered answer as spark metadata", async () => {
-    await renderCaptureForm();
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
     await act(async () => {
       setText("I keep returning to studios with huge north-facing windows");
     });
@@ -227,29 +228,18 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.setSelectionRange(20, 58);
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
-    const selectionPopover = container?.querySelector<HTMLElement>(".cap-highlight-popover--selection");
-    expect(selectionPopover?.textContent).toContain("add highlight");
-    expect(selectionPopover?.style.getPropertyValue("--highlight-top")).not.toBe("");
+    const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
+    expect(selectionToolbar?.textContent).toContain("highlight");
+    expect(selectionToolbar?.style.getPropertyValue("--highlight-top")).not.toBe("");
     await act(async () => {
-      selectionPopover?.querySelector<HTMLButtonElement>("button")?.click();
+      selectionToolbar?.querySelector<HTMLButtonElement>("button")?.click();
     });
-    expect(container?.querySelector(".cap-highlight-popover--saved")?.textContent).toContain("highlighted in text");
-    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe(
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe(
       "studios with huge north-facing windows",
     );
-    await act(async () => {
-      Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
-        .find((button) => button.textContent?.includes("I want this"))
-        ?.click();
-    });
 
     await clickQuickSave();
 
-    const metadataNote = `capture_metadata:v1:${JSON.stringify({
-      reason: "want",
-      reasonLabel: "I want this",
-      userReason: null,
-    })}`;
     expect(createInspiration).toHaveBeenCalledWith({
       text: "I keep returning to studios with huge north-facing windows",
       kind: "note",
@@ -261,18 +251,18 @@ describe("CaptureForm multi-input quick capture", () => {
           endOffset: 58,
           confidence: 100,
           isPrimary: true,
-          note: metadataNote,
+          note: undefined,
         },
       ],
     });
-    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Saved safe. The marked part can help you understand why it mattered later.",
-    );
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
   });
 
-  it("offers a one-tap reason and optional micro-answer without blocking save", async () => {
-    await renderCaptureForm();
+  it("supports multiple explicit highlights without blocking save", async () => {
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
     await act(async () => {
       setText("This scared me because it feels high stakes");
     });
@@ -282,20 +272,16 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
     });
     await act(async () => {
-      Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
-        .find((button) => button.textContent?.includes("this scared me"))
-        ?.click();
+      textarea?.setSelectionRange("This scared me because it ".length, "This scared me because it feels high stakes".length);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
-
-    expect(container?.querySelector("#capResonanceNote")?.getAttribute("placeholder")).toBe(
-      "Optional. Keep it tiny.",
-    );
-    expect(container?.querySelector("label.cap-resonance-note")?.textContent).toContain(
-      "What feels at stake?",
-    );
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
+    });
+    expect(container?.querySelectorAll(".cap-note-highlight-layer mark")).toHaveLength(2);
 
     await clickQuickSave();
 
@@ -310,24 +296,27 @@ describe("CaptureForm multi-input quick capture", () => {
           endOffset: 14,
           confidence: 100,
           isPrimary: true,
-          note: `capture_metadata:v1:${JSON.stringify({
-            reason: "scared",
-            reasonLabel: "this scared me",
-            userReason: null,
-          })}`,
+          note: undefined,
+        },
+        {
+          text: "feels high stakes",
+          source: "user_selected",
+          startOffset: 26,
+          endOffset: 43,
+          confidence: 100,
+          isPrimary: false,
+          note: undefined,
         },
       ],
     });
     expect(createReflection).not.toHaveBeenCalled();
-    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Saved safe. The marked part can help you understand why it mattered later.",
-    );
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("save another");
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("add a little more");
-    expect(container?.querySelector(".cap-save-mirror-actions")?.textContent).toContain("return later");
+    // On a full save the in-cell mirror is gone; the parent is signalled to
+    // close the surface and flash the capture button instead.
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
   });
 
-  it("creates an inline highlight from a selection reaction and custom note in the same popover", async () => {
+  it("creates an inline highlight only after clicking the small selection toolbar", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("The quiet studio standards pulled me back");
@@ -338,24 +327,16 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
 
-    const selectionPopover = container?.querySelector<HTMLElement>(".cap-highlight-popover--selection");
-    expect(selectionPopover).not.toBeNull();
-    expect(selectionPopover?.style.getPropertyValue("--highlight-top")).not.toBe("");
+    const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
+    expect(selectionToolbar).not.toBeNull();
+    expect(selectionToolbar?.style.getPropertyValue("--highlight-top")).not.toBe("");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")).toBeNull();
     await act(async () => {
-      Array.from(selectionPopover?.querySelectorAll<HTMLButtonElement>("button") ?? [])
-        .find((button) => button.textContent === "taste")
-        ?.click();
+      selectionToolbar?.querySelector<HTMLButtonElement>("button")?.click();
     });
 
-    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe("studio standards");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe("studio standards");
     expect(container?.querySelector(".cap-highlight-row")).toBeNull();
-    const noteInput = container?.querySelector<HTMLInputElement>("#capResonanceNote");
-    expect(noteInput).not.toBeNull();
-    await act(async () => {
-      if (noteInput) noteInput.value = "This is the bar I want around me.";
-      noteInput?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-      noteInput?.dispatchEvent(new Event("change", { bubbles: true }));
-    });
 
     await clickQuickSave();
 
@@ -370,11 +351,7 @@ describe("CaptureForm multi-input quick capture", () => {
           endOffset: 26,
           confidence: 100,
           isPrimary: true,
-          note: `capture_metadata:v1:${JSON.stringify({
-            reason: "taste",
-            reasonLabel: "taste",
-            userReason: "This is the bar I want around me.",
-          })}`,
+          note: undefined,
         },
       ],
     });
@@ -391,25 +368,27 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
     });
 
-    const savedPopover = container?.querySelector<HTMLElement>(".cap-highlight-popover--saved");
-    expect(savedPopover).not.toBeNull();
-    expect(savedPopover?.style.getPropertyValue("--highlight-left")).not.toBe("");
+    const mark = container?.querySelector<HTMLElement>(".cap-note-highlight-layer mark");
+    expect(mark).not.toBeNull();
+    expect(mark?.textContent).toContain("open studio table");
     expect(container?.querySelector(".cap-highlight-row")).toBeNull();
     expect(container?.querySelector("#capHighlightState")).toBeNull();
-
-    expect(container?.querySelector(".cap-resonance--popover")).not.toBeNull();
+    expect(container?.querySelector(".cap-resonance--popover")).toBeNull();
 
     await act(async () => {
-      savedPopover?.querySelector<HTMLButtonElement>("[aria-label='Remove highlighted text']")?.click();
+      mark?.querySelector<HTMLButtonElement>(".cap-unhighlight")?.click();
     });
     expect(container?.querySelector(".cap-note-highlight-layer mark")).toBeNull();
-    expect(container?.querySelector(".cap-highlight-popover--saved")).toBeNull();
+    expect(container?.querySelector(".cap-selection-toolbar")).toBeNull();
   });
 
   it("expands into a full-page writing environment without losing draft highlights", async () => {
+    // The expand/collapse control sits with the attach button on the left of
+    // the capture bar; toggling it asks the parent to flip focus mode, and the
+    // cell preserves draft + highlights across the transition.
     const toggleFocus = vi.fn();
     const { rerender } = await (async () => {
       await renderCaptureForm({ focused: false, onToggleFocus: toggleFocus });
@@ -430,7 +409,7 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
     });
 
     await act(async () => {
@@ -440,7 +419,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await rerender(true);
     expect(container?.querySelector(".cell.capture")?.className).toContain("focused");
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Keep the open studio table safe");
-    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe("open studio table");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe("open studio table");
 
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#capExpand")?.click();
@@ -448,37 +427,36 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(toggleFocus).toHaveBeenLastCalledWith(false);
     await rerender(false);
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Keep the open studio table safe");
-    expect(container?.querySelector(".cap-note-highlight-layer mark")?.textContent).toBe("open studio table");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe("open studio table");
   });
 
-  it("lets the user keep writing after the non-final mirror", async () => {
-    await renderCaptureForm();
+  it("signals the parent to close and flash after a quick save instead of showing a mirror", async () => {
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
     await act(async () => {
       setText("This private weather needs one more pass");
     });
 
     await clickQuickSave();
-    await act(async () => {
-      Array.from(container?.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button") ?? [])
-        .find((button) => button.textContent === "save another")
-        ?.click();
-    });
 
+    // No in-cell post-save mirror; the parent handles the close + "saved" flash.
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    // The note is cleared so a fresh capture can start.
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
   });
 
-  it("offers optional post-save reflection and attaches it to the saved inspiration", async () => {
+  it("attaches a reflection through the Reflect-deeper save flow", async () => {
     vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save" }));
-    await renderCaptureForm();
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
     await act(async () => {
       setText("A messy thing I want safe before I understand it");
     });
 
-    await clickQuickSave();
+    // "Reflect deeper" opens the reflection view before committing the save.
     await act(async () => {
-      Array.from(container?.querySelectorAll<HTMLButtonElement>(".cap-save-mirror-actions button") ?? [])
-        .find((button) => button.textContent === "add a little more")
-        ?.click();
+      container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
     });
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
@@ -501,10 +479,12 @@ describe("CaptureForm multi-input quick capture", () => {
       answer: "It showed me what I want to protect.",
       skipped: false,
     });
-    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Saved with your thought");
+    // No mirror card — the parent is signalled to close and flash "saved".
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
+    expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
-  it("persists the optional reason note as stronger user-provided capture metadata", async () => {
+  it("persists a selected passage as user-selected spark metadata", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("I want to build toward this operating cadence");
@@ -515,19 +495,7 @@ describe("CaptureForm multi-input quick capture", () => {
       textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
     });
     await act(async () => {
-      container?.querySelector<HTMLButtonElement>(".cap-highlight-popover--selection button")?.click();
-    });
-    await act(async () => {
-      Array.from(container?.querySelectorAll<HTMLButtonElement>("#capResonance button") ?? [])
-        .find((button) => button.textContent?.includes("I want to build toward this"))
-        ?.click();
-    });
-    const noteInput = container?.querySelector<HTMLInputElement>("#capResonanceNote");
-    expect(noteInput).not.toBeNull();
-    await act(async () => {
-      if (noteInput) noteInput.value = "This might change what I commit to next.";
-      noteInput?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText" }));
-      noteInput?.dispatchEvent(new Event("change", { bubbles: true }));
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
     });
 
     await clickQuickSave();
@@ -543,11 +511,7 @@ describe("CaptureForm multi-input quick capture", () => {
           endOffset: 27,
           confidence: 100,
           isPrimary: true,
-          note: `capture_metadata:v1:${JSON.stringify({
-            reason: "build_toward_this",
-            reasonLabel: "I want to build toward this",
-            userReason: "This might change what I commit to next.",
-          })}`,
+          note: undefined,
         },
       ],
     });
