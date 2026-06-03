@@ -614,7 +614,7 @@ export default function LoginPage(): JSX.Element {
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
-        <p className="login-eyebrow">WAKA · Inspirations</p>
+        <p className="login-eyebrow">WAKA · Signals</p>
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>

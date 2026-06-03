@@ -55,9 +55,10 @@ import {
   persistLocalInspirationScores,
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
-import { persistMeaningPacketForInspiration } from "../lib/meaning-packets.js";
+import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
+import { withSignalLayer } from "../lib/signals.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -392,10 +393,10 @@ routes.post("/", async (c) => {
       })),
     );
   }
-  await persistMeaningPacketForInspiration({
+  await persistSignalPacketForSignal({
     db,
     userId: scoredInserted.userId,
-    inspirationId: scoredInserted.id,
+    signalId: scoredInserted.id,
   });
 
   // 3. Enqueue a durable background classification job. The worker consumes
@@ -423,7 +424,7 @@ routes.post("/", async (c) => {
   // 4. 201 Created with the canonical row payload. Cluster will be `null`
   //    until the classifier worker updates it; the SPA renders an
   //    "uncategorised" state in that window.
-  return c.json({ inspiration: withDisplayedWowScore(scoredInserted) }, 201);
+  return c.json({ inspiration: withSignalLayer(withDisplayedWowScore(scoredInserted)) }, 201);
 });
 
 /**
@@ -572,10 +573,12 @@ routes.get("/", async (c) => {
 
   const now = new Date();
   return c.json({
-    inspirations: rows.map((row) => ({
-      ...withDisplayedWowScore(row, now),
-      attachments: attachmentsByInspiration.get(row.id) ?? [],
-    })),
+    inspirations: rows.map((row) =>
+      withSignalLayer({
+        ...withDisplayedWowScore(row, now),
+        attachments: attachmentsByInspiration.get(row.id) ?? [],
+      }),
+    ),
   }, 200);
 });
 
@@ -675,10 +678,10 @@ routes.post("/:id/sparks", async (c) => {
 
   if (!spark) return c.json({ error: "Failed to create spark" }, 500);
 
-  await persistMeaningPacketForInspiration({
+  await persistSignalPacketForSignal({
     db,
     userId: user.id,
-    inspirationId: idCheck.data,
+    signalId: idCheck.data,
   });
 
   return c.json({
@@ -688,6 +691,39 @@ routes.post("/:id/sparks", async (c) => {
       updatedAt: spark.updatedAt.toISOString(),
     },
   }, 201);
+});
+
+routes.delete("/:id/sparks/:sparkId", async (c) => {
+  const inspirationId = c.req.param("id");
+  const sparkId = c.req.param("sparkId");
+  const idCheck = z.string().uuid().safeParse(inspirationId);
+  const sparkIdCheck = z.string().uuid().safeParse(sparkId);
+  if (!idCheck.success || !sparkIdCheck.success) {
+    return c.json({ error: "Invalid spark id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const [deleted] = await db
+    .delete(inspirationSparks)
+    .where(
+      and(
+        eq(inspirationSparks.id, sparkIdCheck.data),
+        eq(inspirationSparks.inspirationId, idCheck.data),
+        eq(inspirationSparks.userId, user.id),
+      ),
+    )
+    .returning({ id: inspirationSparks.id });
+
+  if (!deleted) return c.json({ error: "Spark not found" }, 404);
+
+  await persistSignalPacketForSignal({
+    db,
+    userId: user.id,
+    signalId: idCheck.data,
+  });
+
+  return c.json({ ok: true }, 200);
 });
 
 // ---------------------------------------------------------------------------
@@ -846,8 +882,6 @@ const updateInspirationSchema = z
       path: ["text"],
     },
   );
-
-type UpdateInspirationInput = z.infer<typeof updateInspirationSchema>;
 
 /**
  * PATCH /api/inspirations/:id
@@ -1020,8 +1054,6 @@ const createReflectionSchema = z.object({
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   skipped: z.boolean().optional(),
 });
-
-type CreateReflectionInput = z.infer<typeof createReflectionSchema>;
 
 /**
  * POST /api/inspirations/:id/reflections

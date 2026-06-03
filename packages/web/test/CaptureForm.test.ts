@@ -56,6 +56,12 @@ async function flushReactWork(): Promise<void> {
   });
 }
 
+async function flushDraftAutosave(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  });
+}
+
 async function renderCaptureForm(props: ComponentProps<typeof CaptureForm> = {}): Promise<HTMLDivElement> {
   container = document.createElement("div");
   document.body.append(container);
@@ -109,13 +115,14 @@ async function clickQuickSave(): Promise<void> {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   vi.mocked(createInspiration).mockResolvedValue(inspiration());
   vi.mocked(createReflection).mockResolvedValue({
     reflection: {
       id: "reflection-1",
       inspirationId: "insp-new",
       userId: "user-1",
-      question: "What caught your attention here?",
+      question: "What did this mean to you?",
       answer: "It matters.",
       skipped: false,
       createdAt: "2026-05-27T12:01:00.000Z",
@@ -163,6 +170,7 @@ afterEach(() => {
   container = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
+  window.localStorage.clear();
 });
 
 describe("CaptureForm responsive CTA CSS", () => {
@@ -177,13 +185,385 @@ describe("CaptureForm responsive CTA CSS", () => {
 });
 
 describe("CaptureForm multi-input quick capture", () => {
+  it("opens as a private blank-page capture ritual", async () => {
+    await renderCaptureForm();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.placeholder).toBe(
+      "What almost slipped away?",
+    );
+    expect(container?.querySelector("#capResonance")).toBeNull();
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
+    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect deeper");
+    expect(container?.textContent?.toLowerCase()).not.toMatch(
+      /\bsignals?\b|\bmemories\b|\bgraph\b|\bnodes?\b|memory movement|\bresonance\b|\banalysis\b|\bAI\b/,
+    );
+  });
+
+  it("autosaves draft text locally and restores it on the next mount", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("A private draft that should not disappear");
+    });
+    await flushReactWork();
+    await flushDraftAutosave();
+
+    act(() => {
+      root?.unmount();
+    });
+    container?.remove();
+    root = null;
+    container = null;
+
+    await renderCaptureForm();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
+      "A private draft that should not disappear",
+    );
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
+  });
+
+  it("drops expired local capture drafts instead of restoring sensitive text indefinitely", async () => {
+    window.localStorage.setItem(
+      "waka.captureDraft.v1",
+      JSON.stringify({
+        note: "An old private draft",
+        storedAt: Date.now() - 25 * 60 * 60 * 1000,
+      }),
+    );
+
+    await renderCaptureForm();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
+    expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
+  it("persists marked text and the small why-it-mattered answer as spark metadata", async () => {
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
+    await act(async () => {
+      setText("I keep returning to studios with huge north-facing windows");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      textarea?.setSelectionRange(20, 58);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
+    expect(selectionToolbar?.textContent).toContain("highlight");
+    expect(selectionToolbar?.style.getPropertyValue("--highlight-top")).not.toBe("");
+    await act(async () => {
+      selectionToolbar?.querySelector<HTMLButtonElement>("button")?.click();
+    });
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe(
+      "studios with huge north-facing windows",
+    );
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "I keep returning to studios with huge north-facing windows",
+      kind: "note",
+      sparks: [
+        {
+          text: "studios with huge north-facing windows",
+          source: "user_selected",
+          startOffset: 20,
+          endOffset: 58,
+          confidence: 100,
+          isPrimary: true,
+          note: undefined,
+        },
+      ],
+    });
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
+    expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
+  it("supports multiple explicit highlights without blocking save", async () => {
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
+    await act(async () => {
+      setText("This scared me because it feels high stakes");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(0, "This scared me".length);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
+    });
+    await act(async () => {
+      textarea?.setSelectionRange("This scared me because it ".length, "This scared me because it feels high stakes".length);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
+    });
+    expect(container?.querySelectorAll(".cap-note-highlight-layer mark")).toHaveLength(2);
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "This scared me because it feels high stakes",
+      kind: "note",
+      sparks: [
+        {
+          text: "This scared me",
+          source: "user_selected",
+          startOffset: 0,
+          endOffset: 14,
+          confidence: 100,
+          isPrimary: true,
+          note: undefined,
+        },
+        {
+          text: "feels high stakes",
+          source: "user_selected",
+          startOffset: 26,
+          endOffset: 43,
+          confidence: 100,
+          isPrimary: false,
+          note: undefined,
+        },
+      ],
+    });
+    expect(createReflection).not.toHaveBeenCalled();
+    // On a full save the in-cell mirror is gone; the parent is signalled to
+    // close the surface and flash the capture button instead.
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
+  });
+
+  it("creates an inline highlight only after clicking the small selection toolbar", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("The quiet studio standards pulled me back");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(10, 26);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+
+    const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
+    expect(selectionToolbar).not.toBeNull();
+    expect(selectionToolbar?.style.getPropertyValue("--highlight-top")).not.toBe("");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")).toBeNull();
+    await act(async () => {
+      selectionToolbar?.querySelector<HTMLButtonElement>("button")?.click();
+    });
+
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe("studio standards");
+    expect(container?.querySelector(".cap-highlight-row")).toBeNull();
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "The quiet studio standards pulled me back",
+      kind: "note",
+      sparks: [
+        {
+          text: "studio standards",
+          source: "user_selected",
+          startOffset: 10,
+          endOffset: 26,
+          confidence: 100,
+          isPrimary: true,
+          note: undefined,
+        },
+      ],
+    });
+  });
+
+  it("keeps highlight editing next to the highlighted text instead of a detached list", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("The part that hit was the open studio table");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(26, 43);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
+    });
+
+    const mark = container?.querySelector<HTMLElement>(".cap-note-highlight-layer mark");
+    expect(mark).not.toBeNull();
+    expect(mark?.textContent).toContain("open studio table");
+    expect(container?.querySelector(".cap-highlight-row")).toBeNull();
+    expect(container?.querySelector("#capHighlightState")).toBeNull();
+    expect(container?.querySelector(".cap-resonance--popover")).toBeNull();
+
+    await act(async () => {
+      mark?.querySelector<HTMLButtonElement>(".cap-unhighlight")?.click();
+    });
+    expect(container?.querySelector(".cap-note-highlight-layer mark")).toBeNull();
+    expect(container?.querySelector(".cap-selection-toolbar")).toBeNull();
+  });
+
+  it("expands into a full-page writing environment without losing draft highlights", async () => {
+    // The expand/collapse control sits with the attach button on the left of
+    // the capture bar; toggling it asks the parent to flip focus mode, and the
+    // cell preserves draft + highlights across the transition.
+    const toggleFocus = vi.fn();
+    const { rerender } = await (async () => {
+      await renderCaptureForm({ focused: false, onToggleFocus: toggleFocus });
+      return {
+        rerender: async (focused: boolean) => {
+          await act(async () => {
+            root?.render(createElement(CaptureForm, { focused, onToggleFocus: toggleFocus }));
+          });
+        },
+      };
+    })();
+    await act(async () => {
+      setText("Keep the open studio table safe");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(9, 26);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
+    });
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(toggleFocus).toHaveBeenCalledWith(true);
+    await rerender(true);
+    expect(container?.querySelector(".cell.capture")?.className).toContain("focused");
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Keep the open studio table safe");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe("open studio table");
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(toggleFocus).toHaveBeenLastCalledWith(false);
+    await rerender(false);
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Keep the open studio table safe");
+    expect(container?.querySelector(".cap-note-highlight-layer mark")?.childNodes[0]?.textContent).toBe("open studio table");
+  });
+
+  it("signals the parent to close and flash after a quick save instead of showing a mirror", async () => {
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
+    await act(async () => {
+      setText("This private weather needs one more pass");
+    });
+
+    await clickQuickSave();
+
+    // No in-cell post-save mirror; the parent handles the close + "saved" flash.
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    // The note is cleared so a fresh capture can start.
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
+  });
+
+  it("attaches a reflection through the Reflect-deeper save flow", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save" }));
+    const onSaved = vi.fn();
+    await renderCaptureForm({ onSaved });
+    await act(async () => {
+      setText("A messy thing I want safe before I understand it");
+    });
+
+    // "Reflect deeper" opens the reflection view before committing the save.
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+    });
+    expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
+
+    const answer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
+    expect(answer).not.toBeNull();
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+    await act(async () => {
+      setter?.call(answer, "It showed me what I want to protect.");
+      answer?.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspiration).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
+      question: "Why did this matter right now?",
+      answer: "It showed me what I want to protect.",
+      skipped: false,
+    });
+    // No mirror card — the parent is signalled to close and flash "saved".
+    expect(container?.querySelector(".cap-save-mirror")).toBeNull();
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists a selected passage as user-selected spark metadata", async () => {
+    await renderCaptureForm();
+    await act(async () => {
+      setText("I want to build toward this operating cadence");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      textarea?.setSelectionRange(0, "I want to build toward this".length);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>(".cap-selection-toolbar button")?.click();
+    });
+
+    await clickQuickSave();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "I want to build toward this operating cadence",
+      kind: "note",
+      sparks: [
+        {
+          text: "I want to build toward this",
+          source: "user_selected",
+          startOffset: 0,
+          endOffset: 27,
+          confidence: 100,
+          isPrimary: true,
+          note: undefined,
+        },
+      ],
+    });
+  });
+
+  it("keeps the draft intact when server save fails", async () => {
+    vi.mocked(createInspiration).mockRejectedValueOnce(
+      new ApiError({ status: 500, message: "save failed" }),
+    );
+    await renderCaptureForm();
+    await act(async () => {
+      setText("Do not clear this draft");
+    });
+    await flushDraftAutosave();
+
+    await clickQuickSave();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Do not clear this draft");
+    expect(window.localStorage.getItem("waka.captureDraft.v1")).toContain("Do not clear this draft");
+  });
+
   it("gently prompts instead of saving when the empty composer is invoked from the keyboard", async () => {
     await renderCaptureForm();
 
     await pressMetaEnter();
 
     expect(createInspiration).not.toHaveBeenCalled();
-    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Add a note, link, or image to save.");
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain(
+      "Add what hit: a note, link, or image to save.",
+    );
   });
 
   it("turns a pasted URL-only input into a removable link chip without duplicating raw text", async () => {
@@ -201,9 +581,9 @@ describe("CaptureForm multi-input quick capture", () => {
     await pasteText("https://example.com/article");
 
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
-      "저장하기 전에 맥락 메모 하나 추가",
+      "이 영감을 저장하기 전에 짧은 생각 하나 더하기",
     );
-    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("맥락을 추가하지 않고 지금 저장");
+    expect(container?.querySelector<HTMLButtonElement>("#capSave")?.title).toBe("이 영감을 지금 저장");
     expect(container?.querySelector<HTMLButtonElement>(".att-x")?.getAttribute("aria-label")).toBe("첨부 제거");
   });
 
@@ -350,7 +730,7 @@ describe("CaptureForm multi-input quick capture", () => {
       expect.objectContaining({ failedAttachments: [expect.objectContaining({ localId: expect.any(String) })] }),
     );
     expect(container?.querySelector("#capConfirm")?.textContent).toContain(
-      "Saved — 1 attachment failed. Your inspiration is still in history.",
+      "Saved — 1 attachment failed. Your inspiration is still safe.",
     );
   });
 
@@ -380,7 +760,7 @@ describe("CaptureForm multi-input quick capture", () => {
 });
 
 describe("CaptureForm Process journey", () => {
-  it("enters reflection only from Process and saves the reflection separately on Continue", async () => {
+  it("enters the deeper path only from Reflect deeper and saves the answer separately", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("Process this richer input");
@@ -415,10 +795,9 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "What caught your attention here?",
+      question: "Why did this matter right now?",
       answer: "It connects to the next project.",
       skipped: false,
     });
   });
 });
-

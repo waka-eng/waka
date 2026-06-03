@@ -59,7 +59,7 @@ import {
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { calculateDisplayedInspirationScore } from "../src/lib/inspiration-scores.js";
-import { persistMeaningPacketForInspiration } from "../src/lib/meaning-packets.js";
+import { persistSignalPacketForSignal } from "../src/lib/signal-packets.js";
 import { createUserFixture } from "./fixtures/users.js";
 import {
   apiRequest,
@@ -111,6 +111,38 @@ interface ApiInspiration {
   classifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  signalScores?: {
+    resonance: number;
+    recurrence: number;
+    agency: number;
+    identitySignal: number;
+    decisionRelevance: number;
+  };
+  signal?: {
+    id: string;
+    userId: string;
+    text: string;
+    kind: string | null;
+    category: number | null;
+    scores: {
+      resonance: number;
+      recurrence: number;
+      agency: number;
+      identitySignal: number;
+      decisionRelevance: number;
+    };
+    capturedAt: string;
+    updatedAt: string;
+    interpretation: {
+      cluster: string | null;
+      classifiedAt: string | null;
+    };
+    legacy: {
+      inspirationId: string;
+      importanceScore: number;
+      wowScore: number;
+    };
+  };
   attachments?: Array<{
     id: string;
     type: string;
@@ -265,6 +297,32 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(dbRows[0]!.text).toBe("light bends around dense thoughts");
     expect(row.importanceScore).toEqual(expect.any(Number));
     expect(row.wowScore).toEqual(expect.any(Number));
+    expect(row.signalScores).toEqual({
+      resonance: row.wowScore,
+      recurrence: row.wowScore,
+      agency: row.importanceScore,
+      identitySignal: row.importanceScore,
+      decisionRelevance: row.importanceScore,
+    });
+    expect(row.signal).toMatchObject({
+      id: row.id,
+      userId: fixture.user.id,
+      text: "light bends around dense thoughts",
+      kind: "note",
+      category: 3,
+      scores: row.signalScores,
+      capturedAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      interpretation: {
+        cluster: null,
+        classifiedAt: null,
+      },
+      legacy: {
+        inspirationId: row.id,
+        importanceScore: row.importanceScore,
+        wowScore: row.wowScore,
+      },
+    });
     expect(dbRows[0]!.importanceScore).toBe(row.importanceScore);
     expect(row.wowScore).toBe(
       calculateDisplayedInspirationScore({
@@ -350,6 +408,19 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(kindByText.get("https://example.com/kind-link")).toBe("link");
     expect(kindByText.get("Image inspiration")).toBe("image");
     expect(kindByText.get("Mixed inspiration")).toBe("mixed");
+    for (const row of listed.body.inspirations) {
+      expect(row.signal?.id).toBe(row.id);
+      expect(row.signal?.scores).toEqual(row.signalScores);
+      expect(row.signalScores).toEqual(
+        expect.objectContaining({
+          resonance: expect.any(Number),
+          recurrence: expect.any(Number),
+          agency: expect.any(Number),
+          identitySignal: expect.any(Number),
+          decisionRelevance: expect.any(Number),
+        }),
+      );
+    }
   });
 
 
@@ -521,7 +592,7 @@ describe("POST /api/inspirations — successful creation", () => {
     expect(packets[0]!.primarySparkId).toBe(rows[0]!.id);
     expect(packets[0]!.sparkText).toBe(selectedText);
     expect(packets[0]!.artifactExcerpt).toContain("The full essay gives context.");
-    expect(packets[0]!.packetText).toContain("SPARKS");
+    expect(packets[0]!.packetText).toContain("WHAT_HIT");
     expect(packets[0]!.packetText).toContain(selectedText);
     expect(packets[0]!.packetText.length).toBeLessThan(text.length + 500);
     expect(packets[0]!.tokenEstimate).toBeLessThan(500);
@@ -660,7 +731,7 @@ describe("Inspiration sparks", () => {
     expect(res.body.details?.confidence?.[0]).toBeTruthy();
   });
 
-  it("keeps one idempotent meaning packet per inspiration when rebuilt", async () => {
+  it("keeps one idempotent signal packet per inspiration when rebuilt", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
     const client = authedClient(fixture);
@@ -686,10 +757,10 @@ describe("Inspiration sparks", () => {
     expect(firstRows).toHaveLength(1);
     const first = firstRows[0]!;
 
-    await persistMeaningPacketForInspiration({
+    await persistSignalPacketForSignal({
       db: getDb(),
       userId: fixture.user.id,
-      inspirationId: created.body.inspiration.id,
+      signalId: created.body.inspiration.id,
     });
 
     const secondRows = await getDb()
@@ -701,7 +772,7 @@ describe("Inspiration sparks", () => {
     expect(secondRows[0]!.inputFingerprint).toBe(first.inputFingerprint);
   });
 
-  it("does not build a meaning packet across tenant boundaries", async () => {
+  it("does not build a signal packet across tenant boundaries", async () => {
     const alice = await createUserFixture(getDb());
     const bob = await createUserFixture(getDb());
     cleanup.trackUser(alice.user.id);
@@ -710,14 +781,14 @@ describe("Inspiration sparks", () => {
     const created = await authedClient(alice).json<CreateInspirationResponse>(
       "POST",
       "/api/inspirations",
-      { text: "alice private meaning packet source" },
+      { text: "alice private signal packet source" },
     );
     expect(created.status).toBe(201);
 
-    const result = await persistMeaningPacketForInspiration({
+    const result = await persistSignalPacketForSignal({
       db: getDb(),
       userId: bob.user.id,
-      inspirationId: created.body.inspiration.id,
+      signalId: created.body.inspiration.id,
     });
 
     expect(result.status).toBe("missing_inspiration");
@@ -757,7 +828,7 @@ describe("Inspiration sparks", () => {
     expect(packets[0]!.primarySparkId).toBeNull();
     expect(packets[0]!.sparkText).toBe("");
     expect(packets[0]!.artifactExcerpt).toContain("full essay-style capture");
-    expect(packets[0]!.packetText).toContain("SPARKS\nnone");
+    expect(packets[0]!.packetText).toContain("WHAT_HIT\nnone");
     expect(packets[0]!.sourceMetadata).toMatchObject({
       sparkCount: 0,
       hasPrimarySpark: false,

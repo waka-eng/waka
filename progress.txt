@@ -1,0 +1,1914 @@
+# Ralph Progress Log
+
+## Codebase Patterns
+
+- WAKA is a pnpm workspace with API code in `packages/api`, web app code in `packages/web`, and Drizzle migrations under `drizzle/migrations`.
+- Product direction for this run: WAKA becomes an ambition mirror powered by a personal context graph; use signal/context/top-of-mind language for new work.
+- Keep the graph inspector internal. User-facing graph-backed output should appear as post-it-style Top of Mind notes, evidence drawers, patterns, and later decision memos.
+- Signal-facing compatibility currently wraps existing `/api/inspirations` responses with additive `signal` and `signalScores` fields instead of renaming the route or persistence immediately.
+- `meaning_nodes.type` remains a text compatibility field for now; use `contextNodeTypeValues` for new graph writes and `normalizeContextNodeType` when reading legacy `question`/`claim`/`life_direction` rows.
+- Signal packet creation lives in `packages/api/src/lib/signal-packets.ts`, but persists to the existing `meaning_packets` table; `packages/api/src/lib/meaning-packets.ts` is a compatibility wrapper for old imports.
+- Top-of-mind note compatibility lives in `packages/api/src/lib/top-of-mind-notes.ts`; it serializes current `wow_moments` rows into provisional active notes while persistence remains unchanged.
+- The user-facing `/api/top-of-mind` route returns `topOfMindNotes` plus the legacy `topOfMind` preview field for current home-page compatibility; web client helpers live in `packages/web/src/lib/api.ts`.
+- User feedback persistence lives in `packages/api/src/db/schema-feedback.ts` and `/api/feedback`; feedback targets are polymorphic, but create paths must verify target ownership for the signed-in tenant before inserting rows.
+- Top-of-mind refresh currently persists graph-generated notes through `wow_moments` with `top_of_mind_context_node:v1:*` idempotency keys until dedicated note persistence lands.
+- Home should consume `fetchTopOfMindNotes` for the primary user-facing Top of Mind post-it surface; use the legacy `topOfMind` preview only as a fallback while compatibility remains.
+- Web feedback submissions should use `createFeedback` from `packages/web/src/lib/api.ts`; top-of-mind note feedback targets use `targetType: "top_of_mind_note"` and the note id returned by `/api/top-of-mind`.
+- Product-domain model calls should go through `packages/api/src/lib/model-provider.ts`; Gemini-specific HTTP clients remain the current implementation behind `gemini-model-provider.ts`.
+- Capture highlights and lightweight resonance answers should travel through the existing `inspiration_sparks` request fields until a dedicated signal metadata table exists.
+- The shareable Top of Mind value-prop surface currently lives at protected route `/top-of-mind/share` and reads the current user's notes from `/api/top-of-mind`; do not expose public note sharing until a share-token or permission model exists.
+- Saved-signal archive and deep-dive UI should use the user-facing `/api/signals` route; it assembles legacy inspiration rows with signal packets, highlights, context nodes, top-of-mind notes, and signal feedback without making `/api/wow-moments` the preferred product surface.
+- Final naming convention: product-facing UI, docs, model prompts, and web client helpers should use signal, signal packet, context graph/node, top-of-mind note, resonance, and feedback; `wow_*`, `meaning_*`, and `/api/wow-moments` names are legacy compatibility only unless a persistence migration explicitly renames them.
+- Capture self-understanding metadata should use existing `inspiration_sparks.note` as `capture_metadata:v1:{...}` until a dedicated signal metadata table exists; signal packets already carry spark notes forward as user-provided evidence.
+- Capture should remain one click away and quick-save capable, but the visible ritual should ask "What almost slipped away?", show local autosave safety near the writing area, and treat user highlights/resonance/micro-reflections as privileged evidence.
+- Top of Mind post-its must help infer ambition and internal frequency. They should express desired environments, desired peers, work direction, taste/standards, rejected contexts, or emerging self-image. They must not be raw context-node labels, saved-signal summaries, tags, or shallow "You keep circling X" wrappers.
+- Top-of-mind note surfaces should expose an `ambitionDimension` (`place`, `people`, `work`, `taste`, `tension`, `identity`, `rejection`, or `next_experiment`) so feedback validates the ambition read, not just a legacy WOW/context row.
+- Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
+- Memory Drawer is the primary saved-signal revisit surface in Home. It should group signals into emotional/memory sections, keep search/filters secondary, open signals in a full-width reflective detail, and persist still-alive/changed-shape/not-anymore feedback as `targetType: "signal"`.
+- Top of Mind needs an explicit internal-frequency / ambient-signal layer above individual graph nodes. It should answer what kind of city, room, peer group, standard, anti-environment, or self-image the user is trying to live near, not just rephrase a context node with ambition-flavored copy.
+- Top-of-mind note surfaces expose `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale`; graph refresh stores those fields in the legacy `wow_moments.why` text until dedicated note persistence exists, and serializers split them back out for the API/UI.
+- Primary Top of Mind post-it text should read like first-person jotting from the user's own scratchpad, but it should be direct and credible. Prefer "I need...", "I want...", and "I am done with..." over second-person diagnosis or weak hedges such as "I think", "maybe", "might", "probably", or "seems".
+- Top-of-mind compatibility serialization should rewrite legacy second-person primary text and embedded ambient-signal fields into direct first-person post-it text instead of preserving old outside-voice copy.
+- Primary user-facing architecture should stay inside one reflective world: Capture, five Top of Mind post-its, Memory Drawer, Share, and dev-only Internal Debug. Avoid reintroducing dashboard/archive/graph terminology into the main Home surface.
+- When enough context exists, Home and share Top of Mind surfaces should render exactly five post-it slots where meaningful notes are available; empty or pulled-down slots should not be filled with weak placeholders.
+- Context memory movement is currently derivable in `packages/api/src/lib/memory-movement.ts` from existing meaning node/evidence fields; Top of Mind refresh should rank by memory movement (`reactivated`, `contradicted`, `needs_testing`, etc.) as well as graph weight.
+- Ambition synthesis is a bounded layer after deterministic Top of Mind ranking: use `packages/api/src/lib/ambition-synthesis.ts` for trigger gating, compact evidence inputs, prior feedback/rewrites, rejected alternatives, generic-output rejection, and deterministic fallback.
+- Shareable Top of Mind surfaces can show generated post-its and provenance counts, but raw saved-signal text should stay private until an explicit sharing permission model exists.
+- Internal context debugging should use `/api/admin/meaning-graph` as the diagnostic surface for memory movement, synthesis quality, Top of Mind provenance, and user corrections; keep this admin-only and out of the primary user experience.
+- Primary Top of Mind post-it text should use compressed sticky-note thought language, usually 3-9 words and no more than 12, without forced `I need`/`I want`/`I am done with` starts; keep memory/status metadata in peel-open detail or internal debug, not on the visible card.
+- Memory Drawer constellation relationships are currently derived in Home from saved-signal overlap in related Top of Mind notes, context terms, relevance reasons, and matching snippets; relationship feedback is stored as `targetType: "signal"` with `relationship_feedback:v1` correction text until a dedicated relationship feedback target exists.
+- Top-of-mind primary text should be compressed but interpretable, usually 6-14 words, with a concrete ambition object plus a reason, contrast, or tension; reject ultra-short slogans such as "public before perfect", "taste as default", "test it outside", and "courage normal".
+- Memory Drawer should stay as two modes inside Home: chronological List and relationship Canvas. Do not reintroduce memory-movement sections, dense sidebars, search-first structure, or graph/admin vocabulary into this user-facing revisit surface.
+- Top of Mind action checklist items should be generated from post-it evidence, ambient/environment fields, and ambition dimension. Reject generic reflective homework such as "do one tiny test", "explore", "journal", "learn more", or actions that simply repeat the post-it title.
+- Action recommendation state currently persists through `feedback` rows with `source: "action_recommendation"` and metadata keyed to the source top-of-mind note; use `/api/action-recommendations` rather than frontend-only action helpers.
+- Home primary navigation should be object-led inside the wall: no persistent topbar, date display, or mode tabs; enter Memory Drawer through the physical drawer object and keep language switching as a quiet footer control.
+- Memory Drawer default landing should be an object-led grouping desk: WAKA-proposed and user-created group objects sit above immutable raw saved signals, with chronological all-saves kept as a clean path and search as a secondary command.
+- Memory Drawer inspiration comparison should happen through draggable `.memory-window` cards layered over the drawer desk; raw saved inspiration remains dominant, with only gentle nearby-pile and relationship context.
+- Opened Memory Drawer groupings support Grid, Vertical Flow, and Horizontal Flow views; Flow mode should use clipped/aspect-ratio stages and transform movement, with draggable comparison windows still layered above the drawer desk.
+- Top of Mind correction should use the wall metaphor: edit/pin the post-it wording or pull it down, persist through `/api/feedback`, and avoid visible true/partly/not-this reaction controls on user-facing note surfaces.
+- Capture UI should call saved things inspirations and avoid internal/clinical terms such as signal, graph, node, memory movement, resonance, and analysis; quick save should feel safe first, with deeper reflection optional.
+- Home user-facing surfaces should sanitize backend-provided Top of Mind, evidence, and action copy before rendering so internal terms such as signal, graph, node, resonance, analysis, and AI do not leak outside admin/debug surfaces.
+- Main wall actions are independent paper objects: keep the action checklist visible and draggable on the wall whenever meaningful actions exist, even if Top of Mind notes are empty or the drawer UI changes.
+- Memory Drawer should open to one clean white workspace with quiet grouping/all-inspirations entry objects; selecting one swaps to that focused card workspace with a small way back, rather than stacking grouping navigation and long card lists in separate vertical sections.
+- Opened Top of Mind post-its should stay minimal: post-it text, one short explanatory paragraph, private-drawer evidence handoff, and physical edit/pull-down controls only.
+- Capture highlight controls should be proximity-based inside the writing area; selected text gets an inline add-highlight popover and saved highlights expose nearby edit/remove/reason controls instead of detached bottom lists.
+- Memory Drawer stack cards should stay neutral and evidence-like: white/off-white slips, quiet source/date metadata, no folder/icon chrome, no type badges, and no legacy colorful `memory-signal-card--*` treatment inside `.memory-drawer-stack`.
+- Opened-inspiration highlight reactions currently persist on `inspiration_sparks.note` as `highlight_reaction:v1:{...}` metadata; capture-save highlight reactions still use `capture_metadata:v1:{...}` on the primary spark.
+
+---
+
+## 2026-06-01 19:03 PDT - US-050
+
+- What was implemented
+  - Added compact reaction choices and a same-popover custom note path when selecting text in capture.
+  - Made opened inspiration selections create fixed-position highlight popovers from the actual selection range, with reaction/note metadata persisted through inspiration sparks.
+  - Replaced inline remove buttons and detached opened-inspiration add-highlight panels with focus/hover highlight controls for edit reaction, expand note, and remove.
+  - Kept capture and Memory Drawer highlight controls visually quiet with neutral backgrounds, small shadows, and compact text buttons.
+- Files changed
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 77 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspiration, Top of Mind, action recommendation, saved-inspiration, spark-create, and spark-delete APIs. Verified capture selection popover, inline capture mark, opened-inspiration selection popover from range rect, reaction/note spark persistence, focused existing-highlight controls, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Opened-inspiration highlight reactions currently persist on `inspiration_sparks.note` as `highlight_reaction:v1:{...}` metadata; capture-save highlight reactions still use `capture_metadata:v1:{...}` on the primary spark.
+  - Gotchas encountered
+    - Capture textareas still need an approximated textarea-relative position because browser selection ranges are not available inside a native textarea; opened inspiration text uses the actual `Range.getBoundingClientRect()`.
+    - React `onMouseEnter` is awkward to trigger in jsdom; focus on the inline mark is a better regression path for existing-highlight controls.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 18:49 PDT - US-049
+
+- What was implemented
+  - Simplified the anchored Memory Drawer stack into neutral white/off-white slips and quote-style inspiration cards.
+  - Removed folder/icon chrome from stack groupings and removed legacy colorful stack-card classes, material badges, attachment chips, and noisy type labels from drawer-stack inspiration cards.
+  - Kept source/date/attachment context as quiet metadata and made opened inspiration detail use neutral "saved" header language.
+  - Kept user-created pile rename behavior while showing proposed/all pile titles as plain text in drill-down views.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 53 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, saved-inspiration, and reflection APIs. Verified neutral drawer slips, no folder chrome, no loud stack card classes, quiet attachment metadata, neutral opened detail, anchored drill-down, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer stack cards should stay neutral and evidence-like: white/off-white slips, quiet source/date metadata, no folder/icon chrome, no type badges, and no legacy colorful `memory-signal-card--*` treatment inside `.memory-drawer-stack`.
+  - Gotchas encountered
+    - Browser verification needs to wait for saved-inspiration groupings before asserting drawer-stack contents; opening the drawer immediately can briefly show the zero-save state.
+    - Rendered text from CSS-transformed uppercase labels should be case-normalized in Playwright checks.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 13:15 PDT - US-047
+
+- What was implemented
+  - Simplified opened Top of Mind post-its to the note text, one concise explanatory paragraph, a quiet private-drawer action, and existing rewrite/pull-down controls.
+  - Removed raw saved-inspiration evidence cards, dense context panels, repeated headings, and empty evidence blocks from the opened post-it surface.
+  - Moved capture highlighting into proximity popovers near selected/highlighted text, including add-highlight, remove, and why-it-mattered controls.
+  - Made expanded capture occupy the full viewport and preserve draft text/highlights across expand and collapse.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 73 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, saved-inspiration, reflection, and capture-save APIs. Verified capture launcher, full-screen expanded capture, selection-near highlight popover, saved-highlight controls, quick-save confirmation, opened post-it without raw evidence, drawer evidence handoff, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Opened Top of Mind should hand evidence inspection to Memory Drawer rather than duplicating saved inspiration cards in the post-it.
+    - Capture highlight interaction needs to stay physically close to the selected text; bottom highlight rows make the writing surface feel detached.
+  - Gotchas encountered
+    - Browser verification must enter capture through the `.nc-save` launcher; the capture composer is not mounted on the wall until that dialog opens.
+    - Playwright route mocks are order-sensitive in this setup; register the broad `/api/**` fallback before specific API mocks.
+  - Useful context
+    - Vite served browser verification at `http://127.0.0.1:5173/`.
+
+---
+
+## 2026-06-01 13:01 PDT - US-046
+
+- What was implemented
+  - Restored the action checklist as an independent draggable wall post-it whenever active action recommendations exist.
+  - Simplified Memory Drawer into a single white workspace that opens to quiet grouping/all-inspirations entry objects.
+  - Changed drawer selection so choosing a grouping or all inspirations swaps into a focused card workspace with a small back-to-piles control, instead of showing folder navigation and a separate card list at the same time.
+  - Lightened saved-inspiration card styling with bounded white/light cards, short excerpts, quiet material/date cues, and fewer heavy surfaces.
+  - Updated Home tests for the new drawer path and added a regression that actions remain visible without Top of Mind post-its.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 51 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, and saved-inspiration APIs. Verified wall action checklist, in-place drawer entry, single workspace first viewport, all-inspirations selection, minimal bounded cards, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Main wall action recommendations should not be structurally nested under Top of Mind note rendering.
+    - Drawer simplification works best as a state swap inside one workspace: entry objects first, selected inspiration cards second.
+  - Gotchas encountered
+    - Home tests that inspect saved inspiration cards now need to explicitly open the all-inspirations pile unless search selects it.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 12:35 PDT - US-045
+
+- What was implemented
+  - Removed prominent product-name chrome from the main wall/footer and drawer header, replacing it with quieter inspiration-drawer language.
+  - Replaced user-facing signal/resonance/internal wording across Home, Top of Mind evidence, action recommendations, drawer copy, and English/Korean i18n strings with inspiration/what-hit language.
+  - Added a `userFacingCopy` sanitizer for backend-provided Top of Mind, evidence, and action text before it reaches user-facing Home surfaces.
+  - Added Home/Capture regression coverage for banned internal terms across wall, opened post-it, drawer chrome, capture, and action surfaces.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/CaptureForm.test.ts` passed: 70 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, and saved-inspiration APIs. Verified wall, opened post-it, drawer, action pad, capture entry, banned internal copy absence, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - User-facing Home copy needs a rendering-time sanitizer for model/API text because backend compatibility payloads can still contain internal signal/resonance vocabulary.
+  - Gotchas encountered
+    - Browser mocks for `/api/top-of-mind` must include the legacy `relationshipSignals` and `summary` fields because Home still reads compatibility preview fields even when rendering Top of Mind note surfaces.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 12:16 PDT - US-043
+
+- What was implemented
+  - Reworked capture into two explicit paths: primary quick save as "Save it now" and secondary "Reflect deeper" before saving.
+  - Updated quick-save confirmation to reassure the user that the inspiration is safe and can become an ingredient for later understanding.
+  - Added a post-save "add a little more" path that persists an optional reflection against the already-saved inspiration, plus a "return later" path that closes the modal.
+  - Removed internal/clinical capture UI language from the launcher, modal copy, fallback attachment-only labels, and capture tests.
+- Files changed
+  - `packages/web/src/components/capture/CaptureCell.tsx`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 68 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, saved inspirations, action recommendations, and reflection APIs. Verified capture launcher, banned capture-language absence, quick save confirmation, post-save deeper reflection persistence, return-later close, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture is now the exception to older signal-forward copy: user-facing capture should say inspiration and keep internal model vocabulary out of the writing surface.
+  - Gotchas encountered
+    - Post-save reflection cannot reuse the original pre-save reflective flow after the form clears; it needs to attach a reflection to the just-saved inspiration id.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 12:22 PDT - US-044
+
+- What was implemented
+  - Added an optional "what happened?" follow-up when a user checks off an action, with save and skip paths.
+  - Persisted action outcomes through the existing action recommendation feedback metadata, including optional linked inspiration ids.
+  - Updated action recommendation ranking so completed actions strengthen future recommendations only when the completion has outcome text or linked captured inspiration evidence.
+  - Kept completed and removed actions out of the active checklist while preserving command-like external action copy.
+- Files changed
+  - `packages/api/src/lib/action-recommendations.ts`
+  - `packages/api/src/lib/action-recommendations.test.ts`
+  - `packages/api/src/routes/action-recommendations.ts`
+  - `packages/api/src/routes/action-recommendations.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/action-recommendations.test.ts src/routes/action-recommendations.test.ts` passed: 5 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 49 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendations, signals, and reflections APIs. Verified done opens the optional outcome prompt, saving persists outcome text, the action disappears, and there is no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable codebase pattern.
+  - Gotchas encountered
+    - Empty action completions should remain state only; outcome text or linked captured inspiration ids are the evidence that can strengthen future recommendations.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 12:07 PDT - US-042
+
+- What was implemented
+  - Replaced opened Top of Mind reaction controls with physical post-it actions: rewrite the note in-place, pin the new wording, or pull the note down.
+  - Persisted rewrites as `partly` feedback with the user's wording and pull-down removals as `not_true` feedback while keeping UI copy about changing the post-it, not rating an answer.
+  - Optimistically updated rewritten post-it text, removed pulled-down notes from the wall, and blocked legacy fallback notes from immediately filling the slot after removal.
+  - Updated Top of Mind copy/tests so old true/partly/not-this/rewrite-in-my-words controls do not render on the wall or opened post-it.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 48 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/feedback.test.ts src/routes/top-of-mind.test.ts src/lib/top-of-mind-refresh.test.ts` passed: 22 tests.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, and feedback APIs. Verified no old reaction labels on the wall/opened note, rewrite persistence, pull-down persistence, no weak fallback replacement after removal, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top of Mind feedback should now be implemented as post-it editing/removal affordances, not visible rating buttons.
+  - Gotchas encountered
+    - Home computes fallback Top of Mind cards eagerly, so browser mocks for `/api/top-of-mind` still need valid `supportingInspirations` on legacy fallback theme/question rows even when note surfaces are present.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 11:56 PDT - US-041
+
+- What was implemented
+  - Added Grid, Vertical Flow, and Horizontal Flow view controls inside opened Memory Drawer groupings.
+  - Built a clipped, aspect-ratio Flow workspace with transform-based movement, stable one-at-a-time inspiration cards, quiet pile context, previous/next controls, and an open-on-desk path into existing draggable comparison windows.
+  - Kept Flow mode isolated from the underlying stack so the drawer does not show leftover list content beneath the active flow workspace.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 47 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and action recommendation APIs. Verified Memory Drawer entry, Vertical Flow transform navigation, no stack content under Flow mode, opening a Flow item into a draggable inspiration window, Horizontal Flow rendering, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer groupings can now expose alternate views without leaving the drawer desk; keep comparison windows as the layered workspace above any grouping view.
+  - Gotchas encountered
+    - In browser accessibility queries, hidden Flow cards are correctly excluded by `aria-hidden`, so verification should click the active card action rather than assuming all transformed cards are accessible.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 11:31 PDT - US-039
+
+- What was implemented
+  - Rebuilt the Memory Drawer landing as a drawer-desk of tactile grouping objects, including front/back folder styling, category icons, selected state, absolute board positioning, and a bulletin object for creating a user grouping.
+  - Added deterministic WAKA-proposed groupings from saved signal highlights, recent saves, recurrence, Top of Mind evidence, context terms, and source/material signals while keeping raw saved inspiration cards as the contents.
+  - Added in-place grouping contents with newest-first and strongest-fit browse orders, quiet grouping explanations, rename support, and keep/dismiss controls for proposed groupings.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 45 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and action recommendations APIs. Verified generated grouping objects, draggable desktop folder behavior, no old List/Canvas landing copy, grouped contents preserving raw saves, and viewport fit.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer should now treat generated organization as a removable layer above immutable saved signals, with object-led grouping navigation before any list/search structure.
+  - Gotchas encountered
+    - The saved signals fetch is delayed after opening Memory Drawer, so browser verification needs to wait briefly for `/api/signals` before asserting highlight- and Top-of-Mind-derived groups.
+  - Useful context
+    - Vite served browser verification at `http://127.0.0.1:5173/`.
+
+---
+
+## 2026-06-01 11:47 PDT - US-040
+
+- What was implemented
+  - Added draggable Memory Drawer inspiration windows that open from saved-inspiration cards and layer above the grouping desk for side-by-side comparison.
+  - Supported multiple open windows with z-index focus, close, minimize/reopen controls, per-session positions, reset on drawer exit, and mobile stacked behavior when dragging is not practical.
+  - Moved full saved inspiration reading, attachments, highlight add/remove, nearby grouping context, and sparse relationship hints into the window body while keeping WAKA context contained.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 46 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and action recommendation APIs. Verified two open inspiration windows, desktop drag state/position changes, minimize, close, mobile fit, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer comparison should use layered paper windows above the grouping desk rather than expanding cards inline.
+  - Gotchas encountered
+    - The visible window title area must remain a drag handle; making it a button caused real browser drag attempts from the header to be ignored.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 11:20 PDT - US-038
+
+- What was implemented
+  - Removed the persistent Home top bar, mode tabs, and date display from the primary wall.
+  - Added a physical drawer/folder object on the Top of Mind wall that opens Memory Drawer in-place, plus a small paper-style return control inside the drawer.
+  - Moved Korean/English switching into a quiet footer control and kept bottom-center capture available.
+  - Tightened mobile layout so Top of Mind post-its, action checklist, drawer object, and capture affordance stay within the wall flow.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 44 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind fallback, action recommendations, and saved signals APIs. Verified old topbar/tabs/date are absent, drawer object opens Memory Drawer in-place, capture remains bottom-center, and mobile wall objects stay visible.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Primary Home navigation should happen through wall objects rather than app chrome; the drawer object is now the entry point for saved inspirations.
+  - Gotchas encountered
+    - The action recommendation post-it used desktop absolute coordinates on mobile; when adding new wall objects, verify all absolute-positioned artifacts have mobile relative/flex fallbacks.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 10:26 PDT - US-037
+
+- What was implemented
+  - Added a tested action recommendation domain layer that converts active Top of Mind notes plus evidence into structured, high-confidence real-world experiments.
+  - Added authenticated `/api/action-recommendations` list/state endpoints; completed and removed actions persist as feedback metadata against the source top-of-mind note and are filtered out on future recommendation runs.
+  - Updated Home to fetch persisted action recommendations, render the top active actions on the draggable paper post-it, and post completed/removed state changes instead of using frontend template helpers.
+- Files changed
+  - `packages/api/src/lib/action-recommendations.ts`
+  - `packages/api/src/lib/action-recommendations.test.ts`
+  - `packages/api/src/routes/action-recommendations.ts`
+  - `packages/api/src/routes/action-recommendations.test.ts`
+  - `packages/api/src/index.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/action-recommendations.test.ts src/routes/action-recommendations.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 44 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked same-origin auth, inspirations, Top of Mind, action recommendations, and signals APIs. Verified grounded action copy, no generic placeholders, done/remove persistence posts, mobile viewport fit, and draggable paper interaction.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Action recommendation state can reuse feedback metadata until a dedicated action persistence table is warranted.
+  - Gotchas encountered
+    - Home needs `/api/action-recommendations` mocked separately from `/api/top-of-mind`; otherwise the action pad correctly stays hidden because low-confidence or absent recommendations are no longer generated in the frontend.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-05-31 21:49 PDT - US-035
+
+- What was implemented
+  - Rebuilt the Home Memory Drawer around two in-place modes: a newest-first chronological List and a low-fidelity relationship Canvas.
+  - Reused bounded scrap-card visual language across List and Canvas, with material labels for note scraps, link slips, image tiles, layered saves, and highlighted scraps.
+  - Removed user-facing Memory Drawer movement sections/lenses and the dense side-detail flow; opening a card now shows the saved signal, highlights/attachments, and concise relationship context.
+  - Kept sparse human relationship labels/lines in Canvas and retained relationship feedback without exposing graph/admin terms.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 41 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for Memory Drawer List and Canvas modes on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, signal detail, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer should be mode-based, not taxonomy-based: List for chronological revisiting, Canvas for sparse relationships.
+  - Gotchas encountered
+    - The old revisit feedback controls made the opened-card panel too broad for this story; keep feedback on relationship labels or purpose-built controls, not in the opened memory detail.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-05-31 21:32 PDT - US-034
+
+- What was implemented
+  - Replaced deterministic Top of Mind fallback post-it phrases with more interpretable sticky-note thoughts that name a concrete ambition object and imply a reason, contrast, or tension.
+  - Tightened Top of Mind note normalization, ambition synthesis quality gates, and judge prompt/schema guidance so ultra-short slogans fail while 6-14-word private note language passes.
+  - Updated Home and API tests away from slogan fixtures toward "make the thing before explaining it" and related interpretable examples.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/ambition-synthesis.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - Targeted API/web tests
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/lib/ambition-synthesis.test.ts src/lib/model-provider.test.ts` passed: 20 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 43 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, saved signals, and reflection API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Primary post-it copy should not optimize for minimum word count; it needs enough language to carry a recognizable ambition object and tension.
+  - Gotchas encountered
+    - Legacy note dimension inference treats words like "room" and "where" as place signals, so tests that intend work fallbacks should avoid place-heavy fixture copy.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-05-31 21:24 PDT - US-033
+
+- What was implemented
+  - Added a Memory Drawer relationship constellation above the revisit shelves, deriving sparse saved-signal relationships from shared Top of Mind notes, context terms, relevance reasons, and matching snippets.
+  - Rendered saved signal types with distinct material treatments: handwritten note scraps, source-aware link cards, photo-like image tiles, and layered mixed/file scraps.
+  - Added calm relationship detail with source signal excerpts and lightweight relationship feedback controls for true, not connected, and better label.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 43 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for the Memory Drawer constellation at `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Relationship feedback needs a dedicated target eventually; for now, encode the relationship id and label in signal feedback correction text with `relationship_feedback:v1`.
+  - Gotchas encountered
+    - The constellation should hide SVG relationship lines on mobile and fall back to a readable stacked scrap layout to avoid tiny labels and overlap.
+  - Useful context
+    - The local Vite verification server ran at `http://localhost:5173/`.
+
+---
+
+## 2026-05-31 21:13 PDT - US-032
+
+- What was implemented
+  - Changed deterministic Top of Mind generation and legacy note normalization from forced first-person sentences to concise sticky-note thought language such as "public before perfect" and "people who make courage normal".
+  - Updated ambition synthesis and Top of Mind judge validation/prompt guidance so outside diagnostic voice, weak hedges, and template-like first-person starts are rejected for primary post-it text.
+  - Removed memory/status metadata from the visible Home post-it card surface while keeping it available in the peel-open detail view.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/ambition-synthesis.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - Targeted API/web tests and `prd.json`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/lib/ambition-synthesis.test.ts src/lib/model-provider.test.ts` passed: 19 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 41 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, and Top of Mind API responses. Verified one meaningful post-it, no forced first-person card text, no visible card metadata, and peel-open detail retains memory movement.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Primary post-it text should be treated as a thought fragment, not a sentence template; word count and voice checks belong in generation, serialization, synthesis quality gates, and UI tests.
+  - Gotchas encountered
+    - Browser verification mocks need broad `/api/**` fallbacks registered before specific routes so the specific Top of Mind mock wins.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-05-31 11:55 PDT - US-031
+
+- What was implemented
+  - Enriched the internal `/api/admin/meaning-graph` response with derivable memory movement state, reinforcement/decay metrics, Top of Mind why-now diagnostics, rejected alternative interpretation, note-level feedback, and quality indicators for shallow summaries, raw graph labels, generic wrappers, and thin synthesis support.
+  - Updated the internal Context dashboard with memory-state and recent-correction filters plus selected-node diagnostics for memory movement, synthesis quality, Top of Mind provenance, rejected reads, and feedback that shaped a post-it.
+  - Kept the graph inspector internal/admin-only and preserved individual-node graph navigation behavior.
+- Files changed
+  - `packages/api/src/routes/admin-meaning-graph.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/MeaningGraph.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/MeaningGraph.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/admin-meaning-graph.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/web test -- test/MeaningGraph.test.ts` passed: 6 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/admin/meaning-graph` on desktop `1280x850` and mobile `390x844` using mocked auth and admin graph API responses. Verified memory diagnostics, synthesis quality, rejected alternate read, Top of Mind feedback, memory-state filtering, and recent-correction filtering.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Internal debug can derive memory movement from existing context node/evidence rows and should serialize it through the admin graph route instead of adding a user-facing graph surface.
+  - Gotchas encountered
+    - Playwright route handlers are order-sensitive; register broad `/api/**` fallbacks before more specific mocked endpoints so the specific mocks win.
+  - Useful context
+    - Vite served the browser verification run at `http://localhost:5173/`.
+
+---
+
+## 2026-05-31 11:45 PDT - US-030
+
+- What was implemented
+  - Rebuilt the Top of Mind share page copy around the living value prop: WAKA catches what moved the user and turns saved signals into a changing map of what they may want to build, who they want around them, and where they may need to be.
+  - Foregrounded the current five Top of Mind post-its as provisional, replaceable reads shaped by saved signals, corrections, returns, and things that changed shape.
+  - Removed raw evidence previews from the shared post-it surface and replaced them with provenance counts plus privacy copy so private saved signals do not leak without a sharing model.
+- Files changed
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/TopOfMindShare.test.ts` passed: 1 test.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth and Top of Mind API responses. Verified five post-its render, value-prop/privacy copy appears, and raw private signal text does not render.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Shareable Top of Mind pages should explain provenance through generated post-its and counts, not by rendering raw saved-signal evidence.
+  - Gotchas encountered
+    - Playwright route handlers are order-sensitive; register broad `/api/**` fallbacks before specific mocked endpoints or auth will be intercepted by the fallback.
+  - Useful context
+    - The Vite dev command still served the verification run at `http://localhost:5173/` despite the requested port argument.
+
+---
+
+## 2026-05-31 11:20 PDT - US-026
+
+- What was implemented
+  - Added a derivable memory movement model for context patterns with emerging, active, fading, dormant, reactivated, contradicted, and needs_testing states.
+  - Derived first seen, last seen, reinforcement counts, recent reinforcement counts, current decayed weight, confidence, decay, and supporting signal ids from existing context node/evidence data.
+  - Added deterministic signal movement evaluation for reinforcement, emerging pattern creation, reactivation, contradiction, and decay by omission.
+  - Wired memory patterns into Top of Mind refresh candidates so meaningful memory movement can outrank static high-weight graph claims.
+- Files changed
+  - `packages/api/src/lib/memory-movement.ts`
+  - `packages/api/src/lib/memory-movement.test.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.test.ts`
+  - `packages/api/src/lib/model-provider.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/memory-movement.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/model-provider.test.ts` passed: 13 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory movement can be derived from existing `meaning_nodes` and `meaning_evidence` fields for now; no migration is required until a dedicated memory-pattern persistence model is needed.
+  - Gotchas encountered
+    - Reactivation needs a strong ranking boost or static high-weight active nodes can still dominate Top of Mind selection.
+  - Useful context
+    - The 30-day recent reinforcement window means May 1 evidence is still recent when evaluating on May 30.
+
+---
+
+## 2026-05-31 11:15 PDT - US-025
+
+- What was implemented
+  - Made the Home Top of Mind surface render exactly five post-it slots whenever enough context exists, with empty slots treated as provisional placeholders.
+  - Added visible memory-movement labels including keeps returning, newly forming, came back, fading, tension, and needs testing.
+  - Made compact and expanded post-it copy explicitly replaceable with not-final, changed-by-new-signals, still-here, and replaced-when-memory-moves language.
+  - Changed Top of Mind feedback controls to true, partly, not this, and rewrite in my words; rewrites persist as correction text through the existing feedback API.
+  - Updated the share page to foreground five current Top of Mind post-it slots with memory-state and replaceability language.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/TopOfMindShare.test.ts` passed: 40 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts` passed: 18 tests.
+  - Browser verification with Playwright + Vite passed for `/` and `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, saved-signal, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Five Top of Mind slots are now the primary product object; render empty placeholders rather than shrinking the surface when fewer than five notes are active.
+  - Gotchas encountered
+    - Playwright route handlers are order-sensitive; register broad `/api/**` fallbacks before more specific mocked endpoints.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/` even when a different port was passed through the pnpm command.
+
+---
+
+## 2026-05-31 11:07 PDT - US-024
+
+- What was implemented
+  - Rebuilt the capture modal around the private blank-page prompt "What almost slipped away?" with calmer writing scale and visible local autosave safety copy.
+  - Replaced broad resonance chips with emotionally precise human pulls including wanting, missing, envy, hurt, fear, identity, rejection, people, building, environment, and uncertainty.
+  - Kept quick save, messy text, typed/pasted links, image upload, highlighting, and signal spark metadata persistence intact.
+  - Changed successful saves to show a tiny non-final mirror with keep, adjust, and just save actions instead of immediately dismissing capture.
+  - Updated reflection copy so user-written micro-reflections are framed as privileged evidence.
+- Files changed
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts test/Home.test.ts` passed: 57 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for Home capture on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, signals, Top of Mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture should keep quick-save mechanics and spark metadata persistence, but the visible ritual should ask for what almost slipped away and preserve the user's own micro-reflection as privileged evidence.
+  - Gotchas encountered
+    - Browser text for autosave safety is uppercased by CSS, so browser assertions should compare case-insensitively when checking rendered safety copy.
+  - Useful context
+    - The first Playwright run without complete same-origin API interception fell through to Vite's local proxy and logged expected connection errors; the successful verification intercepted the required `/api/*` calls.
+
+---
+
+## 2026-05-31 10:59 PDT - US-023
+
+- What was implemented
+  - Reset the Home architecture vocabulary around the reflective ambition mirror spaces: Top of Mind, Memory Drawer, Share, Capture, and dev-only Debug.
+  - Moved the primary revisit surface from "all signals" language to Memory Drawer copy and demoted the legacy `/signals` route link to an older archive view.
+  - Expanded the Home Top of Mind fetch/render limit and paper layout from four notes to the five-post-it metaphor.
+  - Added smoke coverage that asserts the primary spaces render without exposing meaning graph or compatibility archive language.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 38 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and feedback API responses. Verified five visible post-its, Memory Drawer navigation, Share link, and no visible compatibility archive copy.
+- Learnings for future iterations:
+  - Patterns discovered
+    - The primary product architecture should stay in one reflective shell: Capture, five Top of Mind post-its, Memory Drawer, Share, and dev-only Internal Debug.
+  - Gotchas encountered
+    - The Home route was still fetching only four top-of-mind notes, so the five-post-it metaphor needed an explicit client limit and a fifth paper position/color.
+  - Useful context
+    - `/signals` remains as a compatibility route, but the Home copy now frames it as an older archive view instead of the primary saved-signal experience.
+
+---
+
+## 2026-05-30 23:02 PDT - US-022
+
+- What was implemented
+  - Changed deterministic Top of Mind ambient-signal generation to direct first-person post-it language.
+  - Updated legacy top-of-mind serialization so older second-person `beliefStatement` and embedded `Ambient signal` text become direct first-person primary note text.
+  - Updated the top-of-mind model prompt/validation to request direct first-person belief statements for newly judged notes.
+  - Updated Home/share/API fixtures and tests so first-read post-its avoid outside voice and weak hedges.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.test.ts`
+  - `packages/api/src/lib/top-of-mind-notes.test.ts`
+  - `packages/api/src/lib/auto-wow-generation.test.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts src/routes/wow-moments.test.ts src/lib/auto-wow-generation.test.ts` passed: 26 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/TopOfMindShare.test.ts test/api.test.ts` passed: 58 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` and `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, signals, top-of-mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Legacy persisted Top of Mind text can contain structured ambient fields from older runs; sanitize those fields at serialization time before the UI sees them as primary post-it text.
+  - Gotchas encountered
+    - Ambition-dimension inference should check people language before generic `environment` text because serialized field labels like `Matched environment` can otherwise force a people note into the place dimension.
+  - Useful context
+    - Vite served the browser verification run at `http://localhost:5173/`.
+
+---
+
+## 2026-05-30 22:42 PDT - US-022 setup
+
+- Added follow-up Ralph story: `US-022 Make Top of Mind read like first-person jotting`.
+- Product correction:
+  - US-021 adds an internal-frequency / ambient-signal layer, but the voice still matters.
+  - The post-it should feel like a live note the user might jot down to themselves, not an AI diagnosis from the outside.
+  - Good examples: "I need a city that makes brave work feel normal" or "I want peers who make building in public less weird."
+  - Bad examples: "You seem to want...", "WAKA thinks...", "This person is drawn to...", or raw graph-label summaries.
+- Refinement:
+  - Do not use "I think", "maybe", "might", "probably", "seems", or other language that makes the post-it feel less credible or overly ambiguous.
+- Ralph acceptance warning:
+  - Keep evidence/provenance visible as generated support, but make the primary post-it text first-person.
+  - Preserve the ambient-signal goal: first-person notes still need to point at cities, rooms, peers, standards, anti-environments, or emerging self-image.
+
+---
+
+## 2026-05-30 22:34 PDT - US-021
+
+- What was implemented
+  - Added an explicit internal-frequency ambient-signal layer to graph-backed Top of Mind generation.
+  - Replaced label-wrapper titles with ambient-signal titles about braver places, fast public-building peers, workroom temperature, taste standards, rejected consensus rooms, self-image, and real-world tests.
+  - Exposed `ambientSignal`, `matchedEnvironment`, `antiEnvironment`, and `evidenceRationale` through the Top of Mind compatibility model and `/api/top-of-mind` surfaces without exposing admin graph internals.
+  - Updated Home and share-page rendering so the first-read post-it is the ambient signal, with matched/anti-environment and evidence rationale available second.
+  - Stripped structured ambient prefixes out of serialized note `body` so the UI does not duplicate the dedicated internal-frequency fields.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/styles/global.css`
+  - Targeted API/web tests and `prd.json`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts src/routes/wow-moments.test.ts` passed: 18 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts test/TopOfMindShare.test.ts test/api.test.ts` passed: 58 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` and `/top-of-mind/share` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, signals, top-of-mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top-of-mind ambient-signal fields are currently serialized through the legacy WOW persistence layer and split back out by `top-of-mind-notes.ts`.
+  - Gotchas encountered
+    - Generated note `body` should not repeat the structured ambient fields now that Home renders a dedicated internal-frequency section.
+  - Useful context
+    - The dev server command accepted the Vite args through pnpm but still served on the existing default `http://localhost:5173/`; browser verification targeted that reported URL.
+
+---
+
+## 2026-05-30 19:05 PDT - US-021 setup
+
+- Added follow-up Ralph story: `US-021 Generate internal-frequency ambient signals for Top of Mind`.
+- Product correction:
+  - US-018 improved wording and introduced ambition dimensions, but the resulting post-its can still feel like graph-node summaries.
+  - The Paul Graham cities frame requires a higher-level inference: what ambient external signal is the user trying to match with their internal frequency?
+  - Useful notes should sound like "You may be looking for places that quietly tell you to be braver" or "You seem to want peers who make fast, public building feel normal."
+  - Bad notes are still label wrappers: "rooms where X can become normal," "work that turns X visible," or anything reducible to one context label.
+- Ralph acceptance warning:
+  - Do not satisfy this by another template pass over `meaning_nodes.label`.
+  - Use multiple evidence points where possible and expose ambient signal, matched environment, anti-environment, and evidence rationale.
+  - Verify the exact Home Top of Mind path because this is the primary product surface.
+
+---
+
+## 2026-05-30 18:48 PDT - US-020
+
+- What was implemented
+  - Rebuilt the Home All Signals tab as an in-place saved-signal revisit surface instead of routing to `/signals`.
+  - Added a soft browse-first layout with progressive advanced search, saved-signal cards, highlighted snippets, raw signal revisit detail, attachment context, related Top of Mind notes, and lightweight "still matters" feedback.
+  - Kept newly captured/optimistic local signals merged into the in-place list so quick saves remain visible before `/api/signals` refresh catches up.
+  - Left `/signals` available as a compatibility archive link, but no longer as the primary Home tab path.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 37 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, top-of-mind, saved-signal, and feedback API responses. The All Signals tab stayed at `/`, rendered inside `.nc-canvas`, did not render `.signal-archive-page`, and saved "Still alive" feedback from the in-place revisit detail.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Home All Signals is now the primary saved-signal revisit surface; keep it in the Top of Mind shell and use `/signals` only as a compatibility/deep-link archive.
+  - Gotchas encountered
+    - The in-place list must merge local optimistic entries with `/api/signals` rows or freshly captured signals disappear until a backend refresh.
+    - Search filtering needs to clear stale selected detail state so the right-side revisit panel does not keep showing the previous signal.
+  - Useful context
+    - The separate `/signals` archive still exists for compatibility, but the product path from Home no longer navigates there.
+
+---
+
+## 2026-05-30 17:10 PDT - US-018 setup
+
+- Added the next Ralph story: `US-018 Rebuild Top of Mind as ambition mirror statements`.
+- Product correction from manual review:
+  - Existing Top of Mind notes can still feel like graph-node labels or summaries of saved content.
+  - That does not satisfy the ambition mirror goal. The user wants the surface to infer an internal frequency: the environments, people, standards, rejected contexts, and emerging self-image their saved signals point toward.
+  - Future Top of Mind generation must produce ambient-signal mirror statements, not theme labels. Good outputs sound like "You seem pulled toward places where ambitious people make things in public." Bad outputs sound like "founder cities" or "You keep circling founder cities."
+- Ralph acceptance warning:
+  - Do not satisfy this by only changing copy on a hidden route or by wrapping existing graph labels in generic sentence templates.
+  - Verify the exact Home Top of Mind path because this is where the user judges whether the product helps them find ambition.
+  - Add tests that reject summary-like titles and raw graph labels.
+
+---
+
+## 2026-05-30 17:14 PDT - US-019 setup
+
+- Added follow-up Ralph story: `US-019 Update internal context dashboard for ambition graph debugging`.
+- Scope:
+  - Keep dashboard internal/admin-only.
+  - Make ambition dimensions readable and filterable.
+  - Improve selected-node evidence navigation across saved signals, Top of Mind notes, and feedback.
+  - Restore individual node dragging; dragging one node should not move an entire connected component unless explicit group-drag mode exists.
+- Ordering:
+  - US-018 remains the next story because the user-facing Top of Mind ambition mirror is higher priority.
+  - US-019 should run after US-018 to improve internal graph debugging around the new ambition dimensions.
+
+---
+
+## 2026-05-30 17:20 PDT - US-020 setup
+
+- Added follow-up Ralph story: `US-020 Rebuild All Signals as an in-place inspiration revisit experience`.
+- Product correction:
+  - Home All Signals should not navigate to a completely separate page.
+  - The current archive/search experience is too complicated and does not match the Top of Mind look and feel.
+  - Deep diving past inspirations should feel like gently revisiting what the user once loved: what hit, what still feels alive, what changed, and what it reveals about ambition.
+- UX direction:
+  - Stay inside the Top of Mind shell.
+  - Prefer a calm browse-and-revisit flow over a dense search/filter dashboard.
+  - Keep advanced search secondary.
+  - Avoid narrow sidebars and admin-dashboard layouts.
+  - Show raw inspiration, highlighted parts, original context, related Top of Mind notes, and one lightweight "still matters" correction path.
+
+---
+
+## 2026-05-30 18:38 PDT - US-019
+
+- What was implemented
+  - Updated the internal context dashboard to expose context node type, ambition dimension, status/confidence/search filtering, and readable selected-node debug details.
+  - Extended the admin graph API serialization with related Top of Mind notes and feedback for context nodes.
+  - Restored individual node dragging by persisting manual positions for only the dragged node until refresh.
+  - Improved dashboard layout so the graph, detail panel, filters, and recent-signal review remain readable on desktop and mobile.
+- Files changed
+  - `packages/api/src/routes/admin-meaning-graph.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/MeaningGraph.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/MeaningGraph.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/MeaningGraph.test.ts` passed: 5 tests.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/admin-meaning-graph.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/admin/meaning-graph` on desktop and mobile using mocked same-origin auth and admin graph API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - Adding controls above the ReactFlow canvas requires explicit grid rows; otherwise later dashboard sections can overlap the graph and intercept node clicks.
+    - Mobile graph verification should check the actual canvas bounding box because desktop viewport constraints can collapse after stacked layout rules apply.
+  - Useful context
+    - The dashboard remains internal/admin-only at `/admin/meaning-graph`; this story did not make graph inspection part of the primary user-facing Top of Mind experience.
+
+---
+
+## 2026-05-30 16:07 PDT - US-014C
+
+- What was implemented
+  - Added authenticated `/api/signals` list/detail routes for saved-signal archive search and deep dives.
+  - Search supports exact text plus context-oriented matching over raw text, highlighted snippets, context terms, and related top-of-mind note titles.
+  - Added filters for all, highlighted, high resonance, tensions, questions, people/places, and recently resurfaced signals, plus recent/resonance/resurfaced sorting.
+  - Added protected `/signals` web route with prominent search/filter/sort controls and a deep-dive panel showing raw signal text, highlighted snippets, attachments, signal packet interpretation, related context nodes, related top-of-mind notes, and lightweight signal feedback/correction actions.
+  - Added a home all-signals link into the deep archive while keeping capture lightweight and folder/tag-free.
+- Files changed
+  - `packages/api/src/routes/signals.ts`
+  - `packages/api/src/routes/signals.test.ts`
+  - `packages/api/src/index.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/SavedSignalsArchive.tsx`
+  - `packages/web/src/main.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/api.test.ts`
+  - `packages/web/test/SavedSignalsArchive.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/signals.test.ts` passed: 2 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/api.test.ts test/SavedSignalsArchive.test.ts` passed: 22 tests.
+  - `pnpm --filter @waka/web test -- test/SavedSignalsArchive.test.ts` passed: 2 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/signals` on desktop and mobile using mocked same-origin auth, `/api/signals`, and feedback responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Saved-signal archive surfaces should call `/api/signals`, not legacy inspiration or WOW routes directly, when they need search plus packet/context/top-of-mind joins.
+  - Gotchas encountered
+    - Vite accepted the dev command but used the existing default `localhost:5173`; browser verification targeted the actual reported URL.
+  - Useful context
+    - `/api/signals` is still a compatibility assembler over existing inspiration, meaning packet, meaning graph, top-of-mind, and feedback persistence. A later dedicated signal persistence migration can keep the web route stable.
+
+---
+
+## 2026-05-30 15:58 PDT - US-014B
+
+- What was implemented
+  - Added a generated Top of Mind value-prop page at `/top-of-mind/share`.
+  - The page explains that most inspiration disappears, WAKA catches saved signals before they slip away, and saved signals form a changing picture of who the user wants to think with, where they want to be, and what they might build.
+  - Rendered active provisional post-it notes from the current `/api/top-of-mind` route with concise evidence previews and copy that frames them as reflections, tensions, questions, and action hints rather than permanent identity claims.
+  - Kept the route protected because the repo does not yet have a public share-token or note-sharing permission model.
+- Files changed
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/main.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/TopOfMindShare.test.ts` passed: 1 test.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/top-of-mind/share` on desktop and mobile using mocked same-origin auth and top-of-mind API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Share-style surfaces should consume `/api/top-of-mind` and user-facing top-of-mind note types instead of legacy WOW routes.
+  - Gotchas encountered
+    - A truly public share link needs an explicit share-token or permission model before exposing personal Top of Mind notes to anonymous visitors.
+  - Useful context
+    - The new page intentionally contains no visible WOW terminology; legacy compatibility fields can still appear in mocked data as long as they are not rendered.
+
+---
+
+## 2026-05-30 15:41 PDT - US-014
+
+- What was implemented
+  - Added a model provider interface covering signal classification, signal packet generation, context graph relationship judgment, and top-of-mind note generation.
+  - Kept Gemini as the current provider implementation behind `gemini-model-provider.ts`.
+  - Routed classification, context relationship judgment, WOW/top-of-mind judgment defaults, and graph-backed top-of-mind refresh through provider-facing seams.
+  - Added focused provider tests for default override behavior and top-of-mind note generation through the provider interface.
+- Files changed
+  - `packages/api/src/lib/model-provider.ts`
+  - `packages/api/src/lib/gemini-model-provider.ts`
+  - `packages/api/src/lib/model-provider.test.ts`
+  - `packages/api/src/queue/classifier.ts`
+  - `packages/api/src/lib/meaning-relationship-judge.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/model-provider.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/meaning-relationship-judge.test.ts src/lib/wow-judge.test.ts src/lib/auto-wow-generation.test.ts` passed for the unit-config tests collected: 13 tests.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/model-provider.test.ts src/lib/signal-packets.test.ts src/routes/inspirations-auto-wow.test.ts src/lib/meaning-graph-writer-categories.test.ts src/routes/admin-meaning-graph.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/auto-wow-generation.test.ts` passed: 21 tests.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Product-domain model defaults should depend on `getDefaultModelProvider()` rather than instantiating provider-specific clients directly.
+  - Gotchas encountered
+    - `vitest.unit.config.ts` only includes `src/**/*.test.ts` plus `test/wow-score.test.ts`; test files under `packages/api/test` are not collected by that config.
+  - Useful context
+    - Signal packet and top-of-mind refresh generation are deterministic today, but they are included in the provider interface so later model-backed implementations can replace them without touching product-domain services.
+
+---
+
+## 2026-05-30 15:29 PDT - US-012
+
+- What was implemented
+  - Added compact feedback controls to active Top of Mind post-it notes for `true`, `partly`, `not true`, `important`, and `not important`.
+  - Persisted note feedback through the authenticated `/api/feedback` route using a new typed web API helper.
+  - Added optimistic note feedback state with saved/error UI and rollback on failed submissions.
+  - Added optional correction text on the expanded post-it surface without requiring the user to write.
+- Files changed
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/api.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 17 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 38 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for desktop compact feedback and mobile expanded feedback with optional correction text using mocked same-origin API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top-of-mind feedback should target the user-facing note id, not related signal or context node ids, when the control is attached to a post-it note.
+  - Gotchas encountered
+    - Feedback controls inside the hover-only note reveal were visible to tests but not reliably clickable in browser hit-testing; compact controls need to sit outside the hidden reveal and above the draggable note surface.
+  - Useful context
+    - Negative note feedback optimistically marks compatibility notes stale client-side while the server applies durable graph/note effects through `/api/feedback`.
+
+---
+
+## 2026-05-30 15:11 PDT - US-011
+
+- What was implemented
+  - Added an expanded evidence panel for user-facing Top of Mind post-it notes on Home.
+  - The panel shows supporting evidence signals, concise evidence reasons, resonance labels where available, and related context claims without exposing raw admin graph fields.
+  - Added empty evidence/context states so provisional notes remain understandable when graph links are not attached yet.
+  - Added responsive panel styling and verified the expanded post-it stays inside desktop and mobile viewports without evidence/context overlap.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 35 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for desktop and mobile evidence panels using mocked same-origin API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - The top-of-mind route currently provides related context node ids but not context labels, so the Home surface must avoid rendering raw ids and use note/fallback labels until the API exposes public context summaries.
+  - Useful context
+    - The expanded post-it panel is the current evidence drawer surface; clicking a Top of Mind note opens it and clicking the backdrop closes it.
+
+---
+
+## 2026-05-30 14:11 PDT - US-001
+
+- What was implemented
+  - Added `docs/ambition-mirror-domain-migration.md` with the inspiration/WOW/meaning to signal/context/top-of-mind migration plan.
+  - Documented persistence, API route, and web component strategies for wrapping, migrating, or leaving old names internal.
+  - Explicitly preserved the admin graph inspector as internal and documented phased compatibility for existing data and tests.
+- Files changed
+  - `docs/ambition-mirror-domain-migration.md`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `sed -n '1,260p' docs/ambition-mirror-domain-migration.md`
+  - `wc -l docs/ambition-mirror-domain-migration.md`
+  - `rg "admin graph|internal|compatibility|signal packet|top-of-mind|context node" docs/ambition-mirror-domain-migration.md`
+- Learnings for future iterations:
+  - Patterns discovered
+    - Documentation-only stories can be verified with direct file review and targeted content search.
+  - Gotchas encountered
+    - Creating branch `ralph/ambition-mirror-context-graph` failed because the sandbox would not permit creating `.git/refs/heads/ralph`; work continued from `dev`.
+    - `git add docs/ambition-mirror-domain-migration.md prd.json progress.txt && git commit -m "feat: US-001 - Document domain rename map and migration strategy"` failed because Git could not create `.git/index.lock` in this sandbox.
+  - Useful context
+    - Current persistence still uses `inspirations`, `meaning_packets`, `meaning_nodes`, `meaning_edges`, `meaning_evidence`, `wow_moments`, and `wow_moment_inspirations`; the doc recommends wrapping first before destructive renames.
+
+---
+
+## 2026-05-30 14:18 PDT - US-002
+
+- What was implemented
+  - Added a signal-facing API type adapter over the existing inspiration persistence shape.
+  - Existing POST/GET `/api/inspirations` responses now include additive `signal` and `signalScores` fields while preserving old inspiration fields and routes.
+  - Exposed resonance, recurrence, agency, identity signal, and decision relevance score names, initially derived from existing displayed WOW and importance scores.
+  - Added matching web API client types and fetch-stubbed compatibility tests for create/list behavior through the signal layer.
+- Files changed
+  - `packages/api/src/lib/signals.ts`
+  - `packages/api/src/routes/inspirations.ts`
+  - `packages/api/test/inspirations.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 11 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api test -- test/inspirations.test.ts` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Signal-facing compatibility can be additive on existing inspiration responses as `signal` and `signalScores` while keeping `/api/inspirations` stable.
+  - Gotchas encountered
+    - The local API integration test environment currently points at `HOST.neon.tech`, so DB-backed route tests cannot run until the DB connection URL is fixed.
+  - Useful context
+    - Initial signal score names intentionally map to existing fields: resonance/recurrence from displayed `wowScore`, and agency/identitySignal/decisionRelevance from `importanceScore`.
+
+---
+
+## 2026-05-30 14:29 PDT - US-003
+
+- What was implemented
+  - Added context node category support for theme, value, person, environment, aesthetic, tension, project, open_question, and hypothesis.
+  - Updated the meaning graph writer to emit the new context-node categories while keeping existing meaning graph tables unchanged.
+  - Added deterministic legacy type normalization for existing meaning graph rows and exposed `contextType` from the internal admin graph inspector.
+  - Updated top-of-mind ranking to understand both new context-node categories and old meaning-node type names.
+- Files changed
+  - `packages/api/src/lib/context-node-types.ts`
+  - `packages/api/src/lib/meaning-graph-writer.ts`
+  - `packages/api/src/lib/meaning-graph-writer-categories.test.ts`
+  - `packages/api/src/lib/top-of-mind-preview.ts`
+  - `packages/api/src/routes/admin-meaning-graph.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/api/test/meaning-graph-writer.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/meaning-graph-writer-categories.test.ts src/lib/top-of-mind-preview.test.ts src/routes/admin-meaning-graph.test.ts` passed: 8 tests.
+  - `pnpm --filter @waka/api test -- test/meaning-graph-writer.test.ts src/routes/admin-meaning-graph.test.ts` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Context graph code can evolve the category vocabulary without a DB migration because `meaning_nodes.type` is currently text.
+    - Use `normalizeContextNodeType` anywhere old meaning graph rows might be read into new signal/context/top-of-mind surfaces.
+  - Gotchas encountered
+    - The default API Vitest setup still requires a resolvable `DB_CONNECTION_URL`; use `vitest.unit.config.ts` for pure route/helper tests that should not run DB setup.
+  - Useful context
+    - Existing legacy type mapping is deterministic: `question` to `open_question`, `life_direction` to `project`, `person_archetype` to `person`, `desire` to `hypothesis`, and `claim` or unknown values to `theme`.
+
+---
+
+## 2026-05-30 14:35 PDT - US-004
+
+- What was implemented
+  - Added signal packet naming as the primary packet creation API while preserving the existing `meaning_packets` persistence table.
+  - Moved deterministic packet construction to `packages/api/src/lib/signal-packets.ts` and kept `packages/api/src/lib/meaning-packets.ts` as a source-compatible wrapper.
+  - Updated create/spark/rebuild code paths to call `persistSignalPacketForSignal`.
+  - Updated deterministic packet text from `waka.meaning_packet.v1`/`SPARKS` to `waka.signal_packet.v1`/`WHAT_HIT` plus `WHY_IT_MATTERS`.
+  - Updated packet-related tests and route mocks for the new signal packet imports/header.
+- Files changed
+  - `packages/api/src/lib/signal-packets.ts`
+  - `packages/api/src/lib/meaning-packets.ts`
+  - `packages/api/src/lib/signal-packets.test.ts`
+  - `packages/api/src/lib/meaning-candidates.ts`
+  - `packages/api/src/lib/meaning-graph-rebuild.ts`
+  - `packages/api/src/lib/meaning-relationship-judge.ts`
+  - `packages/api/src/routes/inspirations.ts`
+  - `packages/api/src/routes/inspirations-auto-wow.test.ts`
+  - `packages/api/src/routes/admin-meaning-graph.test.ts`
+  - `packages/api/test/inspirations.test.ts`
+  - `packages/api/test/meaning-candidates.test.ts`
+  - `packages/api/test/meaning-graph-writer.test.ts`
+  - `packages/api/test/meaning-relationship-judge.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/signal-packets.test.ts src/routes/inspirations-auto-wow.test.ts src/routes/admin-meaning-graph.test.ts` passed: 6 tests.
+  - `pnpm --filter @waka/api test -- test/inspirations.test.ts -t "signal packet|bounded context"` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - New packet creation should use `signal-packets.ts`; old `meaning-packets.ts` exists only to keep compatibility while persistence remains `meaning_packets`.
+  - Gotchas encountered
+    - The DB-backed API test environment still points at unresolved `HOST.neon.tech`, so packet integration tests cannot run here until the test DB URL is fixed.
+  - Useful context
+    - Existing graph/candidate code still exposes `Meaning*` names where it describes internal graph relationships, but newly generated per-signal packet text now uses `waka.signal_packet.v1`.
+
+---
+
+## 2026-05-30 14:39 PDT - US-005
+
+- What was implemented
+  - Added a top-of-mind note compatibility model over current WOW moment persistence.
+  - Exposed note types `pattern`, `tension`, `question`, `hypothesis`, and `action`, plus active/stale-style status values for future feedback flows.
+  - Added a `topOfMindNote` field to `/api/wow-moments` responses without removing or renaming existing WOW response fields.
+  - Added web API client types for the additive note shape.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/top-of-mind-notes.test.ts`
+  - `packages/api/src/routes/wow-moments.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-notes.test.ts src/routes/wow-moments.test.ts` passed: 4 tests.
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 11 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api test -- test/wow-moments.test.ts` was attempted but failed before test collection with `getaddrinfo ENOTFOUND HOST.neon.tech`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Keep current WOW routes additive during the migration: expose `topOfMindNote` beside existing WOW fields until UI and API route migration stories land.
+  - Gotchas encountered
+    - DB-backed API tests still cannot collect in this environment while `DB_CONNECTION_URL` points at unresolved `HOST.neon.tech`.
+  - Useful context
+    - The compatibility note status is always `active` for now because there is no feedback or dismissal persistence yet.
+    - Related context node ids are returned as an empty list until graph-backed note refresh/persistence lands.
+
+---
+
+## 2026-05-30 14:44 PDT - US-006
+
+- What was implemented
+  - Added authenticated `/api/top-of-mind` note list behavior backed by existing WOW moment compatibility persistence.
+  - Added authenticated `/api/top-of-mind/:noteId` detail behavior with tenant-scoped lookup and UUID validation.
+  - Returned active top-of-mind notes with concise evidence previews and related signal references without exposing raw admin graph fields.
+  - Kept the existing `topOfMind` preview response field on the list route so the current home page remains compatible until UI migration stories land.
+  - Added web API client types and helpers for top-of-mind note list/detail responses.
+- Files changed
+  - `packages/api/src/routes/top-of-mind.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/top-of-mind.test.ts` passed: 6 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/api.test.ts` passed: 15 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - `/api/top-of-mind` is now the user-facing note surface; use `topOfMindNotes` for new UI work and keep `topOfMind` only as a compatibility preview until the home page migrates.
+  - Gotchas encountered
+    - The route still reads from WOW moment compatibility tables, so note status is active and related context node ids stay empty until feedback and refresh persistence stories land.
+  - Useful context
+    - Evidence previews intentionally expose signal ids, short text previews, role, reason, kind, timestamp, and resonance score, not meaning graph/admin internals.
+
+---
+
+## 2026-05-30 14:48 PDT - US-007
+
+- What was implemented
+  - Added polymorphic user feedback persistence for `signal`, `context_node`, `top_of_mind_note`, and `hypothesis` targets.
+  - Added feedback values `true`, `partly`, `not_true`, `important`, and `not_important`, plus optional emotion labels `admire`, `envy`, `want`, `fear`, `curious`, and `aesthetic_only`.
+  - Added authenticated `/api/feedback` create/list behavior with tenant-scoped target ownership checks before inserts.
+  - Added a Drizzle migration for the feedback table and enum types.
+- Files changed
+  - `packages/api/src/db/schema-feedback.ts`
+  - `packages/api/src/db/index.ts`
+  - `packages/api/src/routes/feedback.ts`
+  - `packages/api/src/routes/feedback.test.ts`
+  - `packages/api/src/index.ts`
+  - `drizzle/migrations/0019_add_feedback.sql`
+  - `drizzle/migrations/meta/_journal.json`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/feedback.test.ts` passed: 9 tests.
+  - `pnpm db:check` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Feedback writes should keep user validation/correction separate from graph mutation; US-008 can consume feedback provenance and apply deterministic graph updates.
+    - Polymorphic feedback targets need explicit tenant ownership checks because the database cannot enforce cross-table ownership with a single foreign key.
+  - Gotchas encountered
+    - `top_of_mind_note` feedback currently validates against `wow_moments` because top-of-mind note persistence is still a compatibility layer over WOW moment rows.
+  - Useful context
+    - `hypothesis` feedback validates against `meaning_nodes` rows with `type = 'hypothesis'`.
+
+---
+
+## 2026-05-30 14:54 PDT - US-008
+
+- What was implemented
+  - Added deterministic feedback application logic for `true`, `partly`, `not_true`, `important`, and `not_important`.
+  - Feedback creation now applies graph effects after the feedback row is inserted, strengthening or weakening related context nodes and storing application provenance in feedback metadata.
+  - Top-of-mind note feedback updates compatibility note confidence through `wow_moments.wow_score` and derives note status from latest applied feedback metadata.
+  - Added targeted tests for every feedback value and for top-of-mind status serialization from applied feedback provenance.
+- Files changed
+  - `packages/api/src/lib/feedback-application.ts`
+  - `packages/api/src/lib/feedback-application.test.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/routes/feedback.ts`
+  - `packages/api/src/routes/top-of-mind.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/feedback-application.test.ts src/routes/feedback.test.ts src/routes/top-of-mind.test.ts` passed: 24 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - Top-of-mind notes still use WOW moment compatibility persistence, so note status is derived from applied feedback metadata until dedicated note persistence lands.
+  - Useful context
+    - Top-of-mind note feedback finds related context nodes through the note's related signal rows and existing `meaning_evidence`; if no graph evidence exists yet, provenance is still stored on the feedback row.
+
+---
+
+## 2026-05-30 14:59 PDT - US-009
+
+- What was implemented
+  - Added a bounded top-of-mind refresh service that selects active context nodes, ranks candidates by recurrence, agency-oriented node types, unresolved questions/tensions/hypotheses, and recency.
+  - Persisted generated provisional notes through the current WOW compatibility tables with stable `top_of_mind_context_node:v1:*` idempotency keys to avoid duplicating active notes for the same graph claim.
+  - Linked generated notes back to supporting signal evidence and exposed related context node ids on the user-facing top-of-mind note serializer where graph evidence is available.
+  - Added deterministic tests for ranking, evidence ordering, deduplication, and unsupported-claim skipping.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.test.ts`
+  - `packages/api/src/routes/top-of-mind.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/routes/top-of-mind.test.ts` passed: 11 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Graph-generated top-of-mind notes should use stable context-node idempotency keys while `wow_moments` remains the compatibility persistence layer.
+  - Gotchas encountered
+    - Existing top-of-mind route unit tests use narrow hand-built Drizzle mocks, so new serializer enrichment queries need matching mock shape updates.
+  - Useful context
+    - Related context node ids are inferred from linked signal evidence and `meaning_evidence`; they may include multiple nodes when a source signal supports more than one graph claim.
+
+---
+
+## 2026-05-30 15:06 PDT - US-010
+
+- What was implemented
+  - Updated the authenticated home page to consume user-facing top-of-mind notes from `/api/top-of-mind` as the primary post-it surface.
+  - Added data-aware home behavior: returning users with enough signals or active notes land on Top of Mind, while low-data users land on an inline capture-first signal entry surface.
+  - Removed the home-page WOW moments panel/fetch path from the primary surface and shifted visible home copy toward top-of-mind, signal, resonance, and provisional reflection language.
+  - Kept capture one click away for returning users and inline for low-data users.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 33 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for returning-user Top of Mind and mobile low-data capture-first states.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Home should read `topOfMindNotes` for user-facing post-it notes and keep the legacy `topOfMind` preview as fallback compatibility.
+  - Gotchas encountered
+    - The Home test harness needs both `/api/top-of-mind?limit=4` note data and the legacy `topOfMind` fallback shape because the client still supports both during migration.
+  - Useful context
+    - The low-data threshold is currently two saved signals unless active top-of-mind notes already exist.
+
+---
+
+## 2026-05-30 15:37 PDT - US-013
+
+- What was implemented
+  - Updated capture-facing English and Korean copy from inspiration/WOW framing toward signal, what hit, resonance, and lightweight context.
+  - Renamed visible capture CTAs from quick/process language to `Save signal` and `Add context`.
+  - Updated attachment-only fallback text to `Image signal`, `Link signal`, and `Mixed signal` while preserving legacy fallback suppression for old rows.
+  - Tightened the reference capture page CSS so the capture form no longer overflows mobile viewports.
+- Files changed
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/components/capture/CaptureCell.tsx`
+  - `packages/web/src/components/InspirationCard.tsx`
+  - `packages/web/src/components/history/InspirationDetail.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/InspirationCard.test.ts`
+  - `packages/web/test/i18n.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts` passed: 12 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 38 tests.
+  - `pnpm --filter @waka/web test -- test/InspirationCard.test.ts test/i18n.test.ts` passed: 8 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for the capture tab at 1280x900 and 390x844, including signal/resonance copy checks and viewport fit checks.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - The generic `.cell.capture` mobile aspect-ratio rule can leak into the reference capture page unless that page explicitly resets grid placement and aspect ratio.
+  - Useful context
+    - Existing legacy `Link inspiration` / `Image inspiration` / `Mixed inspiration` rows are still treated as system fallback text so old attachment-only saves remain clean in history.
+
+---
+
+## 2026-05-30 15:46 PDT - US-015
+
+- What was implemented
+  - Added a low-prominence authenticated `/api/decision-memo` scaffold for a what-to-build memo.
+  - Added deterministic memo assembly from active context graph nodes, strongest signal evidence, active top-of-mind notes, unresolved tensions/questions/hypotheses, and one testable next action.
+  - Added focused tests for fixture-based memo assembly and route tenant scoping through the authenticated user id.
+- Files changed
+  - `packages/api/src/lib/decision-memo.ts`
+  - `packages/api/src/lib/decision-memo.test.ts`
+  - `packages/api/src/routes/decision-memo.ts`
+  - `packages/api/src/routes/decision-memo.test.ts`
+  - `packages/api/src/index.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/decision-memo.test.ts src/routes/decision-memo.test.ts` passed: 3 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable cross-story pattern.
+  - Gotchas encountered
+    - The working PRD already had unrelated uncommitted story edits; US-015 was marked complete without reverting or reshaping those edits.
+  - Useful context
+    - The decision memo is API-only for now, so this story did not require browser verification.
+
+---
+
+## 2026-05-30 15:52 PDT - US-014A
+
+- What was implemented
+  - Made capture feel more like a low-pressure private scratchpad by reducing textarea type size and adding compact metadata controls below the note.
+  - Added local draft autosave for note text, highlighted snippets, resonance choice, and pasted link chips; drafts are cleared only after the server save succeeds.
+  - Added selected-text marking for "what hit" and persisted it as `sparks` metadata on the signal save payload.
+  - Added a lightweight resonance question with want, admire, envy, feels like me, bothers me, and not sure choices; resonance is stored in spark metadata when present.
+  - Updated post-save confirmation copy to reflect what WAKA noticed without making a final claim.
+- Files changed
+  - `packages/web/src/components/capture/CaptureCell.tsx`
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts` passed: 15 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/i18n.test.ts` passed: 5 tests.
+  - Browser verification with Playwright + Vite passed for desktop highlight/resonance/save confirmation and mobile capture layout using mocked same-origin API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture highlight and resonance metadata can use the existing `sparks` create payload, avoiding a persistence migration for this story.
+  - Gotchas encountered
+    - React textarea selection updates need mouse/key selection events as well as `onSelect` so the mark-highlight action remains reliable.
+  - Useful context
+    - Autosave intentionally restores text and link chips only; image/file blobs are not persisted in localStorage.
+
+---
+## 2026-05-30 16:16 PDT - US-016
+
+- What was implemented
+  - Audited remaining product-facing WOW, inspiration, and meaning terminology across web UI copy, README/docs, model prompt text, and web API helper names.
+  - Moved visible product/admin labels toward signal, top-of-mind note, context graph, and resonance language while keeping legacy route/table/field names where they are compatibility or persistence details.
+  - Renamed the legacy web `/api/wow-moments` client helper/types to top-of-mind compatibility names so `/api/top-of-mind` remains the preferred user-facing route.
+  - Updated the Gemini judge prompt wording from WOW/inspiration framing to top-of-mind/signal framing while documenting retained `isWowMoment`, `relatedInspirationIds`, and `sourceEvidence.inspirationId` as legacy JSON compatibility keys.
+  - Added final naming conventions to the domain migration doc and Codebase Patterns.
+- Files changed
+  - `README.md`
+  - `docs/ambition-mirror-domain-migration.md`
+  - `packages/api/src/lib/auto-wow-generation.ts`
+  - `packages/api/src/lib/wow-judge.ts`
+  - `packages/api/src/queue/classifier.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/src/pages/AdminHome.tsx`
+  - `packages/web/src/pages/AdminWowStatus.tsx`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/Login.tsx`
+  - `packages/web/src/pages/MeaningGraph.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/src/components/WowMomentsSection.tsx`
+  - `packages/web/src/components/history/InspirationDetail.tsx`
+  - `packages/web/src/components/layout/HistoryPanel.tsx`
+  - `packages/web/src/components/wm/WmActionList.tsx`
+  - `packages/web/test/api.test.ts`
+  - `packages/web/test/WowMomentsSection.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/model-provider.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/routes/top-of-mind.test.ts src/lib/wow-judge.test.ts` passed for collected unit-config tests: 16 tests.
+  - `pnpm --filter @waka/web test -- test/api.test.ts test/i18n.test.ts test/WowMomentsSection.test.ts test/Home.test.ts test/TopOfMindShare.test.ts` passed: 99 tests.
+  - `pnpm --filter @waka/api test -- test/wow-judge.test.ts` was attempted but the legacy integration-style test suite failed before collection with `getaddrinfo ENOTFOUND HOST.neon.tech`; no assertions ran.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Product-facing copy and new client helpers should use signal/top-of-mind/context/resonance naming even when the underlying persistence or compatibility route still says `wow`, `meaning`, or `inspiration`.
+  - Gotchas encountered
+    - `packages/api/test/wow-judge.test.ts` is not collected by `vitest.unit.config.ts` and tries to connect to the configured database when run through the package test script.
+    - Broad text replacement in admin graph code can accidentally change typed API field names like `recentInspirations` or `processedInspirations`; keep identifier compatibility separate from visible copy changes.
+- Useful context
+    - `/api/wow-moments` remains a legacy compatibility route. User-facing web work should prefer `/api/top-of-mind` and top-of-mind note serializers.
+
+---
+
+## 2026-05-30 16:27 PDT - US-017
+
+- What was implemented
+  - Reframed capture metadata as a small self-understanding loop: save the signal, optionally mark what hit, tap a lightweight reason chip, optionally answer one tiny follow-up, then get confirmation that WAKA noticed the human-provided signal context.
+  - Expanded capture reason chips to cover amused me, I want this, I admire this, I envy this, feels like me, bothers me, makes me curious, high-stakes, and not sure.
+  - Added progressive disclosure for the optional follow-up question after a reason chip is selected.
+  - Persisted reason and optional micro-answer through existing signal spark metadata using `capture_metadata:v1` in the spark note so signal packets/context interpretation can treat it as stronger user evidence.
+  - Kept raw save friction unchanged: users can still save just text/link/image without selecting any metadata or opening the deeper prompt.
+- Files changed
+  - `packages/web/src/components/capture/CaptureForm.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/src/lib/i18n/messages/en-US.json`
+  - `packages/web/src/lib/i18n/messages/ko-KR.json`
+  - `packages/web/test/CaptureForm.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/CaptureForm.test.ts` passed: 17 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for desktop 1280x900 and mobile 390x844 using mocked same-origin auth, inspiration list, top-of-mind, and inspiration create responses; verified optional capture metadata was posted and no horizontal overflow occurred.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Capture metadata can remain frictionless and packet-visible by encoding user-provided reason data in `inspiration_sparks.note` with a versioned `capture_metadata:v1` prefix.
+  - Gotchas encountered
+    - The optional reason input needs to preserve the live DOM value at save time as well as React state so fast save interactions do not drop the micro-answer.
+  - Useful context
+    - The chip icons intentionally use simple text symbols instead of image assets so the existing compact capture surface stays fast and keyboard/touch friendly.
+
+---
+
+## 2026-05-30 17:30 PDT - US-018
+
+- What was implemented
+  - Rebuilt graph-backed Top of Mind generation around explicit ambition dimensions: place, people, work, taste, tension, identity, rejection, and next experiment.
+  - Changed generated post-it titles away from raw labels and "You keep circling" wrappers toward ambient ambition mirror statements.
+  - Added ambition-focused `why` text with supporting saved-signal previews and exposed `ambitionDimension` on top-of-mind note API/web types.
+  - Updated Home and Top of Mind share rendering so visible post-its foreground ambition reads and feedback is framed as correcting the dimension read.
+  - Added deterministic tests rejecting raw graph labels, saved-summary titles, and shallow theme-label phrasing.
+- Files changed
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/api/src/routes/wow-moments.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/pages/TopOfMindShare.tsx`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/top-of-mind-refresh.test.ts src/lib/top-of-mind-notes.test.ts src/routes/top-of-mind.test.ts src/routes/wow-moments.test.ts` passed: 17 tests.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts -t "top-of-mind|evidence|feedback|low-data|graph preview|Korean home copy"` passed: 11 tests, 27 skipped.
+  - `pnpm --filter @waka/web test -- test/TopOfMindShare.test.ts test/api.test.ts` passed: 21 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for the exact Home Top of Mind path using mocked same-origin auth, inspirations, and `/api/top-of-mind`; screenshot saved at `/tmp/waka-us018-home.png`.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Top-of-mind note surfaces now carry `ambitionDimension`; web feedback/correction UI should preserve that framing when validating or correcting a post-it.
+  - Gotchas encountered
+    - The full `Home.test.ts` suite still contains older all-signals tab assertions, but the current app navigates that tab to `/signals`; US-018 verification used the narrower Top of Mind path required by the story.
+  - Useful context
+    - Legacy WOW moments without mirror-style belief statements are converted into ambition mirror titles at serialization time, while newly refreshed graph notes generate mirror titles directly.
+
+---
+
+## 2026-05-31 11:25 PDT - US-027
+
+- What was implemented
+  - Added a bounded ambition synthesis loop after deterministic Top of Mind candidate ranking.
+  - Added event trigger gating for qualified clusters, memory movement, explicit deep dives, weekly refreshes, strong feedback, corrections, and contradictions.
+  - Built compact synthesis inputs with selected saved signals, highlights, capture metadata, micro-reflections, prior feedback, rewrites, memory state, and rejected/competing interpretations.
+  - Added synthesis output validation for first-person post-it candidates, environment direction, rejection, evidence rationale, confidence, and rejected alternative interpretation.
+  - Added token-budget, candidate-count, signal-count, idempotency-key, generic-output rejection, and deterministic fallback safeguards.
+  - Extended Top of Mind compatibility serialization with `rejectedAlternativeInterpretation` for future peel-open reflection surfaces.
+- Files changed
+  - `packages/api/src/lib/ambition-synthesis.ts`
+  - `packages/api/src/lib/ambition-synthesis.test.ts`
+  - `packages/api/src/lib/top-of-mind-refresh.ts`
+  - `packages/api/src/lib/top-of-mind-notes.ts`
+  - `packages/api/src/lib/top-of-mind-notes.test.ts`
+  - `packages/api/src/lib/model-provider.ts`
+  - `packages/api/src/lib/gemini-model-provider.ts`
+  - `packages/api/src/lib/model-provider.test.ts`
+  - `packages/api/src/routes/top-of-mind.test.ts`
+  - `packages/web/src/lib/api.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/ambition-synthesis.test.ts src/lib/top-of-mind-notes.test.ts src/lib/top-of-mind-refresh.test.ts src/lib/model-provider.test.ts src/routes/top-of-mind.test.ts` passed: 26 tests.
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Follow-up focused check `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/lib/ambition-synthesis.test.ts` passed: 5 tests after tightening shallow-category validation.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Ambition synthesis should sit after deterministic graph/memory ranking and before WOW-backed Top of Mind persistence; the model provider receives a compact bounded input and the loop owns fallback behavior.
+  - Gotchas encountered
+    - Adding `rejectedAlternativeInterpretation` to the note contract requires updating both API test fixtures and the web API type.
+  - Useful context
+    - The current Gemini provider still returns deterministic fallback synthesis; future model-heavy synthesis can replace only `synthesizeAmbition` without changing refresh persistence.
+
+---
+
+## 2026-05-31 11:33 PDT - US-028
+
+- What was implemented
+  - Rebuilt the opened Top of Mind post-it as a large peel-open reflection surface instead of a compact centered detail panel.
+  - Preserved the first-person post-it as the emotional anchor and added sections for what it points toward, what it rejects, what changed recently, why it is here now, and rejected alternate read.
+  - Expanded supporting saved moments to show up to five evidence signals and kept true, partly, not this, and rewrite in my words feedback inside the opened surface.
+  - Added Home tests for the peel-open surface and rejected-alternative rendering, and kept typed Top of Mind fixtures aligned with the current API shape.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `packages/web/test/TopOfMindShare.test.ts`
+  - `packages/web/test/api.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 39 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for opening a Home Top of Mind post-it on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable codebase pattern discovered.
+  - Gotchas encountered
+    - Playwright route interception is order-sensitive in this setup; broad `/api/**` fallbacks need to be registered before specific mocked endpoints.
+  - Useful context
+    - Vite served the browser verification run at `http://localhost:5173/` despite the alternate port argument.
+
+---
+## 2026-05-31 11:40 PDT - US-029
+
+- What was implemented
+  - Rebuilt the Home Memory Drawer around emotional memory sections: still alive, changed shape, forgotten but returning, older version of me, keeps coming back, and tensions.
+  - Kept advanced search and section filters secondary while preserving the in-place Home path and `/signals` as the older compatibility route.
+  - Replaced the side-by-side inspection feel with a full-width opened saved-signal reflection surface showing original signal, highlights, emotional pull, signal packet interpretation, related context, related Top of Mind notes, and reflection prompts for then/now/still-me.
+  - Added still alive, changed shape, and not anymore signal feedback with optional what-changed text persisted through the existing feedback API.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 41 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for Home -> Memory Drawer -> opened saved signal -> changed-shape feedback on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, Top of Mind, signal detail, and feedback API responses.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Memory Drawer should stay in the Home Top of Mind world, with emotional sections and a full-width reflective signal detail instead of an archive/search or narrow-sidebar inspection pattern.
+  - Gotchas encountered
+    - The saved-signal API fetch is debounced in Home; component tests that need server-enriched Memory Drawer rows should wait past the debounce before asserting sections.
+    - Browser verification needs to mock the best-effort `/api/inspirations/:id/revisits` endpoint if logs matter; missing it only produced Vite proxy noise because revisit recording is non-blocking.
+  - Useful context
+    - Optional what-changed text rides through `createFeedback` as `correctionText` on `targetType: "signal"`.
+
+---
+
+## 2026-06-01 00:00 PDT - US-036
+
+- What was implemented
+  - Replaced the shallow `actionForThoughtCard` template fallback with bounded action generation that uses each Top of Mind note's title, evidence preview, matched/anti-environment fields, and ambition dimension.
+  - Filtered out generic/template actions and duplicate weak actions before rendering the active checklist.
+  - Made the action checklist its own draggable paper object and kept done/remove actions hiding items from the active checklist.
+  - Added visible post-it and evidence provenance to each action without exposing graph/admin language.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 44 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, saved signals, and Top of Mind API responses. Verified grounded action copy, no generic placeholders, done hides the checklist, and pointer dragging updates the action paper position.
+- Learnings for future iterations:
+  - Patterns discovered
+    - Action post-its need real-world verbs plus evidence linkage; reflective homework should be treated as a failed generation.
+  - Gotchas encountered
+    - Browser verification must mock `/api/*` paths, not unprefixed API paths.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 13:39 PDT - US-048
+
+- What was implemented
+  - Replaced the page-like memory drawer overlay with an anchored glass stack that opens from the wall drawer object while keeping the wall, post-its, and action checklist visible behind it.
+  - Made the stack drill in-place from clean entry objects to grouping contents, then to a readable saved-inspiration detail, with back controls returning through the same stack levels.
+  - Removed large drawer workspace/header language from the active stack path and kept stack dimensions stable with internal scrolling and a mobile bottom-sheet treatment.
+  - Updated Home tests away from full-screen drawer and draggable-window expectations toward anchored stack behavior.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 52 tests.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, inspirations, Top of Mind, action recommendation, saved-inspiration list/detail, and revisit APIs. Verified drawer object remains visible, stack opens without `.memory-drawer-overlay`, grouping contents replace entry objects in-place, inspiration detail opens inside `.memory-drawer-stack`, no `.memory-window` renders, stack is in frame, and no horizontal overflow.
+- Learnings for future iterations:
+  - Patterns discovered
+    - No new durable codebase pattern.
+  - Gotchas encountered
+    - The old draggable memory-window helpers are still present but inert after the stack pivot; remove them in a focused cleanup rather than mixing that deletion into this UI correction.
+    - Playwright can consider stack cards unstable during quick re-renders; forcing the click after the card is located was needed for this verification script.
+  - Useful context
+    - Vite served browser verification at `http://localhost:5173/`.
+
+---
+
+## 2026-06-01 21:45 PDT - Drawer hover-reveal redesign + regression cleanup
+
+- What was implemented
+  - Memory-drawer constellation finished toward the Shopify Editions reference: hover-reveal card is now anchored beneath the hovered /label (counter-scaled to a stable size) and shows a tight blurb + "open these N saves" CTA + /label, instead of a screen-centered paragraph.
+  - "Seen/peeked" feedback: dimmed label now also carries a small filled dot before the slug.
+  - Constellation connecting lines are now real (generated from a shared MEMORY_MAP_SLOTS constant from the hub to each rendered node) and faintly visible, replacing the 4 hardcoded display:none paths.
+  - Bottom bar unified: search pill and capture pill share one translucent-glass construction, and the close (X) circle uses the same translucent ring + white inner as the lightbulb, so capture/search read as two states of one component.
+  - Action checklist no longer fabricates client-side fallback actions; it renders only the server recommender's grounded, learning-loop-connected actions (removed fallbackActionItems, hasServerActionRecommendations, and the fallback-action- early returns that broke persistence).
+  - PRD US-050 annotated: highlight-only capture (no reaction chips) is an intentional design decision, not a regression.
+  - Test/rename drift fixed so the full web suite is green:
+    - Login subtitle "your signals" -> "your inspirations" (user-facing noun is inspiration).
+    - i18n test updated to the app's inspiration/영감 count phrasing (was stale signal/신호).
+    - InspirationCard Korean attachment aria-label expectation "첨부 맥락" -> "첨부 정보".
+    - WowMomentsSection dev-panel labels "Source signal"/"출처 신호" -> "Source inspiration"/"출처 영감" (renamed in US-045) and section copy "What WAKA noticed" -> "Why WAKA noticed this".
+- Files changed
+  - packages/web/src/pages/Home.tsx
+  - packages/web/src/pages/Login.tsx
+  - packages/web/src/styles/global.css
+  - packages/web/test/i18n.test.ts
+  - packages/web/test/InspirationCard.test.ts
+  - packages/web/test/WowMomentsSection.test.ts
+  - prd.json
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test` passed: 155 tests, 9 files (previously 8 failing across 4 files).
+  - Visual states (hover card anchoring, bottom-bar parity) still pending in-browser confirmation at localhost:3030.
+- Learnings for future iterations
+  - Per-story verification only ran the story's own test file, so 8 failures accumulated unseen in auth-boundary/i18n/InspirationCard/WowMomentsSection. Run the full `@waka/web` suite before declaring a story done.
+  - The api suite cannot run locally: test/setup.ts connects to DB at import using the placeholder HOST.neon.tech in .env. "Verification passed" claims for api stories are only reproducible by bypassing that setup.
+  - User-facing noun is "inspiration"/"영감"; "signal" is internal/domain only. Login copy had leaked the internal term.
+
+---
+
+## 2026-06-01 22:40 PDT - Capture chrome reposition, sizing, and Shopify skill-tag interaction
+
+- What was implemented
+  - Moved the capture focus-mode (expand/collapse) control out of the bottom capture bar and up into the modal chrome next to the close button. The bottom bar now holds only attach + Reflect deeper + Save it now.
+  - Removed `#capExpand` (and its now-unused props) from `CaptureCell`; the minimize control is rendered in `Home` as `.reference-capture-min`, wired to `captureFocused`.
+  - Shrank the capture close button (62px + 12px ring -> 44px + 5px ring, X mark 16px -> 13px) and reduced the capture/reflect text size (clamp(18px,2vw,28px)/520 -> clamp(15px,1.35vw,20px)/480), keeping the highlight overlay font in lockstep.
+  - Gave the memory-map constellation tags the Shopify Editions skill-tag interaction: on hover/focus they morph in place (background-color + min-width/padding, 200ms ease-out) into a filled rounded pill, with a forgiving `::before` (inset -16px) hover hit-area so adjacent tags don't flicker. The anchored blurb + "open these N saves" card still reveals below.
+  - Diagnosed the user's "crammed top-left" report as a stale `:3030` build (current source reproduced clean); rebuilt `packages/web` dist twice so `:3030` reflects all recent fixes.
+- Files changed
+  - packages/web/src/components/capture/CaptureCell.tsx
+  - packages/web/src/pages/Home.tsx
+  - packages/web/src/styles/global.css
+  - packages/web/test/CaptureForm.test.ts
+  - packages/web/test/Home.test.ts
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test` passed: 156 tests, 9 files.
+  - Browser verification via Vite + mocked APIs: capture modal shows minimize+close clustered top-right with smaller close and smaller body text and a 3-item bottom bar; constellation tag fills/expands in place on hover with the reveal card below.
+  - Rebuilt dist served by `:3030` (static), so a refresh reflects current source.
+- Learnings for future iterations
+  - `:3030` serves the built `dist` statically; uncommitted source changes only appear there after `pnpm --filter @waka/web build`. "Still broken on :3030" usually means a stale bundle, not a live-source bug.
+  - The Shopify skill-tag feel is `transition-[background-color,min-width]` (in-place pill morph) plus a `before:-inset` forgiving hover zone, not a separate popup.
+
+---
+
+## 2026-06-01 23:30 PDT - Constellation cleanup + capture chrome rework (rapid design pass)
+
+- Constellation tags (Inspiration Drawer): removed the SVG relationship lines; switched from absolute fixed slots to a centered flex-wrap layout so tags can never overlap regardless of label length/count; shrank tag text (clamp 22-42px -> 14-20px); tags now render at full opacity and dim to 0.4 only after being hovered/opened (was per-node weighted opacity + a leading dot); removed the seen dot; cleared the inherited hitarea box-shadow/background so only the text shows (no white box); made the drawer backdrop an opaque clean field (#f4f2ee) so tags no longer sit over the blurred wall.
+- Capture modal chrome: close button is centered again (removed the top-right minimize+close cluster); the expand/focus control moved back into the capture bar next to the attach button (bottom-left), with the two save actions on the bottom-right; removed the enclosing pill so controls sit directly on the surface; lighter/smaller treatment (utility circles 42->34px, save buttons 14px/720 -> 13px/560, quick min-width dropped).
+- Expand now fills to the top (min-height calc(100dvh - clamp(96px,12vh,150px))) with padding.
+- Bottom bar: capture pill gains a morph-in entry animation (ncSaveMorphIn) so returning capture<-search animates like search<-capture.
+- Search bar: warm amber focus ring while typing (:focus-within).
+- Capture button shows a "···" hint when an unsaved draft is waiting (captureDraftHasContent from local storage), cleared on save.
+- Files: packages/web/src/pages/Home.tsx, packages/web/src/components/capture/CaptureCell.tsx, packages/web/src/styles/global.css, packages/web/test/CaptureForm.test.ts, packages/web/test/Home.test.ts
+- Verification: typecheck clean; full web suite 156/156. Browser-verified via Vite + mocked APIs: drawer tags collision-free on a clean field with no white box (boxShadow computed "none", background transparent, opacity 1, no overlapping rects); capture modal close centered, attach+expand bottom-left, save/reflect bottom-right, no bar, smaller; search focus amber ring; draft "···" hint. Rebuilt dist for :3030.
+
+---
+
+## 2026-06-02 20:22 PDT - Saved-inspiration detail redesign + verification
+
+- What was implemented
+  - Redesigned the saved-inspiration detail inside the drawer stack to match the calmer category contents language: centered text-forward flow, no card/shadow panel, quiet metadata, readable source text, hairline-separated sections, and the same light reveal animation.
+  - Added the US-029 reflection prompts directly to the detail: "what did this mean then?", "what does it mean now?", and "is this still me?".
+  - Added lightweight detail feedback controls: "still alive", "changed shape", and "not anymore". These persist through the existing `/feedback` client with `targetType: "signal"` and update the local detail feedback state.
+  - Fixed a real browser hit-testing bug from the drawer stack pivot: `.memory-drawer-stack` has `pointer-events: none`, so the new contents/detail flows now explicitly opt back in with `pointer-events: auto`.
+  - Rebuilt the web dist so the static-served bundle reflects the latest source.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 56 tests.
+  - `pnpm --filter @waka/web test` passed: 157 tests.
+  - `pnpm --filter @waka/web build` passed.
+  - Browser verification with Playwright + Vite passed for `/` on desktop `1280x850` and mobile `390x844` using mocked auth, saved signals, Top of Mind, action recommendations, saved-signal detail, and feedback APIs. Verified capture close applies `reference-capture-modal--closing` and `captureSheetToPill` mid-flight, detail prompts/feedback render, feedback saves, detail stays in frame, and no horizontal overflow.
+  - `pnpm --filter @waka/api test` no longer failed at DB setup and completed several DB-backed files, but then stalled silently in the remaining API file startup phase; I terminated the parent process with SIGTERM. Treat this as inconclusive, not a pass.
+- Learnings for future iterations
+  - Patterns discovered
+    - Drawer stack child screens need their own `pointer-events: auto` because the full-screen stack shell is intentionally pointer-transparent for the constellation treatment.
+  - Gotchas encountered
+    - Playwright pointer clicks exposed the pointer-events regression that jsdom tests could not see.
+    - Capture close animation is better verified by computed `animationName`, `transform`, and `opacity` than by bounding boxes; transformed box dimensions were not a reliable signal during the overlapping open/close animation.
+
+---
+
+## 2026-06-02 20:31 PDT - Drawer overlay + bottom-bar parity
+
+- What was implemented
+  - Changed the Memory Drawer/lightbulb view from an opaque page replacement to a translucent overlay over the Top of Mind wall, with a slight 2px blur and much lighter wall dimming.
+  - Added a closing state for the drawer so the search pill animates back with `drawerSearchMorphOut` before returning to the capture button.
+  - Matched capture and search typography across desktop/mobile: same Inter Tight font, 13px size, 560 weight, normal letter spacing; search text stays lower opacity.
+  - Kept the previously added saved-inspiration detail redesign and feedback controls intact.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 56 tests.
+  - `pnpm --filter @waka/web test` passed: 157 tests.
+  - `pnpm --filter @waka/web build` passed after the final CSS change.
+  - Browser verification with Playwright + Vite passed for desktop `1280x850` and mobile `390x844`: drawer overlay is translucent, wall blur is 2px, capture/search font styles match, search text is lower opacity, and both search + drawer overlay animate closed.
+
+---
+
+## 2026-06-02 20:35 PDT - Always-visible action checklist empty state
+
+- What was implemented
+  - Kept the wall action checklist paper visible even when there are no active action recommendations.
+  - Added empty-state copy: "action items will show up once enough inspirations are reached".
+  - Preserved done/remove behavior so individual action items disappear after completion/removal, while the paper remains visible with the empty state.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 57 tests.
+  - `pnpm --filter @waka/web test` passed: 158 tests.
+  - `pnpm --filter @waka/web build` passed.
+
+---
+
+## 2026-06-02 20:56 PDT - Word-cloud motion reduction + outside close
+
+- What was implemented
+  - Removed the word-cloud tag entrance animation so all inspiration group tags are visible together instead of popping in over time.
+  - Added outside-click close for the word-cloud drawer: clicking the empty cloud field/background closes the overlay, while clicking tag text still opens that group.
+  - Kept the existing X/lightbulb close path and reverse search/drawer close animation.
+- Files changed
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `packages/web/test/Home.test.ts`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/web test -- test/Home.test.ts` passed: 58 tests.
+  - `pnpm --filter @waka/web test` passed: 159 tests.
+  - `pnpm --filter @waka/web build` passed.
+  - Browser verification with Playwright + Vite passed for desktop `1280x850` and mobile `390x844`: word-cloud tag `animationName` is `none`, background click closes the drawer, and the close animation still runs.
+
+---

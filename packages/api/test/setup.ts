@@ -71,10 +71,21 @@ function findRepoEnvFile(): string | null {
 
 const envFile = findRepoEnvFile();
 if (envFile) {
-  // `override: false` (default) is correct: if a developer has exported
-  // a value into their shell (e.g. `JWT_SECRET=...vitest --filter=...`),
-  // we honour the explicit override rather than clobbering it from .env.
-  loadDotenv({ path: envFile });
+  const rootDir = dirname(envFile);
+  // Layer env files the standard way: `.env` provides base values, then
+  // `.env.local` overrides them. The repo-root `.env` ships placeholder
+  // connection details (e.g. HOST.neon.tech), while a developer's real
+  // DB_CONNECTION_URL lives in `.env.local` — loading only `.env` (its
+  // default search order) made the whole suite fail at import with a DNS
+  // error against the placeholder host.
+  //
+  // `override: false` on the base load still honours any value already
+  // exported into the shell; the explicit `override: true` on `.env.local`
+  // lets a developer's local config win over both the shell and `.env`.
+  const baseEnv = resolve(rootDir, ".env");
+  if (existsSync(baseEnv)) loadDotenv({ path: baseEnv });
+  const localEnv = resolve(rootDir, ".env.local");
+  if (existsSync(localEnv)) loadDotenv({ path: localEnv, override: true });
 }
 
 // ---------------------------------------------------------------------------

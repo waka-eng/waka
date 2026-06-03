@@ -9,7 +9,7 @@ import {
   type Inspiration,
 } from "../src/db/index.js";
 import { findMeaningPacketCandidates } from "../src/lib/meaning-candidates.js";
-import { persistMeaningPacketForInspiration } from "../src/lib/meaning-packets.js";
+import { persistSignalPacketForSignal } from "../src/lib/signal-packets.js";
 
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -20,10 +20,10 @@ async function createPacket(
   userId: string,
   inspiration: Inspiration,
 ): Promise<void> {
-  const result = await persistMeaningPacketForInspiration({
+  const result = await persistSignalPacketForSignal({
     db: testDb.db,
     userId,
-    inspirationId: inspiration.id,
+    signalId: inspiration.id,
   });
   expect(result.status).toBe("created_or_updated");
 }
@@ -111,7 +111,7 @@ describe("findMeaningPacketCandidates", () => {
   it("falls back to durable packet signals when the trigger has no embedding", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Trigger with no embedding but a meaning packet.",
+      text: "Trigger with no embedding but a signal packet.",
       createdAt: new Date("2026-04-01T00:00:00.000Z"),
     });
     const oldHighSignal = await createInspirationFixture(testDb.db, alice.user.id, {
@@ -143,7 +143,7 @@ describe("findMeaningPacketCandidates", () => {
     expect(result.candidates[0]!.packet.packetText).toContain("Older high-signal");
   });
 
-  it("requires a trigger meaning packet before returning candidates", async () => {
+  it("requires a trigger signal packet before returning candidates", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Trigger exists but has not been packetized yet.",
@@ -173,7 +173,7 @@ describe("findMeaningPacketCandidates", () => {
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
     });
     const noPacketCandidate = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Embedded candidate without a meaning packet should be ignored.",
+      text: "Embedded candidate without a signal packet should be ignored.",
       createdAt: new Date("2026-01-02T00:00:00.000Z"),
     });
     const packetCandidates: Inspiration[] = [];
@@ -205,7 +205,7 @@ describe("findMeaningPacketCandidates", () => {
       noPacketCandidate.id,
     );
     for (const candidate of result.candidates) {
-      expect(candidate.packet.packetText).toContain("waka.meaning_packet.v1");
+      expect(candidate.packet.packetText).toContain("waka.signal_packet.v1");
       expect(candidate.packet.tokenEstimate).toBeGreaterThan(0);
     }
     const persistedRows = await testDb.db

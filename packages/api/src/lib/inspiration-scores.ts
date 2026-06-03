@@ -6,7 +6,7 @@
  * WOW-moment generation path.
  */
 
-import { and, desc, eq, gte, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, lt, ne, sql } from "drizzle-orm";
 
 import {
   attachments,

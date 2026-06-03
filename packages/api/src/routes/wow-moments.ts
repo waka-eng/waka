@@ -24,6 +24,7 @@ import {
 } from "../lib/inspiration-embeddings.js";
 import { persistLocalInspirationScoresById } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { topOfMindNoteFromWowMoment } from "../lib/top-of-mind-notes.js";
 import {
   DEFAULT_WOW_GENERATION_LIMIT,
   MAX_WOW_GENERATION_LIMIT,
@@ -173,32 +174,40 @@ export function createWowMomentsRoutes(
     }
 
     return c.json({
-      wowMoments: moments.map((moment) => ({
-        ...moment,
-        relatedInspirations: (relatedByMomentId.get(moment.id) ?? [])
-          .slice(0, MAX_WOW_MOMENT_SOURCE_LINKS)
-          .map((row) => {
-            const [source] = normalizeWowSourceEvidence(
-              [
-                {
-                  inspirationId: row.inspirationId,
-                  role: row.role,
-                  reason: row.reason,
-                },
-              ],
-              [row.inspirationId],
-            );
-            return {
-              inspirationId: row.inspirationId,
-              role: source?.role ?? "Source inspiration",
-              reason: source?.reason ?? "Why this source matters",
-              text: row.inspirationText,
-              kind: row.inspirationKind,
-              createdAt: row.inspirationCreatedAt,
-              wowScore: row.inspirationWowScore,
-            };
+      wowMoments: moments.map((moment) => {
+        const relatedRowsForMoment = (relatedByMomentId.get(moment.id) ?? [])
+          .slice(0, MAX_WOW_MOMENT_SOURCE_LINKS);
+        const relatedInspirations = relatedRowsForMoment.map((row) => {
+          const [source] = normalizeWowSourceEvidence(
+            [
+              {
+                inspirationId: row.inspirationId,
+                role: row.role,
+                reason: row.reason,
+              },
+            ],
+            [row.inspirationId],
+          );
+          return {
+            inspirationId: row.inspirationId,
+            role: source?.role ?? "Source inspiration",
+            reason: source?.reason ?? "Why this source matters",
+            text: row.inspirationText,
+            kind: row.inspirationKind,
+            createdAt: row.inspirationCreatedAt,
+            wowScore: row.inspirationWowScore,
+          };
+        });
+
+        return {
+          ...moment,
+          relatedInspirations,
+          topOfMindNote: topOfMindNoteFromWowMoment({
+            moment,
+            relatedSignalIds: relatedRowsForMoment.map((row) => row.inspirationId),
           }),
-      })),
+        };
+      }),
     });
   });
 

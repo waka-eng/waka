@@ -23,3 +23,4 @@ export * from "./schema-wow-moments";
 export * from "./schema-embeddings";
 export * from "./schema-background-jobs";
 export * from "./schema-revisits";
+export * from "./schema-feedback";

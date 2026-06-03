@@ -120,8 +120,15 @@ export default defineConfig({
      * in <100ms, but the queue/classifier path can fan out to mocked
      * Gemini + Drizzle and benefit from a slightly more generous budget.
      */
-    testTimeout: 10_000,
-    hookTimeout: 10_000,
+    testTimeout: 20_000,
+    /**
+     * beforeAll/afterAll hooks provision isolated test schemas (create +
+     * migrate) against the configured Postgres. Against a remote managed DB
+     * (e.g. Neon) that round-trips slower than a local instance, so 10s was
+     * too tight and surfaced as "Hook timed out" cascades. 45s gives the
+     * schema setup/teardown room without masking genuinely hung work.
+     */
+    hookTimeout: 45_000,
 
     /**
      * Reporter — `default` for local DX, plus `junit` for CI ingestion.

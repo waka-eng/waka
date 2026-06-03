@@ -43,11 +43,11 @@ function ScoreBreakdownGrid({ breakdown }: { breakdown: ApiInspirationScoreBreak
   return (
     <div className="admin-score-breakdown">
       <div>
-        <span>Displayed WOW</span>
+        <span>Displayed resonance</span>
         <strong>{breakdown.displayedWowScore}</strong>
       </div>
       <div>
-        <span>Stored/core WOW</span>
+        <span>Stored/core resonance</span>
         <strong>{breakdown.persistedCoreWowScore}</strong>
       </div>
       <div>
@@ -106,7 +106,7 @@ export default function AdminWowStatusPage(): JSX.Element {
     try {
       setRows(await fetchWowStatus(24));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load WOW status");
+      setError(err instanceof Error ? err.message : "Failed to load top-of-mind status");
     } finally {
       setLoading(false);
     }
@@ -158,9 +158,9 @@ export default function AdminWowStatusPage(): JSX.Element {
         <div>
           <Link to="/admin" className="admin-back-link">Admin</Link>
           <span>internal diagnostics</span>
-          <h1>WOW pipeline status</h1>
+          <h1>Top-of-mind pipeline status</h1>
           <p>
-            Internal visibility into the existing WOW pipeline. This page keeps
+            Internal visibility into the legacy note-generation pipeline. This page keeps
             scores, debug labels, jobs, and judge diagnostics out of the
             user-facing product surface.
           </p>
@@ -170,8 +170,8 @@ export default function AdminWowStatusPage(): JSX.Element {
         </button>
       </header>
 
-      <section className="admin-summary-row" aria-label="WOW status summary">
-        <span>{summary.inspirations} inspirations</span>
+      <section className="admin-summary-row" aria-label="top-of-mind status summary">
+        <span>{summary.inspirations} signals</span>
         <span>{summary.ready} ready</span>
         <span>{summary.waiting} waiting</span>
         <span>{summary.failed} failed</span>
@@ -179,13 +179,13 @@ export default function AdminWowStatusPage(): JSX.Element {
 
       {error ? <p className="admin-error">{error}</p> : null}
 
-      <section className="admin-table-card" aria-label="WOW pipeline rows">
+      <section className="admin-table-card" aria-label="Top-of-mind pipeline rows">
         <div className="admin-table-scroll">
           <table>
             <thead>
               <tr>
                 <th>Saved</th>
-                <th>Inspiration</th>
+                <th>Signal</th>
                 <th>Cluster</th>
                 <th>Scores</th>
                 <th>Embedding</th>
@@ -198,7 +198,7 @@ export default function AdminWowStatusPage(): JSX.Element {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9}>{loading ? "Loading status..." : "No recent inspirations."}</td>
+                  <td colSpan={9}>{loading ? "Loading status..." : "No recent signals."}</td>
                 </tr>
               ) : (
                 rows.map((row) => {
@@ -211,7 +211,7 @@ export default function AdminWowStatusPage(): JSX.Element {
                         <td>{row.inspiration.textPreview}</td>
                         <td>{row.inspiration.cluster ?? "unclassified"}</td>
                         <td>
-                          <strong>WOW {row.inspiration.wowScore}</strong>
+                          <strong>Resonance {row.inspiration.wowScore}</strong>
                           <span>Importance {row.inspiration.importanceScore}</span>
                           <button
                             type="button"

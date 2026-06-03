@@ -293,6 +293,35 @@ export type ClusterKind =
  */
 export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
 
+export type ApiSignalScoreName =
+  | "resonance"
+  | "recurrence"
+  | "agency"
+  | "identitySignal"
+  | "decisionRelevance";
+
+export type ApiSignalScores = Record<ApiSignalScoreName, number>;
+
+export interface ApiSignal {
+  id: string;
+  userId: string;
+  text: string;
+  kind: ApiInspirationKind | null;
+  category: number | null;
+  scores: ApiSignalScores;
+  capturedAt: string;
+  updatedAt: string;
+  interpretation: {
+    cluster: ClusterKind | null;
+    classifiedAt: string | null;
+  };
+  legacy: {
+    inspirationId: string;
+    importanceScore: number;
+    wowScore: number;
+  };
+}
+
 export interface ApiInspiration {
   id: string;
   userId: string;
@@ -307,6 +336,9 @@ export interface ApiInspiration {
   updatedAt: string;
   /** Populated by GET /inspirations; omitted on older create/update responses. */
   attachments?: ApiAttachment[];
+  /** Signal-facing compatibility layer over the current inspiration row. */
+  signal?: ApiSignal;
+  signalScores?: ApiSignalScores;
 }
 
 export interface ApiInspirationScoreBreakdown {
@@ -451,7 +483,7 @@ export async function createInspiration(
   const body = await postJson<CreateInspirationResponse>(
     apiPath("/inspirations"),
     input,
-    "Failed to save inspiration",
+    "Failed to save signal",
   );
   return body.inspiration;
 }
@@ -469,7 +501,7 @@ export async function updateInspiration(
   const body = await patchJson<UpdateInspirationResponse>(
     apiPath(`/inspirations/${encodeURIComponent(id)}`),
     input,
-    "Failed to update inspiration",
+    "Failed to update signal",
   );
   return body.inspiration;
 }
@@ -488,7 +520,7 @@ export async function recordInspirationRevisit(
   return postJson<CreateInspirationRevisitResponse>(
     apiPath(`/inspirations/${encodeURIComponent(id)}/revisits`),
     { eventType },
-    "Failed to record inspiration revisit",
+    "Failed to record signal revisit",
   );
 }
 
@@ -497,7 +529,7 @@ export async function fetchInspirationSparks(
 ): Promise<ApiInspirationSpark[]> {
   const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
     apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    "Failed to load inspiration sparks",
+    "Failed to load signal highlights",
   );
   return Array.isArray(body.sparks) ? body.sparks : [];
 }
@@ -520,6 +552,44 @@ export async function createInspirationSpark(
     "Failed to save spark",
   );
   return body.spark;
+}
+
+export async function deleteInspirationSpark(
+  inspirationId: string,
+  sparkId: string,
+): Promise<void> {
+  const path = apiPath(
+    `/inspirations/${encodeURIComponent(inspirationId)}/sparks/${encodeURIComponent(sparkId)}`,
+  );
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while removing highlight",
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — handled below.
+  }
+  const errorBody = (body ?? {}) as { error?: string };
+  throw new ApiError({
+    status: res.status,
+    message:
+      errorBody.error ??
+      `Failed to remove highlight (HTTP ${res.status}). Please try again.`,
+  });
 }
 
 export async function fetchInspirationScoreBreakdown(
@@ -562,7 +632,7 @@ export async function fetchInspirations(): Promise<ApiInspiration[]> {
   } catch {
     throw new ApiError({
       status: 0,
-      message: "Network unreachable while loading inspirations",
+      message: "Network unreachable while loading signals",
     });
   }
 
@@ -615,7 +685,7 @@ export async function deleteInspiration(id: string): Promise<void> {
   } catch {
     throw new ApiError({
       status: 0,
-      message: "Network unreachable while deleting inspiration",
+      message: "Network unreachable while deleting signal",
     });
   }
 
@@ -632,7 +702,7 @@ export async function deleteInspiration(id: string): Promise<void> {
     status: res.status,
     message:
       errorBody.error ??
-      `Failed to delete inspiration (HTTP ${res.status}). Please try again.`,
+      `Failed to delete signal (HTTP ${res.status}). Please try again.`,
   });
 }
 
@@ -643,7 +713,30 @@ export type WowKind =
   | "tension"
   | "outlier";
 
-export interface ApiWowMomentRelatedInspiration {
+export type ApiTopOfMindNoteType =
+  | "pattern"
+  | "tension"
+  | "question"
+  | "hypothesis"
+  | "action";
+
+export type ApiTopOfMindNoteStatus =
+  | "active"
+  | "dismissed"
+  | "stale"
+  | "replaced";
+
+export type ApiAmbitionDimension =
+  | "place"
+  | "people"
+  | "work"
+  | "taste"
+  | "tension"
+  | "identity"
+  | "rejection"
+  | "next_experiment";
+
+export interface ApiTopOfMindCompatibilitySignal {
   inspirationId: string;
   role: string;
   reason: string;
@@ -653,7 +746,59 @@ export interface ApiWowMomentRelatedInspiration {
   wowScore: number;
 }
 
-export interface ApiWowMoment {
+export interface ApiTopOfMindNote {
+  id: string;
+  userId: string;
+  title: string;
+  ambitionDimension: ApiAmbitionDimension;
+  ambientSignal: string;
+  matchedEnvironment: string;
+  antiEnvironment: string;
+  evidenceRationale: string;
+  rejectedAlternativeInterpretation: string | null;
+  type: ApiTopOfMindNoteType;
+  body: string;
+  prompt: string | null;
+  guidance: string | null;
+  confidence: number;
+  status: ApiTopOfMindNoteStatus;
+  relatedSignalIds: string[];
+  relatedContextNodeIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  source: "wow_moment_compatibility";
+  isProvisional: true;
+  legacy: {
+    wowMomentId: string;
+    wowKind: WowKind;
+    wowScore: number;
+  };
+}
+
+export interface ApiTopOfMindEvidencePreview {
+  signalId: string;
+  role: string;
+  reason: string;
+  textPreview: string;
+  kind: string | null;
+  createdAt: string;
+  resonanceScore: number;
+}
+
+export interface ApiTopOfMindRelatedSignalReference {
+  id: string;
+  preview: string;
+  kind: string | null;
+  createdAt: string;
+  resonanceScore: number;
+}
+
+export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
+  evidencePreviews: ApiTopOfMindEvidencePreview[];
+  relatedSignals: ApiTopOfMindRelatedSignalReference[];
+};
+
+export interface ApiTopOfMindCompatibilityMoment {
   id: string;
   userId: string;
   title: string;
@@ -665,15 +810,221 @@ export interface ApiWowMoment {
   wowScore: number;
   createdAt: string;
   updatedAt: string;
-  relatedInspirations: ApiWowMomentRelatedInspiration[];
+  relatedInspirations: ApiTopOfMindCompatibilitySignal[];
+  topOfMindNote?: ApiTopOfMindNote;
 }
 
-export interface ListWowMomentsResponse {
-  wowMoments: ApiWowMoment[];
+export interface ListTopOfMindCompatibilityMomentsResponse {
+  wowMoments: ApiTopOfMindCompatibilityMoment[];
 }
 
-export interface FetchWowMomentsOptions {
+export interface ListTopOfMindNotesResponse {
+  topOfMindNotes: ApiTopOfMindNoteSurface[];
+  topOfMind?: ApiTopOfMind;
+}
+
+export interface GetTopOfMindNoteResponse {
+  topOfMindNote: ApiTopOfMindNoteSurface;
+}
+
+export type ApiActionRecommendationStatus =
+  | "active"
+  | "completed"
+  | "removed";
+
+export type ApiActionRecommendationKind =
+  | "message_person"
+  | "enter_room"
+  | "make_artifact"
+  | "remove_pull"
+  | "test_hunch"
+  | "revisit_signal";
+
+export interface ApiActionRecommendation {
+  id: string;
+  text: string;
+  sourceTopOfMindId: string;
+  sourceSignalIds: string[];
+  evidenceSnippets: string[];
+  kind: ApiActionRecommendationKind;
+  whyNow: string;
+  confidence: number;
+  createdAt: string;
+  status: ApiActionRecommendationStatus;
+  dismissedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface ListActionRecommendationsResponse {
+  actionRecommendations: ApiActionRecommendation[];
+}
+
+export interface UpdateActionRecommendationStateRequest {
+  sourceTopOfMindId: string;
+  status: Exclude<ApiActionRecommendationStatus, "active">;
+  outcomeText?: string;
+  relatedSignalIds?: string[];
+}
+
+export interface ApiActionRecommendationState {
+  actionId: string;
+  sourceTopOfMindId: string;
+  status: ApiActionRecommendationStatus;
+  outcomeText?: string | null;
+  relatedSignalIds?: string[];
+  updatedAt: string;
+}
+
+export interface UpdateActionRecommendationStateResponse {
+  actionRecommendationState: ApiActionRecommendationState;
+}
+
+export type ApiFeedbackTarget =
+  | "signal"
+  | "context_node"
+  | "top_of_mind_note"
+  | "hypothesis";
+export type ApiFeedbackValue =
+  | "true"
+  | "partly"
+  | "not_true"
+  | "important"
+  | "not_important";
+export type ApiFeedbackEmotion =
+  | "admire"
+  | "envy"
+  | "want"
+  | "fear"
+  | "curious"
+  | "aesthetic_only";
+
+export interface ApiFeedbackRecord {
+  id: string;
+  userId: string;
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+  value: ApiFeedbackValue;
+  emotionLabel: ApiFeedbackEmotion | null;
+  correctionText: string | null;
+  source: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFeedbackRequest {
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+  value: ApiFeedbackValue;
+  emotionLabel?: ApiFeedbackEmotion;
+  correctionText?: string;
+}
+
+export interface CreateFeedbackResponse {
+  feedback: ApiFeedbackRecord;
+}
+
+export interface FetchTopOfMindCompatibilityMomentsOptions {
   limit?: number;
+}
+
+export interface FetchTopOfMindNotesOptions {
+  limit?: number;
+}
+
+export type SavedSignalArchiveFilter =
+  | "all"
+  | "highlighted"
+  | "high_resonance"
+  | "tensions"
+  | "questions"
+  | "people_places"
+  | "recently_resurfaced";
+
+export type SavedSignalArchiveSort = "recent" | "resonance" | "revisited";
+
+export interface ApiSavedSignalSearchResult {
+  id: string;
+  userId: string;
+  textPreview: string;
+  kind: string | null;
+  capturedAt: string;
+  updatedAt: string;
+  resonanceScore: number;
+  signalScores: ApiSignalScores;
+  highlightedSnippets: Array<{
+    id: string;
+    text: string;
+    source: string;
+    confidence: number;
+    isPrimary: boolean;
+  }>;
+  matchingSnippets: string[];
+  relatedContextTerms: string[];
+  relatedTopOfMindNoteTitles: string[];
+  attachmentSummary: Array<{
+    id: string;
+    type: AttachmentType;
+    label: string;
+  }>;
+  relevanceReasons: string[];
+}
+
+export interface ApiSavedSignalDetail extends ApiSavedSignalSearchResult {
+  rawText: string;
+  attachments: Array<{
+    id: string;
+    type: AttachmentType;
+    url?: string;
+    label: string;
+    contentType: string | null;
+    size: number | null;
+  }>;
+  resonanceFeedback: Array<{
+    id: string;
+    value: ApiFeedbackValue;
+    emotionLabel: ApiFeedbackEmotion | null;
+    correctionText: string | null;
+    createdAt: string;
+  }>;
+  signalPacket: {
+    id: string;
+    text: string;
+    primarySpark: string;
+    artifactExcerpt: string;
+    updatedAt: string;
+  } | null;
+  relatedContextNodes: Array<{
+    id: string;
+    type: string;
+    label: string;
+    description: string;
+    confidence: number;
+    evidenceReason: string;
+  }>;
+  relatedTopOfMindNotes: Array<{
+    id: string;
+    title: string;
+    type: ApiTopOfMindNoteType;
+    body: string;
+    confidence: number;
+    status: "active";
+  }>;
+}
+
+export interface FetchSavedSignalsOptions {
+  q?: string;
+  filter?: SavedSignalArchiveFilter;
+  sort?: SavedSignalArchiveSort;
+  limit?: number;
+}
+
+export interface ListSavedSignalsResponse {
+  signals: ApiSavedSignalSearchResult[];
+}
+
+export interface GetSavedSignalResponse {
+  signal: ApiSavedSignalDetail;
 }
 
 export type BackgroundJobType = "process_inspiration";
@@ -755,14 +1106,14 @@ export async function fetchWowStatus(limit = 12): Promise<ApiWowStatusRow[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   const body = await getJson<ListWowStatusResponse>(
     apiPath(`/wow-status?${params.toString()}`),
-    "Failed to load WOW status",
+    "Failed to load top-of-mind status",
   );
   return Array.isArray(body.rows) ? body.rows : [];
 }
 
-export async function fetchWowMoments(
-  options: FetchWowMomentsOptions = {},
-): Promise<ApiWowMoment[]> {
+export async function fetchLegacyTopOfMindCompatibilityMoments(
+  options: FetchTopOfMindCompatibilityMomentsOptions = {},
+): Promise<ApiTopOfMindCompatibilityMoment[]> {
   const params = new URLSearchParams();
   if (typeof options.limit === "number") params.set("limit", String(options.limit));
   const query = params.toString();
@@ -777,7 +1128,7 @@ export async function fetchWowMoments(
   } catch {
     throw new ApiError({
       status: 0,
-      message: "Network unreachable while loading WOW moments",
+      message: "Network unreachable while loading top-of-mind compatibility notes",
     });
   }
 
@@ -794,18 +1145,156 @@ export async function fetchWowMoments(
       status: res.status,
       message:
         errorBody.error ??
-        `Failed to load WOW moments (HTTP ${res.status}). Please try again.`,
+        `Failed to load top-of-mind compatibility notes (HTTP ${res.status}). Please try again.`,
     });
   }
 
-  const payload = body as Partial<ListWowMomentsResponse> | null;
+  const payload = body as Partial<ListTopOfMindCompatibilityMomentsResponse> | null;
   if (!payload || !Array.isArray(payload.wowMoments)) {
     throw new ApiError({
       status: res.status,
-      message: "Malformed WOW moments response",
+      message: "Malformed top-of-mind compatibility response",
     });
   }
   return payload.wowMoments;
+}
+
+export async function fetchTopOfMindNotes(
+  options: FetchTopOfMindNotesOptions = {},
+): Promise<ApiTopOfMindNoteSurface[]> {
+  const params = new URLSearchParams();
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<ListTopOfMindNotesResponse>(
+    apiPath(`/top-of-mind${query ? `?${query}` : ""}`),
+    "Failed to load top-of-mind notes",
+  );
+
+  if (!Array.isArray(body.topOfMindNotes)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed top-of-mind notes response",
+    });
+  }
+
+  return body.topOfMindNotes;
+}
+
+export async function fetchTopOfMindNote(
+  noteId: string,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await getJson<GetTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${noteId}`),
+    "Failed to load top-of-mind note",
+  );
+
+  if (!body.topOfMindNote) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed top-of-mind note response",
+    });
+  }
+
+  return body.topOfMindNote;
+}
+
+export async function fetchActionRecommendations(): Promise<
+  ApiActionRecommendation[]
+> {
+  const body = await getJson<ListActionRecommendationsResponse>(
+    apiPath("/action-recommendations"),
+    "Failed to load action recommendations",
+  );
+
+  if (!Array.isArray(body.actionRecommendations)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed action recommendation response",
+    });
+  }
+
+  return body.actionRecommendations;
+}
+
+export async function updateActionRecommendationState(
+  actionId: string,
+  input: UpdateActionRecommendationStateRequest,
+): Promise<ApiActionRecommendationState> {
+  const body = await postJson<UpdateActionRecommendationStateResponse>(
+    apiPath(`/action-recommendations/${encodeURIComponent(actionId)}/state`),
+    input,
+    "Failed to update action recommendation",
+  );
+
+  if (!body.actionRecommendationState) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed action recommendation state response",
+    });
+  }
+
+  return body.actionRecommendationState;
+}
+
+export async function fetchSavedSignals(
+  options: FetchSavedSignalsOptions = {},
+): Promise<ApiSavedSignalSearchResult[]> {
+  const params = new URLSearchParams();
+  if (options.q) params.set("q", options.q);
+  if (options.filter && options.filter !== "all") params.set("filter", options.filter);
+  if (options.sort && options.sort !== "recent") params.set("sort", options.sort);
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<ListSavedSignalsResponse>(
+    apiPath(`/signals${query ? `?${query}` : ""}`),
+    "Failed to load saved signals",
+  );
+
+  if (!Array.isArray(body.signals)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed saved signals response",
+    });
+  }
+
+  return body.signals;
+}
+
+export async function fetchSavedSignalDetail(
+  signalId: string,
+): Promise<ApiSavedSignalDetail> {
+  const body = await getJson<GetSavedSignalResponse>(
+    apiPath(`/signals/${encodeURIComponent(signalId)}`),
+    "Failed to load saved signal",
+  );
+
+  if (!body.signal) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed saved signal response",
+    });
+  }
+
+  return body.signal;
+}
+
+export async function createFeedback(
+  input: CreateFeedbackRequest,
+): Promise<ApiFeedbackRecord> {
+  const body = await postJson<CreateFeedbackResponse>(
+    apiPath("/feedback"),
+    input,
+    "Failed to save feedback",
+  );
+
+  if (!body.feedback) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed feedback response",
+    });
+  }
+
+  return body.feedback;
 }
 
 export async function fetchBackgroundJobs(
@@ -852,9 +1341,52 @@ export async function fetchBackgroundJobs(
   return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
+export type ApiMeaningGraphMemoryState =
+  | "emerging"
+  | "active"
+  | "fading"
+  | "dormant"
+  | "reactivated"
+  | "contradicted"
+  | "needs_testing";
+
+export interface ApiMeaningGraphMemory {
+  state: ApiMeaningGraphMemoryState;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  reinforcementCount: number;
+  recentReinforcementCount: number;
+  currentWeight: number;
+  confidence: number;
+  decay: number;
+  supportingSignalIds: string[];
+  movementScore: number;
+}
+
+export interface ApiMeaningGraphQualityIndicator {
+  type:
+    | "raw_graph_label"
+    | "shallow_summary"
+    | "generic_ambition_wrapper"
+    | "unsupported_synthesis"
+    | "healthy_specificity";
+  severity: "ok" | "watch" | "risk";
+  label: string;
+  detail: string;
+}
+
 export interface ApiMeaningGraphNode {
   id: string;
   type: string;
+  contextType: string;
+  ambitionDimension:
+    | "place"
+    | "people"
+    | "work"
+    | "taste"
+    | "identity"
+    | "rejection"
+    | "next_experiment";
   label: string;
   description: string;
   status: string;
@@ -866,6 +1398,42 @@ export interface ApiMeaningGraphNode {
   lastReinforcedAt: string;
   createdAt: string;
   updatedAt: string;
+  memory: ApiMeaningGraphMemory;
+  qualityIndicators: ApiMeaningGraphQualityIndicator[];
+  relatedTopOfMindNotes: Array<{
+    id: string;
+    title: string;
+    why: string;
+    score: number;
+    ambitionDimension: ApiTopOfMindNote["ambitionDimension"];
+    ambientSignal: string;
+    matchedEnvironment: string;
+    antiEnvironment: string;
+    evidenceRationale: string;
+    rejectedAlternativeInterpretation: string | null;
+    whyNow: string;
+    changedRecently: string;
+    feedback: Array<{
+      id: string;
+      targetType: "top_of_mind_note";
+      value: ApiFeedbackValue;
+      emotionLabel: ApiFeedbackEmotion | null;
+      correctionText: string | null;
+      source: string;
+      createdAt: string;
+    }>;
+    qualityIndicators: ApiMeaningGraphQualityIndicator[];
+    createdAt: string;
+  }>;
+  feedback: Array<{
+    id: string;
+    targetType: "context_node" | "hypothesis";
+    value: ApiFeedbackValue;
+    emotionLabel: ApiFeedbackEmotion | null;
+    correctionText: string | null;
+    source: string;
+    createdAt: string;
+  }>;
   evidence: Array<{
     inspirationId: string;
     packetId: string;
@@ -907,6 +1475,7 @@ export interface ApiMeaningGraphRecentInspiration {
     id: string;
     label: string;
     type: string;
+    contextType?: string;
     reason: string;
   }>;
   relationshipEdges: Array<{
@@ -995,7 +1564,7 @@ export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
   const params = new URLSearchParams({ limit: String(limit) });
   const body = await getJson<{ graph: ApiMeaningGraph }>(
     apiPath(`/admin/meaning-graph?${params.toString()}`),
-    "Failed to load meaning graph",
+    "Failed to load context graph",
   );
   return body.graph;
 }
@@ -1004,7 +1573,7 @@ export async function rebuildMeaningGraph(): Promise<{
   job: ApiMeaningGraphRebuildJob;
   statusUrl?: string;
 }> {
-  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to enqueue meaning graph rebuild");
+  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to enqueue context graph rebuild");
 }
 
 export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
@@ -1013,7 +1582,7 @@ export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
   const path = jobId
     ? `/admin/meaning-graph/rebuild/${encodeURIComponent(jobId)}`
     : "/admin/meaning-graph/rebuild";
-  return getJson(apiPath(path), "Failed to load meaning graph rebuild status");
+  return getJson(apiPath(path), "Failed to load context graph rebuild status");
 }
 
 export function formatMeaningGraphRebuildError(err: unknown): string {
@@ -1029,7 +1598,7 @@ export function formatMeaningGraphRebuildError(err: unknown): string {
     return timeoutMessage;
   }
 
-  const message = err instanceof Error ? err.message : "Failed to rebuild meaning graph";
+  const message = err instanceof Error ? err.message : "Failed to rebuild context graph";
   return `Rebuild failed: ${message}`;
 }
 

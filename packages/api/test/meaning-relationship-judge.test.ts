@@ -9,7 +9,7 @@ import {
   judgeMeaningRelationshipsForInspiration,
   type MeaningRelationshipJudgeClient,
 } from "../src/lib/meaning-relationship-judge.js";
-import { persistMeaningPacketForInspiration } from "../src/lib/meaning-packets.js";
+import { persistSignalPacketForSignal } from "../src/lib/signal-packets.js";
 
 import { createInspirationFixture } from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
@@ -20,10 +20,10 @@ async function createPacket(
   userId: string,
   inspiration: Inspiration,
 ): Promise<void> {
-  const result = await persistMeaningPacketForInspiration({
+  const result = await persistSignalPacketForSignal({
     db: testDb.db,
     userId,
-    inspirationId: inspiration.id,
+    signalId: inspiration.id,
   });
   expect(result.status).toBe("created_or_updated");
 }
@@ -91,7 +91,7 @@ describe("judgeMeaningRelationshipsForInspiration", () => {
   it("returns not_enough_candidates without calling the judge when no bounded candidates exist", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
-      text: "Trigger has a packet but no other saved meaning packets.",
+      text: "Trigger has a packet but no other saved signal packets.",
     });
     await createPacket(testDb, alice.user.id, trigger);
     const client: MeaningRelationshipJudgeClient = {
@@ -167,7 +167,7 @@ describe("judgeMeaningRelationshipsForInspiration", () => {
     });
     expect(client.judgeMeaningRelationships).toHaveBeenCalledTimes(1);
     const input = vi.mocked(client.judgeMeaningRelationships).mock.calls[0]![0];
-    expect(input.trigger.packetText).toContain("waka.meaning_packet.v1");
+    expect(input.trigger.packetText).toContain("waka.signal_packet.v1");
     expect(input.candidates[0]!.packetText).toContain("Cities and peers");
     expect(input.candidates[0]!.scores.runtimeMeaningCandidateScore).toEqual(
       expect.any(Number),
@@ -345,7 +345,7 @@ describe("GeminiMeaningRelationshipJudgeClient", () => {
       trigger: {
         inspirationId: triggerId,
         packetId: "packet-trigger",
-        packetText: "waka.meaning_packet.v1\nSPARKS\nchoosing what to build",
+        packetText: "waka.signal_packet.v1\nWHAT_HIT\nchoosing what to build",
         sparkText: "choosing what to build",
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
         cluster: "bridge",
@@ -354,7 +354,7 @@ describe("GeminiMeaningRelationshipJudgeClient", () => {
         {
           inspirationId: candidateId,
           packetId: "packet-candidate",
-          packetText: "waka.meaning_packet.v1\nSPARKS\nchoosing who to build with",
+          packetText: "waka.signal_packet.v1\nWHAT_HIT\nchoosing who to build with",
           sparkText: "choosing who to build with",
           createdAt: new Date("2026-01-02T00:00:00.000Z"),
           cluster: "loop",
@@ -373,7 +373,7 @@ describe("GeminiMeaningRelationshipJudgeClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const request = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     const prompt = request.contents[0].parts[0].text as string;
-    expect(prompt).toContain("waka.meaning_packet.v1");
+    expect(prompt).toContain("waka.signal_packet.v1");
     expect(prompt).toContain(candidateId);
     expect(prompt).toContain("allowedCandidateIds");
   });

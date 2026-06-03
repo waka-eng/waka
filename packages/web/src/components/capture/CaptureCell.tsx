@@ -67,6 +67,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type ReactNode,
+  type SyntheticEvent,
   forwardRef,
   useState,
 } from "react";
@@ -117,10 +118,18 @@ export interface CaptureCellProps {
 
   /** Controlled textarea value for the capture note. */
   noteValue?: string;
+  /** Optional selected ranges to render as in-text highlights behind the textarea. */
+  noteHighlights?: Array<{ startOffset: number; endOffset: number; text: string }>;
+  /** Removes one existing note highlight. */
+  onRemoveNoteHighlight?: (index: number) => void;
+  /** Optional floating action shown while text is selected but not yet highlighted. */
+  noteSelectionToolbar?: ReactNode;
   /** Fires on every textarea keystroke. */
   onNoteChange?: (value: string) => void;
   /** Fires when text is pasted into the universal composer. */
   onNotePaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  /** Fires when the user selects text inside the capture textarea. */
+  onNoteSelect?: (event: SyntheticEvent<HTMLTextAreaElement>) => void;
   /**
    * Optional textarea keydown — used by the prototype to (a) submit on
    * Cmd/Ctrl+Enter and (b) discard with Escape. We forward the event
@@ -150,7 +159,6 @@ export interface CaptureCellProps {
   onSave?: () => void;
   /** Fires when the user chooses the guided reflective save flow. */
   onReflectiveSave?: () => void;
-
   /** Fires when the user picks a file via the `+` button. */
   onFileSelect?: (file: File) => void;
 
@@ -170,6 +178,8 @@ export interface CaptureCellProps {
    * the attachment data model.
    */
   attachments?: ReactNode;
+  /** Optional lightweight controls or metadata rendered under the textarea. */
+  captureMeta?: ReactNode;
 
   /**
    * Optional save-confirmation overlay copy. When set (and `confirmVisible`
@@ -245,17 +255,18 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       view = "note",
       visualState = {},
       noteValue,
+      noteHighlights = [],
+      onRemoveNoteHighlight,
+      noteSelectionToolbar,
       onNoteChange,
       onNotePaste,
+      onNoteSelect,
       onNoteKeyDown,
-      notePlaceholder = "A link, a note, an image — whatever's inspiring you right now…",
-      processSaveLabel = "Process this inspiration",
-      processSaveTitle = "Add one context note before saving",
-      quickSaveLabel = "Quick save",
-      quickSaveTitle = "Save now without adding context",
-      focusModeLabel = "Focus mode",
-      enterFocusModeLabel = "Enter focus mode",
-      exitFocusModeLabel = "Exit focus mode",
+      notePlaceholder = "Drop what hit: a note, link, or image. Save it fast or reflect deeper.",
+      processSaveLabel = "Reflect deeper",
+      processSaveTitle = "Add one small thought before saving this inspiration",
+      quickSaveLabel = "Save it now",
+      quickSaveTitle = "Save this inspiration now",
       doneLabel = "Done",
       continueLabel = "Continue",
       saveVisible = false,
@@ -265,6 +276,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       focused = false,
       onToggleFocus,
       attachments,
+      captureMeta,
       confirmMessage,
       confirmVisible = false,
       reflectQuestion,
@@ -280,6 +292,46 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
     ref,
   ): JSX.Element {
     const [dragActive, setDragActive] = useState(false);
+    const noteText = noteValue ?? "";
+    const visibleNoteHighlights = noteHighlights
+      .map((item, index) => ({ ...item, index }))
+      .filter(
+        (item) =>
+          noteText &&
+          item.startOffset >= 0 &&
+          item.endOffset > item.startOffset &&
+          noteText.slice(item.startOffset, item.endOffset) === item.text,
+      )
+      .sort((a, b) => a.startOffset - b.startOffset);
+    const noteHighlightLayer = visibleNoteHighlights.length > 0 ? (
+      <div className="cap-note-highlight-layer" aria-hidden="true">
+        {visibleNoteHighlights.map((item, itemIndex) => {
+          const previousEnd = visibleNoteHighlights[itemIndex - 1]?.endOffset ?? 0;
+          return (
+            <span key={`${item.startOffset}-${item.endOffset}`}>
+              <span>{noteText.slice(previousEnd, item.startOffset)}</span>
+              <mark>
+                {item.text}
+                {onRemoveNoteHighlight ? (
+                  <button
+                    type="button"
+                    className="cap-unhighlight"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => onRemoveNoteHighlight(item.index)}
+                  >
+                    unhighlight
+                  </button>
+                ) : null}
+              </mark>
+              {itemIndex === visibleNoteHighlights.length - 1 ? (
+                <span>{noteText.slice(item.endOffset) || "\n"}</span>
+              ) : null}
+            </span>
+          );
+        })}
+      </div>
+    ) : null;
+
     const handleNoteChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
       onNoteChange?.(event.target.value);
     };
@@ -362,15 +414,22 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           transition smooth.
         */}
         <div className="cap-body" id="capBody" hidden={isReflectView}>
+          {noteHighlightLayer}
+          {noteSelectionToolbar}
           <textarea
+            className={visibleNoteHighlights.length > 0 ? "cap-note-input cap-note-input--has-highlight" : "cap-note-input"}
             id="capNote"
             placeholder={notePlaceholder}
             spellCheck={false}
             value={noteValue ?? ""}
             onChange={handleNoteChange}
             onPaste={onNotePaste}
+            onSelect={onNoteSelect}
+            onMouseUp={onNoteSelect}
+            onKeyUp={onNoteSelect}
             onKeyDown={onNoteKeyDown}
           />
+          {captureMeta}
           <div className="cap-strip" id="capStrip">
             {attachments}
           </div>
@@ -395,99 +454,88 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           />
         </div>
 
-        {/* --- Capture bar (file picker · save · expand/collapse) --- */}
+        {/* --- Capture bar: utilities (attach · expand) on the left, save
+             actions on the right — placed directly, no enclosing pill. --- */}
         <div className="cap-bar" id="capBar" hidden={isReflectView}>
-          <label className="cap-file-btn" htmlFor="capFile">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          <div className="cap-bar-left">
+            <label className="cap-file-btn" htmlFor="capFile" title="attach an image">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21.4 11.6 12.2 20.8a6 6 0 0 1-8.5-8.5l9.8-9.8a4 4 0 0 1 5.7 5.7l-9.8 9.8a2 2 0 1 1-2.8-2.8l9.2-9.2" />
+              </svg>
+            </label>
+            <input
+              id="capFile"
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={handleFileChange}
+            />
+            <button
+              type="button"
+              className="cap-expand"
+              id="capExpand"
+              title={focused ? "exit focus mode" : "focus mode"}
+              aria-label={focused ? "exit focus mode" : "enter focus mode"}
+              aria-pressed={focused}
+              onClick={() => onToggleFocus?.(!focused)}
             >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </label>
-          <input
-            id="capFile"
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleFileChange}
-          />
-          <button
-            type="button"
-            className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}`}
-            id="capReflectiveSave"
-            onClick={onReflectiveSave}
-            title={processSaveTitle}
-            disabled={!saveVisible}
-          >
-            {processSaveLabel}
-          </button>
-          <button
-            type="button"
-            className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
-            id="capSave"
-            onClick={onSave}
-            title={quickSaveTitle}
-            aria-label={quickSaveTitle}
-            // The prototype's `pointer-events: none` on the hidden state
-            // prevents accidental clicks during the fade-in transition.
-            // We also gate via `disabled` so AT users get the right
-            // semantics (not just visual-only disabling).
-            disabled={!saveVisible}
-          >
-            {quickSaveLabel}
-          </button>
-          <button
-            type="button"
-            className="cap-expand"
-            id="capExpand"
-            title={focused ? exitFocusModeLabel : focusModeLabel}
-            aria-label={focused ? exitFocusModeLabel : enterFocusModeLabel}
-            aria-pressed={focused}
-            onClick={() => onToggleFocus?.(!focused)}
-          >
-            {/*
-              Both glyphs live in the DOM; the prototype's CSS swaps which
-              is visible based on `.capture.focused`. We mirror that — keep
-              both rendered and let CSS do the visibility flip — so the
-              hover/transition contract stays identical.
-            */}
-            <svg
-              className="icon-expand"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={focused ? { display: "none" } : undefined}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                {focused ? (
+                  <>
+                    <polyline points="4 14 10 14 10 20" />
+                    <polyline points="20 10 14 10 14 4" />
+                    <line x1="14" y1="10" x2="21" y2="3" />
+                    <line x1="3" y1="21" x2="10" y2="14" />
+                  </>
+                ) : (
+                  <>
+                    <polyline points="15 3 21 3 21 9" />
+                    <polyline points="9 21 3 21 3 15" />
+                    <line x1="21" y1="3" x2="14" y2="10" />
+                    <line x1="3" y1="21" x2="10" y2="14" />
+                  </>
+                )}
+              </svg>
+            </button>
+          </div>
+          <div className="cap-bar-right">
+            <button
+              type="button"
+              className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}`}
+              id="capReflectiveSave"
+              onClick={onReflectiveSave}
+              title={processSaveTitle}
+              disabled={!saveVisible}
             >
-              <polyline points="15 3 21 3 21 9" />
-              <polyline points="9 21 3 21 3 15" />
-              <line x1="21" y1="3" x2="14" y2="10" />
-              <line x1="3" y1="21" x2="10" y2="14" />
-            </svg>
-            <svg
-              className="icon-collapse"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={focused ? undefined : { display: "none" }}
+              {processSaveLabel}
+            </button>
+            <button
+              type="button"
+              className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
+              id="capSave"
+              onClick={onSave}
+              title={quickSaveTitle}
+              aria-label={quickSaveTitle}
+              disabled={!saveVisible}
             >
-              <polyline points="4 14 10 14 10 20" />
-              <polyline points="20 10 14 10 14 4" />
-              <line x1="14" y1="10" x2="21" y2="3" />
-              <line x1="3" y1="21" x2="10" y2="14" />
-            </svg>
-          </button>
+              {quickSaveLabel}
+            </button>
+          </div>
         </div>
 
         {/* --- Reflect bar (Done · Continue) --- */}

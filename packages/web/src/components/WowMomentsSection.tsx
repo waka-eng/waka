@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import type { ApiWowMoment } from "../lib/api";
+import type { ApiTopOfMindCompatibilityMoment } from "../lib/api";
 import {
   DEFAULT_LOCALE,
   formatBestRecentMirrorMoments,
@@ -16,9 +16,9 @@ const MAX_WOW_LEAD_LENGTH = 180;
 const MAX_PATTERN_CHUNK_LENGTH = 240;
 const STICKY_NOTE_COLORS = ["#fff4a8", "#ffd7a8", "#d7f3c4", "#cfe8ff", "#f5d2f0"];
 const STICKY_NOTE_ROTATIONS = [-2.4, 1.6, -1.1, 2.2, -1.8, 1.1, -2, 2.6, -0.8];
-const SOURCE_FALLBACK_LABEL = "Source inspiration";
+const SOURCE_FALLBACK_LABEL = "Source signal";
 const SOURCE_FALLBACK_REASON = "Why this source matters";
-const SOURCE_FALLBACK_TEXT = "a source inspiration";
+const SOURCE_FALLBACK_TEXT = "a source signal";
 const INTERNAL_SOURCE_ROLE_LABELS = new Set([
   "primary",
   "supporting",
@@ -34,13 +34,13 @@ const INTERNAL_SOURCE_ROLE_LABELS = new Set([
 type ResonanceOption = "thats-me" | "partly" | "not-quite";
 type MemoryEndingState = "prompt" | "editing" | "remembered" | "dismissed";
 
-function countGeneratedFields(moment: ApiWowMoment): number {
+function countGeneratedFields(moment: ApiTopOfMindCompatibilityMoment): number {
   return [moment.title, moment.why, moment.beliefStatement, moment.reflectionQuestion, moment.reflectionGuide].filter(
     (value) => Boolean(value && value.trim()),
   ).length;
 }
 
-function formatDevCompactCounts(locale: SupportedLocale, moment: ApiWowMoment): string {
+function formatDevCompactCounts(locale: SupportedLocale, moment: ApiTopOfMindCompatibilityMoment): string {
   const sourceCount = moment.relatedInspirations.length;
   const generatedFieldCount = countGeneratedFields(moment);
   if (locale === "ko-KR") {
@@ -231,8 +231,8 @@ function buildPatternReport(value: string | null | undefined): { lead: string; b
   return { lead: "", bodyChunks: buildPatternChunks(normalized) };
 }
 
-function getReflectionGuide(moment: ApiWowMoment): string | null | undefined {
-  return (moment as ApiWowMoment & { reflectionGuide?: string | null }).reflectionGuide;
+function getReflectionGuide(moment: ApiTopOfMindCompatibilityMoment): string | null | undefined {
+  return (moment as ApiTopOfMindCompatibilityMoment & { reflectionGuide?: string | null }).reflectionGuide;
 }
 
 function lowerFirstLetter(value: string): string {
@@ -243,7 +243,7 @@ function sourceQuote(value: string): string {
   return `“${stripTerminalPunctuation(value)}”`;
 }
 
-function buildBeliefStatement(moment: ApiWowMoment): string {
+function buildBeliefStatement(moment: ApiTopOfMindCompatibilityMoment): string {
   const suppliedBelief = cleanBeliefSourceText(moment.beliefStatement);
   if (suppliedBelief) return suppliedBelief;
 
@@ -283,20 +283,20 @@ function buildBeliefStatement(moment: ApiWowMoment): string {
   if (title) {
     return `One possible reading: ${sourceQuote(
       title,
-    )} may be a small mirror of something you are drawn to. Add more inspirations and WAKA can ground this more clearly.`;
+    )} may be a small mirror of something you are drawn to. Add more signals and WAKA can ground this more clearly.`;
   }
 
-  return "One possible reading: this moment may be a small mirror. Add more inspirations and WAKA can ground the belief more clearly.";
+  return "One possible reading: this moment may be a small mirror. Add more signals and WAKA can ground the belief more clearly.";
 }
 
-function compareBestRecentWowMoments(a: ApiWowMoment, b: ApiWowMoment): number {
+function compareBestRecentWowMoments(a: ApiTopOfMindCompatibilityMoment, b: ApiTopOfMindCompatibilityMoment): number {
   const scoreDelta = b.wowScore - a.wowScore;
   if (scoreDelta !== 0) return scoreDelta;
   return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
 }
 
 interface WowMomentsSectionProps {
-  moments: ApiWowMoment[];
+  moments: ApiTopOfMindCompatibilityMoment[];
   loading: boolean;
   error: string | null;
   onAddInspiration?: () => void;
@@ -315,7 +315,7 @@ export function WowMomentsSection({
   const [searchParams, setSearchParams] = useSearchParams();
   const bestRecentMoments = useMemo(() => [...moments].sort(compareBestRecentWowMoments), [moments]);
   const visibleMoments = useMemo(() => bestRecentMoments.slice(0, MAX_VISIBLE_WOW_MOMENTS), [bestRecentMoments]);
-  const [selectedMoment, setSelectedMoment] = useState<ApiWowMoment | null>(null);
+  const [selectedMoment, setSelectedMoment] = useState<ApiTopOfMindCompatibilityMoment | null>(null);
   const [selectedResonance, setSelectedResonance] = useState<ResonanceOption | null>(null);
   const [memoryEndingState, setMemoryEndingState] = useState<MemoryEndingState>("prompt");
   const [memoryBeliefText, setMemoryBeliefText] = useState("");
@@ -328,7 +328,7 @@ export function WowMomentsSection({
     setMemoryBeliefText("");
   };
 
-  const selectMomentDetail = (moment: ApiWowMoment) => {
+  const selectMomentDetail = (moment: ApiTopOfMindCompatibilityMoment) => {
     setSelectedMoment(moment);
     resetLocalReflectionState();
     const firstSourceId = moment.relatedInspirations[0]?.inspirationId;
@@ -389,7 +389,7 @@ export function WowMomentsSection({
     }
   }, [loading, searchParams, selectedMoment, setSearchParams, visibleMoments]);
 
-  const openMoment = (moment: ApiWowMoment) => {
+  const openMoment = (moment: ApiTopOfMindCompatibilityMoment) => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("wow", moment.id);
     setSearchParams(nextParams);
@@ -428,7 +428,7 @@ export function WowMomentsSection({
     });
   };
 
-  const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLElement>, moment: ApiWowMoment) => {
+  const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLElement>, moment: ApiTopOfMindCompatibilityMoment) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       openMoment(moment);
@@ -825,7 +825,7 @@ export function WowMomentsSection({
                     </div>
                   ) : null}
                   {relatedSources.length > 0 ? (
-                    <ol className="wow-moment-related" aria-label="Inspirations behind this">
+                    <ol className="wow-moment-related" aria-label="Signals behind this">
                       {relatedSources.map((related) => (
                         <li key={`${moment.id}-${related.inspirationId}`}>
                           <span className="wow-moment-related-label">{t(locale, "savedInspiration")}</span>

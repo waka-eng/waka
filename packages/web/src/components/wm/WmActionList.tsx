@@ -54,7 +54,7 @@ export const DEFAULT_WM_ACTIONS: ReadonlyArray<WmAction> = [
   { value: "write", label: "Expand on this — write about it" },
   { value: "discuss", label: "Talk it out with the agent" },
   { value: "attach", label: "Attach a link, draft, or essay" },
-  { value: "related", label: "Find related saves across your inspirations" },
+  { value: "related", label: "Find related saves across your signals" },
   { value: "share", label: "Share this tile" },
 ];
 

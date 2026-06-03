@@ -16,12 +16,15 @@ import {
   meaningEdges,
   meaningEvidence,
   meaningNodes,
-  meaningPackets,
   type MeaningEdge,
   type MeaningEvidence,
   type MeaningNode,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import {
+  contextNodeTypeValues,
+  type ContextNodeType,
+} from "./context-node-types.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import {
   judgeMeaningRelationshipsForInspiration,
@@ -32,17 +35,10 @@ import {
 } from "./meaning-relationship-judge.js";
 
 export const meaningNodeTypeValues = [
-  "claim",
-  "value",
-  "question",
-  "desire",
-  "tension",
-  "life_direction",
-  "person_archetype",
-  "environment",
+  ...contextNodeTypeValues,
 ] as const;
 
-export type MeaningNodeType = (typeof meaningNodeTypeValues)[number];
+export type MeaningNodeType = ContextNodeType;
 
 export const meaningEdgeKindValues = [
   "supports",
@@ -168,7 +164,7 @@ function buildMeaningSignals(
     const source = sparkSource || row.packet.artifactExcerpt || row.packet.packetText;
     addSignal(signals, {
       ...common,
-      type: "claim",
+      type: "theme",
       label: shortText(source, 92),
       description:
         "A specific saved claim or spark preserved so the graph keeps texture instead of only broad themes.",
@@ -183,7 +179,7 @@ function buildMeaningSignals(
   if (includesAny(text, ["ai", "agent", "prototype", "build", "builder", "building", "tools", "만들"])) {
     addSignal(signals, {
       ...common,
-      type: "question",
+      type: "open_question",
       label: "what is worth building when building itself gets cheap?",
       description: "The save points past raw speed toward judgment and direction.",
       reason: "WAKA building/AI signals plus packet evidence promoted this as a live question.",
@@ -202,14 +198,14 @@ function buildMeaningSignals(
   if (includesAny(text, ["who", "people", "community", "builder", "founder", "lonely", "alone", "together", "hacker house", "누구", "사람", "외로"])) {
     addSignal(signals, {
       ...common,
-      type: "desire",
+      type: "hypothesis",
       label: "to build around people who make ambition feel less lonely",
       description: "The save treats people as part of the work, not background context.",
       reason: "People/community signals were retrieved as meaning evidence, not just topic overlap.",
     });
     addSignal(signals, {
       ...common,
-      type: "person_archetype",
+      type: "person",
       label: "builders who are intense but still human",
       description: "The desired people hold ambition without flattening the human reason for it.",
       reason: "Builder/founder language appears with emotional cost and belonging signals.",
@@ -228,10 +224,22 @@ function buildMeaningSignals(
     });
   }
 
+  if (includesAny(text, ["aesthetic", "aesthetics", "beautiful", "design", "taste", "visual", "style", "분위기", "미감", "아름", "디자인"])) {
+    addSignal(signals, {
+      ...common,
+      type: "aesthetic",
+      label: "a taste for work that feels visually and emotionally coherent",
+      description: "The save treats aesthetic pull as context, not decoration.",
+      reason: "Taste/design language promoted this as durable aesthetic context.",
+      weight: clampInt(weight - 8, 20, 100),
+      confidence: clampInt(confidence - 6, 45, 95),
+    });
+  }
+
   if (includesAny(text, ["why", "meaning", "matter", "death", "life", "last day", "가치", "왜", "삶", "죽"])) {
     addSignal(signals, {
       ...common,
-      type: "question",
+      type: "open_question",
       label: "what kind of life would make this work worth it?",
       description: "The save asks whether work is connected to a life that feels worth living.",
       reason: "Life/why signals were strong enough to promote an existential question.",
@@ -241,7 +249,7 @@ function buildMeaningSignals(
   if (includesAny(text, ["what to build", "who to build", "무엇을 만들어야", "누구와", "왜 만들어야"])) {
     addSignal(signals, {
       ...common,
-      type: "life_direction",
+      type: "project",
       label: "choose work, people, and environments that keep the why alive",
       description: "The save links work, people, place, and meaning into a direction of life.",
       reason: "The packet directly connects what to build, who to build with, and why it matters.",
@@ -264,7 +272,7 @@ function buildMeaningSignals(
     const source = row.packet.sparkText.trim() || row.packet.artifactExcerpt || row.packet.packetText;
     addSignal(signals, {
       ...common,
-      type: "question",
+      type: "open_question",
       label: `why this keeps moving me: ${shortText(source, 72)}`,
       description: "The save has enough signal to preserve as an under-specified meaning question.",
       reason: "Fallback promotion from spark or strong WAKA scores without a clearer ontology match.",
@@ -294,10 +302,10 @@ function proposalToEdgeKind(kind: MeaningRelationshipKind): MeaningEdgeKind {
 
 function chooseEdgeSource(signals: MeaningSignal[]): MeaningSignal | null {
   return (
-    signals.find((signal) => signal.type === "life_direction") ??
-    signals.find((signal) => signal.type === "desire") ??
-    signals.find((signal) => signal.type === "question") ??
-    signals.find((signal) => signal.type === "claim") ??
+    signals.find((signal) => signal.type === "project") ??
+    signals.find((signal) => signal.type === "hypothesis") ??
+    signals.find((signal) => signal.type === "open_question") ??
+    signals.find((signal) => signal.type === "theme") ??
     signals[0] ??
     null
   );
@@ -312,24 +320,26 @@ function chooseDistinctEdgePair(
   targetSignals: MeaningSignal[],
 ): { source: MeaningSignal; target: MeaningSignal } | null {
   const sourcePreference = [
-    "life_direction",
-    "desire",
-    "question",
-    "claim",
+    "project",
+    "hypothesis",
+    "open_question",
+    "theme",
     "value",
     "tension",
     "environment",
-    "person_archetype",
+    "person",
+    "aesthetic",
   ];
   const targetPreference = [
-    "life_direction",
+    "project",
     "environment",
-    "desire",
-    "question",
-    "claim",
+    "hypothesis",
+    "open_question",
+    "theme",
     "value",
     "tension",
-    "person_archetype",
+    "person",
+    "aesthetic",
   ];
   const orderedSources = [
     ...sourcePreference.flatMap((type) =>

@@ -256,7 +256,7 @@ export function InspirationDetail({
             ? caught.message
             : caught instanceof Error
               ? caught.message
-              : "Failed to update inspiration.";
+              : "Failed to update signal.";
         setSaveState({ status: "error", message });
       }
     })();
@@ -291,7 +291,7 @@ export function InspirationDetail({
             ? caught.message
             : caught instanceof Error
               ? caught.message
-              : "Failed to delete inspiration.";
+              : "Failed to delete signal.";
         setDeleteState({ status: "error", message });
       }
     })();
@@ -389,7 +389,7 @@ export function InspirationDetail({
           className="detail-back"
           id="detailBack"
           onClick={onBack}
-          aria-label="Back to saved inspirations"
+          aria-label="Back to saved signals"
         >
           ← Back
         </button>
@@ -411,7 +411,7 @@ export function InspirationDetail({
               <button
                 type="button"
                 onClick={handleDeleteClick}
-                aria-label="Delete this inspiration"
+                aria-label="Delete this signal"
                 style={{
                   background: "transparent",
                   border: "1px solid rgba(0,0,0,0.08)",
@@ -622,9 +622,9 @@ export function InspirationDetail({
                 type="button"
                 className="reflect-btn reflect-next"
                 onClick={handleStartReflection}
-                aria-label="Process this inspiration with a reflection"
+                aria-label="Add context to this signal"
               >
-                Process this inspiration
+                Add context
               </button>
             ) : (
               <ReflectionForm

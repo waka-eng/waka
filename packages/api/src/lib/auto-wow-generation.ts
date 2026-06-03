@@ -76,7 +76,7 @@ async function loadUserPreferredLocale(
 }
 
 /**
- * Best-effort automatic WOW generation for a freshly captured inspiration.
+ * Best-effort automatic top-of-mind generation for a freshly captured inspiration.
  *
  * This intentionally reuses the same bounded embedding → candidate judge →
  * persistence path as manual generation. The async classifier worker invokes
@@ -123,7 +123,7 @@ export async function generateAutoWowMomentForInspiration(
         inspirationId: params.inspirationId,
       });
     } catch {
-      // Score refresh is best-effort. It should never block automatic WOW
+      // Score refresh is best-effort. It should never block automatic top-of-mind
       // generation or turn a successful capture pipeline into an unavailable
       // result.
     }

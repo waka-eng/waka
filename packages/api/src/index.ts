@@ -12,10 +12,14 @@ import { handle } from "hono/aws-lambda";
 
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
+import { actionRecommendationsRoutes } from "./routes/action-recommendations.js";
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
 import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.js";
+import { decisionMemoRoutes } from "./routes/decision-memo.js";
+import { feedbackRoutes } from "./routes/feedback.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { signalArchiveRoutes } from "./routes/signals.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
 import { wowStatusRoutes } from "./routes/wow-status.js";
@@ -49,8 +53,20 @@ app.route("/api/admin/top-of-mind-preview", adminTopOfMindPreviewRoutes);
 // applies `requireAuth` at the mount point.
 app.route("/api/inspirations", inspirationsRoutes);
 
+// User-facing saved-signal archive and deep-dive surface.
+app.route("/api/signals", signalArchiveRoutes);
+
 // User-facing reading of the current meaning graph.
 app.route("/api/top-of-mind", topOfMindRoutes);
+
+// Low-prominence scaffold for turning graph-backed notes into a build decision.
+app.route("/api/decision-memo", decisionMemoRoutes);
+
+// Real-world experiments recommended from the current Top of Mind surface.
+app.route("/api/action-recommendations", actionRecommendationsRoutes);
+
+// User feedback teaches the graph-backed signal and top-of-mind loop.
+app.route("/api/feedback", feedbackRoutes);
 
 // Attachments routes (presigned uploads, ...) live under /api/attachments.
 // The router applies `requireAuth` at the mount point, so no anonymous

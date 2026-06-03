@@ -1,8 +1,9 @@
-# WAKA inspirations
+# WAKA signals
 
-A multi-user inspirations capture app: paste a thought, attach links / images,
-and a Gemini-powered classifier groups it into one of six clusters (`outlier`,
-`bridge`, `morph`, `convergence`, `tension`, `loop`).
+WAKA is an ambition mirror powered by saved signals, signal packets, a personal
+context graph, and provisional top-of-mind notes. Paste a thought, attach links
+or images, and WAKA keeps the captured signal lightweight while the backend
+derives context for later reflection.
 
 The stack is:
 
@@ -84,7 +85,7 @@ You can sanity-check the schema in the browser:
 pnpm db:studio
 ```
 
-You should see `users`, `inspirations`, `attachments`, `reflections`,
+You should see `users`, `WAKA legacy inspiration rows`, `attachments`, `reflections`,
 `sessions`, and `background_jobs` tables.
 
 ### 4. Push secrets into SST
@@ -151,12 +152,13 @@ local runner does not load root `.env` or `.env.production` for API development.
 This mode intentionally clears `VITE_API_URL` before building the client so
 browser API calls and Google OAuth navigation use same-origin paths such as
 `/api/auth/google/login`. It also builds with `VITE_SHOW_INTERNAL_STATUS=true` so
-the internal/demo-only WOW pipeline status strip is visible in the local
-same-origin demo after a successful Inspiration First capture; normal production
+the internal/demo-only top-of-mind pipeline status strip is visible in the local
+same-origin demo after a successful Capture First save; normal production
 builds keep the strip hidden unless that Vite env flag is explicitly set. API
 routes are mounted before static assets; the SPA
 fallback serves `index.html` only for non-API GET routes and will not intercept
-`/api/auth/*`, `/api/inspirations/*`, `/api/attachments/*`, `/api/wow-moments/*`, or `/api/health`.
+`/api/auth/*`, `/api/inspirations/*`, `/api/attachments/*`, `/api/top-of-mind/*`,
+legacy `/api/wow-moments/*`, or `/api/health`.
 
 Because Option B serves a built Vite bundle from Hono, Vite hot reload is not
 part of `pnpm dev:local`. Use the separate Vite/SST development flow when you
@@ -177,17 +179,18 @@ All endpoints still require a normal authenticated session. When the env gate is
 off, `/api/admin/background-jobs` returns 404 so the admin surface is not
 advertised.
 
-The authenticated Home page also has a compact internal/demo-only WOW pipeline
-status strip after a successful inspiration capture. It renders in Vite dev mode,
+The authenticated Home page also has a compact internal/demo-only top-of-mind pipeline
+status strip after a successful signal capture. It renders in Vite dev mode,
 in `pnpm dev:local`'s same-origin demo build, or when
 `VITE_SHOW_INTERNAL_STATUS=true` is set explicitly for the web app. The strip only
-shows safe fields (short inspiration id, timestamps, simple job/WOW status, WOW
-count) and degrades gracefully if the admin background-jobs endpoint is disabled.
+shows safe fields (short signal id, timestamps, simple job/top-of-mind status,
+and generated note count) and degrades gracefully if the admin background-jobs
+endpoint is disabled.
 
 Endpoints:
 
 - `GET /api/admin/background-jobs?status=&type=&userId=&limit=` lists newest jobs first. `limit` defaults to 50 and is clamped to 100. The list stays lightweight.
-- `GET /api/admin/background-jobs/:id` returns one tenant-scoped job or 404. For `process_inspiration` jobs it also includes a bounded `pipeline` object with the visible inspiration preview, cluster/classification status, scores, and linked WOW moment previews (`titlePreview` and `explanationPreview`). Missing or cross-tenant inspirations are reported as `inspiration: null` with a missing reason rather than a 500.
+- `GET /api/admin/background-jobs/:id` returns one tenant-scoped job or 404. For `process_inspiration` jobs it also includes a bounded `pipeline` object with the visible signal preview, cluster/classification status, scores, and linked top-of-mind note previews (`titlePreview` and `explanationPreview`). Missing or cross-tenant legacy inspiration rows are reported as `inspiration: null` with a missing reason rather than a 500.
 - `POST /api/admin/background-jobs/:id/retry` resets a failed job to `pending`; non-failed jobs return 409.
 
 Responses return safe job metadata plus `payloadSummary` only. For
@@ -218,8 +221,9 @@ failed jobs.
 
 ### 6. Optional local demo seed
 
-For quick UI review with a realistic 30-inspiration board plus persisted WOW
-moments, seed a local/dev database for a specific demo user:
+For quick UI review with a realistic 30-signal board plus persisted top-of-mind
+notes backed by legacy WOW storage, seed a local/dev database for a specific
+demo user:
 
 ```bash
 # Recommended: sign up locally first, then seed that email.
@@ -232,7 +236,7 @@ pnpm demo:seed -- --email=demo@example.test --create-user --password='local-only
 pnpm demo:seed -- --user-id=<uuid>
 
 # Cleanup only: remove curated demo seed rows while preserving the account and
-# normal user-created inspirations/WOW moments.
+# normal user-created signals/top-of-mind notes.
 pnpm demo:seed -- --email=demo@example.test --cleanup-demo-data
 ```
 
@@ -243,16 +247,17 @@ as a deliberate override only for an explicitly disposable dev database. It does
 not log secrets, does not mock production code, and only writes real
 tenant-scoped rows for the selected user. By default each run replaces this
 script's prior demo rows for the user so the account keeps exactly one
-30-inspiration demo dataset plus its persisted WOW moments; pass
+30-signal demo dataset plus its persisted top-of-mind notes; pass
 `--append-demo-data` only when you intentionally want duplicate demo datasets for
 stress testing. If the `--email` user does not exist, the command fails unless
 you pass `--create-user --password=...`; the password is stored as a bcrypt hash
 via the existing API auth helper so the demo account can log in.
 
 Cleanup-only mode never creates users and never reseeds data. It deletes only
-`kind = "demo-seed"` inspirations for the selected user plus WOW moments whose
-linked inspirations are all selected-user demo seed rows. Mixed WOW moments that
-include any non-demo/user-created inspiration survive; deleting demo inspirations
+`kind = "demo-seed"` legacy inspiration rows for the selected user plus
+top-of-mind notes whose linked legacy inspiration rows are all selected-user demo
+seed rows. Mixed top-of-mind notes that include any non-demo/user-created signal
+survive; deleting demo legacy inspiration rows
 only removes their join rows through the database's tenant-scoped foreign keys.
 
 Safety warning: demo seed and cleanup are local/dev operations. Non-local
@@ -260,11 +265,11 @@ database hosts are refused by default. `--allow-remote` is only for an explicitl
 disposable remote dev database; never point seed or cleanup at production,
 staging, or any database containing real user data.
 
-### 7. Organic WOW end-to-end validation
+### 7. Organic top-of-mind end-to-end validation
 
 Use this after creating a login-capable local demo account when you want to prove
-WAKA can generate WOW moments from organic captured inspirations without curated
-demo rows.
+WAKA can generate top-of-mind notes from organic captured signals without
+curated demo rows.
 
 Against an already-running local/dev stack:
 
@@ -280,8 +285,8 @@ WAKA_ORGANIC_EMAIL=demo@example.test WAKA_ORGANIC_PASSWORD='local-only-demo-pass
 
 The script signs in through `/login`, optionally runs the same guarded demo-data
 cleanup for the existing account, captures multiple related organic notes with a
-unique run marker, waits for classification/background WOW status, and passes
-only when a generated/existing WOW moment links back to at least two captured
+unique run marker, waits for classification/background top-of-mind status, and passes
+only when a generated/existing top-of-mind note links back to at least two captured
 organic rows (by id or run-marker text). It does not create or delete users and
 it avoids printing passwords, tokens, DB URLs, provider prompts, or full payloads.
 
@@ -291,8 +296,8 @@ be used only by deliberately setting `WAKA_ORGANIC_ALLOW_REMOTE=1`; never use
 that override for production, staging, or real-user data.
 
 This organic smoke proves that seeded demo data can be removed, the account
-remains login-capable, user-created inspirations remain, and the normal
-capture/classification/background WOW pipeline can produce a WOW moment without
+remains login-capable, user-created signals remain, and the normal
+capture/classification/background top-of-mind pipeline can produce a top-of-mind note without
 curated demo seed rows.
 
 ### 8. End-to-end browser flow (manual smoke)
@@ -306,7 +311,7 @@ or <http://localhost:3010> for Option B. The app should redirect you to
    modal trigger, history sidebar).
 2. **Sign in with Google** — log out, return to `/login`, click "Continue
    with Google". You should land back on `/` as the same user.
-3. **Capture an inspiration**:
+3. **Capture a signal**:
    - Type some text, optionally paste a URL, optionally drag-drop an image.
    - Click Save. The list should update **immediately** with the row, and
      the cluster chip should be empty (cluster is async).
@@ -316,16 +321,16 @@ or <http://localhost:3010> for Option B. The app should redirect you to
      the file bytes; the API Function URL never sees the file.
 5. **Watch the classifier close the loop**:
    - Within ~5–15 seconds, refresh `/` (or wait for the next poll). The new
-     inspiration should now show one of the six cluster chips.
+     signal should now show one of the six cluster chips.
    - Cross-check in `pnpm db:studio` → `inspirations` row → `cluster` column
      transitioned `NULL → outlier|bridge|morph|convergence|tension|loop` and
      `classified_at` is populated.
-6. **Add a reflection** — open the inspiration detail panel, type a question
+6. **Add a reflection** — open the signal detail panel, type a question
    + answer, save, refresh: the reflection persists.
-7. **Delete an inspiration** — confirm the row disappears from the list and
+7. **Delete a signal** — confirm the row disappears from the list and
    from the database.
 8. **Tenant isolation check** — sign up as a *second* user in an incognito
-   window. The first user's inspirations must NOT appear.
+   window. The first user's signals must NOT appear.
 
 ### 9. Run the test suite
 

@@ -12,13 +12,13 @@
  * Closes the classification loop end-to-end:
  *   1. Receive an `{ inspirationId }` job from the DB-backed worker.
  *   2. SELECT the corresponding `inspirations` row by id + job user id via Drizzle ORM.
- *   3. Call Gemini (`classifyInspirationText`) with the row's text and let
+ *   3. Ask the configured model provider to classify the row's text and let
  *      the result cascade through this file's retry/permanent decision tree.
  *   4. UPDATE the row's `cluster` + `classified_at` (+ `updated_at`) when a
  *      validated label comes back, guarded by `WHERE cluster IS NULL` for
  *      idempotency under at-least-once worker execution.
- *   5. Best-effort automatic WOW generation after classification reaches a
- *      success/permanent-skip outcome. WOW provider/runtime failures are
+ *   5. Best-effort automatic top-of-mind generation after classification reaches a
+ *      success/permanent-skip outcome. top-of-mind provider/runtime failures are
  *      swallowed here and must not alter classification retry semantics.
  *
  * Error & retry semantics (the contract)
@@ -42,13 +42,13 @@
  *       a second worker that races past this guard still cannot clobber the
  *       first writer.
  *
- *   - Gemini returns null cluster (safety block, schema drift, out-of-set
+ *   - Provider returns null cluster (safety block, schema drift, out-of-set
  *     label, empty text)
  *     → permanent skip. Leave `cluster` NULL on the row. The same input on a
  *       retry would produce the same null; the row is reachable for a future
  *       backfill via the `inspirations_cluster_null_idx` partial index.
  *
- *   - Gemini throws (non-2xx HTTP, network error, non-JSON body, missing
+ *   - Provider throws (non-2xx HTTP, network error, non-JSON body, missing
  *     API key)
  *   - Drizzle / Postgres throws (SELECT or UPDATE)
  *     → transient. The DB-backed worker retries with backoff up to the job's
@@ -60,7 +60,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import { backgroundJobs, type Inspiration, inspirations } from "../db/index.js";
 import { generateAutoWowMomentForInspiration } from "../lib/auto-wow-generation.js";
 import { getDb } from "../lib/db.js";
-import { classifyInspirationText } from "./gemini.js";
+import {
+  getDefaultModelProvider,
+  type ModelProvider,
+} from "../lib/model-provider.js";
 
 // ---------------------------------------------------------------------------
 // Legacy Lambda/SQS-shaped event types (minimal subset)
@@ -103,6 +106,7 @@ interface ClassificationJob {
 
 export interface ClassificationJobDependencies {
   generateAutoWowMoment?: typeof generateAutoWowMomentForInspiration;
+  modelProvider?: ModelProvider;
   userId?: string;
   backgroundJobId?: string;
 }
@@ -171,13 +175,13 @@ async function loadInspiration(
 // ---------------------------------------------------------------------------
 
 /**
- * Process one classification job: SELECT the row, call Gemini, UPDATE
+ * Process one classification job: SELECT the row, classify through the model provider, UPDATE
  * `cluster` + `classified_at` if a label comes back, all guarded by
  * `WHERE cluster IS NULL` for idempotency.
  *
  * Returns successfully on permanent outcomes (row missing, already
  * classified, Gemini returns null) so callers don't retry pointlessly.
- * Throws on transient failures (DB / Gemini / network) so the DB-backed
+ * Throws on transient failures (DB / provider / network) so the DB-backed
  * worker can apply retry/backoff policy. Compatibility batch behaviour also
  * lives at the call-site, not here.
  *
@@ -208,10 +212,11 @@ export async function runClassificationJob(
     return;
   }
 
-  const result = await classifyInspirationText(row.text);
+  const modelProvider = deps.modelProvider ?? (await getDefaultModelProvider());
+  const result = await modelProvider.classifySignalText(row.text);
 
   if (result.cluster === null) {
-    console.warn("[classifier] no cluster from gemini, leaving NULL", {
+    console.warn("[classifier] no cluster from model provider, leaving NULL", {
       inspirationId: row.id,
       finishReason: result.finishReason,
       blockReason: result.blockReason,
@@ -273,13 +278,13 @@ async function attemptAutoWowGeneration(
     await recordAutoWowGenerationResult(deps.backgroundJobId, row.id, result);
 
     if (result.status === "unavailable") {
-      console.warn("[classifier] automatic WOW generation unavailable", {
+      console.warn("[classifier] automatic top-of-mind generation unavailable", {
         inspirationId: row.id,
         userId: row.userId,
       });
     }
   } catch (err) {
-    console.warn("[classifier] automatic WOW generation threw", {
+    console.warn("[classifier] automatic top-of-mind generation threw", {
       inspirationId: row.id,
       userId: row.userId,
       errorName: err instanceof Error ? err.name : typeof err,

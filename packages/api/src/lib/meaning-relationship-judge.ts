@@ -20,6 +20,7 @@ import {
   type FindMeaningPacketCandidatesResult,
   type MeaningPacketCandidate,
 } from "./meaning-candidates.js";
+import { getDefaultModelProvider } from "./model-provider.js";
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 const MAX_OUTPUT_TOKENS = 1536;
@@ -579,7 +580,7 @@ export async function judgeMeaningRelationshipsForInspiration(
       candidateSet,
       judgment: defaultFalseJudgment(
         "missing_trigger_packet",
-        "Trigger inspiration does not have a meaning packet.",
+        "Trigger inspiration does not have a signal packet.",
       ),
       proposals: [],
     };
@@ -591,13 +592,15 @@ export async function judgeMeaningRelationshipsForInspiration(
       candidateSet,
       judgment: defaultFalseJudgment(
         "not_enough_candidates",
-        "No bounded meaning packet candidates were available.",
+        "No bounded signal packet candidates were available.",
       ),
       proposals: [],
     };
   }
 
-  const client = params.client ?? new GeminiMeaningRelationshipJudgeClient();
+  const client =
+    params.client ??
+    (await getDefaultModelProvider()).contextGraphRelationshipJudge;
   let judgment: MeaningRelationshipJudgment;
   try {
     judgment = await client.judgeMeaningRelationships(input);

@@ -34,10 +34,10 @@ afterEach(() => {
 });
 
 describe("InspirationCard attachment-first rendering", () => {
-  it("leads URL-only saved inspirations with link context instead of fallback text", async () => {
+  it("leads URL-only saved signals with link context instead of fallback text", async () => {
     await renderCard({
       id: "insp-link",
-      text: "Link inspiration",
+      text: "Link signal",
       kind: "link",
       timestamp: "12:00 PM · 5/28/2026",
       links: ["https://example.com/article"],
@@ -77,10 +77,10 @@ describe("InspirationCard attachment-first rendering", () => {
     expect(container?.textContent).not.toContain("LINK");
   });
 
-  it("leads image-only saved inspirations with image context instead of fallback text", async () => {
+  it("leads image-only saved signals with image context instead of fallback text", async () => {
     await renderCard({
       id: "insp-image",
-      text: "Image inspiration",
+      text: "Image signal",
       kind: "image",
       timestamp: "12:00 PM · 5/28/2026",
       links: null,
@@ -122,7 +122,7 @@ describe("InspirationCard attachment-first rendering", () => {
     await renderCard(
       {
         id: "insp-ko-link",
-        text: "Link inspiration",
+        text: "Link signal",
         kind: "link",
         links: ["https://example.com/article"],
         attachments: [
@@ -142,6 +142,6 @@ describe("InspirationCard attachment-first rendering", () => {
       "ko-KR",
     );
 
-    expect(container?.querySelector(".history-attachments")?.getAttribute("aria-label")).toBe("첨부 맥락");
+    expect(container?.querySelector(".history-attachments")?.getAttribute("aria-label")).toBe("첨부 정보");
   });
 });

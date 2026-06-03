@@ -63,7 +63,7 @@ export interface HistoryPanelProps {
 export function HistoryPanel({
   open,
   onClose,
-  title = "Saved inspirations",
+  title = "Saved signals",
   children,
   detail,
 }: HistoryPanelProps): JSX.Element {
@@ -99,7 +99,7 @@ export function HistoryPanel({
             className="history-close"
             id="historyClose"
             onClick={onClose}
-            aria-label="Close saved inspirations"
+            aria-label="Close saved signals"
           >
             ×
           </button>

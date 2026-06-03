@@ -7,7 +7,7 @@
  */
 
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const API_TARGET = process.env.VITE_API_URL ?? "http://localhost:3010";
 

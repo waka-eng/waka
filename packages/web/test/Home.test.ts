@@ -6,23 +6,33 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createFeedback,
   createInspiration,
+  createInspirationSpark,
+  deleteInspirationSpark,
   finalizeAttachment,
+  fetchActionRecommendations,
   fetchInspirations,
   fetchReflections,
+  fetchSavedSignalDetail,
+  fetchSavedSignals,
   fetchTopOfMind,
-  fetchWowMoments,
+  fetchTopOfMindNotes,
   presignAttachment,
   recordInspirationRevisit,
+  updateActionRecommendationState,
   updateInspiration,
   uploadToPresignedUrl,
 } from "../src/lib/api";
 import type {
   ApiAttachment,
+  ApiActionRecommendation,
   ApiInspiration,
   ApiReflection,
+  ApiSavedSignalDetail,
+  ApiSavedSignalSearchResult,
   ApiTopOfMind,
-  ApiWowMoment,
+  ApiTopOfMindNoteSurface,
 } from "../src/lib/api";
 import { HomePage } from "../src/pages/Home";
 
@@ -60,8 +70,30 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     ...actual,
     fetchInspirations: vi.fn(async () => []),
     fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
-    fetchWowMoments: vi.fn(async () => []),
+    fetchTopOfMindNotes: vi.fn(async () => [sampleTopOfMindNote]),
+    fetchActionRecommendations: vi.fn(async () => [sampleActionRecommendation]),
+    updateActionRecommendationState: vi.fn(async (actionId: string, input: any) => ({
+      actionId,
+      sourceTopOfMindId: input.sourceTopOfMindId,
+      status: input.status,
+      updatedAt: "2026-06-01T10:00:00.000Z",
+    })),
+    createFeedback: vi.fn(async () => ({
+      id: "feedback-1",
+      userId: "user-1",
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "true",
+      emotionLabel: null,
+      correctionText: null,
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    })),
     fetchReflections: vi.fn(async () => []),
+    fetchSavedSignals: vi.fn(async () => sampleSavedSignals),
+    fetchSavedSignalDetail: vi.fn(async () => sampleSavedSignalDetail),
     fetchInspirationScoreBreakdown: vi.fn(async () => null),
     createInspiration: vi.fn(async () => {
       throw new Error("createInspiration mock not configured");
@@ -79,6 +111,27 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     updateInspiration: vi.fn(async () => {
       throw new Error("updateInspiration mock not configured");
     }),
+    createInspirationSpark: vi.fn(async (_inspirationId: string, input: any) => ({
+      id: "spark-new",
+      userId: "user-1",
+      inspirationId: _inspirationId,
+      text: input.text,
+      source: input.source ?? "user_selected",
+      startOffset: input.startOffset ?? null,
+      endOffset: input.endOffset ?? null,
+      confidence: input.confidence ?? 100,
+      isPrimary: input.isPrimary ?? false,
+      note: input.note ?? null,
+      whatMovedUser: null,
+      impliedValues: [],
+      worldviewClaims: [],
+      tensions: [],
+      decisionRelevance: [],
+      emotionalCharge: [],
+      createdAt: "2026-06-01T10:00:00.000Z",
+      updatedAt: "2026-06-01T10:00:00.000Z",
+    })),
+    deleteInspirationSpark: vi.fn(async () => undefined),
     deleteInspiration: vi.fn(async () => undefined),
     recordInspirationRevisit: vi.fn(async () => ({
       revisit: {
@@ -138,36 +191,147 @@ const sampleInspirations: ApiInspiration[] = [
   },
 ];
 
-const sampleWowMoments: ApiWowMoment[] = [
+const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
   {
-    id: "wow-1",
+    id: "insp-1",
     userId: "user-1",
-    title: "Cities keep teaching through bridges",
-    kind: "bridge",
-    why: "Several saves connect architecture essays with walking routes and jazz history.",
-    beliefStatement: "I keep learning through places I cross repeatedly.",
-    reflectionQuestion: "What bridge keeps reappearing?",
-    reflectionGuide: "Name what it connects, then choose one next crossing.",
-    wowScore: 9,
-    createdAt: "2026-05-11T12:00:00.000Z",
-    updatedAt: "2026-05-11T12:00:00.000Z",
-    relatedInspirations: [
+    textPreview: "Architecture essay about bridge rhythms in city walks",
+    kind: "note",
+    capturedAt: "2026-05-10T12:00:00.000Z",
+    updatedAt: "2026-05-10T12:00:00.000Z",
+    resonanceScore: 7,
+    signalScores: {
+      resonance: 7,
+      recurrence: 6,
+      agency: 5,
+      identitySignal: 7,
+      decisionRelevance: 4,
+    },
+    highlightedSnippets: [
       {
-        inspirationId: "insp-1",
-        role: "anchor",
-        reason: "This save anchors the pattern.",
-        text: "Architecture essay about bridge rhythms in city walks",
-        kind: "note",
-        createdAt: "2026-05-10T12:00:00.000Z",
-        wowScore: 4,
+        id: "spark-1",
+        text: "bridge rhythms in city walks",
+        source: "user",
+        confidence: 0.96,
+        isPrimary: true,
       },
     ],
+    matchingSnippets: ["bridge rhythms"],
+    relatedContextTerms: ["places that make movement visible"],
+    relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
+    attachmentSummary: [],
+    relevanceReasons: ["highlighted"],
+  },
+  {
+    id: "insp-2",
+    userId: "user-1",
+    textPreview: "Synthetic memory note for rereading old journals",
+    kind: "quote",
+    capturedAt: "2026-05-09T12:00:00.000Z",
+    updatedAt: "2026-05-09T12:00:00.000Z",
+    resonanceScore: 8,
+    signalScores: {
+      resonance: 8,
+      recurrence: 3,
+      agency: 2,
+      identitySignal: 6,
+      decisionRelevance: 3,
+    },
+    highlightedSnippets: [],
+    matchingSnippets: [],
+    relatedContextTerms: ["memory as a working material"],
+    relatedTopOfMindNoteTitles: [],
+    attachmentSummary: [],
+    relevanceReasons: [],
   },
 ];
 
+const sampleSavedSignalDetail: ApiSavedSignalDetail = {
+  ...sampleSavedSignals[0],
+  rawText: "Architecture essay about bridge rhythms in city walks",
+  attachments: [],
+  resonanceFeedback: [],
+  signalPacket: {
+    id: "packet-1",
+    text: "waka.signal_packet:v1\nREAD: This signal suggests work that turns movement, place, and public rhythm into visible form.",
+    primarySpark: "bridge rhythms in city walks",
+    artifactExcerpt: "Architecture essay about bridge rhythms in city walks",
+    updatedAt: "2026-05-10T12:05:00.000Z",
+  },
+  relatedContextNodes: [
+    {
+      id: "ctx-1",
+      type: "environment",
+      label: "places that make movement visible",
+      description: "The user keeps saving signals about environments with readable rhythm.",
+      confidence: 0.8,
+      evidenceReason: "Supported by architecture and walking signals.",
+    },
+  ],
+  relatedTopOfMindNotes: [
+    {
+      id: "note-1",
+      title: "make the thing before explaining it",
+      type: "pattern",
+      body: "The signal keeps pointing toward environments where movement becomes a public artifact.",
+      confidence: 0.82,
+      status: "active",
+    },
+  ],
+};
+
+const sampleTopOfMindNote: ApiTopOfMindNoteSurface = {
+  id: "note-1",
+  userId: "user-1",
+  title: "make the thing before explaining it",
+  ambitionDimension: "work",
+  ambientSignal: "make the thing before explaining it",
+  matchedEnvironment: "A working culture where bridge rhythms become visible through repeated making.",
+  antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
+  evidenceRationale: "Several saved signals cluster around city walks, architecture, and jazz history.",
+  rejectedAlternativeInterpretation: "This is not just an archive theme about bridges or city walking.",
+  type: "pattern",
+  body: "Several saved signals connect architecture essays with walking routes and jazz history.",
+  prompt: "What bridge keeps reappearing?",
+  guidance: "Name what it connects, then choose one next crossing.",
+  confidence: 0.82,
+  status: "active",
+  relatedSignalIds: ["insp-1"],
+  relatedContextNodeIds: ["theme-1"],
+  createdAt: "2026-05-11T12:00:00.000Z",
+  updatedAt: "2026-05-11T12:00:00.000Z",
+  source: "wow_moment_compatibility",
+  isProvisional: true,
+  legacy: {
+    wowMomentId: "wow-1",
+    wowKind: "bridge",
+    wowScore: 9,
+  },
+  evidencePreviews: [
+    {
+      signalId: "insp-1",
+      role: "anchor",
+      reason: "This signal anchors the pattern.",
+      textPreview: "Architecture essay about bridge rhythms in city walks",
+      kind: "note",
+      createdAt: "2026-05-10T12:00:00.000Z",
+      resonanceScore: 4,
+    },
+  ],
+  relatedSignals: [
+    {
+      id: "insp-1",
+      preview: "Architecture essay about bridge rhythms in city walks",
+      kind: "note",
+      createdAt: "2026-05-10T12:00:00.000Z",
+      resonanceScore: 4,
+    },
+  ],
+};
+
 const sampleTopOfMind: ApiTopOfMind = {
   generatedAt: "2026-05-12T12:00:00.000Z",
-  headline: "Bridge ideas keep returning",
+  headline: "make the thing before explaining it",
   activeThemes: [
     {
       nodeId: "theme-1",
@@ -195,19 +359,62 @@ const sampleTopOfMind: ApiTopOfMind = {
   },
 };
 
+const sampleActionRecommendation: ApiActionRecommendation = {
+  id: "action-note-1-rough",
+  text: "Make the rough thing first, then show one person before explaining it.",
+  sourceTopOfMindId: "note-1",
+  sourceSignalIds: ["insp-1"],
+  evidenceSnippets: ["Architecture essay about bridge rhythms in city walks"],
+  kind: "make_artifact",
+  whyNow: "Saved signals keep returning to public rough drafts.",
+  confidence: 95,
+  createdAt: "2026-05-11T12:00:00.000Z",
+  status: "active",
+  dismissedAt: null,
+  completedAt: null,
+};
+
 function setApiFixtures({
   inspirations = sampleInspirations,
   topOfMind = sampleTopOfMind,
-  wowMoments = sampleWowMoments,
+  topOfMindNotes = [sampleTopOfMindNote],
+  actionRecommendations = [sampleActionRecommendation],
+  savedSignals = sampleSavedSignals,
+  savedSignalDetail = sampleSavedSignalDetail,
 }: {
   inspirations?: ApiInspiration[];
   topOfMind?: ApiTopOfMind;
-  wowMoments?: ApiWowMoment[];
+  topOfMindNotes?: ApiTopOfMindNoteSurface[];
+  actionRecommendations?: ApiActionRecommendation[];
+  savedSignals?: ApiSavedSignalSearchResult[];
+  savedSignalDetail?: ApiSavedSignalDetail;
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
-  vi.mocked(fetchWowMoments).mockResolvedValue(wowMoments);
+  vi.mocked(fetchTopOfMindNotes).mockResolvedValue(topOfMindNotes);
+  vi.mocked(fetchActionRecommendations).mockResolvedValue(actionRecommendations);
   vi.mocked(fetchReflections).mockResolvedValue([]);
+  vi.mocked(fetchSavedSignals).mockResolvedValue(savedSignals);
+  vi.mocked(fetchSavedSignalDetail).mockImplementation(async (id: string) => {
+    const fallback = savedSignals.find((signal) => signal.id === id) ?? savedSignals[0] ?? sampleSavedSignals[0];
+    if (id === savedSignalDetail.id || fallback.textPreview.includes("Architecture essay")) {
+      return {
+        ...savedSignalDetail,
+        id,
+        textPreview: fallback.textPreview,
+        rawText: fallback.textPreview,
+      };
+    }
+    return {
+      ...fallback,
+      rawText: fallback.textPreview,
+      attachments: [],
+      resonanceFeedback: [],
+      signalPacket: null,
+      relatedContextNodes: [],
+      relatedTopOfMindNotes: [],
+    };
+  });
   vi.mocked(recordInspirationRevisit).mockResolvedValue({
     revisit: {
       id: "revisit-1",
@@ -254,6 +461,12 @@ async function renderHomePage(): Promise<HTMLDivElement> {
 async function flushReactWork(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
+  });
+}
+
+async function waitForTimers(ms = 0): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => window.setTimeout(resolve, ms));
   });
 }
 
@@ -323,42 +536,54 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
-    const savesTab = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-mode-btn")).find(
-      (button) => button.textContent === `all inspirations (${count})`,
-    );
-    expect(savesTab).not.toBeNull();
+    const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
+    expect(drawerObject?.textContent).toContain(`${count} saved`);
     await act(async () => {
-      savesTab?.click();
+      drawerObject?.click();
+    });
+    await flushReactWork();
+  }
+
+  async function openAllInspirations(container: HTMLElement): Promise<void> {
+    const allPile = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-group-hitarea")).find(
+      (button) => button.textContent?.includes("all saved, newest first"),
+    );
+    expect(allPile).not.toBeNull();
+    await act(async () => {
+      allPile?.click();
     });
     await flushReactWork();
   }
 
   async function openBridgeDetail(container: HTMLElement): Promise<HTMLElement> {
     await clickSavesTab(container);
-    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    await waitForTimers(130);
+    await flushReactWork();
+    const search = container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
       setInputValue(search!, "bridge");
     });
-    const bridgeSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const bridgeSave = container.querySelector<HTMLButtonElement>(".memory-contents-item");
     expect(bridgeSave).not.toBeNull();
     expect(bridgeSave?.textContent).toContain("Architecture essay about bridge rhythms");
     await act(async () => {
       bridgeSave?.click();
     });
     await flushReactWork();
-    const detail = container.querySelector<HTMLElement>(".detail-view");
+    await flushReactWork();
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail.signal-revisit-detail");
     expect(detail).not.toBeNull();
     return detail!;
   }
 
-  it("loads current Home data from inspirations, top-of-mind, and WOW endpoints", async () => {
+  it("loads current Home data from signals and top-of-mind endpoints", async () => {
     setApiFixtures();
     await renderHomePage();
 
     expect(fetchInspirations).toHaveBeenCalledTimes(1);
     expect(fetchTopOfMind).toHaveBeenCalledTimes(1);
-    expect(fetchWowMoments).toHaveBeenCalledWith({ limit: 10 });
+    expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 5 });
   });
 
 
@@ -421,24 +646,25 @@ describe("HomePage current home experience", () => {
           ],
         },
       ],
-      wowMoments: [],
+      topOfMindNotes: [],
     });
     const container = await renderHomePage();
 
     await clickSavesTab(container, 1);
+    await openAllInspirations(container);
     expect(container.textContent).toContain("<script>alert(1)</script> Source title");
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("image.png · 4 KB");
 
-    const save = container.querySelector<HTMLButtonElement>(".reference-save");
+    const save = container.querySelector<HTMLButtonElement>(".memory-contents-item");
     await act(async () => {
       save?.click();
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("Attachment context");
-    expect(container.textContent).toContain("example.com · URL source");
-    expect(container.textContent).toContain("image/png · 4 KB · User-uploaded attachment");
+    expect(container.textContent).toContain("attachment details");
+    expect(container.textContent).toContain("<script>alert(1)</script> Source title");
+    expect(container.textContent).toContain("image.png · 4 KB");
     expect(container.querySelector(".detail-attachment-image")).toBeNull();
     expect(container.innerHTML).not.toContain("private-bucket.s3.us-east-1.amazonaws.com");
     expect(container.innerHTML).not.toContain("users/user-1/image.png");
@@ -534,11 +760,12 @@ describe("HomePage current home experience", () => {
           ],
         }),
       ],
-      wowMoments: [],
+      topOfMindNotes: [],
     });
     const container = await renderHomePage();
 
     await clickSavesTab(container, 4);
+    await openAllInspirations(container);
     expect(container.querySelector(".reference-save-kind")).toBeNull();
     const historyText = container.querySelector(".reference-saves-page")?.textContent ?? "";
     expect(historyText).toContain("Link inspiration");
@@ -559,45 +786,533 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelector(".nc-canvas")).not.toBeNull();
+    expect(container.querySelector(".nc-topbar")).toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("Most inspiration disappears.");
-    expect(container.textContent).toContain("not final. changes as new inspirations arrive.");
+    expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
   });
 
-  it("keeps meaning-graph top-of-mind primary when current WOW moments are available", async () => {
+  it("names the primary product spaces without surfacing internal graph UI", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("top of mind");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("2 saved");
+    expect(container.querySelector("a[href='/top-of-mind/share']")).toBeNull();
+    expect(container.querySelector(".admin-entry-pill")?.textContent).toBe("Debug");
+    expect(container.textContent).not.toContain("meaning graph");
+    expect(container.textContent).not.toContain("compatibility archive");
+  });
+
+  it("keeps internal language out of the main wall, post-it, drawer, capture, and action copy", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const bannedInternalCopy = /\b(signals?|memories|nodes?|graph|resonance|analysis|AI|productivity|knowledge[-\s]?base)\b|memory movement/i;
+    const wallCopy = [
+      container.querySelector(".nc-titlecard")?.textContent,
+      container.querySelector(".nc-stage")?.textContent,
+      container.querySelector(".nc-action-pad")?.textContent,
+      container.querySelector(".nc-save")?.textContent,
+    ].join(" ");
+
+    expect(wallCopy).not.toMatch(bannedInternalCopy);
+    expect(container.querySelector(".nc-titlecard")?.textContent).not.toMatch(/\bWAKA\b/);
+    expect(container.querySelector(".nc-stage")?.textContent).not.toMatch(/\bWAKA\b/);
+
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-note-modal")?.textContent).not.toMatch(bannedInternalCopy);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-note-peel-close")?.click();
+    });
+    await flushReactWork();
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const drawerCopy = [
+      container.querySelector(".signal-revisit-header")?.textContent,
+      container.querySelector(".memory-group-board")?.textContent,
+      container.querySelector(".memory-contents-flow")?.textContent,
+    ].join(" ");
+    expect(drawerCopy).not.toMatch(bannedInternalCopy);
+    expect(drawerCopy).not.toMatch(/\bWAKA\b/);
+  });
+
+  it("keeps top-of-mind notes primary when enough inspirations are available", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     expect(container.querySelector(".nc-stage")).not.toBeNull();
-    expect(container.querySelector(".nc-wow-panel")).not.toBeNull();
-    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
-    expect(container.textContent).toContain("What WAKA noticed");
-    expect(container.textContent).toContain("Dev-only inspect WOW fields (1)");
+    expect(container.querySelector(".nc-topbar")).toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
+    expect(container.textContent).toContain("make the thing before explaining it");
+    expect(container.textContent).not.toContain("ambition signal");
+    expect(container.textContent).toContain("action items");
+    expect(container.textContent).not.toContain("try one small thing in the real world");
+    expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("not final");
+    expect(container.querySelector(".nc-note")?.textContent).not.toContain("changed by new saves");
+    expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
+    expect(container.textContent).not.toContain("What WAKA noticed");
+    expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
-  it("renders WOW moments without replacing top-of-mind notes", async () => {
+  it("renders persisted grounded action recommendations instead of frontend templates", async () => {
+    setApiFixtures({
+      actionRecommendations: [
+        sampleActionRecommendation,
+        {
+          ...sampleActionRecommendation,
+          id: "action-note-people",
+          text: "Message one person who makes people who make building feel less lonely feel normal and ask for a 20-minute exchange.",
+          sourceTopOfMindId: "note-people",
+          sourceSignalIds: ["insp-people"],
+          evidenceSnippets: ["A studio note about friends who send ugly first drafts"],
+          kind: "message_person",
+          whyNow: "Saved signals keep naming collaborators who make courage feel ordinary.",
+          confidence: 88,
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
+    expect(actionPad).not.toBeNull();
+
+    const actionText = actionPad?.textContent ?? "";
+    expect(actionText).toContain("Make the rough thing first, then show one person before explaining it.");
+    expect(actionText).toContain("Message one person who makes people who make building feel less lonely feel normal");
+    expect(actionText).toContain("saved inspirations keep returning to public rough dra");
+    expect(actionText).toContain("evidence: Architecture essay about bridge rhythms");
+    expect(actionText).not.toMatch(/do one tiny|smallest test|explore this|reflect on|journal|learn more|think about|research/i);
+    expect(actionText).not.toContain("Make one rough artifact for:");
+    expect(actionText).not.toContain("Run the smallest test of:");
+    expect(fetchActionRecommendations).toHaveBeenCalled();
+  });
+
+  it("keeps the action checklist visible with empty-state copy before enough recommendations exist", async () => {
+    setApiFixtures({
+      actionRecommendations: [],
+    });
+    const container = await renderHomePage();
+    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
+
+    expect(actionPad).not.toBeNull();
+    expect(actionPad?.textContent).toContain("action items");
+    expect(actionPad?.textContent).not.toContain("try one small thing in the real world");
+    expect(actionPad?.textContent).toContain("action items will show up once enough inspirations are reached");
+    expect(actionPad?.querySelector(".nc-action-check")).toBeNull();
+  });
+
+  it("keeps the action checklist on the wall even without top-of-mind post-its", async () => {
+    setApiFixtures({
+      topOfMind: { activeThemes: [], activeQuestions: [], topOfMind: null },
+      topOfMindNotes: [],
+      actionRecommendations: [sampleActionRecommendation],
+    });
+    const container = await renderHomePage();
+
+    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
+    expect(actionPad).not.toBeNull();
+    expect(actionPad?.textContent).toContain(sampleActionRecommendation.text);
+    expect(container.querySelector(".memory-drawer-workspace")).toBeNull();
+  });
+
+  it("asks for an optional action outcome before a done item disappears", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
-    expect(container.textContent).toContain("What WAKA noticed");
-    expect(container.textContent).toContain("Cities keep teaching through bridges");
-    expect(container.textContent).toContain("Several saves connect architecture essays");
+    const markDone = container.querySelector<HTMLButtonElement>(".nc-action-check");
+    expect(markDone?.getAttribute("aria-label")).toContain("mark done:");
+    await act(async () => {
+      markDone?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(container.textContent).toContain("what happened?");
+
+    const outcome = container.querySelector<HTMLTextAreaElement>(".nc-action-outcome textarea");
+    expect(outcome).not.toBeNull();
+    await act(async () => {
+      setInputValue(outcome!, "It showed the rough version was ready enough to start a conversation.");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-action-outcome button[type='submit']")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(container.querySelector(".nc-action-check")).toBeNull();
+    expect(container.textContent).toContain("action items will show up once enough inspirations are reached");
+    expect(updateActionRecommendationState).toHaveBeenCalledWith(
+      sampleActionRecommendation.id,
+      {
+        sourceTopOfMindId: sampleActionRecommendation.sourceTopOfMindId,
+        status: "completed",
+        outcomeText: "It showed the rough version was ready enough to start a conversation.",
+      },
+    );
   });
 
-  it("renders the Home authorship footnote for the signed-in user", async () => {
+  it("lets action checklist items disappear when done without an outcome or removed", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("This page was not written by river.");
-    expect(container.textContent).toContain("— Ⓒ WAKA, 2026, for minds that wander");
+    const markDone = container.querySelector<HTMLButtonElement>(".nc-action-check");
+    await act(async () => {
+      markDone?.click();
+    });
+    await flushReactWork();
+    await act(async () => {
+      [...container.querySelectorAll<HTMLButtonElement>(".nc-action-outcome button")].find(
+        (button) => button.textContent === "skip",
+      )?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(container.querySelector(".nc-action-check")).toBeNull();
+    expect(container.textContent).toContain("action items will show up once enough inspirations are reached");
+    expect(updateActionRecommendationState).toHaveBeenCalledWith(
+      sampleActionRecommendation.id,
+      {
+        sourceTopOfMindId: sampleActionRecommendation.sourceTopOfMindId,
+        status: "completed",
+      },
+    );
+
+    setApiFixtures({
+      actionRecommendations: [
+        {
+          ...sampleActionRecommendation,
+          id: "action-remove",
+          sourceTopOfMindId: "note-remove-action",
+        },
+      ],
+    });
+    await act(async () => {
+      mountedRoot?.unmount();
+    });
+    mountedRoot = null;
+    mountedContainer?.remove();
+    mountedContainer = null;
+    const nextContainer = await renderHomePage();
+    const remove = nextContainer.querySelector<HTMLButtonElement>(".nc-action-remove");
+    expect(remove?.getAttribute("aria-label")).toContain("remove action:");
+    await act(async () => {
+      remove?.click();
+    });
+    await flushReactWork();
+    expect(nextContainer.querySelector(".nc-action-pad")).not.toBeNull();
+    expect(nextContainer.querySelector(".nc-action-remove")).toBeNull();
+    expect(nextContainer.textContent).toContain("action items will show up once enough inspirations are reached");
+    expect(updateActionRecommendationState).toHaveBeenCalledWith(
+      "action-remove",
+      {
+        sourceTopOfMindId: "note-remove-action",
+        status: "removed",
+      },
+    );
+  });
+
+  it("makes the action checklist draggable like a paper object", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
+    expect(actionPad).not.toBeNull();
+
+    await act(async () => {
+      const pointerDown = new Event("pointerdown", { bubbles: true });
+      Object.assign(pointerDown, { clientX: 100, clientY: 120 });
+      actionPad?.dispatchEvent(pointerDown);
+    });
+    expect(actionPad?.classList.contains("nc-action-pad--dragging")).toBe(true);
+
+    await act(async () => {
+      const pointerMove = new Event("pointermove", { bubbles: true });
+      Object.assign(pointerMove, { clientX: 136, clientY: 150 });
+      window.dispatchEvent(pointerMove);
+    });
+    expect(actionPad?.style.getPropertyValue("--action-dx")).toBe("36px");
+    expect(actionPad?.style.getPropertyValue("--action-dy")).toBe("30px");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    });
+    expect(actionPad?.classList.contains("nc-action-pad--dragging")).toBe(false);
+  });
+
+  it("keeps post-its direct and rejects summary-like topic labels", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const postitBodies = Array.from(container.querySelectorAll(".nc-note:not(.nc-note--empty) .nc-note-body")).map(
+      (note) => note.textContent ?? "",
+    );
+
+    expect(postitBodies).toHaveLength(1);
+    expect(postitBodies[0]).toBe("make the thing before explaining it");
+    expect(postitBodies[0]).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
+    expect(postitBodies[0].split(/\s+/).length).toBeGreaterThanOrEqual(5);
+    expect(postitBodies[0].split(/\s+/).length).toBeLessThanOrEqual(14);
+    expect(postitBodies[0]).toMatch(/\b(people|room|work|thing|path|taste|self|question|experiment)\b/i);
+    expect(postitBodies[0]).not.toMatch(
+      /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
+    );
+    expect(postitBodies.join(" ")).not.toMatch(/\b(startups|comedy|cities|AI|inspiration|productivity)\b/i);
+    expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
+  });
+
+  it("opens a simplified top-of-mind post-it with a private drawer evidence action", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    expect(expanded).not.toBeNull();
+    expect(expanded?.classList.contains("nc-note-peel")).toBe(false);
+    expect(expanded?.getAttribute("role")).toBe("dialog");
+    expect(expanded?.textContent).not.toContain("opened post-it");
+    expect(expanded?.textContent).not.toContain("short, provisional, easy to change");
+    expect(expanded?.textContent).toContain("inspirations that led here");
+    expect(expanded?.textContent).toContain("1 saved inspiration nearby");
+    expect(expanded?.textContent).not.toContain("Architecture essay about bridge rhythms in city walks");
+    expect(expanded?.textContent).not.toContain("This inspiration anchors the pattern.");
+    expect(expanded?.textContent?.toLowerCase()).not.toContain("memory movement");
+    expect(expanded?.textContent).toContain("Several saved inspirations cluster around city walks");
+    expect(expanded?.textContent).not.toContain("theme-1");
+    expect(expanded?.textContent).not.toContain("meaning_nodes");
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-note-drawer-link")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-note-modal")).toBeNull();
+    expect(container.querySelector(".memory-drawer-stack")).not.toBeNull();
+  });
+
+  it("keeps empty evidence out of the opened post-it and points to the drawer", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          id: "note-no-evidence",
+          title: "A question is still forming",
+          evidencePreviews: [],
+          relatedSignals: [],
+          relatedSignalIds: [],
+          relatedContextNodeIds: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    expect(expanded?.textContent).toContain("inspirations that led here");
+    expect(expanded?.textContent).toContain("saved inspirations stay private there");
+    expect(expanded?.textContent).not.toContain("no saved inspiration attached yet");
+    expect(expanded?.textContent).not.toContain("This post-it does not have saved inspiration attached yet.");
+    expect(expanded?.textContent).not.toContain("ambition dimension");
+    expect(expanded?.textContent).not.toContain("No deeper read has attached to this note yet.");
+    expect(expanded?.textContent).not.toContain("meaning_nodes");
+    expect(expanded?.textContent).not.toContain("context_node:");
+  });
+
+  it("removes old reaction buttons from the wall and opened post-it", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    expect(expanded?.textContent).not.toContain("true");
+    expect(expanded?.textContent).not.toContain("partly");
+    expect(expanded?.textContent).not.toContain("not this");
+    expect(expanded?.textContent).not.toContain("rewrite in my words");
+    expect(expanded?.textContent).not.toContain("rewrite this post-it");
+    expect(expanded?.textContent).not.toContain("pin wording");
+    expect(expanded?.textContent).toContain("pull down");
+  });
+
+  it("persists an in-place Top of Mind rewrite using the user's wording", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
+    expect(rewrite).not.toBeNull();
+    await act(async () => {
+      setInputValue(rewrite!, "make rooms where rough drafts can breathe");
+    });
+    const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "save",
+    );
+    expect(pinButton).not.toBeNull();
+
+    await act(async () => {
+      pinButton?.click();
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("make rooms where rough drafts can breathe");
+    expect(container.textContent).toContain("saved");
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "partly",
+      correctionText: "make rooms where rough drafts can breathe",
+    });
+  });
+
+  it("pulls down a Top of Mind post-it without showing a weak replacement", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const pullDownButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "pull down",
+    );
+    expect(pullDownButton).not.toBeNull();
+
+    await act(async () => {
+      pullDownButton?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-note-modal")).toBeNull();
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).not.toContain("ambition signal");
+    expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "not_true",
+      correctionText: "pulled down from the wall",
+    });
+  });
+
+  it("surfaces Top of Mind edit failures without keeping optimistic wording", async () => {
+    vi.mocked(createFeedback).mockRejectedValueOnce(new Error("offline"));
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
+    expect(rewrite).not.toBeNull();
+    await act(async () => {
+      setInputValue(rewrite!, "make the public room first");
+    });
+    const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "save",
+    );
+    expect(pinButton).not.toBeNull();
+
+    await act(async () => {
+      pinButton?.click();
+    });
+    await flushReactWork();
+
+    const visiblePostItBodies = Array.from(container.querySelectorAll(".nc-note-body")).map(
+      (body) => body.textContent ?? "",
+    );
+    expect(visiblePostItBodies.join(" ")).toContain("make the thing before explaining it");
+    expect(visiblePostItBodies.join(" ")).not.toContain("make the public room first");
+    expect(container.textContent).toContain("could not change post-it");
+  });
+
+  it("starts low-data users on Top of Mind with bottom capture available", async () => {
+    setApiFixtures({
+      inspirations: [],
+      topOfMindNotes: [],
+      topOfMind: {
+        ...sampleTopOfMind,
+        activeThemes: [],
+        activeQuestions: [],
+        relationshipSignals: [],
+        summary: {
+          inspirationCount: 0,
+          meaningNoteCount: 0,
+          relationshipEdgeCount: 0,
+        },
+      },
+    });
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".reference-capture-page")).toBeNull();
+    expect(container.querySelector(".nc-topbar")).toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
+    expect(container.querySelector("#capNote")).toBeNull();
+  });
+
+  it("falls back to graph preview notes while top-of-mind note persistence is empty", async () => {
+    setApiFixtures({ topOfMindNotes: [] });
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
+    expect(container.textContent).not.toContain("ambition signal");
+    expect(container.textContent).toContain("action items");
+    expect(container.textContent).not.toContain("What WAKA noticed");
+  });
+
+  it("removes the authorship footnote and keeps language switching top-right", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).not.toContain("This page was not written by river.");
+    expect(container.textContent).not.toContain("— Ⓒ 2026, for minds that wander");
+    expect(container.querySelector(".nc-footnote")).toBeNull();
+    expect(container.querySelector(".nc-lang--top")).not.toBeNull();
   });
 
   it("filters server-returned inspirations down to the authenticated user", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("all inspirations (2)");
+    expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("2 saved");
     expect(container.textContent).not.toContain("Other user save should never render");
   });
 
@@ -617,7 +1332,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("WAKA가 포착한 것");
+    expect(container.textContent).toContain("make the thing before explaining it");
   });
 
   it("localizes the logout affordance in Korean", async () => {
@@ -645,14 +1360,134 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
   });
 
-  it("switches to the all-inspirations page from the top mode tabs", async () => {
+  it("opens an anchored memory drawer stack from the wall drawer object", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     await clickSavesTab(container);
 
     expect(container.querySelector(".reference-saves-page")).not.toBeNull();
-    expect(container.querySelector(".nc-mode-btn--active")?.textContent).toBe("all inspirations (2)");
+    expect(container.querySelector(".signal-revisit-page")).not.toBeNull();
+    expect(container.querySelector(".signal-archive-page")).toBeNull();
+    expect(container.querySelector(".nc-drawer-object--close")).not.toBeNull();
+    expect(container.querySelector(".nc-bottom-bar--drawer")).not.toBeNull();
+    expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
+    expect(container.querySelector(".memory-drawer-stack")).not.toBeNull();
+    expect(container.querySelector(".memory-drawer-overlay")).toBeNull();
+    expect(container.textContent).not.toContain("Choose a pile, or open everything.");
+    expect(container.textContent).not.toContain("back to wall");
+    expect(container.querySelector(".memory-group-board")).not.toBeNull();
+    expect(container.querySelector(".memory-contents-flow")).toBeNull();
+    expect(container.querySelector(".memory-mode-switcher")).toBeNull();
+    expect(container.textContent).not.toContain("List scans the timeline");
+  });
+
+  it("drills from drawer stack entries to group contents and inspiration detail in place", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
+    expect(stack).not.toBeNull();
+    expect(stack?.querySelector(".memory-group-board")).not.toBeNull();
+    expect(stack?.querySelector(".memory-contents-flow")).toBeNull();
+    expect(stack?.querySelector(".memory-stack-detail")).toBeNull();
+
+    await openAllInspirations(container);
+    expect(stack?.querySelector(".memory-group-board")).toBeNull();
+    const contents = stack?.querySelector<HTMLElement>(".memory-contents-flow");
+    expect(contents).not.toBeNull();
+    expect(contents?.textContent).toContain("Architecture essay about bridge rhythms");
+
+    const firstInspiration = contents?.querySelector<HTMLButtonElement>(".memory-contents-item");
+    expect(firstInspiration).not.toBeNull();
+    await act(async () => {
+      firstInspiration?.click();
+    });
+    await flushReactWork();
+
+    expect(stack?.querySelector(".memory-contents-flow")).toBeNull();
+    const detail = stack?.querySelector<HTMLElement>(".memory-stack-detail");
+    expect(detail).not.toBeNull();
+    expect(detail?.textContent).toContain("Architecture essay about bridge rhythms");
+    expect(container.querySelector(".memory-window")).toBeNull();
+
+    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-workspace-back");
+    await act(async () => {
+      detailBack?.click();
+    });
+    await flushReactWork();
+    expect(stack?.querySelector(".memory-contents-flow")).not.toBeNull();
+
+    const stackBack = stack?.querySelector<HTMLButtonElement>(".memory-contents-flow .memory-contents-back");
+    await act(async () => {
+      stackBack?.click();
+    });
+    await flushReactWork();
+    expect(stack?.querySelector(".memory-group-board")).not.toBeNull();
+  });
+
+  it("closes the word-cloud drawer when the user clicks outside a tag", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    const board = container.querySelector<HTMLElement>(".memory-map-board");
+    expect(board).not.toBeNull();
+
+    await act(async () => {
+      board?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".memory-drawer-stack--closing")).not.toBeNull();
+
+    await waitForTimers(380);
+    await flushReactWork();
+    expect(container.querySelector(".memory-drawer-stack")).toBeNull();
+    expect(container.querySelector(".nc-save")).not.toBeNull();
+  });
+
+  it("resets word-cloud seen opacity after the drawer closes and reopens", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const firstTag = container.querySelector<HTMLElement>(".memory-map-node");
+    const firstHitarea = firstTag?.querySelector<HTMLButtonElement>(".memory-group-hitarea");
+    expect(firstTag).not.toBeNull();
+    expect(firstTag?.dataset.state).toBe("idle");
+
+    await act(async () => {
+      firstHitarea?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(firstTag?.dataset.state).toBe("seen");
+    expect(firstTag?.classList.contains("memory-map-node--seen")).toBe(true);
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.click();
+    });
+    await flushReactWork();
+    await waitForTimers(380);
+    await flushReactWork();
+    expect(container.querySelector(".memory-drawer-stack")).toBeNull();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const reopenedFirstTag = container.querySelector<HTMLElement>(".memory-map-node");
+    expect(reopenedFirstTag?.dataset.state).toBe("idle");
+    expect(reopenedFirstTag?.classList.contains("memory-map-node--seen")).toBe(false);
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -660,6 +1495,7 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     await clickSavesTab(container);
+    await openAllInspirations(container);
 
     const savesPage = container.querySelector<HTMLElement>(".reference-saves-page");
     expect(savesPage?.textContent).toContain("Architecture essay about bridge rhythms");
@@ -667,16 +1503,251 @@ describe("HomePage current home experience", () => {
     expect(savesPage?.textContent).not.toContain("Other user save should never render");
   });
 
+  it("shows generated groupings with a chronological all-inspirations path and search secondary", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const drawer = container.querySelector<HTMLElement>(".signal-revisit-page");
+    const board = drawer?.querySelector<HTMLElement>(".memory-group-board");
+    const contents = drawer?.querySelector<HTMLElement>(".memory-contents-flow");
+    expect(board).not.toBeNull();
+    expect(board?.textContent).toContain("all saved, newest first");
+    expect(board?.textContent).toContain("highlighted by me");
+    expect(board?.textContent).toContain("work i keep circling");
+    expect(contents).toBeNull();
+    expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
+    await openAllInspirations(container);
+    const openedContents = drawer?.querySelector<HTMLElement>(".memory-contents-flow");
+    expect(openedContents?.textContent?.indexOf("Architecture essay")).toBeLessThan(
+      openedContents?.textContent?.indexOf("Synthetic memory note") ?? 9999,
+    );
+    expect(drawer?.querySelector(".signal-memory-lenses")).toBeNull();
+    expect(drawer?.textContent?.toLowerCase()).not.toContain("keeps coming back");
+    expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
+  });
+
+  it("generates object groupings from saved inspiration materials and top-of-mind evidence", async () => {
+    const constellationSignals: ApiSavedSignalSearchResult[] = [
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-note",
+        textPreview: "Handwritten thought about rooms where making feels public",
+        kind: "note",
+        relatedContextTerms: ["public making rooms"],
+        relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
+        attachmentSummary: [],
+      },
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-link",
+        textPreview: "Essay link about people who build in public",
+        kind: "link",
+        relatedContextTerms: ["public making rooms"],
+        attachmentSummary: [
+          { id: "att-link", type: "link", label: "https://example.com/public-building" },
+        ],
+      },
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-image",
+        textPreview: "Image inspiration",
+        kind: "image",
+        relatedContextTerms: ["studio wall"],
+        attachmentSummary: [
+          { id: "att-image", type: "image", label: "studio-wall.png" },
+        ],
+      },
+      {
+        ...sampleSavedSignals[0],
+        id: "sig-mixed",
+        textPreview: "Mixed save with a note and a link about collaborators",
+        kind: "mixed",
+        relatedContextTerms: ["collaborators"],
+        attachmentSummary: [
+          { id: "att-mixed-link", type: "link", label: "https://example.com/collab" },
+          { id: "att-mixed-file", type: "file", label: "notes.pdf" },
+        ],
+      },
+    ];
+    setApiFixtures({
+      inspirations: constellationSignals.map((signal) => ({
+        ...sampleInspirations[0],
+        id: signal.id,
+        text: signal.textPreview,
+        kind: signal.kind,
+        createdAt: signal.capturedAt,
+        updatedAt: signal.updatedAt,
+      })),
+      savedSignals: constellationSignals,
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          relatedSignalIds: ["sig-note", "sig-link"],
+          evidencePreviews: [],
+          relatedSignals: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container, 4);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const board = container.querySelector<HTMLElement>(".memory-group-board");
+    expect(board).not.toBeNull();
+    expect(board?.querySelector(".memory-group-object--pin")?.textContent).toContain("highlighted by me");
+    expect(board?.textContent).toContain("work i keep circling");
+    expect(board?.querySelector(".folder-icon")).toBeNull();
+    expect(board?.querySelector(".mac-folder-front")).toBeNull();
+    expect(board?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
+    expect(board?.textContent?.toLowerCase()).not.toContain("memory movement");
+  });
+
+  it("keeps the drawer stack visually neutral without decorative folder chrome or loud stack cards", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
+    expect(stack).not.toBeNull();
+    expect(stack?.querySelector(".folder-icon")).toBeNull();
+    expect(stack?.querySelector(".mac-folder-front")).toBeNull();
+    expect(stack?.querySelector(".mac-folder-back")).toBeNull();
+    expect(stack?.querySelector(".memory-group-object--slip")).not.toBeNull();
+
+    await openAllInspirations(container);
+
+    const contents = container.querySelector<HTMLElement>(".memory-contents-flow");
+    expect(contents).not.toBeNull();
+    expect(contents?.querySelectorAll(".memory-order-switcher").length).toBeLessThanOrEqual(1);
+
+    const stackCard = contents?.querySelector<HTMLElement>(".memory-contents-item");
+    expect(stackCard).not.toBeNull();
+    expect(stackCard?.classList.contains("memory-contents-item")).toBe(true);
+    expect(stackCard?.className).not.toMatch(/reference-save|signal-revisit-card|memory-signal-card--(note|link|image|mixed)/);
+    expect(stackCard?.querySelector(".memory-signal-card-kind")).toBeNull();
+    expect(stackCard?.querySelector(".reference-save-link")).toBeNull();
+    expect(stackCard?.querySelector(".reference-save-attachment")).toBeNull();
+    expect(stackCard?.querySelector(".memory-contents-item-meta")).not.toBeNull();
+  });
+
+  it("allows user-created groupings and renaming while keeping proposed map nodes button-light", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const createButton = container.querySelector<HTMLButtonElement>(".memory-bulletin-object");
+    expect(createButton).not.toBeNull();
+    await act(async () => {
+      createButton?.click();
+    });
+
+    const nameInput = container.querySelector<HTMLInputElement>(".memory-contents-rename input");
+    expect(nameInput).not.toBeNull();
+    expect(nameInput?.value).toBe("my own pile");
+    await act(async () => {
+      setInputValue(nameInput!, "places pulling me");
+    });
+    expect(nameInput?.value).toBe("places pulling me");
+    const backToPiles = container.querySelector<HTMLButtonElement>(".memory-contents-back");
+    await act(async () => {
+      backToPiles?.click();
+    });
+    await flushReactWork();
+
+    const proposed = Array.from(container.querySelectorAll<HTMLElement>(".memory-group-object")).find((object) =>
+      object.textContent?.includes("highlighted by me"),
+    );
+    expect(proposed).not.toBeNull();
+    expect(proposed?.querySelector(".memory-map-preview")).not.toBeNull();
+    expect(proposed?.querySelectorAll("button")).toHaveLength(1);
+    expect(proposed?.textContent).not.toContain("dismiss");
+    expect(proposed?.textContent).not.toContain("keep");
+  });
+
+  it("lists grouping contents newest first", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          id: "sig-relevant-old",
+          textPreview: "Old highlighted save about bridge rooms",
+          capturedAt: "2026-04-01T12:00:00.000Z",
+          highlightedSnippets: [{ id: "spark-old", text: "bridge rooms", source: "user", confidence: 0.9, isPrimary: true }],
+          signalScores: { resonance: 9, recurrence: 9, agency: 9, identitySignal: 9, decisionRelevance: 9 },
+        },
+        {
+          ...sampleSavedSignals[1],
+          id: "sig-recent-light",
+          textPreview: "Recent lightly relevant save about a room",
+          capturedAt: "2026-05-20T12:00:00.000Z",
+          highlightedSnippets: [{ id: "spark-new", text: "room", source: "user", confidence: 0.8, isPrimary: true }],
+          signalScores: { resonance: 1, recurrence: 1, agency: 1, identitySignal: 1, decisionRelevance: 1 },
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    const highlightedGroup = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-group-hitarea")).find(
+      (button) => button.textContent?.includes("highlighted by me"),
+    );
+    await act(async () => {
+      highlightedGroup?.click();
+    });
+    const contents = container.querySelector<HTMLElement>(".memory-contents-flow");
+    // Contents always read newest-first now (the explicit sort toggle was
+    // removed in favor of the calmer text-forward layout).
+    expect(contents?.textContent?.indexOf("Recent lightly relevant")).toBeLessThan(
+      contents?.textContent?.indexOf("Old highlighted save") ?? 9999,
+    );
+  });
+
+  it("keeps selected grouping contents inside the anchored stack", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    await openAllInspirations(container);
+
+    const stack = container.querySelector<HTMLElement>(".memory-drawer-stack");
+    const contents = container.querySelector<HTMLElement>(".memory-contents-flow");
+    expect(stack).not.toBeNull();
+    expect(contents).not.toBeNull();
+    expect(contents?.querySelector(".memory-contents-list")).not.toBeNull();
+    expect(contents?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(contents?.textContent).toContain("Synthetic memory note");
+    expect(container.querySelector(".memory-view-switcher")).toBeNull();
+    expect(container.querySelector(".memory-flow-workspace")).toBeNull();
+    expect(container.querySelector(".memory-window")).toBeNull();
+  });
+
   it("searches the current all-inspirations list", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     await clickSavesTab(container);
 
-    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    const search = container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
       setInputValue(search!, "synthetic");
     });
+    await flushReactWork();
     const savesPageAfterSearch = container.querySelector<HTMLElement>(".reference-saves-page");
     expect(savesPageAfterSearch?.textContent).toContain("Synthetic memory note");
     expect(savesPageAfterSearch?.textContent).not.toContain("Architecture essay about bridge rhythms");
@@ -687,83 +1758,199 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
     await clickSavesTab(container);
 
-    const search = container.querySelector<HTMLInputElement>('.reference-saves-page input[type="search"]');
+    const search = container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]');
     expect(search).not.toBeNull();
     await act(async () => {
       setInputValue(search!, "bridge");
     });
+    await flushReactWork();
     const savesPageAfterSearch = container.querySelector<HTMLElement>(".reference-saves-page");
     expect(savesPageAfterSearch?.textContent).toContain("Architecture essay about bridge rhythms");
     expect(savesPageAfterSearch?.textContent).not.toContain("Synthetic memory note");
   });
 
-  it("opens a saved inspiration detail and records a revisit", async () => {
+  it("opens an in-place saved inspiration revisit and records a revisit", async () => {
     setApiFixtures();
-    vi.mocked(fetchReflections).mockResolvedValue([
-      persistedReflection({ id: "reflection-existing", answer: "This already helped once." }),
-    ]);
     const container = await renderHomePage();
 
     await openBridgeDetail(container);
 
-    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
-  it("shows existing reflections in the inspiration detail", async () => {
+  it("opens the full saved inspiration inside the anchored stack", async () => {
     setApiFixtures();
-    vi.mocked(fetchReflections).mockResolvedValue([
-      persistedReflection({ id: "reflection-existing", answer: "This already helped once." }),
-    ]);
     const container = await renderHomePage();
 
     const detail = await openBridgeDetail(container);
 
-    expect(detail.textContent).toContain("Inspiration details");
-    expect(detail.textContent).toContain("This already helped once.");
+    expect(container.querySelector(".memory-window")).toBeNull();
+    expect(detail.textContent).not.toContain("highlighted scrap");
+    expect(detail.textContent).toContain("saved inspiration");
+    expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
+    expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(detail.textContent).toContain("bridge rhythms in city walks");
+    expect(detail.textContent).toContain("nearby piles");
+    expect(detail.textContent).toContain("highlighted by me");
+    expect(detail.textContent).toContain("what did this mean then?");
+    expect(detail.textContent).toContain("what does it mean now?");
+    expect(detail.textContent).toContain("is this still me?");
+    expect(detail.textContent).toContain("still alive");
+    expect(detail.textContent).toContain("changed shape");
+    expect(detail.textContent).toContain("not anymore");
+    expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
+    expect(detail.textContent).not.toContain("related context");
   });
 
-  it("opens saved inspirations as editable detail text instead of a static preview", async () => {
+  it("saves still-alive feedback from the opened inspiration detail", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     const detail = await openBridgeDetail(container);
-    const detailsTextarea = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inspiration details"]');
-
-    expect(detailsTextarea).not.toBeNull();
-    expect(detailsTextarea?.value).toBe("Architecture essay about bridge rhythms in city walks");
-  });
-
-  it("saves detail edits through updateInspiration", async () => {
-    setApiFixtures();
-    vi.mocked(updateInspiration).mockResolvedValue(
-      persistedInspiration({
-        id: "insp-1",
-        text: "Edited bridge rhythm note for the next walk",
-        wowScore: 6,
-        createdAt: "2026-05-10T12:00:00.000Z",
-        updatedAt: "2026-05-15T12:00:00.000Z",
-      }),
+    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-detail-feedback-actions button")).find(
+      (button) => button.textContent === "still alive",
     );
-    const container = await renderHomePage();
-    const detail = await openBridgeDetail(container);
-    const detailsTextarea = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="Inspiration details"]');
+    expect(stillAlive).not.toBeNull();
 
     await act(async () => {
-      setInputValue(detailsTextarea!, "Edited bridge rhythm note for the next walk");
-    });
-    const saveButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent === "Save details",
-    );
-    await act(async () => {
-      saveButton?.click();
+      stillAlive?.click();
     });
     await flushReactWork();
 
-    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
-      text: "Edited bridge rhythm note for the next walk",
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "important",
     });
-    expect(detailsTextarea?.value).toBe("Edited bridge rhythm note for the next walk");
+    expect(detail.textContent).toContain("saved");
+  });
+
+  it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {
+    const unhighlightedBridgeSignal = { ...sampleSavedSignals[0], highlightedSnippets: [] };
+    setApiFixtures({
+      savedSignals: [unhighlightedBridgeSignal, sampleSavedSignals[1]],
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        highlightedSnippets: [],
+      },
+    });
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const readable = detail.querySelector<HTMLElement>(".memory-readable-signal");
+    expect(readable).not.toBeNull();
+
+    const selection = {
+      rangeCount: 1,
+      toString: () => "bridge rhythms",
+      getRangeAt: () => ({
+        getBoundingClientRect: () => ({
+          top: 120,
+          left: 80,
+          width: 120,
+          height: 18,
+          right: 200,
+          bottom: 138,
+          x: 80,
+          y: 120,
+          toJSON: () => ({}),
+        }),
+      }),
+      removeAllRanges: vi.fn(),
+    } as unknown as Selection;
+    const getSelectionSpy = vi.spyOn(window, "getSelection").mockImplementation(() => selection);
+
+    await act(async () => {
+      readable?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    const popover = container.querySelector<HTMLElement>(".memory-highlight-popover--selection");
+    expect(popover).not.toBeNull();
+    expect(popover?.style.getPropertyValue("--memory-highlight-top")).toBe("74px");
+    expect(popover?.textContent).toContain("bridge rhythms");
+    expect(popover?.textContent).toContain("taste");
+    expect(container.querySelector(".signal-revisit-highlights")).toBeNull();
+
+    await act(async () => {
+      Array.from(popover?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+        .find((button) => button.textContent === "taste")
+        ?.click();
+    });
+    const noteInput = popover?.querySelector<HTMLInputElement>("input");
+    expect(noteInput).not.toBeNull();
+    await act(async () => {
+      setInputValue(noteInput!, "This is the standard I keep noticing.");
+    });
+    await act(async () => {
+      popover?.querySelector<HTMLButtonElement>("button")?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspirationSpark).toHaveBeenCalledWith("insp-1", {
+      text: "bridge rhythms",
+      source: "user_selected",
+      confidence: 100,
+      isPrimary: false,
+      note: `highlight_reaction:v1:${JSON.stringify({
+        reaction: "taste",
+        note: "This is the standard I keep noticing.",
+      })}`,
+    });
+    expect(detail.querySelector(".memory-inline-highlight")?.textContent).toBe("bridge rhythms");
+
+    const mark = detail.querySelector<HTMLElement>(".memory-inline-highlight");
+    await act(async () => {
+      mark?.focus();
+    });
+    const savedPopover = container.querySelector<HTMLElement>(".memory-highlight-popover--saved");
+    expect(savedPopover?.textContent).toContain("edit reaction");
+    expect(savedPopover?.textContent).toContain("expand note");
+    await act(async () => {
+      Array.from(savedPopover?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+        .find((button) => button.textContent === "remove")
+        ?.click();
+    });
+    expect(deleteInspirationSpark).toHaveBeenCalledWith("insp-1", "spark-new");
+
+    getSelectionSpy.mockRestore();
+  });
+
+  it("replaces one stack inspiration detail with another without opening windows", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          relatedSignalIds: ["insp-1", "insp-2"],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+    await openAllInspirations(container);
+    const cards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item"));
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+    await act(async () => {
+      cards[0]?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Architecture essay");
+
+    const back = container.querySelector<HTMLButtonElement>(".memory-stack-detail .memory-workspace-back");
+    await act(async () => {
+      back?.click();
+    });
+    await flushReactWork();
+    const nextCards = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item"));
+    await act(async () => {
+      nextCards[1]?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Synthetic memory note");
+    expect(container.querySelectorAll(".memory-stack-detail")).toHaveLength(1);
+    expect(container.querySelector(".memory-window")).toBeNull();
   });
 
   it("opens capture from the floating action", async () => {
@@ -786,8 +1973,29 @@ describe("HomePage current home experience", () => {
       container.querySelector<HTMLButtonElement>(".reference-capture-close")?.click();
     });
 
+    expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
+    await waitForTimers(380);
+    await flushReactWork();
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
     expect(createInspiration).not.toHaveBeenCalled();
+  });
+
+  it("toggles focus mode from the expand control in the capture bar", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    expect(container.querySelector(".reference-capture-modal--expanded")).toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(container.querySelector(".reference-capture-modal--expanded")).not.toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capExpand")?.click();
+    });
+    expect(container.querySelector(".reference-capture-modal--expanded")).toBeNull();
   });
 
   it("persists a quick note capture through the current capture contract", async () => {
@@ -813,7 +2021,7 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("closes capture and increments the all-inspirations count after a quick save", async () => {
+  it("closes the surface and flashes the capture button after a quick save", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -829,11 +2037,21 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
+    // No in-cell mirror; the surface begins closing immediately on a full save.
+    expect(container.querySelector(".cap-save-mirror")).toBeNull();
+    expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
+
+    await waitForTimers(380);
+    await flushReactWork();
+
+    // Surface is gone and the capture button flashes an ephemeral "saved".
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
-    expect(container.textContent).toContain("all inspirations (3)");
+    const savedButton = container.querySelector(".nc-save--saved");
+    expect(savedButton).not.toBeNull();
+    expect(savedButton?.textContent).toContain("saved");
   });
 
-  it("shows a newly persisted quick save in the all-inspirations list", async () => {
+  it("shows a newly persisted quick save in the inspiration drawer list", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -849,11 +2067,12 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await clickSavesTab(container, 3);
+    await openAllInspirations(container);
 
     expect(container.textContent).toContain("Fast save without reflective friction");
   });
 
-  it("persists a typed URL as a link attachment and shows it in all inspirations", async () => {
+  it("persists a typed URL as a link attachment and shows it in the inspiration drawer", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({
@@ -884,6 +2103,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await clickSavesTab(container, 3);
+    await openAllInspirations(container);
 
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Read https://example.com/article before the next salon",
@@ -895,7 +2115,9 @@ describe("HomePage current home experience", () => {
       url: "https://example.com/article",
       name: "example.com/article",
     });
-    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
+      save.textContent?.includes("Read https://example.com/article before the next salon"),
+    );
     expect(newSave?.textContent).toContain("Read https://example.com/article before the next salon");
     expect(newSave?.textContent).toContain("example.com");
     expect(newSave?.textContent).not.toContain("MIXED");
@@ -959,6 +2181,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await clickSavesTab(container, 3);
+    await openAllInspirations(container);
 
     expect(objectUrl).toHaveBeenCalledWith(file);
     expect(createInspiration).toHaveBeenCalledWith({
@@ -986,7 +2209,9 @@ describe("HomePage current home experience", () => {
       contentType: "image/png",
       size: 5,
     });
-    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
+      save.textContent?.includes("Image inspiration"),
+    );
     expect(newSave?.textContent).toContain("Image inspiration");
     expect(newSave?.textContent).not.toContain("(attachment-only inspiration)");
     expect(newSave?.textContent).toContain("photo.png");
@@ -1063,8 +2288,11 @@ describe("HomePage current home experience", () => {
     expect(detail?.textContent).not.toContain("save failed");
 
     await clickSavesTab(container, 3);
+    await openAllInspirations(container);
 
-    const newSave = container.querySelector<HTMLButtonElement>(".reference-save");
+    const newSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
+      save.textContent?.includes("Image with local upload trouble"),
+    );
     expect(newSave?.textContent).toContain("Image with local upload trouble");
     expect(newSave?.textContent).toContain("photo.png");
     expect(newSave?.textContent).not.toContain("IMAGE");
@@ -1105,7 +2333,8 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(HomePage).toBeTypeOf("function");
-    expect(container.querySelector(".nc-mode")).not.toBeNull();
+    expect(container.querySelector(".nc-mode")).toBeNull();
+    expect(container.querySelector(".nc-drawer-object")).not.toBeNull();
     expect(container.textContent).toContain("capture inspiration");
   });
 });
