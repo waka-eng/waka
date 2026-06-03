@@ -31,16 +31,21 @@
     "qa:wow-detail:signed-in:boot": "tsx tools/dev-stack/boot-and-wait.ts --boot-cmd \"pnpm dev:local\" --api-url http://localhost:3010 --web-url http://localhost:3010 -- pnpm tsx tools/e2e/wow-detail-signed-in.ts"
   },
   "devDependencies": {
-    "dotenv": "^16.4.5",
     "@types/node": "^22.9.0",
-    "drizzle-kit": "^0.28.1",
+    "dotenv": "^16.4.5",
+    "drizzle-kit": "^0.31.10",
     "playwright": "^1.48.2",
-    "sst": "^3.3.40",
+    "sst": "^4.15.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "drizzle-orm": "^0.36.4",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.25.12"
+    }
   }
 }

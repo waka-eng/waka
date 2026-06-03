@@ -182,21 +182,19 @@ async function applyPlanToContextNodes(
     );
 
   const now = new Date();
-  await Promise.all(
-    nodes.map((node) => {
-      const patch = applyPlanToNode(node, input.plan);
-      return db
-        .update(meaningNodes)
-        .set({
-          ...patch,
-          status: input.plan.nodeStatus,
-          lastReinforcedAt:
-            input.plan.nodeStatus === "active" ? now : node.lastReinforcedAt,
-          updatedAt: now,
-        })
-        .where(and(eq(meaningNodes.userId, input.userId), eq(meaningNodes.id, node.id)));
-    }),
-  );
+  for (const node of nodes) {
+    const patch = applyPlanToNode(node, input.plan);
+    await db
+      .update(meaningNodes)
+      .set({
+        ...patch,
+        status: input.plan.nodeStatus,
+        lastReinforcedAt:
+          input.plan.nodeStatus === "active" ? now : node.lastReinforcedAt,
+        updatedAt: now,
+      })
+      .where(and(eq(meaningNodes.userId, input.userId), eq(meaningNodes.id, node.id)));
+  }
 }
 
 async function applyPlanToTopOfMindNoteConfidence(

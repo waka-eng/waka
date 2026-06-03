@@ -42,9 +42,14 @@ const listActionRecommendationsQuerySchema = z
   })
   .strict();
 
-const updateActionRecommendationSchema = z
+const actionRecommendationParamsSchema = z
   .object({
     actionId: z.string().min(1).max(180),
+  })
+  .strict();
+
+const updateActionRecommendationBodySchema = z
+  .object({
     sourceTopOfMindId: z.string().uuid("sourceTopOfMindId must be a uuid"),
     status: z.enum(actionRecommendationStatusValues).refine(
       (status) => status !== "active",
@@ -89,6 +94,19 @@ export interface ActionRecommendationsRouteDependencies {
     db: WakaDb,
     input: SaveActionRecommendationStateInput,
   ) => Promise<ActionRecommendationState | null>;
+}
+
+function findMatchingActionRecommendation(
+  actionRecommendations: RecommendedAction[],
+  input: { actionId: string; sourceTopOfMindId: string },
+): RecommendedAction | null {
+  return (
+    actionRecommendations.find(
+      (action) =>
+        action.id === input.actionId &&
+        action.sourceTopOfMindId === input.sourceTopOfMindId,
+    ) ?? null
+  );
 }
 
 function parseActionStateMetadata(row: {
@@ -253,37 +271,61 @@ export function createActionRecommendationsRoutes(
       return c.json({ error: "Request body must be valid JSON" }, 400);
     }
 
-    const parsed = updateActionRecommendationSchema.safeParse({
-      actionId: c.req.param("actionId"),
-      ...(rawBody && typeof rawBody === "object" ? rawBody : {}),
-    });
-    if (!parsed.success) {
+    const parsedParams = actionRecommendationParamsSchema.safeParse(c.req.param());
+    const parsedBody = updateActionRecommendationBodySchema.safeParse(rawBody);
+    if (!parsedParams.success || !parsedBody.success) {
       return c.json(
         {
           error: "Invalid action recommendation state payload",
-          details: parsed.error.flatten().fieldErrors,
+          details: {
+            ...(!parsedParams.success
+              ? parsedParams.error.flatten().fieldErrors
+              : {}),
+            ...(!parsedBody.success ? parsedBody.error.flatten().fieldErrors : {}),
+          },
         },
         400,
       );
     }
 
-    const saveInput: SaveActionRecommendationStateInput = {
-      userId: c.get("user").id,
-      actionId: parsed.data.actionId,
-      sourceTopOfMindId: parsed.data.sourceTopOfMindId,
-      status: parsed.data.status as Exclude<ActionRecommendationStatus, "active">,
-    };
-    if (parsed.data.outcomeText?.trim()) {
-      saveInput.outcomeText = parsed.data.outcomeText.trim();
-    }
-    if (parsed.data.relatedSignalIds?.length) {
-      saveInput.relatedSignalIds = parsed.data.relatedSignalIds;
+    const userId = c.get("user").id;
+    const db = getDatabase();
+    const notes = await listTopOfMindNotes(db, { userId, limit: 20 });
+    const states = await listStates(db, {
+      userId,
+      sourceTopOfMindIds: notes.map((note) => note.id),
+    });
+    const actionRecommendations = recommendActionsFromTopOfMind({
+      notes,
+      states,
+      limit: MAX_ACTION_RECOMMENDATION_LIMIT,
+    });
+    const matchingAction = findMatchingActionRecommendation(actionRecommendations, {
+      actionId: parsedParams.data.actionId,
+      sourceTopOfMindId: parsedBody.data.sourceTopOfMindId,
+    });
+
+    if (!matchingAction) {
+      return c.json({ error: "Action recommendation not found" }, 404);
     }
 
-    const state = await saveState(getDatabase(), saveInput);
+    const saveInput: SaveActionRecommendationStateInput = {
+      userId,
+      actionId: parsedParams.data.actionId,
+      sourceTopOfMindId: parsedBody.data.sourceTopOfMindId,
+      status: parsedBody.data.status as Exclude<ActionRecommendationStatus, "active">,
+    };
+    if (parsedBody.data.outcomeText?.trim()) {
+      saveInput.outcomeText = parsedBody.data.outcomeText.trim();
+    }
+    if (parsedBody.data.relatedSignalIds?.length) {
+      saveInput.relatedSignalIds = parsedBody.data.relatedSignalIds;
+    }
+
+    const state = await saveState(db, saveInput);
 
     if (!state) {
-      return c.json({ error: "Action recommendation source not found" }, 404);
+      return c.json({ error: "Action recommendation not found" }, 404);
     }
 
     return c.json({ actionRecommendationState: state });

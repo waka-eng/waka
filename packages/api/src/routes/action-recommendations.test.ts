@@ -162,8 +162,15 @@ describe("GET /api/action-recommendations", () => {
       }),
     );
 
+    const listResponse = await app.request("/api/action-recommendations");
+    const listBody = (await listResponse.json()) as {
+      actionRecommendations: Array<{ id: string }>;
+    };
+    const actionId = listBody.actionRecommendations[0]?.id;
+    expect(actionId).toBeTruthy();
+
     const response = await app.request(
-      "/api/action-recommendations/action-note-1-rough/state",
+      `/api/action-recommendations/${actionId}/state`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -179,7 +186,7 @@ describe("GET /api/action-recommendations", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       actionRecommendationState: {
-        actionId: "action-note-1-rough",
+        actionId,
         sourceTopOfMindId: note.id,
         status: "completed",
         outcomeText: "It showed the rough version was enough to start the conversation.",
@@ -188,11 +195,57 @@ describe("GET /api/action-recommendations", () => {
     });
     expect(saveState).toHaveBeenCalledWith(db, {
       userId: user.id,
-      actionId: "action-note-1-rough",
+      actionId,
       sourceTopOfMindId: note.id,
       status: "completed",
       outcomeText: "It showed the rough version was enough to start the conversation.",
       relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
     });
+  });
+
+  it("rejects body action IDs and unknown recommendation IDs before saving state", async () => {
+    const saveState = vi.fn();
+    const app = new Hono();
+    app.route(
+      "/api/action-recommendations",
+      createActionRecommendationsRoutes({
+        getDatabase: () => ({}) as any,
+        authMiddleware: authMiddleware(),
+        listTopOfMindNotes: vi.fn(async () => [note]),
+        listStates: vi.fn(async () => []),
+        saveState,
+      }),
+    );
+
+    const overrideResponse = await app.request(
+      "/api/action-recommendations/not-a-real-action/state",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionId: "attacker-controlled-action",
+          sourceTopOfMindId: note.id,
+          status: "removed",
+        }),
+      },
+    );
+
+    expect(overrideResponse.status).toBe(400);
+    expect(saveState).not.toHaveBeenCalled();
+
+    const unknownResponse = await app.request(
+      "/api/action-recommendations/not-a-real-action/state",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceTopOfMindId: note.id,
+          status: "removed",
+        }),
+      },
+    );
+
+    expect(unknownResponse.status).toBe(404);
+    expect(saveState).not.toHaveBeenCalled();
   });
 });

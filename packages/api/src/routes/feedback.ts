@@ -177,35 +177,39 @@ export async function createFeedbackForUser(
   db: WakaDb,
   input: CreateFeedbackInput,
 ): Promise<FeedbackRecord | null> {
-  const targetExists = await targetBelongsToUser(db, input);
-  if (!targetExists) return null;
+  return db.transaction(async (tx) => {
+    const txDb = tx as unknown as WakaDb;
+    const targetExists = await targetBelongsToUser(txDb, input);
+    if (!targetExists) return null;
 
-  const [row] = await db
-    .insert(feedback)
-    .values({
+    const now = new Date();
+    const [row] = await tx
+      .insert(feedback)
+      .values({
+        userId: input.userId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        value: input.value,
+        emotionLabel: input.emotionLabel ?? null,
+        correctionText: input.correctionText ?? null,
+        source: "user",
+        updatedAt: now,
+      })
+      .returning();
+
+    if (!row) return null;
+
+    const metadata = await applyFeedbackToGraph(txDb, {
+      feedbackId: row.id,
       userId: input.userId,
       targetType: input.targetType,
       targetId: input.targetId,
       value: input.value,
-      emotionLabel: input.emotionLabel ?? null,
       correctionText: input.correctionText ?? null,
-      source: "user",
-      updatedAt: new Date(),
-    })
-    .returning();
+    });
 
-  if (!row) return null;
-
-  const metadata = await applyFeedbackToGraph(db, {
-    feedbackId: row.id,
-    userId: input.userId,
-    targetType: input.targetType,
-    targetId: input.targetId,
-    value: input.value,
-    correctionText: input.correctionText ?? null,
+    return serializeFeedback({ ...row, metadata, updatedAt: new Date() });
   });
-
-  return serializeFeedback({ ...row, metadata, updatedAt: new Date() });
 }
 
 export async function listFeedbackForUser(

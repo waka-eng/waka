@@ -174,6 +174,7 @@ const URL_REGEX = /\bhttps?:\/\/[^\s]+/gi;
 const TRAILING_PUNCT = /[.,)\]>;'"]+$/;
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
+const CAPTURE_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 
 type CaptureResonanceAnswer =
   | "pulled_me"
@@ -212,6 +213,7 @@ interface StoredCaptureDraft {
   highlight?: HighlightedSignalText | null;
   highlights?: HighlightedSignalText[];
   links?: Array<{ url: string; name?: string }>;
+  storedAt?: number;
 }
 
 const resonanceOptions: Array<{ value: CaptureResonanceAnswer; label: string; icon: string; prompt: string }> = [
@@ -310,7 +312,16 @@ function readStoredCaptureDraft(): StoredCaptureDraft | null {
     const raw = window.localStorage.getItem(CAPTURE_DRAFT_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredCaptureDraft;
-    return parsed && typeof parsed === "object" ? parsed : null;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (
+      typeof parsed.storedAt !== "number" ||
+      !Number.isFinite(parsed.storedAt) ||
+      Date.now() - parsed.storedAt > CAPTURE_DRAFT_TTL_MS
+    ) {
+      window.localStorage.removeItem(CAPTURE_DRAFT_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -330,7 +341,10 @@ function writeStoredCaptureDraft(draft: StoredCaptureDraft): void {
       window.localStorage.removeItem(CAPTURE_DRAFT_STORAGE_KEY);
       return;
     }
-    window.localStorage.setItem(CAPTURE_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    window.localStorage.setItem(
+      CAPTURE_DRAFT_STORAGE_KEY,
+      JSON.stringify({ ...draft, storedAt: Date.now() }),
+    );
   } catch {
     // Draft persistence is best-effort; capture itself should keep working.
   }

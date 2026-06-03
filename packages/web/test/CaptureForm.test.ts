@@ -216,6 +216,21 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
   });
 
+  it("drops expired local capture drafts instead of restoring sensitive text indefinitely", async () => {
+    window.localStorage.setItem(
+      "waka.captureDraft.v1",
+      JSON.stringify({
+        note: "An old private draft",
+        storedAt: Date.now() - 25 * 60 * 60 * 1000,
+      }),
+    );
+
+    await renderCaptureForm();
+
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
+    expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
   it("persists marked text and the small why-it-mattered answer as spark metadata", async () => {
     const onSaved = vi.fn();
     await renderCaptureForm({ onSaved });
