@@ -7,8 +7,9 @@ reflections, WOW judgments) and the *machine signals* derived from it (scores,
 embeddings, revisit events, jobs) in one Postgres database. This document defines
 the target split:
 
-> **Vault (YAML files) = source of truth for meaning. Index (DB) = a rebuildable
-> projection on top of it.**
+> **Vault (YAML files) = source of truth for meaning. **
+>
+> **Index (DB) = a rebuildable projection on top of it.**
 
 The analogy is Git: an object store holds the canonical content; the index exists
 only to make queries fast and can always be rebuilt from the objects.
@@ -203,6 +204,50 @@ The same machinery gives us `waka reindex {userId}` for free: scan the Vault,
 rebuild the index from scratch. Schema changes, score-formula overhauls, and
 disaster recovery all converge on that one command.
 
+## How a WOW moment is born in the vault world
+
+Files do not compute. The discovery machinery — embeddings, similarity,
+scoring, candidate retrieval — runs entirely on the DB index, exactly as it
+does today (see [`wow-moment-algorithm.md`](./wow-moment-algorithm.md)). The
+vault enters the picture only at the two moments that matter to the user:
+when a thought is captured, and when a connection is recognized.
+
+```
+① Capture
+   user saves an inspiration
+   → vault/{user}/inspirations/2026/06/{id}.yaml   (file: the memory itself)
+   → documents index upsert                         (DB: its queryable shadow)
+   → background_jobs enqueue
+
+② Nervous-system reaction (DB only — no file reads)
+   classifier → Gemini embedding → inspiration_embeddings
+   workers    → importance/wow score columns on the index
+
+③ Candidate retrieval (DB only)
+   trigger embedding vs prior embeddings: cosine similarity,
+   surprise similarity (ideal ≈ 0.62), time distance
+   → pure index scan; not a single file byte is read
+
+④ Judgment (LLM)
+   trigger + top candidates' content → judgeWowMomentForInspiration
+   → { isWowMoment, kind, why, related[] }
+
+⑤ Birth — the first time a file is written in this flow
+   → vault/{user}/moments/2026/06/{momentId}.yaml   (the full judgment as a document)
+   → documents index row                            (for lists and ranking)
+```
+
+The intuition: **the DB is the unconscious, the vault is the conscious.** The
+hunch — similarity scores, embedding distances — happens below the surface in
+the index. The instant a meaningful connection is confirmed, it surfaces as a
+document: a WOW moment file records what triggered it, which past inspirations
+built the bridge, and why it was surprising. The labor of discovery (vectors,
+similarity numbers) stays in the DB; only the narrative is born as a file.
+
+This is also why generation latency and cost do not change in the vault
+world: steps ②–④ are byte-for-byte the existing pipeline. The vault adds one
+S3 PUT at capture (①) and one at birth (⑤).
+
 ## Migration phases
 
 1. **Exporter (this phase, shipped)** — read-only backfill of existing DB
@@ -217,12 +262,59 @@ disaster recovery all converge on that one command.
    nothing changes there). Add the `documents` table + reconciler + `reindex`.
 4. **Retire content columns** — only after extended verification.
 
-## Why this is worth it
+## Why this is good for users — the philosophy
 
-- **Data sovereignty**: the vault directory *is* the export — every inspiration
-  leaves as YAML.
-- **Agent-native**: agents can read and refine vault documents directly.
-- **Auditable judgments**: every WOW judgment is an immutable document with
-  provenance, replayable at will.
+The technical split ("computation belongs to the machine, memory belongs to
+the human") is itself the product stance. The vault is its physical
+implementation.
+
+### 1. Ownership of memory
+
+Today a user's years of inspirations and WOW moments are rows in our
+database; they exist only as long as the service does. In the vault world,
+`vault/{userId}/` *is* the complete history of that person's thinking — one
+directory, readable in any editor, importable into any tool. There is a
+categorical difference between *offering* an export feature and *existing in
+an exportable form*: the former is a favor, the latter is a right.
+
+### 2. Transparent judgment
+
+When the system claims "these two thoughts connect," the user's legitimate
+skepticism is "says who?" Every WOW moment is a human-readable document
+carrying its evidence (`related[]` with reasons) and its provenance
+(`judge`). A user can open the judgment, disagree with it, and argue back.
+An AI verdict that is a contestable record — not a black-box output — is the
+minimum condition for trust.
+
+### 3. Scores never touch the memory
+
+Banning machine-derived values from files is an ethical decision as much as a
+technical one. When users open their vault they see their own thoughts, their
+own reflections, and the story of discovered connections — never "this
+thought scored 73." The system's arithmetic is the system's business; the
+user's memory stays unannotated. In a world where feed algorithms reshape the
+content itself, keeping the measurement out of the artifact is a deliberate
+counter-position.
+
+### 4. On the side of slow thinking
+
+Feeds flow away; files accumulate. Opening `moments/2026/06/` three years
+later is a reunion with your own mind — "this is the connection I saw back
+then." If WAKA is an ambition *mirror*, a mirror must be a record, not a
+flash. A WOW moment that exists as a document rather than a notification
+means the product bets on the user's growth, not the user's dopamine.
+
+### 5. Compatible with the agent era
+
+A memory that exists as YAML is a memory the user can hand to *their own*
+agent: "read my vault and trace how my thinking changed this year." The
+archive is not data that only means something inside WAKA — it is text any
+intelligence can converse with. That is the protocol side of the
+protocol-vs-platform choice.
+
+### And operationally
+
+- **Auditable, replayable judgments** — every WOW judgment is an immutable
+  document with provenance.
 - **The DB becomes a disposable cache** — the operational center of gravity
-  drops a level.
+  drops a level; disaster recovery is `reindex`.
