@@ -80,8 +80,8 @@ vault/
       2026/06/
         {wowMomentId}.yaml
     graph/                      # later phase
-      nodes/{slug}.yaml
-      edges.yaml
+      nodes/{type}--{slug}.yaml
+      edges/{sourceSlug}--{kind}--{targetSlug}.yaml
     manifest.yaml               # later phase: vault + schema versions, last reindex
 ```
 
@@ -151,6 +151,93 @@ related:
 judge:
   idempotency_key: v1:user:trigger:kind:…
 ```
+
+### Graph documents (later phase)
+
+The context graph splits along the same meaning/signal line as everything
+else:
+
+| Files (meaning) | DB (signals) |
+| --- | --- |
+| node `type`, `label`, `description`, `status` | `weight`, `confidence` — writer-updated strength |
+| node evidence list (which inspiration, why) | `evidence_count` — countable from evidence |
+| edge `kind`, source/target, evidence inspirations | `last_reinforced_at` — changes by the second |
+
+The key insight: **weight/confidence are projections recomputable from
+evidence.** Files keep the evidence itself; strength lives in the index and
+is re-derived from evidence at `reindex` time, so Principle 2 (full
+restoration from the Vault alone) holds.
+
+Unlike inspirations and moments — a *journal* of immutable events partitioned
+by `YYYY/MM` — the graph is a *lexicon*: the living current state of who the
+user is. Nodes are organized by what they are, not when they appeared. The
+three vault directories map to the three layers of the ambition mirror:
+`inspirations/` is *what I thought*, `moments/` is *what connected*,
+`graph/nodes/` is *who I am becoming*.
+
+#### Node (`waka/meaning-node@v1`)
+
+One file per concept at `graph/nodes/{type}--{slug}.yaml` — the filename
+derives from the DB uniqueness key `(type, label)`, so listing the directory
+reads as the user's lexicon (`value--curiosity-driven-building.yaml`). This is
+the one place we don't use UUID filenames; the UUID stays inside the file as
+the rename-stable key (a rename writes the new path, deletes the old, and the
+index follows the `id`).
+
+```yaml
+schema: waka/meaning-node@v1
+id: 8f3a2c1d-…              # DB id — survives renames
+rev: 4
+type: value                  # theme | value | person | environment | aesthetic
+                             # | tension | project | open_question | hypothesis
+label: curiosity-driven building
+description: |
+  Building things to find out, not to win. Recurs whenever …
+status: active
+first_seen_at: 2026-03-02T11:20:00.000Z
+
+evidence:                    # meaning_evidence — why this node exists
+  - inspiration: 0c8c52cf-…
+    reason: chose the harder stack just to understand it
+  - inspiration: 9a11e0d2-…
+    reason: '"fun first" framing of the weekend project'
+```
+
+Evidence is embedded in the node file rather than split out: opening a node
+shows immediately *why it exists*, which is the same contestable-judgment
+philosophy applied to the graph. Evidence is append-mostly, so rev conflicts
+are rare.
+
+#### Edge (`waka/meaning-edge@v1`)
+
+One file per relationship at
+`graph/edges/{sourceSlug}--{kind}--{targetSlug}.yaml`. A single `edges.yaml`
+would be rewritten on every reinforcement (hash churn), become the one
+write-contention bottleneck, and break "one document = one unit of meaning" —
+hence per-edge files.
+
+```yaml
+schema: waka/meaning-edge@v1
+id: 2b7e9d40-…
+rev: 2
+kind: challenges             # supports | challenges | points_to | asks_for | reactivates
+source:
+  id: 8f3a2c1d-…
+  node: value--curiosity-driven-building     # denormalized for human readers
+target:
+  id: 5d1c8e77-…
+  node: project--waka-launch
+
+evidence_inspirations:       # the inspirations that witnessed this relation
+  - 0c8c52cf-…
+  - 77e1b2a9-…
+```
+
+Node references carry both the `id` (integrity — survives renames) and the
+slug (readability — the graph is legible from files alone). If they diverge,
+the reconciler corrects the slug from the `id`. The meaning side of an edge
+(existence, kind, evidence list) changes only when new evidence arrives, so
+edge files stay quiet; per-reinforcement counters live entirely in the DB.
 
 ## Index: the `documents` table (Phase 3)
 
