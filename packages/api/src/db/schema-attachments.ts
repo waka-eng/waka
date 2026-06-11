@@ -34,7 +34,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { inspirations } from "./schema";
+import { signals } from "./schema";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -80,9 +80,9 @@ export const attachments = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    inspirationId: uuid("inspiration_id")
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
 
     type: attachmentTypeEnum("type").notNull(),
 
@@ -141,7 +141,7 @@ export const attachments = pgTable(
   (table) => ({
     // Loading an inspiration detail view fetches all of its attachments;
     // this index supports that lookup.
-    inspirationIdx: index("attachments_inspiration_idx").on(
+    inspirationIdx: index("attachments_signal_idx").on(
       table.inspirationId,
     ),
   }),
@@ -155,8 +155,8 @@ export type NewAttachment = typeof attachments.$inferInsert;
 // ---------------------------------------------------------------------------
 
 export const attachmentsRelations = relations(attachments, ({ one }) => ({
-  inspiration: one(inspirations, {
+  inspiration: one(signals, {
     fields: [attachments.inspirationId],
-    references: [inspirations.id],
+    references: [signals.id],
   }),
 }));

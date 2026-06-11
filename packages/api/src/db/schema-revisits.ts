@@ -10,7 +10,7 @@
 import { relations } from "drizzle-orm";
 import { index, pgEnum, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 
-import { inspirations, users } from "./schema";
+import { inspirations, signals, users } from "./schema";
 
 export const inspirationRevisitEventTypeValues = [
   "detail_opened",
@@ -23,12 +23,12 @@ export type InspirationRevisitEventType =
   (typeof inspirationRevisitEventTypeValues)[number];
 
 export const inspirationRevisitEventTypeEnum = pgEnum(
-  "inspiration_revisit_event_type",
+  "signal_revisit_event_type",
   inspirationRevisitEventTypeValues,
 );
 
-export const inspirationRevisitEvents = pgTable(
-  "inspiration_revisit_events",
+export const signalRevisitEvents = pgTable(
+  "signal_revisit_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
@@ -36,9 +36,9 @@ export const inspirationRevisitEvents = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
 
-    inspirationId: uuid("inspiration_id")
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
 
     eventType: inspirationRevisitEventTypeEnum("event_type").notNull(),
 
@@ -48,17 +48,21 @@ export const inspirationRevisitEvents = pgTable(
   },
   (table) => ({
     inspirationCreatedIdx: index(
-      "inspiration_revisit_events_inspiration_created_idx",
+      "signal_revisit_events_signal_created_idx",
     ).on(table.userId, table.inspirationId, table.createdAt.desc()),
-    userCreatedIdx: index("inspiration_revisit_events_user_created_idx").on(
+    userCreatedIdx: index("signal_revisit_events_user_created_idx").on(
       table.userId,
       table.createdAt.desc(),
     ),
   }),
 );
 
-export type InspirationRevisitEvent = typeof inspirationRevisitEvents.$inferSelect;
-export type NewInspirationRevisitEvent = typeof inspirationRevisitEvents.$inferInsert;
+export const inspirationRevisitEvents = signalRevisitEvents;
+
+export type SignalRevisitEvent = typeof signalRevisitEvents.$inferSelect;
+export type NewSignalRevisitEvent = typeof signalRevisitEvents.$inferInsert;
+export type InspirationRevisitEvent = SignalRevisitEvent;
+export type NewInspirationRevisitEvent = NewSignalRevisitEvent;
 
 export const inspirationRevisitEventsRelations = relations(
   inspirationRevisitEvents,

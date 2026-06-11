@@ -208,13 +208,13 @@ describe("demo seed CLI helpers", () => {
     await seedDemoRows(fakeSql, userId);
 
     const inspirationIdsBySlug = new Map<string, string>();
-    const inspirationInserts = calls.filter((call) => /insert into inspirations/.test(call.sql));
+    const inspirationInserts = calls.filter((call) => /insert into signals/.test(call.sql));
     for (let index = 0; index < inspirationInserts.length; index += 1) {
       const call = inspirationInserts[index]!;
       inspirationIdsBySlug.set(DEMO_INSPIRATIONS[index]!.slug, call.values[0] as string);
     }
 
-    const wowInserts = calls.filter((call) => /insert into wow_moments/.test(call.sql));
+    const wowInserts = calls.filter((call) => /insert into top_of_mind_notes/.test(call.sql));
     expect(wowInserts).toHaveLength(DEMO_WOW_MOMENTS.length);
     for (let index = 0; index < wowInserts.length; index += 1) {
       const call = wowInserts[index]!;
@@ -268,9 +268,9 @@ describe("demo seed CLI helpers", () => {
     expect(calls[0]!.sql).toContain("mixed_demo_moments");
     expect(calls[0]!.sql).toContain("left join prior_demo_inspirations");
     expect(calls[0]!.sql).toContain("pdi.id is null");
-    expect(calls[0]!.sql).toContain("delete from wow_moments");
+    expect(calls[0]!.sql).toContain("delete from top_of_mind_notes");
     expect(calls[0]!.sql).not.toContain("wm.title = any");
-    expect(calls[1]!.sql).toContain("delete from inspirations");
+    expect(calls[1]!.sql).toContain("delete from signals");
     expect(calls[1]!.sql).toContain("kind = ?");
     expect(calls[1]!.sql).not.toContain("text = any");
     expect(calls[0]!.values).toContain(userId);
@@ -305,7 +305,7 @@ describe("demo seed CLI helpers", () => {
 
     const fakeSql = (async (strings: TemplateStringsArray) => {
       const statement = strings.join("?");
-      if (/delete from wow_moments/.test(statement)) {
+      if (/delete from top_of_mind_notes/.test(statement)) {
         const selectedDemoIds = new Set(
           Array.from(inspirations.entries())
             .filter(([, row]) => row.userId === selectedUserId && row.kind === DEMO_SEED_KIND)
@@ -339,7 +339,7 @@ describe("demo seed CLI helpers", () => {
           },
         ];
       }
-      if (/delete from inspirations/.test(statement)) {
+      if (/delete from signals/.test(statement)) {
         const deletedIds = Array.from(inspirations.entries())
           .filter(([, row]) => row.userId === selectedUserId && row.kind === DEMO_SEED_KIND)
           .map(([id]) => id);

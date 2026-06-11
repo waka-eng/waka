@@ -82,15 +82,15 @@ async function ensureSeededDemoAccount(config: ReturnType<typeof resolveSignedIn
       });
       const inspirationRows = await tx<Array<{ count: string | number }>>`
         select count(*) as count
-        from inspirations
+        from signals
         where user_id = ${user.id}
           and kind = ${DEMO_SEED_KIND}
       `;
       const wowRows = await tx<Array<{ count: string | number }>>`
         select count(distinct wm.id) as count
-        from wow_moments wm
-        inner join wow_moment_inspirations wmi on wmi.wow_moment_id = wm.id
-        inner join inspirations i on i.id = wmi.inspiration_id
+        from top_of_mind_notes wm
+        inner join top_of_mind_note_signals wmi on wmi.top_of_mind_note_id = wm.id
+        inner join signals i on i.id = wmi.signal_id
         where wm.user_id = ${user.id}
           and wmi.user_id = ${user.id}
           and i.user_id = ${user.id}

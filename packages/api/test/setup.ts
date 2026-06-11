@@ -147,7 +147,7 @@ async function ensureRevisitEventSchema(): Promise<void> {
     );
     await sql.unsafe(`
       DO $$ BEGIN
-        CREATE TYPE "public"."inspiration_revisit_event_type" AS ENUM(
+        CREATE TYPE "public"."signal_revisit_event_type" AS ENUM(
           'detail_opened',
           'detail_returned',
           'reflection_created',
@@ -158,18 +158,18 @@ async function ensureRevisitEventSchema(): Promise<void> {
       END $$;
     `);
     await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS "public"."inspiration_revisit_events" (
+      CREATE TABLE IF NOT EXISTS "public"."signal_revisit_events" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
         "user_id" uuid NOT NULL,
-        "inspiration_id" uuid NOT NULL,
-        "event_type" "public"."inspiration_revisit_event_type" NOT NULL,
+        "signal_id" uuid NOT NULL,
+        "event_type" "public"."signal_revisit_event_type" NOT NULL,
         "created_at" timestamp with time zone DEFAULT now() NOT NULL
       );
     `);
     await sql.unsafe(`
       DO $$ BEGIN
-        ALTER TABLE "public"."inspiration_revisit_events"
-          ADD CONSTRAINT "inspiration_revisit_events_user_id_users_id_fk"
+        ALTER TABLE "public"."signal_revisit_events"
+          ADD CONSTRAINT "signal_revisit_events_user_id_users_id_fk"
           FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
           ON DELETE cascade ON UPDATE no action;
       EXCEPTION
@@ -178,22 +178,22 @@ async function ensureRevisitEventSchema(): Promise<void> {
     `);
     await sql.unsafe(`
       DO $$ BEGIN
-        ALTER TABLE "public"."inspiration_revisit_events"
-          ADD CONSTRAINT "inspiration_revisit_events_inspiration_id_inspirations_id_fk"
-          FOREIGN KEY ("inspiration_id") REFERENCES "public"."inspirations"("id")
+        ALTER TABLE "public"."signal_revisit_events"
+          ADD CONSTRAINT "signal_revisit_events_signal_id_signals_id_fk"
+          FOREIGN KEY ("signal_id") REFERENCES "public"."signals"("id")
           ON DELETE cascade ON UPDATE no action;
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
     `);
     await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "inspiration_revisit_events_inspiration_created_idx"
-        ON "public"."inspiration_revisit_events"
-        USING btree ("user_id", "inspiration_id", "created_at" DESC NULLS LAST);
+      CREATE INDEX IF NOT EXISTS "signal_revisit_events_signal_created_idx"
+        ON "public"."signal_revisit_events"
+        USING btree ("user_id", "signal_id", "created_at" DESC NULLS LAST);
     `);
     await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "inspiration_revisit_events_user_created_idx"
-        ON "public"."inspiration_revisit_events"
+      CREATE INDEX IF NOT EXISTS "signal_revisit_events_user_created_idx"
+        ON "public"."signal_revisit_events"
         USING btree ("user_id", "created_at" DESC NULLS LAST);
     `);
   } finally {
@@ -223,7 +223,7 @@ async function ensureLocalePreferenceSchema(): Promise<void> {
         ADD COLUMN IF NOT EXISTS "preferred_locale" text NOT NULL DEFAULT 'en-US';
     `);
     await sql.unsafe(`
-      ALTER TABLE "public"."wow_moments"
+      ALTER TABLE "public"."top_of_mind_notes"
         ADD COLUMN IF NOT EXISTS "locale" text NOT NULL DEFAULT 'en-US';
     `);
   } finally {
@@ -249,10 +249,10 @@ async function ensureMeaningPacketSchema(): Promise<void> {
       `SELECT pg_advisory_lock(hashtext('waka_test_meaning_packet_schema'))`,
     );
     await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS "public"."meaning_packets" (
+      CREATE TABLE IF NOT EXISTS "public"."signal_packets" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
         "user_id" uuid NOT NULL,
-        "inspiration_id" uuid NOT NULL,
+        "signal_id" uuid NOT NULL,
         "primary_spark_id" uuid,
         "spark_text" text DEFAULT '' NOT NULL,
         "artifact_excerpt" text DEFAULT '' NOT NULL,
@@ -267,8 +267,8 @@ async function ensureMeaningPacketSchema(): Promise<void> {
     `);
     await sql.unsafe(`
       DO $$ BEGIN
-        ALTER TABLE "public"."meaning_packets"
-          ADD CONSTRAINT "meaning_packets_user_id_users_id_fk"
+        ALTER TABLE "public"."signal_packets"
+          ADD CONSTRAINT "signal_packets_user_id_users_id_fk"
           FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
           ON DELETE cascade ON UPDATE no action;
       EXCEPTION
@@ -277,9 +277,9 @@ async function ensureMeaningPacketSchema(): Promise<void> {
     `);
     await sql.unsafe(`
       DO $$ BEGIN
-        ALTER TABLE "public"."meaning_packets"
-          ADD CONSTRAINT "meaning_packets_inspiration_id_inspirations_id_fk"
-          FOREIGN KEY ("inspiration_id") REFERENCES "public"."inspirations"("id")
+        ALTER TABLE "public"."signal_packets"
+          ADD CONSTRAINT "signal_packets_signal_id_signals_id_fk"
+          FOREIGN KEY ("signal_id") REFERENCES "public"."signals"("id")
           ON DELETE cascade ON UPDATE no action;
       EXCEPTION
         WHEN duplicate_object THEN null;
@@ -287,21 +287,21 @@ async function ensureMeaningPacketSchema(): Promise<void> {
     `);
     await sql.unsafe(`
       DO $$ BEGIN
-        ALTER TABLE "public"."meaning_packets"
-          ADD CONSTRAINT "meaning_packets_primary_spark_id_inspiration_sparks_id_fk"
-          FOREIGN KEY ("primary_spark_id") REFERENCES "public"."inspiration_sparks"("id")
+        ALTER TABLE "public"."signal_packets"
+          ADD CONSTRAINT "signal_packets_primary_spark_id_signal_sparks_id_fk"
+          FOREIGN KEY ("primary_spark_id") REFERENCES "public"."signal_sparks"("id")
           ON DELETE set null ON UPDATE no action;
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
     `);
     await sql.unsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "meaning_packets_user_inspiration_unique_idx"
-        ON "public"."meaning_packets" ("user_id", "inspiration_id");
+      CREATE UNIQUE INDEX IF NOT EXISTS "signal_packets_user_signal_unique_idx"
+        ON "public"."signal_packets" ("user_id", "signal_id");
     `);
     await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "meaning_packets_user_updated_idx"
-        ON "public"."meaning_packets" ("user_id", "updated_at" DESC);
+      CREATE INDEX IF NOT EXISTS "signal_packets_user_updated_idx"
+        ON "public"."signal_packets" ("user_id", "updated_at" DESC);
     `);
   } finally {
     await sql

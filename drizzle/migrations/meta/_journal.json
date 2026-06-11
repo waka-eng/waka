@@ -134,6 +134,13 @@
       "when": 1780270200000,
       "tag": "0019_add_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1781197200000,
+      "tag": "0020_signal_table_cutover",
+      "breakpoints": true
     }
   ]
 }

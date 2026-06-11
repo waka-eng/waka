@@ -5,7 +5,10 @@ import { eq } from "drizzle-orm";
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../src/db/index.js";
 import { findWowMomentCandidates, MAX_DB_CANDIDATE_POOL } from "../src/lib/wow-candidates.js";
 
-import { createInspirationFixture } from "./fixtures/inspirations.js";
+import {
+  createInspirationFixture,
+  inspirationInsertFactory,
+} from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
 import { createTestDatabase, type TestDatabase } from "./helpers/db.js";
 
@@ -31,7 +34,7 @@ async function setWowScore(
   wowScore: number,
 ): Promise<void> {
   await testDb.sql`
-    UPDATE inspirations
+    UPDATE signals
     SET wow_score = ${wowScore}
     WHERE id = ${inspiration.id}
   `;
@@ -277,14 +280,28 @@ describe("findWowMomentCandidates", () => {
     await setWowScore(testDb, perfectButLowPreselection, 0);
     await createEmbedding(testDb, perfectButLowPreselection, [1, 0]);
 
-    for (let index = 0; index < MAX_DB_CANDIDATE_POOL; index += 1) {
-      const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
-        text: `High durable preselection candidate ${index}`,
-        createdAt: new Date(Date.UTC(2026, 0, 2, 0, 0, index)),
-      });
-      await setWowScore(testDb, candidate, 100);
-      await createEmbedding(testDb, candidate, [0, 1]);
-    }
+    const candidateRows = await testDb.db
+      .insert(inspirations)
+      .values(
+        Array.from({ length: MAX_DB_CANDIDATE_POOL }, (_, index) =>
+          inspirationInsertFactory(alice.user.id, {
+            text: `High durable preselection candidate ${index}`,
+            createdAt: new Date(Date.UTC(2026, 0, 2, 0, 0, index)),
+            wowScore: 100,
+          }),
+        ),
+      )
+      .returning();
+    await testDb.db.insert(inspirationEmbeddings).values(
+      candidateRows.map((candidate) => ({
+        userId: candidate.userId,
+        inspirationId: candidate.id,
+        model: "test-embedding-model",
+        dimensions: 2,
+        inputHash: `hash-${candidate.id}`,
+        embedding: [0, 1],
+      })),
+    );
 
     const result = await findWowMomentCandidates({
       db: testDb.db,
@@ -296,6 +313,6 @@ describe("findWowMomentCandidates", () => {
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0]!.inspiration.id).not.toBe(perfectButLowPreselection.id);
     expect(result.candidates[0]!.scores.persistedWowScore).toBe(1);
-  });
+  }, 60_000);
 
 });

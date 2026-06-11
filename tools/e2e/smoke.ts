@@ -434,6 +434,9 @@ async function run(): Promise<void> {
      * ---------------------------------------------------------- */
     step("Capture form accepts a typed note + file attachment", 3, 7);
 
+    await page
+      .getByRole("button", { name: /capture inspiration/i })
+      .click();
     const captureNote = page.locator("#capNote");
     await captureNote.waitFor({ timeout: NAV_TIMEOUT_MS });
     await captureNote.fill(noteText);

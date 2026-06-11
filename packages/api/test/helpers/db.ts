@@ -21,7 +21,7 @@
  *
  *   - Creates a fresh schema named `waka_test_<random>` on the live Neon DB.
  *   - Opens a postgres-js connection whose `search_path` is pinned to that
- *     schema (so `users`, `inspirations`, etc. unqualified references all
+ *     schema (so `users`, `signals`, etc. unqualified references all
  *     resolve to the test schema, and the production `lib/db.ts` queries —
  *     which never qualify with a schema name — would also work if pointed
  *     at this connection by an integration test).
@@ -59,10 +59,10 @@
  *   afterAll(async () => { await testDb.cleanup(); });
  *   beforeEach(async () => { await testDb.truncateAll(); });
  *
- *   describe("inspirations", () => {
+ *   describe("signals", () => {
  *     it("inserts a row", async () => {
  *       const [row] = await testDb.db
- *         .insert(inspirations)
+ *         .insert(signals)
  *         .values({ userId, text: "hi" })
  *         .returning();
  *       expect(row).toBeDefined();
@@ -169,6 +169,23 @@ function isLocalPostgresUrl(connectionString: string): boolean {
 
 function resolveSslMode(connectionString: string): false | "require" {
   return isLocalPostgresUrl(connectionString) ? false : "require";
+}
+
+function withSearchPath(connectionString: string, searchPath: string): string {
+  const url = new URL(connectionString);
+  const existingOptions = url.searchParams.get("options");
+  const searchPathOption = `-c search_path=${searchPath}`;
+  url.searchParams.set(
+    "options",
+    existingOptions ? `${existingOptions} ${searchPathOption}` : searchPathOption,
+  );
+  return url.toString();
+}
+
+function withNeonUnpooledHost(connectionString: string): string {
+  const url = new URL(connectionString);
+  url.hostname = url.hostname.replace("-pooler.", ".");
+  return url.toString();
 }
 
 // ---------------------------------------------------------------------------
@@ -308,34 +325,40 @@ export async function createTestDatabase(): Promise<TestDatabase> {
 
   const connectionString = resolveConnectionString();
 
-  // We open the connection with `search_path` pinned to the test schema
-  // *and* `public` (for any Postgres extensions / `gen_random_uuid` etc.
-  // installed there). postgres-js sets the `search_path` GUC at session
-  // start, so every statement that follows resolves unqualified table
-  // names to the test schema first.
-  //
-  // Note: we connect with `search_path: public` initially so the
-  // `CREATE SCHEMA` statement runs against a known-good context, then
-  // re-issue `SET search_path` once the schema exists. Doing it in two
-  // steps avoids the chicken-and-egg of asking postgres-js to set a
-  // search_path that includes a schema that doesn't yet exist.
-  const sql = postgres(connectionString, {
+  // Neon pooler can run statements across transaction-pooled server sessions,
+  // so a plain `SET search_path` is not reliable for a Drizzle client whose
+  // queries must always resolve to the isolated schema. We create the schema
+  // first, then reconnect through Neon's unpooled host with search_path as a
+  // startup option.
+  const bootstrapSql = postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 10,
+    ssl: resolveSslMode(connectionString),
+    onnotice: () => {},
+  });
+
+  try {
+    await bootstrapSql.unsafe(`CREATE SCHEMA "${schemaName}"`);
+  } catch (err) {
+    await bootstrapSql.end({ timeout: 5 }).catch(() => {});
+    throw err;
+  }
+  await bootstrapSql.end({ timeout: 5 }).catch(() => {});
+
+  const sql = postgres(
+    withSearchPath(withNeonUnpooledHost(connectionString), schemaName),
+    {
     max: 1,
     prepare: false,
     idle_timeout: 10,
     ssl: resolveSslMode(connectionString),
     // Don't emit the verbose pgbouncer/Neon notices in test output.
     onnotice: () => {},
-  });
+    },
+  );
 
   try {
-    await sql.unsafe(`CREATE SCHEMA "${schemaName}"`);
-    // Pin search_path for every subsequent statement on this connection.
-    // Putting `public` second preserves access to extensions like
-    // `pgcrypto` (which provides `gen_random_uuid()` used by our PK
-    // defaults) without letting our table names collide with public ones.
-    await sql.unsafe(`SET search_path TO "${schemaName}", public`);
-
     const migrationsDir = findMigrationsDir();
     await applyMigrations(sql, schemaName, migrationsDir);
   } catch (err) {
@@ -362,13 +385,13 @@ export async function createTestDatabase(): Promise<TestDatabase> {
    * a future test mutates `search_path` mid-run.
    */
   const truncatableTables = [
-    "inspiration_revisit_events",
-    "inspiration_embeddings",
-    "wow_moment_inspirations",
-    "wow_moments",
+    "signal_revisit_events",
+    "signal_embeddings",
+    "top_of_mind_note_signals",
+    "top_of_mind_notes",
     "reflections",
     "attachments",
-    "inspirations",
+    "signals",
     "sessions",
     "users",
   ];

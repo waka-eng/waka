@@ -139,7 +139,7 @@ export function buildSignalPacket(
     classifiedAt: input.signal.classifiedAt?.toISOString() ?? null,
   };
   const sourceMetadata = {
-    persistedAs: "meaning_packets",
+    persistedAs: "signal_packets",
     kind: input.signal.kind,
     category: input.signal.category,
     createdAt: input.signal.createdAt.toISOString(),

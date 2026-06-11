@@ -20,18 +20,18 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { inspirations, users } from "./schema";
+import { inspirations, signals, users } from "./schema";
 
-export const inspirationEmbeddings = pgTable(
-  "inspiration_embeddings",
+export const signalEmbeddings = pgTable(
+  "signal_embeddings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    inspirationId: uuid("inspiration_id")
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
     model: text("model").notNull(),
     dimensions: integer("dimensions").notNull(),
     inputHash: text("input_hash").notNull(),
@@ -45,29 +45,33 @@ export const inspirationEmbeddings = pgTable(
   },
   (table) => ({
     onePerInspirationIdx: uniqueIndex(
-      "inspiration_embeddings_inspiration_unique_idx",
+      "signal_embeddings_signal_unique_idx",
     ).on(table.inspirationId),
-    userInspirationIdx: index("inspiration_embeddings_user_inspiration_idx").on(
+    userInspirationIdx: index("signal_embeddings_user_signal_idx").on(
       table.userId,
       table.inspirationId,
     ),
-    userModelIdx: index("inspiration_embeddings_user_model_idx").on(
+    userModelIdx: index("signal_embeddings_user_model_idx").on(
       table.userId,
       table.model,
     ),
     userModelDimensionsIdx: index(
-      "inspiration_embeddings_user_model_dimensions_idx",
+      "signal_embeddings_user_model_dimensions_idx",
     ).on(table.userId, table.model, table.dimensions),
     tenantInspirationFk: foreignKey({
-      name: "inspiration_embeddings_user_inspiration_fk",
+      name: "signal_embeddings_user_signal_fk",
       columns: [table.userId, table.inspirationId],
-      foreignColumns: [inspirations.userId, inspirations.id],
+      foreignColumns: [signals.userId, signals.id],
     }).onDelete("cascade"),
   }),
 );
 
-export type InspirationEmbedding = typeof inspirationEmbeddings.$inferSelect;
-export type NewInspirationEmbedding = typeof inspirationEmbeddings.$inferInsert;
+export const inspirationEmbeddings = signalEmbeddings;
+
+export type SignalEmbedding = typeof signalEmbeddings.$inferSelect;
+export type NewSignalEmbedding = typeof signalEmbeddings.$inferInsert;
+export type InspirationEmbedding = SignalEmbedding;
+export type NewInspirationEmbedding = NewSignalEmbedding;
 
 export const inspirationEmbeddingsRelations = relations(
   inspirationEmbeddings,
