@@ -39,6 +39,7 @@ function parseArgs(argv: string[]): Args {
   const args: Args = { all: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
+    if (flag === "--") continue;
     const next = () => {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith("--")) {
