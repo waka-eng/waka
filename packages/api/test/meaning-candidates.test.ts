@@ -50,7 +50,7 @@ async function setWowScore(
   wowScore: number,
 ): Promise<void> {
   await testDb.sql`
-    UPDATE inspirations
+    UPDATE signals
     SET wow_score = ${wowScore}
     WHERE id = ${inspiration.id}
   `;

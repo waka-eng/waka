@@ -119,7 +119,7 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
 // ---------------------------------------------------------------------------
-// inspirations
+// signals
 // ---------------------------------------------------------------------------
 
 /**
@@ -133,8 +133,8 @@ export type NewUser = typeof users.$inferInsert;
  * kind and category are free-form metadata carried over from the original
  * single-file UI (e.g. "note", "link", "image"; numeric category bucket).
  */
-export const inspirations = pgTable(
-  "inspirations",
+export const signals = pgTable(
+  "signals",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
@@ -167,36 +167,42 @@ export const inspirations = pgTable(
   (table) => ({
     // The list view filters by user_id and orders by created_at DESC; a
     // composite index supports both in one B-tree walk.
-    userCreatedIdx: index("inspirations_user_created_idx").on(
+    userCreatedIdx: index("signals_user_created_idx").on(
       table.userId,
       table.createdAt.desc(),
     ),
     // Backfill / re-classify jobs scan rows where cluster IS NULL.
-    clusterNullIdx: index("inspirations_cluster_null_idx")
+    clusterNullIdx: index("signals_cluster_null_idx")
       .on(table.id)
       .where(sql`${table.cluster} IS NULL`),
     // Supports composite tenant-bound foreign keys from child tables that
     // carry both user_id and inspiration_id (e.g. stored embeddings).
-    userIdIdUnique: uniqueIndex("inspirations_user_id_id_unique_idx").on(
+    userIdIdUnique: uniqueIndex("signals_user_id_id_unique_idx").on(
       table.userId,
       table.id,
     ),
   }),
 );
 
-export type Inspiration = typeof inspirations.$inferSelect;
-export type NewInspiration = typeof inspirations.$inferInsert;
+// Compatibility aliases: the public API still exposes `/api/inspirations`
+// while the physical database table has moved to the signal vocabulary.
+export const inspirations = signals;
 
-export const inspirationSparks = pgTable(
-  "inspiration_sparks",
+export type Signal = typeof signals.$inferSelect;
+export type NewSignal = typeof signals.$inferInsert;
+export type Inspiration = Signal;
+export type NewInspiration = NewSignal;
+
+export const signalSparks = pgTable(
+  "signal_sparks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    inspirationId: uuid("inspiration_id")
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
     text: text("text").notNull(),
     source: text("source").notNull().default("user_selected"),
     startOffset: integer("start_offset"),
@@ -233,32 +239,36 @@ export const inspirationSparks = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    userInspirationIdx: index("inspiration_sparks_user_inspiration_idx").on(
+    userInspirationIdx: index("signal_sparks_user_signal_idx").on(
       table.userId,
       table.inspirationId,
     ),
-    inspirationCreatedIdx: index("inspiration_sparks_inspiration_created_idx").on(
+    inspirationCreatedIdx: index("signal_sparks_signal_created_idx").on(
       table.inspirationId,
       table.createdAt.desc(),
     ),
   }),
 );
 
-export type InspirationSpark = typeof inspirationSparks.$inferSelect;
-export type NewInspirationSpark = typeof inspirationSparks.$inferInsert;
+export const inspirationSparks = signalSparks;
 
-export const meaningPackets = pgTable(
-  "meaning_packets",
+export type SignalSpark = typeof signalSparks.$inferSelect;
+export type NewSignalSpark = typeof signalSparks.$inferInsert;
+export type InspirationSpark = SignalSpark;
+export type NewInspirationSpark = NewSignalSpark;
+
+export const signalPackets = pgTable(
+  "signal_packets",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    inspirationId: uuid("inspiration_id")
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
     primarySparkId: uuid("primary_spark_id").references(
-      () => inspirationSparks.id,
+      () => signalSparks.id,
       { onDelete: "set null" },
     ),
     sparkText: text("spark_text").notNull().default(""),
@@ -282,22 +292,26 @@ export const meaningPackets = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    userInspirationUnique: uniqueIndex("meaning_packets_user_inspiration_unique_idx").on(
+    userInspirationUnique: uniqueIndex("signal_packets_user_signal_unique_idx").on(
       table.userId,
       table.inspirationId,
     ),
-    userUpdatedIdx: index("meaning_packets_user_updated_idx").on(
+    userUpdatedIdx: index("signal_packets_user_updated_idx").on(
       table.userId,
       table.updatedAt.desc(),
     ),
   }),
 );
 
-export type MeaningPacket = typeof meaningPackets.$inferSelect;
-export type NewMeaningPacket = typeof meaningPackets.$inferInsert;
+export const meaningPackets = signalPackets;
 
-export const meaningNodes = pgTable(
-  "meaning_nodes",
+export type SignalPacket = typeof signalPackets.$inferSelect;
+export type NewSignalPacket = typeof signalPackets.$inferInsert;
+export type MeaningPacket = SignalPacket;
+export type NewMeaningPacket = NewSignalPacket;
+
+export const contextNodes = pgTable(
+  "context_nodes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
@@ -325,41 +339,45 @@ export const meaningNodes = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    userTypeLabelUnique: uniqueIndex("meaning_nodes_user_type_label_unique_idx").on(
+    userTypeLabelUnique: uniqueIndex("context_nodes_user_type_label_unique_idx").on(
       table.userId,
       table.type,
       table.label,
     ),
-    userStatusIdx: index("meaning_nodes_user_status_idx").on(
+    userStatusIdx: index("context_nodes_user_status_idx").on(
       table.userId,
       table.status,
     ),
-    userWeightIdx: index("meaning_nodes_user_weight_idx").on(
+    userWeightIdx: index("context_nodes_user_weight_idx").on(
       table.userId,
       table.weight.desc(),
     ),
   }),
 );
 
-export type MeaningNode = typeof meaningNodes.$inferSelect;
-export type NewMeaningNode = typeof meaningNodes.$inferInsert;
+export const meaningNodes = contextNodes;
 
-export const meaningEvidence = pgTable(
-  "meaning_evidence",
+export type ContextNode = typeof contextNodes.$inferSelect;
+export type NewContextNode = typeof contextNodes.$inferInsert;
+export type MeaningNode = ContextNode;
+export type NewMeaningNode = NewContextNode;
+
+export const contextEvidence = pgTable(
+  "context_evidence",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    meaningNodeId: uuid("meaning_node_id")
+    meaningNodeId: uuid("context_node_id")
       .notNull()
-      .references(() => meaningNodes.id, { onDelete: "cascade" }),
-    inspirationId: uuid("inspiration_id")
+      .references(() => contextNodes.id, { onDelete: "cascade" }),
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
-    packetId: uuid("packet_id")
+      .references(() => signals.id, { onDelete: "cascade" }),
+    packetId: uuid("signal_packet_id")
       .notNull()
-      .references(() => meaningPackets.id, { onDelete: "cascade" }),
+      .references(() => signalPackets.id, { onDelete: "cascade" }),
     reason: text("reason").notNull().default(""),
     weight: integer("weight").notNull().default(0),
     confidence: integer("confidence").notNull().default(0),
@@ -369,42 +387,46 @@ export const meaningEvidence = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    nodeInspirationUnique: uniqueIndex("meaning_evidence_node_inspiration_unique_idx").on(
+    nodeInspirationUnique: uniqueIndex("context_evidence_node_signal_unique_idx").on(
       table.meaningNodeId,
       table.inspirationId,
     ),
-    userNodeIdx: index("meaning_evidence_user_node_idx").on(
+    userNodeIdx: index("context_evidence_user_node_idx").on(
       table.userId,
       table.meaningNodeId,
     ),
-    userInspirationIdx: index("meaning_evidence_user_inspiration_idx").on(
+    userInspirationIdx: index("context_evidence_user_signal_idx").on(
       table.userId,
       table.inspirationId,
     ),
   }),
 );
 
-export type MeaningEvidence = typeof meaningEvidence.$inferSelect;
-export type NewMeaningEvidence = typeof meaningEvidence.$inferInsert;
+export const meaningEvidence = contextEvidence;
 
-export const meaningEdges = pgTable(
-  "meaning_edges",
+export type ContextEvidence = typeof contextEvidence.$inferSelect;
+export type NewContextEvidence = typeof contextEvidence.$inferInsert;
+export type MeaningEvidence = ContextEvidence;
+export type NewMeaningEvidence = NewContextEvidence;
+
+export const contextEdges = pgTable(
+  "context_edges",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    sourceNodeId: uuid("source_node_id")
+    sourceNodeId: uuid("source_context_node_id")
       .notNull()
-      .references(() => meaningNodes.id, { onDelete: "cascade" }),
-    targetNodeId: uuid("target_node_id")
+      .references(() => contextNodes.id, { onDelete: "cascade" }),
+    targetNodeId: uuid("target_context_node_id")
       .notNull()
-      .references(() => meaningNodes.id, { onDelete: "cascade" }),
+      .references(() => contextNodes.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     weight: integer("weight").notNull().default(0),
     confidence: integer("confidence").notNull().default(0),
     evidenceCount: integer("evidence_count").notNull().default(0),
-    evidenceInspirationIds: jsonb("evidence_inspiration_ids")
+    evidenceInspirationIds: jsonb("evidence_signal_ids")
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
@@ -421,23 +443,27 @@ export const meaningEdges = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    userEdgeUnique: uniqueIndex("meaning_edges_user_source_target_kind_unique_idx").on(
+    userEdgeUnique: uniqueIndex("context_edges_user_source_target_kind_unique_idx").on(
       table.userId,
       table.sourceNodeId,
       table.targetNodeId,
       table.kind,
     ),
-    userStatusIdx: index("meaning_edges_user_status_idx").on(
+    userStatusIdx: index("context_edges_user_status_idx").on(
       table.userId,
       table.status,
     ),
-    sourceNodeIdx: index("meaning_edges_source_node_idx").on(table.sourceNodeId),
-    targetNodeIdx: index("meaning_edges_target_node_idx").on(table.targetNodeId),
+    sourceNodeIdx: index("context_edges_source_node_idx").on(table.sourceNodeId),
+    targetNodeIdx: index("context_edges_target_node_idx").on(table.targetNodeId),
   }),
 );
 
-export type MeaningEdge = typeof meaningEdges.$inferSelect;
-export type NewMeaningEdge = typeof meaningEdges.$inferInsert;
+export const meaningEdges = contextEdges;
+
+export type ContextEdge = typeof contextEdges.$inferSelect;
+export type NewContextEdge = typeof contextEdges.$inferInsert;
+export type MeaningEdge = ContextEdge;
+export type NewMeaningEdge = NewContextEdge;
 
 // ---------------------------------------------------------------------------
 // Relations

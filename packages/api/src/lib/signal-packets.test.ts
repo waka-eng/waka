@@ -37,7 +37,7 @@ function spark(overrides: Partial<Parameters<typeof buildSignalPacket>[0]["spark
 }
 
 describe("buildSignalPacket", () => {
-  it("builds deterministic signal packet text while preserving meaning_packets storage compatibility", () => {
+  it("builds deterministic signal packet text for signal_packets storage", () => {
     const packet = buildSignalPacket({ signal: signal(), sparks: [spark()] });
 
     expect(packet.packetText).toContain("waka.signal_packet.v1");
@@ -45,7 +45,7 @@ describe("buildSignalPacket", () => {
     expect(packet.packetText).toContain("WHY_IT_MATTERS");
     expect(packet.packetText).not.toContain("waka.meaning_packet.v1");
     expect(packet.sourceMetadata).toMatchObject({
-      persistedAs: "meaning_packets",
+      persistedAs: "signal_packets",
       sparkCount: 1,
       hasPrimarySpark: true,
     });

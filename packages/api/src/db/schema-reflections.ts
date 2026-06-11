@@ -26,7 +26,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { inspirations, users } from "./schema";
+import { signals, users } from "./schema";
 
 // ---------------------------------------------------------------------------
 // reflections
@@ -37,9 +37,9 @@ export const reflections = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    inspirationId: uuid("inspiration_id")
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
 
     // Denormalised owner pointer. The reflection is also reachable via
     // inspirations.user_id, but storing user_id directly on this row lets
@@ -69,7 +69,7 @@ export const reflections = pgTable(
   (table) => ({
     // The detail view loads all reflections for an inspiration ordered by
     // creation time; this index supports both the filter and the ordering.
-    inspirationCreatedIdx: index("reflections_inspiration_created_idx").on(
+    inspirationCreatedIdx: index("reflections_signal_created_idx").on(
       table.inspirationId,
       table.createdAt,
     ),
@@ -91,9 +91,9 @@ export type NewReflection = typeof reflections.$inferInsert;
 // ---------------------------------------------------------------------------
 
 export const reflectionsRelations = relations(reflections, ({ one }) => ({
-  inspiration: one(inspirations, {
+  inspiration: one(signals, {
     fields: [reflections.inspirationId],
-    references: [inspirations.id],
+    references: [signals.id],
   }),
   user: one(users, {
     fields: [reflections.userId],

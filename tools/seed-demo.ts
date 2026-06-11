@@ -195,14 +195,14 @@ export async function replacePriorDemoRows(
     preserved_non_demo_wow_moments: string | number;
   }>>`
     with prior_demo_inspirations as (
-      select id from inspirations
+      select id from signals
       where user_id = ${userId}
         and kind = ${DEMO_SEED_KIND}
     ), demo_linked_moments as (
       select distinct wm.id
-      from wow_moment_inspirations wmi
-      inner join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
-      inner join wow_moments wm on wm.id = wmi.wow_moment_id
+      from top_of_mind_note_signals wmi
+      inner join prior_demo_inspirations pdi on pdi.id = wmi.signal_id
+      inner join top_of_mind_notes wm on wm.id = wmi.top_of_mind_note_id
       where wm.user_id = ${userId}
         and wmi.user_id = ${userId}
     ), demo_only_moments as (
@@ -210,9 +210,9 @@ export async function replacePriorDemoRows(
       from demo_linked_moments dlm
       where not exists (
         select 1
-        from wow_moment_inspirations wmi
-        left join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
-        where wmi.wow_moment_id = dlm.id
+        from top_of_mind_note_signals wmi
+        left join prior_demo_inspirations pdi on pdi.id = wmi.signal_id
+        where wmi.top_of_mind_note_id = dlm.id
           and wmi.user_id = ${userId}
           and pdi.id is null
       )
@@ -221,19 +221,19 @@ export async function replacePriorDemoRows(
       from demo_linked_moments dlm
       where exists (
         select 1
-        from wow_moment_inspirations wmi
-        left join prior_demo_inspirations pdi on pdi.id = wmi.inspiration_id
-        where wmi.wow_moment_id = dlm.id
+        from top_of_mind_note_signals wmi
+        left join prior_demo_inspirations pdi on pdi.id = wmi.signal_id
+        where wmi.top_of_mind_note_id = dlm.id
           and wmi.user_id = ${userId}
           and pdi.id is null
       )
     ), non_demo_moments as (
       select wm.id
-      from wow_moments wm
+      from top_of_mind_notes wm
       where wm.user_id = ${userId}
         and not exists (select 1 from demo_linked_moments dlm where dlm.id = wm.id)
     ), deleted_demo_moments as (
-      delete from wow_moments
+      delete from top_of_mind_notes
       where user_id = ${userId}
         and id in (select id from demo_only_moments)
       returning id
@@ -245,7 +245,7 @@ export async function replacePriorDemoRows(
   `;
   const inspirationRows = await sql<Array<{ deleted_demo_inspirations: string | number }>>`
     with deleted_demo_inspirations as (
-      delete from inspirations
+      delete from signals
       where user_id = ${userId}
         and kind = ${DEMO_SEED_KIND}
       returning id
@@ -288,7 +288,7 @@ export async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> 
     const id = randomUUID();
     const createdAt = new Date(now - (DEMO_INSPIRATIONS.length - index) * 60 * 60 * 1000);
     await sql`
-      insert into inspirations (
+      insert into signals (
         id, user_id, text, kind, category, importance_score, wow_score,
         cluster, classified_at, created_at, updated_at
       ) values (
@@ -321,7 +321,7 @@ export async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> 
       relatedInspirationIds,
     });
     await sql`
-      insert into wow_moments (
+      insert into top_of_mind_notes (
         id, user_id, title, kind, idempotency_key, why, reflection_question, wow_score,
         created_at, updated_at
       ) values (
@@ -336,8 +336,8 @@ export async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> 
         throw new Error(`Demo WOW moment references unknown inspiration slug ${related.inspirationSlug}`);
       }
       await sql`
-        insert into wow_moment_inspirations (
-          id, user_id, wow_moment_id, inspiration_id, role, reason, sort_order, created_at
+        insert into top_of_mind_note_signals (
+          id, user_id, top_of_mind_note_id, signal_id, role, reason, sort_order, created_at
         ) values (
           ${randomUUID()}, ${userId}, ${id}, ${inspirationId}, ${related.role}, ${related.reason},
           ${relatedIndex}, ${createdAt}

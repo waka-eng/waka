@@ -20,7 +20,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { inspirations, users } from "./schema";
+import { inspirations, signals, users } from "./schema";
 
 export const wowKindEnumValues = [
   "recurrence",
@@ -38,8 +38,8 @@ export const wowKindEnum = pgEnum("wow_kind", wowKindEnumValues);
  * Persisted WOW moment shown to users. `wowScore` is a denormalised snapshot
  * owned by the future signal-updater pipeline, not calculated on GET.
  */
-export const wowMoments = pgTable(
-  "wow_moments",
+export const topOfMindNotes = pgTable(
+  "top_of_mind_notes",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
@@ -62,38 +62,40 @@ export const wowMoments = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    idempotencyKeyIdx: uniqueIndex("wow_moments_idempotency_key_unique_idx").on(
+    idempotencyKeyIdx: uniqueIndex("top_of_mind_notes_idempotency_key_unique_idx").on(
       table.idempotencyKey,
     ),
-    userCreatedIdx: index("wow_moments_user_created_idx").on(
+    userCreatedIdx: index("top_of_mind_notes_user_created_idx").on(
       table.userId,
       table.createdAt.desc(),
     ),
-    userIdIdUnique: uniqueIndex("wow_moments_user_id_id_unique_idx").on(
+    userIdIdUnique: uniqueIndex("top_of_mind_notes_user_id_id_unique_idx").on(
       table.userId,
       table.id,
     ),
-    userScoreIdx: index("wow_moments_user_score_idx").on(
+    userScoreIdx: index("top_of_mind_notes_user_score_idx").on(
       table.userId,
       table.wowScore.desc(),
     ),
   }),
 );
 
+export const wowMoments = topOfMindNotes;
+
 /** Join rows explain the role each inspiration played in the WOW moment. */
-export const wowMomentInspirations = pgTable(
-  "wow_moment_inspirations",
+export const topOfMindNoteSignals = pgTable(
+  "top_of_mind_note_signals",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    wowMomentId: uuid("wow_moment_id")
+    wowMomentId: uuid("top_of_mind_note_id")
       .notNull()
-      .references(() => wowMoments.id, { onDelete: "cascade" }),
-    inspirationId: uuid("inspiration_id")
+      .references(() => topOfMindNotes.id, { onDelete: "cascade" }),
+    inspirationId: uuid("signal_id")
       .notNull()
-      .references(() => inspirations.id, { onDelete: "cascade" }),
+      .references(() => signals.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("related"),
     reason: text("reason").notNull().default(""),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -102,35 +104,41 @@ export const wowMomentInspirations = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    momentOrderIdx: index("wow_moment_inspirations_moment_order_idx").on(
+    momentOrderIdx: index("top_of_mind_note_signals_note_order_idx").on(
       table.userId,
       table.wowMomentId,
       table.sortOrder,
     ),
-    inspirationIdx: index("wow_moment_inspirations_inspiration_idx").on(
+    inspirationIdx: index("top_of_mind_note_signals_signal_idx").on(
       table.userId,
       table.inspirationId,
     ),
     momentUserFk: foreignKey({
-      name: "wow_moment_inspirations_user_moment_fk",
+      name: "top_of_mind_note_signals_user_note_fk",
       columns: [table.userId, table.wowMomentId],
-      foreignColumns: [wowMoments.userId, wowMoments.id],
+      foreignColumns: [topOfMindNotes.userId, topOfMindNotes.id],
     }).onDelete("cascade"),
     inspirationUserFk: foreignKey({
-      name: "wow_moment_inspirations_user_inspiration_fk",
+      name: "top_of_mind_note_signals_user_signal_fk",
       columns: [table.userId, table.inspirationId],
-      foreignColumns: [inspirations.userId, inspirations.id],
+      foreignColumns: [signals.userId, signals.id],
     }).onDelete("cascade"),
     momentInspirationUniqueIdx: uniqueIndex(
-      "wow_moment_inspirations_moment_inspiration_unique_idx",
+      "top_of_mind_note_signals_note_signal_unique_idx",
     ).on(table.wowMomentId, table.inspirationId),
   }),
 );
 
-export type WowMoment = typeof wowMoments.$inferSelect;
-export type NewWowMoment = typeof wowMoments.$inferInsert;
-export type WowMomentInspiration = typeof wowMomentInspirations.$inferSelect;
-export type NewWowMomentInspiration = typeof wowMomentInspirations.$inferInsert;
+export const wowMomentInspirations = topOfMindNoteSignals;
+
+export type TopOfMindNote = typeof topOfMindNotes.$inferSelect;
+export type NewTopOfMindNote = typeof topOfMindNotes.$inferInsert;
+export type TopOfMindNoteSignal = typeof topOfMindNoteSignals.$inferSelect;
+export type NewTopOfMindNoteSignal = typeof topOfMindNoteSignals.$inferInsert;
+export type WowMoment = TopOfMindNote;
+export type NewWowMoment = NewTopOfMindNote;
+export type WowMomentInspiration = TopOfMindNoteSignal;
+export type NewWowMomentInspiration = NewTopOfMindNoteSignal;
 
 export const wowMomentsRelations = relations(wowMoments, ({ one, many }) => ({
   user: one(users, {
