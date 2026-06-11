@@ -18,6 +18,7 @@ export default defineConfig({
       "src/lib/feedback-application.test.ts",
       "src/routes/action-recommendations.test.ts",
       "src/routes/feedback.test.ts",
+      "src/vault/*.test.ts",
     ],
     exclude: [
       "**/node_modules/**",
