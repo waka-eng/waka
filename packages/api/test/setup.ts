@@ -311,6 +311,79 @@ async function ensureMeaningPacketSchema(): Promise<void> {
   }
 }
 
+async function ensureDocumentsSchema(): Promise<void> {
+  const connectionString = process.env.DB_CONNECTION_URL;
+  if (!connectionString) return;
+
+  const sql = postgres(connectionString, {
+    max: 1,
+    prepare: false,
+    onnotice: () => {},
+  });
+
+  try {
+    await sql.unsafe(
+      `SELECT pg_advisory_lock(hashtext('waka_test_documents_schema'))`,
+    );
+    await sql.unsafe(`
+      DO $$ BEGIN
+        CREATE TYPE "public"."document_type" AS ENUM(
+          'signal',
+          'top_of_mind_note',
+          'context_node',
+          'context_edge'
+        );
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await sql.unsafe(`
+      CREATE TABLE IF NOT EXISTS "public"."documents" (
+        "id" uuid PRIMARY KEY NOT NULL,
+        "user_id" uuid NOT NULL,
+        "doc_type" "public"."document_type" NOT NULL,
+        "path" text NOT NULL,
+        "content_hash" text NOT NULL,
+        "rev" integer DEFAULT 1 NOT NULL,
+        "search_text" text,
+        "cluster" "public"."cluster",
+        "importance_score" integer,
+        "wow_score" integer,
+        "created_at" timestamp with time zone,
+        "indexed_at" timestamp with time zone DEFAULT now() NOT NULL
+      );
+    `);
+    await sql.unsafe(`
+      DO $$ BEGIN
+        ALTER TABLE "public"."documents"
+          ADD CONSTRAINT "documents_user_id_users_id_fk"
+          FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
+          ON DELETE cascade ON UPDATE no action;
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    await sql.unsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "documents_user_path_unique_idx"
+        ON "public"."documents" ("user_id", "path");
+    `);
+    await sql.unsafe(`
+      CREATE INDEX IF NOT EXISTS "documents_user_type_created_idx"
+        ON "public"."documents" ("user_id", "doc_type", "created_at" DESC NULLS LAST);
+    `);
+    await sql.unsafe(`
+      CREATE INDEX IF NOT EXISTS "documents_user_type_score_idx"
+        ON "public"."documents" ("user_id", "doc_type", "wow_score" DESC NULLS LAST);
+    `);
+  } finally {
+    await sql
+      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_documents_schema'))`)
+      .catch(() => {});
+    await sql.end({ timeout: 5 }).catch(() => {});
+  }
+}
+
 await ensureRevisitEventSchema();
 await ensureLocalePreferenceSchema();
 await ensureMeaningPacketSchema();
+await ensureDocumentsSchema();

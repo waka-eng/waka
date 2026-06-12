@@ -158,6 +158,13 @@ export default $config({
       },
     });
 
+    /**
+     * Vault bucket. User-meaning YAML documents live here as the source of
+     * truth; the Postgres `documents` table is a rebuildable index over this
+     * prefix.
+     */
+    const vaultBucket = new sst.aws.Bucket("Vault");
+
     // -----------------------------------------------------------------------
     // Hono API Function
     //
@@ -202,6 +209,7 @@ export default $config({
         dbConnectionUrl,
         geminiApiKey,
         attachmentsBucket,
+        vaultBucket,
       ],
       // Fallback environment names so the existing Hono code that reads
       // `process.env.JWT_SECRET` / `process.env.DB_CONNECTION_URL` keeps
@@ -223,6 +231,9 @@ export default $config({
         GEMINI_API_KEY: geminiApiKey.value,
         ATTACHMENTS_BUCKET: attachmentsBucket.name,
         ATTACHMENTS_REGION: AWS_REGION,
+        WAKA_VAULT_BUCKET: vaultBucket.name,
+        WAKA_VAULT_PREFIX: "vault/",
+        WAKA_VAULT_REGION: AWS_REGION,
         ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
         ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
         ...(isDevelopmentDomain
@@ -273,6 +284,7 @@ export default $config({
       apiUrl: api.url,
       webUrl: web.url,
       attachmentsBucket: attachmentsBucket.name,
+      vaultBucket: vaultBucket.name,
     };
   },
 });

@@ -38,6 +38,10 @@ class MemoryVault implements VaultStore {
     return this.files.get(path) ?? null;
   }
 
+  async delete(path: string): Promise<void> {
+    this.files.delete(path);
+  }
+
   async *list(prefix: string): AsyncIterable<string> {
     for (const path of [...this.files.keys()].sort()) {
       if (path.startsWith(prefix)) yield path;

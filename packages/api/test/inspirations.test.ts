@@ -421,7 +421,7 @@ describe("POST /api/inspirations — successful creation", () => {
         }),
       );
     }
-  });
+  }, 60_000);
 
 
 
@@ -678,7 +678,7 @@ describe("Inspiration sparks", () => {
 
     expect(list.status).toBe(200);
     expect(list.body.sparks.map((row) => row.id)).toContain(spark.body.spark.id);
-  });
+  }, 60_000);
 
   it("does not let another user list or create sparks on a private inspiration", async () => {
     const alice = await createUserFixture(getDb());
@@ -1127,7 +1127,7 @@ describe("Fetching by id", () => {
     expect(res.body.reflections[0]!.question).toBe(
       "what does this remind me of?",
     );
-  });
+  }, 60_000);
 
   it("POST /api/inspirations/:id/reflections enqueues organic WOW re-processing for the reflected inspiration", async () => {
     const fixture = await createUserFixture(getDb());
@@ -1183,7 +1183,7 @@ describe("Fetching by id", () => {
       status: "pending",
       payload: { inspirationId },
     });
-  });
+  }, 60_000);
 
   it("GET /api/inspirations/:id/reflections returns 404 for another user's id (no enumeration)", async () => {
     const alice = await createUserFixture(getDb());

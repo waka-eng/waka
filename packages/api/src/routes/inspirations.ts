@@ -35,6 +35,7 @@ import {
   S3Client,
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
+import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
@@ -47,6 +48,8 @@ import {
   inspirations,
   reflections,
   type InspirationRevisitEventType,
+  type Signal,
+  type SignalSpark,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import {
@@ -59,6 +62,13 @@ import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
 import { withSignalLayer } from "../lib/signals.js";
+import {
+  deleteSignalDocument,
+  materializeSignalDocument,
+  writeSignalDraftToVault,
+} from "../vault/materialize.js";
+import { getRuntimeVault } from "../vault/runtime.js";
+import type { VaultStore } from "../vault/vault.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -150,6 +160,7 @@ const createSparkSchema = z.object({
 
 export interface InspirationsRouteDependencies {
   getDatabase?: typeof getDb;
+  getVault?: () => VaultStore;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   enqueueClassificationJob?: typeof enqueueClassification;
   persistScores?: typeof persistLocalInspirationScores;
@@ -295,6 +306,7 @@ export function createInspirationsRoutes(
 ): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
+  const getVault = deps.getVault ?? getRuntimeVault;
   const enqueueClassificationJob = deps.enqueueClassificationJob ?? enqueueClassification;
   const persistScores = deps.persistScores ?? persistLocalInspirationScores;
   const persistSingleScore = deps.persistSingleScore ?? persistSingleLocalInspirationScoreById;
@@ -344,16 +356,65 @@ routes.post("/", async (c) => {
   const user = c.get("user");
   const db = getDatabase();
 
+  const now = new Date();
+  const signalId = randomUUID();
+  const sparkInputs = normalizeSparkInputs(parsed.data);
+  const draftSignal: Signal = {
+    id: signalId,
+    userId: user.id,
+    text: parsed.data.text,
+    kind: parsed.data.kind ?? null,
+    category: parsed.data.category ?? null,
+    importanceScore: 0,
+    wowScore: 0,
+    cluster: null,
+    classifiedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const draftSparks: SignalSpark[] = sparkInputs.map((spark) => ({
+    id: randomUUID(),
+    userId: user.id,
+    inspirationId: signalId,
+    text: spark.text,
+    source: spark.source ?? "user_selected",
+    startOffset: spark.startOffset ?? null,
+    endOffset: spark.endOffset ?? null,
+    confidence: spark.confidence ?? 100,
+    isPrimary: spark.isPrimary ?? false,
+    note: spark.note ?? null,
+    whatMovedUser: null,
+    impliedValues: [],
+    worldviewClaims: [],
+    tensions: [],
+    decisionRelevance: [],
+    emotionalCharge: [],
+    createdAt: now,
+    updatedAt: now,
+  }));
+
+  const vault = getVault();
+  await writeSignalDraftToVault({
+    vault,
+    signal: draftSignal,
+    sparks: draftSparks,
+  });
+
   // 2. Insert. We `.returning()` the columns the SPA needs to render the
   //    new row immediately. cluster / classified_at are intentionally NULL
-  //    here — the background classifier will UPDATE them later.
+  //    here — the background classifier will UPDATE them later. The vault
+  //    draft above is deliberately written first so the user-meaning artifact
+  //    exists before the rebuildable DB projection.
   const [inserted] = await db
     .insert(inspirations)
     .values({
+      id: signalId,
       userId: user.id,
       text: parsed.data.text,
       kind: parsed.data.kind ?? null,
       category: parsed.data.category ?? null,
+      createdAt: now,
+      updatedAt: now,
     })
     .returning({
       id: inspirations.id,
@@ -377,24 +438,32 @@ routes.post("/", async (c) => {
 
   const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };
-  const sparkInputs = normalizeSparkInputs(parsed.data);
   if (sparkInputs.length > 0) {
     await db.insert(inspirationSparks).values(
-      sparkInputs.map((spark) => ({
+      draftSparks.map((spark) => ({
+        id: spark.id,
         userId: user.id,
-        inspirationId: scoredInserted.id,
+        inspirationId: signalId,
         text: spark.text,
-        source: spark.source ?? "user_selected",
-        startOffset: spark.startOffset ?? null,
-        endOffset: spark.endOffset ?? null,
-        confidence: spark.confidence ?? 100,
-        isPrimary: spark.isPrimary ?? false,
+        source: spark.source,
+        startOffset: spark.startOffset,
+        endOffset: spark.endOffset,
+        confidence: spark.confidence,
+        isPrimary: spark.isPrimary,
         note: spark.note ?? null,
+        createdAt: spark.createdAt,
+        updatedAt: spark.updatedAt,
       })),
     );
   }
   await persistSignalPacketForSignal({
     db,
+    userId: scoredInserted.userId,
+    signalId: scoredInserted.id,
+  });
+  await materializeSignalDocument({
+    db,
+    vault,
     userId: scoredInserted.userId,
     signalId: scoredInserted.id,
   });
@@ -683,6 +752,12 @@ routes.post("/:id/sparks", async (c) => {
     userId: user.id,
     signalId: idCheck.data,
   });
+  await materializeSignalDocument({
+    db,
+    vault: getVault(),
+    userId: user.id,
+    signalId: idCheck.data,
+  });
 
   return c.json({
     spark: {
@@ -719,6 +794,12 @@ routes.delete("/:id/sparks/:sparkId", async (c) => {
 
   await persistSignalPacketForSignal({
     db,
+    userId: user.id,
+    signalId: idCheck.data,
+  });
+  await materializeSignalDocument({
+    db,
+    vault: getVault(),
     userId: user.id,
     signalId: idCheck.data,
   });
@@ -1008,8 +1089,14 @@ routes.patch("/:id", async (c) => {
     });
   }
 
-  const updatedScores = await persistLocalInspirationScores(db, updated);
+  const updatedScores = await persistScores(db, updated);
   const scoredUpdated = { ...updated, ...updatedScores };
+  await materializeSignalDocument({
+    db,
+    vault: getVault(),
+    userId: user.id,
+    signalId: scoredUpdated.id,
+  });
 
   return c.json({ inspiration: withDisplayedWowScore(scoredUpdated) }, 200);
 });
@@ -1193,7 +1280,13 @@ routes.post("/:id/reflections", async (c) => {
     });
   }
 
-  const updatedScores = await persistLocalInspirationScores(db, parent);
+  const updatedScores = await persistScores(db, parent);
+  await materializeSignalDocument({
+    db,
+    vault: getVault(),
+    userId: user.id,
+    signalId: parent.id,
+  });
 
   return c.json(
     {
@@ -1430,6 +1523,13 @@ routes.delete("/:id", async (c) => {
     // POST /api/attachments.
     return c.json({ error: "Inspiration not found" }, 404);
   }
+
+  await deleteSignalDocument({
+    db,
+    vault: getVault(),
+    userId: user.id,
+    signalId: idCheck.data,
+  });
 
   // 3. Collect S3 keys for this inspiration's image / file attachments. Link
   //    attachments have `s3Key === NULL` and are skipped automatically by

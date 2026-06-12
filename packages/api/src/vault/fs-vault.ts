@@ -6,7 +6,7 @@
  * and version-controlled with ordinary tools.
  */
 
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 
 import {
@@ -41,6 +41,11 @@ export class FsVault implements VaultStore {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
     }
+  }
+
+  async delete(path: string): Promise<void> {
+    assertVaultPath(path);
+    await rm(join(this.root, path), { force: true });
   }
 
   async *list(prefix: string): AsyncIterable<string> {

@@ -22,6 +22,7 @@
     "db:check": "drizzle-kit check",
     "demo:seed": "tsx tools/seed-demo.ts",
     "vault:export": "tsx tools/export-vault.ts",
+    "vault:reindex": "tsx tools/reindex-vault.ts",
     "visual-diff": "tsx tools/visual-diff/capture.ts",
     "visual-diff:install": "playwright install chromium",
     "e2e:smoke": "tsx tools/e2e/smoke.ts",
@@ -42,7 +43,8 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "yaml": "^2.9.0"
   },
   "pnpm": {
     "overrides": {
