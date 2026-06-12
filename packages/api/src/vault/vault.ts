@@ -1,8 +1,9 @@
 /**
  * VaultStore — the storage seam between WAKA and its YAML vault.
  *
- * The vault is the canonical home for *meaning* documents (inspirations,
- * WOW moments); the database keeps machine signals and a rebuildable index.
+ * The vault is the canonical home for *meaning* documents (signals,
+ * top-of-mind notes, context graph claims); the database keeps machine
+ * signals and a rebuildable index.
  * See docs/vault-architecture.md for the full design.
  *
  * Implementations:

@@ -1,15 +1,17 @@
 /**
  * Vault document serialization — DB rows in, YAML documents out.
  *
- * Two document schemas exist in Phase 1:
- *   - waka/inspiration@v1 : inspiration text + sparks + reflections +
- *     attachment references
- *   - waka/wow-moment@v1  : a judged WOW moment with its evidence links
+ * Document schemas:
+ *   - waka/signal@v1              : captured signal text + sparks + packet +
+ *                                   reflections + attachment references
+ *   - waka/top-of-mind-note@v1    : a judged top-of-mind note with evidence
+ *   - waka/context-node@v1        : a durable graph claim and its evidence
+ *   - waka/context-edge@v1        : a durable graph relationship
  *
  * Design rules (docs/vault-architecture.md):
  *   - Machine-derived values NEVER enter files: no scores, no cluster, no
  *     embeddings. The judge's idempotency key is provenance, not a signal,
- *     so it rides along on WOW moment documents.
+ *     so it rides along on top-of-mind note documents.
  *   - Output is deterministic for identical input rows: key order is fixed
  *     by construction, null/undefined/empty values are pruned, timestamps
  *     are ISO-8601 UTC strings. Determinism is what makes contentHash a
@@ -20,15 +22,25 @@ import { stringify } from "yaml";
 
 import type {
   Attachment,
-  Inspiration,
-  InspirationSpark,
+  ContextEdge,
+  ContextEvidence,
+  ContextNode,
   Reflection,
-  WowMoment,
-  WowMomentInspiration,
+  Signal,
+  SignalPacket,
+  SignalSpark,
+  TopOfMindNote,
+  TopOfMindNoteSignal,
 } from "../db/index.js";
 
-export const INSPIRATION_SCHEMA = "waka/inspiration@v1";
-export const WOW_MOMENT_SCHEMA = "waka/wow-moment@v1";
+export const SIGNAL_SCHEMA = "waka/signal@v1";
+export const TOP_OF_MIND_NOTE_SCHEMA = "waka/top-of-mind-note@v1";
+export const CONTEXT_NODE_SCHEMA = "waka/context-node@v1";
+export const CONTEXT_EDGE_SCHEMA = "waka/context-edge@v1";
+
+// Compatibility exports for code that has not completed the vocabulary cutover.
+export const INSPIRATION_SCHEMA = SIGNAL_SCHEMA;
+export const WOW_MOMENT_SCHEMA = TOP_OF_MIND_NOTE_SCHEMA;
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -40,22 +52,74 @@ function monthPartition(createdAt: Date): string {
   return `${year}/${month}`;
 }
 
-/** `{userId}/inspirations/YYYY/MM/{id}.yaml` (UTC month of created_at). */
+/** `{userId}/signals/YYYY/MM/{id}.yaml` (UTC month of created_at). */
+export function signalVaultPath(
+  userId: string,
+  id: string,
+  createdAt: Date,
+): string {
+  return `${userId}/signals/${monthPartition(createdAt)}/${id}.yaml`;
+}
+
+/** `{userId}/top-of-mind/YYYY/MM/{id}.yaml` (UTC month of created_at). */
+export function topOfMindNoteVaultPath(
+  userId: string,
+  id: string,
+  createdAt: Date,
+): string {
+  return `${userId}/top-of-mind/${monthPartition(createdAt)}/${id}.yaml`;
+}
+
 export function inspirationVaultPath(
   userId: string,
   id: string,
   createdAt: Date,
 ): string {
-  return `${userId}/inspirations/${monthPartition(createdAt)}/${id}.yaml`;
+  return signalVaultPath(userId, id, createdAt);
 }
 
-/** `{userId}/moments/YYYY/MM/{id}.yaml` (UTC month of created_at). */
 export function wowMomentVaultPath(
   userId: string,
   id: string,
   createdAt: Date,
 ): string {
-  return `${userId}/moments/${monthPartition(createdAt)}/${id}.yaml`;
+  return topOfMindNoteVaultPath(userId, id, createdAt);
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "untitled";
+}
+
+function truncateSlug(slug: string, maxLength: number): string {
+  if (slug.length <= maxLength) return slug;
+  return slug.slice(0, maxLength).replace(/-+$/g, "") || "untitled";
+}
+
+export function contextNodeSlug(node: Pick<ContextNode, "type" | "label" | "id">): string {
+  return `${slugify(node.type)}--${truncateSlug(slugify(node.label), 64)}--${node.id}`;
+}
+
+function contextEdgeNodeSlug(node: Pick<ContextNode, "type" | "label" | "id">): string {
+  return `${slugify(node.type)}--${truncateSlug(slugify(node.label), 24)}--${node.id}`;
+}
+
+export function contextNodeVaultPath(node: Pick<ContextNode, "userId" | "type" | "label" | "id">): string {
+  return `${node.userId}/context/nodes/${contextNodeSlug(node)}.yaml`;
+}
+
+export function contextEdgeVaultPath(input: {
+  edge: Pick<ContextEdge, "userId" | "kind" | "id">;
+  sourceNode: Pick<ContextNode, "type" | "label" | "id">;
+  targetNode: Pick<ContextNode, "type" | "label" | "id">;
+}): string {
+  const sourceSlug = contextEdgeNodeSlug(input.sourceNode);
+  const targetSlug = contextEdgeNodeSlug(input.targetNode);
+  return `${input.edge.userId}/context/edges/${sourceSlug}--${slugify(input.edge.kind)}--${targetSlug}--${input.edge.id}.yaml`;
 }
 
 // ---------------------------------------------------------------------------
@@ -80,23 +144,26 @@ function prune(entries: Record<string, unknown>): Doc {
   return out;
 }
 
-export interface InspirationExport {
-  inspiration: Inspiration;
-  sparks: InspirationSpark[];
+export interface SignalExport {
+  signal: Signal;
+  sparks: SignalSpark[];
+  packet: SignalPacket | null;
   reflections: Reflection[];
   attachments: Attachment[];
 }
 
-export function buildInspirationDoc(input: InspirationExport): Doc {
-  const { inspiration, sparks, reflections, attachments } = input;
+export type InspirationExport = SignalExport;
+
+export function buildSignalDoc(input: SignalExport): Doc {
+  const { signal, sparks, packet, reflections, attachments } = input;
   return prune({
-    schema: INSPIRATION_SCHEMA,
-    id: inspiration.id,
+    schema: SIGNAL_SCHEMA,
+    id: signal.id,
     rev: 1,
-    created_at: inspiration.createdAt.toISOString(),
-    text: inspiration.text,
-    kind: inspiration.kind,
-    category: inspiration.category,
+    created_at: signal.createdAt.toISOString(),
+    text: signal.text,
+    kind: signal.kind,
+    category: signal.category,
     sparks: sparks.map((spark) =>
       prune({
         text: spark.text,
@@ -113,6 +180,14 @@ export function buildInspirationDoc(input: InspirationExport): Doc {
         emotional_charge: spark.emotionalCharge,
       }),
     ),
+    signal_packet: packet
+      ? prune({
+          spark_text: packet.sparkText,
+          artifact_excerpt: packet.artifactExcerpt,
+          packet_text: packet.packetText,
+          source_metadata: packet.sourceMetadata,
+        })
+      : undefined,
     reflections: reflections.map((reflection) =>
       prune({
         question: reflection.question,
@@ -133,26 +208,32 @@ export function buildInspirationDoc(input: InspirationExport): Doc {
   });
 }
 
-export interface WowMomentExport {
-  moment: WowMoment;
-  links: WowMomentInspiration[];
+export function buildInspirationDoc(input: InspirationExport): Doc {
+  return buildSignalDoc(input);
 }
 
-export function buildWowMomentDoc(input: WowMomentExport): Doc {
-  const { moment, links } = input;
+export interface TopOfMindNoteExport {
+  note: TopOfMindNote;
+  links: TopOfMindNoteSignal[];
+}
+
+export type WowMomentExport = TopOfMindNoteExport;
+
+export function buildTopOfMindNoteDoc(input: TopOfMindNoteExport): Doc {
+  const { note, links } = input;
   const ordered = [...links].sort((a, b) => a.sortOrder - b.sortOrder);
   return prune({
-    schema: WOW_MOMENT_SCHEMA,
-    id: moment.id,
+    schema: TOP_OF_MIND_NOTE_SCHEMA,
+    id: note.id,
     rev: 1,
-    created_at: moment.createdAt.toISOString(),
-    title: moment.title,
-    kind: moment.kind,
-    why: moment.why,
-    belief_statement: moment.beliefStatement,
-    reflection_question: moment.reflectionQuestion,
-    reflection_guide: moment.reflectionGuide,
-    locale: moment.locale,
+    created_at: note.createdAt.toISOString(),
+    title: note.title,
+    kind: note.kind,
+    why: note.why,
+    belief_statement: note.beliefStatement,
+    reflection_question: note.reflectionQuestion,
+    reflection_guide: note.reflectionGuide,
+    locale: note.locale,
     related: ordered.map((link) =>
       prune({
         id: link.inspirationId,
@@ -161,14 +242,71 @@ export function buildWowMomentDoc(input: WowMomentExport): Doc {
       }),
     ),
     judge: prune({
-      idempotency_key: moment.idempotencyKey,
+      idempotency_key: note.idempotencyKey,
     }),
+  });
+}
+
+export function buildWowMomentDoc(input: WowMomentExport): Doc {
+  return buildTopOfMindNoteDoc(input);
+}
+
+export interface ContextNodeExport {
+  node: ContextNode;
+  evidence: ContextEvidence[];
+}
+
+export function buildContextNodeDoc(input: ContextNodeExport): Doc {
+  const { node, evidence } = input;
+  return prune({
+    schema: CONTEXT_NODE_SCHEMA,
+    id: node.id,
+    rev: 1,
+    type: node.type,
+    label: node.label,
+    description: node.description,
+    status: node.status,
+    first_seen_at: node.firstSeenAt.toISOString(),
+    evidence: evidence.map((row) =>
+      prune({
+        signal: row.inspirationId,
+        reason: row.reason,
+      }),
+    ),
+  });
+}
+
+export interface ContextEdgeExport {
+  edge: ContextEdge;
+  sourceNode: ContextNode;
+  targetNode: ContextNode;
+}
+
+export function buildContextEdgeDoc(input: ContextEdgeExport): Doc {
+  const { edge, sourceNode, targetNode } = input;
+  const sourceSlug = contextEdgeNodeSlug(sourceNode);
+  const targetSlug = contextEdgeNodeSlug(targetNode);
+  return prune({
+    schema: CONTEXT_EDGE_SCHEMA,
+    id: edge.id,
+    rev: 1,
+    kind: edge.kind,
+    status: edge.status,
+    source: {
+      id: sourceNode.id,
+      node: sourceSlug,
+    },
+    target: {
+      id: targetNode.id,
+      node: targetSlug,
+    },
+    evidence_signals: edge.evidenceInspirationIds,
   });
 }
 
 /**
  * Serialize a document to YAML. `lineWidth: 0` disables wrapping so long
- * inspiration text never gets reflowed (reflow would make hashes depend on
+ * signal text never gets reflowed (reflow would make hashes depend on
  * the serializer's wrap heuristics rather than on content).
  */
 export function toYaml(doc: Doc): string {

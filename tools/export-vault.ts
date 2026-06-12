@@ -91,20 +91,24 @@ async function main(): Promise<void> {
   const source = createDrizzleVaultExportSource(getDb());
 
   const userIds = args.all ? await source.listUserIds() : [args.userId!];
-  let totalInspirations = 0;
-  let totalMoments = 0;
+  let totalSignals = 0;
+  let totalTopOfMindNotes = 0;
+  let totalContextNodes = 0;
+  let totalContextEdges = 0;
 
   for (const userId of userIds) {
     const summary = await exportUserVault({ source, vault, userId });
-    totalInspirations += summary.inspirations.length;
-    totalMoments += summary.wowMoments.length;
+    totalSignals += summary.signals.length;
+    totalTopOfMindNotes += summary.topOfMindNotes.length;
+    totalContextNodes += summary.contextNodes.length;
+    totalContextEdges += summary.contextEdges.length;
     console.log(
-      `user ${userId}: ${summary.inspirations.length} inspirations, ${summary.wowMoments.length} wow moments`,
+      `user ${userId}: ${summary.signals.length} signals, ${summary.topOfMindNotes.length} top-of-mind notes, ${summary.contextNodes.length} context nodes, ${summary.contextEdges.length} context edges`,
     );
   }
 
   console.log(
-    `done: ${userIds.length} user(s), ${totalInspirations} inspirations, ${totalMoments} wow moments → ${
+    `done: ${userIds.length} user(s), ${totalSignals} signals, ${totalTopOfMindNotes} top-of-mind notes, ${totalContextNodes} context nodes, ${totalContextEdges} context edges → ${
       args.out ?? `s3://${args.bucket}/${args.bucketPrefix ?? "vault/"}`
     }`,
   );
