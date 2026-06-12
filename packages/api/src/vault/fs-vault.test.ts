@@ -38,6 +38,13 @@ describe("FsVault", () => {
     expect(await vault.get("u1/a.yaml")).toBe("v: 2\n");
   });
 
+  it("deletes documents idempotently", async () => {
+    await vault.put("u1/a.yaml", "v: 1\n");
+    await vault.delete("u1/a.yaml");
+    await vault.delete("u1/a.yaml");
+    expect(await vault.get("u1/a.yaml")).toBeNull();
+  });
+
   it("lists documents under a prefix in sorted order", async () => {
     await vault.put("u1/top-of-mind/2026/06/b.yaml", "b\n");
     await vault.put("u1/signals/2026/06/a.yaml", "a\n");

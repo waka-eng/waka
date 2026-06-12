@@ -148,6 +148,13 @@
       "when": 1781197300000,
       "tag": "0021_drop_legacy_inspirations",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781200000000,
+      "tag": "0022_documents_index",
+      "breakpoints": true
     }
   ]
 }

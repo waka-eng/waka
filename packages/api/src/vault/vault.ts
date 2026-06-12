@@ -35,6 +35,9 @@ export interface VaultStore {
   /** Read the document at `path`, or null when it does not exist. */
   get(path: string): Promise<string | null>;
 
+  /** Delete the document at `path`. Missing documents are treated as success. */
+  delete(path: string): Promise<void>;
+
   /** Yield every stored path under `prefix`, in lexicographic order. */
   list(prefix: string): AsyncIterable<string>;
 }

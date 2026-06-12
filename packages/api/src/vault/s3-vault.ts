@@ -10,6 +10,7 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
+  DeleteObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 
@@ -37,8 +38,15 @@ export interface S3VaultOptions {
  * outside this package (e.g. the export CLI under tools/) don't need their
  * own dependency on @aws-sdk/client-s3 just to construct a client.
  */
-export function createS3Vault(options: { bucket: string; prefix?: string }): S3Vault {
-  return new S3Vault({ client: new S3Client({}), ...options });
+export function createS3Vault(options: {
+  bucket: string;
+  prefix?: string;
+  region?: string;
+}): S3Vault {
+  return new S3Vault({
+    client: new S3Client(options.region ? { region: options.region } : {}),
+    ...options,
+  });
 }
 
 export class S3Vault implements VaultStore {
@@ -78,6 +86,13 @@ export class S3Vault implements VaultStore {
       if (name === "NoSuchKey" || name === "NotFound") return null;
       throw error;
     }
+  }
+
+  async delete(path: string): Promise<void> {
+    assertVaultPath(path);
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: this.prefix + path }),
+    );
   }
 
   async *list(prefix: string): AsyncIterable<string> {
