@@ -15,29 +15,41 @@ import { asc, eq, inArray } from "drizzle-orm";
 
 import {
   attachments,
-  inspirationSparks,
-  inspirations,
+  contextEdges,
+  contextEvidence,
+  contextNodes,
   reflections,
+  signalPackets,
+  signalSparks,
+  signals,
+  topOfMindNotes,
+  topOfMindNoteSignals,
   users,
-  wowMomentInspirations,
-  wowMoments,
 } from "../db/index.js";
 import type { getDb } from "../lib/db.js";
 import {
-  buildInspirationDoc,
-  buildWowMomentDoc,
-  inspirationVaultPath,
+  buildContextEdgeDoc,
+  buildContextNodeDoc,
+  buildSignalDoc,
+  buildTopOfMindNoteDoc,
+  contextEdgeVaultPath,
+  contextNodeVaultPath,
+  signalVaultPath,
+  topOfMindNoteVaultPath,
   toYaml,
-  wowMomentVaultPath,
-  type InspirationExport,
-  type WowMomentExport,
+  type ContextEdgeExport,
+  type ContextNodeExport,
+  type SignalExport,
+  type TopOfMindNoteExport,
 } from "./serialize.js";
 import type { VaultStore } from "./vault.js";
 
 export interface VaultExportSource {
   listUserIds(): Promise<string[]>;
-  listInspirations(userId: string): Promise<InspirationExport[]>;
-  listWowMoments(userId: string): Promise<WowMomentExport[]>;
+  listSignals(userId: string): Promise<SignalExport[]>;
+  listTopOfMindNotes(userId: string): Promise<TopOfMindNoteExport[]>;
+  listContextNodes(userId: string): Promise<ContextNodeExport[]>;
+  listContextEdges(userId: string): Promise<ContextEdgeExport[]>;
 }
 
 export interface ExportedDocument {
@@ -47,8 +59,10 @@ export interface ExportedDocument {
 
 export interface VaultExportSummary {
   userId: string;
-  inspirations: ExportedDocument[];
-  wowMoments: ExportedDocument[];
+  signals: ExportedDocument[];
+  topOfMindNotes: ExportedDocument[];
+  contextNodes: ExportedDocument[];
+  contextEdges: ExportedDocument[];
 }
 
 /**
@@ -63,25 +77,45 @@ export async function exportUserVault(options: {
 }): Promise<VaultExportSummary> {
   const { source, vault, userId } = options;
 
-  const inspirationDocs: ExportedDocument[] = [];
-  for (const item of await source.listInspirations(userId)) {
-    const path = inspirationVaultPath(
+  const signalDocs: ExportedDocument[] = [];
+  for (const item of await source.listSignals(userId)) {
+    const path = signalVaultPath(
       userId,
-      item.inspiration.id,
-      item.inspiration.createdAt,
+      item.signal.id,
+      item.signal.createdAt,
     );
-    const { contentHash } = await vault.put(path, toYaml(buildInspirationDoc(item)));
-    inspirationDocs.push({ path, contentHash });
+    const { contentHash } = await vault.put(path, toYaml(buildSignalDoc(item)));
+    signalDocs.push({ path, contentHash });
   }
 
-  const wowMomentDocs: ExportedDocument[] = [];
-  for (const item of await source.listWowMoments(userId)) {
-    const path = wowMomentVaultPath(userId, item.moment.id, item.moment.createdAt);
-    const { contentHash } = await vault.put(path, toYaml(buildWowMomentDoc(item)));
-    wowMomentDocs.push({ path, contentHash });
+  const topOfMindNoteDocs: ExportedDocument[] = [];
+  for (const item of await source.listTopOfMindNotes(userId)) {
+    const path = topOfMindNoteVaultPath(userId, item.note.id, item.note.createdAt);
+    const { contentHash } = await vault.put(path, toYaml(buildTopOfMindNoteDoc(item)));
+    topOfMindNoteDocs.push({ path, contentHash });
   }
 
-  return { userId, inspirations: inspirationDocs, wowMoments: wowMomentDocs };
+  const contextNodeDocs: ExportedDocument[] = [];
+  for (const item of await source.listContextNodes(userId)) {
+    const path = contextNodeVaultPath(item.node);
+    const { contentHash } = await vault.put(path, toYaml(buildContextNodeDoc(item)));
+    contextNodeDocs.push({ path, contentHash });
+  }
+
+  const contextEdgeDocs: ExportedDocument[] = [];
+  for (const item of await source.listContextEdges(userId)) {
+    const path = contextEdgeVaultPath(item);
+    const { contentHash } = await vault.put(path, toYaml(buildContextEdgeDoc(item)));
+    contextEdgeDocs.push({ path, contentHash });
+  }
+
+  return {
+    userId,
+    signals: signalDocs,
+    topOfMindNotes: topOfMindNoteDocs,
+    contextNodes: contextNodeDocs,
+    contextEdges: contextEdgeDocs,
+  };
 }
 
 type Db = ReturnType<typeof getDb>;
@@ -113,21 +147,26 @@ export function createDrizzleVaultExportSource(db: Db): VaultExportSource {
       return rows.map((row) => row.id);
     },
 
-    async listInspirations(userId) {
+    async listSignals(userId) {
       const rows = await db
         .select()
-        .from(inspirations)
-        .where(eq(inspirations.userId, userId))
-        .orderBy(asc(inspirations.createdAt));
+        .from(signals)
+        .where(eq(signals.userId, userId))
+        .orderBy(asc(signals.createdAt));
       if (rows.length === 0) return [];
       const ids = rows.map((row) => row.id);
 
-      const [sparkRows, reflectionRows, attachmentRows] = await Promise.all([
+      const [sparkRows, packetRows, reflectionRows, attachmentRows] = await Promise.all([
         db
           .select()
-          .from(inspirationSparks)
-          .where(inArray(inspirationSparks.inspirationId, ids))
-          .orderBy(asc(inspirationSparks.createdAt)),
+          .from(signalSparks)
+          .where(inArray(signalSparks.inspirationId, ids))
+          .orderBy(asc(signalSparks.createdAt)),
+        db
+          .select()
+          .from(signalPackets)
+          .where(inArray(signalPackets.inspirationId, ids))
+          .orderBy(asc(signalPackets.updatedAt)),
         db
           .select()
           .from(reflections)
@@ -141,6 +180,9 @@ export function createDrizzleVaultExportSource(db: Db): VaultExportSource {
       ]);
 
       const sparksByInspiration = groupBy(sparkRows, (row) => row.inspirationId);
+      const packetsByInspiration = new Map(
+        packetRows.map((row) => [row.inspirationId, row]),
+      );
       const reflectionsByInspiration = groupBy(
         reflectionRows,
         (row) => row.inspirationId,
@@ -150,34 +192,82 @@ export function createDrizzleVaultExportSource(db: Db): VaultExportSource {
         (row) => row.inspirationId,
       );
 
-      return rows.map((inspiration) => ({
-        inspiration,
-        sparks: sparksByInspiration.get(inspiration.id) ?? [],
-        reflections: reflectionsByInspiration.get(inspiration.id) ?? [],
-        attachments: attachmentsByInspiration.get(inspiration.id) ?? [],
+      return rows.map((signal) => ({
+        signal,
+        sparks: sparksByInspiration.get(signal.id) ?? [],
+        packet: packetsByInspiration.get(signal.id) ?? null,
+        reflections: reflectionsByInspiration.get(signal.id) ?? [],
+        attachments: attachmentsByInspiration.get(signal.id) ?? [],
       }));
     },
 
-    async listWowMoments(userId) {
+    async listTopOfMindNotes(userId) {
       const rows = await db
         .select()
-        .from(wowMoments)
-        .where(eq(wowMoments.userId, userId))
-        .orderBy(asc(wowMoments.createdAt));
+        .from(topOfMindNotes)
+        .where(eq(topOfMindNotes.userId, userId))
+        .orderBy(asc(topOfMindNotes.createdAt));
       if (rows.length === 0) return [];
       const ids = rows.map((row) => row.id);
 
       const linkRows = await db
         .select()
-        .from(wowMomentInspirations)
-        .where(inArray(wowMomentInspirations.wowMomentId, ids))
-        .orderBy(asc(wowMomentInspirations.sortOrder));
+        .from(topOfMindNoteSignals)
+        .where(inArray(topOfMindNoteSignals.wowMomentId, ids))
+        .orderBy(asc(topOfMindNoteSignals.sortOrder));
       const linksByMoment = groupBy(linkRows, (row) => row.wowMomentId);
 
-      return rows.map((moment) => ({
-        moment,
-        links: linksByMoment.get(moment.id) ?? [],
+      return rows.map((note) => ({
+        note,
+        links: linksByMoment.get(note.id) ?? [],
       }));
+    },
+
+    async listContextNodes(userId) {
+      const rows = await db
+        .select()
+        .from(contextNodes)
+        .where(eq(contextNodes.userId, userId))
+        .orderBy(asc(contextNodes.type), asc(contextNodes.label));
+      if (rows.length === 0) return [];
+      const ids = rows.map((row) => row.id);
+
+      const evidenceRows = await db
+        .select()
+        .from(contextEvidence)
+        .where(inArray(contextEvidence.meaningNodeId, ids))
+        .orderBy(asc(contextEvidence.createdAt));
+      const evidenceByNode = groupBy(evidenceRows, (row) => row.meaningNodeId);
+
+      return rows.map((node) => ({
+        node,
+        evidence: evidenceByNode.get(node.id) ?? [],
+      }));
+    },
+
+    async listContextEdges(userId) {
+      const rows = await db
+        .select()
+        .from(contextEdges)
+        .where(eq(contextEdges.userId, userId))
+        .orderBy(asc(contextEdges.kind), asc(contextEdges.createdAt));
+      if (rows.length === 0) return [];
+
+      const nodeIds = [
+        ...new Set(rows.flatMap((row) => [row.sourceNodeId, row.targetNodeId])),
+      ];
+      const nodeRows = await db
+        .select()
+        .from(contextNodes)
+        .where(inArray(contextNodes.id, nodeIds));
+      const nodeById = new Map(nodeRows.map((node) => [node.id, node]));
+
+      return rows.flatMap((edge) => {
+        const sourceNode = nodeById.get(edge.sourceNodeId);
+        const targetNode = nodeById.get(edge.targetNodeId);
+        if (!sourceNode || !targetNode) return [];
+        return [{ edge, sourceNode, targetNode }];
+      });
     },
   };
 }

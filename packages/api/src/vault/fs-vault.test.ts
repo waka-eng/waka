@@ -21,15 +21,15 @@ afterEach(async () => {
 
 describe("FsVault", () => {
   it("round-trips a document and reports its content hash", async () => {
-    const content = "schema: waka/inspiration@v1\ntext: hello\n";
-    const { contentHash: hash } = await vault.put("u1/inspirations/2026/06/a.yaml", content);
+    const content = "schema: waka/signal@v1\ntext: hello\n";
+    const { contentHash: hash } = await vault.put("u1/signals/2026/06/a.yaml", content);
 
     expect(hash).toBe(contentHash(content));
-    expect(await vault.get("u1/inspirations/2026/06/a.yaml")).toBe(content);
+    expect(await vault.get("u1/signals/2026/06/a.yaml")).toBe(content);
   });
 
   it("returns null for a missing document", async () => {
-    expect(await vault.get("u1/inspirations/2026/06/missing.yaml")).toBeNull();
+    expect(await vault.get("u1/signals/2026/06/missing.yaml")).toBeNull();
   });
 
   it("overwrites an existing document atomically", async () => {
@@ -39,15 +39,15 @@ describe("FsVault", () => {
   });
 
   it("lists documents under a prefix in sorted order", async () => {
-    await vault.put("u1/moments/2026/06/b.yaml", "b\n");
-    await vault.put("u1/inspirations/2026/06/a.yaml", "a\n");
-    await vault.put("u2/inspirations/2026/06/c.yaml", "c\n");
+    await vault.put("u1/top-of-mind/2026/06/b.yaml", "b\n");
+    await vault.put("u1/signals/2026/06/a.yaml", "a\n");
+    await vault.put("u2/signals/2026/06/c.yaml", "c\n");
 
     const all: string[] = [];
     for await (const path of vault.list("u1/")) all.push(path);
     expect(all).toEqual([
-      "u1/inspirations/2026/06/a.yaml",
-      "u1/moments/2026/06/b.yaml",
+      "u1/signals/2026/06/a.yaml",
+      "u1/top-of-mind/2026/06/b.yaml",
     ]);
   });
 

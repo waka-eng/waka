@@ -1,6 +1,8 @@
 # Vault & Index architecture
 
-> **Status**: Phase 1 (Exporter + Vault interface) implemented. Phases 2–4 are design-only.
+> **Status**: Phase 1 (Exporter + Vault interface) implemented. Phase 1 now
+> exports the signal, top-of-mind note, and context graph document shapes.
+> Phases 2–4 are design-only.
 
 WAKA currently stores both the *meaning* a user captured (inspiration text, sparks,
 reflections, WOW judgments) and the *machine signals* derived from it (scores,
@@ -62,9 +64,8 @@ documents, and no human or agent can read or refine an inspiration as a file.
 
 | Vault (YAML) | Index (DB) |
 | --- | --- |
-| inspiration text + sparks + reflections | `importance_score`, `wow_score` (worker-updated) |
-| meaning packets | embeddings (binary, hot) |
-| WOW moment judgments (kind, related, why, provenance) | revisit events (append-heavy log) |
+| signal text + sparks + reflections + signal packet | `importance_score`, `wow_score` (worker-updated) |
+| top-of-mind note judgments (kind, related, why, provenance) | embeddings (binary, hot) |
 | context-graph node/edge meaning | `background_jobs`, `users`, `sessions` |
 | | `documents` index table (path, content_hash, rev, query projections) |
 
@@ -73,25 +74,25 @@ documents, and no human or agent can read or refine an inspiration as a file.
 ```
 vault/
   {userId}/
-    inspirations/
+    signals/
       2026/06/
-        {inspirationId}.yaml
-    moments/
+        {signalId}.yaml
+    top-of-mind/
       2026/06/
-        {wowMomentId}.yaml
-    graph/                      # later phase
-      nodes/{type}--{slug}.yaml
-      edges/{sourceSlug}--{kind}--{targetSlug}.yaml
+        {topOfMindNoteId}.yaml
+    context/
+      nodes/{type}--{slug}--{contextNodeId}.yaml
+      edges/{sourceSlug}--{kind}--{targetSlug}--{contextEdgeId}.yaml
     manifest.yaml               # later phase: vault + schema versions, last reindex
 ```
 
 IDs are the existing UUIDs; the `YYYY/MM` partition comes from the row's
 `created_at` in UTC, so listing a month is a single prefix scan.
 
-### Inspiration document (`waka/inspiration@v1`)
+### Signal document (`waka/signal@v1`)
 
 ```yaml
-schema: waka/inspiration@v1
+schema: waka/signal@v1
 id: 0c8c52cf-…
 rev: 1
 created_at: 2026-06-10T02:31:00.000Z
@@ -106,6 +107,11 @@ sparks:
   - text: "building a protocol"
     what_moved_me: the shift from ownership to connection
     implied_values: [openness, sustainability]
+
+signal_packet:
+  spark_text: building a protocol
+  artifact_excerpt: protocol, not a platform
+  packet_text: A signal about preferring open systems over owned platforms.
 
 reflections:
   - question: Why did this matter right now?
@@ -123,10 +129,10 @@ attachments:
 # no embeddings. Those live only in the DB index.
 ```
 
-### WOW moment document (`waka/wow-moment@v1`)
+### Top-of-mind note document (`waka/top-of-mind-note@v1`)
 
 ```yaml
-schema: waka/wow-moment@v1
+schema: waka/top-of-mind-note@v1
 id: 7d20c1b4-…
 rev: 1
 created_at: 2026-06-10T02:33:11.000Z
@@ -152,7 +158,7 @@ judge:
   idempotency_key: v1:user:trigger:kind:…
 ```
 
-### Graph documents (later phase)
+### Context graph documents
 
 The context graph splits along the same meaning/signal line as everything
 else:
@@ -168,24 +174,24 @@ evidence.** Files keep the evidence itself; strength lives in the index and
 is re-derived from evidence at `reindex` time, so Principle 2 (full
 restoration from the Vault alone) holds.
 
-Unlike inspirations and moments — a *journal* of immutable events partitioned
+Unlike signals and top-of-mind notes — a *journal* of immutable events partitioned
 by `YYYY/MM` — the graph is a *lexicon*: the living current state of who the
 user is. Nodes are organized by what they are, not when they appeared. The
 three vault directories map to the three layers of the ambition mirror:
-`inspirations/` is *what I thought*, `moments/` is *what connected*,
-`graph/nodes/` is *who I am becoming*.
+`signals/` is *what I noticed*, `top-of-mind/` is *what connected*,
+`context/nodes/` is *who I am becoming*.
 
-#### Node (`waka/meaning-node@v1`)
+#### Node (`waka/context-node@v1`)
 
-One file per concept at `graph/nodes/{type}--{slug}.yaml` — the filename
-derives from the DB uniqueness key `(type, label)`, so listing the directory
-reads as the user's lexicon (`value--curiosity-driven-building.yaml`). This is
-the one place we don't use UUID filenames; the UUID stays inside the file as
-the rename-stable key (a rename writes the new path, deletes the old, and the
-index follows the `id`).
+One file per concept at
+`context/nodes/{type}--{slug}--{contextNodeId}.yaml`. The filename carries a
+human-readable slug plus the UUID, so listing the directory reads as the user's
+lexicon while remaining collision-proof after slug normalization
+(`value--curiosity-driven-building--8f3a2c1d-....yaml`). A rename writes the
+new path, deletes the old, and the index follows the `id`.
 
 ```yaml
-schema: waka/meaning-node@v1
+schema: waka/context-node@v1
 id: 8f3a2c1d-…              # DB id — survives renames
 rev: 4
 type: value                  # theme | value | person | environment | aesthetic
@@ -196,10 +202,10 @@ description: |
 status: active
 first_seen_at: 2026-03-02T11:20:00.000Z
 
-evidence:                    # meaning_evidence — why this node exists
-  - inspiration: 0c8c52cf-…
+evidence:                    # context_evidence — why this node exists
+  - signal: 0c8c52cf-…
     reason: chose the harder stack just to understand it
-  - inspiration: 9a11e0d2-…
+  - signal: 9a11e0d2-…
     reason: '"fun first" framing of the weekend project'
 ```
 
@@ -208,27 +214,32 @@ shows immediately *why it exists*, which is the same contestable-judgment
 philosophy applied to the graph. Evidence is append-mostly, so rev conflicts
 are rare.
 
-#### Edge (`waka/meaning-edge@v1`)
+#### Edge (`waka/context-edge@v1`)
 
 One file per relationship at
-`graph/edges/{sourceSlug}--{kind}--{targetSlug}.yaml`. A single `edges.yaml`
+`context/edges/{sourceSlug}--{kind}--{targetSlug}--{contextEdgeId}.yaml`.
+A single `edges.yaml`
 would be rewritten on every reinforcement (hash churn), become the one
 write-contention bottleneck, and break "one document = one unit of meaning" —
 hence per-edge files.
 
+Edge filenames use shortened node slugs plus UUIDs. The UUIDs make the path
+collision-proof and the shortened slugs keep each filesystem path component
+below common filename length limits.
+
 ```yaml
-schema: waka/meaning-edge@v1
+schema: waka/context-edge@v1
 id: 2b7e9d40-…
 rev: 2
 kind: challenges             # supports | challenges | points_to | asks_for | reactivates
 source:
   id: 8f3a2c1d-…
-  node: value--curiosity-driven-building     # denormalized for human readers
+  node: value--curiosity-driven-building--8f3a2c1d-… # denormalized for human readers
 target:
   id: 5d1c8e77-…
-  node: project--waka-launch
+  node: project--waka-launch--5d1c8e77-…
 
-evidence_inspirations:       # the inspirations that witnessed this relation
+evidence_signals:            # the signals that witnessed this relation
   - 0c8c52cf-…
   - 77e1b2a9-…
 ```
@@ -247,7 +258,7 @@ One denormalized index row per Vault document:
 documents = pgTable("documents", {
   id: uuid().primaryKey(),       // same id as the file
   userId: uuid().notNull(),
-  docType: text().notNull(),     // 'inspiration' | 'wow_moment' | 'meaning_node'
+  docType: text().notNull(),     // 'signal' | 'top_of_mind_note' | 'context_node'
   path: text().notNull(),        // vault-relative path
   contentHash: text().notNull(), // sha256 — drift detection + idempotency
   rev: integer().notNull(),
@@ -291,7 +302,7 @@ The same machinery gives us `waka reindex {userId}` for free: scan the Vault,
 rebuild the index from scratch. Schema changes, score-formula overhauls, and
 disaster recovery all converge on that one command.
 
-## How a WOW moment is born in the vault world
+## How a top-of-mind note is born in the vault world
 
 Files do not compute. The discovery machinery — embeddings, similarity,
 scoring, candidate retrieval — runs entirely on the DB index, exactly as it
@@ -301,13 +312,13 @@ when a thought is captured, and when a connection is recognized.
 
 ```
 ① Capture
-   user saves an inspiration
-   → vault/{user}/inspirations/2026/06/{id}.yaml   (file: the memory itself)
+   user saves a signal
+   → vault/{user}/signals/2026/06/{id}.yaml        (file: the memory itself)
    → documents index upsert                         (DB: its queryable shadow)
    → background_jobs enqueue
 
 ② Nervous-system reaction (DB only — no file reads)
-   classifier → Gemini embedding → inspiration_embeddings
+   classifier → Gemini embedding → signal_embeddings
    workers    → importance/wow score columns on the index
 
 ③ Candidate retrieval (DB only)
@@ -316,18 +327,18 @@ when a thought is captured, and when a connection is recognized.
    → pure index scan; not a single file byte is read
 
 ④ Judgment (LLM)
-   trigger + top candidates' content → judgeWowMomentForInspiration
-   → { isWowMoment, kind, why, related[] }
+   trigger + top candidates' content → top-of-mind judge
+   → { isTopOfMindNote, kind, why, related[] }
 
 ⑤ Birth — the first time a file is written in this flow
-   → vault/{user}/moments/2026/06/{momentId}.yaml   (the full judgment as a document)
+   → vault/{user}/top-of-mind/2026/06/{noteId}.yaml (the full judgment as a document)
    → documents index row                            (for lists and ranking)
 ```
 
 The intuition: **the DB is the unconscious, the vault is the conscious.** The
 hunch — similarity scores, embedding distances — happens below the surface in
 the index. The instant a meaningful connection is confirmed, it surfaces as a
-document: a WOW moment file records what triggered it, which past inspirations
+document: a top-of-mind note file records what triggered it, which past signals
 built the bridge, and why it was surprising. The labor of discovery (vectors,
 similarity numbers) stays in the DB; only the narrative is born as a file.
 
@@ -357,7 +368,7 @@ implementation.
 
 ### 1. Ownership of memory
 
-Today a user's years of inspirations and WOW moments are rows in our
+Today a user's years of signals and top-of-mind notes are rows in our
 database; they exist only as long as the service does. In the vault world,
 `vault/{userId}/` *is* the complete history of that person's thinking — one
 directory, readable in any editor, importable into any tool. There is a
@@ -367,7 +378,7 @@ an exportable form*: the former is a favor, the latter is a right.
 ### 2. Transparent judgment
 
 When the system claims "these two thoughts connect," the user's legitimate
-skepticism is "says who?" Every WOW moment is a human-readable document
+skepticism is "says who?" Every top-of-mind note is a human-readable document
 carrying its evidence (`related[]` with reasons) and its provenance
 (`judge`). A user can open the judgment, disagree with it, and argue back.
 An AI verdict that is a contestable record — not a black-box output — is the
@@ -385,10 +396,10 @@ counter-position.
 
 ### 4. On the side of slow thinking
 
-Feeds flow away; files accumulate. Opening `moments/2026/06/` three years
+Feeds flow away; files accumulate. Opening `top-of-mind/2026/06/` three years
 later is a reunion with your own mind — "this is the connection I saw back
 then." If WAKA is an ambition *mirror*, a mirror must be a record, not a
-flash. A WOW moment that exists as a document rather than a notification
+flash. A top-of-mind note that exists as a document rather than a notification
 means the product bets on the user's growth, not the user's dopamine.
 
 ### 5. Compatible with the agent era
