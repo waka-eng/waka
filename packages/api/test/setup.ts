@@ -26,15 +26,13 @@
  * us the strongest possible "load .env before SUT imports" guarantee
  * without sprinkling `dotenv/config` into every spec.
  *
- * No DB schema isolation here
- * ---------------------------
- * The auth routes go through the production `getDb()` singleton which is
- * bound to the public schema by design (Lambda cold-start path). Schema
- * isolation via `createTestDatabase()` exists for tests that drive Drizzle
- * directly, but for `app.request("/api/auth/...")` we use unique
- * RFC-6761-reserved emails (`@example.test`) plus per-test cleanup of
- * inserted user rows — see `test/api/auth.test.ts`. ON DELETE CASCADE on
- * `sessions.user_id` reaps any session rows along with the user.
+ * Guardrails before schema setup
+ * ------------------------------
+ * The full API suite may create/update test-only schema prerequisites before
+ * route specs hit the production-style getDb(). To protect developer and
+ * remote databases, setup refuses DB_CONNECTION_URL values that do not look
+ * like local disposable test databases unless the runner explicitly sets
+ * WAKA_ALLOW_TEST_SCHEMA_DDL=1 after confirming the target is safe.
  */
 
 import { existsSync } from "node:fs";
@@ -104,10 +102,40 @@ for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     throw new Error(
       `[test/setup] Required env var ${key} is not set. ` +
-        `Configure it in .env or .env.local at the repo root before running the test suite.`,
+        `Configure a disposable migrated test database in .env.local before running the full API test suite, ` +
+        `or use \`pnpm --filter @waka/api test:unit\` for unit tests that do not need a database.`,
     );
   }
 }
+
+function isClearlyDisposableTestDatabase(connectionString: string): boolean {
+  try {
+    const url = new URL(connectionString);
+    const host = url.hostname.toLowerCase();
+    const database = url.pathname.replace(/^\//, "").toLowerCase();
+    const schema = url.searchParams.get("schema")?.toLowerCase() ?? "";
+    const isLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
+    return isLocal && (database.includes("test") || schema.includes("test"));
+  } catch {
+    return false;
+  }
+}
+
+function assertDisposableTestDatabase(): void {
+  const connectionString = process.env.DB_CONNECTION_URL;
+  if (!connectionString) return;
+  if (process.env.WAKA_ALLOW_TEST_SCHEMA_DDL === "1") return;
+  if (isClearlyDisposableTestDatabase(connectionString)) return;
+
+  throw new Error(
+    "[test/setup] Refusing to run full API tests against DB_CONNECTION_URL because it does not look like a local disposable test database. " +
+      "The full suite creates/updates test-only schema prerequisites. Point DB_CONNECTION_URL at a migrated local test database whose database or schema name contains 'test', " +
+      "or set WAKA_ALLOW_TEST_SCHEMA_DDL=1 only after confirming the target is disposable. " +
+      "For pure unit coverage, run `pnpm --filter @waka/api test:unit` instead.",
+  );
+}
+
+assertDisposableTestDatabase();
 
 if (!process.env.JWT_SECRET && !process.env.AUTH_SECRET) {
   throw new Error(
