@@ -22,10 +22,9 @@ export function createGeminiModelProvider(): ModelProvider {
       try {
         return await ambitionSynthesisClient.synthesizeAmbition(input);
       } catch (err) {
-        // Synthesis is best-effort: the bounded loop falls back to the
-        // deterministic candidate when we return null, so a Gemini outage or
-        // transport error must never break the refresh.
-        console.warn("[gemini] ambition synthesis threw; falling back", {
+        // Synthesis is best-effort: returning null lets the bounded loop record
+        // the provider failure without silently persisting deterministic text.
+        console.warn("[gemini] ambition synthesis threw; returning null", {
           synthesisKey: input.synthesisKey,
           errorName: err instanceof Error ? err.name : typeof err,
         });

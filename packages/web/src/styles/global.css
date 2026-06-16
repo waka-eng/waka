@@ -10244,6 +10244,21 @@ body.reflect-bg {
   padding: 2px 7px;
 }
 
+.wow-moment-type-chip {
+  align-self: flex-start;
+  margin: 0 0 6px;
+  border: 1px solid rgba(15, 15, 14, 0.18);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(255, 253, 247, 0.58);
+  color: rgba(15, 15, 14, 0.62);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.11em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .wow-moment-card h3 {
   margin: 0 0 8px;
   font-family: var(--font-serif);
@@ -10507,6 +10522,33 @@ body.reflect-bg {
   margin: 0;
   color: var(--ink);
   font-size: clamp(15px, 1.7vw, 18px);
+  line-height: 1.45;
+}
+
+.wow-moment-canonical-fields {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.wow-moment-canonical-fields div {
+  border-left: 2px solid rgba(15, 15, 14, 0.16);
+  padding-left: var(--space-3);
+}
+
+.wow-moment-canonical-fields dt {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.wow-moment-canonical-fields dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: clamp(14px, 1.4vw, 16px);
   line-height: 1.45;
 }
 

@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   rankTopOfMindRefreshCandidates,
+  refreshTopOfMindNotesFromContextGraph,
   type TopOfMindRefreshEvidenceInput,
   type TopOfMindRefreshNodeInput,
 } from "./top-of-mind-refresh.js";
+import type { TopOfMindNoteGenerationInput } from "./model-provider.js";
 
 const userId = "00000000-0000-4000-8000-000000000001";
 const now = new Date("2026-05-30T12:00:00.000Z");
@@ -34,6 +36,97 @@ function evidence(
     inspirationText: "A source signal about work that makes the surrounding life better.",
     sparkText: "life around the work",
     ...input,
+  };
+}
+
+class QueryStub<T> implements PromiseLike<T> {
+  constructor(private readonly result: T) {}
+  from() {
+    return this;
+  }
+  where() {
+    return this;
+  }
+  orderBy() {
+    return this;
+  }
+  limit() {
+    return this;
+  }
+  innerJoin() {
+    return this;
+  }
+  leftJoin() {
+    return this;
+  }
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.result).then(onfulfilled, onrejected);
+  }
+}
+
+function refreshDbStub() {
+  const insertedWowMoments: unknown[] = [];
+  const insertedEvidenceLinks: unknown[] = [];
+  const selectResults = [
+    [
+      node({
+        id: "public-building-room",
+        type: "environment",
+        label: "cities where public building is normal",
+        description: "Signals keep returning to places where ambition feels social.",
+        weight: 160,
+        confidence: 72,
+        evidenceCount: 2,
+      }),
+    ],
+    [
+      evidence({ meaningNodeId: "public-building-room", inspirationId: "signal-1" }),
+      evidence({
+        meaningNodeId: "public-building-room",
+        inspirationId: "signal-2",
+        sparkText: "friends who make shipping less weird",
+      }),
+    ],
+    [],
+    [],
+  ];
+  let selectIndex = 0;
+  return {
+    insertedWowMoments,
+    insertedEvidenceLinks,
+    db: {
+      select: vi.fn(() => new QueryStub(selectResults[selectIndex++] ?? [])),
+      transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+          insert: vi.fn(() => ({
+            values(value: unknown) {
+              const target = Array.isArray(value) ? insertedEvidenceLinks : insertedWowMoments;
+              target.push(value);
+              return {
+                onConflictDoNothing() {
+                  return {
+                    returning() {
+                      return new QueryStub([{ id: "moment-1" }]);
+                    },
+                    then<TResult1 = unknown, TResult2 = never>(
+                      onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
+                      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+                    ): PromiseLike<TResult1 | TResult2> {
+                      return Promise.resolve(undefined).then(onfulfilled, onrejected);
+                    },
+                  };
+                },
+              };
+            },
+          })),
+          select: vi.fn(() => new QueryStub([{ id: "existing-moment" }])),
+        };
+        return callback(tx);
+      }),
+    },
   };
 }
 
@@ -332,5 +425,76 @@ describe("rankTopOfMindRefreshCandidates", () => {
     expect(candidates[0]?.memoryPattern.currentWeight).toBeLessThan(
       candidates[1]?.memoryPattern.currentWeight ?? 0,
     );
+  });
+});
+
+describe("refreshTopOfMindNotesFromContextGraph", () => {
+  it("does not insert wow moments when synthesis fails and exposes failure metadata", async () => {
+    const { db, insertedWowMoments } = refreshDbStub();
+    const result = await refreshTopOfMindNotesFromContextGraph(db as never, {
+      userId,
+      now,
+      modelProvider: {
+        generateTopOfMindNotes: async (input: TopOfMindNoteGenerationInput) =>
+          rankTopOfMindRefreshCandidates(input),
+        synthesizeAmbition: vi.fn().mockResolvedValue(null),
+      } as never,
+    });
+
+    expect(result.generated).toBe(0);
+    expect(result.notes).toEqual([]);
+    expect(result.candidates).toEqual([]);
+    expect(result.synthesis).toMatchObject({
+      attempted: 1,
+      synthesized: 0,
+      failed: 1,
+      skipped: 0,
+    });
+    expect(result.synthesis.failures[0]).toMatchObject({
+      contextNodeId: "public-building-room",
+      reason: "null_output",
+    });
+    expect(insertedWowMoments).toEqual([]);
+  });
+
+  it("persists successfully synthesized refresh candidates", async () => {
+    const { db, insertedWowMoments } = refreshDbStub();
+    const result = await refreshTopOfMindNotesFromContextGraph(db as never, {
+      userId,
+      now,
+      modelProvider: {
+        generateTopOfMindNotes: async (input: TopOfMindNoteGenerationInput) =>
+          rankTopOfMindRefreshCandidates(input),
+        synthesizeAmbition: vi.fn().mockResolvedValue({
+          firstPersonPostItCandidate: "people who make courage feel normal",
+          memoryState: "active",
+          environmentDirection:
+            "People and rooms where shipping in public feels like the expected rhythm.",
+          rejectedEnvironment:
+            "Rooms that turn courage into private planning or generic startup theater.",
+          evidenceRationale:
+            "Two saved signals point toward peers as the personal edge, not cities as a category.",
+          confidence: 88,
+          rejectedAlternativeInterpretation:
+            "The shallow read would call this cities, but the user's edge is wanting peers who normalize visible work.",
+        }),
+      } as never,
+    });
+
+    expect(result.generated).toBe(1);
+    expect(result.notes).toEqual([
+      { id: "moment-1", contextNodeId: "public-building-room", status: "created" },
+    ]);
+    expect(result.synthesis).toMatchObject({
+      attempted: 1,
+      synthesized: 1,
+      failed: 0,
+      skipped: 0,
+    });
+    expect(insertedWowMoments[0]).toMatchObject({
+      title: "people who make courage feel normal",
+      beliefStatement: "people who make courage feel normal",
+      wowScore: 88,
+    });
   });
 });

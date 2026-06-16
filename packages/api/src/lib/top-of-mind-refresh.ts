@@ -13,6 +13,7 @@ import {
 } from "../db/index.js";
 import {
   runBoundedAmbitionSynthesisLoop,
+  type AmbitionSynthesisFailure,
   type AmbitionSynthesisFeedbackInput,
   type AmbitionSynthesisTrigger,
 } from "./ambition-synthesis.js";
@@ -82,6 +83,13 @@ export interface RefreshTopOfMindNotesResult {
   generated: number;
   existing: number;
   skipped: number;
+  synthesis: {
+    attempted: number;
+    synthesized: number;
+    failed: number;
+    skipped: number;
+    failures: AmbitionSynthesisFailure[];
+  };
   candidates: TopOfMindRefreshCandidate[];
   notes: Array<{
     id: string;
@@ -664,6 +672,13 @@ export async function refreshTopOfMindNotesFromContextGraph(
     generated: notes.filter((note) => note.status === "created").length,
     existing: notes.filter((note) => note.status === "existing").length,
     skipped: Math.max(0, nodes.length - candidates.length),
+    synthesis: {
+      attempted: synthesisResult.attempted,
+      synthesized: synthesisResult.synthesized,
+      failed: synthesisResult.failed,
+      skipped: synthesisResult.skipped,
+      failures: synthesisResult.failures,
+    },
     candidates,
     notes,
   };

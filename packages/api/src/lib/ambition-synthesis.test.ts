@@ -129,7 +129,7 @@ describe("bounded ambition synthesis", () => {
     };
     // weekly_refresh and explicit_deep_dive intentionally synthesize thin,
     // single-signal candidates so the bulk refresh gets real LLM text on every
-    // note; the specificity gate and deterministic fallback still guard quality.
+    // note; failed synthesis is surfaced instead of silently persisted.
     expect(
       shouldRunAmbitionSynthesis({
         candidate: thinCandidate,
@@ -193,7 +193,7 @@ describe("bounded ambition synthesis", () => {
     );
   });
 
-  it("falls back deterministically when synthesis is unavailable or generic", async () => {
+  it("surfaces invalid synthesis as failure and excludes the candidate", async () => {
     const generic: AmbitionSynthesisOutput = {
       firstPersonPostItCandidate: "I want startups.",
       memoryState: "active",
@@ -215,14 +215,63 @@ describe("bounded ambition synthesis", () => {
     expect(result).toMatchObject({
       attempted: 1,
       synthesized: 0,
-      fellBack: 1,
+      failed: 1,
+      fellBack: 0,
     });
-    expect(result.candidates[0]?.title).toBe(
-      "a room where unfinished ambition is allowed",
+    expect(result.candidates).toEqual([]);
+    expect(result.failures[0]).toMatchObject({
+      contextNodeId: "public-building-room",
+      reason: "invalid_output",
+    });
+  });
+
+  it("surfaces null and thrown synthesis failures without deterministic titles", async () => {
+    const nullResult = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: candidates(),
+      synthesize: vi.fn().mockResolvedValue(null),
+    });
+    expect(nullResult).toMatchObject({
+      attempted: 1,
+      synthesized: 0,
+      failed: 1,
+      fellBack: 0,
+    });
+    expect(nullResult.candidates).toEqual([]);
+    expect(nullResult.failures[0]?.reason).toBe("null_output");
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const thrownResult = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: candidates(),
+      synthesize: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("provider unavailable with raw user text: I need courage"),
+        ),
+    });
+    const warnPayload = JSON.stringify(warnSpy.mock.calls);
+    warnSpy.mockRestore();
+    expect(thrownResult).toMatchObject({
+      attempted: 1,
+      synthesized: 0,
+      failed: 1,
+      fellBack: 0,
+    });
+    expect(thrownResult.candidates).toEqual([]);
+    expect(thrownResult.failures[0]).toMatchObject({
+      reason: "exception",
+      code: "synthesis_exception",
+      errorName: "Error",
+    });
+    expect(thrownResult.failures[0]).not.toHaveProperty("message");
+    expect(JSON.stringify(thrownResult.failures)).not.toContain(
+      "raw user text",
     );
-    expect(result.candidates[0]?.rejectedAlternativeInterpretation).toContain(
-      "shallow read",
-    );
+    expect(warnPayload).not.toContain("raw user text");
+    expect(warnPayload).not.toContain("provider unavailable");
   });
 
   it("caps model-heavy synthesis attempts even when more candidates are ranked", async () => {
@@ -248,8 +297,10 @@ describe("bounded ambition synthesis", () => {
 
     // 6 ranked candidates, hard cap of 5 model calls.
     expect(result.attempted).toBe(5);
-    expect(result.fellBack).toBe(5);
+    expect(result.failed).toBe(5);
+    expect(result.fellBack).toBe(0);
     expect(result.skipped).toBe(1);
+    expect(result.candidates).toEqual([]);
     expect(synthesize).toHaveBeenCalledTimes(5);
   });
 });

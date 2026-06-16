@@ -334,6 +334,77 @@ describe("WowMomentsSection", () => {
     expect(whyRule).not.toMatch(/-webkit-line-clamp|overflow:\s*hidden|display:\s*-webkit-box/);
   });
 
+  it("uses canonical top-of-mind note fields for the sticky front and richer fields in detail", () => {
+    const legacyStructuredWhy = [
+      "Ambient signal: Legacy ambience should not be on the closed sticky.",
+      "Matched environment: Legacy matched place should not be on the closed sticky.",
+      "Anti-environment: Legacy anti-place should not be on the closed sticky.",
+      "Rejected alternative interpretation: Legacy rejected read should not be on the closed sticky.",
+    ].join(" ");
+    const canonicalMoment: ApiTopOfMindCompatibilityMoment = {
+      ...sampleMoment,
+      title: "Legacy coerced title should not lead",
+      why: legacyStructuredWhy,
+      topOfMindNote: {
+        id: "note-1",
+        userId: "user-1",
+        title: "First-person post-it headline from Gemini",
+        ambitionDimension: "place",
+        ambientSignal: "You keep saving quiet third places with enough hum to focus.",
+        matchedEnvironment: "A warm public room with soft accountability and no performance pressure.",
+        antiEnvironment: "A sterile hot-desk space that turns reflection into throughput.",
+        evidenceRationale: "Three recent signals all point to seeking public solitude with gentle structure.",
+        rejectedAlternativeInterpretation: "This is not just about liking cafe aesthetics.",
+        type: "pattern",
+        body: "A provisional read about the kinds of rooms that help ambition stay humane.",
+        prompt: "Which room makes the next small step easier?",
+        guidance: "Treat this as a post-it, not a diagnosis.",
+        confidence: 0.82,
+        status: "active",
+        relatedSignalIds: ["inspiration-1"],
+        relatedContextNodeIds: [],
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-01T00:00:00.000Z",
+        source: "wow_moment_compatibility",
+        isProvisional: true,
+        legacy: {
+          wowMomentId: "moment-1",
+          wowKind: "bridge",
+          wowScore: 87,
+        },
+      },
+    };
+    const container = renderInteractiveSection({ moments: [canonicalMoment], loading: false, error: null });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    expect(card?.textContent).toContain("recurring signal");
+    expect(card?.textContent).toContain("First-person post-it headline from Gemini");
+    expect(card?.textContent).toContain(
+      "Three recent signals all point to seeking public solitude with gentle structure.",
+    );
+    expect(card?.getAttribute("aria-label")).toContain("First-person post-it headline from Gemini");
+    expect(card?.textContent).not.toContain("Legacy coerced title should not lead");
+    expect(card?.textContent).not.toContain("Ambient signal:");
+    expect(card?.textContent).not.toContain("Matched environment:");
+    expect(card?.textContent).not.toContain("Anti-environment:");
+    expect(card?.textContent).not.toContain("Rejected alternative interpretation:");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    expect(detail?.textContent).toContain("First-person post-it headline from Gemini");
+    expect(detail?.textContent).toContain("Ambient signal");
+    expect(detail?.textContent).toContain("You keep saving quiet third places with enough hum to focus.");
+    expect(detail?.textContent).toContain("Matched environment");
+    expect(detail?.textContent).toContain("A warm public room with soft accountability and no performance pressure.");
+    expect(detail?.textContent).toContain("Anti-environment");
+    expect(detail?.textContent).toContain("A sterile hot-desk space that turns reflection into throughput.");
+    expect(detail?.textContent).toContain("Rejected alternative interpretation");
+    expect(detail?.textContent).toContain("This is not just about liking cafe aesthetics.");
+  });
+
   it("breaks a long pattern report into a lead and readable noticed points", () => {
     const longWhy = [
       "WAKA noticed that several saved inspirations return to small prototypes rather than polished plans.",
