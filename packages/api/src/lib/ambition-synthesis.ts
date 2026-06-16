@@ -72,8 +72,18 @@ export interface BoundedAmbitionSynthesisLoopResult {
   candidates: TopOfMindRefreshCandidate[];
   attempted: number;
   synthesized: number;
+  failed: number;
   fellBack: number;
   skipped: number;
+  failures: AmbitionSynthesisFailure[];
+}
+
+export interface AmbitionSynthesisFailure {
+  candidateId: string;
+  contextNodeId: string;
+  idempotencyKey: string;
+  reason: "null_output" | "invalid_output" | "exception";
+  message?: string;
 }
 
 const MAX_SYNTHESIS_CANDIDATES = 5;
@@ -262,8 +272,9 @@ export function shouldRunAmbitionSynthesis(input: {
   const candidate = input.candidate;
   // explicit_deep_dive and the bulk weekly_refresh both intentionally synthesize
   // thin (single-signal) candidates: the refresh wants real LLM text on every
-  // ranked note, and the specificity gate plus deterministic fallback still
-  // protect quality. Other triggers keep the 2-signal floor.
+  // ranked note. Other triggers keep the 2-signal floor. Production refresh
+  // surfaces synthesis failure instead of silently converting it into a
+  // deterministic note.
   if (
     candidate.evidence.length < 2 &&
     input.trigger !== "explicit_deep_dive" &&
@@ -293,7 +304,8 @@ export function shouldRunAmbitionSynthesis(input: {
       return true;
     case "weekly_refresh":
       // Full-coverage refresh: every ranked candidate that fits the token
-      // budget gets real LLM synthesis. Weak output still falls back.
+      // budget gets real LLM synthesis. Weak output is surfaced as failure
+      // instead of being persisted as deterministic output.
       return true;
     case "strong_feedback":
     case "correction":
@@ -394,7 +406,32 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
   let attempted = 0;
   let synthesized = 0;
   let fellBack = 0;
+  let failed = 0;
   let skipped = 0;
+  const failures: AmbitionSynthesisFailure[] = [];
+
+  function recordFailure(
+    candidate: TopOfMindRefreshCandidate,
+    reason: AmbitionSynthesisFailure["reason"],
+    error?: unknown,
+  ): void {
+    failed += 1;
+    const message =
+      error instanceof Error ? error.message.slice(0, 180) : undefined;
+    failures.push({
+      candidateId: `${candidate.node.id}:${candidate.memoryPattern.state}`,
+      contextNodeId: candidate.node.id,
+      idempotencyKey: candidate.idempotencyKey,
+      reason,
+      ...(message ? { message } : {}),
+    });
+    console.warn("Ambition synthesis failed; candidate will not be persisted", {
+      contextNodeId: candidate.node.id,
+      idempotencyKey: candidate.idempotencyKey,
+      reason,
+      ...(message ? { message } : {}),
+    });
+  }
 
   for (const candidate of input.candidates) {
     if (
@@ -406,7 +443,6 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
       })
     ) {
       skipped += 1;
-      nextCandidates.push(candidate);
       continue;
     }
 
@@ -417,24 +453,35 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
       feedback: input.feedback,
       tokenBudget: input.tokenBudget,
     });
-    const output = await input.synthesize(synthesisInput);
+    let output: AmbitionSynthesisOutput | null;
+    try {
+      output = await input.synthesize(synthesisInput);
+    } catch (error) {
+      recordFailure(candidate, "exception", error);
+      continue;
+    }
+
+    if (!output) {
+      recordFailure(candidate, "null_output");
+      continue;
+    }
+
     if (output && isSpecificAmbitionSynthesisOutput(output)) {
       synthesized += 1;
       nextCandidates.push(applyAmbitionSynthesisOutput(candidate, output));
       continue;
     }
 
-    fellBack += 1;
-    nextCandidates.push(
-      applyAmbitionSynthesisOutput(candidate, synthesisInput.fallback),
-    );
+    recordFailure(candidate, "invalid_output");
   }
 
   return {
     candidates: nextCandidates,
     attempted,
     synthesized,
+    failed,
     fellBack,
     skipped,
+    failures,
   };
 }

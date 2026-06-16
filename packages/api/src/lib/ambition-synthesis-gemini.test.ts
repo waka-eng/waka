@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AmbitionSynthesisInput } from "./ambition-synthesis.js";
 import {
   buildAmbitionSynthesisRequest,
+  buildAmbitionSynthesisGenerateContentUrl,
   GeminiAmbitionSynthesisClient,
   parseAmbitionSynthesisResponse,
 } from "./ambition-synthesis-gemini.js";
@@ -159,6 +160,12 @@ describe("parseAmbitionSynthesisResponse", () => {
 });
 
 describe("GeminiAmbitionSynthesisClient", () => {
+  it("uses the configured Gemini flash-lite model endpoint", () => {
+    expect(buildAmbitionSynthesisGenerateContentUrl()).toContain(
+      "/models/gemini-3.1-flash-lite:generateContent",
+    );
+  });
+
   it("returns a synthesized output on a successful response", async () => {
     const fetchFn = vi
       .fn()
