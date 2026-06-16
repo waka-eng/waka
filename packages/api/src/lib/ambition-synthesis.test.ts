@@ -191,6 +191,10 @@ describe("bounded ambition synthesis", () => {
     expect(result.candidates[0]?.why).toContain(
       "Rejected alternative interpretation:",
     );
+    expect(result.candidates[0]?.why).not.toContain(
+      "This may matter for ambition because it points",
+    );
+    expect(result.candidates[0]?.why).not.toContain("Memory movement:");
   });
 
   it("surfaces invalid synthesis as failure and excludes the candidate", async () => {

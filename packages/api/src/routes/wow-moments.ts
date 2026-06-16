@@ -24,7 +24,10 @@ import {
 } from "../lib/inspiration-embeddings.js";
 import { persistLocalInspirationScoresById } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
-import { topOfMindNoteFromWowMoment } from "../lib/top-of-mind-notes.js";
+import {
+  sanitizeUserFacingTopOfMindText,
+  topOfMindNoteFromWowMoment,
+} from "../lib/top-of-mind-notes.js";
 import {
   DEFAULT_WOW_GENERATION_LIMIT,
   MAX_WOW_GENERATION_LIMIT,
@@ -199,13 +202,16 @@ export function createWowMomentsRoutes(
           };
         });
 
+        const topOfMindNote = topOfMindNoteFromWowMoment({
+          moment,
+          relatedSignalIds: relatedRowsForMoment.map((row) => row.inspirationId),
+        });
+
         return {
           ...moment,
+          why: sanitizeUserFacingTopOfMindText(moment.why),
           relatedInspirations,
-          topOfMindNote: topOfMindNoteFromWowMoment({
-            moment,
-            relatedSignalIds: relatedRowsForMoment.map((row) => row.inspirationId),
-          }),
+          topOfMindNote,
         };
       }),
     });

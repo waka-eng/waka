@@ -70,7 +70,20 @@ function stripTerminalPunctuation(value: string): string {
 }
 
 function normalizeReportText(value: string | null | undefined): string {
-  return (value ?? "").replace(/\s+/g, " ").trim();
+  let normalized = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  normalized = normalized
+    .replace(/\b(?:Ambient signal|Matched environment|Anti-environment|Evidence rationale|Rejected alternative interpretation):\s*/gi, "")
+    .replace(/\bThis may matter for ambition because it points[\s\S]*?(?=(?:\b(?:Ambient signal|Matched environment|Anti-environment|Evidence rationale|Rejected alternative interpretation):)|$)/gi, "")
+    .replace(/\bMemory movement:\s*[^.。!?]*[.。!?]?/gi, "")
+    .replace(/\bSupporting signals:\s*[\s\S]*$/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/\b(?:candidate|rank|score)\b/i.test(normalized)) return "";
+  if (/\b(?:\w+ frequency in the surroundings|clustering around this frequency|starting this frequency)\b/i.test(normalized)) {
+    return "";
+  }
+  return normalized;
 }
 
 const TOP_OF_MIND_TYPE_LABELS: Record<ApiTopOfMindNoteType, string> = {
@@ -297,7 +310,7 @@ function buildBeliefStatement(moment: ApiTopOfMindCompatibilityMoment): string {
   if (suppliedBelief) return suppliedBelief;
 
   const title = beliefExcerpt(moment.title);
-  const why = beliefExcerpt(moment.why);
+  const why = beliefExcerpt(normalizeReportText(moment.why));
   const sourceReason = beliefExcerpt(
     safeBeliefSourceReason(moment.relatedInspirations.find((related) => cleanBeliefSourceText(related.reason))?.reason),
   );
@@ -526,7 +539,7 @@ export function WowMomentsSection({
               <dt>{t(locale, "devWowFieldTitle")}</dt>
               <dd>{moment.title || t(locale, "devWowFieldNotGenerated")}</dd>
               <dt>{t(locale, "devWowFieldWhy")}</dt>
-              <dd>{moment.why || t(locale, "devWowFieldNotGenerated")}</dd>
+              <dd>{normalizeReportText(moment.why) || t(locale, "devWowFieldNotGenerated")}</dd>
               <dt>{t(locale, "devWowFieldBelief")}</dt>
               <dd>{moment.beliefStatement || t(locale, "devWowFieldNotGenerated")}</dd>
               <dt>{t(locale, "devWowFieldReflection")}</dt>

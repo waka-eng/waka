@@ -106,13 +106,12 @@ describe("GET /api/wow-moments top-of-mind compatibility", () => {
       topOfMindNote: {
         id: moment.id,
         userId: user.id,
-        title: "I need a small real-world test, not another private theory.",
+        title: "test the question where it can cost something",
         ambitionDimension: "next_experiment",
-        ambientSignal: "I need a small real-world test, not another private theory.",
-        matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
-        antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
-        evidenceRationale:
-          "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+        ambientSignal: "test the question where it can cost something",
+        matchedEnvironment: "",
+        antiEnvironment: "",
+        evidenceRationale: "",
         type: "action",
         body: "Multiple signals keep circling the same careful ritual.",
         prompt: null,
@@ -130,6 +129,63 @@ describe("GET /api/wow-moments top-of-mind compatibility", () => {
           wowKind: "recurrence",
           wowScore: 82,
         },
+      },
+    });
+  });
+
+  it("sanitizes scaffolded legacy why in the WOW compatibility response", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000011",
+      userId: user.id,
+      title: "People who make courage feel normal",
+      kind: "bridge",
+      why:
+        "Ambient signal: people who make courage feel normal. " +
+        "Matched environment: People who make publishing early feel ordinary. " +
+        "Anti-environment: Circles where permission arrives before motion. " +
+        "Evidence rationale: Three saved signals are clustering around this frequency. " +
+        "This may matter for ambition because it points at a people frequency. " +
+        "Supporting signals: \"shipping early\". " +
+        "Memory movement: 3 reinforcements; rank 2 score 94 candidate abc.",
+      beliefStatement: "people who make courage feel normal",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 82,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createWowMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([])),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/wow-moments",
+      createWowMomentsRoutes({
+        getDatabase: () => db as any,
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/wow-moments?limit=1");
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { wowMoments: unknown[] };
+    const payload = JSON.stringify(body.wowMoments[0]);
+    expect(payload).not.toContain("This may matter for ambition because it points");
+    expect(payload).not.toContain("Memory movement:");
+    expect(payload).not.toContain("Supporting signals:");
+    expect(payload).not.toContain("Ambient signal:");
+    expect(payload).not.toContain("Matched environment:");
+    expect(payload).not.toContain("Evidence rationale:");
+    expect(body.wowMoments[0]).toMatchObject({
+      why: "",
+      topOfMindNote: {
+        evidenceRationale: "",
+        body: "",
       },
     });
   });

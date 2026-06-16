@@ -405,6 +405,42 @@ describe("WowMomentsSection", () => {
     expect(detail?.textContent).toContain("This is not just about liking cafe aesthetics.");
   });
 
+  it("defensively strips legacy scaffolding from sticky and detail rendering", () => {
+    const scaffoldedWhy =
+      "Ambient signal: people who make courage feel normal. " +
+      "Matched environment: People who make publishing early feel ordinary. " +
+      "Anti-environment: Circles where permission arrives before motion. " +
+      "Evidence rationale: Three saved signals are clustering around this frequency. " +
+      "This may matter for ambition because it points at a people frequency. " +
+      "Supporting signals: \"shipping early\". " +
+      "Memory movement: 3 reinforcements; rank 2 score 94 candidate abc.";
+    const container = renderInteractiveSection({
+      moments: [{ ...sampleMoment, why: scaffoldedWhy }],
+      loading: false,
+      error: null,
+    });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    expect(card?.textContent).not.toContain("This may matter for ambition because it points");
+    expect(card?.textContent).not.toContain("Memory movement:");
+    expect(card?.textContent).not.toContain("Supporting signals:");
+    expect(card?.textContent).not.toContain("Ambient signal:");
+    expect(card?.textContent).not.toContain("Matched environment:");
+    expect(card?.textContent).not.toContain("Evidence rationale:");
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    expect(detail?.textContent).not.toContain("This may matter for ambition because it points");
+    expect(detail?.textContent).not.toContain("Memory movement:");
+    expect(detail?.textContent).not.toContain("Supporting signals:");
+    expect(detail?.textContent).not.toContain("Ambient signal:");
+    expect(detail?.textContent).not.toContain("Matched environment:");
+    expect(detail?.textContent).not.toContain("Evidence rationale:");
+  });
+
   it("breaks a long pattern report into a lead and readable noticed points", () => {
     const longWhy = [
       "WAKA noticed that several saved inspirations return to small prototypes rather than polished plans.",

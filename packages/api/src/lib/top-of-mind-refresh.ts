@@ -327,36 +327,6 @@ function buildInternalFrequency(
   }
 }
 
-function buildWhy(
-  node: TopOfMindRefreshNodeInput,
-  evidence: TopOfMindRefreshEvidenceInput[],
-  dimension: AmbitionDimension,
-  frequency: Pick<
-    TopOfMindRefreshCandidate,
-    "ambientSignal" | "matchedEnvironment" | "antiEnvironment" | "evidenceRationale"
-  >,
-): string {
-  const description = normalizeWhitespace(node.description);
-  const evidencePreviews = evidence
-    .map((row) => evidencePreview(row))
-    .filter((preview) => preview.length > 0)
-    .slice(0, 5);
-  const ambitionReason = `This may matter for ambition because it points at a ${dimension.replace(/_/g, " ")} frequency in the surroundings this note is trying to find.`;
-  const memoryText = ` Memory movement: ${node.evidenceCount} reinforcement${node.evidenceCount === 1 ? "" : "s"}; current state is derived from recurrence, recency, decay, and reactivation.`;
-  const descriptionText = description ? ` ${description}` : "";
-  const signalText =
-    evidencePreviews.length > 0
-      ? ` Supporting signals: ${evidencePreviews.map((preview) => `"${preview}"`).join("; ")}.`
-      : ` ${node.evidenceCount} signal${node.evidenceCount === 1 ? "" : "s"} currently support this note.`;
-  return [
-    `Ambient signal: ${frequency.ambientSignal}`,
-    `Matched environment: ${frequency.matchedEnvironment}`,
-    `Anti-environment: ${frequency.antiEnvironment}`,
-    `Evidence rationale: ${frequency.evidenceRationale}`,
-    `${ambitionReason}${descriptionText}${signalText}${memoryText}`,
-  ].join(" ");
-}
-
 function buildIdempotencyKey(userId: string, nodeId: string): string {
   return `top_of_mind_context_node:v1:${userId}:${nodeId}`;
 }
@@ -413,7 +383,7 @@ export function rankTopOfMindRefreshCandidates(input: {
         idempotencyKey,
         title: truncateText(frequency.ambientSignal, MAX_TITLE_CHARS),
         ...frequency,
-        why: buildWhy(node, evidence, ambitionDimension, frequency),
+        why: "",
         ambitionDimension,
         kind: noteKindForContextType(contextType),
         reflectionQuestion: reflectionQuestionForContextType(node, contextType),

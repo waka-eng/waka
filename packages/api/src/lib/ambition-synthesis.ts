@@ -406,26 +406,14 @@ export function applyAmbitionSynthesisOutput(
   const rejectedAlternativeInterpretation = truncateText(
     output.rejectedAlternativeInterpretation,
   );
-  // The persisted `why` string is the only source of truth on read: the API
-  // reconstructs ambientSignal/matchedEnvironment/antiEnvironment/evidenceRationale
-  // by parsing the labeled sections back out of it. Rebuild those labeled
-  // sections from the synthesized output (keeping the deterministic analytical
-  // tail — "This may matter ..." with supporting signals and memory movement) so
-  // the LLM text actually reaches the user instead of only the title.
-  const baseWhy = candidate.why.replace(
-    /\s*Rejected alternative interpretation:.+$/i,
-    "",
-  );
-  const analyticalTail = baseWhy.match(/This may matter[\s\S]*$/)?.[0] ?? "";
-  const synthesizedHead = [
+  // Persist only synthesized fields in the compatibility carrier. Read mappers
+  // strip these labels from user-facing API/UI surfaces.
+  const rebuiltWhy = [
     `Ambient signal: ${postIt}`,
     `Matched environment: ${matchedEnvironment}`,
     `Anti-environment: ${antiEnvironment}`,
     `Evidence rationale: ${evidenceRationale}`,
   ].join(" ");
-  const rebuiltWhy = [synthesizedHead, analyticalTail]
-    .filter((part) => part.trim().length > 0)
-    .join(" ");
   return {
     ...candidate,
     title: postIt,
