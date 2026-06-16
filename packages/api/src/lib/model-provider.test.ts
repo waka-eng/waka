@@ -22,7 +22,6 @@ function fakeProvider(): ModelProvider {
     generateSignalPacket: vi.fn(),
     generateTopOfMindNotes: vi.fn(),
     synthesizeAmbition: vi.fn(),
-    generateActionRecommendation: vi.fn(),
   };
 }
 
@@ -124,7 +123,6 @@ describe("model provider abstraction", () => {
       "judgeMeaningRelationships",
     );
     expect(provider.topOfMindNoteJudge).toHaveProperty("judgeWowMoment");
-    expect(provider).toHaveProperty("generateActionRecommendation");
 
     const notes = await provider.generateTopOfMindNotes({
       userId,

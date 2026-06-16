@@ -15,8 +15,6 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: [
-      "src/lib/action-recommendations.test.ts",
-      "src/lib/action-recommendations-gemini.test.ts",
       "src/lib/ambition-synthesis.test.ts",
       "src/lib/ambition-synthesis-gemini.test.ts",
       "src/lib/feedback-application.test.ts",
@@ -24,7 +22,6 @@ export default defineConfig({
       "src/lib/top-of-mind-notes.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",
       "src/lib/wow-judge-model.test.ts",
-      "src/routes/action-recommendations.test.ts",
       "src/routes/feedback.test.ts",
       "src/routes/wow-moments.test.ts",
       "src/vault/*.test.ts",

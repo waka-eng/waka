@@ -12,7 +12,6 @@ import { handle } from "hono/aws-lambda";
 
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
-import { actionRecommendationsRoutes } from "./routes/action-recommendations.js";
 import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
 import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.js";
@@ -61,9 +60,6 @@ app.route("/api/top-of-mind", topOfMindRoutes);
 
 // Low-prominence scaffold for turning graph-backed notes into a build decision.
 app.route("/api/decision-memo", decisionMemoRoutes);
-
-// Real-world experiments recommended from the current Top of Mind surface.
-app.route("/api/action-recommendations", actionRecommendationsRoutes);
 
 // User feedback teaches the graph-backed signal and top-of-mind loop.
 app.route("/api/feedback", feedbackRoutes);

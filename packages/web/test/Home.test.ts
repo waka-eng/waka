@@ -11,7 +11,6 @@ import {
   createInspirationSpark,
   deleteInspirationSpark,
   finalizeAttachment,
-  fetchActionRecommendations,
   fetchInspirations,
   fetchReflections,
   fetchSavedSignalDetail,
@@ -20,13 +19,11 @@ import {
   fetchTopOfMindNotes,
   presignAttachment,
   recordInspirationRevisit,
-  updateActionRecommendationState,
   updateInspiration,
   uploadToPresignedUrl,
 } from "../src/lib/api";
 import type {
   ApiAttachment,
-  ApiActionRecommendation,
   ApiInspiration,
   ApiReflection,
   ApiSavedSignalDetail,
@@ -71,13 +68,6 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchInspirations: vi.fn(async () => []),
     fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
     fetchTopOfMindNotes: vi.fn(async () => [sampleTopOfMindNote]),
-    fetchActionRecommendations: vi.fn(async () => [sampleActionRecommendation]),
-    updateActionRecommendationState: vi.fn(async (actionId: string, input: any) => ({
-      actionId,
-      sourceTopOfMindId: input.sourceTopOfMindId,
-      status: input.status,
-      updatedAt: "2026-06-01T10:00:00.000Z",
-    })),
     createFeedback: vi.fn(async () => ({
       id: "feedback-1",
       userId: "user-1",
@@ -359,40 +349,22 @@ const sampleTopOfMind: ApiTopOfMind = {
   },
 };
 
-const sampleActionRecommendation: ApiActionRecommendation = {
-  id: "action-note-1-rough",
-  text: "Make the rough thing first, then show one person before explaining it.",
-  sourceTopOfMindId: "note-1",
-  sourceSignalIds: ["insp-1"],
-  evidenceSnippets: ["Architecture essay about bridge rhythms in city walks"],
-  kind: "make_artifact",
-  whyNow: "Saved signals keep returning to public rough drafts.",
-  confidence: 95,
-  createdAt: "2026-05-11T12:00:00.000Z",
-  status: "active",
-  dismissedAt: null,
-  completedAt: null,
-};
-
 function setApiFixtures({
   inspirations = sampleInspirations,
   topOfMind = sampleTopOfMind,
   topOfMindNotes = [sampleTopOfMindNote],
-  actionRecommendations = [sampleActionRecommendation],
   savedSignals = sampleSavedSignals,
   savedSignalDetail = sampleSavedSignalDetail,
 }: {
   inspirations?: ApiInspiration[];
   topOfMind?: ApiTopOfMind;
   topOfMindNotes?: ApiTopOfMindNoteSurface[];
-  actionRecommendations?: ApiActionRecommendation[];
   savedSignals?: ApiSavedSignalSearchResult[];
   savedSignalDetail?: ApiSavedSignalDetail;
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
   vi.mocked(fetchTopOfMindNotes).mockResolvedValue(topOfMindNotes);
-  vi.mocked(fetchActionRecommendations).mockResolvedValue(actionRecommendations);
   vi.mocked(fetchReflections).mockResolvedValue([]);
   vi.mocked(fetchSavedSignals).mockResolvedValue(savedSignals);
   vi.mocked(fetchSavedSignalDetail).mockImplementation(async (id: string) => {
@@ -806,14 +778,13 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("compatibility archive");
   });
 
-  it("keeps internal language out of the main wall, post-it, drawer, capture, and action copy", async () => {
+  it("keeps internal language out of the main wall, post-it, drawer, and capture copy", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const bannedInternalCopy = /\b(signals?|memories|nodes?|graph|resonance|analysis|AI|productivity|knowledge[-\s]?base)\b|memory movement/i;
     const wallCopy = [
       container.querySelector(".nc-titlecard")?.textContent,
       container.querySelector(".nc-stage")?.textContent,
-      container.querySelector(".nc-action-pad")?.textContent,
       container.querySelector(".nc-save")?.textContent,
     ].join(" ");
 
@@ -856,7 +827,6 @@ describe("HomePage current home experience", () => {
     expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).not.toContain("ambition signal");
-    expect(container.textContent).not.toContain("action items");
     expect(container.textContent).not.toContain("try one small thing in the real world");
     expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
@@ -865,22 +835,6 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
-  });
-
-  it("does not fetch or render action recommendations while the surface is disabled", async () => {
-    setApiFixtures({
-      actionRecommendations: [sampleActionRecommendation],
-    });
-    const container = await renderHomePage();
-
-    expect(fetchActionRecommendations).not.toHaveBeenCalled();
-    expect(updateActionRecommendationState).not.toHaveBeenCalled();
-    expect(container.querySelector(".nc-action-pad")).toBeNull();
-    expect(container.querySelector(".nc-action-check")).toBeNull();
-    expect(container.querySelector(".nc-action-remove")).toBeNull();
-    expect(container.textContent).not.toContain(sampleActionRecommendation.text);
-    expect(container.textContent).not.toContain("action items");
-    expect(container.textContent).not.toContain("what happened?");
   });
 
   it("keeps post-its direct and rejects summary-like topic labels", async () => {
@@ -1128,7 +1082,6 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
-    expect(container.textContent).not.toContain("action items");
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
