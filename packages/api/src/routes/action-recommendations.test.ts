@@ -10,6 +10,16 @@ import type { ActionRecommendationState } from "../lib/action-recommendations.js
 
 const user = { id: "00000000-0000-4000-8000-000000000001" };
 
+function getModelProvider() {
+  return Promise.resolve({
+    generateActionRecommendation: vi.fn(async () => ({
+      text: "Draft the rough bridge-rhythm artifact and show it to one builder by Friday.",
+      kind: "make_artifact" as const,
+      whyNow: "The current post-it and evidence both point toward learning by making the rough thing public.",
+    })),
+  });
+}
+
 function authMiddleware() {
   return async (c: any, next: () => Promise<void>) => {
     c.set("user", user);
@@ -87,6 +97,7 @@ describe("GET /api/action-recommendations", () => {
         listTopOfMindNotes,
         listStates,
         saveState,
+        getModelProvider,
       }),
     );
 
@@ -104,7 +115,7 @@ describe("GET /api/action-recommendations", () => {
     };
     const action = firstBody.actionRecommendations[0];
     expect(action).toMatchObject({
-      text: "Make the rough thing first, then show one person before explaining it.",
+      text: "Draft the rough bridge-rhythm artifact and show it to one builder by Friday.",
       sourceTopOfMindId: note.id,
       status: "active",
       kind: "make_artifact",
@@ -159,6 +170,7 @@ describe("GET /api/action-recommendations", () => {
         listTopOfMindNotes: vi.fn(async () => [note]),
         listStates: vi.fn(async () => []),
         saveState,
+        getModelProvider,
       }),
     );
 
@@ -214,6 +226,7 @@ describe("GET /api/action-recommendations", () => {
         listTopOfMindNotes: vi.fn(async () => [note]),
         listStates: vi.fn(async () => []),
         saveState,
+        getModelProvider,
       }),
     );
 
@@ -275,6 +288,7 @@ describe("GET /api/action-recommendations", () => {
         listTopOfMindNotes: vi.fn(async () => [note]),
         listStates: vi.fn(async () => states),
         saveState,
+        getModelProvider,
       }),
     );
 

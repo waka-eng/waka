@@ -11,6 +11,10 @@ import type {
   AmbitionSynthesisOutput,
 } from "./ambition-synthesis.js";
 import type {
+  ActionRecommendationGenerationInput,
+  GeneratedActionRecommendationFields,
+} from "./action-recommendations.js";
+import type {
   TopOfMindRefreshCandidate,
   TopOfMindRefreshEvidenceInput,
   TopOfMindRefreshNodeInput,
@@ -40,6 +44,9 @@ export interface ModelProvider {
   synthesizeAmbition(
     input: AmbitionSynthesisInput,
   ): Promise<AmbitionSynthesisOutput | null>;
+  generateActionRecommendation(
+    input: ActionRecommendationGenerationInput,
+  ): Promise<GeneratedActionRecommendationFields | null>;
 }
 
 let defaultProvider: ModelProvider | null = null;

@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { recommendActionsFromTopOfMind } from "./action-recommendations.js";
+import {
+  recommendActionsFromTopOfMind,
+  type ActionRecommendationGenerator,
+} from "./action-recommendations.js";
 import type { TopOfMindNoteSurface } from "../routes/top-of-mind.js";
+
+const userId = "00000000-0000-4000-8000-000000000001";
 
 const baseNote: TopOfMindNoteSurface = {
   id: "00000000-0000-4000-8000-000000000010",
-  userId: "00000000-0000-4000-8000-000000000001",
+  userId,
   title: "make the thing before explaining it",
   ambitionDimension: "work",
   ambientSignal: "make the thing before explaining it",
@@ -44,9 +49,24 @@ const baseNote: TopOfMindNoteSurface = {
   relatedSignals: [],
 };
 
+function generator(
+  output: Awaited<ReturnType<ActionRecommendationGenerator["generateActionRecommendation"]>> = {
+    text: "Draft the rough bridge-rhythm artifact and show it to one builder by Friday.",
+    kind: "make_artifact" as const,
+    whyNow: "The current post-it and evidence both point toward learning by making the rough thing public.",
+  },
+): ActionRecommendationGenerator {
+  return {
+    generateActionRecommendation: vi.fn(async () => output),
+  };
+}
+
 describe("recommendActionsFromTopOfMind", () => {
-  it("ranks concrete evidence-backed experiments and rejects weak disconnected notes", () => {
-    const actions = recommendActionsFromTopOfMind({
+  it("ranks concrete evidence-backed candidates but uses provider-generated action fields", async () => {
+    const actionGenerator = generator();
+    const actions = await recommendActionsFromTopOfMind({
+      userId,
+      generator: actionGenerator,
       notes: [
         baseNote,
         {
@@ -63,23 +83,29 @@ describe("recommendActionsFromTopOfMind", () => {
 
     expect(actions).toHaveLength(1);
     expect(actions[0]).toMatchObject({
-      text: "Make the rough thing first, then show one person before explaining it.",
+      text: "Draft the rough bridge-rhythm artifact and show it to one builder by Friday.",
       sourceTopOfMindId: baseNote.id,
       sourceSignalIds: ["00000000-0000-4000-8000-000000000101"],
       evidenceSnippets: ["Architecture essay about bridge rhythms in city walks"],
       kind: "make_artifact",
+      whyNow:
+        "The current post-it and evidence both point toward learning by making the rough thing public.",
       status: "active",
     });
     expect(actions[0].confidence).toBeGreaterThanOrEqual(90);
-    expect(actions[0].text).not.toMatch(
-      /do one tiny|smallest test|explore this|reflect on|journal|learn more|think about|research/i,
-    );
+    expect(actionGenerator.generateActionRecommendation).toHaveBeenCalledTimes(1);
   });
 
-  it("removes completed or dismissed actions from future recommendations", () => {
-    const [action] = recommendActionsFromTopOfMind({ notes: [baseNote] });
-    const actions = recommendActionsFromTopOfMind({
+  it("removes completed or dismissed actions from future recommendations", async () => {
+    const [action] = await recommendActionsFromTopOfMind({
+      userId,
       notes: [baseNote],
+      generator: generator(),
+    });
+    const actions = await recommendActionsFromTopOfMind({
+      userId,
+      notes: [baseNote],
+      generator: generator(),
       states: [
         {
           actionId: action.id,
@@ -95,7 +121,7 @@ describe("recommendActionsFromTopOfMind", () => {
     expect(actions).toEqual([]);
   });
 
-  it("strengthens future actions only when a completed action has an outcome", () => {
+  it("strengthens future candidates only when a completed action has an outcome", async () => {
     const lowConfidenceNote = {
       ...baseNote,
       confidence: 49,
@@ -116,14 +142,18 @@ describe("recommendActionsFromTopOfMind", () => {
     };
 
     expect(
-      recommendActionsFromTopOfMind({
+      await recommendActionsFromTopOfMind({
+        userId,
         notes: [lowConfidenceNote],
+        generator: generator(),
         states: [emptyCompletion],
       }),
     ).toEqual([]);
 
-    const [action] = recommendActionsFromTopOfMind({
+    const [action] = await recommendActionsFromTopOfMind({
+      userId,
       notes: [lowConfidenceNote],
+      generator: generator(),
       states: [outcomeCompletion],
     });
     expect(action).toMatchObject({
@@ -131,5 +161,59 @@ describe("recommendActionsFromTopOfMind", () => {
       status: "active",
     });
     expect(action.confidence).toBeGreaterThanOrEqual(60);
+  });
+
+  it("returns empty or partial lists when generation fails or validates poorly", async () => {
+    const mixedGenerator: ActionRecommendationGenerator = {
+      generateActionRecommendation: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          text: "Make a small exhibit from the second signal and invite one person to react this week.",
+          kind: "make_artifact",
+          whyNow: "The second post-it has enough evidence to try in public now.",
+        }),
+    };
+
+    const actions = await recommendActionsFromTopOfMind({
+      userId,
+      generator: mixedGenerator,
+      notes: [
+        baseNote,
+        {
+          ...baseNote,
+          id: "00000000-0000-4000-8000-000000000012",
+          title: "another public making loop",
+          createdAt: new Date("2026-05-31T10:00:00.000Z"),
+        },
+      ],
+    });
+
+    expect(actions).toHaveLength(1);
+    expect(actions[0].sourceTopOfMindId).toBe(baseNote.id);
+  });
+
+  it("keeps IDs stable and independent of generated text", async () => {
+    const [first] = await recommendActionsFromTopOfMind({
+      userId,
+      notes: [baseNote],
+      generator: generator({
+        text: "Make the first rough bridge-rhythm sketch and show one person by Friday.",
+        kind: "make_artifact",
+        whyNow: "The evidence points at public rough drafts.",
+      }),
+    });
+    const [second] = await recommendActionsFromTopOfMind({
+      userId,
+      notes: [baseNote],
+      generator: generator({
+        text: "Send one builder a rough bridge-rhythm draft and ask what feels alive.",
+        kind: "message_person",
+        whyNow: "The evidence points at testing the idea with another person.",
+      }),
+    });
+
+    expect(first.id).toBe(second.id);
+    expect(first.text).not.toBe(second.text);
   });
 });

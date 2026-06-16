@@ -8,10 +8,12 @@ import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
   actionRecommendationStatusValues,
   recommendActionsFromTopOfMind,
+  type ActionRecommendationGenerator,
   type ActionRecommendationState,
   type ActionRecommendationStatus,
   type RecommendedAction,
 } from "../lib/action-recommendations.js";
+import { getDefaultModelProvider } from "../lib/model-provider.js";
 import {
   listTopOfMindNotesForUser,
   type TopOfMindNoteSurface,
@@ -94,6 +96,7 @@ export interface ActionRecommendationsRouteDependencies {
     db: WakaDb,
     input: SaveActionRecommendationStateInput,
   ) => Promise<ActionRecommendationState | null>;
+  getModelProvider?: () => Promise<ActionRecommendationGenerator>;
 }
 
 function findMatchingActionRecommendation(
@@ -247,6 +250,7 @@ export function createActionRecommendationsRoutes(
     deps.listTopOfMindNotes ?? listTopOfMindNotesForUser;
   const listStates = deps.listStates ?? listActionRecommendationStatesForUser;
   const saveState = deps.saveState ?? saveActionRecommendationStateForUser;
+  const getModelProvider = deps.getModelProvider ?? getDefaultModelProvider;
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
@@ -272,8 +276,11 @@ export function createActionRecommendationsRoutes(
       userId,
       sourceTopOfMindIds: notes.map((note) => note.id),
     });
-    const actionRecommendations = recommendActionsFromTopOfMind({
+    const modelProvider = await getModelProvider();
+    const actionRecommendations = await recommendActionsFromTopOfMind({
+      userId,
       notes,
+      generator: modelProvider,
       states,
       limit,
     });
@@ -322,8 +329,11 @@ export function createActionRecommendationsRoutes(
       return c.json({ actionRecommendationState: matchingState });
     }
 
-    const actionRecommendations = recommendActionsFromTopOfMind({
+    const modelProvider = await getModelProvider();
+    const actionRecommendations = await recommendActionsFromTopOfMind({
+      userId,
       notes,
+      generator: modelProvider,
       states: [],
       limit: MAX_ACTION_RECOMMENDATION_LIMIT,
     });
