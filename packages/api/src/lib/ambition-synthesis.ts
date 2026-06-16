@@ -76,7 +76,7 @@ export interface BoundedAmbitionSynthesisLoopResult {
   skipped: number;
 }
 
-const MAX_SYNTHESIS_CANDIDATES = 3;
+const MAX_SYNTHESIS_CANDIDATES = 5;
 const MAX_SIGNALS_PER_SYNTHESIS = 5;
 const DEFAULT_TOKEN_BUDGET = 2400;
 const MAX_FIELD_CHARS = 420;
@@ -260,7 +260,15 @@ export function shouldRunAmbitionSynthesis(input: {
 }): boolean {
   const tokenBudget = input.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
   const candidate = input.candidate;
-  if (candidate.evidence.length < 2 && input.trigger !== "explicit_deep_dive") {
+  // explicit_deep_dive and the bulk weekly_refresh both intentionally synthesize
+  // thin (single-signal) candidates: the refresh wants real LLM text on every
+  // ranked note, and the specificity gate plus deterministic fallback still
+  // protect quality. Other triggers keep the 2-signal floor.
+  if (
+    candidate.evidence.length < 2 &&
+    input.trigger !== "explicit_deep_dive" &&
+    input.trigger !== "weekly_refresh"
+  ) {
     return false;
   }
   if (createAmbitionSynthesisInput(candidate, {
@@ -284,7 +292,9 @@ export function shouldRunAmbitionSynthesis(input: {
     case "explicit_deep_dive":
       return true;
     case "weekly_refresh":
-      return candidate.score >= 260 || candidate.node.evidenceCount >= 3;
+      // Full-coverage refresh: every ranked candidate that fits the token
+      // budget gets real LLM synthesis. Weak output still falls back.
+      return true;
     case "strong_feedback":
     case "correction":
     case "contradiction":
@@ -325,24 +335,43 @@ export function applyAmbitionSynthesisOutput(
   output: AmbitionSynthesisOutput,
 ): TopOfMindRefreshCandidate {
   const boundedConfidence = Math.max(1, Math.min(100, Math.round(output.confidence)));
+  const postIt = truncateText(output.firstPersonPostItCandidate, 120);
+  const matchedEnvironment = truncateText(output.environmentDirection);
+  const antiEnvironment = truncateText(output.rejectedEnvironment);
+  const evidenceRationale = truncateText(output.evidenceRationale);
+  const rejectedAlternativeInterpretation = truncateText(
+    output.rejectedAlternativeInterpretation,
+  );
+  // The persisted `why` string is the only source of truth on read: the API
+  // reconstructs ambientSignal/matchedEnvironment/antiEnvironment/evidenceRationale
+  // by parsing the labeled sections back out of it. Rebuild those labeled
+  // sections from the synthesized output (keeping the deterministic analytical
+  // tail — "This may matter ..." with supporting signals and memory movement) so
+  // the LLM text actually reaches the user instead of only the title.
   const baseWhy = candidate.why.replace(
     /\s*Rejected alternative interpretation:.+$/i,
     "",
   );
+  const analyticalTail = baseWhy.match(/This may matter[\s\S]*$/)?.[0] ?? "";
+  const synthesizedHead = [
+    `Ambient signal: ${postIt}`,
+    `Matched environment: ${matchedEnvironment}`,
+    `Anti-environment: ${antiEnvironment}`,
+    `Evidence rationale: ${evidenceRationale}`,
+  ].join(" ");
+  const rebuiltWhy = [synthesizedHead, analyticalTail]
+    .filter((part) => part.trim().length > 0)
+    .join(" ");
   return {
     ...candidate,
-    title: truncateText(output.firstPersonPostItCandidate, 120),
-    ambientSignal: truncateText(output.firstPersonPostItCandidate, 120),
-    matchedEnvironment: truncateText(output.environmentDirection),
-    antiEnvironment: truncateText(output.rejectedEnvironment),
-    evidenceRationale: truncateText(output.evidenceRationale),
-    rejectedAlternativeInterpretation: truncateText(
-      output.rejectedAlternativeInterpretation,
-    ),
+    title: postIt,
+    ambientSignal: postIt,
+    matchedEnvironment,
+    antiEnvironment,
+    evidenceRationale,
+    rejectedAlternativeInterpretation,
     wowScore: boundedConfidence,
-    why: `${baseWhy} Rejected alternative interpretation: ${truncateText(
-      output.rejectedAlternativeInterpretation,
-    )}`,
+    why: `${rebuiltWhy} Rejected alternative interpretation: ${rejectedAlternativeInterpretation}`,
   };
 }
 
