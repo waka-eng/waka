@@ -72,25 +72,12 @@ const note: TopOfMindNoteSurface = {
 };
 
 describe("GET /api/action-recommendations", () => {
-  it("returns only active high-confidence recommendations and hides persisted removals", async () => {
+  it("returns an empty list without loading notes, states, or the model provider", async () => {
     const db = {};
-    const states: ActionRecommendationState[] = [];
     const listTopOfMindNotes = vi.fn(async () => [note]);
-    const listStates = vi.fn(async () => states);
-    const saveState = vi.fn(
-      async (_db: unknown, input: SaveActionRecommendationStateInput) => {
-        const state = {
-          actionId: input.actionId,
-          sourceTopOfMindId: input.sourceTopOfMindId,
-          status: input.status,
-          outcomeText: input.outcomeText ?? null,
-          relatedSignalIds: input.relatedSignalIds ?? [],
-          updatedAt: new Date("2026-06-01T10:00:00.000Z"),
-        };
-        states.unshift(state);
-        return state;
-      },
-    );
+    const listStates = vi.fn(async () => []);
+    const saveState = vi.fn();
+    const getModelProviderSpy = vi.fn(getModelProvider);
     const app = new Hono();
     app.route(
       "/api/action-recommendations",
@@ -100,55 +87,26 @@ describe("GET /api/action-recommendations", () => {
         listTopOfMindNotes,
         listStates,
         saveState,
-        getModelProvider,
+        getModelProvider: getModelProviderSpy,
       }),
     );
 
-    const firstResponse = await app.request("/api/action-recommendations");
-    expect(firstResponse.status).toBe(200);
-    const firstBody = (await firstResponse.json()) as {
-      actionRecommendations: Array<{
-        id: string;
-        text: string;
-        sourceTopOfMindId: string;
-        status: string;
-        kind: string;
-        evidenceSnippets: string[];
-      }>;
-    };
-    const action = firstBody.actionRecommendations[0];
-    expect(action).toMatchObject({
-      text: "Draft the rough bridge-rhythm artifact and show it to one builder by Friday.",
-      sourceTopOfMindId: note.id,
-      status: "active",
-      kind: "make_artifact",
-    });
-    expect(action.evidenceSnippets).toEqual([
-      "Architecture essay about bridge rhythms in city walks",
-    ]);
-
-    const stateResponse = await app.request(
-      `/api/action-recommendations/${action.id}/state`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceTopOfMindId: note.id,
-          status: "removed",
-        }),
-      },
-    );
-    expect(stateResponse.status).toBe(200);
-    expect(saveState).toHaveBeenCalledWith(db, {
-      userId: user.id,
-      actionId: action.id,
-      sourceTopOfMindId: note.id,
-      status: "removed",
-    });
-
-    const secondResponse = await app.request("/api/action-recommendations");
-    await expect(secondResponse.json()).resolves.toEqual({
+    const response = await app.request("/api/action-recommendations");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
       actionRecommendations: [],
+    });
+    expect(listTopOfMindNotes).not.toHaveBeenCalled();
+    expect(listStates).not.toHaveBeenCalled();
+    expect(saveState).not.toHaveBeenCalled();
+    expect(getModelProviderSpy).not.toHaveBeenCalled();
+
+    const invalidResponse = await app.request(
+      "/api/action-recommendations?limit=not-a-number",
+    );
+    expect(invalidResponse.status).toBe(400);
+    await expect(invalidResponse.json()).resolves.toMatchObject({
+      error: "Invalid action recommendation query",
     });
   });
 
@@ -177,12 +135,13 @@ describe("GET /api/action-recommendations", () => {
       }),
     );
 
-    const listResponse = await app.request("/api/action-recommendations");
-    const listBody = (await listResponse.json()) as {
-      actionRecommendations: Array<{ id: string }>;
-    };
-    const actionId = listBody.actionRecommendations[0]?.id;
-    expect(actionId).toBeTruthy();
+    const [candidate] = selectActionRecommendationCandidates({
+      notes: [note],
+      states: [],
+      limit: 5,
+    });
+    expect(candidate).toBeTruthy();
+    const actionId = candidate.id;
 
     const response = await app.request(
       `/api/action-recommendations/${actionId}/state`,
@@ -377,12 +336,13 @@ describe("GET /api/action-recommendations", () => {
       }),
     );
 
-    const listResponse = await app.request("/api/action-recommendations");
-    const listBody = (await listResponse.json()) as {
-      actionRecommendations: Array<{ id: string }>;
-    };
-    const actionId = listBody.actionRecommendations[0]?.id;
-    expect(actionId).toBeTruthy();
+    const [candidate] = selectActionRecommendationCandidates({
+      notes: [note],
+      states: [],
+      limit: 5,
+    });
+    expect(candidate).toBeTruthy();
+    const actionId = candidate.id;
 
     const payload = {
       sourceTopOfMindId: note.id,

@@ -7,20 +7,17 @@ import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
   actionRecommendationStatusValues,
-  recommendActionsFromTopOfMind,
   selectActionRecommendationCandidates,
   type ActionRecommendationGenerator,
   type ActionRecommendationState,
   type ActionRecommendationStatus,
   type RecommendedAction,
 } from "../lib/action-recommendations.js";
-import { getDefaultModelProvider } from "../lib/model-provider.js";
 import {
   listTopOfMindNotesForUser,
   type TopOfMindNoteSurface,
 } from "./top-of-mind.js";
 
-const DEFAULT_ACTION_RECOMMENDATION_LIMIT = 5;
 const MAX_ACTION_RECOMMENDATION_LIMIT = 5;
 
 const ACTION_FEEDBACK_SOURCE = "action_recommendation";
@@ -253,8 +250,6 @@ export function createActionRecommendationsRoutes(
     deps.listTopOfMindNotes ?? listTopOfMindNotesForUser;
   const listStates = deps.listStates ?? listActionRecommendationStatesForUser;
   const saveState = deps.saveState ?? saveActionRecommendationStateForUser;
-  const getModelProvider = deps.getModelProvider ?? getDefaultModelProvider;
-
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
   routes.get("/", async (c) => {
@@ -271,24 +266,10 @@ export function createActionRecommendationsRoutes(
       );
     }
 
-    const userId = c.get("user").id;
-    const db = getDatabase();
-    const limit = parsedQuery.data.limit ?? DEFAULT_ACTION_RECOMMENDATION_LIMIT;
-    const notes = await listTopOfMindNotes(db, { userId, limit: 20 });
-    const states = await listStates(db, {
-      userId,
-      sourceTopOfMindIds: notes.map((note) => note.id),
-    });
-    const modelProvider = await getModelProvider();
-    const actionRecommendations = await recommendActionsFromTopOfMind({
-      userId,
-      notes,
-      generator: modelProvider,
-      states,
-      limit,
-    });
-
-    return c.json({ actionRecommendations });
+    // Action recommendations are temporarily disabled. Keep the authenticated
+    // endpoint and query validation contract intact, but do not read notes or
+    // invoke the model provider/Gemini while the UI surface is hidden.
+    return c.json({ actionRecommendations: [] });
   });
 
   routes.post("/:actionId/state", async (c) => {
