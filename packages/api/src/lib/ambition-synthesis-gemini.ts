@@ -15,16 +15,15 @@ import {
  * Real Gemini implementation of the ambition-synthesis seam.
  *
  * `runBoundedAmbitionSynthesisLoop` already owns selection, gating, token
- * budgeting, the specificity gate (`isSpecificAmbitionSynthesisOutput`), and the
- * deterministic fallback. This client only has to turn one ranked candidate's
+ * budgeting, and the specificity gate (`isSpecificAmbitionSynthesisOutput`).
+ * This client only has to turn one ranked candidate's
  * structured context (node + saved signals + prior feedback) into a
  * first-person post-it `AmbitionSynthesisOutput`. When generation fails or the
- * model returns unusable output we return `null`; the loop then falls back to
- * the deterministic candidate, so this path can never regress below today's
- * behavior.
+ * model returns unusable output we return `null`; the loop then surfaces failure
+ * metadata so callers do not silently persist deterministic output.
  */
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 const MAX_OUTPUT_TOKENS = 1024;
 const MAX_EXCERPT_CHARS = 600;
 const MAX_POST_IT_CHARS = 120;

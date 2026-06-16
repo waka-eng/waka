@@ -20,7 +20,7 @@ import {
 } from "./gemini-http.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 const MAX_INSPIRATION_CHARS = 4000;
 const MAX_TITLE_CHARS = 120;
 const MAX_REFLECTION_QUESTION_CHARS = 240;

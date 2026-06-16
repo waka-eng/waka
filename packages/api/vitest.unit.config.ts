@@ -15,7 +15,11 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: [
+      "src/lib/ambition-synthesis.test.ts",
+      "src/lib/ambition-synthesis-gemini.test.ts",
       "src/lib/feedback-application.test.ts",
+      "src/lib/top-of-mind-refresh.test.ts",
+      "src/lib/wow-judge-model.test.ts",
       "src/routes/action-recommendations.test.ts",
       "src/routes/feedback.test.ts",
       "src/vault/*.test.ts",
