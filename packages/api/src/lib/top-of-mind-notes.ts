@@ -201,7 +201,6 @@ function hasForbiddenTopOfMindScaffolding(value: string): boolean {
   return /\bThis may matter for ambition because it points\b/i.test(value) ||
     /\bMemory movement\s*:/i.test(value) ||
     /\bSupporting signals\s*:/i.test(value) ||
-    /\b(?:candidate|rank|score)\b/i.test(value) ||
     /\b(?:frequency scaffolding|\w+ frequency in the surroundings|clustering around this frequency|starting this frequency)\b/i.test(value);
 }
 

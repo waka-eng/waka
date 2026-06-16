@@ -79,7 +79,6 @@ function normalizeReportText(value: string | null | undefined): string {
     .replace(/\bSupporting signals:\s*[\s\S]*$/gi, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (/\b(?:candidate|rank|score)\b/i.test(normalized)) return "";
   if (/\b(?:\w+ frequency in the surroundings|clustering around this frequency|starting this frequency)\b/i.test(normalized)) {
     return "";
   }

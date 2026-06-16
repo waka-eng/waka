@@ -210,4 +210,18 @@ describe("top-of-mind note compatibility model", () => {
     expect(note.evidenceRationale).toBe("");
     expect(note.body).toBe("");
   });
+
+  it("keeps legitimate prose containing candidate, rank, and score", () => {
+    const legitimateProse = "a candidate city where the music score makes rank feel irrelevant";
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        title: "candidate city signal",
+        why: legitimateProse,
+        beliefStatement: "a city where score matters less than atmosphere",
+      },
+    });
+
+    expect(note.body).toBe(legitimateProse);
+  });
 });

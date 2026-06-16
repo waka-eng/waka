@@ -441,6 +441,25 @@ describe("WowMomentsSection", () => {
     expect(detail?.textContent).not.toContain("Evidence rationale:");
   });
 
+  it("keeps legitimate top-of-mind prose containing candidate, rank, and score", () => {
+    const legitimateProse = "a candidate city where the music score makes rank feel irrelevant";
+    const container = renderInteractiveSection({
+      moments: [{ ...sampleMoment, title: "Candidate city", why: legitimateProse }],
+      loading: false,
+      error: null,
+    });
+    const card = container.querySelector<HTMLElement>(".wow-moment-card[role='button']");
+
+    expect(card?.textContent).toContain(legitimateProse);
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const detail = container.querySelector<HTMLElement>(".wow-moment-detail-panel--in-grid");
+    expect(detail?.textContent).toContain(legitimateProse);
+  });
+
   it("breaks a long pattern report into a lead and readable noticed points", () => {
     const longWhy = [
       "WAKA noticed that several saved inspirations return to small prototypes rather than polished plans.",
