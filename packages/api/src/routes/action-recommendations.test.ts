@@ -6,7 +6,10 @@ import {
   type SaveActionRecommendationStateInput,
 } from "./action-recommendations.js";
 import type { TopOfMindNoteSurface } from "./top-of-mind.js";
-import type { ActionRecommendationState } from "../lib/action-recommendations.js";
+import {
+  selectActionRecommendationCandidates,
+  type ActionRecommendationState,
+} from "../lib/action-recommendations.js";
 
 const user = { id: "00000000-0000-4000-8000-000000000001" };
 
@@ -213,6 +216,88 @@ describe("GET /api/action-recommendations", () => {
       outcomeText: "It showed the rough version was enough to start the conversation.",
       relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
     });
+  });
+
+  it("persists POST state for deterministic candidates when the model provider fails or would generate invalid output", async () => {
+    const [candidate] = selectActionRecommendationCandidates({
+      notes: [note],
+      states: [],
+      limit: 5,
+    });
+    expect(candidate).toBeTruthy();
+
+    const cases = [
+      {
+        status: "removed" as const,
+        getModelProvider: vi.fn(async () => {
+          throw new Error("Gemini unavailable");
+        }),
+      },
+      {
+        status: "completed" as const,
+        getModelProvider: vi.fn(async () => ({
+          generateActionRecommendation: vi.fn(async () => ({
+            text: "think about it",
+            kind: "not_a_real_kind",
+            whyNow: "",
+          })),
+        })),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const db = {};
+      const saveState = vi.fn(
+        async (_db: unknown, input: SaveActionRecommendationStateInput) => ({
+          actionId: input.actionId,
+          sourceTopOfMindId: input.sourceTopOfMindId,
+          status: input.status,
+          outcomeText: input.outcomeText ?? null,
+          relatedSignalIds: input.relatedSignalIds ?? [],
+          updatedAt: new Date("2026-06-01T10:00:00.000Z"),
+        }),
+      );
+      const app = new Hono();
+      app.route(
+        "/api/action-recommendations",
+        createActionRecommendationsRoutes({
+          getDatabase: () => db as any,
+          authMiddleware: authMiddleware(),
+          listTopOfMindNotes: vi.fn(async () => [note]),
+          listStates: vi.fn(async () => []),
+          saveState,
+          getModelProvider: testCase.getModelProvider as any,
+        }),
+      );
+
+      const response = await app.request(
+        `/api/action-recommendations/${candidate.id}/state`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceTopOfMindId: note.id,
+            status: testCase.status,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      expect(testCase.getModelProvider).not.toHaveBeenCalled();
+      expect(saveState).toHaveBeenCalledWith(db, {
+        userId: user.id,
+        actionId: candidate.id,
+        sourceTopOfMindId: note.id,
+        status: testCase.status,
+      });
+      await expect(response.json()).resolves.toMatchObject({
+        actionRecommendationState: {
+          actionId: candidate.id,
+          sourceTopOfMindId: note.id,
+          status: testCase.status,
+        },
+      });
+    }
   });
 
   it("rejects body action IDs and unknown recommendation IDs before saving state", async () => {

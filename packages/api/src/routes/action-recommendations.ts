@@ -8,6 +8,7 @@ import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
   actionRecommendationStatusValues,
   recommendActionsFromTopOfMind,
+  selectActionRecommendationCandidates,
   type ActionRecommendationGenerator,
   type ActionRecommendationState,
   type ActionRecommendationStatus,
@@ -99,16 +100,18 @@ export interface ActionRecommendationsRouteDependencies {
   getModelProvider?: () => Promise<ActionRecommendationGenerator>;
 }
 
-function findMatchingActionRecommendation(
-  actionRecommendations: RecommendedAction[],
+function hasMatchingActionRecommendationCandidate(
+  notes: TopOfMindNoteSurface[],
   input: { actionId: string; sourceTopOfMindId: string },
-): RecommendedAction | null {
-  return (
-    actionRecommendations.find(
-      (action) =>
-        action.id === input.actionId &&
-        action.sourceTopOfMindId === input.sourceTopOfMindId,
-    ) ?? null
+): boolean {
+  return selectActionRecommendationCandidates({
+    notes,
+    states: [],
+    limit: MAX_ACTION_RECOMMENDATION_LIMIT,
+  }).some(
+    (candidate) =>
+      candidate.id === input.actionId &&
+      candidate.sourceTopOfMindId === input.sourceTopOfMindId,
   );
 }
 
@@ -329,20 +332,12 @@ export function createActionRecommendationsRoutes(
       return c.json({ actionRecommendationState: matchingState });
     }
 
-    const modelProvider = await getModelProvider();
-    const actionRecommendations = await recommendActionsFromTopOfMind({
-      userId,
-      notes,
-      generator: modelProvider,
-      states: [],
-      limit: MAX_ACTION_RECOMMENDATION_LIMIT,
-    });
-    const matchingAction = findMatchingActionRecommendation(actionRecommendations, {
+    const hasMatchingCandidate = hasMatchingActionRecommendationCandidate(notes, {
       actionId: parsedParams.data.actionId,
       sourceTopOfMindId: parsedBody.data.sourceTopOfMindId,
     });
 
-    if (!matchingAction) {
+    if (!hasMatchingCandidate) {
       return c.json({ error: "Action recommendation not found" }, 404);
     }
 
