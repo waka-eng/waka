@@ -49,6 +49,25 @@ function clampInt(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+/**
+ * Whether feedback on this target should mutate the underlying context-graph
+ * nodes (weight/confidence/status).
+ *
+ * A top-of-mind note is a *synthesis* over many shared signals, so feedback on
+ * it judges the presentation, not the meaning. Cascading that judgment into the
+ * graph let a single "not true" on one note flip every context node that shared
+ * a signal into permanent `stale` — and because stale nodes are excluded from
+ * every read path with no reactivation surface, a couple of dismissals could
+ * darken the whole graph and make top-of-mind permanently empty. Note feedback
+ * therefore adjusts only the note itself; signal/context_node/hypothesis
+ * feedback still updates the graph, because those target the meaning directly.
+ */
+export function feedbackMutatesContextNodes(
+  targetType: FeedbackApplicationTarget["targetType"],
+): boolean {
+  return targetType !== "top_of_mind_note";
+}
+
 export function planFeedbackApplication(input: {
   value: FeedbackValue;
   correctionText?: string | null;
@@ -220,11 +239,16 @@ export async function applyFeedbackToGraph(
   const plan = planFeedbackApplication(input);
   const contextNodeIds = await findRelatedContextNodeIds(db, input);
 
-  await applyPlanToContextNodes(db, {
-    userId: input.userId,
-    nodeIds: contextNodeIds,
-    plan,
-  });
+  // Note feedback records the related nodes for provenance but must not mutate
+  // them — see feedbackMutatesContextNodes for why a bad synthesis must not
+  // stale the underlying meaning.
+  if (feedbackMutatesContextNodes(input.targetType)) {
+    await applyPlanToContextNodes(db, {
+      userId: input.userId,
+      nodeIds: contextNodeIds,
+      plan,
+    });
+  }
 
   const noteConfidenceDelta =
     input.targetType === "top_of_mind_note"
