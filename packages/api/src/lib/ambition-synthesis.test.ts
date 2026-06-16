@@ -241,12 +241,19 @@ describe("bounded ambition synthesis", () => {
     expect(nullResult.candidates).toEqual([]);
     expect(nullResult.failures[0]?.reason).toBe("null_output");
 
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const thrownResult = await runBoundedAmbitionSynthesisLoop({
       userId,
       trigger: "weekly_refresh",
       candidates: candidates(),
-      synthesize: vi.fn().mockRejectedValue(new Error("provider unavailable")),
+      synthesize: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("provider unavailable with raw user text: I need courage"),
+        ),
     });
+    const warnPayload = JSON.stringify(warnSpy.mock.calls);
+    warnSpy.mockRestore();
     expect(thrownResult).toMatchObject({
       attempted: 1,
       synthesized: 0,
@@ -256,8 +263,15 @@ describe("bounded ambition synthesis", () => {
     expect(thrownResult.candidates).toEqual([]);
     expect(thrownResult.failures[0]).toMatchObject({
       reason: "exception",
-      message: "provider unavailable",
+      code: "synthesis_exception",
+      errorName: "Error",
     });
+    expect(thrownResult.failures[0]).not.toHaveProperty("message");
+    expect(JSON.stringify(thrownResult.failures)).not.toContain(
+      "raw user text",
+    );
+    expect(warnPayload).not.toContain("raw user text");
+    expect(warnPayload).not.toContain("provider unavailable");
   });
 
   it("caps model-heavy synthesis attempts even when more candidates are ranked", async () => {

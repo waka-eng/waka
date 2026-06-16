@@ -78,12 +78,33 @@ export interface BoundedAmbitionSynthesisLoopResult {
   failures: AmbitionSynthesisFailure[];
 }
 
+type AmbitionSynthesisFailureReason =
+  | "null_output"
+  | "invalid_output"
+  | "exception";
+
+type AmbitionSynthesisFailureCode =
+  | "synthesis_null_output"
+  | "synthesis_invalid_output"
+  | "synthesis_exception";
+
+type SafeExceptionName =
+  | "Error"
+  | "TypeError"
+  | "SyntaxError"
+  | "RangeError"
+  | "ReferenceError"
+  | "AggregateError"
+  | "UnknownError"
+  | "NonErrorThrown";
+
 export interface AmbitionSynthesisFailure {
   candidateId: string;
   contextNodeId: string;
   idempotencyKey: string;
-  reason: "null_output" | "invalid_output" | "exception";
-  message?: string;
+  reason: AmbitionSynthesisFailureReason;
+  code: AmbitionSynthesisFailureCode;
+  errorName?: SafeExceptionName;
 }
 
 const MAX_SYNTHESIS_CANDIDATES = 5;
@@ -103,6 +124,37 @@ const CONCRETE_AMBITION_OBJECT_PATTERN =
   /\b(people|peers|rooms?|places?|city|cities|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b/i;
 const INTERPRETABLE_POST_IT_PATTERN =
   /\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b/i;
+
+function safeExceptionName(error: unknown): SafeExceptionName | undefined {
+  if (!(error instanceof Error)) {
+    return "NonErrorThrown";
+  }
+
+  switch (error.name) {
+    case "Error":
+    case "TypeError":
+    case "SyntaxError":
+    case "RangeError":
+    case "ReferenceError":
+    case "AggregateError":
+      return error.name;
+    default:
+      return "UnknownError";
+  }
+}
+
+function failureCode(
+  reason: AmbitionSynthesisFailureReason,
+): AmbitionSynthesisFailureCode {
+  switch (reason) {
+    case "null_output":
+      return "synthesis_null_output";
+    case "invalid_output":
+      return "synthesis_invalid_output";
+    case "exception":
+      return "synthesis_exception";
+  }
+}
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -416,21 +468,21 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
     error?: unknown,
   ): void {
     failed += 1;
-    const message =
-      error instanceof Error ? error.message.slice(0, 180) : undefined;
+    const code = failureCode(reason);
+    const errorName = reason === "exception" ? safeExceptionName(error) : undefined;
+    const safeMetadata = {
+      contextNodeId: candidate.node.id,
+      idempotencyKey: candidate.idempotencyKey,
+      reason,
+      code,
+      ...(errorName ? { errorName } : {}),
+    };
+
     failures.push({
       candidateId: `${candidate.node.id}:${candidate.memoryPattern.state}`,
-      contextNodeId: candidate.node.id,
-      idempotencyKey: candidate.idempotencyKey,
-      reason,
-      ...(message ? { message } : {}),
+      ...safeMetadata,
     });
-    console.warn("Ambition synthesis failed; candidate will not be persisted", {
-      contextNodeId: candidate.node.id,
-      idempotencyKey: candidate.idempotencyKey,
-      reason,
-      ...(message ? { message } : {}),
-    });
+    console.warn("Ambition synthesis failed; candidate will not be persisted", safeMetadata);
   }
 
   for (const candidate of input.candidates) {
