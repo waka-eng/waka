@@ -112,7 +112,7 @@ describe("bounded ambition synthesis", () => {
     expect(input.estimatedTokens).toBeLessThanOrEqual(input.tokenBudget);
   });
 
-  it("only runs on explicit triggers and qualified bounded evidence sets", () => {
+  it("runs the bulk weekly_refresh on every ranked candidate but keeps the 2-signal floor on narrow triggers", () => {
     const [candidate] = candidates();
 
     expect(
@@ -127,18 +127,28 @@ describe("bounded ambition synthesis", () => {
       evidence: [candidate!.evidence[0]!],
       node: { ...candidate!.node, evidenceCount: 1 },
     };
+    // weekly_refresh and explicit_deep_dive intentionally synthesize thin,
+    // single-signal candidates so the bulk refresh gets real LLM text on every
+    // note; the specificity gate and deterministic fallback still guard quality.
     expect(
       shouldRunAmbitionSynthesis({
         candidate: thinCandidate,
         trigger: "weekly_refresh",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldRunAmbitionSynthesis({
         candidate: thinCandidate,
         trigger: "explicit_deep_dive",
       }),
     ).toBe(true);
+    // Narrow triggers still require at least two supporting signals.
+    expect(
+      shouldRunAmbitionSynthesis({
+        candidate: thinCandidate,
+        trigger: "qualified_cluster",
+      }),
+    ).toBe(false);
   });
 
   it("uses mocked provider synthesis when it states the user's personal edge", async () => {
@@ -216,23 +226,16 @@ describe("bounded ambition synthesis", () => {
   });
 
   it("caps model-heavy synthesis attempts even when more candidates are ranked", async () => {
+    const labels = ["second", "third", "fourth", "fifth", "sixth"];
     const manyCandidates = [
       ...candidates(),
-      ...candidates().map((candidate) => ({
-        ...candidate,
-        node: { ...candidate.node, id: "second-node", label: "second" },
-        idempotencyKey: `${candidate.idempotencyKey}:second`,
-      })),
-      ...candidates().map((candidate) => ({
-        ...candidate,
-        node: { ...candidate.node, id: "third-node", label: "third" },
-        idempotencyKey: `${candidate.idempotencyKey}:third`,
-      })),
-      ...candidates().map((candidate) => ({
-        ...candidate,
-        node: { ...candidate.node, id: "fourth-node", label: "fourth" },
-        idempotencyKey: `${candidate.idempotencyKey}:fourth`,
-      })),
+      ...labels.flatMap((label) =>
+        candidates().map((candidate) => ({
+          ...candidate,
+          node: { ...candidate.node, id: `${label}-node`, label },
+          idempotencyKey: `${candidate.idempotencyKey}:${label}`,
+        })),
+      ),
     ];
     const synthesize = vi.fn().mockResolvedValue(null);
 
@@ -243,9 +246,10 @@ describe("bounded ambition synthesis", () => {
       synthesize,
     });
 
-    expect(result.attempted).toBe(3);
-    expect(result.fellBack).toBe(3);
+    // 6 ranked candidates, hard cap of 5 model calls.
+    expect(result.attempted).toBe(5);
+    expect(result.fellBack).toBe(5);
     expect(result.skipped).toBe(1);
-    expect(synthesize).toHaveBeenCalledTimes(3);
+    expect(synthesize).toHaveBeenCalledTimes(5);
   });
 });
