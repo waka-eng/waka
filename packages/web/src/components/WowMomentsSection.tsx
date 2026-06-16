@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import type { ApiTopOfMindCompatibilityMoment } from "../lib/api";
+import type { ApiTopOfMindCompatibilityMoment, ApiTopOfMindNoteType } from "../lib/api";
 import {
   DEFAULT_LOCALE,
   formatBestRecentMirrorMoments,
@@ -71,6 +71,55 @@ function stripTerminalPunctuation(value: string): string {
 
 function normalizeReportText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
+}
+
+const TOP_OF_MIND_TYPE_LABELS: Record<ApiTopOfMindNoteType, string> = {
+  pattern: "recurring signal",
+  tension: "live tension",
+  question: "open question",
+  hypothesis: "possible read",
+  action: "try next / next action",
+};
+
+type StickyMomentDisplay = {
+  title: string;
+  rationale: string;
+  typeLabel: string | null;
+};
+
+type CanonicalDetailField = {
+  label: string;
+  value: string;
+};
+
+function topOfMindTypeLabel(type: ApiTopOfMindNoteType | null | undefined): string | null {
+  return type ? TOP_OF_MIND_TYPE_LABELS[type] ?? null : null;
+}
+
+function buildStickyMomentDisplay(moment: ApiTopOfMindCompatibilityMoment): StickyMomentDisplay {
+  const canonicalTitle = normalizeReportText(moment.topOfMindNote?.title);
+  const canonicalRationale = normalizeReportText(moment.topOfMindNote?.evidenceRationale);
+
+  return {
+    title: canonicalTitle || normalizeReportText(moment.title),
+    rationale: canonicalRationale || normalizeReportText(moment.why),
+    typeLabel: topOfMindTypeLabel(moment.topOfMindNote?.type),
+  };
+}
+
+function canonicalDetailFields(moment: ApiTopOfMindCompatibilityMoment): CanonicalDetailField[] {
+  const topOfMindNote = moment.topOfMindNote;
+  if (!topOfMindNote) return [];
+
+  return [
+    { label: "Ambient signal", value: normalizeReportText(topOfMindNote.ambientSignal) },
+    { label: "Matched environment", value: normalizeReportText(topOfMindNote.matchedEnvironment) },
+    { label: "Anti-environment", value: normalizeReportText(topOfMindNote.antiEnvironment) },
+    {
+      label: "Rejected alternative interpretation",
+      value: normalizeReportText(topOfMindNote.rejectedAlternativeInterpretation),
+    },
+  ].filter((field) => field.value);
 }
 
 type ReflectionGuideBlock = {
@@ -441,7 +490,11 @@ export function WowMomentsSection({
       "--wow-note-rotation": `${STICKY_NOTE_ROTATIONS[index % STICKY_NOTE_ROTATIONS.length]}deg`,
     }) as CSSProperties;
 
-  const selectedPatternReport = selectedMoment ? buildPatternReport(selectedMoment.why) : { lead: "", bodyChunks: [] };
+  const selectedDisplay = selectedMoment ? buildStickyMomentDisplay(selectedMoment) : null;
+  const selectedCanonicalDetailFields = selectedMoment ? canonicalDetailFields(selectedMoment) : [];
+  const selectedPatternReport = selectedMoment
+    ? buildPatternReport(selectedMoment.topOfMindNote?.evidenceRationale ?? selectedMoment.why)
+    : { lead: "", bodyChunks: [] };
   const selectedPatternVisible = Boolean(selectedPatternReport.lead || selectedPatternReport.bodyChunks.length > 0);
   const selectedBeliefStatement = selectedMoment ? buildBeliefStatement(selectedMoment) : "";
   const selectedSignalCount = selectedMoment?.relatedInspirations.length ?? 0;
@@ -518,12 +571,26 @@ export function WowMomentsSection({
           Back to grid
         </button>
       </div>
-      <h3 id="wow-moment-detail-title">{selectedMoment.title}</h3>
+      <h3 id="wow-moment-detail-title">{selectedDisplay?.title ?? selectedMoment.title}</h3>
       <section className="wow-moment-detail-section wow-moment-detail-section--recognition">
         <span className="wow-moment-step-label">Start here</span>
         <h4>The moment</h4>
-        <p>This may be worth noticing: {selectedMoment.title}</p>
+        <p>This may be worth noticing: {selectedDisplay?.title ?? selectedMoment.title}</p>
       </section>
+      {selectedCanonicalDetailFields.length > 0 ? (
+        <section className="wow-moment-detail-section wow-moment-detail-section--canonical">
+          <span className="wow-moment-step-label">Canonical top-of-mind note</span>
+          <h4>Richer field notes</h4>
+          <dl className="wow-moment-canonical-fields">
+            {selectedCanonicalDetailFields.map((field) => (
+              <div key={`${selectedMoment.id}-${field.label}`}>
+                <dt>{field.label}</dt>
+                <dd>{field.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
       {selectedMoment.relatedInspirations.length > 0 ? (
         <section className="wow-moment-detail-section wow-moment-detail-section--evidence">
           <div className="wow-moment-detail-section-header">
@@ -800,10 +867,11 @@ export function WowMomentsSection({
           {selectedMomentDetail ??
             visibleMoments.map((moment, index) => {
               const relatedSources = moment.relatedInspirations;
+              const stickyDisplay = buildStickyMomentDisplay(moment);
 
               return (
                 <article
-                  aria-label={`Open mirror moment report: ${moment.title}`}
+                  aria-label={`Open mirror moment report: ${stickyDisplay.title}`}
                   className="wow-moment-card wow-moment-card--interactive wow-moment-card--sticky"
                   key={moment.id}
                   onClick={() => openMoment(moment)}
@@ -814,14 +882,17 @@ export function WowMomentsSection({
                 >
                   <span className="wow-moment-sticky-tape" aria-hidden="true" />
                   <span className="wow-moment-sticky-pin" aria-hidden="true" />
-                  <h3>{moment.title}</h3>
+                  {stickyDisplay.typeLabel ? (
+                    <span className="wow-moment-type-chip">{stickyDisplay.typeLabel}</span>
+                  ) : null}
+                  <h3>{stickyDisplay.title}</h3>
                   <span className="wow-moment-open-cue" aria-hidden="true">
                     See why this matters
                   </span>
-                  {moment.why ? (
+                  {stickyDisplay.rationale ? (
                     <div className="wow-moment-why" aria-label="Why WAKA noticed this">
                       <span>Why WAKA noticed this</span>
-                      <p>{moment.why}</p>
+                      <p>{stickyDisplay.rationale}</p>
                     </div>
                   ) : null}
                   {relatedSources.length > 0 ? (
