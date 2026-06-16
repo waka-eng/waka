@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  feedbackMutatesContextNodes,
   planFeedbackApplication,
   readAppliedTopOfMindStatus,
 } from "./feedback-application.js";
@@ -82,6 +83,18 @@ describe("planFeedbackApplication", () => {
     ];
 
     expect(values.map((value) => planFeedbackApplication({ value }))).toHaveLength(5);
+  });
+});
+
+describe("feedbackMutatesContextNodes", () => {
+  it("never lets top-of-mind note feedback mutate the meaning graph", () => {
+    expect(feedbackMutatesContextNodes("top_of_mind_note")).toBe(false);
+  });
+
+  it("still applies signal, context_node, and hypothesis feedback to the graph", () => {
+    expect(feedbackMutatesContextNodes("signal")).toBe(true);
+    expect(feedbackMutatesContextNodes("context_node")).toBe(true);
+    expect(feedbackMutatesContextNodes("hypothesis")).toBe(true);
   });
 });
 
