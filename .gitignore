@@ -27,3 +27,6 @@ archive/
 
 # Visual-diff output is generated; commit only the tool, not its artifacts.
 tools/visual-diff/output/
+
+# Local file-first vault used by pnpm dev:local
+.waka-vault-local/

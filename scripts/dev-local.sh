@@ -81,6 +81,8 @@ export VITE_SHOW_INTERNAL_STATUS=true
 export WAKA_SHOW_INTERNAL_STATUS=true
 export WAKA_SERVE_WEB_DIST=1
 export WAKA_WEB_DIST_DIR="$web_dist_dir"
+export WAKA_VAULT_ROOT="${WAKA_VAULT_ROOT:-$repo_root/.waka-vault-local}"
+mkdir -p "$WAKA_VAULT_ROOT"
 
 if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
   if [[ "$WAKA_API_DOTENV_PATH" != "$repo_root/.env.local" ]]; then
@@ -105,6 +107,11 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
 
   if [[ "$WAKA_SERVE_WEB_DIST" != "1" ]] || [[ "$WAKA_WEB_DIST_DIR" != "$web_dist_dir" ]]; then
     echo "dev:local dry run failed: web dist serving is not configured" >&2
+    exit 1
+  fi
+
+  if [[ -z "$WAKA_VAULT_ROOT" ]]; then
+    echo "dev:local dry run failed: WAKA_VAULT_ROOT must point at a local filesystem vault" >&2
     exit 1
   fi
 

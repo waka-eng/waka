@@ -1,131 +1,14 @@
 import type {
-  CSSProperties,
-  FormEvent,
   KeyboardEvent,
   MouseEvent,
-  PointerEvent,
   ReactNode,
 } from "react";
 
 import type {
-  ApiActionRecommendation,
   ApiFeedbackValue,
   ApiSavedSignalDetail,
   ApiSavedSignalSearchResult,
 } from "../lib/api";
-
-interface ActionChecklistProps {
-  items: ApiActionRecommendation[];
-  dragging: boolean;
-  dragOffset: { x: number; y: number };
-  pendingOutcomeId: string | null;
-  outcomeDrafts: Record<string, string>;
-  onPointerDown: (event: PointerEvent<HTMLElement>) => void;
-  onBeginOutcome: (item: ApiActionRecommendation) => void;
-  onComplete: (item: ApiActionRecommendation, outcomeText?: string) => void;
-  onRemove: (item: ApiActionRecommendation) => void;
-  onOutcomeDraftChange: (itemId: string, value: string) => void;
-  formatSupportingCopy: (text: string) => string;
-}
-
-interface ActionPadStyle extends CSSProperties {
-  "--action-dx": string;
-  "--action-dy": string;
-}
-
-export function ActionChecklist({
-  items,
-  dragging,
-  dragOffset,
-  pendingOutcomeId,
-  outcomeDrafts,
-  onPointerDown,
-  onBeginOutcome,
-  onComplete,
-  onRemove,
-  onOutcomeDraftChange,
-  formatSupportingCopy,
-}: ActionChecklistProps): JSX.Element {
-  const style: ActionPadStyle = {
-    "--action-dx": `${dragOffset.x}px`,
-    "--action-dy": `${dragOffset.y}px`,
-  };
-
-  return (
-    <aside
-      className={`nc-action-pad${dragging ? " nc-action-pad--dragging" : ""}`}
-      aria-label="suggested actions"
-      style={style}
-      onPointerDown={onPointerDown}
-    >
-      <header>
-        <strong>action items</strong>
-      </header>
-      {items.length === 0 ? (
-        <p className="nc-action-empty">action items will show up once enough inspirations are reached</p>
-      ) : (
-        <ul>
-          {items.map((item) => {
-            const isOutcomePending = pendingOutcomeId === item.id;
-            const outcomeDraft = outcomeDrafts[item.id] ?? "";
-            const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-              event.preventDefault();
-              onComplete(item, outcomeDraft);
-            };
-
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className="nc-action-check"
-                  aria-label={`mark done: ${item.text}`}
-                  onClick={() => onBeginOutcome(item)}
-                />
-                <span>
-                  <strong>{item.text}</strong>
-                  <small>
-                    {formatSupportingCopy(item.whyNow)}
-                    {item.evidenceSnippets[0]
-                      ? ` · evidence: ${formatSupportingCopy(item.evidenceSnippets[0])}`
-                      : ""}
-                  </small>
-                  {isOutcomePending ? (
-                    <form className="nc-action-outcome" onSubmit={handleSubmit}>
-                      <label htmlFor={`action-outcome-${item.id}`}>what happened?</label>
-                      <textarea
-                        id={`action-outcome-${item.id}`}
-                        value={outcomeDraft}
-                        onChange={(event) => onOutcomeDraftChange(item.id, event.target.value)}
-                        rows={2}
-                      />
-                      <div>
-                        <button type="submit">save</button>
-                        <button
-                          type="button"
-                          onClick={() => onComplete(item)}
-                        >
-                          skip
-                        </button>
-                      </div>
-                    </form>
-                  ) : null}
-                </span>
-                <button
-                  type="button"
-                  className="nc-action-remove"
-                  aria-label={`remove action: ${item.text}`}
-                  onClick={() => onRemove(item)}
-                >
-                  ×
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </aside>
-  );
-}
 
 export type SavedDetailFeedbackValue = Extract<
   ApiFeedbackValue,

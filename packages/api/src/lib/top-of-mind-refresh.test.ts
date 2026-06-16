@@ -230,9 +230,9 @@ describe("rankTopOfMindRefreshCandidates", () => {
       reflectionQuestion: "what kind of ambition still leaves room for life?",
       wowScore: 100,
     });
-    expect(candidates[0]?.why).toContain("Several signals ask whether ambition can stay humane.");
-    expect(candidates[0]?.why).toContain("This may matter for ambition because it points at a next experiment frequency");
-    expect(candidates[0]?.why).toContain("Memory movement:");
+    expect(candidates[0]?.why).toBe("");
+    expect(candidates[0]?.why).not.toContain("This may matter for ambition");
+    expect(candidates[0]?.why).not.toContain("Memory movement:");
     expect(candidates[0]?.memoryPattern).toMatchObject({
       state: "active",
       reinforcementCount: 4,
@@ -346,11 +346,12 @@ describe("rankTopOfMindRefreshCandidates", () => {
       expect(candidate.matchedEnvironment).toMatch(/environment|culture|work|setting|room/i);
       expect(candidate.antiEnvironment).toMatch(/settings|circles|contexts|rooms|loops|work/i);
       expect(candidate.evidenceRationale).toMatch(/saved signal/);
-      expect(candidate.why).toContain("This may matter for ambition");
-      expect(candidate.why).toContain("Ambient signal:");
-      expect(candidate.why).toContain("Matched environment:");
-      expect(candidate.why).toContain("Anti-environment:");
-      expect(candidate.why).toContain("Evidence rationale:");
+      expect(candidate.why).toBe("");
+      expect(candidate.why).not.toContain("This may matter for ambition");
+      expect(candidate.why).not.toContain("Ambient signal:");
+      expect(candidate.why).not.toContain("Matched environment:");
+      expect(candidate.why).not.toContain("Anti-environment:");
+      expect(candidate.why).not.toContain("Evidence rationale:");
       expect(candidate.evidence.length).toBeGreaterThanOrEqual(1);
     }
   });

@@ -189,60 +189,61 @@ function primaryPostItText(value: string | null | undefined, dimension: Ambition
   return null;
 }
 
+const AMBIENT_FIELD_LABELS = [
+  "Ambient signal",
+  "Matched environment",
+  "Anti-environment",
+  "Evidence rationale",
+  "Rejected alternative interpretation",
+] as const;
+
+function hasForbiddenTopOfMindScaffolding(value: string): boolean {
+  return /\bThis may matter for ambition because it points\b/i.test(value) ||
+    /\bMemory movement\s*:/i.test(value) ||
+    /\bSupporting signals\s*:/i.test(value) ||
+    /\b(?:frequency scaffolding|\w+ frequency in the surroundings|clustering around this frequency|starting this frequency)\b/i.test(value);
+}
+
+export function sanitizeUserFacingTopOfMindText(value: string | null | undefined): string {
+  let sanitized = (value ?? "").replace(/\s+/g, " ").trim();
+  if (!sanitized) return "";
+
+  for (const label of AMBIENT_FIELD_LABELS) {
+    sanitized = sanitized.replace(new RegExp(`\\b${label}:\\s*`, "gi"), "");
+  }
+
+  sanitized = sanitized
+    .replace(/\bThis may matter for ambition because it points[\s\S]*?(?=(?:\b(?:Ambient signal|Matched environment|Anti-environment|Evidence rationale|Rejected alternative interpretation):)|$)/gi, "")
+    .replace(/\bMemory movement:\s*[^.。!?]*[.。!?]?/gi, "")
+    .replace(/\bSupporting signals:\s*[\s\S]*$/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!sanitized || hasForbiddenTopOfMindScaffolding(sanitized)) return "";
+  return sanitized;
+}
+
 function extractAmbientField(body: string, field: string): string | null {
+  const labelAlternation = AMBIENT_FIELD_LABELS.join("|");
   const pattern = new RegExp(
-    `${field}:\\s+(.+?)(?=\\s+(?:Ambient signal:|Matched environment:|Anti-environment:|Evidence rationale:|Rejected alternative interpretation:|This may matter|Supporting signals:)|$)`,
+    `${field}:\\s+(.+?)(?=\\s+(?:${labelAlternation}):|\\s+This may matter|\\s+Supporting signals:|$)`,
+    "i",
   );
   const match = body.match(pattern);
-  return match?.[1]?.trim() ?? null;
+  const sanitized = sanitizeUserFacingTopOfMindText(match?.[1]);
+  return sanitized || null;
 }
 
-function stripAmbientFieldPrefix(body: string): string {
-  const marker = body.match(/\bThis may matter\b/);
-  if (!marker?.index) return body;
-  return body.slice(marker.index).trim();
-}
-
-function fallbackMatchedEnvironment(label: string, dimension: AmbitionDimension): string {
-  switch (dimension) {
-    case "place":
-      return `A city, studio, or room where ${label} feels publicly reinforced.`;
-    case "people":
-      return `People who make ${label} feel like a shared operating rhythm.`;
-    case "work":
-      return `A working culture where ${label} becomes visible through repeated making.`;
-    case "taste":
-      return `Surroundings where ${label} is treated as a standard, not decoration.`;
-    case "tension":
-    case "rejection":
-      return `A surrounding culture that lets ${label} stay visible long enough to choose from it.`;
-    case "next_experiment":
-      return `A practical setting where ${label} can be tested in public conditions.`;
-    case "identity":
-    default:
-      return `An environment where ${label} is mirrored back as normal behavior.`;
-  }
-}
-
-function fallbackAntiEnvironment(dimension: AmbitionDimension): string {
-  switch (dimension) {
-    case "place":
-      return "Settings that make ambition feel private, apologetic, or over-explained.";
-    case "people":
-      return "Circles where permission, polish, or social caution arrives before motion.";
-    case "work":
-      return "Work contexts that reward commentary while the real object stays abstract.";
-    case "taste":
-      return "Rooms that flatten taste into trend, convenience, or generic approval.";
-    case "tension":
-    case "rejection":
-      return "Rooms that smooth over the live part so everyone can keep performing agreement.";
-    case "next_experiment":
-      return "Analysis loops that keep the question safe, abstract, and uncostly.";
-    case "identity":
-    default:
-      return "Contexts that make the emerging version of you feel like a private exception.";
-  }
+function sanitizeTopOfMindBody(body: string): string {
+  const withoutLabeledFields = AMBIENT_FIELD_LABELS.reduce(
+    (text, label) =>
+      text.replace(
+        new RegExp(`${label}:\\s+(.+?)(?=\\s+(?:${AMBIENT_FIELD_LABELS.join("|")}):|\\s+This may matter|\\s+Supporting signals:|$)`, "gi"),
+        " ",
+      ),
+    body,
+  );
+  return sanitizeUserFacingTopOfMindText(withoutLabeledFields);
 }
 
 function titleFromLegacyMoment(moment: TopOfMindNoteWowMoment): string {
@@ -279,7 +280,6 @@ export function topOfMindNoteFromWowMoment(
   const moment = input.moment;
   const ambitionDimension = ambitionDimensionFromMoment(moment);
   const title = titleFromLegacyMoment(moment);
-  const legacyLabel = lowerFirst(moment.title);
   const embeddedAmbientSignal = primaryPostItText(
     extractAmbientField(moment.why, "Ambient signal"),
     ambitionDimension,
@@ -290,21 +290,15 @@ export function topOfMindNoteFromWowMoment(
     title,
     ambitionDimension,
     ambientSignal: embeddedAmbientSignal ?? title,
-    matchedEnvironment:
-      extractAmbientField(moment.why, "Matched environment") ??
-      fallbackMatchedEnvironment(legacyLabel, ambitionDimension),
-    antiEnvironment:
-      extractAmbientField(moment.why, "Anti-environment") ??
-      fallbackAntiEnvironment(ambitionDimension),
-    evidenceRationale:
-      extractAmbientField(moment.why, "Evidence rationale") ??
-      "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+    matchedEnvironment: extractAmbientField(moment.why, "Matched environment") ?? "",
+    antiEnvironment: extractAmbientField(moment.why, "Anti-environment") ?? "",
+    evidenceRationale: extractAmbientField(moment.why, "Evidence rationale") ?? "",
     rejectedAlternativeInterpretation: extractAmbientField(
       moment.why,
       "Rejected alternative interpretation",
     ),
     type: topOfMindNoteTypeFromWowMoment(moment),
-    body: stripAmbientFieldPrefix(moment.why),
+    body: sanitizeTopOfMindBody(moment.why),
     prompt: moment.reflectionQuestion,
     guidance: moment.reflectionGuide,
     confidence: confidenceFromWowScore(moment.wowScore),

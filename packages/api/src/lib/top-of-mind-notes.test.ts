@@ -69,11 +69,9 @@ describe("top-of-mind note compatibility model", () => {
       title: "a room where unfinished ambition is allowed",
       ambitionDimension: "place",
       ambientSignal: "a room where unfinished ambition is allowed",
-      matchedEnvironment:
-        "A city, studio, or room where a provisional reflection feels publicly reinforced.",
-      antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
-      evidenceRationale:
-        "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+      matchedEnvironment: "",
+      antiEnvironment: "",
+      evidenceRationale: "",
       rejectedAlternativeInterpretation: null,
       type: "question",
       body: baseMoment.why,
@@ -130,8 +128,8 @@ describe("top-of-mind note compatibility model", () => {
       ambientSignal: "people who make courage feel normal",
       matchedEnvironment: "People who make publishing early feel ordinary.",
       antiEnvironment: "Circles where permission arrives before motion.",
-      evidenceRationale: "Three saved signals are clustering around this frequency.",
-      body: "This may matter for ambition because it points at a people frequency.",
+      evidenceRationale: "",
+      body: "",
     });
   });
 
@@ -182,5 +180,48 @@ describe("top-of-mind note compatibility model", () => {
     expect(note.title).not.toMatch(
       /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
     );
+  });
+
+  it("sanitizes legacy scaffolding out of every user-facing note field", () => {
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        title: "people who make courage feel normal",
+        why:
+          "Ambient signal: people who make courage feel normal. " +
+          "Matched environment: People who make publishing early feel ordinary. " +
+          "Anti-environment: Circles where permission arrives before motion. " +
+          "Evidence rationale: Three saved signals are clustering around this frequency. " +
+          "This may matter for ambition because it points at a people frequency. " +
+          "Supporting signals: \"shipping early\". " +
+          "Memory movement: 3 reinforcements; rank 2 score 94 candidate abc.",
+        beliefStatement: "people who make courage feel normal",
+      },
+    });
+
+    const payload = JSON.stringify(note);
+    expect(payload).not.toContain("This may matter for ambition because it points");
+    expect(payload).not.toContain("Memory movement:");
+    expect(payload).not.toContain("Supporting signals:");
+    expect(payload).not.toContain("Ambient signal:");
+    expect(payload).not.toContain("Matched environment:");
+    expect(payload).not.toContain("Anti-environment:");
+    expect(payload).not.toContain("Evidence rationale:");
+    expect(note.evidenceRationale).toBe("");
+    expect(note.body).toBe("");
+  });
+
+  it("keeps legitimate prose containing candidate, rank, and score", () => {
+    const legitimateProse = "a candidate city where the music score makes rank feel irrelevant";
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        title: "candidate city signal",
+        why: legitimateProse,
+        beliefStatement: "a city where score matters less than atmosphere",
+      },
+    });
+
+    expect(note.body).toBe(legitimateProse);
   });
 });

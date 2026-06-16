@@ -48,7 +48,6 @@ import {
   type InspirationDetailData,
 } from "../components/history";
 import {
-  ActionChecklist,
   SavedInspirationDetail,
   type SavedDetailFeedbackState,
   type SavedDetailFeedbackValue,
@@ -56,7 +55,6 @@ import {
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
-  type ApiActionRecommendation,
   type ApiAmbitionDimension,
   type ApiFeedbackValue,
   type ApiError,
@@ -72,14 +70,12 @@ import {
   createFeedback,
   createInspirationSpark,
   deleteInspirationSpark,
-  fetchActionRecommendations,
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
   recordInspirationRevisit,
-  updateActionRecommendationState,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
@@ -1403,14 +1399,7 @@ export function HomePage(): JSX.Element {
   const [removedTopOfMindNoteIds, setRemovedTopOfMindNoteIds] = useState<Set<string>>(() => new Set());
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [actionDrag, setActionDrag] = useState({ x: 0, y: 0 });
-  const [actionDragging, setActionDragging] = useState(false);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
-  const [actionRecommendations, setActionRecommendations] = useState<
-    ApiActionRecommendation[]
-  >([]);
-  const [actionOutcomeDrafts, setActionOutcomeDrafts] = useState<Record<string, string>>({});
-  const [pendingActionOutcomeId, setPendingActionOutcomeId] = useState<string | null>(null);
   const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
@@ -1453,7 +1442,6 @@ export function HomePage(): JSX.Element {
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
-  const actionDragStartRef = useRef<{ x: number; y: number; baseX: number; baseY: number } | null>(null);
   const memoryGroupDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const memoryWindowDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
@@ -1505,7 +1493,6 @@ export function HomePage(): JSX.Element {
       setTopOfMindError(null);
       setTopOfMindNotes([]);
       setTopOfMindNotesLoading(false);
-      setActionRecommendations([]);
       return;
     }
 
@@ -1603,17 +1590,6 @@ export function HomePage(): JSX.Element {
         topOfMindLoadedForUserIdRef.current = requestUserId;
         setTopOfMind(next);
         setTopOfMindNotes(notes.filter((note) => note.userId === requestUserId));
-        fetchActionRecommendations()
-          .then((actions) => {
-            if (topOfMindRequestIdRef.current === requestId) {
-              setActionRecommendations(actions.filter((action) => action.status === "active"));
-            }
-          })
-          .catch(() => {
-            if (topOfMindRequestIdRef.current === requestId) {
-              setActionRecommendations([]);
-            }
-          });
         setTopOfMindLoading(false);
         setTopOfMindNotesLoading(false);
         setTopOfMindError(null);
@@ -2415,14 +2391,6 @@ export function HomePage(): JSX.Element {
     ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
     : fallbackThoughtCards;
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
-  // Actions come only from the server recommender, which grounds them in note
-  // evidence, filters out generic/template phrasing, and learns from
-  // completion/dismissal. When it returns none, the checklist stays empty
-  // rather than fabricating ungrounded client-side actions that could never
-  // persist or feed the learning loop.
-  const visibleActionItems = actionRecommendations
-    .filter((item) => item.status === "active")
-    .slice(0, 5);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
   const copy = HOME_COPY[locale];
@@ -3386,33 +3354,6 @@ export function HomePage(): JSX.Element {
   }, [draggingIndex]);
 
   useEffect(() => {
-    if (!actionDragging) return undefined;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const start = actionDragStartRef.current;
-      if (!start) return;
-      setActionDrag({
-        x: start.baseX + event.clientX - start.x,
-        y: start.baseY + event.clientY - start.y,
-      });
-    };
-
-    const handlePointerUp = () => {
-      actionDragStartRef.current = null;
-      setActionDragging(false);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [actionDragging]);
-
-  useEffect(() => {
     if (draggingMemoryGroupId === null) return undefined;
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -3510,18 +3451,6 @@ export function HomePage(): JSX.Element {
     setDraggingIndex(index);
   };
 
-  const onActionPadPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("button, a, input, textarea")) return;
-    actionDragStartRef.current = {
-      x: event.clientX,
-      y: event.clientY,
-      baseX: actionDrag.x,
-      baseY: actionDrag.y,
-    };
-    setActionDragging(true);
-  };
-
   const startMemoryWindowDrag = (
     memoryWindow: MemoryWindowState,
     event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
@@ -3567,85 +3496,6 @@ export function HomePage(): JSX.Element {
 
   const closeExpandedNoteOnBackdrop = () => {
     setExpandedNoteIndex(null);
-  };
-
-  const beginActionOutcome = (item: ApiActionRecommendation): void => {
-    setPendingActionOutcomeId(item.id);
-    setActionOutcomeDrafts((current) => ({
-      ...current,
-      [item.id]: current[item.id] ?? "",
-    }));
-  };
-
-  const completeActionItem = (
-    item: ApiActionRecommendation,
-    outcomeText?: string,
-  ): void => {
-    setActionRecommendations((current) =>
-      current.filter((action) => action.id !== item.id),
-    );
-    setPendingActionOutcomeId((current) => (current === item.id ? null : current));
-    setActionOutcomeDrafts((current) => {
-      const next = { ...current };
-      delete next[item.id];
-      return next;
-    });
-    const trimmedOutcome = outcomeText?.trim();
-    void updateActionRecommendationState(item.id, {
-      sourceTopOfMindId: item.sourceTopOfMindId,
-      status: "completed",
-      ...(trimmedOutcome ? { outcomeText: trimmedOutcome } : {}),
-    }).catch(() => {
-      setActionRecommendations((current) =>
-        current.some((action) => action.id === item.id)
-          ? current
-          : [...current, item].sort((a, b) => b.confidence - a.confidence),
-      );
-      setPendingActionOutcomeId(item.id);
-      setActionOutcomeDrafts((current) => ({
-        ...current,
-        [item.id]: outcomeText ?? "",
-      }));
-    });
-  };
-
-  const removeActionItem = (item: ApiActionRecommendation): void => {
-    setActionRecommendations((current) =>
-      current.filter((action) => action.id !== item.id),
-    );
-    void updateActionRecommendationState(item.id, {
-      sourceTopOfMindId: item.sourceTopOfMindId,
-      status: "removed",
-    }).catch(() => {
-      setActionRecommendations((current) =>
-        current.some((action) => action.id === item.id)
-          ? current
-          : [...current, item].sort((a, b) => b.confidence - a.confidence),
-      );
-    });
-  };
-
-  const renderActionPostIt = (): JSX.Element => {
-    return (
-      <ActionChecklist
-        items={visibleActionItems}
-        dragging={actionDragging}
-        dragOffset={actionDrag}
-        pendingOutcomeId={pendingActionOutcomeId}
-        outcomeDrafts={actionOutcomeDrafts}
-        onPointerDown={onActionPadPointerDown}
-        onBeginOutcome={beginActionOutcome}
-        onComplete={completeActionItem}
-        onRemove={removeActionItem}
-        onOutcomeDraftChange={(itemId, value) =>
-          setActionOutcomeDrafts((current) => ({
-            ...current,
-            [itemId]: value,
-          }))
-        }
-        formatSupportingCopy={(text) => shortText(userFacingCopy(text), 54)}
-      />
-    );
   };
 
   const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
@@ -3824,7 +3674,6 @@ export function HomePage(): JSX.Element {
           ) : (
             <p className="nc-loading">{copy.emptyThoughts}</p>
           )}
-          {renderActionPostIt()}
         </section>
       </main>
 

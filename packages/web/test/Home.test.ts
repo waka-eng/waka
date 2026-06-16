@@ -11,7 +11,6 @@ import {
   createInspirationSpark,
   deleteInspirationSpark,
   finalizeAttachment,
-  fetchActionRecommendations,
   fetchInspirations,
   fetchReflections,
   fetchSavedSignalDetail,
@@ -20,13 +19,11 @@ import {
   fetchTopOfMindNotes,
   presignAttachment,
   recordInspirationRevisit,
-  updateActionRecommendationState,
   updateInspiration,
   uploadToPresignedUrl,
 } from "../src/lib/api";
 import type {
   ApiAttachment,
-  ApiActionRecommendation,
   ApiInspiration,
   ApiReflection,
   ApiSavedSignalDetail,
@@ -71,13 +68,6 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     fetchInspirations: vi.fn(async () => []),
     fetchTopOfMind: vi.fn(async () => sampleTopOfMind),
     fetchTopOfMindNotes: vi.fn(async () => [sampleTopOfMindNote]),
-    fetchActionRecommendations: vi.fn(async () => [sampleActionRecommendation]),
-    updateActionRecommendationState: vi.fn(async (actionId: string, input: any) => ({
-      actionId,
-      sourceTopOfMindId: input.sourceTopOfMindId,
-      status: input.status,
-      updatedAt: "2026-06-01T10:00:00.000Z",
-    })),
     createFeedback: vi.fn(async () => ({
       id: "feedback-1",
       userId: "user-1",
@@ -359,40 +349,22 @@ const sampleTopOfMind: ApiTopOfMind = {
   },
 };
 
-const sampleActionRecommendation: ApiActionRecommendation = {
-  id: "action-note-1-rough",
-  text: "Make the rough thing first, then show one person before explaining it.",
-  sourceTopOfMindId: "note-1",
-  sourceSignalIds: ["insp-1"],
-  evidenceSnippets: ["Architecture essay about bridge rhythms in city walks"],
-  kind: "make_artifact",
-  whyNow: "Saved signals keep returning to public rough drafts.",
-  confidence: 95,
-  createdAt: "2026-05-11T12:00:00.000Z",
-  status: "active",
-  dismissedAt: null,
-  completedAt: null,
-};
-
 function setApiFixtures({
   inspirations = sampleInspirations,
   topOfMind = sampleTopOfMind,
   topOfMindNotes = [sampleTopOfMindNote],
-  actionRecommendations = [sampleActionRecommendation],
   savedSignals = sampleSavedSignals,
   savedSignalDetail = sampleSavedSignalDetail,
 }: {
   inspirations?: ApiInspiration[];
   topOfMind?: ApiTopOfMind;
   topOfMindNotes?: ApiTopOfMindNoteSurface[];
-  actionRecommendations?: ApiActionRecommendation[];
   savedSignals?: ApiSavedSignalSearchResult[];
   savedSignalDetail?: ApiSavedSignalDetail;
 } = {}): void {
   vi.mocked(fetchInspirations).mockResolvedValue(inspirations);
   vi.mocked(fetchTopOfMind).mockResolvedValue(topOfMind);
   vi.mocked(fetchTopOfMindNotes).mockResolvedValue(topOfMindNotes);
-  vi.mocked(fetchActionRecommendations).mockResolvedValue(actionRecommendations);
   vi.mocked(fetchReflections).mockResolvedValue([]);
   vi.mocked(fetchSavedSignals).mockResolvedValue(savedSignals);
   vi.mocked(fetchSavedSignalDetail).mockImplementation(async (id: string) => {
@@ -806,14 +778,13 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("compatibility archive");
   });
 
-  it("keeps internal language out of the main wall, post-it, drawer, capture, and action copy", async () => {
+  it("keeps internal language out of the main wall, post-it, drawer, and capture copy", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const bannedInternalCopy = /\b(signals?|memories|nodes?|graph|resonance|analysis|AI|productivity|knowledge[-\s]?base)\b|memory movement/i;
     const wallCopy = [
       container.querySelector(".nc-titlecard")?.textContent,
       container.querySelector(".nc-stage")?.textContent,
-      container.querySelector(".nc-action-pad")?.textContent,
       container.querySelector(".nc-save")?.textContent,
     ].join(" ");
 
@@ -856,7 +827,6 @@ describe("HomePage current home experience", () => {
     expect(container.querySelectorAll(".nc-note")).toHaveLength(1);
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).not.toContain("ambition signal");
-    expect(container.textContent).toContain("action items");
     expect(container.textContent).not.toContain("try one small thing in the real world");
     expect(container.querySelector(".nc-note .nc-note-control-btn")).toBeNull();
     expect(container.querySelector(".nc-note")?.textContent).not.toContain("keeps returning");
@@ -865,188 +835,6 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(container.textContent).not.toContain("What WAKA noticed");
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
-  });
-
-  it("renders persisted grounded action recommendations instead of frontend templates", async () => {
-    setApiFixtures({
-      actionRecommendations: [
-        sampleActionRecommendation,
-        {
-          ...sampleActionRecommendation,
-          id: "action-note-people",
-          text: "Message one person who makes people who make building feel less lonely feel normal and ask for a 20-minute exchange.",
-          sourceTopOfMindId: "note-people",
-          sourceSignalIds: ["insp-people"],
-          evidenceSnippets: ["A studio note about friends who send ugly first drafts"],
-          kind: "message_person",
-          whyNow: "Saved signals keep naming collaborators who make courage feel ordinary.",
-          confidence: 88,
-        },
-      ],
-    });
-    const container = await renderHomePage();
-    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
-    expect(actionPad).not.toBeNull();
-
-    const actionText = actionPad?.textContent ?? "";
-    expect(actionText).toContain("Make the rough thing first, then show one person before explaining it.");
-    expect(actionText).toContain("Message one person who makes people who make building feel less lonely feel normal");
-    expect(actionText).toContain("saved inspirations keep returning to public rough dra");
-    expect(actionText).toContain("evidence: Architecture essay about bridge rhythms");
-    expect(actionText).not.toMatch(/do one tiny|smallest test|explore this|reflect on|journal|learn more|think about|research/i);
-    expect(actionText).not.toContain("Make one rough artifact for:");
-    expect(actionText).not.toContain("Run the smallest test of:");
-    expect(fetchActionRecommendations).toHaveBeenCalled();
-  });
-
-  it("keeps the action checklist visible with empty-state copy before enough recommendations exist", async () => {
-    setApiFixtures({
-      actionRecommendations: [],
-    });
-    const container = await renderHomePage();
-    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
-
-    expect(actionPad).not.toBeNull();
-    expect(actionPad?.textContent).toContain("action items");
-    expect(actionPad?.textContent).not.toContain("try one small thing in the real world");
-    expect(actionPad?.textContent).toContain("action items will show up once enough inspirations are reached");
-    expect(actionPad?.querySelector(".nc-action-check")).toBeNull();
-  });
-
-  it("keeps the action checklist on the wall even without top-of-mind post-its", async () => {
-    setApiFixtures({
-      topOfMind: { activeThemes: [], activeQuestions: [], topOfMind: null },
-      topOfMindNotes: [],
-      actionRecommendations: [sampleActionRecommendation],
-    });
-    const container = await renderHomePage();
-
-    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
-    expect(actionPad).not.toBeNull();
-    expect(actionPad?.textContent).toContain(sampleActionRecommendation.text);
-    expect(container.querySelector(".memory-drawer-workspace")).toBeNull();
-  });
-
-  it("asks for an optional action outcome before a done item disappears", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    const markDone = container.querySelector<HTMLButtonElement>(".nc-action-check");
-    expect(markDone?.getAttribute("aria-label")).toContain("mark done:");
-    await act(async () => {
-      markDone?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
-    expect(container.textContent).toContain("what happened?");
-
-    const outcome = container.querySelector<HTMLTextAreaElement>(".nc-action-outcome textarea");
-    expect(outcome).not.toBeNull();
-    await act(async () => {
-      setInputValue(outcome!, "It showed the rough version was ready enough to start a conversation.");
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".nc-action-outcome button[type='submit']")?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
-    expect(container.querySelector(".nc-action-check")).toBeNull();
-    expect(container.textContent).toContain("action items will show up once enough inspirations are reached");
-    expect(updateActionRecommendationState).toHaveBeenCalledWith(
-      sampleActionRecommendation.id,
-      {
-        sourceTopOfMindId: sampleActionRecommendation.sourceTopOfMindId,
-        status: "completed",
-        outcomeText: "It showed the rough version was ready enough to start a conversation.",
-      },
-    );
-  });
-
-  it("lets action checklist items disappear when done without an outcome or removed", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    const markDone = container.querySelector<HTMLButtonElement>(".nc-action-check");
-    await act(async () => {
-      markDone?.click();
-    });
-    await flushReactWork();
-    await act(async () => {
-      [...container.querySelectorAll<HTMLButtonElement>(".nc-action-outcome button")].find(
-        (button) => button.textContent === "skip",
-      )?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector(".nc-action-pad")).not.toBeNull();
-    expect(container.querySelector(".nc-action-check")).toBeNull();
-    expect(container.textContent).toContain("action items will show up once enough inspirations are reached");
-    expect(updateActionRecommendationState).toHaveBeenCalledWith(
-      sampleActionRecommendation.id,
-      {
-        sourceTopOfMindId: sampleActionRecommendation.sourceTopOfMindId,
-        status: "completed",
-      },
-    );
-
-    setApiFixtures({
-      actionRecommendations: [
-        {
-          ...sampleActionRecommendation,
-          id: "action-remove",
-          sourceTopOfMindId: "note-remove-action",
-        },
-      ],
-    });
-    await act(async () => {
-      mountedRoot?.unmount();
-    });
-    mountedRoot = null;
-    mountedContainer?.remove();
-    mountedContainer = null;
-    const nextContainer = await renderHomePage();
-    const remove = nextContainer.querySelector<HTMLButtonElement>(".nc-action-remove");
-    expect(remove?.getAttribute("aria-label")).toContain("remove action:");
-    await act(async () => {
-      remove?.click();
-    });
-    await flushReactWork();
-    expect(nextContainer.querySelector(".nc-action-pad")).not.toBeNull();
-    expect(nextContainer.querySelector(".nc-action-remove")).toBeNull();
-    expect(nextContainer.textContent).toContain("action items will show up once enough inspirations are reached");
-    expect(updateActionRecommendationState).toHaveBeenCalledWith(
-      "action-remove",
-      {
-        sourceTopOfMindId: "note-remove-action",
-        status: "removed",
-      },
-    );
-  });
-
-  it("makes the action checklist draggable like a paper object", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-    const actionPad = container.querySelector<HTMLElement>(".nc-action-pad");
-    expect(actionPad).not.toBeNull();
-
-    await act(async () => {
-      const pointerDown = new Event("pointerdown", { bubbles: true });
-      Object.assign(pointerDown, { clientX: 100, clientY: 120 });
-      actionPad?.dispatchEvent(pointerDown);
-    });
-    expect(actionPad?.classList.contains("nc-action-pad--dragging")).toBe(true);
-
-    await act(async () => {
-      const pointerMove = new Event("pointermove", { bubbles: true });
-      Object.assign(pointerMove, { clientX: 136, clientY: 150 });
-      window.dispatchEvent(pointerMove);
-    });
-    expect(actionPad?.style.getPropertyValue("--action-dx")).toBe("36px");
-    expect(actionPad?.style.getPropertyValue("--action-dy")).toBe("30px");
-
-    await act(async () => {
-      window.dispatchEvent(new Event("pointerup", { bubbles: true }));
-    });
-    expect(actionPad?.classList.contains("nc-action-pad--dragging")).toBe(false);
   });
 
   it("keeps post-its direct and rejects summary-like topic labels", async () => {
@@ -1294,7 +1082,6 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
-    expect(container.textContent).toContain("action items");
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
