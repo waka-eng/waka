@@ -837,6 +837,41 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
+  it("treats collapsed post-its as intentional previews while keeping the full note in the modal", async () => {
+    const fullTitle =
+      "make the thing before explaining it because the room keeps rewarding comments before anyone can touch the real object";
+    const fullBody =
+      "Several saved signals connect architecture essays with walking routes, jazz history, and a repeated wish to make the concrete draft before the commentary takes over.";
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          title: fullTitle,
+          body: fullBody,
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    expect(note?.querySelector(".nc-note-preview")?.getAttribute("aria-label")).toBe("post-it preview");
+    expect(note?.querySelector(".nc-note-body--preview")?.textContent).toMatch(/…$/);
+    expect(note?.querySelector(".nc-note-body--preview")?.textContent).not.toContain("real object");
+    expect(note?.querySelector(".nc-note-explain--preview")?.textContent).toContain("saved inspirations");
+    expect(note?.querySelector(".nc-note-open-hint")?.textContent).toBe("open note");
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expandedTitle = container.querySelector<HTMLTextAreaElement>(".nc-note-modal .nc-note-body-edit");
+    expect(expandedTitle?.value).toBe(fullTitle);
+    expect(container.querySelector(".nc-note-modal")?.textContent).toContain(
+      "Several saved inspirations cluster around city walks",
+    );
+  });
+
   it("keeps post-its direct and rejects summary-like topic labels", async () => {
     setApiFixtures();
     const container = await renderHomePage();
