@@ -964,6 +964,72 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note-delete-action .nc-note-control-btn--delete")?.textContent).toBe("delete");
   });
 
+  it("opens the saved inspiration detail from an expanded post-it evidence item", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const openButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-open");
+    expect(openButton).not.toBeNull();
+    expect(openButton?.textContent).toBe("open inspiration");
+
+    await act(async () => {
+      openButton?.click();
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-note-modal")).toBeNull();
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
+    expect(detail).not.toBeNull();
+    expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
+    expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(detail?.textContent).toContain("Highlights");
+    expect(detail?.textContent).not.toContain("Signal packet");
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
+    expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
+  });
+
+  it("keeps post-it evidence preview-only when an inspiration id is missing", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          evidencePreviews: [
+            {
+              ...sampleTopOfMindNote.evidencePreviews[0],
+              signalId: "",
+              textPreview: "A preview without a resolvable saved inspiration id",
+            },
+          ],
+          relatedSignals: [],
+          relatedSignalIds: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const evidenceTrigger = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
+    expect(evidenceTrigger?.disabled).toBe(true);
+    expect(evidenceTrigger?.textContent).toContain("preview");
+    expect(container.querySelector(".nc-note-evidence-open--disabled")?.textContent).toContain("preview only");
+    expect(container.querySelector(".memory-stack-detail--mockup")).toBeNull();
+    expect(fetchSavedSignalDetail).not.toHaveBeenCalled();
+  });
+
   it("keeps empty evidence out of the opened post-it and points to the drawer", async () => {
     setApiFixtures({
       topOfMindNotes: [
