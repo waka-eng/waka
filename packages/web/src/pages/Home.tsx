@@ -738,14 +738,30 @@ function thoughtCardPreviewLabel(card: HomeThoughtCard, locale: string): string 
 }
 
 function explainThoughtCard(card: HomeThoughtCard): string {
-  const reason = shortText(userFacingCopy(card.reason || card.evidenceRationale || ""), 108);
-  const context = shortText(userFacingCopy(card.matchedEnvironment || card.ambientSignal || ""), 56);
-  if (reason && context) {
-    return `${reason} · Around ${context}.`;
+  const explanation =
+    card.reason ||
+    card.evidenceRationale ||
+    card.matchedEnvironment ||
+    card.ambientSignal ||
+    "Still forming from saved inspirations.";
+  return shortText(userFacingCopy(explanation), 78);
+}
+
+function thoughtCardInspirationPreviews(card: HomeThoughtCard, isFeatured: boolean): string[] {
+  const seen = new Set<string>();
+  const limit = isFeatured ? 3 : 2;
+  const previews: string[] = [];
+
+  for (const support of card.supportingSignals) {
+    const preview = shortText(userFacingCopy(support.preview), isFeatured ? 64 : 54);
+    const key = normalizeMeaningLabel(preview);
+    if (!preview || seen.has(key)) continue;
+    seen.add(key);
+    previews.push(preview);
+    if (previews.length >= limit) break;
   }
-  if (reason) return reason;
-  if (context) return `Keeps surfacing around ${context}.`;
-  return "Provisional — open to read or rewrite.";
+
+  return previews;
 }
 
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
@@ -3507,6 +3523,8 @@ export function HomePage(): JSX.Element {
   const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
     const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
+    const inspirationPreviews = thoughtCardInspirationPreviews(signal, index === 0);
+    const inspirationLabel = locale === "ko-KR" ? "여기서 시작됨" : "where it began";
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
@@ -3531,6 +3549,19 @@ export function HomePage(): JSX.Element {
         <div className="nc-note-explain nc-note-explain--preview">
           <p>{explainThoughtCard(signal)}</p>
         </div>
+
+        {inspirationPreviews.length > 0 ? (
+          <div className="nc-note-inspirations" aria-label={inspirationLabel}>
+            <span className="nc-note-inspirations-label">{inspirationLabel}</span>
+            <ul className="nc-note-inspirations-list">
+              {inspirationPreviews.map((preview) => (
+                <li className="nc-note-inspiration-chip" key={preview}>
+                  “{preview}”
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
       <span className="nc-note-open-hint" aria-hidden="true">open note</span>
     </article>
