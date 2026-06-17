@@ -50,8 +50,6 @@ import {
 } from "../components/history";
 import {
   SavedInspirationDetail,
-  type SavedDetailFeedbackState,
-  type SavedDetailFeedbackValue,
 } from "../components/home-surfaces";
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
@@ -1540,7 +1538,6 @@ export function HomePage(): JSX.Element {
       }
     >
   >({});
-  const [savedDetailFeedback, setSavedDetailFeedback] = useState<Record<string, SavedDetailFeedbackState>>({});
   const [removedTopOfMindNoteIds, setRemovedTopOfMindNoteIds] = useState<Set<string>>(() => new Set());
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
@@ -2355,19 +2352,6 @@ export function HomePage(): JSX.Element {
     if (selectedSupportingSignalFallback?.id === selectedSavedSignalId) return selectedSupportingSignalFallback;
     return null;
   }, [inPlaceSignals, savedSignalDetail, selectedSavedSignalId, selectedSupportingSignalFallback]);
-  const visibleSavedSignalOrder = selectedMemoryGroup ? selectedMemoryGroupSignals : pathFilteredSignals;
-  const nextSavedSignal = useMemo(() => {
-    if (!selectedSavedSignalId) return null;
-    const index = visibleSavedSignalOrder.findIndex((signal) => signal.id === selectedSavedSignalId);
-    return index >= 0 ? (visibleSavedSignalOrder[index + 1] ?? null) : null;
-  }, [selectedSavedSignalId, visibleSavedSignalOrder]);
-  const handleNextSavedSignal = useCallback(() => {
-    if (!nextSavedSignal) return;
-    setSelectedInspirationText(null);
-    setSelectedSavedSignalId(nextSavedSignal.id);
-    setSavedSignalDetail(null);
-    recordRevisit(nextSavedSignal.id, "detail_opened");
-  }, [nextSavedSignal, recordRevisit]);
 
   const visibleMemoryWindows = useMemo(
     () =>
@@ -2791,47 +2775,6 @@ export function HomePage(): JSX.Element {
     }
   };
 
-  const submitSavedDetailFeedback = async (signalId: string, value: SavedDetailFeedbackValue) => {
-    const previousFeedback = savedDetailFeedback[signalId] ?? {
-      value: null,
-      status: "idle" as FeedbackStatus,
-      error: null,
-    };
-
-    setSavedDetailFeedback((prev) => ({
-      ...prev,
-      [signalId]: { value, status: "saving", error: null },
-    }));
-
-    try {
-      const feedback = await createFeedback({
-        targetType: "signal",
-        targetId: signalId,
-        value,
-      });
-      setSavedSignalDetail((current) =>
-        current?.id === signalId
-          ? {
-              ...current,
-              resonanceFeedback: [feedback, ...current.resonanceFeedback.filter((item) => item.id !== feedback.id)],
-            }
-          : current,
-      );
-      setSavedDetailFeedback((prev) => ({
-        ...prev,
-        [signalId]: { value, status: "saved", error: null },
-      }));
-    } catch {
-      setSavedDetailFeedback((prev) => ({
-        ...prev,
-        [signalId]: {
-          ...previousFeedback,
-          status: "error",
-          error: "could not save that yet",
-        },
-      }));
-    }
-  };
 
   const renderPostItSaveAction = (signal: HomeThoughtCard): JSX.Element | null => {
     if (!signal.feedbackTargetId) return null;
@@ -3331,19 +3274,12 @@ export function HomePage(): JSX.Element {
     if (!selectedSavedSignal) return null;
     const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
     const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
-    const activeFeedback = savedDetailFeedback[selectedSavedSignal.id];
-    const relatedGroupNames = memoryGroupings
-      .filter((group) => group.signals.some((signal) => signal.id === selectedSavedSignal.id))
-      .map((group) => group.name)
-      .slice(0, 3);
     return (
       <SavedInspirationDetail
         signal={selectedSavedSignal}
         detail={savedSignalDetail}
         loading={savedSignalDetailLoading}
-        relatedGroupNames={relatedGroupNames}
         backLabel={selectedMemoryGroup ? "list" : (selectedMemoryPathFilter?.label ?? "list")}
-        activeFeedback={activeFeedback}
         highlightError={
           highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id
             ? highlightStatus.message
@@ -3361,12 +3297,9 @@ export function HomePage(): JSX.Element {
         }}
         onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
-        onSubmitFeedback={(value) => void submitSavedDetailFeedback(selectedSavedSignal.id, value)}
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
         shortText={shortText}
-        nextSignal={nextSavedSignal}
-        onNextSignal={nextSavedSignal ? handleNextSavedSignal : undefined}
       />
     );
   };
