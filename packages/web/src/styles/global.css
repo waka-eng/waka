@@ -3895,7 +3895,7 @@
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 2px;
   box-shadow: 0 28px 54px -34px rgba(0, 0, 0, 0.3);
-  overflow-y: auto;
+  overflow: hidden;
   cursor: default;
   display: flex;
   flex-direction: column;
@@ -4405,8 +4405,13 @@
 }
 
 .nc-note-modal .nc-note-expanded-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
   max-height: none;
   opacity: 1;
+  overflow: hidden;
   pointer-events: auto;
   transition: none;
 }
@@ -4466,6 +4471,10 @@
 }
 
 .nc-note-evidence {
+  display: flex !important;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 12px !important;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
   padding-bottom: 18px;
@@ -4506,6 +4515,15 @@
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.nc-note-evidence-list {
+  max-height: min(320px, 38dvh);
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
 }
 
 .nc-note-evidence-trigger {
@@ -4920,7 +4938,13 @@
   .nc-note-modal {
     width: 100%;
     max-height: calc(100dvh - 32px);
+    min-height: min(560px, calc(100dvh - 32px));
     padding: 28px 24px 30px;
+  }
+
+  .nc-note-evidence-list {
+    max-height: min(300px, 34dvh);
+    padding-right: 6px;
   }
 
   .nc-note-peel {
