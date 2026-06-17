@@ -3945,8 +3945,7 @@
   min-height: 148px;
   flex: 1 1 auto;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
 }
 
 .nc-note-body--preview {
@@ -3987,8 +3986,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-top: 14px;
-  padding: 10px 11px;
+  margin-top: 6px;
+  padding: 8px 10px;
   border-left: 2px solid var(--ink);
   opacity: 0.78;
 }
@@ -4005,7 +4004,7 @@
 
 .nc-note-explain--preview {
   position: relative;
-  min-height: calc(1.38em * 2 + 20px);
+  min-height: calc(1.38em + 16px);
   overflow: hidden;
 }
 
@@ -4024,9 +4023,70 @@
   right: 0;
   bottom: 0;
   left: 0;
-  height: 18px;
+  height: 14px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg));
   pointer-events: none;
+}
+
+.nc-note-inspirations {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  max-height: 74px;
+  overflow: hidden;
+  padding-top: 1px;
+}
+
+.nc-note-inspirations::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg));
+  pointer-events: none;
+}
+
+.nc-note-inspirations-label {
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  opacity: 0.48;
+}
+
+.nc-note-inspirations-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nc-note-inspiration-chip {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  margin: 0;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  font-style: italic;
+  line-height: 1.25;
+  opacity: 0.8;
+}
+
+.nc-note--featured .nc-note-inspirations {
+  max-height: 90px;
 }
 
 .nc-note-evidence-label,
