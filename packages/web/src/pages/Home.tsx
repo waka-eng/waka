@@ -2232,6 +2232,18 @@ export function HomePage(): JSX.Element {
     return entries.find((e) => e.id === selectedId) ?? null;
   }, [entries, selectedId]);
 
+  const nextEntryInHistory = useMemo(() => {
+    if (!selectedId) return null;
+    const index = entries.findIndex((entry) => entry.id === selectedId);
+    return index >= 0 ? (entries[index + 1] ?? null) : null;
+  }, [entries, selectedId]);
+
+  const handleNextInspiration = useCallback(() => {
+    if (!nextEntryInHistory) return;
+    setSelectedId(nextEntryInHistory.id);
+    recordRevisit(nextEntryInHistory.id, "detail_opened");
+  }, [nextEntryInHistory, recordRevisit]);
+
   const detailData = useMemo<InspirationDetailData | null>(() => {
     if (!selectedEntry) return null;
     return {
@@ -2336,6 +2348,19 @@ export function HomePage(): JSX.Element {
   const selectedSavedSignal = useMemo(() => {
     return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? null;
   }, [inPlaceSignals, selectedSavedSignalId]);
+  const visibleSavedSignalOrder = selectedMemoryGroup ? selectedMemoryGroupSignals : pathFilteredSignals;
+  const nextSavedSignal = useMemo(() => {
+    if (!selectedSavedSignalId) return null;
+    const index = visibleSavedSignalOrder.findIndex((signal) => signal.id === selectedSavedSignalId);
+    return index >= 0 ? (visibleSavedSignalOrder[index + 1] ?? null) : null;
+  }, [selectedSavedSignalId, visibleSavedSignalOrder]);
+  const handleNextSavedSignal = useCallback(() => {
+    if (!nextSavedSignal) return;
+    setSelectedInspirationText(null);
+    setSelectedSavedSignalId(nextSavedSignal.id);
+    setSavedSignalDetail(null);
+    recordRevisit(nextSavedSignal.id, "detail_opened");
+  }, [nextSavedSignal, recordRevisit]);
 
   const visibleMemoryWindows = useMemo(
     () =>
@@ -2537,6 +2562,7 @@ export function HomePage(): JSX.Element {
       onInspirationScoresChanged={handleInspirationScoresChanged}
       onInspirationUpdated={handleInspirationUpdated}
       locale={locale}
+      onNextInspiration={nextEntryInHistory ? handleNextInspiration : undefined}
     />
   ) : undefined;
 
@@ -3328,6 +3354,8 @@ export function HomePage(): JSX.Element {
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
         shortText={shortText}
+        nextSignal={nextSavedSignal}
+        onNextSignal={nextSavedSignal ? handleNextSavedSignal : undefined}
       />
     );
   };

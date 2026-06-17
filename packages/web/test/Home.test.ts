@@ -1722,6 +1722,62 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).not.toContain("related context");
   });
 
+  it("renders the clicked memory drawer inspiration with the mockup detail surface and next navigation", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          attachmentSummary: [{ id: "att-video", type: "link", label: "youtube.com" }],
+        },
+        sampleSavedSignals[1],
+      ],
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        attachmentSummary: [{ id: "att-video", type: "link", label: "youtube.com" }],
+        attachments: [
+          {
+            id: "att-video",
+            type: "link",
+            url: "https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s",
+            label: "youtube.com/watch",
+            contentType: null,
+            size: null,
+          },
+        ],
+      },
+    });
+    const container = await renderHomePage();
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await openAllInspirations(container);
+
+    const firstSave = container.querySelector<HTMLButtonElement>(".memory-contents-item");
+    expect(firstSave).not.toBeNull();
+    await act(async () => {
+      firstSave?.click();
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
+    expect(detail).not.toBeNull();
+    expect(detail?.querySelector(".memory-detail-close")?.textContent).toContain("×");
+    expect(detail?.querySelector(".memory-detail-hero")).not.toBeNull();
+    expect(detail?.querySelector(".memory-detail-source-card")?.textContent).toContain("youtube.com/watch");
+    expect(detail?.textContent).toContain("Link");
+    expect(detail?.textContent).toContain("https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s");
+    expect(detail?.textContent).toContain("Highlights");
+    expect(detail?.querySelector(".memory-detail-next")?.textContent).toContain("View next inspiration");
+
+    const next = detail?.querySelector<HTMLButtonElement>('.memory-detail-next button[aria-label="View next inspiration"]');
+    await act(async () => {
+      next?.click();
+    });
+    await flushReactWork();
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-2");
+    expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-2", "detail_opened");
+  });
+
   it("saves still-alive feedback from the opened inspiration detail", async () => {
     setApiFixtures();
     const container = await renderHomePage();
