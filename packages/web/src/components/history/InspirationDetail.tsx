@@ -375,29 +375,30 @@ export function InspirationDetail({
   return (
     <div className="detail-view visible" id="detailView">
       <div className="detail-head detail-head--balanced">
-        <button
-          type="button"
-          className="detail-back"
-          id="detailBack"
-          onClick={onBack}
-          aria-label="Back to saved signals"
-        >
-          ← Back
-        </button>
-        {onDeleted ? (
-          // Inline two-stage delete pill. Hidden when `onDeleted` is not
-          // wired so a read-only mount of the detail view stays read-only.
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontFamily: "var(--font-mono)",
-              fontSize: 10,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-            }}
+        <div className="detail-head-inner">
+          <button
+            type="button"
+            className="detail-back"
+            id="detailBack"
+            onClick={onBack}
+            aria-label="Back to saved signals"
           >
+            ← Back
+          </button>
+          {/* Inline two-stage delete pill. Hidden when `onDeleted` is not
+              wired so a read-only mount of the detail view stays read-only. */}
+          {onDeleted ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
             {deleteState.status === "idle" || deleteState.status === "error" ? (
               <button
                 type="button"
@@ -497,8 +498,9 @@ export function InspirationDetail({
                 {deleteState.message}
               </span>
             ) : null}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="detail-body" id="detailBody">
         <form
@@ -511,7 +513,7 @@ export function InspirationDetail({
         >
           <label
             htmlFor="inspirationDetailText"
-            className="detail-section-label"
+            className="detail-section-label detail-section-title"
           >
             What you saved
           </label>
