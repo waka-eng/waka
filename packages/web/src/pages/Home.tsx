@@ -1077,7 +1077,9 @@ function memoryPathSlug(value: string): string {
     .toLowerCase()
     .split(/\s+/)
     .map((word) => word.replace(/[^a-z0-9-]/g, ""))
-    .filter((word) => word.length > 1 && !["the", "and", "for", "with", "from", "that", "this"].includes(word))
+    .filter((word) =>
+      (word.length > 1 || /^\d+$/.test(word)) && !["the", "and", "for", "with", "from", "that", "this"].includes(word),
+    )
     .slice(0, 4)
     .join("-");
   return cleaned || "inspirations";
@@ -1155,7 +1157,6 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
   const dynamicFilters = [...topicGroups.entries()]
     .filter(([, group]) => group.signals.length > 0)
     .sort(([, a], [, b]) => b.signals.length - a.signals.length || b.newest - a.newest)
-    .slice(0, 6)
     .map(([slug, group]) => ({
       id: `topic-${slug}`,
       path: `/${slug}`,

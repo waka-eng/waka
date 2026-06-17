@@ -1439,7 +1439,6 @@ describe("HomePage current home experience", () => {
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(panel).not.toBeNull();
     expect(pathFilters).not.toBeNull();
-    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBeLessThanOrEqual(9);
     expect(pathFilters?.textContent).toContain("/make-thing-before-explaining");
     expect(pathFilters?.textContent).toContain("/recently-saved");
     expect(pathFilters?.textContent).not.toMatch(/meaning[-_]?nodes?|context[-_]?nodes?|node id|ctx[-_]?1234/i);
@@ -1460,6 +1459,57 @@ describe("HomePage current home experience", () => {
     expect(panel?.querySelector(".mac-folder-front")).toBeNull();
     expect(panel?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
     expect(panel?.textContent?.toLowerCase()).not.toContain("memory movement");
+  });
+
+  it("renders every filesystem path category with only its related inspirations", async () => {
+    const categorySignals: ApiSavedSignalSearchResult[] = Array.from({ length: 8 }, (_, index) => ({
+      ...sampleSavedSignals[0],
+      id: `category-signal-${index + 1}`,
+      textPreview: `Saved inspiration for path ${index + 1}`,
+      capturedAt: `2026-05-${String(20 - index).padStart(2, "0")}T12:00:00.000Z`,
+      relatedTopOfMindNoteTitles: [],
+      relatedContextTerms: [`category path ${index + 1}`],
+      highlightedSnippets: [],
+      matchingSnippets: [],
+      attachmentSummary: [],
+    }));
+    setApiFixtures({
+      inspirations: categorySignals.map((signal) => ({
+        ...sampleInspirations[0],
+        id: signal.id,
+        text: signal.textPreview,
+        createdAt: signal.capturedAt,
+        updatedAt: signal.updatedAt,
+      })),
+      savedSignals: categorySignals,
+      topOfMindNotes: [],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container, categorySignals.length);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
+    expect(pathFilters).not.toBeNull();
+
+    const filterText = pathFilters?.textContent ?? "";
+    for (const signal of categorySignals) {
+      const index = Number(signal.id.replace("category-signal-", ""));
+      expect(filterText).toContain(`/category-path-${index}`);
+    }
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBeGreaterThanOrEqual(categorySignals.length + 2);
+  });
+
+  it("keeps the drawer and filesystem list centered across desktop and phone CSS", () => {
+    const css = readFileSync("src/styles/global.css", "utf8");
+
+    expect(css).toMatch(/\.memory-drawer-stack\s*\{[\s\S]*?left: 50%;[\s\S]*?transform: translateX\(-50%\);/);
+    expect(css).toMatch(/\.memory-category-panel\s*\{[\s\S]*?width: min\(680px, 100%\);[\s\S]*?margin: 0 auto;/);
+    expect(css).toMatch(/\.memory-path-list\s*\{[\s\S]*?width: min\(680px, 100%\);[\s\S]*?margin: 0 auto;/);
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.signal-revisit-page\.memory-drawer-stack\s*\{[\s\S]*?left: 14px;[\s\S]*?width: auto;[\s\S]*?transform: none;/,
+    );
   });
 
   it("keeps the drawer stack visually neutral without decorative folder chrome or loud stack cards", async () => {

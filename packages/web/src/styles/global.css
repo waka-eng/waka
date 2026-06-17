@@ -1466,6 +1466,8 @@
 .memory-category-panel {
   display: grid;
   gap: 14px;
+  width: min(680px, 100%);
+  margin: 0 auto;
   min-width: 0;
   pointer-events: auto;
 }
@@ -1473,7 +1475,7 @@
 .memory-category-intro {
   display: grid;
   gap: 6px;
-  max-width: 620px;
+  width: min(620px, 100%);
   padding: 4px 4px 0;
 }
 
@@ -3253,6 +3255,12 @@
     padding-top: 24px;
   }
 
+  .signal-revisit-page.memory-drawer-stack {
+    width: min(920px, calc(100vw - 44px));
+    height: min(620px, calc(100dvh - var(--memory-drawer-top) - 148px));
+    padding-top: 14px;
+  }
+
   .signal-revisit-header {
     align-items: stretch;
   }
@@ -3369,6 +3377,16 @@
 
   .signal-revisit-detail {
     min-height: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .signal-revisit-page.memory-drawer-stack {
+    right: 14px;
+    left: 14px;
+    width: auto;
+    height: calc(100dvh - var(--memory-drawer-top) - 138px);
+    transform: none;
   }
 }
 
