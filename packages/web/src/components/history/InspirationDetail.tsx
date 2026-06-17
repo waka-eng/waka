@@ -127,9 +127,12 @@ function attachmentTitle(attachment: ApiAttachment): string {
   const link = attachment.enrichment?.link;
   if (attachment.type === "link") {
     const title = link?.title?.trim();
-    return title || link?.hostname || attachment.url || "Link attachment";
+    return title || link?.hostname || attachment.url || "Saved link";
   }
-  return attachment.enrichment?.image?.filename ?? attachment.name ?? attachment.type;
+  if (attachment.type === "image") {
+    return attachment.enrichment?.image?.filename ?? attachment.name ?? "Uploaded image";
+  }
+  return attachment.name ?? "Attached file";
 }
 
 function attachmentMeta(attachment: ApiAttachment, locale: SupportedLocale): string {
@@ -238,6 +241,7 @@ export function InspirationDetail({
 
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
+  const sourceLinks = inspiration.links?.filter((link) => link.trim().length > 0) ?? [];
 
   const handleSaveDetails = useCallback(() => {
     const nextText = detailsText.trim();
@@ -370,20 +374,7 @@ export function InspirationDetail({
 
   return (
     <div className="detail-view visible" id="detailView">
-      <div
-        className="detail-head"
-        style={{
-          // Allow the delete pill to sit on the right edge without
-          // disrupting the prototype's left-aligned `← Back` rhythm.
-          // The prototype's `.detail-head` rule already lays the area
-          // out as a flex row, so this just enables `justify-content`
-          // without changing visual parity for the empty case.
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-        }}
-      >
+      <div className="detail-head detail-head--balanced">
         <button
           type="button"
           className="detail-back"
@@ -511,24 +502,18 @@ export function InspirationDetail({
       </div>
       <div className="detail-body" id="detailBody">
         <form
+          className="detail-editor"
           aria-label="Inspiration details"
           onSubmit={(event) => {
             event.preventDefault();
             handleSaveDetails();
           }}
-          style={{ display: "grid", gap: 12 }}
         >
           <label
             htmlFor="inspirationDetailText"
-            style={{
-              color: "var(--muted)",
-              fontFamily: "JetBrains Mono, ui-monospace, monospace",
-              fontSize: 9,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-            }}
+            className="detail-section-label"
           >
-            Inspiration details
+            What you saved
           </label>
           <textarea
             id="inspirationDetailText"
@@ -539,23 +524,9 @@ export function InspirationDetail({
             }}
             rows={7}
             aria-label="Inspiration details"
-            style={{
-              width: "100%",
-              resize: "vertical",
-              border: "1px solid rgba(0,0,0,0.08)",
-              borderRadius: 2,
-              background: "#fffefb",
-              color: "var(--ink)",
-              fontFamily: "Fraunces, Times New Roman, serif",
-              fontSize: 20,
-              fontStyle: "italic",
-              fontWeight: 300,
-              lineHeight: 1.42,
-              padding: 18,
-              boxSizing: "border-box",
-            }}
+            className="detail-text detail-textarea"
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div className="detail-editor-actions">
             <button
               type="submit"
               disabled={!detailsChanged || detailsEmpty || saveState.status === "saving"}
@@ -580,17 +551,30 @@ export function InspirationDetail({
               {saveState.status === "saving" ? "Saving…" : "Save details"}
             </button>
             {saveState.status === "saved" ? (
-              <span role="status" aria-live="polite" style={{ color: "var(--muted)", fontSize: 12 }}>
+              <span role="status" aria-live="polite" className="detail-inline-status">
                 Saved.
               </span>
             ) : null}
             {saveState.status === "error" ? (
-              <span role="alert" aria-live="polite" style={{ color: "var(--muted)", fontSize: 12 }}>
+              <span role="alert" aria-live="polite" className="detail-inline-status">
                 {saveState.message}
               </span>
             ) : null}
           </div>
         </form>
+
+        {sourceLinks.length > 0 ? (
+          <section className="detail-links-section" aria-label="Source links">
+            <div className="detail-section-label">Source links</div>
+            <div className="detail-links">
+              {sourceLinks.map((link) => (
+                <a key={link} href={link} target="_blank" rel="noreferrer">
+                  {link}
+                </a>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {inspiration.warningMessage ? (
           <div className="detail-warning" role="status" aria-live="polite">
@@ -615,8 +599,10 @@ export function InspirationDetail({
           </section>
         ) : null}
 
+        <div className="detail-meta">Saved {inspiration.timestamp}</div>
+
         {state.status === "ready" ? (
-          <div style={{ marginTop: 18 }}>
+          <div className="detail-reflection-action">
             {!reflecting ? (
               <button
                 type="button"
@@ -647,14 +633,7 @@ export function InspirationDetail({
           <div
             role="status"
             aria-live="polite"
-            style={{
-              marginTop: 16,
-              color: "var(--muted)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 10,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-            }}
+            className="detail-reflection-status"
           >
             Loading reflections…
           </div>
@@ -664,14 +643,7 @@ export function InspirationDetail({
           <div
             role="alert"
             aria-live="polite"
-            style={{
-              marginTop: 16,
-              color: "var(--muted)",
-              fontFamily: "var(--font-mono)",
-              fontSize: 10,
-              letterSpacing: "0.12em",
-              textTransform: "uppercase",
-            }}
+            className="detail-reflection-status"
           >
             {state.message}
           </div>
@@ -681,21 +653,14 @@ export function InspirationDetail({
           <div
             // Empty-state copy. Italic serif so it reads as part of the
             // prototype's reflective voice rather than a system message.
-            style={{
-              marginTop: 18,
-              color: "var(--muted)",
-              fontFamily: "var(--font-serif)",
-              fontStyle: "italic",
-              fontSize: 14,
-              lineHeight: 1.5,
-            }}
+            className="detail-empty-reflections"
           >
             No reflections yet.
           </div>
         ) : null}
 
         {state.status === "ready" && entries.length > 0 ? (
-          <div style={{ marginTop: 18 }}>
+          <div className="detail-reflection-action">
             <ReflectionThread
               entries={entries}
               open={threadOpen}

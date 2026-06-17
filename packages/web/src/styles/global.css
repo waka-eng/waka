@@ -9600,25 +9600,138 @@ body.reflect-bg {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+.detail-head--balanced {
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .detail-body {
-  padding: 28px 26px 42px;
+  display: grid;
+  gap: 20px;
+  width: min(100%, 660px);
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 30px 26px 44px;
+}
+
+.detail-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-section-label {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .detail-text {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
   background: rgba(255, 253, 247, 0.62);
-  padding: var(--space-4);
-  margin-bottom: var(--space-4);
+  padding: 20px;
+  margin-bottom: 0;
+}
+
+.detail-textarea {
+  width: 100%;
+  min-height: 220px;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-family: var(--font-serif);
+  font-size: clamp(18px, 2vw, 22px);
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.58;
+  color: var(--ink);
+  outline: none;
+}
+
+.detail-textarea:focus {
+  border-color: rgba(15, 15, 14, 0.22);
+  box-shadow: 0 0 0 3px rgba(15, 15, 14, 0.045);
+}
+
+.detail-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detail-inline-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.detail-links-section,
+.detail-attachments {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.detail-links {
+  margin-bottom: 0;
+}
+
+.detail-attachment-card {
+  padding: 12px 0;
+}
+
+.detail-attachment-description {
+  max-width: 58ch;
 }
 
 .detail-meta {
   display: inline-flex;
+  justify-self: start;
   max-width: 100%;
   padding: 5px 9px;
   border: var(--border-hairline);
   border-radius: 999px;
-  margin-bottom: var(--space-4);
+  margin-bottom: 0;
+}
+
+.detail-reflection-action,
+.detail-reflection-status,
+.detail-empty-reflections {
+  margin-top: 0;
+}
+
+.detail-reflection-status {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.detail-empty-reflections {
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .detail-body {
+    width: 100%;
+    padding: 24px 18px 34px;
+  }
+
+  .detail-text {
+    padding: 16px;
+  }
+
+  .detail-textarea {
+    min-height: 190px;
+    font-size: 18px;
+  }
 }
 
 .home-view-switcher {
