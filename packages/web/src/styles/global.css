@@ -3646,7 +3646,7 @@
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
     linear-gradient(rgba(0, 0, 0, 0.018), rgba(0, 0, 0, 0.018));
   color: var(--ink);
-  padding: 24px 26px 26px;
+  padding: 24px 26px 18px;
   border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
@@ -3940,6 +3940,49 @@
   color: var(--ink);
 }
 
+.nc-note-preview {
+  display: flex;
+  min-height: 148px;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.nc-note-body--preview {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: calc(1.32em * 2);
+  mask-image: linear-gradient(180deg, #000 78%, rgba(0, 0, 0, 0.42));
+}
+
+.nc-note--featured .nc-note-body--preview {
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  max-height: calc(1.18em * 3);
+}
+
+.nc-note-open-hint {
+  align-self: flex-end;
+  margin-top: 2px;
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  opacity: 0.46;
+}
+
+.nc-note:hover .nc-note-open-hint,
+.nc-note:focus-within .nc-note-open-hint {
+  opacity: 0.72;
+}
+
 .nc-note-explain {
   display: flex;
   flex-direction: column;
@@ -3958,6 +4001,32 @@
   font-style: normal;
   letter-spacing: 0;
   line-height: 1.38;
+}
+
+.nc-note-explain--preview {
+  position: relative;
+  min-height: calc(1.38em * 2 + 20px);
+  overflow: hidden;
+}
+
+.nc-note-explain--preview p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-height: calc(1.38em * 2);
+}
+
+.nc-note-explain--preview::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg));
+  pointer-events: none;
 }
 
 .nc-note-evidence-label,

@@ -731,23 +731,29 @@ function uniqueThoughtCards(cards: HomeThoughtCard[]): HomeThoughtCard[] {
   return out;
 }
 
+function thoughtCardPreviewLabel(card: HomeThoughtCard, locale: string): string {
+  const displayLabel =
+    locale === "en-US" ? card.label : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(card.label)] ?? card.label;
+  return shortText(userFacingCopy(displayLabel), card.feedbackTargetId ? 96 : 120);
+}
+
 function explainThoughtCard(card: HomeThoughtCard): string {
-  const reason = shortText(userFacingCopy(card.reason || card.evidenceRationale || ""), 135);
-  const context = userFacingCopy(card.matchedEnvironment || card.ambientSignal || "");
+  const reason = shortText(userFacingCopy(card.reason || card.evidenceRationale || ""), 108);
+  const context = shortText(userFacingCopy(card.matchedEnvironment || card.ambientSignal || ""), 56);
   if (reason && context) {
-    return `${reason} It keeps pointing toward ${shortText(context, 72)}.`;
+    return `${reason} · Around ${context}.`;
   }
   if (reason) return reason;
-  if (context) return `This keeps surfacing around ${shortText(context, 96)}.`;
-  return "This is provisional. New saves can replace it.";
+  if (context) return `Keeps surfacing around ${context}.`;
+  return "Provisional — open to read or rewrite.";
 }
 
 const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
-  { top: "24px", left: "calc(50% - 200px)", tilt: -1.4, w: "400px" },
-  { top: "74px", left: "calc(50% - 520px)", tilt: -2.2, w: "260px" },
-  { top: "246px", left: "calc(50% + 66px)", tilt: 1.8, w: "280px" },
-  { top: "250px", left: "calc(50% - 444px)", tilt: 1.2, w: "260px" },
-  { top: "410px", left: "calc(50% - 96px)", tilt: -0.8, w: "300px" },
+  { top: "24px", left: "calc(50% - 210px)", tilt: -1.4, w: "420px" },
+  { top: "74px", left: "calc(50% - 540px)", tilt: -2.2, w: "292px" },
+  { top: "246px", left: "calc(50% + 70px)", tilt: 1.8, w: "300px" },
+  { top: "250px", left: "calc(50% - 454px)", tilt: 1.2, w: "292px" },
+  { top: "410px", left: "calc(50% - 104px)", tilt: -0.8, w: "312px" },
 ];
 
 const NOTE_COLORS = [
@@ -3519,15 +3525,14 @@ export function HomePage(): JSX.Element {
       onPointerDown={onNotePointerDown(index)}
       onClick={onNoteClick(index)}
     >
-      <p className="nc-note-body">
-        {locale === "en-US"
-          ? signal.label
-          : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
-      </p>
+      <div className="nc-note-preview" aria-label="post-it preview">
+        <p className="nc-note-body nc-note-body--preview">{thoughtCardPreviewLabel(signal, locale)}</p>
 
-      <div className="nc-note-explain">
-        <p>{explainThoughtCard(signal)}</p>
+        <div className="nc-note-explain nc-note-explain--preview">
+          <p>{explainThoughtCard(signal)}</p>
+        </div>
       </div>
+      <span className="nc-note-open-hint" aria-hidden="true">open note</span>
     </article>
   );
   };
