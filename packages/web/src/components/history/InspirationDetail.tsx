@@ -36,7 +36,7 @@
  * cannot fix.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
@@ -112,6 +112,8 @@ export interface InspirationDetailProps {
   onInspirationUpdated?: (inspiration: ApiInspiration) => void;
   /** Locale for user-visible attachment status copy. */
   locale?: SupportedLocale;
+  /** Move to the next inspiration in the parent list/order. Hidden when omitted. */
+  onNextInspiration?: () => void;
 }
 
 /* ============================================================
@@ -152,6 +154,53 @@ function attachmentMeta(attachment: ApiAttachment, locale: SupportedLocale): str
   return [attachment.contentType, sizeLabel, source].filter(Boolean).join(" · ") || t(locale, "attachmentSourceUserUpload");
 }
 
+function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function detailTitle(inspiration: InspirationDetailData): string {
+  const attachmentTitleText = firstNonEmpty(
+    ...(inspiration.attachments ?? []).map((attachment) =>
+      attachment.type === "link" ? attachment.enrichment?.link?.title : null,
+    ),
+  );
+  if (attachmentTitleText) return attachmentTitleText;
+
+  const text = inspiration.text.trim().replace(/\s+/g, " ");
+  if (!text) return "Saved inspiration";
+  const sentence = text.match(/^(.{24,160}?[.!?])\s/)?.[1] ?? text;
+  return sentence.length > 132 ? `${sentence.slice(0, 129).trimEnd()}…` : sentence;
+}
+
+function detailDescription(inspiration: InspirationDetailData): string | null {
+  return firstNonEmpty(
+    ...(inspiration.attachments ?? []).map((attachment) =>
+      attachment.type === "link" ? attachment.enrichment?.link?.description : null,
+    ),
+  );
+}
+
+function primaryAttachment(inspiration: InspirationDetailData): ApiAttachment | null {
+  const attachments = inspiration.attachments ?? [];
+  return (
+    attachments.find((attachment) => attachment.type === "link" && attachment.enrichment?.link) ??
+    attachments.find((attachment) => attachment.type === "image" && attachment.url) ??
+    attachments[0] ??
+    null
+  );
+}
+
+function previewImageUrl(attachment: ApiAttachment | null): string | null {
+  if (!attachment) return null;
+  if (attachment.type === "link") return attachment.enrichment?.link?.previewImageUrl ?? null;
+  if (attachment.type === "image") return attachment.url ?? null;
+  return null;
+}
+
 export function InspirationDetail({
   inspiration,
   onBack,
@@ -160,6 +209,7 @@ export function InspirationDetail({
   onInspirationScoresChanged,
   onInspirationUpdated,
   locale = DEFAULT_LOCALE,
+  onNextInspiration,
 }: InspirationDetailProps): JSX.Element {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const reflectionsRef = useRef<ApiReflection[]>([]);
@@ -242,6 +292,13 @@ export function InspirationDetail({
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
   const sourceLinks = inspiration.links?.filter((link) => link.trim().length > 0) ?? [];
+  const heroTitle = useMemo(() => detailTitle(inspiration), [inspiration]);
+  const heroDescription = useMemo(() => detailDescription(inspiration), [inspiration]);
+  const featuredAttachment = useMemo(() => primaryAttachment(inspiration), [inspiration]);
+  const featuredPreview = previewImageUrl(featuredAttachment);
+  const featuredUrl = featuredAttachment?.type === "link"
+    ? (featuredAttachment.enrichment?.link?.finalUrl ?? featuredAttachment.url ?? null)
+    : (featuredAttachment?.url ?? sourceLinks[0] ?? null);
 
   const handleSaveDetails = useCallback(() => {
     const nextText = detailsText.trim();
@@ -373,7 +430,7 @@ export function InspirationDetail({
       : [];
 
   return (
-    <div className="detail-view visible" id="detailView">
+    <div className="detail-view detail-view--mockup visible" id="detailView">
       <div className="detail-head detail-head--balanced">
         <div className="detail-head-inner">
           <button
@@ -503,6 +560,56 @@ export function InspirationDetail({
         </div>
       </div>
       <div className="detail-body" id="detailBody">
+        <section className="detail-hero" aria-labelledby="inspirationDetailTitle">
+          <div className="detail-media-card">
+            {featuredPreview ? (
+              <img
+                src={featuredPreview}
+                alt=""
+                className="detail-media-image"
+                loading="lazy"
+              />
+            ) : (
+              <div className="detail-media-placeholder" aria-hidden="true">
+                <span>{featuredAttachment ? attachmentTitle(featuredAttachment) : "Saved signal"}</span>
+              </div>
+            )}
+            {featuredAttachment ? (
+              <div className="detail-media-caption">
+                <span>{attachmentTitle(featuredAttachment)}</span>
+                <small>{attachmentMeta(featuredAttachment, locale)}</small>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="detail-hero-copy">
+            <h1 id="inspirationDetailTitle" className="detail-title">
+              {heroTitle}
+            </h1>
+            <div className="detail-meta detail-meta--hero">
+              {featuredAttachment?.enrichment?.link?.hostname ? `${featuredAttachment.enrichment.link.hostname} · ` : ""}
+              Saved {inspiration.timestamp}
+            </div>
+            {heroDescription ? (
+              <p className="detail-hero-description">{heroDescription}</p>
+            ) : null}
+          </div>
+        </section>
+
+        {featuredUrl ? (
+          <section className="detail-links-section" aria-label="Primary source link">
+            <div className="detail-section-label">Link</div>
+            <a
+              className="detail-primary-link"
+              href={featuredUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {featuredUrl}
+            </a>
+          </section>
+        ) : null}
+
         <form
           className="detail-editor"
           aria-label="Inspiration details"
@@ -515,7 +622,7 @@ export function InspirationDetail({
             htmlFor="inspirationDetailText"
             className="detail-section-label detail-section-title"
           >
-            What you saved
+            Highlights
           </label>
           <textarea
             id="inspirationDetailText"
@@ -532,23 +639,7 @@ export function InspirationDetail({
             <button
               type="submit"
               disabled={!detailsChanged || detailsEmpty || saveState.status === "saving"}
-              style={{
-                background: "var(--ink)",
-                border: "1px solid var(--ink)",
-                borderRadius: 999,
-                color: "var(--bg)",
-                cursor:
-                  !detailsChanged || detailsEmpty || saveState.status === "saving"
-                    ? "not-allowed"
-                    : "pointer",
-                fontFamily: "Inter Tight, Helvetica Neue, Helvetica, Arial, sans-serif",
-                fontSize: 12,
-                letterSpacing: "0.02em",
-                padding: "8px 15px",
-                textTransform: "lowercase",
-                opacity:
-                  !detailsChanged || detailsEmpty || saveState.status === "saving" ? 0.5 : 1,
-              }}
+              className="detail-save-button"
             >
               {saveState.status === "saving" ? "Saving…" : "Save details"}
             </button>
@@ -669,6 +760,17 @@ export function InspirationDetail({
               onToggle={() => setThreadOpen((v) => !v)}
             />
           </div>
+        ) : null}
+
+        {onNextInspiration ? (
+          <button
+            type="button"
+            className="detail-next-button"
+            onClick={onNextInspiration}
+            aria-label="View next inspiration"
+          >
+            View next inspiration <span aria-hidden="true">→</span>
+          </button>
         ) : null}
       </div>
     </div>

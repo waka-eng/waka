@@ -2232,6 +2232,18 @@ export function HomePage(): JSX.Element {
     return entries.find((e) => e.id === selectedId) ?? null;
   }, [entries, selectedId]);
 
+  const nextEntryInHistory = useMemo(() => {
+    if (!selectedId) return null;
+    const index = entries.findIndex((entry) => entry.id === selectedId);
+    return index >= 0 ? (entries[index + 1] ?? null) : null;
+  }, [entries, selectedId]);
+
+  const handleNextInspiration = useCallback(() => {
+    if (!nextEntryInHistory) return;
+    setSelectedId(nextEntryInHistory.id);
+    recordRevisit(nextEntryInHistory.id, "detail_opened");
+  }, [nextEntryInHistory, recordRevisit]);
+
   const detailData = useMemo<InspirationDetailData | null>(() => {
     if (!selectedEntry) return null;
     return {
@@ -2537,6 +2549,7 @@ export function HomePage(): JSX.Element {
       onInspirationScoresChanged={handleInspirationScoresChanged}
       onInspirationUpdated={handleInspirationUpdated}
       locale={locale}
+      onNextInspiration={nextEntryInHistory ? handleNextInspiration : undefined}
     />
   ) : undefined;
 
