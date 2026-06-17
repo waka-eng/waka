@@ -3962,13 +3962,19 @@ export function HomePage(): JSX.Element {
                           <button
                             type="button"
                             className="nc-note-evidence-open"
+                            aria-label="open inspiration"
+                            title="Open inspiration"
                             onClick={() => openSupportingSignalDetail(support)}
                           >
-                            open inspiration
+                            open
                           </button>
                         ) : (
-                          <span className="nc-note-evidence-open nc-note-evidence-open--disabled">
-                            preview only
+                          <span
+                            className="nc-note-evidence-open nc-note-evidence-open--disabled"
+                            aria-label="preview only"
+                            title="Preview only"
+                          >
+                            preview
                           </span>
                         )}
                       </div>

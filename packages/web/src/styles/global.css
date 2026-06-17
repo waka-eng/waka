@@ -4693,11 +4693,14 @@
 }
 
 .nc-note-evidence-actions {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .nc-note-evidence-trigger {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -4731,16 +4734,18 @@
 }
 
 .nc-note-evidence-open {
-  justify-self: start;
+  flex: 0 0 auto;
   border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink);
   cursor: pointer;
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 6px 10px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin-top: 2px;
+  padding: 4px 7px;
   text-transform: uppercase;
 }
 

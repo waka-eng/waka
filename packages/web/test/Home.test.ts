@@ -977,7 +977,8 @@ describe("HomePage current home experience", () => {
 
     const openButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-open");
     expect(openButton).not.toBeNull();
-    expect(openButton?.textContent).toBe("open inspiration");
+    expect(openButton?.textContent).toBe("open");
+    expect(openButton?.getAttribute("aria-label")).toBe("open inspiration");
 
     await act(async () => {
       openButton?.click();
@@ -1031,7 +1032,8 @@ describe("HomePage current home experience", () => {
     const evidenceTrigger = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
     expect(evidenceTrigger?.disabled).toBe(true);
     expect(evidenceTrigger?.textContent).toContain("preview");
-    expect(container.querySelector(".nc-note-evidence-open--disabled")?.textContent).toContain("preview only");
+    expect(container.querySelector(".nc-note-evidence-open--disabled")?.textContent).toContain("preview");
+    expect(container.querySelector(".nc-note-evidence-open--disabled")?.getAttribute("aria-label")).toBe("preview only");
     expect(container.querySelector(".memory-stack-detail--mockup")).toBeNull();
     expect(fetchSavedSignalDetail).not.toHaveBeenCalled();
   });
