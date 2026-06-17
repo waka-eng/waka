@@ -920,7 +920,7 @@ describe("HomePage current home experience", () => {
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
 
-  it("opens a simplified top-of-mind post-it from the keyboard with a private drawer evidence action", async () => {
+  it("opens a simplified top-of-mind post-it from the keyboard with inline evidence and updated actions", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -959,13 +959,9 @@ describe("HomePage current home experience", () => {
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(expanded?.textContent).toContain("shares this context");
     expect(expanded?.textContent).toContain("also points at this post-it");
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>(".nc-note-drawer-link")?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector(".nc-note-modal")).toBeNull();
-    expect(container.querySelector(".memory-drawer-stack")).not.toBeNull();
+    expect(container.querySelector(".nc-note-drawer-link")).toBeNull();
+    expect(container.querySelector(".nc-note-save-action .nc-note-control-btn--save")?.textContent).toBe("save");
+    expect(container.querySelector(".nc-note-delete-action .nc-note-control-btn--delete")?.textContent).toBe("delete");
   });
 
   it("keeps empty evidence out of the opened post-it and points to the drawer", async () => {
@@ -1023,7 +1019,9 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("rewrite in my words");
     expect(expanded?.textContent).not.toContain("rewrite this post-it");
     expect(expanded?.textContent).not.toContain("pin wording");
-    expect(expanded?.textContent).toContain("pull down");
+    expect(expanded?.textContent).not.toContain("pull down");
+    expect(expanded?.textContent).not.toContain("open memory drawer");
+    expect(expanded?.textContent).toContain("delete");
   });
 
   it("persists an in-place Top of Mind rewrite using the user's wording", async () => {
@@ -1061,7 +1059,7 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("pulls down a Top of Mind post-it without showing a weak replacement", async () => {
+  it("deletes a Top of Mind post-it without showing a weak replacement", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -1072,13 +1070,13 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const pullDownButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
-      (button) => button.textContent === "pull down",
+    const deleteButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
+      (button) => button.textContent === "delete",
     );
-    expect(pullDownButton).not.toBeNull();
+    expect(deleteButton).not.toBeNull();
 
     await act(async () => {
-      pullDownButton?.click();
+      deleteButton?.click();
     });
     await flushReactWork();
 

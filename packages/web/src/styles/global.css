@@ -3949,7 +3949,7 @@
 .nc-note-peel-close {
   position: absolute;
   top: 18px;
-  right: 18px;
+  left: 18px;
   z-index: 2;
   display: grid;
   place-items: center;
@@ -4343,6 +4343,30 @@
 
 .nc-note-control-btn--pull {
   border-style: dashed;
+}
+
+.nc-note-control-btn--save {
+  background: color-mix(in srgb, white 34%, transparent);
+}
+
+.nc-note-control-btn--delete {
+  border-style: dashed;
+}
+
+.nc-note-save-action {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 3;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.nc-note-delete-action {
+  display: flex;
+  justify-content: center;
+  width: 100%;
 }
 
 .nc-note-feedback-status {
@@ -4785,7 +4809,7 @@
 .nc-note-expanded-foot {
   display: flex;
   align-items: end;
-  justify-content: space-between;
+  justify-content: center;
   gap: 20px;
   padding-top: 2px;
 }
