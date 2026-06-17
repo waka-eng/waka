@@ -628,6 +628,14 @@ interface MemoryGrouping {
   tilt: number;
 }
 
+interface MemoryPathFilter {
+  id: string;
+  path: string;
+  label: string;
+  description: string;
+  signals: ApiSavedSignalSearchResult[];
+}
+
 interface UserMemoryGrouping {
   id: string;
   name: string;
@@ -1020,6 +1028,135 @@ function sortSignalsForGrouping(
   return [...signals].sort((a, b) => signalRelevanceScore(b, terms) - signalRelevanceScore(a, terms));
 }
 
+function categoryTitleFromTerm(value: string): string {
+  const clean = userFacingCopy(value).replace(/[\s_/-]+/g, " ").trim();
+  if (!clean) return "recently saved";
+  return shortText(
+    clean
+      .split(" ")
+      .map((word) => (word.length <= 2 ? word : `${word[0].toUpperCase()}${word.slice(1)}`))
+      .join(" "),
+    42,
+  );
+}
+
+function isInternalMemoryPathTopic(value: string): boolean {
+  const normalized = value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_:/.-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return true;
+  if (/\b(?:meaning|context|memory)?\s*nodes?\b/.test(normalized)) return true;
+  if (/\b(?:context|memory|graph)\s*edges?\b/.test(normalized)) return true;
+  if (/\bnode\s*ids?\b/.test(normalized)) return true;
+  if (/\b(?:ctx|node|edge|debug|internal)\s*[a-z0-9]{4,}\b/.test(normalized)) return true;
+  return false;
+}
+
+function memoryPathSlug(value: string): string {
+  const cleaned = userFacingCopy(value)
+    .replace(/[’']/g, "")
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9-]/g, ""))
+    .filter((word) =>
+      (word.length > 1 || /^\d+$/.test(word)) && !["the", "and", "for", "with", "from", "that", "this"].includes(word),
+    )
+    .slice(0, 4)
+    .join("-");
+  return cleaned || "inspirations";
+}
+
+function sortedSignalsNewest(signals: ApiSavedSignalSearchResult[]): ApiSavedSignalSearchResult[] {
+  return [...signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
+}
+
+function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPathFilter[] {
+  const sortedSignals = sortedSignalsNewest(signals);
+  const highlightedSignals = sortedSignals.filter(
+    (signal) => signal.highlightedSnippets.length > 0 || signal.matchingSnippets.length > 0,
+  );
+  const recentWindow = sortedSignals.filter((signal) => signalAgeDays(signal) <= 30);
+  const recentlySavedSignals = recentWindow.length > 0 ? recentWindow : sortedSignals.slice(0, Math.min(6, sortedSignals.length));
+  const filters: MemoryPathFilter[] = [
+    {
+      id: "all-saved",
+      path: "/all-saved",
+      label: "all saved",
+      description: "all saved inspirations, newest first",
+      signals: sortedSignals,
+    },
+  ];
+
+  if (highlightedSignals.length > 0) {
+    filters.push({
+      id: "highlights",
+      path: "/highlights",
+      label: "highlights",
+      description: "saved inspirations with highlights",
+      signals: highlightedSignals,
+    });
+  }
+
+  if (recentlySavedSignals.length > 0) {
+    filters.push({
+      id: "recently-saved",
+      path: "/recently-saved",
+      label: "recently saved",
+      description: "newest saved inspirations",
+      signals: recentlySavedSignals,
+    });
+  }
+
+  const topicGroups = new Map<string, { label: string; signals: ApiSavedSignalSearchResult[]; newest: number }>();
+  const addTopic = (rawLabel: string, signal: ApiSavedSignalSearchResult): void => {
+    if (isInternalMemoryPathTopic(rawLabel)) return;
+    const label = categoryTitleFromTerm(rawLabel);
+    const slug = memoryPathSlug(label);
+    if (
+      !slug ||
+      ["signal", "signals", "memory", "memories", "node", "nodes", "graph", "resonance", "waka"].includes(slug) ||
+      isInternalMemoryPathTopic(label) ||
+      isInternalMemoryPathTopic(slug)
+    )
+      return;
+    const existing = topicGroups.get(slug);
+    if (existing) {
+      if (!existing.signals.some((item) => item.id === signal.id)) existing.signals.push(signal);
+      existing.newest = Math.max(existing.newest, capturedAtMs(signal));
+      return;
+    }
+    topicGroups.set(slug, { label, signals: [signal], newest: capturedAtMs(signal) });
+  };
+
+  for (const signal of sortedSignals) {
+    signal.relatedTopOfMindNoteTitles.filter((title) => title.trim()).forEach((title) => addTopic(title, signal));
+  }
+  for (const signal of sortedSignals) {
+    signal.relatedContextTerms.filter((term) => term.trim()).forEach((term) => addTopic(term, signal));
+  }
+
+  const dynamicFilters = [...topicGroups.entries()]
+    .filter(([, group]) => group.signals.length > 0)
+    .sort(([, a], [, b]) => b.signals.length - a.signals.length || b.newest - a.newest)
+    .map(([slug, group]) => ({
+      id: `topic-${slug}`,
+      path: `/${slug}`,
+      label: group.label.toLowerCase(),
+      description: `${group.signals.length === 1 ? "1 inspiration" : `${group.signals.length} inspirations`} sharing this path`,
+      signals: sortedSignalsNewest(group.signals),
+    }));
+
+  return [...filters, ...dynamicFilters];
+}
+
+function applySearchToSignals(signals: ApiSavedSignalSearchResult[], query: string): ApiSavedSignalSearchResult[] {
+  if (!query) return sortedSignalsNewest(signals);
+  return sortedSignalsNewest(signals).filter((signal) => signalTextHaystack(signal).includes(query));
+}
+
 function buildProposedMemoryGroupings(
   signals: ApiSavedSignalSearchResult[],
   notes: ApiTopOfMindNoteSurface[],
@@ -1362,6 +1499,7 @@ export function HomePage(): JSX.Element {
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
+  const [selectedMemoryPathFilterId, setSelectedMemoryPathFilterId] = useState("all-saved");
   // The cleaned-up contents view always reads newest-first; the explicit
   // sort toggle was removed in favor of a calmer, text-forward layout.
   const memoryBrowseOrder: MemoryBrowseOrder = "newest";
@@ -2166,11 +2304,8 @@ export function HomePage(): JSX.Element {
         }),
       ]
     : localSignalRows;
-  const searchedSignals = savedSignalRows.filter((signal) => {
-    if (!savedSignalQuery) return true;
-    return signalTextHaystack(signal).includes(savedSignalQuery);
-  });
-  const inPlaceSignals = [...searchedSignals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
+  const allSavedSignals = sortedSignalsNewest(savedSignalRows);
+  const inPlaceSignals = applySearchToSignals(allSavedSignals, savedSignalQuery);
   const memoryGroupings = useMemo(
     () =>
       buildProposedMemoryGroupings(
@@ -2182,6 +2317,12 @@ export function HomePage(): JSX.Element {
       ),
     [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, topOfMindNotes, userMemoryGroups],
   );
+  const memoryPathFilters = useMemo(() => buildMemoryPathFilters(allSavedSignals), [allSavedSignals]);
+  const selectedMemoryPathFilter =
+    memoryPathFilters.find((filter) => filter.id === selectedMemoryPathFilterId) ?? memoryPathFilters[0] ?? null;
+  const pathFilteredSignals = selectedMemoryPathFilter
+    ? applySearchToSignals(selectedMemoryPathFilter.signals, savedSignalQuery)
+    : inPlaceSignals;
   const selectedMemoryGroup =
     selectedMemoryGroupId === null
       ? null
@@ -2243,6 +2384,13 @@ export function HomePage(): JSX.Element {
       setSelectedMemoryGroupId(null);
     }
   }, [homeMode, memoryGroupings, selectedMemoryGroupId]);
+
+  useEffect(() => {
+    if (homeMode !== "memoryDrawer") return;
+    if (!memoryPathFilters.some((filter) => filter.id === selectedMemoryPathFilterId)) {
+      setSelectedMemoryPathFilterId("all-saved");
+    }
+  }, [homeMode, memoryPathFilters, selectedMemoryPathFilterId]);
 
   useEffect(() => {
     if (!user || homeMode !== "memoryDrawer") return;
@@ -2415,6 +2563,7 @@ export function HomePage(): JSX.Element {
     if (mode === "memoryDrawer") {
       setDrawerClosing(false);
       setSelectedMemoryGroupId(null);
+      setSelectedMemoryPathFilterId("all-saved");
       setSelectedSavedSignalId(null);
       setSavedSignalDetail(null);
       setMemoryWindows([]);
@@ -3039,6 +3188,7 @@ export function HomePage(): JSX.Element {
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
     const sourceLabel = signalSourceLabel(signal);
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
+    const isSelectedSignal = selectedSavedSignalId === signal.id;
     const metaItems = [
       sourceLabel,
       ...signal.attachmentSummary.slice(0, 2).map((attachment) => attachment.label),
@@ -3048,12 +3198,96 @@ export function HomePage(): JSX.Element {
     return (
       <button
         type="button"
-        className="memory-contents-item"
+        className={`memory-contents-item${isSelectedSignal ? " memory-contents-item--active" : ""}`}
+        aria-current={isSelectedSignal ? "true" : undefined}
         onClick={() => openStackSignal(signal)}
       >
         <span className="memory-contents-item-text">{shortText(signal.textPreview, 160)}</span>
         <span className="memory-contents-item-meta">{metaItems.join(" · ")}</span>
       </button>
+    );
+  };
+
+  const renderMemoryPathDrawer = (): JSX.Element => {
+    const hasSavedInspirations = allSavedSignals.length > 0;
+    const hasMatches = pathFilteredSignals.length > 0;
+    const activePath = selectedMemoryPathFilter?.path ?? "/all-saved";
+    const emptyCopy = !hasSavedInspirations
+      ? initialLoading
+        ? copy.loadingSaves
+        : copy.emptySaves
+      : savedSignalQuery
+        ? `No saved inspirations match “${inspirationFilters.search.trim()}” in ${activePath}.`
+        : `No saved inspirations in ${activePath} yet.`;
+
+    return (
+      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
+        <header className="memory-category-intro memory-path-intro">
+          <span>inspiration drawer</span>
+          <h2>{activePath}</h2>
+          <p>
+            {hasMatches
+              ? `${pathFilteredSignals.length === 1 ? "1 save" : `${pathFilteredSignals.length} saves`} · ${selectedMemoryPathFilter?.description ?? "newest first"}`
+              : selectedMemoryPathFilter?.description ?? "newest first"}
+          </p>
+        </header>
+        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+        {savedSignalsLoading && allSavedSignals.length === 0 ? (
+          <p className="memory-relationship-empty">{copy.loadingSaves}</p>
+        ) : null}
+        {!savedSignalsError && !savedSignalsLoading && !hasMatches ? (
+          <p className="memory-relationship-empty">
+            {emptyCopy}
+            {selectedMemoryPathFilterId !== "all-saved" || savedSignalQuery ? (
+              <button
+                type="button"
+                className="memory-path-clear"
+                onClick={() => {
+                  setSelectedMemoryPathFilterId("all-saved");
+                  if (savedSignalQuery) setInspirationFilters({ search: "" });
+                }}
+              >
+                show /all-saved
+              </button>
+            ) : null}
+          </p>
+        ) : null}
+        {hasMatches ? (
+          <ul className="memory-contents-list memory-path-list">
+            {pathFilteredSignals.map((signal) => (
+              <li key={signal.id}>{renderMemoryStackSignalCard(signal)}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderMemoryPathFilters = (): JSX.Element | null => {
+    if (homeMode !== "memoryDrawer" || selectedSavedSignal) return null;
+    return (
+      <nav className="memory-path-filters" aria-label="saved inspiration paths">
+        {memoryPathFilters.map((filter) => {
+          const count = applySearchToSignals(filter.signals, savedSignalQuery).length;
+          return (
+            <button
+              key={filter.id}
+              type="button"
+              className={`memory-path-filter${selectedMemoryPathFilterId === filter.id ? " memory-path-filter--active" : ""}`}
+              aria-pressed={selectedMemoryPathFilterId === filter.id}
+              onClick={() => {
+                setSelectedMemoryPathFilterId(filter.id);
+                setSelectedMemoryGroupId(null);
+                setSelectedSavedSignalId(null);
+                setSavedSignalDetail(null);
+              }}
+              title={`${filter.description} (${count})`}
+            >
+              {filter.path}
+            </button>
+          );
+        })}
+      </nav>
     );
   };
 
@@ -3072,7 +3306,7 @@ export function HomePage(): JSX.Element {
         detail={savedSignalDetail}
         loading={savedSignalDetailLoading}
         relatedGroupNames={relatedGroupNames}
-        backLabel={selectedMemoryGroup ? "list" : "map"}
+        backLabel={selectedMemoryGroup ? "list" : (selectedMemoryPathFilter?.label ?? "list")}
         activeFeedback={activeFeedback}
         highlightError={
           highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id
@@ -3327,6 +3561,8 @@ export function HomePage(): JSX.Element {
   void setMemoryFolderView;
   void visibleMemoryWindows;
   void renderMemorySignalCard;
+  void renderMemoryGroupObject;
+  void createUserMemoryGroup;
   void renderMemoryFlow;
   void renderMemoryWindow;
 
@@ -3883,31 +4119,10 @@ export function HomePage(): JSX.Element {
             </div>
           ) : (
             <div
-              className="memory-stack-level"
+              className="memory-stack-level memory-stack-level--categories"
               onClick={closeMemoryDrawerFromBackdrop}
             >
-              <div
-                className="memory-group-board memory-map-board"
-                aria-label="proposed inspiration groupings"
-                onClick={closeMemoryDrawerFromBackdrop}
-              >
-                {memoryGroupings.map(renderMemoryGroupObject)}
-                <button
-                  type="button"
-                  className="memory-bulletin-object memory-map-node memory-map-node--new"
-                  onClick={createUserMemoryGroup}
-                >
-                  <strong>/make-my-own</strong>
-                  <small>new collection</small>
-                </button>
-                {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
-                {savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p className="memory-relationship-empty">{copy.loadingSaves}</p>
-                ) : null}
-                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-                ) : null}
-              </div>
+              {renderMemoryPathDrawer()}
             </div>
           )}
         </section>
@@ -3916,20 +4131,23 @@ export function HomePage(): JSX.Element {
       {expandedNoteIndex === null ? (
         <div className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`} aria-label="bottom actions">
           {homeMode === "memoryDrawer" ? (
-            <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
-              <span className="sr-only">{copy.searchLabel}</span>
-              <input
-                type="search"
-                value={inspirationFilters.search}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  setInspirationFilters({ search: event.target.value });
-                  setSelectedMemoryGroupId(event.target.value.trim().length > 0 ? "all" : null);
-                  setSelectedSavedSignalId(null);
-                  setSavedSignalDetail(null);
-                }}
-                placeholder={copy.searchPlaceholder}
-              />
-            </label>
+            <>
+              {renderMemoryPathFilters()}
+              <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
+                <span className="sr-only">{copy.searchLabel}</span>
+                <input
+                  type="search"
+                  value={inspirationFilters.search}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    setInspirationFilters({ search: event.target.value });
+                    setSelectedMemoryGroupId(null);
+                    setSelectedSavedSignalId(null);
+                    setSavedSignalDetail(null);
+                  }}
+                  placeholder={copy.searchPlaceholder}
+                />
+              </label>
+            </>
           ) : (
             <button
               type="button"
