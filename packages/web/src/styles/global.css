@@ -12034,6 +12034,7 @@ body.reflect-bg {
   backdrop-filter: blur(2px) saturate(0.96);
   -webkit-backdrop-filter: blur(2px) saturate(0.96);
   pointer-events: none;
+  transform: none;
   animation: memoryDrawerOverlayIn 240ms ease both;
 }
 
@@ -12065,6 +12066,12 @@ body.reflect-bg {
   inset: 0;
   overflow: visible;
   padding: 0;
+}
+
+.memory-stack-level--categories {
+  overflow: auto;
+  padding: clamp(64px, 10vh, 96px) clamp(20px, 5vw, 56px) 132px;
+  pointer-events: auto;
 }
 
 .memory-stack-entrybar {

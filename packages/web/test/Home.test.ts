@@ -1505,6 +1505,12 @@ describe("HomePage current home experience", () => {
     const css = readFileSync("src/styles/global.css", "utf8");
 
     expect(css).toMatch(/\.memory-drawer-stack\s*\{[\s\S]*?left: 50%;[\s\S]*?transform: translateX\(-50%\);/);
+    expect(css).toMatch(
+      /\.memory-drawer-stack\s*\{[\s\S]*?inset: 0;[\s\S]*?width: 100vw;[\s\S]*?transform: none;[\s\S]*?animation: memoryDrawerOverlayIn/,
+    );
+    expect(css).toMatch(
+      /\.memory-stack-level--categories\s*\{[\s\S]*?padding: clamp\(64px, 10vh, 96px\) clamp\(20px, 5vw, 56px\) 132px;/,
+    );
     expect(css).toMatch(/\.memory-category-panel\s*\{[\s\S]*?width: min\(680px, 100%\);[\s\S]*?margin: 0 auto;/);
     expect(css).toMatch(/\.memory-path-list\s*\{[\s\S]*?width: min\(680px, 100%\);[\s\S]*?margin: 0 auto;/);
     expect(css).toMatch(
