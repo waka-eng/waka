@@ -3199,6 +3199,7 @@ export function HomePage(): JSX.Element {
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
     const sourceLabel = signalSourceLabel(signal);
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
+    const isSelectedSignal = selectedSavedSignalId === signal.id;
     const metaItems = [
       sourceLabel,
       ...signal.attachmentSummary.slice(0, 2).map((attachment) => attachment.label),
@@ -3208,7 +3209,8 @@ export function HomePage(): JSX.Element {
     return (
       <button
         type="button"
-        className="memory-contents-item"
+        className={`memory-contents-item${isSelectedSignal ? " memory-contents-item--active" : ""}`}
+        aria-current={isSelectedSignal ? "true" : undefined}
         onClick={() => openStackSignal(signal)}
       >
         <span className="memory-contents-item-text">{shortText(signal.textPreview, 160)}</span>
