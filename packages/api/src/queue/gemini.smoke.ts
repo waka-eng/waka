@@ -24,7 +24,7 @@
  *   5. `parseClusterFromResponse` handles the documented JSON-encoded shape,
  *      the un-quoted fallback shape, missing candidates, empty parts, and
  *      out-of-set strings — without ever throwing.
- *   6. URL/header builders pin the `gemini-2.0-flash` model id, keep secrets
+ *   6. URL/header builders pin the `gemini-3.1-flash-lite` model id, keep secrets
  *      out of the URL, and send the key via `x-goog-api-key`.
  *   7. (Live, optional) If `GEMINI_API_KEY` is set, classify a hand-picked
  *      inspiration end-to-end and assert the returned cluster is one of the
@@ -33,6 +33,12 @@
  */
 
 import "dotenv/config";
+
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { config as loadDotenv } from "dotenv";
 
 import { clusterEnumValues } from "../db/index.js";
 import { buildGeminiJsonHeaders } from "../lib/gemini-http.js";
@@ -51,7 +57,33 @@ function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(`assert: ${msg}`);
 }
 
+function loadRepoLocalEnvIfNeeded() {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 0) return;
+
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [process.cwd(), scriptDir];
+  const seen = new Set<string>();
+
+  for (const start of candidates) {
+    let current = resolve(start);
+    while (!seen.has(current)) {
+      seen.add(current);
+      const envPath = join(current, ".env.local");
+      if (existsSync(envPath)) {
+        loadDotenv({ path: envPath, override: false });
+        if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 0) return;
+      }
+
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+}
+
 async function main() {
+  loadRepoLocalEnvIfNeeded();
+
   // -------------------------------------------------------------------------
   // 1. Request body shape
   // -------------------------------------------------------------------------
@@ -298,8 +330,8 @@ async function main() {
   const url = buildGenerateContentUrl();
   assert(
     url ===
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-    `URL must hit the v1beta gemini-2.0-flash generateContent endpoint without query secrets, got: ${url}`,
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+    `URL must hit the v1beta gemini-3.1-flash-lite generateContent endpoint without query secrets, got: ${url}`,
   );
   assert(!url.includes("?key="), "API key must not be placed in the query string");
   const headers = buildGeminiJsonHeaders("ABC=DEF&xyz");
