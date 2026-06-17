@@ -34,6 +34,12 @@
 
 import "dotenv/config";
 
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { config as loadDotenv } from "dotenv";
+
 import { clusterEnumValues } from "../db/index.js";
 import { buildGeminiJsonHeaders } from "../lib/gemini-http.js";
 import {
@@ -51,7 +57,33 @@ function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(`assert: ${msg}`);
 }
 
+function loadRepoLocalEnvIfNeeded() {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 0) return;
+
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [process.cwd(), scriptDir];
+  const seen = new Set<string>();
+
+  for (const start of candidates) {
+    let current = resolve(start);
+    while (!seen.has(current)) {
+      seen.add(current);
+      const envPath = join(current, ".env.local");
+      if (existsSync(envPath)) {
+        loadDotenv({ path: envPath, override: false });
+        if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 0) return;
+      }
+
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+}
+
 async function main() {
+  loadRepoLocalEnvIfNeeded();
+
   // -------------------------------------------------------------------------
   // 1. Request body shape
   // -------------------------------------------------------------------------

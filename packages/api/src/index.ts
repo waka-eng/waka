@@ -17,6 +17,7 @@ import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
 import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.js";
 import { decisionMemoRoutes } from "./routes/decision-memo.js";
 import { feedbackRoutes } from "./routes/feedback.js";
+import { guidedReflectionRoutes } from "./routes/guided-reflection.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { signalArchiveRoutes } from "./routes/signals.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
@@ -51,6 +52,11 @@ app.route("/api/admin/top-of-mind-preview", adminTopOfMindPreviewRoutes);
 // Every handler in this router requires a valid session — the router
 // applies `requireAuth` at the mount point.
 app.route("/api/inspirations", inspirationsRoutes);
+
+// User-facing guided Reflect Deeper prompt generation. The route owns the
+// model contract and returns deterministic fallback copy when generation is
+// unavailable, so the capture flow can stay safe and non-blocking.
+app.route("/api/guided-reflection", guidedReflectionRoutes);
 
 // User-facing saved-signal archive and deep-dive surface.
 app.route("/api/signals", signalArchiveRoutes);

@@ -1732,6 +1732,52 @@ export async function finalizeAttachment(
 }
 
 // ---------------------------------------------------------------------------
+// Guided reflection question generation
+// ---------------------------------------------------------------------------
+
+export interface GuidedReflectionQuestionRequest {
+  locale?: SupportedLocale;
+  inspiration: {
+    text: string;
+    kind: ApiInspirationKind;
+    links?: string[];
+    attachmentKinds?: Array<"link" | "image" | "file">;
+    highlights?: string[];
+    resonance?: string | null;
+    resonanceNote?: string | null;
+  };
+  priorAnswers: Array<{ question: string; answer: string }>;
+}
+
+export interface GuidedReflectionQuestionResponse {
+  question: string;
+  source: "model" | "fallback";
+  fallbackReason?:
+    | "no_model_config"
+    | "model_http_error"
+    | "model_network_error"
+    | "invalid_model_response"
+    | "empty_model_response";
+}
+
+/**
+ * POST /guided-reflection/question
+ *
+ * Generates the next Reflect Deeper prompt from the current capture payload and
+ * all prior guided answers. The server owns the LLM JSON contract and returns a
+ * deterministic fallback question when model generation is unavailable.
+ */
+export async function generateGuidedReflectionQuestion(
+  input: GuidedReflectionQuestionRequest,
+): Promise<GuidedReflectionQuestionResponse> {
+  return postJson<GuidedReflectionQuestionResponse>(
+    apiPath("/guided-reflection/question"),
+    input,
+    "Failed to generate reflection question",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Reflections
 // ---------------------------------------------------------------------------
 

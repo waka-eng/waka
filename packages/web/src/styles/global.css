@@ -7689,6 +7689,17 @@ body.dragging .drop-overlay {
   text-transform: uppercase;
   color: var(--muted);
 }
+.reflect-progress {
+  display: block;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 @keyframes qFade {
   from {
     opacity: 0;

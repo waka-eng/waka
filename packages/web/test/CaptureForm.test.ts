@@ -9,6 +9,7 @@ import {
   createInspiration,
   createReflection,
   finalizeAttachment,
+  generateGuidedReflectionQuestion,
   ApiError,
   presignAttachment,
   uploadToPresignedUrl,
@@ -23,6 +24,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     createInspiration: vi.fn(),
     createReflection: vi.fn(),
     finalizeAttachment: vi.fn(),
+    generateGuidedReflectionQuestion: vi.fn(),
     presignAttachment: vi.fn(),
     uploadToPresignedUrl: vi.fn(),
   };
@@ -80,6 +82,14 @@ function setText(value: string): void {
   textarea?.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function setReflectText(value: string): void {
+  const textarea = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
+  expect(textarea).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(textarea, value);
+  textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 
 async function pressMetaEnter(): Promise<void> {
   const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
@@ -127,6 +137,11 @@ beforeEach(() => {
       skipped: false,
       createdAt: "2026-05-27T12:01:00.000Z",
     },
+  });
+  vi.mocked(generateGuidedReflectionQuestion).mockResolvedValue({
+    question: "What first caught you here — the idea, feeling, person, or possibility?",
+    source: "fallback",
+    fallbackReason: "no_model_config",
   });
   vi.mocked(presignAttachment).mockResolvedValue({
     uploadUrl: "https://s3.example/upload",
@@ -468,27 +483,72 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
   });
 
-  it("attaches a reflection through the Reflect-deeper save flow", async () => {
+  it("attaches one ordered adaptive guided reflection after three LLM-guided questions", async () => {
     vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save" }));
+    vi.mocked(generateGuidedReflectionQuestion)
+      .mockResolvedValueOnce({ question: "What private weather does this signal name?", source: "model" })
+      .mockResolvedValueOnce({ question: "What would protecting that weather ask you to change?", source: "model" })
+      .mockResolvedValueOnce({ question: "What is one small room-temperature experiment for tomorrow?", source: "model" });
     const onSaved = vi.fn();
     await renderCaptureForm({ onSaved });
     await act(async () => {
       setText("A messy thing I want safe before I understand it");
     });
 
-    // "Reflect deeper" opens the reflection view before committing the save.
+    // "Reflect deeper" opens the guided reflection view before committing the save.
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
     });
+    await flushReactWork();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith({
+      locale: "en-US",
+      inspiration: {
+        text: "A messy thing I want safe before I understand it",
+        kind: "note",
+        links: [],
+        attachmentKinds: [],
+        highlights: [],
+        resonance: null,
+        resonanceNote: "",
+      },
+      priorAnswers: [],
+    });
+    expect(createInspiration).not.toHaveBeenCalled();
 
-    const answer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
-    expect(answer).not.toBeNull();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
     await act(async () => {
-      setter?.call(answer, "It showed me what I want to protect.");
-      answer?.dispatchEvent(new Event("input", { bubbles: true }));
+      setReflectText("The feeling of wanting to protect it.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
+    expect(generateGuidedReflectionQuestion).toHaveBeenLastCalledWith(expect.objectContaining({
+      priorAnswers: [
+        {
+          question: "What private weather does this signal name?",
+          answer: "The feeling of wanting to protect it.",
+        },
+      ],
+    }));
+    expect(createInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setReflectText("More quiet studio time.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("one small room-temperature experiment");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
+    expect(createInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setReflectText("Book one hour tomorrow.");
     });
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
@@ -496,9 +556,14 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
 
     expect(createInspiration).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledTimes(1);
     expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
-      question: "Why did this matter right now?",
-      answer: "It showed me what I want to protect.",
+      question: "Reflect deeper guided reflection",
+      answer: [
+        "What private weather does this signal name?\nThe feeling of wanting to protect it.",
+        "What would protecting that weather ask you to change?\nMore quiet studio time.",
+        "What is one small room-temperature experiment for tomorrow?\nBook one hour tomorrow.",
+      ].join("\n\n"),
       skipped: false,
     });
     // No mirror card — the parent is signalled to close and flash "saved".
@@ -759,8 +824,8 @@ describe("CaptureForm multi-input quick capture", () => {
   });
 });
 
-describe("CaptureForm Process journey", () => {
-  it("enters the deeper path only from Reflect deeper and saves the answer separately", async () => {
+describe("CaptureForm Reflect Deeper journey", () => {
+  it("blocks blank steps, supports back, and saves after the final guided answer", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("Process this richer input");
@@ -774,16 +839,57 @@ describe("CaptureForm Process journey", () => {
 
     expect(createInspiration).not.toHaveBeenCalled();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
-
-    const answer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
-    expect(answer).not.toBeNull();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-    await act(async () => {
-      setter?.call(answer, "It connects to the next project.");
-      answer?.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
 
     const continueButton = container?.querySelector<HTMLButtonElement>("#reflectNext");
+    await act(async () => {
+      continueButton?.click();
+    });
+    expect(createInspiration).not.toHaveBeenCalled();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Add a few words to keep going");
+
+    await act(async () => {
+      setReflectText("It connects to the next project.");
+    });
+    await act(async () => {
+      continueButton?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+
+    await act(async () => {
+      setReflectText("A protected weekly making block.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectLater")?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector<HTMLTextAreaElement>("#reflectAns")?.value).toBe("It connects to the next project.");
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectLater")?.click();
+    });
+    expect(container?.querySelector("#reflectArea")?.className).not.toContain("visible");
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Process this richer input");
+
+    await act(async () => {
+      processButton?.click();
+    });
+    await act(async () => {
+      setReflectText("It connects to the next project.");
+    });
+    await act(async () => {
+      continueButton?.click();
+    });
+    await act(async () => {
+      setReflectText("A protected weekly making block.");
+    });
+    await act(async () => {
+      continueButton?.click();
+    });
+    await act(async () => {
+      setReflectText("Schedule Friday morning.");
+    });
     await act(async () => {
       continueButton?.click();
     });
@@ -795,8 +901,8 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "Why did this matter right now?",
-      answer: "It connects to the next project.",
+      question: "Reflect deeper guided reflection",
+      answer: expect.stringContaining("Schedule Friday morning."),
       skipped: false,
     });
   });
