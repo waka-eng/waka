@@ -9601,22 +9601,30 @@ body.reflect-bg {
 }
 
 .detail-head--balanced {
+  justify-content: center;
+  padding-inline: clamp(18px, 5vw, 40px);
+}
+
+.detail-head-inner {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  width: min(100%, 620px);
 }
 
 .detail-body {
   display: grid;
-  gap: 20px;
-  width: min(100%, 660px);
+  gap: 28px;
+  width: min(calc(100% - clamp(36px, 9vw, 112px)), 620px);
   box-sizing: border-box;
   margin: 0 auto;
-  padding: 30px 26px 44px;
+  padding: clamp(34px, 6vw, 52px) 0 56px;
 }
 
 .detail-editor {
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .detail-section-label {
@@ -9627,11 +9635,21 @@ body.reflect-bg {
   text-transform: uppercase;
 }
 
+.detail-section-title {
+  color: var(--ink);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 560;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  text-transform: none;
+}
+
 .detail-text {
   border: var(--border-hairline);
   border-radius: var(--radius-sm);
   background: rgba(255, 253, 247, 0.62);
-  padding: 20px;
+  padding: clamp(20px, 4vw, 30px);
   margin-bottom: 0;
 }
 
@@ -9642,10 +9660,10 @@ body.reflect-bg {
   resize: vertical;
   font: inherit;
   font-family: var(--font-serif);
-  font-size: clamp(18px, 2vw, 22px);
+  font-size: clamp(18px, 1.7vw, 21px);
   font-style: italic;
   font-weight: 300;
-  line-height: 1.58;
+  line-height: 1.68;
   color: var(--ink);
   outline: none;
 }
@@ -9670,12 +9688,18 @@ body.reflect-bg {
 .detail-links-section,
 .detail-attachments {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   margin: 0;
 }
 
 .detail-links {
   margin-bottom: 0;
+  row-gap: 8px;
+}
+
+.detail-links a {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .detail-attachment-card {
@@ -9719,9 +9743,14 @@ body.reflect-bg {
 }
 
 @media (max-width: 760px) {
+  .detail-head--balanced {
+    padding-inline: 18px;
+  }
+
   .detail-body {
     width: 100%;
     padding: 24px 18px 34px;
+    gap: 22px;
   }
 
   .detail-text {
