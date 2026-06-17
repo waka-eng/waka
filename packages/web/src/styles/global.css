@@ -1374,7 +1374,7 @@
   bottom: clamp(92px, 13vh, 138px);
   z-index: 45;
   display: grid;
-  width: min(560px, calc(100vw - 44px));
+  width: min(920px, calc(100vw - 44px));
   height: min(620px, calc(100dvh - 142px));
   min-height: 360px;
   padding: 14px;
@@ -1451,6 +1451,107 @@
   min-height: 0;
   overflow: auto;
   padding: 8px 4px 4px;
+}
+
+.memory-stack-level--categories {
+  overflow-x: hidden;
+  padding: 10px 6px 6px;
+}
+
+.memory-category-panel {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.memory-category-intro {
+  display: grid;
+  gap: 6px;
+  max-width: 620px;
+  padding: 4px 4px 0;
+}
+
+.memory-category-intro span,
+.memory-category-column-head span {
+  color: rgba(54, 47, 31, 0.58);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.memory-category-intro h2 {
+  margin: 0;
+  color: #2d281d;
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3vw, 34px);
+  font-weight: 500;
+  line-height: 1.08;
+}
+
+.memory-category-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.memory-category-column {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(54, 48, 34, 0.14);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.82), rgba(246, 239, 222, 0.58)),
+    #f8f3e6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.memory-category-column-head {
+  display: grid;
+  gap: 8px;
+  padding: 16px 16px 6px;
+  border-bottom: 1px solid rgba(54, 48, 34, 0.1);
+}
+
+.memory-category-column-head h3 {
+  margin: 2px 0 0;
+  color: #2d281d;
+  font-family: var(--font-serif);
+  font-size: clamp(18px, 2vw, 24px);
+  font-weight: 500;
+  line-height: 1.08;
+}
+
+.memory-category-column-head p {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.62);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.memory-category-list {
+  padding: 0 10px 10px;
+}
+
+.memory-category-list .memory-contents-item {
+  padding: 13px 10px;
+}
+
+@media (max-width: 760px) {
+  .memory-drawer-stack {
+    right: 14px;
+    left: 14px;
+    width: auto;
+  }
+
+  .memory-category-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 .memory-stack-entrybar,

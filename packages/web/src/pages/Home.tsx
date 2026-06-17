@@ -627,6 +627,15 @@ interface MemoryGrouping {
   tilt: number;
 }
 
+interface MemoryCategoryColumn {
+  id: string;
+  title: string;
+  explanation: string;
+  priority: number;
+  terms: string[];
+  signals: ApiSavedSignalSearchResult[];
+}
+
 interface UserMemoryGrouping {
   id: string;
   name: string;
@@ -1034,6 +1043,133 @@ function sortSignalsForGrouping(
 ): ApiSavedSignalSearchResult[] {
   if (order === "newest") return [...signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
   return [...signals].sort((a, b) => signalRelevanceScore(b, terms) - signalRelevanceScore(a, terms));
+}
+
+function categoryTitleFromTerm(value: string): string {
+  const clean = userFacingCopy(value).replace(/[\s_/-]+/g, " ").trim();
+  if (!clean) return "Recently saved";
+  return shortText(
+    clean
+      .split(" ")
+      .map((word) => (word.length <= 2 ? word : `${word[0].toUpperCase()}${word.slice(1)}`))
+      .join(" "),
+    42,
+  );
+}
+
+function materialCategoryForSignal(signal: ApiSavedSignalSearchResult): Pick<MemoryCategoryColumn, "id" | "title" | "explanation" | "priority" | "terms"> {
+  const visual = signalVisualTreatment(signal);
+  if (visual === "image" || visual === "link") {
+    return {
+      id: "material-images-links",
+      title: "Images & links",
+      explanation: "Visual and link saves gathered together.",
+      priority: 1,
+      terms: ["image", "link"],
+    };
+  }
+  if (visual === "mixed") {
+    return {
+      id: "material-mixed-saves",
+      title: "Mixed saves",
+      explanation: "Layered captures with more than one kind of material.",
+      priority: 1,
+      terms: ["mixed"],
+    };
+  }
+  return {
+    id: "material-notes-scraps",
+    title: "Notes & scraps",
+    explanation: "Text saves and highlighted scraps kept close together.",
+    priority: 1,
+    terms: ["note"],
+  };
+}
+
+function categorySeedForSignal(signal: ApiSavedSignalSearchResult): Pick<MemoryCategoryColumn, "id" | "title" | "explanation" | "priority" | "terms"> {
+  const topOfMindTitle = signal.relatedTopOfMindNoteTitles.find((title) => title.trim().length > 0);
+  if (topOfMindTitle) {
+    const label = categoryTitleFromTerm(topOfMindTitle);
+    return {
+      id: `tom-${normalizeMeaningLabel(topOfMindTitle).replace(/[^a-z0-9]+/g, "-") || signal.id}`,
+      title: label,
+      explanation: "Saved inspirations leaning toward the same post-it.",
+      priority: 3,
+      terms: [topOfMindTitle],
+    };
+  }
+
+  const contextTerm = signal.relatedContextTerms.find((term) => term.trim().length > 0);
+  if (contextTerm) {
+    const label = categoryTitleFromTerm(contextTerm);
+    return {
+      id: `context-${normalizeMeaningLabel(contextTerm).replace(/[^a-z0-9]+/g, "-") || signal.id}`,
+      title: label,
+      explanation: "Saved inspirations sharing a nearby theme.",
+      priority: 2,
+      terms: [contextTerm],
+    };
+  }
+
+  return materialCategoryForSignal(signal);
+}
+
+function buildMemoryCategoryColumns(signals: ApiSavedSignalSearchResult[]): MemoryCategoryColumn[] {
+  const sortedSignals = [...signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
+  const groupsById = new Map<string, MemoryCategoryColumn>();
+
+  for (const signal of sortedSignals) {
+    const seed = categorySeedForSignal(signal);
+    const existing = groupsById.get(seed.id);
+    if (existing) {
+      existing.signals.push(signal);
+    } else {
+      groupsById.set(seed.id, { ...seed, signals: [signal] });
+    }
+  }
+
+  const sortedGroups = [...groupsById.values()].sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority;
+    if (b.signals.length !== a.signals.length) return b.signals.length - a.signals.length;
+    return capturedAtMs(b.signals[0]) - capturedAtMs(a.signals[0]);
+  });
+
+  if (sortedSignals.length <= 2) {
+    return sortedGroups.slice(0, 2).map((group) => ({
+      ...group,
+      signals: [...group.signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a)),
+    }));
+  }
+
+  const primaryGroups = sortedGroups
+    .filter((group) => group.priority >= 2 && (group.signals.length > 1 || group.priority >= 3))
+    .slice(0, 2);
+  const groupedSignalIds = new Set(primaryGroups.flatMap((group) => group.signals.map((signal) => signal.id)));
+  const recentSignals = sortedSignals.filter((signal) => !groupedSignalIds.has(signal.id));
+  const columns: MemoryCategoryColumn[] = primaryGroups.map((group) => ({
+    ...group,
+    signals: [...group.signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a)),
+  }));
+
+  if (recentSignals.length > 0) {
+    columns.push({
+      id: "recently-saved-column",
+      title: "Recently saved",
+      explanation: "Newest inspirations that are still finding their place.",
+      priority: 0,
+      terms: ["recent"],
+      signals: recentSignals,
+    });
+  }
+
+  if (columns.length === 0) {
+    return sortedGroups.slice(0, 3).map((group) => ({
+      ...group,
+      signals: [...group.signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a)),
+    }));
+  }
+
+  return columns.slice(0, 3);
 }
 
 function buildProposedMemoryGroupings(
@@ -2194,6 +2330,7 @@ export function HomePage(): JSX.Element {
       ),
     [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, topOfMindNotes, userMemoryGroups],
   );
+  const memoryCategoryColumns = useMemo(() => buildMemoryCategoryColumns(inPlaceSignals), [inPlaceSignals]);
   const selectedMemoryGroup =
     selectedMemoryGroupId === null
       ? null
@@ -3069,6 +3206,40 @@ export function HomePage(): JSX.Element {
     );
   };
 
+  const renderMemoryCategoryColumns = (): JSX.Element => (
+    <div className="memory-category-panel" aria-label="categorized saved inspirations">
+      <header className="memory-category-intro">
+        <span>inspiration drawer</span>
+        <h2>Saved inspirations, sorted into nearby threads.</h2>
+      </header>
+      <div className="memory-category-columns">
+        {memoryCategoryColumns.map((column) => (
+          <section className="memory-category-column" key={column.id} aria-label={column.title}>
+            <header className="memory-category-column-head">
+              <div>
+                <span>{column.signals.length === 1 ? "1 save" : `${column.signals.length} saves`}</span>
+                <h3>{column.title}</h3>
+              </div>
+              <p>{column.explanation}</p>
+            </header>
+            <ul className="memory-contents-list memory-category-list">
+              {column.signals.map((signal) => (
+                <li key={signal.id}>{renderMemoryStackSignalCard(signal)}</li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+      {savedSignalsLoading && inPlaceSignals.length === 0 ? (
+        <p className="memory-relationship-empty">{copy.loadingSaves}</p>
+      ) : null}
+      {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
+        <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
+      ) : null}
+    </div>
+  );
+
   const renderMemoryStackDetail = (): JSX.Element | null => {
     if (!selectedSavedSignal) return null;
     const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
@@ -3339,6 +3510,8 @@ export function HomePage(): JSX.Element {
   void setMemoryFolderView;
   void visibleMemoryWindows;
   void renderMemorySignalCard;
+  void renderMemoryGroupObject;
+  void createUserMemoryGroup;
   void renderMemoryFlow;
   void renderMemoryWindow;
 
@@ -3755,31 +3928,10 @@ export function HomePage(): JSX.Element {
             </div>
           ) : (
             <div
-              className="memory-stack-level"
+              className="memory-stack-level memory-stack-level--categories"
               onClick={closeMemoryDrawerFromBackdrop}
             >
-              <div
-                className="memory-group-board memory-map-board"
-                aria-label="proposed inspiration groupings"
-                onClick={closeMemoryDrawerFromBackdrop}
-              >
-                {memoryGroupings.map(renderMemoryGroupObject)}
-                <button
-                  type="button"
-                  className="memory-bulletin-object memory-map-node memory-map-node--new"
-                  onClick={createUserMemoryGroup}
-                >
-                  <strong>/make-my-own</strong>
-                  <small>new collection</small>
-                </button>
-                {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
-                {savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p className="memory-relationship-empty">{copy.loadingSaves}</p>
-                ) : null}
-                {!savedSignalsError && !savedSignalsLoading && inPlaceSignals.length === 0 ? (
-                  <p className="memory-relationship-empty">{initialLoading ? copy.loadingSaves : copy.emptySaves}</p>
-                ) : null}
-              </div>
+              {renderMemoryCategoryColumns()}
             </div>
           )}
         </section>
@@ -3795,7 +3947,7 @@ export function HomePage(): JSX.Element {
                 value={inspirationFilters.search}
                 onChange={(event: ChangeEvent<HTMLInputElement>) => {
                   setInspirationFilters({ search: event.target.value });
-                  setSelectedMemoryGroupId(event.target.value.trim().length > 0 ? "all" : null);
+                  setSelectedMemoryGroupId(null);
                   setSelectedSavedSignalId(null);
                   setSavedSignalDetail(null);
                 }}
