@@ -24,7 +24,7 @@
  *   5. `parseClusterFromResponse` handles the documented JSON-encoded shape,
  *      the un-quoted fallback shape, missing candidates, empty parts, and
  *      out-of-set strings — without ever throwing.
- *   6. URL/header builders pin the `gemini-2.0-flash` model id, keep secrets
+ *   6. URL/header builders pin the `gemini-3.1-flash-lite` model id, keep secrets
  *      out of the URL, and send the key via `x-goog-api-key`.
  *   7. (Live, optional) If `GEMINI_API_KEY` is set, classify a hand-picked
  *      inspiration end-to-end and assert the returned cluster is one of the
@@ -298,8 +298,8 @@ async function main() {
   const url = buildGenerateContentUrl();
   assert(
     url ===
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
-    `URL must hit the v1beta gemini-2.0-flash generateContent endpoint without query secrets, got: ${url}`,
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+    `URL must hit the v1beta gemini-3.1-flash-lite generateContent endpoint without query secrets, got: ${url}`,
   );
   assert(!url.includes("?key="), "API key must not be placed in the query string");
   const headers = buildGeminiJsonHeaders("ABC=DEF&xyz");

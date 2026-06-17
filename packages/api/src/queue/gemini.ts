@@ -103,14 +103,15 @@ function getGeminiApiKey(): string {
 }
 
 /**
- * Model id pinned per the Seed constraints ("gemini-2.0-flash or equivalent").
+ * Model id pinned to the same lightweight Gemini family used by the other
+ * WAKA Gemini clients.
  *
  * Pinned here as a module constant rather than read from env so a model
  * change is a code change (and therefore visible in code review). The
  * classifier prompt is tuned for this model's behaviour; swapping models
  * silently is a quiet way to degrade output quality.
  */
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
 /**
  * Hard cap on inspiration text length sent to Gemini.
@@ -122,7 +123,7 @@ const GEMINI_MODEL = "gemini-2.0-flash";
  *      context window and silently fail.
  *
  * 4 kB is comfortably above any realistic capture and well below the
- * gemini-2.0-flash 1M-token context.
+ * gemini-3.1-flash-lite context window.
  */
 const MAX_INSPIRATION_CHARS = 4000;
 
