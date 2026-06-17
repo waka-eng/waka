@@ -3706,6 +3706,11 @@
     z-index 0s;
 }
 
+.nc-note:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ink) 42%, white);
+  outline-offset: 6px;
+}
+
 .nc-note--dragging,
 .nc-note--dragging:hover {
   cursor: grabbing;

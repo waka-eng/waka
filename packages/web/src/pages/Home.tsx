@@ -28,6 +28,7 @@ import {
   useState,
   type ChangeEvent,
   type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -3503,6 +3504,12 @@ export function HomePage(): JSX.Element {
     setExpandedNoteIndex((current) => (current === index ? current : index));
   };
 
+  const onNoteKeyDown = (index: number) => (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    setExpandedNoteIndex((current) => (current === index ? current : index));
+  };
+
   const closeExpandedNoteOnBackdrop = () => {
     setExpandedNoteIndex(null);
     setExpandedSupportingSignalIds(new Set());
@@ -3556,6 +3563,9 @@ export function HomePage(): JSX.Element {
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
       key={signal.id}
+      role="button"
+      tabIndex={0}
+      aria-label="open post-it reflection"
       style={{
         ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
         ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
@@ -3567,6 +3577,7 @@ export function HomePage(): JSX.Element {
       }}
       onPointerDown={onNotePointerDown(index)}
       onClick={onNoteClick(index)}
+      onKeyDown={onNoteKeyDown(index)}
     >
       <div className="nc-note-preview" aria-label="post-it preview">
         <p className="nc-note-body nc-note-body--preview">{thoughtCardPreviewLabel(signal, locale)}</p>

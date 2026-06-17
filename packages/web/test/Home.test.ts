@@ -886,6 +886,24 @@ describe("HomePage current home experience", () => {
     );
   });
 
+  it("lets keyboard users open a collapsed post-it preview", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    expect(note?.getAttribute("role")).toBe("button");
+    expect(note?.getAttribute("tabindex")).toBe("0");
+    expect(note?.getAttribute("aria-label")).toBe("open post-it reflection");
+
+    await act(async () => {
+      note?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-note-modal")?.getAttribute("role")).toBe("dialog");
+    expect(container.querySelector(".nc-note-modal")?.textContent).toContain("inspirations that led here");
+  });
+
   it("keeps post-its direct and rejects summary-like topic labels", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -906,14 +924,17 @@ describe("HomePage current home experience", () => {
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
 
-  it("opens a simplified top-of-mind post-it with a private drawer evidence action", async () => {
+  it("opens a simplified top-of-mind post-it from the keyboard with a private drawer evidence action", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
+    expect(note?.getAttribute("role")).toBe("button");
+    expect(note?.getAttribute("tabindex")).toBe("0");
+    expect(note?.getAttribute("aria-label")).toBe("open post-it reflection");
 
     await act(async () => {
-      note?.click();
+      note?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
     });
     await flushReactWork();
 
