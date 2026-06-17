@@ -630,9 +630,9 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.textContent).toContain("attachment details");
+    expect(container.textContent).not.toContain("attachment details");
     expect(container.textContent).toContain("<script>alert(1)</script> Source title");
-    expect(container.textContent).toContain("image.png · 4 KB");
+    expect(container.textContent).not.toContain("image.png · 4 KB");
     expect(container.querySelector(".detail-attachment-image")).toBeNull();
     expect(container.innerHTML).not.toContain("private-bucket.s3.us-east-1.amazonaws.com");
     expect(container.innerHTML).not.toContain("users/user-1/image.png");
@@ -1708,14 +1708,14 @@ describe("HomePage current home experience", () => {
     expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
-    expect(detail.textContent).toContain("nearby piles");
-    expect(detail.textContent).toContain("highlighted by me");
-    expect(detail.textContent).toContain("what did this mean then?");
-    expect(detail.textContent).toContain("what does it mean now?");
-    expect(detail.textContent).toContain("is this still me?");
-    expect(detail.textContent).toContain("still alive");
-    expect(detail.textContent).toContain("changed shape");
-    expect(detail.textContent).toContain("not anymore");
+    expect(detail.textContent).not.toContain("highlighted by me");
+    expect(detail.textContent).not.toContain("nearby piles");
+    expect(detail.textContent).not.toContain("what did this mean then?");
+    expect(detail.textContent).not.toContain("what does it mean now?");
+    expect(detail.textContent).not.toContain("is this still me?");
+    expect(detail.textContent).not.toContain("still alive");
+    expect(detail.textContent).not.toContain("changed shape");
+    expect(detail.textContent).not.toContain("not anymore");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
   });
@@ -1765,6 +1765,11 @@ describe("HomePage current home experience", () => {
     expect(detail?.textContent).toContain("Link");
     expect(detail?.textContent).toContain("https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s");
     expect(detail?.textContent).toContain("Highlights");
+    expect(detail?.textContent).not.toContain("what did this mean then?");
+    expect(detail?.textContent).not.toContain("what does it mean now?");
+    expect(detail?.textContent).not.toContain("does this still fit?");
+    expect(detail?.textContent).not.toContain("attachment details");
+    expect(detail?.textContent).not.toContain("nearby piles");
     expect(detail?.querySelector(".memory-detail-next")?.textContent).toContain("View next inspiration");
 
     const next = detail?.querySelector<HTMLButtonElement>('.memory-detail-next button[aria-label="View next inspiration"]');
@@ -1774,29 +1779,6 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-2");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-2", "detail_opened");
-  });
-
-  it("saves still-alive feedback from the opened inspiration detail", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    const detail = await openBridgeDetail(container);
-    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-detail-feedback-actions button")).find(
-      (button) => button.textContent === "still alive",
-    );
-    expect(stillAlive).not.toBeNull();
-
-    await act(async () => {
-      stillAlive?.click();
-    });
-    await flushReactWork();
-
-    expect(createFeedback).toHaveBeenCalledWith({
-      targetType: "signal",
-      targetId: "insp-1",
-      value: "important",
-    });
-    expect(detail.textContent).toContain("saved");
   });
 
   it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {
@@ -2256,7 +2238,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     const detail = container.querySelector<HTMLElement>(".detail-view");
-    expect(detail?.textContent).toContain("1 attachment failed to upload.");
+    expect(detail?.textContent).not.toContain("1 attachment failed to upload.");
     expect(detail?.textContent?.toLowerCase()).not.toContain("error");
     expect(detail?.textContent).not.toContain("save failed");
 
