@@ -2190,30 +2190,6 @@ export function HomePage(): JSX.Element {
     setSelectedId((current) => (current === id ? null : current));
   }, []);
 
-  const handleDetailReflectionCountChanged = useCallback(
-    (id: string, count: number) => {
-      setEntries((prev) =>
-        prev.map((entry) =>
-          entry.id === id || entry.tempId === id
-            ? {
-                ...entry,
-                reflectionsAnswered: count,
-                reflectionsTotal: count,
-              }
-            : entry,
-        ),
-      );
-    },
-    [],
-  );
-
-  const handleInspirationScoresChanged = useCallback(
-    (scores: ApiInspirationScorePatch) => {
-      setEntries((prev) => prev.map((entry) => applyInspirationScorePatch(entry, scores)));
-    },
-    [],
-  );
-
   const handleInspirationUpdated = useCallback((inspiration: ApiInspiration) => {
     setEntries((prev) =>
       prev.map((entry) => applyUpdatedInspiration(entry, inspiration)),
@@ -2545,14 +2521,11 @@ export function HomePage(): JSX.Element {
   const historyDetail = detailData ? (
     <InspirationDetail
       // Re-key on id so navigating between inspirations remounts the
-      // component, resetting the loading state and re-running the
-      // reflections fetch for the new row.
+      // component and resets the edit/delete affordances for the new row.
       key={detailData.id}
       inspiration={detailData}
       onBack={handleBackFromDetail}
       onDeleted={handleDeletedInspiration}
-      onReflectionCountChanged={handleDetailReflectionCountChanged}
-      onInspirationScoresChanged={handleInspirationScoresChanged}
       onInspirationUpdated={handleInspirationUpdated}
       locale={locale}
       onNextInspiration={nextEntryInHistory ? handleNextInspiration : undefined}
@@ -2774,7 +2747,6 @@ export function HomePage(): JSX.Element {
       }));
     }
   };
-
 
   const renderPostItSaveAction = (signal: HomeThoughtCard): JSX.Element | null => {
     if (!signal.feedbackTargetId) return null;

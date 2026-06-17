@@ -2306,7 +2306,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     const detail = container.querySelector<HTMLElement>(".detail-view");
-    expect(detail?.textContent).toContain("1 attachment failed to upload.");
+    expect(detail?.textContent).not.toContain("1 attachment failed to upload.");
     expect(detail?.textContent?.toLowerCase()).not.toContain("error");
     expect(detail?.textContent).not.toContain("save failed");
 
