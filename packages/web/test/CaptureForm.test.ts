@@ -80,6 +80,14 @@ function setText(value: string): void {
   textarea?.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+function setReflectText(value: string): void {
+  const textarea = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
+  expect(textarea).not.toBeNull();
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(textarea, value);
+  textarea?.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 
 async function pressMetaEnter(): Promise<void> {
   const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
@@ -468,7 +476,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
   });
 
-  it("attaches a reflection through the Reflect-deeper save flow", async () => {
+  it("attaches one ordered guided reflection after three Reflect-deeper questions", async () => {
     vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save" }));
     const onSaved = vi.fn();
     await renderCaptureForm({ onSaved });
@@ -476,19 +484,36 @@ describe("CaptureForm multi-input quick capture", () => {
       setText("A messy thing I want safe before I understand it");
     });
 
-    // "Reflect deeper" opens the reflection view before committing the save.
+    // "Reflect deeper" opens the guided reflection view before committing the save.
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
     });
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What caught you first");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(createInspiration).not.toHaveBeenCalled();
 
-    const answer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
-    expect(answer).not.toBeNull();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
     await act(async () => {
-      setter?.call(answer, "It showed me what I want to protect.");
-      answer?.dispatchEvent(new Event("input", { bubbles: true }));
+      setReflectText("The feeling of wanting to protect it.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What does it make you want more of");
+    expect(createInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setReflectText("More quiet studio time.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("smallest clue or next move");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
+    expect(createInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setReflectText("Book one hour tomorrow.");
     });
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
@@ -496,9 +521,14 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
 
     expect(createInspiration).toHaveBeenCalledTimes(1);
+    expect(createReflection).toHaveBeenCalledTimes(1);
     expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
-      question: "Why did this matter right now?",
-      answer: "It showed me what I want to protect.",
+      question: "Reflect deeper guided reflection",
+      answer: [
+        "What caught you first — the image, idea, feeling, person, or possibility?\nThe feeling of wanting to protect it.",
+        "What does it make you want more of, protect, change, or refuse?\nMore quiet studio time.",
+        "What is the smallest clue or next move this points toward?\nBook one hour tomorrow.",
+      ].join("\n\n"),
       skipped: false,
     });
     // No mirror card — the parent is signalled to close and flash "saved".
@@ -759,8 +789,8 @@ describe("CaptureForm multi-input quick capture", () => {
   });
 });
 
-describe("CaptureForm Process journey", () => {
-  it("enters the deeper path only from Reflect deeper and saves the answer separately", async () => {
+describe("CaptureForm Reflect Deeper journey", () => {
+  it("blocks blank steps, supports back, and saves after the final guided answer", async () => {
     await renderCaptureForm();
     await act(async () => {
       setText("Process this richer input");
@@ -774,16 +804,57 @@ describe("CaptureForm Process journey", () => {
 
     expect(createInspiration).not.toHaveBeenCalled();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
-
-    const answer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
-    expect(answer).not.toBeNull();
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
-    await act(async () => {
-      setter?.call(answer, "It connects to the next project.");
-      answer?.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
 
     const continueButton = container?.querySelector<HTMLButtonElement>("#reflectNext");
+    await act(async () => {
+      continueButton?.click();
+    });
+    expect(createInspiration).not.toHaveBeenCalled();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector("#capConfirm")?.textContent).toContain("Add a few words to keep going");
+
+    await act(async () => {
+      setReflectText("It connects to the next project.");
+    });
+    await act(async () => {
+      continueButton?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+
+    await act(async () => {
+      setReflectText("A protected weekly making block.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectLater")?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector<HTMLTextAreaElement>("#reflectAns")?.value).toBe("It connects to the next project.");
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectLater")?.click();
+    });
+    expect(container?.querySelector("#reflectArea")?.className).not.toContain("visible");
+    expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("Process this richer input");
+
+    await act(async () => {
+      processButton?.click();
+    });
+    await act(async () => {
+      setReflectText("It connects to the next project.");
+    });
+    await act(async () => {
+      continueButton?.click();
+    });
+    await act(async () => {
+      setReflectText("A protected weekly making block.");
+    });
+    await act(async () => {
+      continueButton?.click();
+    });
+    await act(async () => {
+      setReflectText("Schedule Friday morning.");
+    });
     await act(async () => {
       continueButton?.click();
     });
@@ -795,8 +866,8 @@ describe("CaptureForm Process journey", () => {
       kind: "note",
     });
     expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "Why did this matter right now?",
-      answer: "It connects to the next project.",
+      question: "Reflect deeper guided reflection",
+      answer: expect.stringContaining("Schedule Friday morning."),
       skipped: false,
     });
   });
