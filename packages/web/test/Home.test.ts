@@ -848,6 +848,13 @@ describe("HomePage current home experience", () => {
           ...sampleTopOfMindNote,
           title: fullTitle,
           body: fullBody,
+          evidencePreviews: [
+            {
+              ...sampleTopOfMindNote.evidencePreviews[0],
+              textPreview:
+                "Architecture essay about bridge rhythms in city walks, public crossings, jazz history, and making before commentary",
+            },
+          ],
         },
       ],
     });
@@ -857,7 +864,15 @@ describe("HomePage current home experience", () => {
     expect(note?.querySelector(".nc-note-preview")?.getAttribute("aria-label")).toBe("post-it preview");
     expect(note?.querySelector(".nc-note-body--preview")?.textContent).toMatch(/…$/);
     expect(note?.querySelector(".nc-note-body--preview")?.textContent).not.toContain("real object");
-    expect(note?.querySelector(".nc-note-explain--preview")?.textContent).toContain("saved inspirations");
+    const previewExplanation = note?.querySelector(".nc-note-explain--preview")?.textContent ?? "";
+    expect(previewExplanation).toContain("saved inspirations");
+    expect(previewExplanation).toMatch(/…$/);
+    const inspirationPreview = note?.querySelector(".nc-note-inspirations");
+    expect(inspirationPreview?.textContent).toContain("where it began");
+    expect(inspirationPreview?.textContent).toContain("Architecture essay about bridge rhythms");
+    expect(inspirationPreview?.querySelector(".nc-note-inspiration-chip")?.textContent).toMatch(/…/);
+    expect(note?.textContent).not.toContain("This signal anchors the pattern.");
+    expect(note?.textContent).not.toContain("insp-1");
     expect(note?.querySelector(".nc-note-open-hint")?.textContent).toBe("open note");
 
     await act(async () => {
@@ -943,6 +958,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
+    expect(note?.querySelector(".nc-note-inspirations")).toBeNull();
+    expect(note?.textContent).not.toContain("open to see what led here");
+    expect(note?.textContent).not.toContain("no saved inspiration");
 
     await act(async () => {
       note?.click();
