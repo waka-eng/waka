@@ -5,13 +5,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InspirationDetail } from "../src/components/history/InspirationDetail";
-import { fetchReflections } from "../src/lib/api";
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
-    fetchReflections: vi.fn(async () => []),
     updateInspiration: vi.fn(async () => {
       throw new Error("updateInspiration mock not configured");
     }),
@@ -101,13 +99,15 @@ describe("InspirationDetail", () => {
     const onNext = vi.fn();
     const container = await renderDetail(onNext);
 
-    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
     expect(container.querySelector(".detail-view--mockup")).not.toBeNull();
     expect(container.querySelector<HTMLImageElement>(".detail-media-image")?.src).toBe("https://example.com/preview.jpg");
     expect(container.textContent).toContain("A grounded source title");
     expect(container.textContent).toContain("Link");
     expect(container.textContent).toContain("https://example.com/watch?v=ambition");
     expect(container.textContent).toContain("Highlights");
+    expect(container.textContent).not.toContain("Source links");
+    expect(container.textContent).not.toContain("Add context");
+    expect(container.textContent).not.toContain("No reflections yet.");
 
     const next = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
       button.textContent?.includes("View next inspiration"),

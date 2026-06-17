@@ -2,56 +2,25 @@
  * <InspirationDetail /> — single-inspiration detail view rendered inside
  * the history drawer's `.detail-view` shell.
  *
- * Sub-AC 9.5 wires the GET /inspirations/:id/reflections endpoint into
- * the React component tree, replacing the prototype's
- * `renderDetail(item)` (index.html lines 2628-2698) with a declarative
- * component that:
+ * Replaces the prototype's `renderDetail(item)` (index.html lines 2628-2698)
+ * with a declarative component that:
  *
- *   1. Renders the inspiration's text / links / attachments / meta
- *      (same DOM contract as the prototype so the existing CSS rules in
- *      `.detail-text`, `.detail-links`, `.detail-attachments`,
- *      `.detail-meta` apply 1:1).
- *   2. Fetches the caller's reflections for this inspiration via
- *      `fetchReflections(id)` on mount, surfaces loading + error states
- *      while the request is in flight, and shows an empty placeholder
- *      when the response is `[]`.
- *   3. Hands the populated list to `<ReflectionThread>` (already built in
- *      Sub-AC 4.3.3) which owns the expand/collapse toggle and the
- *      thread-body rendering.
- *
- * Loading state: small mono-uppercase ribbon ("Loading reflections…")
- * inside the detail body so the user sees motion before the response
- * arrives. The visual rhythm matches the rest of the prototype's
- * diagnostic chrome.
- *
- * Empty state: a single italic-serif sentence ("No reflections yet.")
- * — matches the prototype's "sit with this a little longer" cadence
- * without claiming a prompt that the user hasn't been given. Authoring
- * a new reflection is wired separately by `<ReflectionForm>`.
- *
- * Error state: a non-blocking ribbon with the API error message. The
- * user can still see the inspiration body — only the reflections panel
- * fails open. We deliberately do *not* throw or unmount the detail view
- * because that would steal the user's attention from a failure they
- * cannot fix.
+ *   1. Renders the mockup-style source/preview hero, primary link, and
+ *      editable Highlights area.
+ *   2. Keeps the close/back/delete and next-inspiration navigation affordances
+ *      available while intentionally omitting lower reflection/context panels.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   ApiError,
   deleteInspiration,
-  fetchReflections,
   updateInspiration,
   type ApiAttachment,
   type ApiInspiration,
-  type ApiInspirationScorePatch,
-  type ApiReflection,
-  type CreateReflectionResponse,
 } from "../../lib/api";
 import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
-import { ReflectionForm, type PendingReflection } from "./ReflectionForm";
-import { ReflectionThread, type ReflectionEntry } from "./ReflectionThread";
 
 /* ============================================================
  * Types
@@ -99,15 +68,6 @@ export interface InspirationDetailProps {
    * component can still be mounted in a read-only context.
    */
   onDeleted?: (id: string) => void;
-  /**
-   * Optional parent-state bridge. Fires whenever this detail view knows the
-   * exact reflection count (after the initial GET, and after a successful
-   * POST). The parent uses the exact count instead of blindly incrementing so
-   * list rows stay aligned with the detail thread.
-   */
-  onReflectionCountChanged?: (id: string, count: number) => void;
-  /** Fires after reflection POST returns recomputed parent scores. */
-  onInspirationScoresChanged?: (scores: ApiInspirationScorePatch) => void;
   /** Fires after editing details returns the canonical inspiration row. */
   onInspirationUpdated?: (inspiration: ApiInspiration) => void;
   /** Locale for user-visible attachment status copy. */
@@ -119,11 +79,6 @@ export interface InspirationDetailProps {
 /* ============================================================
  * Component
  * ============================================================ */
-
-type LoadState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; reflections: ApiReflection[] };
 
 function attachmentTitle(attachment: ApiAttachment): string {
   const link = attachment.enrichment?.link;
@@ -205,15 +160,10 @@ export function InspirationDetail({
   inspiration,
   onBack,
   onDeleted,
-  onReflectionCountChanged,
-  onInspirationScoresChanged,
   onInspirationUpdated,
   locale = DEFAULT_LOCALE,
   onNextInspiration,
 }: InspirationDetailProps): JSX.Element {
-  const [state, setState] = useState<LoadState>({ status: "loading" });
-  const reflectionsRef = useRef<ApiReflection[]>([]);
-  const [reflecting, setReflecting] = useState(false);
   const [detailsText, setDetailsText] = useState(inspiration.text);
   const [saveState, setSaveState] = useState<
     | { status: "idle" }
@@ -243,51 +193,14 @@ export function InspirationDetail({
     | { status: "deleting" }
     | { status: "error"; message: string }
   >({ status: "idle" });
-  /**
-   * Thread expansion mirrors the prototype's `expandedItems` set, but
-   * scoped to this detail mount — when the user navigates to a different
-   * inspiration the thread starts collapsed (matches the prototype's
-   * behavior since `renderDetail` re-reads the set per render and a
-   * fresh detail view begins with no entry in the set).
-   */
-  const [threadOpen, setThreadOpen] = useState(false);
-
   useEffect(() => {
-    let cancelled = false;
-    setState({ status: "loading" });
-    reflectionsRef.current = [];
-    setThreadOpen(false);
-    setReflecting(false);
     // Reset the delete affordance whenever the user navigates to a
     // different inspiration so a half-confirmed delete on row A doesn't
     // bleed into row B.
     setDeleteState({ status: "idle" });
     setDetailsText(inspiration.text);
     setSaveState({ status: "idle" });
-
-    void (async () => {
-      try {
-        const rows = await fetchReflections(inspiration.id);
-        if (cancelled) return;
-        reflectionsRef.current = rows;
-        setState({ status: "ready", reflections: rows });
-        onReflectionCountChanged?.(inspiration.id, rows.length);
-      } catch (caught) {
-        if (cancelled) return;
-        const message =
-          caught instanceof ApiError
-            ? caught.message
-            : caught instanceof Error
-              ? caught.message
-              : "Failed to load reflections.";
-        setState({ status: "error", message });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [inspiration.id, onReflectionCountChanged]);
+  }, [inspiration.id, inspiration.text]);
 
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
@@ -357,77 +270,6 @@ export function InspirationDetail({
       }
     })();
   }, [inspiration.id, onDeleted]);
-
-  // ----- Reflection authoring ----------------------------------------------
-
-  const handleStartReflection = useCallback(() => {
-    setReflecting(true);
-  }, []);
-
-  const handleCancelReflection = useCallback(() => {
-    setReflecting(false);
-  }, []);
-
-  const handleOptimisticReflection = useCallback(
-    (pending: PendingReflection) => {
-      const optimistic: ApiReflection = {
-        id: pending.tempId,
-        inspirationId: pending.inspirationId,
-        userId: "",
-        question: pending.question,
-        answer: pending.answer,
-        skipped: pending.skipped,
-        createdAt: pending.createdAt,
-      };
-
-      const nextReflections = [...reflectionsRef.current, optimistic];
-      reflectionsRef.current = nextReflections;
-      setState({ status: "ready", reflections: nextReflections });
-      setThreadOpen(true);
-    },
-    [],
-  );
-
-  const handlePersistedReflection = useCallback(
-    (tempId: string, server: CreateReflectionResponse) => {
-      const hadOptimistic = reflectionsRef.current.some((row) => row.id === tempId);
-      const nextReflections = hadOptimistic
-        ? reflectionsRef.current.map((row) =>
-            row.id === tempId ? server.reflection : row,
-          )
-        : [...reflectionsRef.current, server.reflection];
-      reflectionsRef.current = nextReflections;
-      setState({ status: "ready", reflections: nextReflections });
-      setReflecting(false);
-      setThreadOpen(true);
-      onReflectionCountChanged?.(inspiration.id, nextReflections.length);
-      if (server.inspiration) onInspirationScoresChanged?.(server.inspiration);
-    },
-    [
-      inspiration.id,
-      onInspirationScoresChanged,
-      onReflectionCountChanged,
-    ],
-  );
-
-  const handleReflectionError = useCallback((tempId: string) => {
-    const nextReflections = reflectionsRef.current.filter((row) => row.id !== tempId);
-    reflectionsRef.current = nextReflections;
-    setState({ status: "ready", reflections: nextReflections });
-  }, []);
-
-  // Map server rows into the shape `<ReflectionThread>` expects. The
-  // server enforces tenant scope so we don't need to filter by user_id
-  // here; whatever we got back is by construction the caller's data.
-  const entries: ReflectionEntry[] =
-    state.status === "ready"
-      ? state.reflections.map((r) => ({
-          id: r.id,
-          question: r.question,
-          answer: r.answer,
-          skipped: r.skipped,
-        }))
-      : [];
 
   return (
     <div className="detail-view detail-view--mockup visible" id="detailView">
@@ -655,112 +497,6 @@ export function InspirationDetail({
             ) : null}
           </div>
         </form>
-
-        {sourceLinks.length > 0 ? (
-          <section className="detail-links-section" aria-label="Source links">
-            <div className="detail-section-label">Source links</div>
-            <div className="detail-links">
-              {sourceLinks.map((link) => (
-                <a key={link} href={link} target="_blank" rel="noreferrer">
-                  {link}
-                </a>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {inspiration.warningMessage ? (
-          <div className="detail-warning" role="status" aria-live="polite">
-            {inspiration.warningMessage}
-          </div>
-        ) : null}
-
-        {inspiration.attachments && inspiration.attachments.length > 0 ? (
-          <section className="detail-attachments" aria-label={t(locale, "attachmentContext")}>
-            <div className="detail-attachment-heading">{t(locale, "attachmentContext")}</div>
-            {inspiration.attachments.map((attachment) => (
-              <article key={attachment.id} className="detail-attachment-card">
-                <div>
-                  <div className="detail-attachment-title">{attachmentTitle(attachment)}</div>
-                  <div className="detail-attachment-meta">{attachmentMeta(attachment, locale)}</div>
-                  {attachment.type === "link" && attachment.enrichment?.link?.description ? (
-                    <p className="detail-attachment-description">{attachment.enrichment.link.description}</p>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-          </section>
-        ) : null}
-
-        <div className="detail-meta">Saved {inspiration.timestamp}</div>
-
-        {state.status === "ready" ? (
-          <div className="detail-reflection-action">
-            {!reflecting ? (
-              <button
-                type="button"
-                className="reflect-btn reflect-next"
-                onClick={handleStartReflection}
-                aria-label="Add context to this signal"
-              >
-                Add context
-              </button>
-            ) : (
-              <ReflectionForm
-                key={inspiration.id}
-                inspirationId={inspiration.id}
-                defaultQuestion="What about this is worth remembering?"
-                answerPlaceholder="Sit with it for a moment, then add what it opens up…"
-                hideSkip
-                onCancel={handleCancelReflection}
-                onOptimisticAdd={handleOptimisticReflection}
-                onPersisted={handlePersistedReflection}
-                onPersistError={handleReflectionError}
-              />
-            )}
-          </div>
-        ) : null}
-
-        {/* Reflections panel — loading / error / empty / list */}
-        {state.status === "loading" ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="detail-reflection-status"
-          >
-            Loading reflections…
-          </div>
-        ) : null}
-
-        {state.status === "error" ? (
-          <div
-            role="alert"
-            aria-live="polite"
-            className="detail-reflection-status"
-          >
-            {state.message}
-          </div>
-        ) : null}
-
-        {state.status === "ready" && entries.length === 0 ? (
-          <div
-            // Empty-state copy. Italic serif so it reads as part of the
-            // prototype's reflective voice rather than a system message.
-            className="detail-empty-reflections"
-          >
-            No reflections yet.
-          </div>
-        ) : null}
-
-        {state.status === "ready" && entries.length > 0 ? (
-          <div className="detail-reflection-action">
-            <ReflectionThread
-              entries={entries}
-              open={threadOpen}
-              onToggle={() => setThreadOpen((v) => !v)}
-            />
-          </div>
-        ) : null}
 
         {onNextInspiration ? (
           <button

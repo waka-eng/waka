@@ -50,8 +50,6 @@ import {
 } from "../components/history";
 import {
   SavedInspirationDetail,
-  type SavedDetailFeedbackState,
-  type SavedDetailFeedbackValue,
 } from "../components/home-surfaces";
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
@@ -1539,7 +1537,6 @@ export function HomePage(): JSX.Element {
       }
     >
   >({});
-  const [savedDetailFeedback, setSavedDetailFeedback] = useState<Record<string, SavedDetailFeedbackState>>({});
   const [removedTopOfMindNoteIds, setRemovedTopOfMindNoteIds] = useState<Set<string>>(() => new Set());
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
@@ -2190,30 +2187,6 @@ export function HomePage(): JSX.Element {
     setSelectedId((current) => (current === id ? null : current));
   }, []);
 
-  const handleDetailReflectionCountChanged = useCallback(
-    (id: string, count: number) => {
-      setEntries((prev) =>
-        prev.map((entry) =>
-          entry.id === id || entry.tempId === id
-            ? {
-                ...entry,
-                reflectionsAnswered: count,
-                reflectionsTotal: count,
-              }
-            : entry,
-        ),
-      );
-    },
-    [],
-  );
-
-  const handleInspirationScoresChanged = useCallback(
-    (scores: ApiInspirationScorePatch) => {
-      setEntries((prev) => prev.map((entry) => applyInspirationScorePatch(entry, scores)));
-    },
-    [],
-  );
-
   const handleInspirationUpdated = useCallback((inspiration: ApiInspiration) => {
     setEntries((prev) =>
       prev.map((entry) => applyUpdatedInspiration(entry, inspiration)),
@@ -2552,14 +2525,11 @@ export function HomePage(): JSX.Element {
   const historyDetail = detailData ? (
     <InspirationDetail
       // Re-key on id so navigating between inspirations remounts the
-      // component, resetting the loading state and re-running the
-      // reflections fetch for the new row.
+      // component and resets the edit/delete affordances for the new row.
       key={detailData.id}
       inspiration={detailData}
       onBack={handleBackFromDetail}
       onDeleted={handleDeletedInspiration}
-      onReflectionCountChanged={handleDetailReflectionCountChanged}
-      onInspirationScoresChanged={handleInspirationScoresChanged}
       onInspirationUpdated={handleInspirationUpdated}
       locale={locale}
       onNextInspiration={nextEntryInHistory ? handleNextInspiration : undefined}
@@ -2777,48 +2747,6 @@ export function HomePage(): JSX.Element {
           ...previousFeedback,
           status: "error",
           error: copy.feedbackError,
-        },
-      }));
-    }
-  };
-
-  const submitSavedDetailFeedback = async (signalId: string, value: SavedDetailFeedbackValue) => {
-    const previousFeedback = savedDetailFeedback[signalId] ?? {
-      value: null,
-      status: "idle" as FeedbackStatus,
-      error: null,
-    };
-
-    setSavedDetailFeedback((prev) => ({
-      ...prev,
-      [signalId]: { value, status: "saving", error: null },
-    }));
-
-    try {
-      const feedback = await createFeedback({
-        targetType: "signal",
-        targetId: signalId,
-        value,
-      });
-      setSavedSignalDetail((current) =>
-        current?.id === signalId
-          ? {
-              ...current,
-              resonanceFeedback: [feedback, ...current.resonanceFeedback.filter((item) => item.id !== feedback.id)],
-            }
-          : current,
-      );
-      setSavedDetailFeedback((prev) => ({
-        ...prev,
-        [signalId]: { value, status: "saved", error: null },
-      }));
-    } catch {
-      setSavedDetailFeedback((prev) => ({
-        ...prev,
-        [signalId]: {
-          ...previousFeedback,
-          status: "error",
-          error: "could not save that yet",
         },
       }));
     }
@@ -3322,19 +3250,12 @@ export function HomePage(): JSX.Element {
     if (!selectedSavedSignal) return null;
     const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
     const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
-    const activeFeedback = savedDetailFeedback[selectedSavedSignal.id];
-    const relatedGroupNames = memoryGroupings
-      .filter((group) => group.signals.some((signal) => signal.id === selectedSavedSignal.id))
-      .map((group) => group.name)
-      .slice(0, 3);
     return (
       <SavedInspirationDetail
         signal={selectedSavedSignal}
         detail={savedSignalDetail}
         loading={savedSignalDetailLoading}
-        relatedGroupNames={relatedGroupNames}
         backLabel={selectedMemoryGroup ? "list" : (selectedMemoryPathFilter?.label ?? "list")}
-        activeFeedback={activeFeedback}
         highlightError={
           highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id
             ? highlightStatus.message
@@ -3351,7 +3272,6 @@ export function HomePage(): JSX.Element {
         }}
         onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
-        onSubmitFeedback={(value) => void submitSavedDetailFeedback(selectedSavedSignal.id, value)}
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
         shortText={shortText}
