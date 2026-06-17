@@ -1212,14 +1212,16 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Choose a pile, or open everything.");
     expect(container.textContent).not.toContain("back to wall");
     expect(container.querySelector(".memory-category-panel")).not.toBeNull();
-    expect(container.querySelector(".memory-category-column")).not.toBeNull();
+    expect(container.querySelector(".memory-category-column")).toBeNull();
+    expect(container.querySelector(".memory-path-filters")).not.toBeNull();
+    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("/all-saved");
     expect(container.querySelector(".memory-group-board")).toBeNull();
     expect(container.querySelector(".memory-contents-flow")).toBeNull();
     expect(container.querySelector(".memory-mode-switcher")).toBeNull();
     expect(container.textContent).not.toContain("List scans the timeline");
   });
 
-  it("opens categorized drawer entries and inspiration detail in place", async () => {
+  it("opens filesystem-filtered drawer entries and inspiration detail in place", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1235,7 +1237,8 @@ describe("HomePage current home experience", () => {
     expect(stack?.querySelector(".memory-contents-flow")).toBeNull();
     expect(stack?.querySelector(".memory-stack-detail")).toBeNull();
     expect(columns?.textContent).toContain("Architecture essay about bridge rhythms");
-    expect(columns?.textContent).toContain("1 save");
+    expect(columns?.textContent).toContain("2 saves");
+    expect(container.querySelector(".memory-path-filter--active")?.textContent).toContain("/all-saved");
 
     const firstInspiration = columns?.querySelector<HTMLButtonElement>(".memory-contents-item");
     expect(firstInspiration).not.toBeNull();
@@ -1280,7 +1283,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-save")).not.toBeNull();
   });
 
-  it("keeps category columns available after the drawer closes and reopens", async () => {
+  it("keeps path filters available after the drawer closes and reopens", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1288,7 +1291,7 @@ describe("HomePage current home experience", () => {
     await waitForTimers(130);
     await flushReactWork();
 
-    expect(container.querySelector(".memory-category-column")).not.toBeNull();
+    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("/all-saved");
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.click();
@@ -1303,7 +1306,8 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".memory-category-panel")).not.toBeNull();
-    expect(container.querySelector(".memory-category-column")?.textContent).toContain("save");
+    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("/all-saved");
+    expect(container.querySelector(".memory-category-panel")?.textContent).toContain("save");
   });
 
   it("lists the authenticated user's saved inspirations newest first", async () => {
@@ -1319,7 +1323,7 @@ describe("HomePage current home experience", () => {
     expect(savesPage?.textContent).not.toContain("Other user save should never render");
   });
 
-  it("shows category columns with chronological cards and search secondary", async () => {
+  it("shows filesystem path filters with chronological list rows and search secondary", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
@@ -1328,23 +1332,25 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const drawer = container.querySelector<HTMLElement>(".signal-revisit-page");
-    const columns = drawer?.querySelector<HTMLElement>(".memory-category-panel");
+    const panel = drawer?.querySelector<HTMLElement>(".memory-category-panel");
     const contents = drawer?.querySelector<HTMLElement>(".memory-contents-flow");
-    expect(columns).not.toBeNull();
-    expect(columns?.textContent).toContain("Make The Thing Before Explaining it");
-    expect(columns?.textContent).toContain("Memory as a Working Material");
-    expect(columns?.textContent).toContain("1 save");
+    const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
+    expect(panel).not.toBeNull();
+    expect(pathFilters?.textContent).toContain("/all-saved");
+    expect(pathFilters?.textContent).toContain("/recently-saved");
+    expect(pathFilters?.textContent).toContain("/make-thing-before-explaining");
+    expect(panel?.textContent).toContain("2 saves");
     expect(contents).toBeNull();
     expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
-    expect(columns?.textContent?.indexOf("Architecture essay")).toBeLessThan(
-      columns?.textContent?.indexOf("Synthetic memory note") ?? 9999,
+    expect(panel?.textContent?.indexOf("Architecture essay")).toBeLessThan(
+      panel?.textContent?.indexOf("Synthetic memory note") ?? 9999,
     );
     expect(drawer?.querySelector(".signal-memory-lenses")).toBeNull();
     expect(drawer?.textContent?.toLowerCase()).not.toContain("keeps coming back");
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
-  it("generates category columns from saved inspiration context and materials", async () => {
+  it("generates filesystem path filters from saved inspiration context", async () => {
     const constellationSignals: ApiSavedSignalSearchResult[] = [
       {
         ...sampleSavedSignals[0],
@@ -1414,16 +1420,30 @@ describe("HomePage current home experience", () => {
     await waitForTimers(130);
     await flushReactWork();
 
-    const columns = container.querySelector<HTMLElement>(".memory-category-panel");
-    expect(columns).not.toBeNull();
-    expect(columns?.querySelectorAll(".memory-category-column").length).toBeLessThanOrEqual(3);
-    expect(columns?.textContent).toContain("Make The Thing Before Explaining it");
-    expect(columns?.textContent).toContain("Recently saved");
-    expect(columns?.textContent).toContain("2 saves");
-    expect(columns?.querySelector(".folder-icon")).toBeNull();
-    expect(columns?.querySelector(".mac-folder-front")).toBeNull();
-    expect(columns?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
-    expect(columns?.textContent?.toLowerCase()).not.toContain("memory movement");
+    const panel = container.querySelector<HTMLElement>(".memory-category-panel");
+    const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
+    expect(panel).not.toBeNull();
+    expect(pathFilters).not.toBeNull();
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBeLessThanOrEqual(9);
+    expect(pathFilters?.textContent).toContain("/make-thing-before-explaining");
+    expect(pathFilters?.textContent).toContain("/recently-saved");
+
+    const makingPath = Array.from(pathFilters?.querySelectorAll<HTMLButtonElement>(".memory-path-filter") ?? []).find(
+      (button) => button.textContent === "/make-thing-before-explaining",
+    );
+    expect(makingPath).not.toBeNull();
+    await act(async () => {
+      makingPath?.click();
+    });
+    await flushReactWork();
+    expect(panel?.textContent).toContain("2 inspirations sharing this path");
+    expect(panel?.textContent).toContain("Handwritten thought about rooms where making feels public");
+    expect(panel?.textContent).toContain("Essay link about people who build in public");
+    expect(panel?.textContent).not.toContain("Image inspiration");
+    expect(panel?.querySelector(".folder-icon")).toBeNull();
+    expect(panel?.querySelector(".mac-folder-front")).toBeNull();
+    expect(panel?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
+    expect(panel?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
   it("keeps the drawer stack visually neutral without decorative folder chrome or loud stack cards", async () => {
@@ -1439,7 +1459,8 @@ describe("HomePage current home experience", () => {
     expect(stack?.querySelector(".folder-icon")).toBeNull();
     expect(stack?.querySelector(".mac-folder-front")).toBeNull();
     expect(stack?.querySelector(".mac-folder-back")).toBeNull();
-    expect(stack?.querySelector(".memory-category-column")).not.toBeNull();
+    expect(stack?.querySelector(".memory-category-column")).toBeNull();
+    expect(container.querySelector(".memory-path-filter")).not.toBeNull();
 
     await openAllInspirations(container);
 
@@ -1470,8 +1491,8 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     const columns = container.querySelectorAll(".memory-category-column");
-    expect(columns).toHaveLength(1);
-    expect(columns[0]?.textContent).toContain("1 save");
+    expect(columns).toHaveLength(0);
+    expect(container.querySelector(".memory-category-panel")?.textContent).toContain("1 save");
     expect(container.querySelector(".memory-bulletin-object")).toBeNull();
   });
 
