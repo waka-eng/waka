@@ -747,29 +747,12 @@ function explainThoughtCard(card: HomeThoughtCard): string {
   return shortText(userFacingCopy(explanation), 78);
 }
 
-function thoughtCardInspirationPreviews(card: HomeThoughtCard, isFeatured: boolean): string[] {
-  const seen = new Set<string>();
-  const limit = isFeatured ? 3 : 2;
-  const previews: string[] = [];
-
-  for (const support of card.supportingSignals) {
-    const preview = shortText(userFacingCopy(support.preview), isFeatured ? 64 : 54);
-    const key = normalizeMeaningLabel(preview);
-    if (!preview || seen.has(key)) continue;
-    seen.add(key);
-    previews.push(preview);
-    if (previews.length >= limit) break;
-  }
-
-  return previews;
-}
-
-const NOTE_POSITIONS: Array<{ top: string; left: string; tilt: number; w: string }> = [
-  { top: "24px", left: "calc(50% - 210px)", tilt: -1.4, w: "420px" },
-  { top: "74px", left: "calc(50% - 540px)", tilt: -2.2, w: "292px" },
-  { top: "246px", left: "calc(50% + 70px)", tilt: 1.8, w: "300px" },
-  { top: "250px", left: "calc(50% - 454px)", tilt: 1.2, w: "292px" },
-  { top: "410px", left: "calc(50% - 104px)", tilt: -0.8, w: "312px" },
+const NOTE_LAYOUTS: Array<{ tilt: number; w: string }> = [
+  { tilt: -1.4, w: "420px" },
+  { tilt: -2.2, w: "292px" },
+  { tilt: 1.8, w: "300px" },
+  { tilt: 1.2, w: "292px" },
+  { tilt: -0.8, w: "312px" },
 ];
 
 const NOTE_COLORS = [
@@ -1422,6 +1405,10 @@ export function HomePage(): JSX.Element {
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
+  const [expandedSupportingSignalIds, setExpandedSupportingSignalIds] = useState<Set<string>>(() => new Set());
+  const [supportingSignalDetails, setSupportingSignalDetails] = useState<Record<string, ApiSavedSignalDetail | null>>({});
+  const [supportingSignalDetailLoadingIds, setSupportingSignalDetailLoadingIds] = useState<Set<string>>(() => new Set());
+  const [supportingSignalDetailErrors, setSupportingSignalDetailErrors] = useState<Record<string, string>>({});
   const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
@@ -3518,13 +3505,53 @@ export function HomePage(): JSX.Element {
 
   const closeExpandedNoteOnBackdrop = () => {
     setExpandedNoteIndex(null);
+    setExpandedSupportingSignalIds(new Set());
+  };
+
+  const loadSupportingSignalDetail = (signalId: string) => {
+    if (supportingSignalDetails[signalId] !== undefined || supportingSignalDetailLoadingIds.has(signalId)) return;
+    setSupportingSignalDetailLoadingIds((current) => new Set([...current, signalId]));
+    setSupportingSignalDetailErrors((current) => {
+      const next = { ...current };
+      delete next[signalId];
+      return next;
+    });
+    void fetchSavedSignalDetail(signalId)
+      .then((detail) => {
+        setSupportingSignalDetails((current) => ({ ...current, [signalId]: detail }));
+      })
+      .catch(() => {
+        setSupportingSignalDetails((current) => ({ ...current, [signalId]: null }));
+        setSupportingSignalDetailErrors((current) => ({
+          ...current,
+          [signalId]: "Couldn’t open this save yet. The preview still stays here.",
+        }));
+      })
+      .finally(() => {
+        setSupportingSignalDetailLoadingIds((current) => {
+          const next = new Set(current);
+          next.delete(signalId);
+          return next;
+        });
+      });
+  };
+
+  const toggleSupportingSignal = (signalId: string) => {
+    setExpandedSupportingSignalIds((current) => {
+      const next = new Set(current);
+      if (next.has(signalId)) {
+        next.delete(signalId);
+      } else {
+        next.add(signalId);
+        loadSupportingSignalDetail(signalId);
+      }
+      return next;
+    });
   };
 
   const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
-    const position = NOTE_POSITIONS[index] ?? NOTE_POSITIONS[0];
+    const layout = NOTE_LAYOUTS[index] ?? NOTE_LAYOUTS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
-    const inspirationPreviews = thoughtCardInspirationPreviews(signal, index === 0);
-    const inspirationLabel = locale === "ko-KR" ? "여기서 시작됨" : "where it began";
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
@@ -3532,10 +3559,8 @@ export function HomePage(): JSX.Element {
       style={{
         ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
         ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
-        ["--tilt" as string]: `${position.tilt}deg`,
-        ["--w" as string]: position.w,
-        ["--top" as string]: position.top,
-        ["--left" as string]: position.left,
+        ["--tilt" as string]: `${layout.tilt}deg`,
+        ["--w" as string]: layout.w,
         ["--dx" as string]: `${drag.x}px`,
         ["--dy" as string]: `${drag.y}px`,
         ["--decay" as string]: String(1 - index * 0.08),
@@ -3549,19 +3574,6 @@ export function HomePage(): JSX.Element {
         <div className="nc-note-explain nc-note-explain--preview">
           <p>{explainThoughtCard(signal)}</p>
         </div>
-
-        {inspirationPreviews.length > 0 ? (
-          <div className="nc-note-inspirations" aria-label={inspirationLabel}>
-            <span className="nc-note-inspirations-label">{inspirationLabel}</span>
-            <ul className="nc-note-inspirations-list">
-              {inspirationPreviews.map((preview) => (
-                <li className="nc-note-inspiration-chip" key={preview}>
-                  “{preview}”
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
       </div>
       <span className="nc-note-open-hint" aria-hidden="true">open note</span>
     </article>
@@ -3627,6 +3639,111 @@ export function HomePage(): JSX.Element {
             </p>
           </section>
 
+          <section className="nc-note-evidence" aria-label="inspirations that led here">
+            <div className="nc-note-evidence-head">
+              <p>inspirations that led here</p>
+              <span>
+                {supportingCount > 0
+                  ? `${supportingCount} saved inspiration${supportingCount === 1 ? "" : "s"} nearby`
+                  : "saved inspirations stay private there"}
+              </span>
+            </div>
+            {supportingCount > 0 ? (
+              <ul className="nc-note-evidence-list">
+                {signal.supportingSignals.map((support) => {
+                  const isOpen = expandedSupportingSignalIds.has(support.id);
+                  const detail = supportingSignalDetails[support.id];
+                  const isLoading = supportingSignalDetailLoadingIds.has(support.id);
+                  const error = supportingSignalDetailErrors[support.id];
+                  const nearbySignals = signal.supportingSignals.filter((candidate) => candidate.id !== support.id).slice(0, 3);
+                  const nearbySavedSignals = detail
+                    ? savedSignals
+                        .filter((saved) =>
+                          saved.id !== support.id &&
+                          saved.relatedContextTerms.some((term) => detail.relatedContextTerms.includes(term)),
+                        )
+                        .slice(0, 3)
+                    : [];
+                  const relatedSnippets = detail
+                    ? [
+                        ...detail.matchingSnippets,
+                        ...detail.highlightedSnippets.map((snippet) => snippet.text),
+                      ].filter((snippet, snippetIndex, all) => snippet && all.indexOf(snippet) === snippetIndex).slice(0, 3)
+                    : [];
+                  return (
+                    <li className="nc-note-evidence-item" key={support.id}>
+                      <button
+                        type="button"
+                        className="nc-note-evidence-trigger"
+                        aria-expanded={isOpen}
+                        aria-controls={`top-of-mind-evidence-${support.id}`}
+                        onClick={() => toggleSupportingSignal(support.id)}
+                      >
+                        <span>{shortText(userFacingCopy(support.preview), 96)}</span>
+                        <small>{isOpen ? "hide" : "expand"}</small>
+                      </button>
+                      {isOpen ? (
+                        <div className="nc-note-evidence-detail" id={`top-of-mind-evidence-${support.id}`}>
+                          {isLoading ? <p className="nc-note-evidence-muted">Opening this save…</p> : null}
+                          {error ? <p className="nc-note-evidence-muted">{error}</p> : null}
+                          <p className="nc-note-evidence-full">
+                            {userFacingCopy(detail?.rawText || detail?.signalPacket?.text || support.preview)}
+                          </p>
+                          {support.reason ? <p className="nc-note-evidence-why">{userFacingCopy(support.reason)}</p> : null}
+                          {relatedSnippets.length > 0 ? (
+                            <div className="nc-note-related-block">
+                              <p>nearby passages</p>
+                              <ul>
+                                {relatedSnippets.map((snippet) => (
+                                  <li key={snippet}>“{shortText(userFacingCopy(snippet), 120)}”</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {detail?.relatedContextNodes.length ? (
+                            <div className="nc-note-related-block">
+                              <p>shares this context</p>
+                              <ul>
+                                {detail.relatedContextNodes.slice(0, 3).map((node) => (
+                                  <li key={node.id}>{userFacingCopy(node.label || node.description)}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {detail?.relatedTopOfMindNotes.length ? (
+                            <div className="nc-note-related-block">
+                              <p>also points at this post-it</p>
+                              <ul>
+                                {detail.relatedTopOfMindNotes.slice(0, 3).map((note) => (
+                                  <li key={note.id}>{userFacingCopy(note.title || note.body)}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {nearbySavedSignals.length > 0 || nearbySignals.length > 0 ? (
+                            <div className="nc-note-related-block">
+                              <p>nearby saves</p>
+                              <ul>
+                                {nearbySavedSignals.map((saved) => (
+                                  <li key={saved.id}>{shortText(userFacingCopy(saved.textPreview), 120)}</li>
+                                ))}
+                                {nearbySavedSignals.length === 0
+                                  ? nearbySignals.map((nearby) => (
+                                      <li key={nearby.id}>{shortText(userFacingCopy(nearby.preview), 120)}</li>
+                                    ))
+                                  : null}
+                              </ul>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </section>
+
           <button
             type="button"
             className="nc-note-drawer-link"
@@ -3635,10 +3752,10 @@ export function HomePage(): JSX.Element {
               chooseHomeMode("memoryDrawer");
             }}
           >
-            inspirations that led here
+            open memory drawer
             <span>
               {supportingCount > 0
-                ? `${supportingCount} saved inspiration${supportingCount === 1 ? "" : "s"} nearby`
+                ? "browse every saved inspiration"
                 : "saved inspirations stay private there"}
             </span>
           </button>
@@ -3700,7 +3817,7 @@ export function HomePage(): JSX.Element {
           {copy.lifecycleHint ? <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p> : null}
         </section>
 
-        <section className="nc-stage" aria-label={PRODUCT_SPACES.topOfMind}>
+        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={PRODUCT_SPACES.topOfMind}>
           {topOfMindLoading ? (
             <p className="nc-loading">{copy.loadingThoughts}</p>
           ) : topOfMindError ? (
