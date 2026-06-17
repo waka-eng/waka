@@ -3930,25 +3930,6 @@ export function HomePage(): JSX.Element {
                           <span>{shortText(userFacingCopy(support.preview), 96)}</span>
                           <small>{supportSignalId ? (isOpen ? "hide" : "expand") : "preview"}</small>
                         </button>
-                        {supportSignalId ? (
-                          <button
-                            type="button"
-                            className="nc-note-evidence-open"
-                            aria-label="open inspiration"
-                            title="Open inspiration"
-                            onClick={() => openSupportingSignalDetail(support)}
-                          >
-                            open
-                          </button>
-                        ) : (
-                          <span
-                            className="nc-note-evidence-open nc-note-evidence-open--disabled"
-                            aria-label="preview only"
-                            title="Preview only"
-                          >
-                            preview
-                          </span>
-                        )}
                       </div>
                       {isOpen ? (
                         <div className="nc-note-evidence-detail" id={`top-of-mind-evidence-${supportSignalId ?? "missing"}`}>
@@ -3957,6 +3938,19 @@ export function HomePage(): JSX.Element {
                           <p className="nc-note-evidence-full">
                             {userFacingCopy(detail?.rawText || detail?.signalPacket?.text || support.preview)}
                           </p>
+                          {supportSignalId ? (
+                            <div className="nc-note-evidence-detail-actions">
+                              <button
+                                type="button"
+                                className="nc-note-evidence-open"
+                                aria-label="open inspiration"
+                                title="Open inspiration"
+                                onClick={() => openSupportingSignalDetail(support)}
+                              >
+                                open
+                              </button>
+                            </div>
+                          ) : null}
                           {support.reason ? <p className="nc-note-evidence-why">{userFacingCopy(support.reason)}</p> : null}
                           {relatedSnippets.length > 0 ? (
                             <div className="nc-note-related-block">

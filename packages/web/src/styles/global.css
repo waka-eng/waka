@@ -4769,6 +4769,15 @@
   background: color-mix(in srgb, white 15%, transparent);
 }
 
+.nc-note-evidence-list .nc-note-evidence-detail {
+  display: grid;
+}
+
+.nc-note-evidence-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .nc-note-evidence-detail .nc-note-evidence-full,
 .nc-note-evidence-detail .nc-note-evidence-why,
 .nc-note-evidence-detail .nc-note-evidence-muted {

@@ -949,6 +949,8 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
 
+    expect(container.querySelector(".nc-note-evidence-open")).toBeNull();
+
     const inspirationButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
     expect(inspirationButton?.getAttribute("aria-expanded")).toBe("false");
     await act(async () => {
@@ -975,10 +977,23 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const openButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-open");
+    expect(container.querySelector(".nc-note-evidence-open")).toBeNull();
+
+    const evidenceTrigger = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
+    expect(evidenceTrigger).not.toBeNull();
+
+    await act(async () => {
+      evidenceTrigger?.click();
+    });
+    await flushReactWork();
+
+    const detailContainer = container.querySelector<HTMLElement>(".nc-note-evidence-detail");
+    expect(detailContainer).not.toBeNull();
+    const openButton = detailContainer?.querySelector<HTMLButtonElement>(".nc-note-evidence-open");
     expect(openButton).not.toBeNull();
     expect(openButton?.textContent).toBe("open");
     expect(openButton?.getAttribute("aria-label")).toBe("open inspiration");
+    expect(openButton?.closest(".nc-note-evidence-detail")).toBe(detailContainer);
 
     await act(async () => {
       openButton?.click();
@@ -1032,8 +1047,8 @@ describe("HomePage current home experience", () => {
     const evidenceTrigger = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
     expect(evidenceTrigger?.disabled).toBe(true);
     expect(evidenceTrigger?.textContent).toContain("preview");
-    expect(container.querySelector(".nc-note-evidence-open--disabled")?.textContent).toContain("preview");
-    expect(container.querySelector(".nc-note-evidence-open--disabled")?.getAttribute("aria-label")).toBe("preview only");
+    expect(container.querySelector(".nc-note-evidence-open")).toBeNull();
+    expect(container.querySelector(".nc-note-evidence-open--disabled")).toBeNull();
     expect(container.querySelector(".memory-stack-detail--mockup")).toBeNull();
     expect(fetchSavedSignalDetail).not.toHaveBeenCalled();
   });
