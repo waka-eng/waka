@@ -4663,8 +4663,7 @@
 }
 
 .nc-note-evidence-head span,
-.nc-note-evidence-trigger small,
-.nc-note-related-block p {
+.nc-note-evidence-trigger small {
   color: var(--ink);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
@@ -4674,8 +4673,7 @@
   text-transform: uppercase;
 }
 
-.nc-note-evidence-list,
-.nc-note-related-block ul {
+.nc-note-evidence-list {
   display: grid;
   gap: 8px;
   list-style: none;
@@ -4690,6 +4688,18 @@
   overscroll-behavior: contain;
   padding-right: 8px;
   scrollbar-gutter: stable;
+}
+
+.nc-note-evidence--expanded {
+  flex: 1 1 100%;
+}
+
+.nc-note-evidence--expanded .nc-note-evidence-list {
+  max-height: min(520px, 56dvh);
+}
+
+.nc-note-evidence-item--expanded {
+  scroll-margin: 12px;
 }
 
 .nc-note-evidence-actions {
@@ -4769,6 +4779,15 @@
   background: color-mix(in srgb, white 15%, transparent);
 }
 
+.nc-note-evidence-list .nc-note-evidence-detail {
+  display: grid;
+}
+
+.nc-note-evidence-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .nc-note-evidence-detail .nc-note-evidence-full,
 .nc-note-evidence-detail .nc-note-evidence-why,
 .nc-note-evidence-detail .nc-note-evidence-muted {
@@ -4785,19 +4804,6 @@
   font-size: 13px;
   font-style: normal;
   opacity: 0.58;
-}
-
-.nc-note-related-block {
-  display: grid;
-  gap: 6px;
-}
-
-.nc-note-related-block li {
-  color: var(--ink);
-  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 13px;
-  line-height: 1.35;
-  opacity: 0.7;
 }
 
 .nc-note-drawer-link {
