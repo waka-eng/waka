@@ -41,6 +41,8 @@ const MAX_REPAIR_OUTPUT_TOKENS = 512;
 const MIN_WOW_MOMENT_SOURCE_LINKS = 2;
 const ENGLISH_POST_IT_THOUGHT_PATTERN =
   /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(people|peers|rooms?|places?|city|cities|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b)(?=.*\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b).{3,120}$/i;
+const ENGLISH_SOFT_APHORISTIC_THOUGHT_PATTERN =
+  /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(before|after|without|instead|than|where|who|because|until|against|not|but|through|for|from|into|with)\b)(?=.*\b(growth|future|choices?|practice|architecture|weakness|strength|daily|quiet|build|building|letting go|release|change|possibility|ambition)\b).{3,120}$/i;
 const KOREAN_SOFT_BELIEF_PATTERN =
   /(수\s*있|듯(?:합니|해|하)|것\s*같|지도\s*모|여길\s*수|보입니|보여요)/;
 const KOREAN_HARD_BELIEF_PATTERN =
@@ -63,7 +65,8 @@ const INTERNAL_SOURCE_ROLE_LABELS = new Set([
 function usesSoftBeliefStatementPhrasing(value: string): boolean {
   const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
   if (
-    ENGLISH_POST_IT_THOUGHT_PATTERN.test(value) &&
+    (ENGLISH_POST_IT_THOUGHT_PATTERN.test(value) ||
+      ENGLISH_SOFT_APHORISTIC_THOUGHT_PATTERN.test(value)) &&
     wordCount >= 5 &&
     wordCount <= 14
   )
@@ -226,7 +229,8 @@ is acceptable only when it still carries a concrete ambition object plus a reaso
 contrast, or tension. Avoid ultra-short slogans such as "public before perfect",
 "taste as default", "test it outside", or "courage normal". Good examples:
 "make the thing before explaining it", "people who make courage feel normal",
-"a room where unfinished ambition is allowed", "stop mistaking safety for
+"a room where unfinished ambition is allowed", "letting go is not weakness but
+new growth", "build the future through daily choices", "stop mistaking safety for
 clarity", "not another impressive path that feels dead", and "find people who
 make building feel less lonely". Avoid forced starts such as "I need", "I want",
 or "I am done with" unless they sound natural and non-template-like.

@@ -191,6 +191,43 @@ describe("wow judge concrete contract", () => {
     });
   });
 
+  it("accepts soft aphoristic belief fragments from live WOW judge output", () => {
+    for (const beliefStatement of [
+      "letting go is not weakness but the prerequisite for new growth",
+      "build the future through the quiet architecture of daily choices",
+    ]) {
+      const judgment = parseWowJudgmentFromResponse(
+        geminiEnvelope(
+          JSON.stringify({
+            isWowMoment: true,
+            kind: "bridge",
+            title: "Quiet Growth",
+            why: "Two signals connect release with deliberate future-building.",
+            beliefStatement,
+            relatedInspirationIds: [triggerId, candidateId],
+            sourceEvidence: [
+              {
+                inspirationId: triggerId,
+                role: "The release",
+                reason: "Frames letting go as part of growth.",
+              },
+              {
+                inspirationId: candidateId,
+                role: "The daily practice",
+                reason: "Grounds future-building in daily choices.",
+              },
+            ],
+          }),
+        ),
+      );
+
+      expect(judgment).toMatchObject({
+        isWowMoment: true,
+        beliefStatement,
+      });
+    }
+  });
+
   it("normalizes model-authored invalid_judge_json instead of accepting it as a model reason", () => {
     const judgment = parseWowJudgmentFromResponse(
       geminiEnvelope(
