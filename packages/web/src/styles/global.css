@@ -1830,6 +1830,148 @@
   padding: clamp(66px, 11vh, 120px) 8px 120px;
 }
 
+.memory-drawer-stack .memory-stack-detail--mockup {
+  width: min(1120px, calc(100vw - 64px));
+  max-width: none;
+  min-height: min(760px, calc(100dvh - 126px));
+  margin: 0 auto;
+  padding: clamp(88px, 12vh, 132px) clamp(18px, 5vw, 58px) clamp(70px, 10vh, 108px);
+  border: 0;
+  background:
+    radial-gradient(circle at 68% 16%, rgba(235, 219, 184, 0.36), transparent 31%),
+    linear-gradient(180deg, rgba(255, 254, 251, 0.92), rgba(255, 250, 240, 0.86));
+  box-shadow: 0 38px 110px rgba(44, 38, 28, 0.12);
+}
+
+.memory-detail-close {
+  position: absolute;
+  top: clamp(18px, 3vw, 34px);
+  right: clamp(18px, 3.5vw, 42px);
+  z-index: 4;
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(15, 15, 14, 0.08);
+  border-radius: 50%;
+  background: rgba(255, 254, 251, 0.88);
+  box-shadow: 0 12px 32px rgba(15, 15, 14, 0.12);
+  color: #050505;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 36px;
+  line-height: 1;
+}
+
+.memory-detail-hero {
+  display: grid;
+  grid-template-columns: minmax(250px, 382px) minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 58px);
+  align-items: center;
+  border-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.memory-detail-source-card {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.memory-detail-source-image,
+.memory-detail-source-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(15, 15, 14, 0.1);
+  border-radius: 4px;
+  background: rgba(15, 15, 14, 0.045);
+  object-fit: cover;
+  box-shadow: 0 22px 55px rgba(15, 15, 14, 0.08);
+}
+
+.memory-detail-source-placeholder {
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  color: rgba(15, 15, 14, 0.56);
+  font-family: var(--font-serif);
+  font-size: clamp(18px, 2vw, 24px);
+  font-style: italic;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.memory-detail-source-caption {
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.memory-detail-head--mockup {
+  gap: 12px;
+  padding: 0;
+}
+
+.memory-detail-head--mockup h2 {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: clamp(36px, 5vw, 58px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.memory-detail-head--mockup p {
+  color: rgba(15, 15, 14, 0.58);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.memory-detail-link a {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: clamp(17px, 2vw, 22px);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.memory-stack-readable--mockup .memory-readable-signal {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: clamp(20px, 2.4vw, 28px);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.memory-detail-next {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  margin-top: clamp(18px, 4vw, 42px);
+}
+
+.memory-detail-next button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: var(--font-serif);
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.memory-detail-next small {
+  max-width: 420px;
+  color: rgba(15, 15, 14, 0.5);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: right;
+}
+
 .memory-detail-head {
   display: grid;
   gap: 8px;
