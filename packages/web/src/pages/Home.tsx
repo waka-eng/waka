@@ -1331,7 +1331,7 @@ const HOME_COPY = {
     correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
     rewriteCta: "save",
-    removeCta: "pull down",
+    removeCta: "delete",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
@@ -1396,7 +1396,7 @@ const HOME_COPY = {
     correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
     rewriteCta: "save",
-    removeCta: "pull down",
+    removeCta: "delete",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
@@ -2824,42 +2824,23 @@ export function HomePage(): JSX.Element {
     }
   };
 
-  const renderPostItControls = (
-    signal: HomeThoughtCard,
-  ): JSX.Element | null => {
+  const renderPostItSaveAction = (signal: HomeThoughtCard): JSX.Element | null => {
     if (!signal.feedbackTargetId) return null;
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
     return (
-      <div
-        className="nc-note-controls"
-        role="group"
-        aria-label={copy.reactionGroup}
-      >
-        <div className="nc-note-control-actions">
-          <button
-            type="button"
-            className="nc-note-control-btn"
-            disabled={saving || !(noteFeedback[signal.id]?.correctionText || signal.label).trim()}
-            onClick={(event) => {
-              event.stopPropagation();
-              void submitTopOfMindEdit(signal, noteFeedback[signal.id]?.correctionText || signal.label);
-            }}
-          >
-            {copy.rewriteCta}
-          </button>
-          <button
-            type="button"
-            className="nc-note-control-btn nc-note-control-btn--pull"
-            disabled={saving}
-            onClick={(event) => {
-              event.stopPropagation();
-              void pullDownTopOfMindNote(signal);
-            }}
-          >
-            {copy.removeCta}
-          </button>
-        </div>
+      <div className="nc-note-save-action">
+        <button
+          type="button"
+          className="nc-note-control-btn nc-note-control-btn--save"
+          disabled={saving || !(noteFeedback[signal.id]?.correctionText || signal.label).trim()}
+          onClick={(event) => {
+            event.stopPropagation();
+            void submitTopOfMindEdit(signal, noteFeedback[signal.id]?.correctionText || signal.label);
+          }}
+        >
+          {copy.rewriteCta}
+        </button>
         {feedbackState?.status === "saving" ? (
           <p className="nc-note-feedback-status">{copy.feedbackSaving}</p>
         ) : feedbackState?.status === "saved" ? (
@@ -2869,6 +2850,26 @@ export function HomePage(): JSX.Element {
             {feedbackState.error ?? copy.feedbackError}
           </p>
         ) : null}
+      </div>
+    );
+  };
+
+  const renderPostItDeleteAction = (signal: HomeThoughtCard): JSX.Element | null => {
+    if (!signal.feedbackTargetId) return null;
+    const saving = noteFeedback[signal.id]?.status === "saving";
+    return (
+      <div className="nc-note-delete-action" role="group" aria-label={copy.reactionGroup}>
+        <button
+          type="button"
+          className="nc-note-control-btn nc-note-control-btn--delete"
+          disabled={saving}
+          onClick={(event) => {
+            event.stopPropagation();
+            void pullDownTopOfMindNote(signal);
+          }}
+        >
+          {copy.removeCta}
+        </button>
       </div>
     );
   };
@@ -3871,6 +3872,7 @@ export function HomePage(): JSX.Element {
         }}
         onClick={(event) => event.stopPropagation()}
       >
+        {renderPostItSaveAction(signal)}
         <button
           type="button"
           className="nc-note-peel-close"
@@ -4019,24 +4021,8 @@ export function HomePage(): JSX.Element {
             ) : null}
           </section>
 
-          <button
-            type="button"
-            className="nc-note-drawer-link"
-            onClick={() => {
-              closeExpandedNoteOnBackdrop();
-              chooseHomeMode("memoryDrawer");
-            }}
-          >
-            open memory drawer
-            <span>
-              {supportingCount > 0
-                ? "browse every saved inspiration"
-                : "saved inspirations stay private there"}
-            </span>
-          </button>
-
           <footer className="nc-note-expanded-foot">
-            {renderPostItControls(signal)}
+            {renderPostItDeleteAction(signal)}
           </footer>
         </div>
       </article>
