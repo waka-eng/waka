@@ -4690,6 +4690,18 @@
   scrollbar-gutter: stable;
 }
 
+.nc-note-evidence--expanded {
+  flex: 1 1 100%;
+}
+
+.nc-note-evidence--expanded .nc-note-evidence-list {
+  max-height: min(520px, 56dvh);
+}
+
+.nc-note-evidence-item--expanded {
+  scroll-margin: 12px;
+}
+
 .nc-note-evidence-actions {
   display: flex;
   align-items: flex-start;

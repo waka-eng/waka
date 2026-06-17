@@ -3826,6 +3826,10 @@ export function HomePage(): JSX.Element {
     const signal = meaningfulThoughtCards[index];
     if (!signal) return null;
     const supportingCount = signal.supportingSignals.length;
+    const hasExpandedSupportingSignal = signal.supportingSignals.some((support) => {
+      const supportSignalId = signalIdForSupportingSignal(support);
+      return supportSignalId ? expandedSupportingSignalIds.has(supportSignalId) : false;
+    });
     return (
       <article
         className="nc-note-modal"
@@ -3882,7 +3886,10 @@ export function HomePage(): JSX.Element {
             </p>
           </section>
 
-          <section className="nc-note-evidence" aria-label="inspirations that led here">
+          <section
+            className={`nc-note-evidence${hasExpandedSupportingSignal ? " nc-note-evidence--expanded" : ""}`}
+            aria-label="inspirations that led here"
+          >
             <div className="nc-note-evidence-head">
               <p>inspirations that led here</p>
               <span>
@@ -3894,13 +3901,16 @@ export function HomePage(): JSX.Element {
             {supportingCount > 0 ? (
               <ul className="nc-note-evidence-list">
                 {signal.supportingSignals.map((support) => {
-                  const isOpen = expandedSupportingSignalIds.has(support.id);
-                  const detail = supportingSignalDetails[support.id];
-                  const isLoading = supportingSignalDetailLoadingIds.has(support.id);
-                  const error = supportingSignalDetailErrors[support.id];
                   const supportSignalId = signalIdForSupportingSignal(support);
+                  const isOpen = supportSignalId ? expandedSupportingSignalIds.has(supportSignalId) : false;
+                  const detail = supportSignalId ? supportingSignalDetails[supportSignalId] : undefined;
+                  const isLoading = supportSignalId ? supportingSignalDetailLoadingIds.has(supportSignalId) : false;
+                  const error = supportSignalId ? supportingSignalDetailErrors[supportSignalId] : undefined;
                   return (
-                    <li className="nc-note-evidence-item" key={`${supportSignalId ?? "missing"}-${support.preview}`}>
+                    <li
+                      className={`nc-note-evidence-item${isOpen ? " nc-note-evidence-item--expanded" : ""}`}
+                      key={`${supportSignalId ?? "missing"}-${support.preview}`}
+                    >
                       <div className="nc-note-evidence-actions">
                         <button
                           type="button"

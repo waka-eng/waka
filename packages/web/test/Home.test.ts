@@ -949,6 +949,9 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
 
+    const evidenceSection = container.querySelector<HTMLElement>(".nc-note-evidence");
+    expect(evidenceSection).not.toBeNull();
+    expect(evidenceSection?.classList.contains("nc-note-evidence--expanded")).toBe(false);
     expect(container.querySelector(".nc-note-evidence-open")).toBeNull();
 
     const inspirationButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
@@ -958,6 +961,8 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(inspirationButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(evidenceSection?.classList.contains("nc-note-evidence--expanded")).toBe(true);
+    expect(container.querySelector(".nc-note-evidence-item--expanded .nc-note-evidence-detail")).not.toBeNull();
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(expanded?.textContent).not.toContain("nearby passages");
     expect(expanded?.textContent).not.toContain("shares this context");
