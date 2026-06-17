@@ -4692,7 +4692,15 @@
   scrollbar-gutter: stable;
 }
 
+.nc-note-evidence-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
 .nc-note-evidence-trigger {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: start;
   justify-content: space-between;
@@ -4718,6 +4726,38 @@
 .nc-note-evidence-trigger:focus-visible {
   border-color: color-mix(in srgb, var(--ink) 28%, transparent);
   outline: none;
+}
+
+.nc-note-evidence-trigger:disabled {
+  cursor: default;
+  opacity: 0.64;
+}
+
+.nc-note-evidence-open {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin-top: 2px;
+  padding: 4px 7px;
+  text-transform: uppercase;
+}
+
+.nc-note-evidence-open:hover,
+.nc-note-evidence-open:focus-visible {
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  outline: none;
+}
+
+.nc-note-evidence-open--disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .nc-note-evidence-detail {
@@ -4918,6 +4958,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.nc-note-evidence-list .nc-note-evidence-actions {
+  display: grid;
 }
 
 .nc-note-reactions--expanded {

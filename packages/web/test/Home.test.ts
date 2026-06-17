@@ -964,6 +964,80 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note-delete-action .nc-note-control-btn--delete")?.textContent).toBe("delete");
   });
 
+  it("opens the saved inspiration detail from an expanded post-it evidence item", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const openButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-open");
+    expect(openButton).not.toBeNull();
+    expect(openButton?.textContent).toBe("open");
+    expect(openButton?.getAttribute("aria-label")).toBe("open inspiration");
+
+    await act(async () => {
+      openButton?.click();
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-note-modal")).toBeNull();
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
+    expect(detail).not.toBeNull();
+    expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
+    expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
+    expect(detail?.textContent).toContain("Highlights");
+    expect(detail?.textContent).not.toContain("Signal packet");
+    expect(detail?.textContent).not.toContain("what did this mean then?");
+    expect(detail?.textContent).not.toContain("what does it mean now?");
+    expect(detail?.textContent).not.toContain("does this still fit?");
+    expect(detail?.textContent).not.toContain("attachment details");
+    expect(detail?.textContent).not.toContain("nearby piles");
+    expect(detail?.textContent).not.toContain("View next inspiration");
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
+    expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
+  });
+
+  it("keeps post-it evidence preview-only when an inspiration id is missing", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          evidencePreviews: [
+            {
+              ...sampleTopOfMindNote.evidencePreviews[0],
+              signalId: "",
+              textPreview: "A preview without a resolvable saved inspiration id",
+            },
+          ],
+          relatedSignals: [],
+          relatedSignalIds: [],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const evidenceTrigger = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
+    expect(evidenceTrigger?.disabled).toBe(true);
+    expect(evidenceTrigger?.textContent).toContain("preview");
+    expect(container.querySelector(".nc-note-evidence-open--disabled")?.textContent).toContain("preview");
+    expect(container.querySelector(".nc-note-evidence-open--disabled")?.getAttribute("aria-label")).toBe("preview only");
+    expect(container.querySelector(".memory-stack-detail--mockup")).toBeNull();
+    expect(fetchSavedSignalDetail).not.toHaveBeenCalled();
+  });
+
   it("keeps empty evidence out of the opened post-it and points to the drawer", async () => {
     setApiFixtures({
       topOfMindNotes: [
@@ -1716,11 +1790,12 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).not.toContain("still alive");
     expect(detail.textContent).not.toContain("changed shape");
     expect(detail.textContent).not.toContain("not anymore");
+    expect(detail.textContent).not.toContain("View next inspiration");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
   });
 
-  it("renders the clicked memory drawer inspiration with the mockup detail surface and next navigation", async () => {
+  it("renders the clicked memory drawer inspiration with the trimmed mockup detail surface", async () => {
     setApiFixtures({
       savedSignals: [
         {
@@ -1770,15 +1845,8 @@ describe("HomePage current home experience", () => {
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.querySelector(".memory-detail-next")?.textContent).toContain("View next inspiration");
-
-    const next = detail?.querySelector<HTMLButtonElement>('.memory-detail-next button[aria-label="View next inspiration"]');
-    await act(async () => {
-      next?.click();
-    });
-    await flushReactWork();
-    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-2");
-    expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-2", "detail_opened");
+    expect(detail?.textContent).not.toContain("View next inspiration");
+    expect(detail?.querySelector(".memory-detail-next")).toBeNull();
   });
 
   it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {

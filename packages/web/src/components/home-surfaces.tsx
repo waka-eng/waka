@@ -24,8 +24,6 @@ interface SavedInspirationDetailProps {
   formatTimestamp: (date: string) => string;
   signalSourceLabel: (signal: ApiSavedSignalSearchResult) => string | null;
   shortText: (text: string, maxLength: number) => string;
-  nextSignal?: ApiSavedSignalSearchResult | null;
-  onNextSignal?: () => void;
 }
 
 export function SavedInspirationDetail({
@@ -43,8 +41,6 @@ export function SavedInspirationDetail({
   formatTimestamp,
   signalSourceLabel,
   shortText,
-  nextSignal,
-  onNextSignal,
 }: SavedInspirationDetailProps): JSX.Element {
   const sourceLabel = signalSourceLabel(signal);
   const meta = [sourceLabel, formatTimestamp(signal.capturedAt)].filter(Boolean).join(" · ");
@@ -135,14 +131,6 @@ export function SavedInspirationDetail({
       {selectionPopover}
       {existingHighlightPopover}
       {highlightError ? <p className="signal-revisit-state">{highlightError}</p> : null}
-      {nextSignal && onNextSignal ? (
-        <nav className="memory-detail-next" aria-label="Next inspiration">
-          <button type="button" onClick={onNextSignal} aria-label="View next inspiration">
-            View next inspiration <span aria-hidden="true">→</span>
-          </button>
-          <small>{shortText(nextSignal.textPreview, 96)}</small>
-        </nav>
-      ) : null}
     </div>
   );
 }

@@ -141,6 +141,7 @@ type TopOfMindFeedbackValue = Extract<
 >;
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
+type SupportingThoughtSignal = HomeThoughtCard["supportingSignals"][number];
 
 const TOP_OF_MIND_NOTE_LIMIT = 5;
 const MEMORY_DRAWER_CLOSE_MS = 360;
@@ -1549,6 +1550,8 @@ export function HomePage(): JSX.Element {
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
   const [selectedSavedSignalId, setSelectedSavedSignalId] = useState<string | null>(null);
+  const [selectedSupportingSignalFallback, setSelectedSupportingSignalFallback] =
+    useState<ApiSavedSignalSearchResult | null>(null);
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
@@ -2319,21 +2322,12 @@ export function HomePage(): JSX.Element {
   const selectedMemoryRelationship = constellationRelationships[0] ?? null;
 
   const selectedSavedSignal = useMemo(() => {
-    return inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? null;
-  }, [inPlaceSignals, selectedSavedSignalId]);
-  const visibleSavedSignalOrder = selectedMemoryGroup ? selectedMemoryGroupSignals : pathFilteredSignals;
-  const nextSavedSignal = useMemo(() => {
-    if (!selectedSavedSignalId) return null;
-    const index = visibleSavedSignalOrder.findIndex((signal) => signal.id === selectedSavedSignalId);
-    return index >= 0 ? (visibleSavedSignalOrder[index + 1] ?? null) : null;
-  }, [selectedSavedSignalId, visibleSavedSignalOrder]);
-  const handleNextSavedSignal = useCallback(() => {
-    if (!nextSavedSignal) return;
-    setSelectedInspirationText(null);
-    setSelectedSavedSignalId(nextSavedSignal.id);
-    setSavedSignalDetail(null);
-    recordRevisit(nextSavedSignal.id, "detail_opened");
-  }, [nextSavedSignal, recordRevisit]);
+    const listedSignal = inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? null;
+    if (listedSignal) return listedSignal;
+    if (savedSignalDetail?.id === selectedSavedSignalId) return savedSignalDetail;
+    if (selectedSupportingSignalFallback?.id === selectedSavedSignalId) return selectedSupportingSignalFallback;
+    return null;
+  }, [inPlaceSignals, savedSignalDetail, selectedSavedSignalId, selectedSupportingSignalFallback]);
 
   const visibleMemoryWindows = useMemo(
     () =>
@@ -2407,7 +2401,9 @@ export function HomePage(): JSX.Element {
           const ownRows = rows.filter((row) => row.userId === user.id);
           setSavedSignals(ownRows);
           setSelectedSavedSignalId((current) =>
-            current && ownRows.some((row) => row.id === current) ? current : null,
+            current && (ownRows.some((row) => row.id === current) || selectedSupportingSignalFallback?.id === current)
+              ? current
+              : null,
           );
         } catch (caught) {
           if (cancelled) return;
@@ -2422,11 +2418,11 @@ export function HomePage(): JSX.Element {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [homeMode, inspirationFilters.search, user]);
+  }, [homeMode, inspirationFilters.search, selectedSupportingSignalFallback?.id, user]);
 
   useEffect(() => {
     if (homeMode !== "memoryDrawer") return;
-    if (!selectedSavedSignal?.id) {
+    if (!selectedSavedSignalId) {
       setSavedSignalDetail(null);
       return;
     }
@@ -2435,7 +2431,7 @@ export function HomePage(): JSX.Element {
     setSavedSignalDetailLoading(true);
     void (async () => {
       try {
-        const detail = await fetchSavedSignalDetail(selectedSavedSignal.id);
+        const detail = await fetchSavedSignalDetail(selectedSavedSignalId);
         if (cancelled) return;
         setSavedSignalDetail(detail);
       } catch {
@@ -2449,7 +2445,7 @@ export function HomePage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [homeMode, selectedSavedSignal?.id]);
+  }, [homeMode, selectedSavedSignalId]);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -3268,6 +3264,7 @@ export function HomePage(): JSX.Element {
         existingHighlightPopover={renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
         onBack={() => {
           setSelectedSavedSignalId(null);
+          setSelectedSupportingSignalFallback(null);
           setSavedSignalDetail(null);
         }}
         onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
@@ -3275,8 +3272,6 @@ export function HomePage(): JSX.Element {
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
         shortText={shortText}
-        nextSignal={nextSavedSignal}
-        onNextSignal={nextSavedSignal ? handleNextSavedSignal : undefined}
       />
     );
   };
@@ -3700,6 +3695,57 @@ export function HomePage(): JSX.Element {
     setExpandedSupportingSignalIds(new Set());
   };
 
+  const signalIdForSupportingSignal = (support: SupportingThoughtSignal): string | null => {
+    const id = support.id?.trim();
+    return id ? id : null;
+  };
+
+  const fallbackSavedSignalFromSupport = (support: SupportingThoughtSignal): ApiSavedSignalSearchResult | null => {
+    const id = signalIdForSupportingSignal(support);
+    if (!id) return null;
+    const listedSignal = allSavedSignals.find((signal) => signal.id === id);
+    if (listedSignal) return listedSignal;
+    return {
+      id,
+      userId: user.id,
+      textPreview: support.preview,
+      kind: support.kind ?? null,
+      capturedAt: support.createdAt ?? new Date().toISOString(),
+      updatedAt: support.createdAt ?? new Date().toISOString(),
+      resonanceScore: support.resonanceScore ?? 0,
+      signalScores: {
+        resonance: support.resonanceScore ?? 0,
+        recurrence: 0,
+        agency: 0,
+        identitySignal: 0,
+        decisionRelevance: 0,
+      },
+      highlightedSnippets: [],
+      matchingSnippets: [],
+      relatedContextTerms: [],
+      relatedTopOfMindNoteTitles: [],
+      attachmentSummary: [],
+      relevanceReasons: support.reason ? [support.reason] : [],
+    };
+  };
+
+  const openSupportingSignalDetail = (support: SupportingThoughtSignal) => {
+    const fallbackSignal = fallbackSavedSignalFromSupport(support);
+    if (!fallbackSignal) return;
+    setSelectedSupportingSignalFallback(fallbackSignal);
+    setSelectedMemoryGroupId(null);
+    setSelectedMemoryPathFilterId("all-saved");
+    setSelectedInspirationText(null);
+    setSelectedSavedSignalId(fallbackSignal.id);
+    setSavedSignalDetail(supportingSignalDetails[fallbackSignal.id] ?? null);
+    setExpandedNoteIndex(null);
+    setExpandedSupportingSignalIds(new Set());
+    clearDrawerCloseTimer();
+    setDrawerClosing(false);
+    setHomeMode("memoryDrawer");
+    recordRevisit(fallbackSignal.id, "detail_opened");
+  };
+
   const loadSupportingSignalDetail = (signalId: string) => {
     if (supportingSignalDetails[signalId] !== undefined || supportingSignalDetailLoadingIds.has(signalId)) return;
     setSupportingSignalDetailLoadingIds((current) => new Set([...current, signalId]));
@@ -3867,20 +3913,45 @@ export function HomePage(): JSX.Element {
                         ...detail.highlightedSnippets.map((snippet) => snippet.text),
                       ].filter((snippet, snippetIndex, all) => snippet && all.indexOf(snippet) === snippetIndex).slice(0, 3)
                     : [];
+                  const supportSignalId = signalIdForSupportingSignal(support);
                   return (
-                    <li className="nc-note-evidence-item" key={support.id}>
-                      <button
-                        type="button"
-                        className="nc-note-evidence-trigger"
-                        aria-expanded={isOpen}
-                        aria-controls={`top-of-mind-evidence-${support.id}`}
-                        onClick={() => toggleSupportingSignal(support.id)}
-                      >
-                        <span>{shortText(userFacingCopy(support.preview), 96)}</span>
-                        <small>{isOpen ? "hide" : "expand"}</small>
-                      </button>
+                    <li className="nc-note-evidence-item" key={`${supportSignalId ?? "missing"}-${support.preview}`}>
+                      <div className="nc-note-evidence-actions">
+                        <button
+                          type="button"
+                          className="nc-note-evidence-trigger"
+                          aria-expanded={isOpen}
+                          aria-controls={`top-of-mind-evidence-${supportSignalId ?? "missing"}`}
+                          disabled={!supportSignalId}
+                          onClick={() => {
+                            if (supportSignalId) toggleSupportingSignal(supportSignalId);
+                          }}
+                        >
+                          <span>{shortText(userFacingCopy(support.preview), 96)}</span>
+                          <small>{supportSignalId ? (isOpen ? "hide" : "expand") : "preview"}</small>
+                        </button>
+                        {supportSignalId ? (
+                          <button
+                            type="button"
+                            className="nc-note-evidence-open"
+                            aria-label="open inspiration"
+                            title="Open inspiration"
+                            onClick={() => openSupportingSignalDetail(support)}
+                          >
+                            open
+                          </button>
+                        ) : (
+                          <span
+                            className="nc-note-evidence-open nc-note-evidence-open--disabled"
+                            aria-label="preview only"
+                            title="Preview only"
+                          >
+                            preview
+                          </span>
+                        )}
+                      </div>
                       {isOpen ? (
-                        <div className="nc-note-evidence-detail" id={`top-of-mind-evidence-${support.id}`}>
+                        <div className="nc-note-evidence-detail" id={`top-of-mind-evidence-${supportSignalId ?? "missing"}`}>
                           {isLoading ? <p className="nc-note-evidence-muted">Opening this save…</p> : null}
                           {error ? <p className="nc-note-evidence-muted">{error}</p> : null}
                           <p className="nc-note-evidence-full">
