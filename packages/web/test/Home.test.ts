@@ -867,10 +867,9 @@ describe("HomePage current home experience", () => {
     const previewExplanation = note?.querySelector(".nc-note-explain--preview")?.textContent ?? "";
     expect(previewExplanation).toContain("saved inspirations");
     expect(previewExplanation).toMatch(/…$/);
-    const inspirationPreview = note?.querySelector(".nc-note-inspirations");
-    expect(inspirationPreview?.textContent).toContain("where it began");
-    expect(inspirationPreview?.textContent).toContain("Architecture essay about bridge rhythms");
-    expect(inspirationPreview?.querySelector(".nc-note-inspiration-chip")?.textContent).toMatch(/…/);
+    expect(note?.querySelector(".nc-note-inspirations")).toBeNull();
+    expect(note?.textContent).not.toContain("where it began");
+    expect(note?.textContent).not.toContain("Architecture essay about bridge rhythms");
     expect(note?.textContent).not.toContain("This signal anchors the pattern.");
     expect(note?.textContent).not.toContain("insp-1");
     expect(note?.querySelector(".nc-note-open-hint")?.textContent).toBe("open note");
@@ -885,6 +884,24 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note-modal")?.textContent).toContain(
       "Several saved inspirations cluster around city walks",
     );
+  });
+
+  it("lets keyboard users open a collapsed post-it preview", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    expect(note?.getAttribute("role")).toBe("button");
+    expect(note?.getAttribute("tabindex")).toBe("0");
+    expect(note?.getAttribute("aria-label")).toBe("open post-it reflection");
+
+    await act(async () => {
+      note?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-note-modal")?.getAttribute("role")).toBe("dialog");
+    expect(container.querySelector(".nc-note-modal")?.textContent).toContain("inspirations that led here");
   });
 
   it("keeps post-its direct and rejects summary-like topic labels", async () => {
@@ -907,14 +924,17 @@ describe("HomePage current home experience", () => {
     expect(postitBodies.join(" ")).not.toContain("places that make movement visible");
   });
 
-  it("opens a simplified top-of-mind post-it with a private drawer evidence action", async () => {
+  it("opens a simplified top-of-mind post-it from the keyboard with a private drawer evidence action", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
+    expect(note?.getAttribute("role")).toBe("button");
+    expect(note?.getAttribute("tabindex")).toBe("0");
+    expect(note?.getAttribute("aria-label")).toBe("open post-it reflection");
 
     await act(async () => {
-      note?.click();
+      note?.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
     });
     await flushReactWork();
 
@@ -926,12 +946,23 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("short, provisional, easy to change");
     expect(expanded?.textContent).toContain("inspirations that led here");
     expect(expanded?.textContent).toContain("1 saved inspiration nearby");
-    expect(expanded?.textContent).not.toContain("Architecture essay about bridge rhythms in city walks");
+    expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).not.toContain("This inspiration anchors the pattern.");
     expect(expanded?.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(expanded?.textContent).toContain("Several saved inspirations cluster around city walks");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
+
+    const inspirationButton = container.querySelector<HTMLButtonElement>(".nc-note-evidence-trigger");
+    expect(inspirationButton?.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => {
+      inspirationButton?.click();
+    });
+    await flushReactWork();
+    expect(inspirationButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
+    expect(expanded?.textContent).toContain("shares this context");
+    expect(expanded?.textContent).toContain("also points at this post-it");
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>(".nc-note-drawer-link")?.click();

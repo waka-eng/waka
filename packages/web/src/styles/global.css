@@ -3526,6 +3526,29 @@
   min-width: 1080px;
 }
 
+.nc-stage--top-of-mind-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), max-content));
+  align-content: start;
+  justify-content: center;
+  gap: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 44px);
+  width: min(1180px, calc(100vw - 32px));
+  min-height: 620px;
+  margin: clamp(18px, 4vh, 44px) auto clamp(48px, 8vh, 88px);
+  padding: 12px clamp(4px, 2vw, 18px) 72px;
+}
+
+.nc-stage--top-of-mind-wall::before {
+  display: none;
+}
+
+.nc-stage--top-of-mind-wall .nc-loading {
+  position: static;
+  transform: none;
+  grid-column: 1 / -1;
+  justify-self: center;
+}
+
 .nc-drawer-object {
   position: absolute;
   right: clamp(26px, 7vw, 96px);
@@ -3637,10 +3660,9 @@
 }
 
 .nc-note {
-  position: absolute;
-  top: var(--top, 30%);
-  left: var(--left, 40%);
-  width: var(--w, 320px);
+  position: relative;
+  width: min(var(--w, 320px), 100%);
+  min-height: 230px;
   background: var(--bg);
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
@@ -3682,6 +3704,11 @@
     box-shadow 180ms ease,
     border-color 200ms ease,
     z-index 0s;
+}
+
+.nc-note:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ink) 42%, white);
+  outline-offset: 6px;
 }
 
 .nc-note--dragging,
@@ -4316,6 +4343,117 @@
 
 .nc-note-one-read {
   margin-top: 18px !important;
+}
+
+.nc-note-evidence {
+  gap: 12px !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  padding-bottom: 18px;
+}
+
+.nc-note-evidence-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.nc-note-evidence-head p {
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 650;
+  opacity: 0.86;
+}
+
+.nc-note-evidence-head span,
+.nc-note-evidence-trigger small,
+.nc-note-related-block p {
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  opacity: 0.52;
+  text-transform: uppercase;
+}
+
+.nc-note-evidence-list,
+.nc-note-related-block ul {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nc-note-evidence-trigger {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, white 18%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 11px 12px;
+  text-align: left;
+}
+
+.nc-note-evidence-trigger span {
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 1.34;
+}
+
+.nc-note-evidence-trigger:hover,
+.nc-note-evidence-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--ink) 28%, transparent);
+  outline: none;
+}
+
+.nc-note-evidence-detail {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-top: 0;
+  background: color-mix(in srgb, white 15%, transparent);
+}
+
+.nc-note-evidence-detail .nc-note-evidence-full,
+.nc-note-evidence-detail .nc-note-evidence-why,
+.nc-note-evidence-detail .nc-note-evidence-muted {
+  font-family: "Fraunces", serif;
+  font-size: 17px;
+  font-style: italic;
+  line-height: 1.48;
+  opacity: 0.78;
+}
+
+.nc-note-evidence-detail .nc-note-evidence-why,
+.nc-note-evidence-detail .nc-note-evidence-muted {
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-style: normal;
+  opacity: 0.58;
+}
+
+.nc-note-related-block {
+  display: grid;
+  gap: 6px;
+}
+
+.nc-note-related-block li {
+  color: var(--ink);
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.7;
 }
 
 .nc-note-drawer-link {
