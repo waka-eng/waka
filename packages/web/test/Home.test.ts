@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
@@ -1221,6 +1222,18 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("List scans the timeline");
   });
 
+  it("keeps drawer bottom controls responsive on phone widths", () => {
+    const css = readFileSync("src/styles/global.css", "utf8");
+    const mobileDrawerRules = css.match(/@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar--drawer[\s\S]*?\.nc-bottom-bar--drawer \.nc-drawer-object[\s\S]*?\n  \}/)?.[0] ?? "";
+
+    expect(mobileDrawerRules).toContain("left: 12px");
+    expect(mobileDrawerRules).toContain("right: 12px");
+    expect(mobileDrawerRules).toContain("grid-template-columns: minmax(0, 1fr) auto");
+    expect(mobileDrawerRules).toContain("max-width: 100%");
+    expect(mobileDrawerRules).toContain("width: 100%");
+    expect(mobileDrawerRules).toContain("min-width: 0");
+  });
+
   it("opens filesystem-filtered drawer entries and inspiration detail in place", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -1251,9 +1264,11 @@ describe("HomePage current home experience", () => {
     const detail = stack?.querySelector<HTMLElement>(".memory-stack-detail");
     expect(detail).not.toBeNull();
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms");
+    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-workspace-back");
+    expect(detailBack?.textContent).toContain("← back to all saved");
+    expect(detailBack?.textContent).not.toContain("map");
     expect(container.querySelector(".memory-window")).toBeNull();
 
-    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-workspace-back");
     await act(async () => {
       detailBack?.click();
     });
@@ -1357,7 +1372,7 @@ describe("HomePage current home experience", () => {
         id: "sig-note",
         textPreview: "Handwritten thought about rooms where making feels public",
         kind: "note",
-        relatedContextTerms: ["public making rooms"],
+        relatedContextTerms: ["public making rooms", "meaning_nodes", "context_node", "node id ctx_1234"],
         relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
         attachmentSummary: [],
       },
@@ -1427,6 +1442,7 @@ describe("HomePage current home experience", () => {
     expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBeLessThanOrEqual(9);
     expect(pathFilters?.textContent).toContain("/make-thing-before-explaining");
     expect(pathFilters?.textContent).toContain("/recently-saved");
+    expect(pathFilters?.textContent).not.toMatch(/meaning[-_]?nodes?|context[-_]?nodes?|node id|ctx[-_]?1234/i);
 
     const makingPath = Array.from(pathFilters?.querySelectorAll<HTMLButtonElement>(".memory-path-filter") ?? []).find(
       (button) => button.textContent === "/make-thing-before-explaining",

@@ -1056,6 +1056,21 @@ function categoryTitleFromTerm(value: string): string {
   );
 }
 
+function isInternalMemoryPathTopic(value: string): boolean {
+  const normalized = value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_:/.-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return true;
+  if (/\b(?:meaning|context|memory)?\s*nodes?\b/.test(normalized)) return true;
+  if (/\b(?:context|memory|graph)\s*edges?\b/.test(normalized)) return true;
+  if (/\bnode\s*ids?\b/.test(normalized)) return true;
+  if (/\b(?:ctx|node|edge|debug|internal)\s*[a-z0-9]{4,}\b/.test(normalized)) return true;
+  return false;
+}
+
 function memoryPathSlug(value: string): string {
   const cleaned = userFacingCopy(value)
     .replace(/[’']/g, "")
@@ -1111,9 +1126,16 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
 
   const topicGroups = new Map<string, { label: string; signals: ApiSavedSignalSearchResult[]; newest: number }>();
   const addTopic = (rawLabel: string, signal: ApiSavedSignalSearchResult): void => {
+    if (isInternalMemoryPathTopic(rawLabel)) return;
     const label = categoryTitleFromTerm(rawLabel);
     const slug = memoryPathSlug(label);
-    if (!slug || ["signal", "signals", "memory", "memories", "node", "nodes", "graph", "resonance", "waka"].includes(slug)) return;
+    if (
+      !slug ||
+      ["signal", "signals", "memory", "memories", "node", "nodes", "graph", "resonance", "waka"].includes(slug) ||
+      isInternalMemoryPathTopic(label) ||
+      isInternalMemoryPathTopic(slug)
+    )
+      return;
     const existing = topicGroups.get(slug);
     if (existing) {
       if (!existing.signals.some((item) => item.id === signal.id)) existing.signals.push(signal);
@@ -3293,7 +3315,7 @@ export function HomePage(): JSX.Element {
         detail={savedSignalDetail}
         loading={savedSignalDetailLoading}
         relatedGroupNames={relatedGroupNames}
-        backLabel={selectedMemoryGroup ? "list" : "map"}
+        backLabel={selectedMemoryGroup ? "list" : (selectedMemoryPathFilter?.label ?? "list")}
         activeFeedback={activeFeedback}
         highlightError={
           highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id

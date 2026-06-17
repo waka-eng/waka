@@ -12577,6 +12577,37 @@ body.reflect-bg {
     padding: 0;
   }
 
+  .nc-bottom-bar--drawer {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    transform: none;
+  }
+
+  .nc-bottom-bar--drawer .memory-path-filters {
+    grid-column: 1 / -1;
+    max-width: 100%;
+    min-width: 0;
+    order: 1;
+    padding: 0 2px 2px;
+  }
+
+  .nc-bottom-bar--drawer .nc-drawer-search {
+    grid-column: 1;
+    width: 100%;
+    min-width: 0;
+    order: 2;
+  }
+
+  .nc-bottom-bar--drawer .nc-drawer-object {
+    grid-column: 2;
+    order: 2;
+  }
+
   .memory-map-board,
   .memory-drawer-stack .memory-group-board {
     inset: 0;
