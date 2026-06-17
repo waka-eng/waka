@@ -4663,8 +4663,7 @@
 }
 
 .nc-note-evidence-head span,
-.nc-note-evidence-trigger small,
-.nc-note-related-block p {
+.nc-note-evidence-trigger small {
   color: var(--ink);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
@@ -4674,8 +4673,7 @@
   text-transform: uppercase;
 }
 
-.nc-note-evidence-list,
-.nc-note-related-block ul {
+.nc-note-evidence-list {
   display: grid;
   gap: 8px;
   list-style: none;
@@ -4794,19 +4792,6 @@
   font-size: 13px;
   font-style: normal;
   opacity: 0.58;
-}
-
-.nc-note-related-block {
-  display: grid;
-  gap: 6px;
-}
-
-.nc-note-related-block li {
-  color: var(--ink);
-  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 13px;
-  line-height: 1.35;
-  opacity: 0.7;
 }
 
 .nc-note-drawer-link {

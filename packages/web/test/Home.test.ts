@@ -959,8 +959,11 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     expect(inspirationButton?.getAttribute("aria-expanded")).toBe("true");
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
-    expect(expanded?.textContent).toContain("shares this context");
-    expect(expanded?.textContent).toContain("also points at this post-it");
+    expect(expanded?.textContent).not.toContain("nearby passages");
+    expect(expanded?.textContent).not.toContain("shares this context");
+    expect(expanded?.textContent).not.toContain("also points at this post-it");
+    expect(expanded?.textContent).not.toContain("nearby saves");
+    expect(container.querySelector(".nc-note-related-block")).toBeNull();
     expect(container.querySelector(".nc-note-drawer-link")).toBeNull();
     expect(container.querySelector(".nc-note-save-action .nc-note-control-btn--save")?.textContent).toBe("save");
     expect(container.querySelector(".nc-note-delete-action .nc-note-control-btn--delete")?.textContent).toBe("delete");

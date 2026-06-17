@@ -3898,21 +3898,6 @@ export function HomePage(): JSX.Element {
                   const detail = supportingSignalDetails[support.id];
                   const isLoading = supportingSignalDetailLoadingIds.has(support.id);
                   const error = supportingSignalDetailErrors[support.id];
-                  const nearbySignals = signal.supportingSignals.filter((candidate) => candidate.id !== support.id).slice(0, 3);
-                  const nearbySavedSignals = detail
-                    ? savedSignals
-                        .filter((saved) =>
-                          saved.id !== support.id &&
-                          saved.relatedContextTerms.some((term) => detail.relatedContextTerms.includes(term)),
-                        )
-                        .slice(0, 3)
-                    : [];
-                  const relatedSnippets = detail
-                    ? [
-                        ...detail.matchingSnippets,
-                        ...detail.highlightedSnippets.map((snippet) => snippet.text),
-                      ].filter((snippet, snippetIndex, all) => snippet && all.indexOf(snippet) === snippetIndex).slice(0, 3)
-                    : [];
                   const supportSignalId = signalIdForSupportingSignal(support);
                   return (
                     <li className="nc-note-evidence-item" key={`${supportSignalId ?? "missing"}-${support.preview}`}>
@@ -3952,51 +3937,6 @@ export function HomePage(): JSX.Element {
                             </div>
                           ) : null}
                           {support.reason ? <p className="nc-note-evidence-why">{userFacingCopy(support.reason)}</p> : null}
-                          {relatedSnippets.length > 0 ? (
-                            <div className="nc-note-related-block">
-                              <p>nearby passages</p>
-                              <ul>
-                                {relatedSnippets.map((snippet) => (
-                                  <li key={snippet}>“{shortText(userFacingCopy(snippet), 120)}”</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-                          {detail?.relatedContextNodes.length ? (
-                            <div className="nc-note-related-block">
-                              <p>shares this context</p>
-                              <ul>
-                                {detail.relatedContextNodes.slice(0, 3).map((node) => (
-                                  <li key={node.id}>{userFacingCopy(node.label || node.description)}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-                          {detail?.relatedTopOfMindNotes.length ? (
-                            <div className="nc-note-related-block">
-                              <p>also points at this post-it</p>
-                              <ul>
-                                {detail.relatedTopOfMindNotes.slice(0, 3).map((note) => (
-                                  <li key={note.id}>{userFacingCopy(note.title || note.body)}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-                          {nearbySavedSignals.length > 0 || nearbySignals.length > 0 ? (
-                            <div className="nc-note-related-block">
-                              <p>nearby saves</p>
-                              <ul>
-                                {nearbySavedSignals.map((saved) => (
-                                  <li key={saved.id}>{shortText(userFacingCopy(saved.textPreview), 120)}</li>
-                                ))}
-                                {nearbySavedSignals.length === 0
-                                  ? nearbySignals.map((nearby) => (
-                                      <li key={nearby.id}>{shortText(userFacingCopy(nearby.preview), 120)}</li>
-                                    ))
-                                  : null}
-                              </ul>
-                            </div>
-                          ) : null}
                         </div>
                       ) : null}
                     </li>
