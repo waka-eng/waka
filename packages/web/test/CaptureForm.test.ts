@@ -9,6 +9,7 @@ import {
   createInspiration,
   createReflection,
   finalizeAttachment,
+  generateGuidedReflectionQuestion,
   ApiError,
   presignAttachment,
   uploadToPresignedUrl,
@@ -23,6 +24,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     createInspiration: vi.fn(),
     createReflection: vi.fn(),
     finalizeAttachment: vi.fn(),
+    generateGuidedReflectionQuestion: vi.fn(),
     presignAttachment: vi.fn(),
     uploadToPresignedUrl: vi.fn(),
   };
@@ -135,6 +137,11 @@ beforeEach(() => {
       skipped: false,
       createdAt: "2026-05-27T12:01:00.000Z",
     },
+  });
+  vi.mocked(generateGuidedReflectionQuestion).mockResolvedValue({
+    question: "What first caught you here — the idea, feeling, person, or possibility?",
+    source: "fallback",
+    fallbackReason: "no_model_config",
   });
   vi.mocked(presignAttachment).mockResolvedValue({
     uploadUrl: "https://s3.example/upload",
@@ -476,8 +483,12 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe("");
   });
 
-  it("attaches one ordered guided reflection after three Reflect-deeper questions", async () => {
+  it("attaches one ordered adaptive guided reflection after three LLM-guided questions", async () => {
     vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save" }));
+    vi.mocked(generateGuidedReflectionQuestion)
+      .mockResolvedValueOnce({ question: "What private weather does this signal name?", source: "model" })
+      .mockResolvedValueOnce({ question: "What would protecting that weather ask you to change?", source: "model" })
+      .mockResolvedValueOnce({ question: "What is one small room-temperature experiment for tomorrow?", source: "model" });
     const onSaved = vi.fn();
     await renderCaptureForm({ onSaved });
     await act(async () => {
@@ -488,9 +499,23 @@ describe("CaptureForm multi-input quick capture", () => {
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
     });
+    await flushReactWork();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What caught you first");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith({
+      locale: "en-US",
+      inspiration: {
+        text: "A messy thing I want safe before I understand it",
+        kind: "note",
+        links: [],
+        attachmentKinds: [],
+        highlights: [],
+        resonance: null,
+        resonanceNote: "",
+      },
+      priorAnswers: [],
+    });
     expect(createInspiration).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -499,7 +524,16 @@ describe("CaptureForm multi-input quick capture", () => {
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
     });
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What does it make you want more of");
+    await flushReactWork();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
+    expect(generateGuidedReflectionQuestion).toHaveBeenLastCalledWith(expect.objectContaining({
+      priorAnswers: [
+        {
+          question: "What private weather does this signal name?",
+          answer: "The feeling of wanting to protect it.",
+        },
+      ],
+    }));
     expect(createInspiration).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -508,7 +542,8 @@ describe("CaptureForm multi-input quick capture", () => {
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
     });
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("smallest clue or next move");
+    await flushReactWork();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("one small room-temperature experiment");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
     expect(createInspiration).not.toHaveBeenCalled();
 
@@ -525,9 +560,9 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
       question: "Reflect deeper guided reflection",
       answer: [
-        "What caught you first — the image, idea, feeling, person, or possibility?\nThe feeling of wanting to protect it.",
-        "What does it make you want more of, protect, change, or refuse?\nMore quiet studio time.",
-        "What is the smallest clue or next move this points toward?\nBook one hour tomorrow.",
+        "What private weather does this signal name?\nThe feeling of wanting to protect it.",
+        "What would protecting that weather ask you to change?\nMore quiet studio time.",
+        "What is one small room-temperature experiment for tomorrow?\nBook one hour tomorrow.",
       ].join("\n\n"),
       skipped: false,
     });

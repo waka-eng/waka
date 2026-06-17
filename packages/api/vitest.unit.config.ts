@@ -18,6 +18,7 @@ export default defineConfig({
       "src/lib/ambition-synthesis.test.ts",
       "src/lib/ambition-synthesis-gemini.test.ts",
       "src/lib/feedback-application.test.ts",
+      "src/lib/guided-reflection-question.test.ts",
       "src/lib/model-provider.test.ts",
       "src/lib/top-of-mind-notes.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",

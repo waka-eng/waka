@@ -59,6 +59,7 @@ import {
   createInspiration,
   createReflection,
   finalizeAttachment,
+  generateGuidedReflectionQuestion,
   presignAttachment,
   uploadToPresignedUrl,
   type ApiAttachment,
@@ -176,11 +177,12 @@ const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 const CAPTURE_DRAFT_STORAGE_KEY = "waka.captureDraft.v1";
 const CAPTURE_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;
 const CAPTURE_DRAFT_WRITE_DEBOUNCE_MS = 300;
-const GUIDED_REFLECTION_QUESTION_KEYS = [
+const GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS = [
   "guidedReflectionQuestion1",
   "guidedReflectionQuestion2",
   "guidedReflectionQuestion3",
 ] as const satisfies readonly MessageKey[];
+const GUIDED_REFLECTION_MAX_STEPS = 3;
 
 interface GuidedReflectionPayload {
   question: string;
@@ -415,6 +417,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [reflectionAnswer, setReflectionAnswer] = useState("");
     const [reflectionStepIndex, setReflectionStepIndex] = useState(0);
     const [guidedReflectionAnswers, setGuidedReflectionAnswers] = useState<string[]>([]);
+    const [guidedReflectionQuestions, setGuidedReflectionQuestions] = useState<string[]>(() => [
+      t(locale, GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS[0]),
+    ]);
     const [postSaveReflectionTargetId, setPostSaveReflectionTargetId] = useState<string | null>(null);
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
@@ -512,6 +517,45 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setConfirmVisible(false);
       }, ms);
     }, []);
+
+    const fallbackGuidedQuestion = useCallback(
+      (stepIndex: number): string => {
+        const key = GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS[stepIndex] ?? GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS[GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS.length - 1];
+        return t(locale, key);
+      },
+      [locale],
+    );
+
+    const requestGuidedQuestion = useCallback(
+      async (priorAnswers: string[], priorQuestions: string[]): Promise<string> => {
+        const trimmed = note.trim();
+        const existingLinkUrls = pending
+          .filter((p) => p.kind === "link" && p.url)
+          .map((p) => p.url as string);
+        const typedLinks = extractUrlsFromText(trimmed).filter((url) => !existingLinkUrls.includes(url));
+        const kind = primaryCaptureKind(trimmed, pending);
+        const response = await generateGuidedReflectionQuestion({
+          locale,
+          inspiration: {
+            text: trimmed.length > 0 ? trimmed : fallbackTextForCaptureKind(kind),
+            kind,
+            links: [...existingLinkUrls, ...typedLinks],
+            attachmentKinds: pending.map((item) => item.kind),
+            highlights: highlights.map((item) => item.text),
+            resonance,
+            resonanceNote: resonanceNoteInputRef.current?.value ?? resonanceNote,
+          },
+          priorAnswers: priorAnswers
+            .map((answer, index) => ({
+              question: priorQuestions[index] ?? fallbackGuidedQuestion(index),
+              answer: answer.trim(),
+            }))
+            .filter((item) => item.answer.length > 0),
+        });
+        return response.question.trim() || fallbackGuidedQuestion(priorAnswers.length);
+      },
+      [fallbackGuidedQuestion, highlights, locale, note, pending, resonance, resonanceNote],
+    );
 
     /* --------------------------------------------------------
      * Attachment management
@@ -922,30 +966,39 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const handleStartReflectiveSave = useCallback((): void => {
       if (saving) return;
       if (note.trim().length === 0 && pending.length === 0) return;
+      const firstFallback = fallbackGuidedQuestion(0);
       setPostSaveReflectionTargetId(null);
       setGuidedReflectionAnswers([]);
+      setGuidedReflectionQuestions([firstFallback]);
       setReflectionStepIndex(0);
       setReflectionAnswer("");
       setActiveView("reflect");
       setReflectGlow(false);
       onToggleFocus?.(true);
+      void requestGuidedQuestion([], []).then(
+        (question) => {
+          setGuidedReflectionQuestions([question]);
+        },
+        () => {
+          setGuidedReflectionQuestions([firstFallback]);
+        },
+      );
       queueMicrotask(() => {
         document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus();
       });
-    }, [note, pending, saving, onToggleFocus]);
+    }, [fallbackGuidedQuestion, note, pending, requestGuidedQuestion, saving, onToggleFocus]);
 
     const buildGuidedReflectionPayload = useCallback((answers: string[]): GuidedReflectionPayload => {
       return {
         question: t(locale, "guidedReflectionUmbrellaQuestion"),
-        answer: GUIDED_REFLECTION_QUESTION_KEYS
-          .map((questionKey, index) => {
-            const question = t(locale, questionKey);
-            const answer = answers[index]?.trim() ?? "";
-            return `${question}\n${answer}`;
+        answer: answers
+          .map((answer, index) => {
+            const question = guidedReflectionQuestions[index] ?? fallbackGuidedQuestion(index);
+            return `${question}\n${answer.trim()}`;
           })
           .join("\n\n"),
       };
-    }, [locale]);
+    }, [fallbackGuidedQuestion, guidedReflectionQuestions, locale]);
 
     const handleGuidedReflectionBack = useCallback((): void => {
       if (saving) return;
@@ -979,25 +1032,48 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       nextAnswers[reflectionStepIndex] = answer;
       setGuidedReflectionAnswers(nextAnswers);
 
-      const isFinalStep = reflectionStepIndex === GUIDED_REFLECTION_QUESTION_KEYS.length - 1;
+      const isFinalStep = reflectionStepIndex === GUIDED_REFLECTION_MAX_STEPS - 1;
       if (isFinalStep) {
         void triggerSave({ reflection: buildGuidedReflectionPayload(nextAnswers) });
         return;
       }
 
       const nextStepIndex = reflectionStepIndex + 1;
+      const nextFallback = fallbackGuidedQuestion(nextStepIndex);
+      const questionsSnapshot = [...guidedReflectionQuestions];
+      if (!questionsSnapshot[nextStepIndex]) questionsSnapshot[nextStepIndex] = nextFallback;
+      setGuidedReflectionQuestions(questionsSnapshot);
       setReflectionStepIndex(nextStepIndex);
       setReflectionAnswer(nextAnswers[nextStepIndex] ?? "");
+      void requestGuidedQuestion(nextAnswers, questionsSnapshot).then(
+        (question) => {
+          setGuidedReflectionQuestions((current) => {
+            const updated = [...current];
+            updated[nextStepIndex] = question;
+            return updated;
+          });
+        },
+        () => {
+          setGuidedReflectionQuestions((current) => {
+            const updated = [...current];
+            updated[nextStepIndex] = nextFallback;
+            return updated;
+          });
+        },
+      );
       queueMicrotask(() => {
         document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus();
       });
     }, [
       buildGuidedReflectionPayload,
+      fallbackGuidedQuestion,
       flashConfirm,
       guidedReflectionAnswers,
+      guidedReflectionQuestions,
       locale,
       reflectionAnswer,
       reflectionStepIndex,
+      requestGuidedQuestion,
       saving,
       triggerSave,
     ]);
@@ -1078,8 +1154,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
     const saveVisible =
       !saving && (note.trim().length > 0 || pending.length > 0);
-    const reflectStepCount = GUIDED_REFLECTION_QUESTION_KEYS.length;
-    const reflectQuestionKey = GUIDED_REFLECTION_QUESTION_KEYS[reflectionStepIndex] ?? GUIDED_REFLECTION_QUESTION_KEYS[0];
+    const reflectStepCount = GUIDED_REFLECTION_MAX_STEPS;
+    const reflectQuestion = guidedReflectionQuestions[reflectionStepIndex] ?? fallbackGuidedQuestion(reflectionStepIndex);
     const reflectProgress = formatMessage(locale, "guidedReflectionProgress", {
       current: reflectionStepIndex + 1,
       total: reflectStepCount,
@@ -1172,7 +1248,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         reflectQuestion={
           <>
             <span className="reflect-kicker">{t(locale, "processThisInspiration")}</span>
-            {t(locale, reflectQuestionKey)}
+            {reflectQuestion}
             <span className="reflect-progress">{reflectProgress}</span>
           </>
         }
