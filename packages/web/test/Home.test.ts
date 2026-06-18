@@ -551,7 +551,7 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
-  it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
+  it("renders processed Reflect Deeper analysis in saved inspiration detail after fetch", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([
       persistedReflection({
@@ -573,13 +573,46 @@ describe("HomePage current home experience", () => {
 
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(fetchReflections).toHaveBeenCalledWith("insp-1");
-    expect(detail.textContent).toContain("Highlights");
-    expect(detail.textContent).toContain("Reflect Deeper transcript");
-    expect(detail.textContent).toContain("2 of 2 answered");
-    expect(detail.textContent).toContain("Q1 What texture did this save point toward?");
-    expect(detail.textContent).toContain("Answer Mossy light and imperfect ceramic edges.");
-    expect(detail.textContent).toContain("Q2 What should stay attached after refresh?");
-    expect(detail.textContent).toContain("Answer The Reflect Deeper transcript should be readable in detail.");
+    expect(detail.textContent).toContain("Inspiration details");
+    expect(detail.textContent).toContain("Reflect Deeper on this inspiration");
+    expect(detail.textContent).toContain("Processed reflection analysis");
+    expect(detail.textContent).toContain("Synthesized from 2 answered Reflect Deeper notes.");
+    expect(detail.textContent).toContain("What the reflection points toward Mossy light and imperfect ceramic edges.");
+    expect(detail.textContent).toContain("What the reflection points toward The Reflect Deeper transcript should be readable in detail.");
+    expect(detail.textContent).not.toContain("Q1 What texture did this save point toward?");
+    expect(detail.textContent).not.toContain("Answer Mossy light and imperfect ceramic edges.");
+  });
+
+  it("enriches an existing saved inspiration through Reflect Deeper without duplicating the inspiration", async () => {
+    setApiFixtures();
+    const serverReflection = persistedReflection({
+      id: "reflection-existing-new",
+      question: "What does this inspiration want you to notice now?",
+      answer: "It wants the bridge rhythm to become a daily walk.",
+      createdAt: "2026-05-14T16:33:00.000Z",
+    });
+    vi.mocked(createReflection).mockResolvedValue({ reflection: serverReflection });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const answer = detail.querySelector<HTMLTextAreaElement>(".reflect-answer");
+    expect(answer).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(answer!, "It wants the bridge rhythm to become a daily walk.");
+    });
+    await act(async () => {
+      detail.querySelector<HTMLButtonElement>(".reflect-next")?.click();
+    });
+    await flushReactWork();
+
+    expect(createReflection).toHaveBeenCalledWith("insp-1", {
+      question: "What does this inspiration want you to notice now?",
+      answer: "It wants the bridge rhythm to become a daily walk.",
+    });
+    expect(createInspiration).not.toHaveBeenCalled();
+    expect(detail.textContent).toContain("Processed reflection analysis");
+    expect(detail.textContent).toContain("What the reflection points toward It wants the bridge rhythm to become a daily walk.");
   });
 
   it("loads current Home data from signals and top-of-mind endpoints", async () => {
@@ -1119,7 +1152,8 @@ describe("HomePage current home experience", () => {
     expect(detail).not.toBeNull();
     expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
-    expect(detail?.textContent).toContain("Highlights");
+    expect(detail?.textContent).toContain("Inspiration details");
+    expect(detail?.textContent).toContain("Reflect Deeper on this inspiration");
     expect(detail?.textContent).not.toContain("Signal packet");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
@@ -1284,7 +1318,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
@@ -1350,7 +1384,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-page")).toBeNull();
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
-    expect(container.textContent).toContain("When saved inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
@@ -1981,7 +2015,8 @@ describe("HomePage current home experience", () => {
     expect(detail?.querySelector(".memory-detail-source-card")?.textContent).toContain("youtube.com/watch");
     expect(detail?.textContent).toContain("Link");
     expect(detail?.textContent).toContain("https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s");
-    expect(detail?.textContent).toContain("Highlights");
+    expect(detail?.textContent).not.toContain("Highlights");
+    expect(detail?.textContent).toContain("Reflect Deeper on this inspiration");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
     expect(detail?.textContent).not.toContain("does this still fit?");
@@ -2261,23 +2296,25 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "A windowed studio signal",
       kind: "note",
+      reflections: [
+        {
+          question: "What caught you first?",
+          answer: "The soft north light.",
+          skipped: false,
+        },
+        {
+          question: "What does it ask you to protect?",
+          answer: "Protected quiet mornings.",
+          skipped: false,
+        },
+        {
+          question: "What is the smallest next move?",
+          answer: "Block tomorrow morning.",
+          skipped: false,
+        },
+      ],
     });
-    expect(createReflection).toHaveBeenCalledTimes(3);
-    expect(createReflection).toHaveBeenNthCalledWith(1, "insp-guided-save", {
-      question: "What caught you first?",
-      answer: "The soft north light.",
-      skipped: false,
-    });
-    expect(createReflection).toHaveBeenNthCalledWith(2, "insp-guided-save", {
-      question: "What does it ask you to protect?",
-      answer: "Protected quiet mornings.",
-      skipped: false,
-    });
-    expect(createReflection).toHaveBeenNthCalledWith(3, "insp-guided-save", {
-      question: "What is the smallest next move?",
-      answer: "Block tomorrow morning.",
-      skipped: false,
-    });
+    expect(createReflection).not.toHaveBeenCalled();
   });
 
   it("closes the surface and flashes the capture button after a quick save", async () => {

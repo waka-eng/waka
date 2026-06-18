@@ -48,6 +48,7 @@ import {
   InspirationDetail,
   type InspirationDetailData,
 } from "../components/history";
+import type { PendingReflection } from "../components/history/ReflectionForm";
 import {
   SavedInspirationDetail,
 } from "../components/home-surfaces";
@@ -55,6 +56,7 @@ import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout
 import {
   type ApiAttachment,
   type ApiAmbitionDimension,
+  type CreateReflectionResponse,
   type ApiFeedbackValue,
   type ApiError,
   type ApiInspiration,
@@ -3138,6 +3140,31 @@ export function HomePage(): JSX.Element {
     recordRevisit(signal.id, "detail_opened");
   };
 
+  const handleSavedReflectionOptimisticAdd = useCallback((pending: PendingReflection): void => {
+    const optimistic: ApiReflection = {
+      id: pending.tempId,
+      inspirationId: pending.inspirationId,
+      userId: user.id,
+      question: pending.question,
+      answer: pending.answer,
+      skipped: pending.skipped,
+      createdAt: pending.createdAt,
+    };
+    setSavedSignalReflectionsError(null);
+    setSavedSignalReflections((current) => [...current, optimistic]);
+  }, [user.id]);
+
+  const handleSavedReflectionPersisted = useCallback((tempId: string, server: CreateReflectionResponse): void => {
+    setSavedSignalReflections((current) => current.map((reflection) =>
+      reflection.id === tempId ? server.reflection : reflection,
+    ));
+  }, []);
+
+  const handleSavedReflectionPersistError = useCallback((tempId: string, error: ApiError): void => {
+    setSavedSignalReflections((current) => current.filter((reflection) => reflection.id !== tempId));
+    setSavedSignalReflectionsError(error.message);
+  }, []);
+
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
     const sourceLabel = signalSourceLabel(signal);
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
@@ -3268,6 +3295,9 @@ export function HomePage(): JSX.Element {
         })}
         selectionPopover={renderMemorySelectionPopover(selectedSavedSignal.id)}
         existingHighlightPopover={renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
+        onReflectionOptimisticAdd={handleSavedReflectionOptimisticAdd}
+        onReflectionPersisted={handleSavedReflectionPersisted}
+        onReflectionPersistError={handleSavedReflectionPersistError}
         onBack={() => {
           setSelectedSavedSignalId(null);
           setSelectedSupportingSignalFallback(null);
@@ -3279,7 +3309,6 @@ export function HomePage(): JSX.Element {
         onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
-        shortText={shortText}
       />
     );
   };
