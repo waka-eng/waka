@@ -227,7 +227,7 @@ describe("WowMomentsSection", () => {
     });
 
     expect(html).toContain("Why WAKA noticed this");
-    expect(html).toContain("1 best-recent mirror moments shown.");
+    expect(html).toContain("1 recent mirror moment shown.");
     expect(html).not.toContain("Inspect all WOW moments (1)");
     expect(html).not.toContain("Dev-only inspect legacy fields");
     expect(html).not.toContain(">1</span>");
@@ -1439,7 +1439,7 @@ describe("WowMomentsSection", () => {
       error: null,
     });
 
-    expect(html).toContain("9 best-recent mirror moments shown.");
+    expect(html).toContain("9 recent mirror moments shown.");
     expect(html).not.toContain("Inspect all WOW moments (11)");
     expect(html).not.toContain("Dev-only inspect legacy fields");
     expect(html).toContain("wow-moments-grid wow-moments-grid--populated");
@@ -1509,7 +1509,7 @@ describe("WowMomentsSection", () => {
       showDevInspection: true,
     });
 
-    expect(container.textContent).toContain("9 best-recent mirror moments shown.");
+    expect(container.textContent).toContain("9 recent mirror moments shown.");
     expect(container.textContent).toContain("Dev-only inspect legacy fields (10)");
     expect(container.textContent).toContain("WOW card 9");
     expect(container.textContent).not.toContain("Generated field previews");
@@ -1568,7 +1568,7 @@ describe("WowMomentsSection", () => {
       locale: "ko-KR",
     });
 
-    expect(container.textContent).toContain("9개의 최근 핵심 미러 순간이 표시됨.");
+    expect(container.textContent).toContain("최근 미러 순간 9개 표시됨.");
     expect(container.textContent).toContain("개발 전용 레거시 필드 점검 (10)");
     expect(container.textContent).toContain("WOW card 9");
     expect(container.textContent).not.toContain("Dev-only inspect legacy fields");

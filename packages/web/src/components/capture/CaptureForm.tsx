@@ -127,6 +127,8 @@ export interface PersistedResult {
   attachments: ApiAttachment[];
   reflections?: CreateReflectionResponse[];
   reflection?: CreateReflectionResponse;
+  /** Count of Reflect Deeper Q/A rows saved by POST /inspirations. */
+  reflectionCount?: number;
   /** Per-attachment failures. Surfaces the original `localId` so the parent
    *  can keep the failed one visible (e.g. with a retry affordance) while
    *  the inspiration row itself is treated as saved. */
@@ -848,21 +850,18 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           text: inspirationText,
           kind,
           ...(captureSparks ? { sparks: captureSparks } : {}),
+          ...(reflectiveAnswers.length > 0
+            ? {
+                reflections: reflectiveAnswers.map((item) => ({
+                  question: item.question,
+                  answer: item.answer,
+                  skipped: false,
+                })),
+              }
+            : {}),
         });
 
-        const reflections: CreateReflectionResponse[] = [];
-        if (options.reflection) {
-          for (const item of reflectiveAnswers) {
-            reflections.push(
-              await createReflection(inspiration.id, {
-                question: item.question,
-                answer: item.answer,
-                skipped: false,
-              }),
-            );
-          }
-        }
-        const reflection = reflections[reflections.length - 1];
+        const savedReflectionCount = reflectiveAnswers.length;
 
         // 3. Fan out each attachment. We persist in parallel because they
         //    don't depend on one another. `Promise.allSettled` lets a single
@@ -900,8 +899,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onPersisted?.(tempId, {
           inspiration,
           attachments,
-          reflections,
-          reflection,
+          reflectionCount: savedReflectionCount,
           failedAttachments: failed,
         });
 
@@ -920,10 +918,10 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setReflectionStepIndex(0);
         setGuidedReflectionAnswers([]);
         setActiveView("note");
-        setPostSaveReflectionTargetId(reflection ? null : inspiration.id);
-        setReflectGlow(Boolean(reflection));
+        setPostSaveReflectionTargetId(savedReflectionCount > 0 ? null : inspiration.id);
+        setReflectGlow(savedReflectionCount > 0);
         if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
-        if (reflection) {
+        if (savedReflectionCount > 0) {
           reflectGlowTimerRef.current = setTimeout(() => {
             setReflectGlow(false);
             reflectGlowTimerRef.current = null;

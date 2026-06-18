@@ -96,6 +96,21 @@ import type { VaultStore } from "../vault/vault.js";
  */
 const captureInputKindValues = ["note", "link", "image", "mixed"] as const;
 
+const reflectionInputSchema = z.object({
+  question: z
+    .string()
+    .trim()
+    .min(1, "Reflection question is required")
+    .max(4096, "Reflection question is too long"),
+  answer: z
+    .string()
+    .trim()
+    .max(8192, "Reflection answer is too long")
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  skipped: z.boolean().optional(),
+});
+
 const createInspirationSchema = z.object({
   text: z
     .string()
@@ -137,6 +152,10 @@ const createInspirationSchema = z.object({
       }),
     )
     .max(12, "Too many sparks for one inspiration")
+    .optional(),
+  reflections: z
+    .array(reflectionInputSchema)
+    .max(3, "Too many guided reflections for one inspiration")
     .optional(),
 });
 
@@ -400,62 +419,95 @@ routes.post("/", async (c) => {
     sparks: draftSparks,
   });
 
-  // 2. Insert. We `.returning()` the columns the SPA needs to render the
-  //    new row immediately. cluster / classified_at are intentionally NULL
-  //    here — the background classifier will UPDATE them later. The vault
-  //    draft above is deliberately written first so the user-meaning artifact
-  //    exists before the rebuildable DB projection.
-  const [inserted] = await db
-    .insert(inspirations)
-    .values({
-      id: signalId,
-      userId: user.id,
-      text: parsed.data.text,
-      kind: parsed.data.kind ?? null,
-      category: parsed.data.category ?? null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({
-      id: inspirations.id,
-      userId: inspirations.userId,
-      text: inspirations.text,
-      kind: inspirations.kind,
-      category: inspirations.category,
-      importanceScore: inspirations.importanceScore,
-      wowScore: inspirations.wowScore,
-      cluster: inspirations.cluster,
-      classifiedAt: inspirations.classifiedAt,
-      createdAt: inspirations.createdAt,
-      updatedAt: inspirations.updatedAt,
-    });
+  // 2. Insert the inspiration and any same-submit Reflect Deeper Q/A in one
+  //    DB transaction. This closes the previous partial-save gap where the web
+  //    client could create the inspiration row, then fail on a later reflection
+  //    POST and leave a durable inspiration with no conversation data.
+  const reflectionInputs = parsed.data.reflections ?? [];
+  const persisted = await db.transaction(async (tx) => {
+    const [inserted] = await tx
+      .insert(inspirations)
+      .values({
+        id: signalId,
+        userId: user.id,
+        text: parsed.data.text,
+        kind: parsed.data.kind ?? null,
+        category: parsed.data.category ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({
+        id: inspirations.id,
+        userId: inspirations.userId,
+        text: inspirations.text,
+        kind: inspirations.kind,
+        category: inspirations.category,
+        importanceScore: inspirations.importanceScore,
+        wowScore: inspirations.wowScore,
+        cluster: inspirations.cluster,
+        classifiedAt: inspirations.classifiedAt,
+        createdAt: inspirations.createdAt,
+        updatedAt: inspirations.updatedAt,
+      });
 
-  if (!inserted) {
-    // Drizzle should always return a row on a successful insert; if it
-    // didn't, treat it as an internal error rather than silently 200ing.
-    return c.json({ error: "Failed to create inspiration" }, 500);
-  }
+    if (!inserted) {
+      throw new Error("Failed to create inspiration");
+    }
+
+    if (sparkInputs.length > 0) {
+      await tx.insert(inspirationSparks).values(
+        draftSparks.map((spark) => ({
+          id: spark.id,
+          userId: user.id,
+          inspirationId: signalId,
+          text: spark.text,
+          source: spark.source,
+          startOffset: spark.startOffset,
+          endOffset: spark.endOffset,
+          confidence: spark.confidence,
+          isPrimary: spark.isPrimary,
+          note: spark.note ?? null,
+          createdAt: spark.createdAt,
+          updatedAt: spark.updatedAt,
+        })),
+      );
+    }
+
+    const insertedReflections = reflectionInputs.length > 0
+      ? await tx
+          .insert(reflections)
+          .values(
+            reflectionInputs.map((reflection, index) => ({
+              inspirationId: signalId,
+              userId: user.id,
+              question: reflection.question,
+              answer: reflection.answer ?? null,
+              skipped: reflection.skipped ?? false,
+              // Preserve authored order for multi-step Reflect Deeper saves even
+              // on databases whose timestamp precision would otherwise collapse
+              // several rows into the same created_at value.
+              createdAt: new Date(now.getTime() + index),
+            })),
+          )
+          .returning({
+            id: reflections.id,
+            inspirationId: reflections.inspirationId,
+            userId: reflections.userId,
+            question: reflections.question,
+            answer: reflections.answer,
+            skipped: reflections.skipped,
+            createdAt: reflections.createdAt,
+          })
+      : [];
+
+    return { inserted, insertedReflections };
+  });
+
+  const { inserted, insertedReflections } = persisted;
 
   const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };
-  if (sparkInputs.length > 0) {
-    await db.insert(inspirationSparks).values(
-      draftSparks.map((spark) => ({
-        id: spark.id,
-        userId: user.id,
-        inspirationId: signalId,
-        text: spark.text,
-        source: spark.source,
-        startOffset: spark.startOffset,
-        endOffset: spark.endOffset,
-        confidence: spark.confidence,
-        isPrimary: spark.isPrimary,
-        note: spark.note ?? null,
-        createdAt: spark.createdAt,
-        updatedAt: spark.updatedAt,
-      })),
-    );
-  }
+
   await persistSignalPacketForSignal({
     db,
     userId: scoredInserted.userId,
@@ -493,7 +545,13 @@ routes.post("/", async (c) => {
   // 4. 201 Created with the canonical row payload. Cluster will be `null`
   //    until the classifier worker updates it; the SPA renders an
   //    "uncategorised" state in that window.
-  return c.json({ inspiration: withSignalLayer(withDisplayedWowScore(scoredInserted)) }, 201);
+  return c.json(
+    {
+      inspiration: withSignalLayer(withDisplayedWowScore(scoredInserted)),
+      ...(insertedReflections.length > 0 ? { reflections: insertedReflections } : {}),
+    },
+    201,
+  );
 });
 
 /**
@@ -1127,20 +1185,7 @@ routes.patch("/:id", async (c) => {
  *   - `userId` — derived from the auth context.
  *   - `id` / `createdAt` — generated server-side.
  */
-const createReflectionSchema = z.object({
-  question: z
-    .string()
-    .trim()
-    .min(1, "Reflection question is required")
-    .max(4096, "Reflection question is too long"),
-  answer: z
-    .string()
-    .trim()
-    .max(8192, "Reflection answer is too long")
-    .optional()
-    .transform((v) => (v && v.length > 0 ? v : undefined)),
-  skipped: z.boolean().optional(),
-});
+const createReflectionSchema = reflectionInputSchema;
 
 /**
  * POST /api/inspirations/:id/reflections
