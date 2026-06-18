@@ -9,7 +9,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import { z } from "zod";
 
@@ -17,8 +17,10 @@ import * as dbSchema from "../db/index.js";
 import {
   inspirationEmbeddings,
   inspirations,
+  reflections,
   type Inspiration,
   type InspirationEmbedding,
+  type Reflection,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import {
@@ -37,6 +39,7 @@ export interface CanonicalInspirationEmbeddingInput {
   text: string;
   kind: string | null;
   category: number | null;
+  reflections?: Array<Pick<Reflection, "question" | "answer" | "skipped" | "createdAt">>;
 }
 
 function normalizeTextForEmbedding(value: string): string {
@@ -61,13 +64,22 @@ export function buildCanonicalInspirationEmbeddingInput(
   const text = normalizeTextForEmbedding(inspiration.text);
   const kind = inspiration.kind?.trim() || "null";
   const category = inspiration.category === null ? "null" : String(inspiration.category);
+  const reflectionLines = (inspiration.reflections ?? [])
+    .filter((reflection) => !reflection.skipped && normalizeTextForEmbedding(reflection.answer ?? "").length > 0)
+    .map((reflection, index) => {
+      const question = normalizeTextForEmbedding(reflection.question);
+      const answer = normalizeTextForEmbedding(reflection.answer ?? "");
+      return [`reflection_${index + 1}_question:`, question, `reflection_${index + 1}_answer:`, answer].join("\n");
+    });
 
   return [
-    "waka.inspiration_embedding_input.v1",
+    "waka.inspiration_embedding_input.v2",
     `kind:${kind}`,
     `category:${category}`,
     "text:",
     text,
+    "reflections:",
+    reflectionLines.length > 0 ? reflectionLines.join("\n") : "none",
   ].join("\n");
 }
 
@@ -248,6 +260,40 @@ async function loadExistingEmbedding(
   return rows[0] ?? null;
 }
 
+async function loadTenantScopedReflections(
+  db: WakaDb,
+  userId: string,
+  inspirationId: string,
+): Promise<Array<Pick<Reflection, "question" | "answer" | "skipped" | "createdAt">>> {
+  return db
+    .select({
+      question: reflections.question,
+      answer: reflections.answer,
+      skipped: reflections.skipped,
+      createdAt: reflections.createdAt,
+    })
+    .from(reflections)
+    .where(
+      and(
+        eq(reflections.userId, userId),
+        eq(reflections.inspirationId, inspirationId),
+      ),
+    )
+    .orderBy(asc(reflections.createdAt), asc(reflections.id));
+}
+
+async function buildCanonicalInputForInspiration(
+  db: WakaDb,
+  userId: string,
+  inspiration: Inspiration,
+): Promise<string> {
+  const reflectionRows = await loadTenantScopedReflections(db, userId, inspiration.id);
+  return buildCanonicalInspirationEmbeddingInput({
+    ...inspiration,
+    reflections: reflectionRows,
+  });
+}
+
 async function acquireEmbeddingAdvisoryLock(
   db: WakaDb,
   params: Pick<EnsureInspirationEmbeddingParams, "userId" | "inspirationId"> & {
@@ -264,16 +310,15 @@ async function acquireEmbeddingAdvisoryLock(
   );
 }
 
-function sourceMatchesSnapshot(
+async function sourceMatchesSnapshot(
+  db: WakaDb,
+  userId: string,
   source: Inspiration | null,
-  snapshot: { updatedAt: Date; inputHash: string },
-): boolean {
+  snapshot: { inputHash: string },
+): Promise<boolean> {
   if (!source) return false;
-  const currentInput = buildCanonicalInspirationEmbeddingInput(source);
-  return (
-    source.updatedAt.getTime() === snapshot.updatedAt.getTime() &&
-    hashEmbeddingInput(currentInput) === snapshot.inputHash
-  );
+  const currentInput = await buildCanonicalInputForInspiration(db, userId, source);
+  return hashEmbeddingInput(currentInput) === snapshot.inputHash;
 }
 
 /**
@@ -312,7 +357,7 @@ export async function ensureInspirationEmbedding(
       };
     }
 
-    const canonicalInput = buildCanonicalInspirationEmbeddingInput(inspiration);
+    const canonicalInput = await buildCanonicalInputForInspiration(tx, params.userId, inspiration);
     const inputHash = hashEmbeddingInput(canonicalInput);
     const existing = await loadExistingEmbedding(tx, params.userId, params.inspirationId);
 
@@ -327,10 +372,9 @@ export async function ensureInspirationEmbedding(
       params.inspirationId,
     );
     if (
-      !sourceMatchesSnapshot(freshSource, {
-        updatedAt: inspiration.updatedAt,
+      !(await sourceMatchesSnapshot(tx, params.userId, freshSource, {
         inputHash,
-      })
+      }))
     ) {
       return {
         status: "stale_source",

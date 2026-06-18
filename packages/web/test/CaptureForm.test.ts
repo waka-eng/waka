@@ -189,13 +189,15 @@ afterEach(() => {
 });
 
 describe("CaptureForm responsive CTA CSS", () => {
-  it("keeps modal quick-save CTAs visible when the populated state adds visible", () => {
+  it("keeps modal quick-save CTAs and guided Reflect Deeper controls inside the modal card", () => {
     const css = readFileSync("src/styles/global.css", "utf8");
 
     expect(css).toMatch(/\.cap-save\s*\{[\s\S]*?opacity:\s*0;/);
     expect(css).toMatch(
       /\.cap-save\.visible,\s*\.reference-capture-modal \.cap-save\.visible\s*\{[\s\S]*?opacity:\s*1;[\s\S]*?pointer-events:\s*auto;/,
     );
+    expect(css).toMatch(/\.reference-capture-modal \.cap-body,\s*\.reference-capture-modal \.reflect-area\s*\{/);
+    expect(css).toMatch(/\.reference-capture-modal \.reflect-bar\.visible\s*\{[\s\S]*?display:\s*flex;[\s\S]*?margin-top:\s*16px;/);
   });
 });
 
@@ -505,6 +507,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector("#capBar")).toBeNull();
     expect(container?.querySelector("#capSave")).toBeNull();
     expect(container?.querySelector("#capReflectiveSave")).toBeNull();
+    expect(container?.querySelector("#reflectArea")?.contains(container?.querySelector("#reflectBar") ?? null)).toBe(true);
     expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");

@@ -51,6 +51,30 @@ describe("buildSignalPacket", () => {
     });
   });
 
+  it("includes saved Reflect Deeper answers in packet text and fingerprints", () => {
+    const packet = buildSignalPacket({
+      signal: signal(),
+      sparks: [spark()],
+      reflections: [
+        {
+          id: "00000000-0000-4000-8000-000000000004",
+          question: "What place does this ask for?",
+          answer: "A room with serious peers and protected morning light.",
+          skipped: false,
+          createdAt: now,
+        },
+      ],
+    });
+
+    expect(packet.packetText).toContain("REFLECTIONS");
+    expect(packet.packetText).toContain("What place does this ask for?");
+    expect(packet.packetText).toContain("protected morning light");
+    expect(packet.sourceMetadata).toMatchObject({ reflectionCount: 1 });
+
+    const withoutReflection = buildSignalPacket({ signal: signal(), sparks: [spark()] });
+    expect(packet.inputFingerprint).not.toBe(withoutReflection.inputFingerprint);
+  });
+
   it("keeps the old meaning-packet builder export compatible", () => {
     const capturedSignal = signal();
     const sparks = [spark()];
