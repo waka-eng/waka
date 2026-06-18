@@ -961,6 +961,7 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(inspirationButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(expanded?.classList.contains("nc-note-modal--evidence-expanded")).toBe(true);
     expect(evidenceSection?.classList.contains("nc-note-evidence--expanded")).toBe(true);
     expect(container.querySelector(".nc-note-evidence-item--expanded .nc-note-evidence-detail")).not.toBeNull();
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
@@ -972,6 +973,71 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note-drawer-link")).toBeNull();
     expect(container.querySelector(".nc-note-save-action .nc-note-control-btn--save")?.textContent).toBe("save");
     expect(container.querySelector(".nc-note-delete-action .nc-note-control-btn--delete")?.textContent).toBe("delete");
+  });
+
+  it("expands the opened post-it around a non-first evidence inspiration", async () => {
+    setApiFixtures({
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          evidencePreviews: [
+            sampleTopOfMindNote.evidencePreviews[0],
+            {
+              signalId: "insp-2",
+              role: "second clue",
+              reason: "This later save deepens the same pattern.",
+              textPreview: "Second inspiration about collaboration rooms and honest critique",
+              kind: "note",
+              createdAt: "2026-05-11T12:00:00.000Z",
+              resonanceScore: 5,
+            },
+          ],
+          relatedSignals: [],
+          relatedSignalIds: [],
+        },
+      ],
+      savedSignals: [
+        sampleSavedSignals[0],
+        {
+          ...sampleSavedSignals[0],
+          id: "insp-2",
+          textPreview: "Second inspiration about collaboration rooms and honest critique",
+        },
+      ],
+    });
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+
+    await act(async () => {
+      note?.click();
+    });
+    await flushReactWork();
+
+    const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
+    const evidenceSection = container.querySelector<HTMLElement>(".nc-note-evidence");
+    const evidenceTriggers = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-evidence-trigger"));
+    expect(evidenceTriggers).toHaveLength(2);
+    expect(evidenceTriggers[0].getAttribute("aria-expanded")).toBe("false");
+    expect(evidenceTriggers[1].getAttribute("aria-expanded")).toBe("false");
+
+    await act(async () => {
+      evidenceTriggers[1].click();
+    });
+    await flushReactWork();
+
+    expect(evidenceTriggers[0].getAttribute("aria-expanded")).toBe("false");
+    expect(evidenceTriggers[1].getAttribute("aria-expanded")).toBe("true");
+    expect(expanded?.classList.contains("nc-note-modal--evidence-expanded")).toBe(true);
+    expect(evidenceSection?.classList.contains("nc-note-evidence--expanded")).toBe(true);
+    const expandedItem = container.querySelector<HTMLElement>(".nc-note-evidence-item--expanded");
+    expect(expandedItem?.textContent).toContain("Second inspiration about collaboration rooms and honest critique");
+    const detailContainer = expandedItem?.querySelector<HTMLElement>(".nc-note-evidence-detail");
+    expect(detailContainer).not.toBeNull();
+    expect(detailContainer?.querySelector(".nc-note-evidence-open")?.textContent).toBe("open");
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-2");
+    expect(expanded?.textContent).not.toContain("also points at this post-it");
+    expect(expanded?.textContent).not.toContain("nearby saves");
   });
 
   it("opens the saved inspiration detail from an expanded post-it evidence item", async () => {

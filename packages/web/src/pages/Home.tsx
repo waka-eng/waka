@@ -3832,7 +3832,7 @@ export function HomePage(): JSX.Element {
     });
     return (
       <article
-        className="nc-note-modal"
+        className={`nc-note-modal${hasExpandedSupportingSignal ? " nc-note-modal--evidence-expanded" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`top-of-mind-note-${signal.id}`}
