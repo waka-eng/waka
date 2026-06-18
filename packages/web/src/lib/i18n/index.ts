@@ -6,6 +6,7 @@ export const supportedLocaleValues = ["en-US", "ko-KR"] as const;
 export type SupportedLocale = (typeof supportedLocaleValues)[number];
 
 export const DEFAULT_LOCALE: SupportedLocale = "en-US";
+export const LOCALE_STORAGE_KEY = "waka.ui.locale";
 
 export const supportedLocales: Array<{ code: SupportedLocale; label: string; nativeLabel: string }> = [
   { code: "en-US", label: "English", nativeLabel: "English" },
@@ -20,6 +21,28 @@ export function isSupportedLocale(value: unknown): value is SupportedLocale {
 
 export function normalizeSupportedLocale(value: unknown): SupportedLocale {
   return isSupportedLocale(value) ? value : DEFAULT_LOCALE;
+}
+
+export function readStoredLocale(): SupportedLocale {
+  if (typeof window === "undefined") return DEFAULT_LOCALE;
+
+  try {
+    const stored = window.localStorage?.getItem?.(LOCALE_STORAGE_KEY);
+    if (isSupportedLocale(stored)) return stored;
+  } catch {
+    // Ignore storage failures in privacy-mode browsers and tests.
+  }
+
+  return normalizeSupportedLocale(window.navigator.language);
+}
+
+export function writeStoredLocale(locale: SupportedLocale): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage?.setItem?.(LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Best-effort only; React state still applies the locale for this render.
+  }
 }
 
 export type MessageKey = keyof typeof enUsMessages;

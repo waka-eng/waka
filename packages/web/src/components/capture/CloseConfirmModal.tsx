@@ -47,6 +47,8 @@
 
 import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 
+import { readStoredLocale, t, type SupportedLocale } from "../../lib/locales";
+
 export interface CloseConfirmModalProps {
   /** Whether the dialog is currently visible. Drives the `.visible` class. */
   open: boolean;
@@ -60,16 +62,27 @@ export interface CloseConfirmModalProps {
   cancelLabel?: ReactNode;
   /** Override for the discard button label. */
   discardLabel?: ReactNode;
+  /** Locale for built-in dialog copy. */
+  locale?: SupportedLocale;
 }
 
 export function CloseConfirmModal({
   open,
   onCancel,
   onDiscard,
-  message = "Discard this capture? Your note will be lost.",
-  cancelLabel = "Keep editing",
-  discardLabel = "Discard",
+  message,
+  cancelLabel,
+  discardLabel,
+  locale: localeProp,
 }: CloseConfirmModalProps): JSX.Element {
+  const locale = localeProp ?? readStoredLocale();
+  const messageCopy = message ?? (
+    <>
+      {t(locale, "closeConfirmTitle")} {t(locale, "closeConfirmBody")}
+    </>
+  );
+  const cancelCopy = cancelLabel ?? t(locale, "keepEditing");
+  const discardCopy = discardLabel ?? t(locale, "discard");
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   /**
@@ -123,11 +136,11 @@ export function CloseConfirmModal({
       role="dialog"
       aria-modal="true"
       aria-hidden={!open}
-      aria-label="Discard capture confirmation"
+      aria-label={t(locale, "closeConfirmAria")}
       onClick={handleBackdropClick}
     >
       <div className="cc-box">
-        <div className="cc-msg">{message}</div>
+        <div className="cc-msg">{messageCopy}</div>
         <div className="cc-actions">
           <button
             ref={cancelRef}
@@ -136,7 +149,7 @@ export function CloseConfirmModal({
             id="ccCancel"
             onClick={onCancel}
           >
-            {cancelLabel}
+            {cancelCopy}
           </button>
           <button
             type="button"
@@ -144,7 +157,7 @@ export function CloseConfirmModal({
             id="ccDiscard"
             onClick={onDiscard}
           >
-            {discardLabel}
+            {discardCopy}
           </button>
         </div>
       </div>

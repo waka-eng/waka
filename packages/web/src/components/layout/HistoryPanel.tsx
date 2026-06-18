@@ -37,6 +37,8 @@
 
 import type { ReactNode, MouseEvent } from "react";
 
+import { readStoredLocale, t } from "../../lib/locales";
+
 export interface HistoryPanelProps {
   /** Whether the overlay is currently visible (slid in). */
   open: boolean;
@@ -63,10 +65,12 @@ export interface HistoryPanelProps {
 export function HistoryPanel({
   open,
   onClose,
-  title = "Saved signals",
+  title,
   children,
   detail,
 }: HistoryPanelProps): JSX.Element {
+  const locale = readStoredLocale();
+  const panelTitle = title ?? t(locale, "historyTitle");
   /**
    * Backdrop click → close. The inner `.history-panel` stops propagation so
    * clicks inside the drawer don't dismiss it. This matches the prototype's
@@ -86,20 +90,20 @@ export function HistoryPanel({
       role="dialog"
       aria-modal="true"
       aria-hidden={!open}
-      aria-label={title}
+      aria-label={panelTitle}
       onClick={handleBackdropClick}
     >
       <div className="history-panel">
         <div className="history-head">
           <span className="history-title" id="historyTitle">
-            {title}
+            {panelTitle}
           </span>
           <button
             type="button"
             className="history-close"
             id="historyClose"
             onClick={onClose}
-            aria-label="Close saved signals"
+            aria-label={t(locale, "historyClose")}
           >
             ×
           </button>
@@ -107,7 +111,7 @@ export function HistoryPanel({
         {detail ? null : (
           <div className="history-list" id="historyList">
             {children ?? (
-              <div className="history-empty">Nothing saved yet</div>
+              <div className="history-empty">{t(locale, "historyEmpty")}</div>
             )}
           </div>
         )}
@@ -123,7 +127,7 @@ export function HistoryPanel({
           <div className="detail-view" id="detailView">
             <div className="detail-head">
               <button type="button" className="detail-back" id="detailBack">
-                ← Back
+                ← {t(locale, "detailBack")}
               </button>
             </div>
             <div className="detail-body" id="detailBody" />

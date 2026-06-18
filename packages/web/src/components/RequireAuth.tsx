@@ -28,6 +28,7 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
 import { useAuth } from "../lib/auth-context";
+import { readStoredLocale, t } from "../lib/locales";
 
 export interface RequireAuthProps {
   children: ReactNode;
@@ -36,6 +37,7 @@ export interface RequireAuthProps {
 export function RequireAuth({ children }: RequireAuthProps): JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  const locale = readStoredLocale();
 
   if (isLoading) {
     // Neutral splash. Kept deliberately minimal — once Home renders its own
@@ -61,7 +63,7 @@ export function RequireAuth({ children }: RequireAuthProps): JSX.Element {
           color: "var(--muted)",
         }}
       >
-        Loading…
+        {t(locale, "loadingAuth")}
       </div>
     );
   }

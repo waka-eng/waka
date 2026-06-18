@@ -18,7 +18,7 @@
  * URL and gets bounced here). When absent we default to "/".
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Location } from "react-router-dom";
@@ -26,6 +26,7 @@ import type { Location } from "react-router-dom";
 import { ApiError, apiPath } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { formatMessage, readStoredLocale, t } from "../lib/locales";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -68,31 +69,21 @@ function googleLoginUrl(): string {
  * Unknown codes degrade to a generic banner instead of crashing — useful
  * if the API adds a new failure mode before the SPA learns about it.
  */
-const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  oauth_denied:
-    "Google sign-in was cancelled. You can try again or use email and password.",
-  state_expired:
-    "That sign-in link expired. Please click “Continue with Google” again.",
-  state_mismatch:
-    "Sign-in could not be verified. Please start the Google sign-in flow again.",
-  missing_code:
-    "Google did not return a sign-in code. Please try the Google button again.",
-  token_exchange_failed:
-    "We couldn't reach Google to complete sign-in. Please try again in a moment.",
-  invalid_id_token:
-    "Google returned an invalid identity token. Please try signing in again.",
-  account_conflict:
-    "This email is already linked to a different Google account. Sign in with email and password instead.",
-  upsert_failed:
-    "Something went wrong while finalising your account. Please try again.",
-};
+const OAUTH_ERROR_KEYS = {
+  oauth_denied: "oauthDenied",
+  state_expired: "oauthExpired",
+  state_mismatch: "oauthMismatch",
+  missing_code: "oauthMissingCode",
+  token_exchange_failed: "oauthExchangeFailed",
+  invalid_id_token: "oauthInvalidToken",
+  account_conflict: "oauthAccountConflict",
+  upsert_failed: "oauthUpsertFailed",
+} as const;
 
 function describeOAuthError(code: string | null): string | null {
   if (!code) return null;
-  return (
-    OAUTH_ERROR_MESSAGES[code] ??
-    "Google sign-in didn't complete. Please try again."
-  );
+  const locale = readStoredLocale();
+  return t(locale, OAUTH_ERROR_KEYS[code as keyof typeof OAUTH_ERROR_KEYS] ?? "oauthFallback");
 }
 
 /**
@@ -127,6 +118,7 @@ export function SignupForm(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { signup } = useAuth();
+  const locale = readStoredLocale();
 
   const [values, setValues] = useState<SignupValues>(EMPTY_SIGNUP);
   const [fieldErrors, setFieldErrors] = useState<SignupFieldErrors>({});
@@ -156,13 +148,13 @@ export function SignupForm(): JSX.Element {
     const local: SignupFieldErrors = {};
     const email = values.email.trim();
     if (!email) {
-      local.email = ["Email is required"];
+      local.email = [t(locale, "loginEmailRequired")];
     }
     if (!values.password) {
-      local.password = ["Password is required"];
+      local.password = [t(locale, "loginPasswordRequired")];
     } else if (values.password.length < MIN_PASSWORD_LENGTH) {
       local.password = [
-        `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+        formatMessage(locale, "loginPasswordMin", { count: MIN_PASSWORD_LENGTH }),
       ];
     }
     if (Object.keys(local).length > 0) {
@@ -193,7 +185,7 @@ export function SignupForm(): JSX.Element {
         }
       } else {
         setFormError(
-          "We couldn't reach the server. Check your connection and try again.",
+          t(locale, "loginNetworkError"),
         );
       }
     } finally {
@@ -214,7 +206,7 @@ export function SignupForm(): JSX.Element {
       ) : null}
 
       <label className="field">
-        <span className="field-label">Email</span>
+        <span className="field-label">{t(locale, "loginEmail")}</span>
         <input
           className="field-input"
           type="email"
@@ -236,7 +228,7 @@ export function SignupForm(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Password</span>
+        <span className="field-label">{t(locale, "loginPassword")}</span>
         <input
           className="field-input"
           type="password"
@@ -260,7 +252,7 @@ export function SignupForm(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Name (optional)</span>
+        <span className="field-label">{t(locale, "loginNameOptional")}</span>
         <input
           className="field-input"
           type="text"
@@ -280,7 +272,7 @@ export function SignupForm(): JSX.Element {
       </label>
 
       <button className="btn-primary" type="submit" disabled={submitting}>
-        {submitting ? "Creating account…" : "Create account"}
+        {submitting ? t(locale, "loginCreatingAccount") : t(locale, "loginCreateAccount")}
       </button>
     </form>
   );
@@ -301,6 +293,7 @@ export function LoginForm(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+  const locale = readStoredLocale();
 
   const [values, setValues] = useState<LoginValues>(EMPTY_LOGIN);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
@@ -332,8 +325,8 @@ export function LoginForm(): JSX.Element {
     // single arbiter of "is this credential valid".
     const local: LoginFieldErrors = {};
     const email = values.email.trim();
-    if (!email) local.email = ["Email is required"];
-    if (!values.password) local.password = ["Password is required"];
+    if (!email) local.email = [t(locale, "loginEmailRequired")];
+    if (!values.password) local.password = [t(locale, "loginPasswordRequired")];
     if (Object.keys(local).length > 0) {
       setFieldErrors(local);
       return;
@@ -351,13 +344,13 @@ export function LoginForm(): JSX.Element {
         // field-level one — pinning the error to "password" would imply the
         // email is correct, which is an information leak we'd rather avoid.
         if (err.status === 401) {
-          setFormError("Incorrect email or password.");
+          setFormError(t(locale, "loginInvalidCredentials"));
         } else if (err.status === 404) {
           // Endpoint not yet wired on the backend (earlier sub-ACs). Surface
           // a useful, non-scary message rather than letting the raw "HTTP
           // 404" bubble through.
           setFormError(
-            "Sign-in isn't available yet. Please create an account instead.",
+            t(locale, "loginUnavailable"),
           );
         } else {
           if (err.fieldErrors) {
@@ -369,7 +362,7 @@ export function LoginForm(): JSX.Element {
         }
       } else {
         setFormError(
-          "We couldn't reach the server. Check your connection and try again.",
+          t(locale, "loginNetworkError"),
         );
       }
     } finally {
@@ -389,7 +382,7 @@ export function LoginForm(): JSX.Element {
       ) : null}
 
       <label className="field">
-        <span className="field-label">Email</span>
+        <span className="field-label">{t(locale, "loginEmail")}</span>
         <input
           className="field-input"
           type="email"
@@ -411,7 +404,7 @@ export function LoginForm(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">Password</span>
+        <span className="field-label">{t(locale, "loginPassword")}</span>
         <input
           className="field-input"
           type="password"
@@ -432,7 +425,7 @@ export function LoginForm(): JSX.Element {
       </label>
 
       <button className="btn-primary" type="submit" disabled={submitting}>
-        {submitting ? "Signing in…" : "Sign in"}
+        {submitting ? t(locale, "loginSigningIn") : t(locale, "loginTab")}
       </button>
     </form>
   );
@@ -466,6 +459,8 @@ function GoogleSignInButton({
 }: {
   disabled?: boolean;
 }): JSX.Element {
+  const locale = readStoredLocale();
+
   function handleClick(): void {
     if (disabled) return;
     // assign() (vs href= or replace()) keeps the /login entry in browser
@@ -481,7 +476,7 @@ function GoogleSignInButton({
       className="btn-google"
       onClick={handleClick}
       disabled={disabled}
-      aria-label="Continue with Google"
+      aria-label={t(locale, "loginGoogleContinue")}
     >
       {/*
         Inline SVG (rather than an <img>) so the icon ships with the JS
@@ -515,7 +510,7 @@ function GoogleSignInButton({
           d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5813-2.5814C13.4632.8918 11.426 0 9 0 5.4818 0 2.4382 2.0168.9573 4.9582L3.9641 7.29C4.6718 5.1627 6.656 3.5795 9 3.5795z"
         />
       </svg>
-      <span>Continue with Google</span>
+      <span>{t(locale, "loginGoogleContinue")}</span>
     </button>
   );
 }
@@ -526,10 +521,12 @@ function GoogleSignInButton({
  * between the two equally-valid paths instead of biasing toward one.
  */
 function OrDivider(): JSX.Element {
+  const locale = readStoredLocale();
+
   return (
     <div className="login-divider" role="separator" aria-orientation="horizontal">
       <span className="login-divider__line" aria-hidden="true" />
-      <span className="login-divider__label">or</span>
+      <span className="login-divider__label">{t(locale, "loginOr")}</span>
       <span className="login-divider__line" aria-hidden="true" />
     </div>
   );
@@ -553,6 +550,7 @@ type Mode = "login" | "signup";
  */
 export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
+  const locale = readStoredLocale();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -592,29 +590,13 @@ export default function LoginPage(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const headline = useMemo(
-    () =>
-      mode === "login" ? (
-        <>
-          Welcome <em>back</em>.
-        </>
-      ) : (
-        <>
-          Begin <em>your</em> archive.
-        </>
-      ),
-    [mode],
-  );
-
-  const subtitle =
-    mode === "login"
-      ? "Sign in to return to your inspirations."
-      : "Create an account to capture, cluster, and reflect on the things that move you.";
+  const headline = t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
+  const subtitle = t(locale, mode === "login" ? "loginSubtitle" : "signupSubtitle");
 
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
-        <p className="login-eyebrow">WAKA · Signals</p>
+        <p className="login-eyebrow">{t(locale, "loginEyebrow")}</p>
         <h1 id="login-title" className="login-title">
           {headline}
         </h1>
@@ -640,7 +622,7 @@ export default function LoginPage(): JSX.Element {
         <div
           className="login-tabs"
           role="tablist"
-          aria-label="Sign in or create account"
+          aria-label={t(locale, "loginTabAria")}
         >
           <button
             type="button"
@@ -653,7 +635,7 @@ export default function LoginPage(): JSX.Element {
             }
             onClick={() => setMode("login")}
           >
-            Sign in
+            {t(locale, "loginTab")}
           </button>
           <button
             type="button"
@@ -666,7 +648,7 @@ export default function LoginPage(): JSX.Element {
             }
             onClick={() => setMode("signup")}
           >
-            Create account
+            {t(locale, "loginCreateAccount")}
           </button>
         </div>
 
@@ -683,25 +665,25 @@ export default function LoginPage(): JSX.Element {
         <p className="login-footer">
           {mode === "login" ? (
             <>
-              New to WAKA?{" "}
+              {t(locale, "loginNewPrompt")} {" "}
               <button
                 type="button"
                 className="login-link"
                 onClick={() => setMode("signup")}
               >
-                Create an account
+                {t(locale, "loginCreateAccount")}
               </button>
               .
             </>
           ) : (
             <>
-              Already have an account?{" "}
+              {t(locale, "loginExistingPrompt")} {" "}
               <button
                 type="button"
                 className="login-link"
                 onClick={() => setMode("login")}
               >
-                Sign in
+                {t(locale, "loginTab")}
               </button>
               .
             </>
