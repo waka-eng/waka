@@ -4025,10 +4025,10 @@
 }
 
 .nc-note-modal {
-  width: min(680px, calc(100vw - 56px));
-  max-height: min(720px, calc(100dvh - 56px));
-  min-height: min(560px, calc(100dvh - 56px));
-  padding: clamp(30px, 4vw, 56px);
+  width: min(720px, calc(100vw - 56px));
+  max-height: min(760px, calc(100dvh - 56px));
+  min-height: min(600px, calc(100dvh - 56px));
+  padding: clamp(32px, 4.5vw, 60px);
   background: var(--bg);
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
