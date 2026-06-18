@@ -2137,13 +2137,20 @@ describe("HomePage current home experience", () => {
       text: "A windowed studio signal",
       kind: "note",
     });
-    expect(createReflection).toHaveBeenCalledWith("insp-guided-save", {
-      question: "Reflect deeper guided reflection",
-      answer: [
-        "What caught you first?\nThe soft north light.",
-        "What does it ask you to protect?\nProtected quiet mornings.",
-        "What is the smallest next move?\nBlock tomorrow morning.",
-      ].join("\n\n"),
+    expect(createReflection).toHaveBeenCalledTimes(3);
+    expect(createReflection).toHaveBeenNthCalledWith(1, "insp-guided-save", {
+      question: "What caught you first?",
+      answer: "The soft north light.",
+      skipped: false,
+    });
+    expect(createReflection).toHaveBeenNthCalledWith(2, "insp-guided-save", {
+      question: "What does it ask you to protect?",
+      answer: "Protected quiet mornings.",
+      skipped: false,
+    });
+    expect(createReflection).toHaveBeenNthCalledWith(3, "insp-guided-save", {
+      question: "What is the smallest next move?",
+      answer: "Block tomorrow morning.",
       skipped: false,
     });
   });
