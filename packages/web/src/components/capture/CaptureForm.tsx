@@ -1254,7 +1254,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         captureMeta={
           <div className="cap-meta" id="capMeta">
             <span className="cap-draft-state" id="capDraftState">
-              tip: highlight what inspired you the most
+              {t(locale, "captureTip")}
             </span>
           </div>
         }

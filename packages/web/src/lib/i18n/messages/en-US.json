@@ -40,6 +40,7 @@
   "unsupportedImage": "This image is too large or not supported.",
   "partialAttachmentFailure": "Saved — {count} {count, plural, one {attachment} other {attachments}} failed. Your inspiration is still safe.",
   "autosavedLocally": "Private draft autosaved locally. Cleared only after save succeeds.",
+  "captureTip": "Tip: highlight what inspired you.",
   "markWhatHit": "Mark what hit",
   "removeHighlight": "Remove highlighted text",
   "resonanceQuestion": "Why did this matter?",

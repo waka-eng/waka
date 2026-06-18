@@ -209,7 +209,7 @@ describe("CaptureForm multi-input quick capture", () => {
       "What almost slipped away?",
     );
     expect(container?.querySelector("#capResonance")).toBeNull();
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Tip: highlight what inspired you.");
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect deeper");
     expect(container?.textContent?.toLowerCase()).not.toMatch(
@@ -237,7 +237,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
       "A private draft that should not disappear",
     );
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Tip: highlight what inspired you.");
   });
 
   it("drops expired local capture drafts instead of restoring sensitive text indefinitely", async () => {
@@ -665,10 +665,12 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.disabled).toBe(false);
   });
 
-  it("localizes capture action tooltips and removable chip labels in Korean", async () => {
+  it("localizes capture action tooltips, tip copy, and removable chip labels in Korean", async () => {
     await renderCaptureForm({ locale: "ko-KR" });
     await pasteText("https://example.com/article");
 
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("팁: 마음을 움직인 부분을 표시하세요.");
+    expect(container?.querySelector("#capDraftState")?.textContent).not.toContain("Tip: highlight what inspired you.");
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
       "이 영감을 저장하기 전에 짧은 생각 하나 더하기",
     );
