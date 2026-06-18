@@ -954,7 +954,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 message:
                   err instanceof Error
                     ? err.message
-                    : "Failed to save inspiration",
+                    : t(locale, "reflectionSaveError"),
               });
         onPersistError?.(tempId, error);
         flashConfirm(error.message, 2800);
@@ -1121,7 +1121,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 message:
                   err instanceof Error
                     ? err.message
-                    : "Failed to save reflection",
+                    : t(locale, "reflectionSaveError"),
               });
         flashConfirm(error.message, 2800);
       } finally {
@@ -1213,14 +1213,14 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                   setPendingHighlight(null);
                   setHighlightPopoverPosition(null);
                 }}
-                aria-label="highlight selected text"
-                title="highlight selected text"
+                aria-label={t(locale, "captureHighlightSelectionLabel")}
+                title={t(locale, "captureHighlightSelectionLabel")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="m9 11-6 6v4h4l6-6" />
                   <path d="m22 12-7.5 7.5L4.5 9.5 12 2l10 10Z" />
                 </svg>
-                <span>highlight</span>
+                <span>{t(locale, "captureHighlightSelectionText")}</span>
               </button>
             </div>
           ) : null
@@ -1254,7 +1254,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         captureMeta={
           <div className="cap-meta" id="capMeta">
             <span className="cap-draft-state" id="capDraftState">
-              tip: highlight what inspired you the most
+              {t(locale, "captureTip")}
             </span>
           </div>
         }

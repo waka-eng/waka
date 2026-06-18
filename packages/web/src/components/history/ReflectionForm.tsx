@@ -87,6 +87,7 @@ import {
   createReflection,
   type CreateReflectionResponse,
 } from "../../lib/api";
+import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
 
 /* ============================================================
  * Public types
@@ -162,6 +163,8 @@ export interface ReflectionFormProps {
   onOptimisticAdd?: (pending: PendingReflection) => void;
   /** Fires when the POST resolves with the canonical server row. */
   onPersisted?: (tempId: string, server: CreateReflectionResponse) => void;
+  /** Locale for user-visible reflection form copy. */
+  locale?: SupportedLocale;
   /** Fires when the POST fails (network or 4xx/5xx). */
   onPersistError?: (tempId: string, error: ApiError) => void;
 }
@@ -191,13 +194,14 @@ export function ReflectionForm({
   inspirationId,
   defaultQuestion,
   defaultAnswer = "",
-  answerPlaceholder = "answer here…",
-  questionPlaceholder = "what does this make you ask?",
+  answerPlaceholder,
+  questionPlaceholder,
   autoFocus = true,
   hideSkip = false,
   onCancel,
   onOptimisticAdd,
   onPersisted,
+  locale = DEFAULT_LOCALE,
   onPersistError,
 }: ReflectionFormProps): JSX.Element {
   /* --------------------------------------------------------
@@ -210,6 +214,8 @@ export function ReflectionForm({
    * user can only modify the answer.
    */
   const questionLocked = typeof defaultQuestion === "string";
+  const resolvedAnswerPlaceholder = answerPlaceholder ?? t(locale, "reflectionAnswerPlaceholder");
+  const resolvedQuestionPlaceholder = questionPlaceholder ?? t(locale, "reflectionQuestionPlaceholder");
   const [question, setQuestion] = useState<string>(defaultQuestion ?? "");
   const [answer, setAnswer] = useState<string>(defaultAnswer);
   const [submitting, setSubmitting] = useState(false);
@@ -280,7 +286,7 @@ export function ReflectionForm({
 
       const trimmedQuestion = question.trim();
       if (trimmedQuestion.length === 0) {
-        setError("Please enter a question to reflect on.");
+        setError(t(locale, "reflectionMissingQuestion"));
         // Focus the question field if it's editable so the user can
         // address the validation without hunting for it.
         if (!questionLocked) {
@@ -293,8 +299,8 @@ export function ReflectionForm({
       if (!skip && trimmedAnswer.length === 0) {
         setError(
           hideSkip
-            ? "Add a thought before saving this reflection."
-            : "Add an answer or click Skip.",
+            ? t(locale, "reflectionMissingThought")
+            : t(locale, "reflectionMissingAnswer"),
         );
         queueMicrotask(() => answerTextareaRef.current?.focus());
         return;
@@ -354,7 +360,7 @@ export function ReflectionForm({
                 message:
                   caught instanceof Error
                     ? caught.message
-                    : "Failed to save reflection.",
+                    : t(locale, "reflectionSaveError"),
               });
 
         onPersistError?.(tempId, apiErr);
@@ -375,6 +381,7 @@ export function ReflectionForm({
       onPersisted,
       onPersistError,
       hideSkip,
+      locale,
     ],
   );
 
@@ -439,7 +446,7 @@ export function ReflectionForm({
   const errorId = `${reactId}-error`;
 
   return (
-    <div className="reflect-area visible" role="form" aria-label="Reflection">
+    <div className="reflect-area visible" role="form" aria-label={t(locale, "threadShowReflection")}>
       {questionLocked ? (
         // Locked prompt — render exactly as the prototype's italic serif
         // headline. We still annotate it with an id so the answer textarea
@@ -463,8 +470,8 @@ export function ReflectionForm({
           rows={2}
           value={question}
           onChange={handleQuestionChange}
-          placeholder={questionPlaceholder}
-          aria-label="Reflection question"
+          placeholder={resolvedQuestionPlaceholder}
+          aria-label={t(locale, "reflectionQuestionLabel")}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           disabled={submitting}
@@ -479,9 +486,9 @@ export function ReflectionForm({
         value={answer}
         onChange={handleAnswerChange}
         onKeyDown={handleAnswerKeyDown}
-        placeholder={answerPlaceholder}
+        placeholder={resolvedAnswerPlaceholder}
         aria-labelledby={questionLocked ? questionId : undefined}
-        aria-label={questionLocked ? undefined : "Reflection answer"}
+        aria-label={questionLocked ? undefined : t(locale, "reflectionAnswerLabel")}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         disabled={submitting}
@@ -516,9 +523,9 @@ export function ReflectionForm({
               className="reflect-btn reflect-later"
               onClick={handleSkip}
               disabled={submitting}
-              aria-label="Skip this reflection"
+              aria-label={t(locale, "reflectionSkip")}
             >
-              Skip
+              {t(locale, "reflectionSkip")}
             </button>
           ) : null}
           {onCancel ? (
@@ -527,10 +534,10 @@ export function ReflectionForm({
               className="reflect-btn reflect-later"
               onClick={onCancel}
               disabled={submitting}
-              aria-label="Cancel reflection"
+              aria-label={t(locale, "reflectionCancel")}
               style={{ marginLeft: hideSkip ? 0 : 8 }}
             >
-              Cancel
+              {t(locale, "reflectionCancel")}
             </button>
           ) : null}
         </div>
@@ -539,9 +546,9 @@ export function ReflectionForm({
           className="reflect-btn reflect-next"
           onClick={handleSave}
           disabled={submitting}
-          aria-label="Save reflection"
+          aria-label={t(locale, "guidedReflectionSave")}
         >
-          {submitting ? "Saving…" : "Save"}
+          {submitting ? t(locale, "reflectionSaving") : t(locale, "reflectionSave")}
         </button>
       </div>
     </div>

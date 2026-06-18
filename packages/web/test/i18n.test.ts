@@ -48,8 +48,8 @@ describe("i18n catalogs", () => {
   });
 
   it("formats saved-count and result-count phrases per locale", () => {
-    expect(formatSavedCount("en-US", 1)).toBe("1 inspiration saved");
-    expect(formatSavedCount("en-US", 2)).toBe("2 inspirations saved");
+    expect(formatSavedCount("en-US", 1)).toBe("1 saved");
+    expect(formatSavedCount("en-US", 2)).toBe("2 saved");
     expect(formatSavedCount("ko-KR", 2)).toBe("영감 2개 저장됨");
 
     expect(formatResultsCount("en-US", 1, 1)).toBe("1 of 1 inspiration");
@@ -58,11 +58,11 @@ describe("i18n catalogs", () => {
   });
 
   it("formats WOW count helpers as complete locale-owned phrases", () => {
-    expect(formatBestRecentMirrorMoments("en-US", 9)).toBe("9 best-recent mirror moments shown.");
-    expect(formatBestRecentMirrorMoments("ko-KR", 9)).toBe("9개의 최근 핵심 미러 순간이 표시됨.");
+    expect(formatBestRecentMirrorMoments("en-US", 9)).toBe("9 recent mirror moments shown.");
+    expect(formatBestRecentMirrorMoments("ko-KR", 9)).toBe("최근 미러 순간 9개 표시됨.");
 
-    expect(formatGeneratedFieldCounts("en-US", 1, 1)).toBe("1 source; 1 generated field present");
-    expect(formatGeneratedFieldCounts("en-US", 2, 3)).toBe("2 sources; 3 generated fields present");
-    expect(formatGeneratedFieldCounts("ko-KR", 2, 3)).toBe("2개 출처; 생성 필드 3개 있음");
+    expect(formatGeneratedFieldCounts("en-US", 1, 1)).toBe("1 source; 1 generated field");
+    expect(formatGeneratedFieldCounts("en-US", 2, 3)).toBe("2 sources; 3 generated fields");
+    expect(formatGeneratedFieldCounts("ko-KR", 2, 3)).toBe("출처 2개; 생성 필드 3개");
   });
 });

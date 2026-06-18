@@ -78,38 +78,15 @@ import {
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
-  DEFAULT_LOCALE,
+  formatSavedCount,
   normalizeSupportedLocale,
+  readStoredLocale,
   t,
   type SupportedLocale,
+  writeStoredLocale,
 } from "../lib/locales";
 
-const LOCALE_STORAGE_KEY = "waka.ui.locale";
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
-
-function readInitialLocale(): SupportedLocale {
-  if (typeof window === "undefined") return DEFAULT_LOCALE;
-
-  try {
-    const storedLocale = window.localStorage?.getItem?.(LOCALE_STORAGE_KEY);
-    if (storedLocale) return normalizeSupportedLocale(storedLocale);
-  } catch {
-    // Tests and privacy-mode browsers can expose localStorage but throw or stub
-    // incomplete methods. Fall back to the browser language in those cases.
-  }
-
-  return normalizeSupportedLocale(window.navigator.language);
-}
-
-function writeLocalePreference(locale: SupportedLocale): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage?.setItem?.(LOCALE_STORAGE_KEY, locale);
-  } catch {
-    // Preference persistence is best-effort; the selected locale still applies
-    // for the current render through React state.
-  }
-}
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -1298,8 +1275,8 @@ function buildProposedMemoryGroupings(
 
 const HOME_COPY = {
   "ko-KR": {
-    thoughtTab: "top of mind",
-    savesTab: "inspiration drawer",
+    thoughtTab: "탑오브마인드",
+    savesTab: "영감 서랍",
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
@@ -1312,55 +1289,53 @@ const HOME_COPY = {
       <>
         떠오른 생각은 자주 사라집니다.
         <br />
-        이 사람은 사라지기 전에 붙잡아 두었습니다.
+        사라지기 전에 붙잡은 조각들이
         <br />
-        그렇게 모인 조각들이 천천히 한 방향을 만들기 시작합니다.
+        천천히 한 방향을 만들기 시작합니다.
         <br />
         누구와 생각하고 싶은지. 어디에 머물고 싶은지. 무엇을 만들고 싶은지.
         <br />
-        <span className="nc-tagline-en">
-          — she did not write any of this. she caught what almost slipped away. the rest found its shape.
-        </span>
+        <span className="nc-tagline-en">— 쓴 것이 아니라, 놓칠 뻔한 것을 붙잡았습니다.</span>
       </>
     ),
     lifecycleHint: "",
-    noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
-    evidenceLabel: "여기서 시작됨",
-    reactionGroup: "post-it controls",
-    correctionLabel: "edit post-it",
-    correctionPlaceholder: "write the version you would keep on the wall",
-    rewriteCta: "save",
-    removeCta: "delete",
-    feedbackSaved: "saved",
-    feedbackSaving: "saving...",
-    feedbackError: "could not change post-it",
-    loadingThoughts: "생각이 모이는 중...",
-    emptyThoughts: "저장한 영감이 쌓이면 여기에 생각이 나타납니다.",
+    noteShifted: ["반복됨", "형성 중", "다시 돌아옴", "긴장", "확인 필요"],
+    evidenceLabel: "시작된 곳",
+    reactionGroup: "포스트잇 조정",
+    correctionLabel: "포스트잇 수정",
+    correctionPlaceholder: "벽에 남길 문장으로 다듬기",
+    rewriteCta: "저장",
+    removeCta: "삭제",
+    feedbackSaved: "저장됨",
+    feedbackSaving: "저장 중...",
+    feedbackError: "포스트잇을 바꾸지 못했습니다",
+    loadingThoughts: "생각을 모으는 중...",
+    emptyThoughts: "저장한 영감이 쌓이면 임시 노트가 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
-    captureBody: "정리하지 않아도 됩니다. 지저분하고 부끄럽고 덜 완성된 것도 사라지기 전에 저장하세요.",
-    captureInlineKicker: "inspiration capture",
+    captureBody: "정리하지 않아도 됩니다. 어설프고 덜 완성된 것도 사라지기 전에 저장하세요.",
+    captureInlineKicker: "영감 기록",
     footnote: (name: string) => (
       <>
-        ※ 본 페이지는 {name} 본인이 쓴 글이 아닙니다.
+        이 페이지는 {name}님이 직접 쓴 글이 아닙니다.
         <br />
-        저장한 것들이 모여 자기 멋대로 변합니다.
+        저장한 것들이 모여 모양을 바꾼 결과입니다.
         <br />
-        매주 바뀝니다. 어쩔 수 없음.
+        매주 달라집니다.
       </>
     ),
     footnoteCredit: "— Ⓒ 2026, 생각의 서랍",
-    savesTitle: "inspiration drawer",
-    drawerObjectTitle: "saved inspirations",
-    drawerObjectBody: "open the drawer",
-    searchLabel: "search",
-    searchPlaceholder: "저장본 검색",
-    loadingSaves: "저장본을 불러오는 중...",
+    savesTitle: "영감 서랍",
+    drawerObjectTitle: "저장된 영감",
+    drawerObjectBody: "서랍 열기",
+    searchLabel: "검색",
+    searchPlaceholder: "저장된 영감 검색",
+    loadingSaves: "저장된 영감을 불러오는 중...",
     emptySaves: "아직 저장된 영감이 없습니다.",
-    captureAria: "capture inspiration",
-    captureCta: "capture inspiration",
+    captureAria: "영감 기록하기",
+    captureCta: "영감 기록",
     captureHint: () => "",
-    captureDialog: "capture inspiration",
-    close: "close",
+    captureDialog: "영감 기록",
+    close: "닫기",
   },
   "en-US": {
     thoughtTab: "top of mind",
@@ -1494,7 +1469,7 @@ export function HomePage(): JSX.Element {
   const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
   const [topOfMindNotes, setTopOfMindNotes] = useState<ApiTopOfMindNoteSurface[]>([]);
   const [topOfMindNotesLoading, setTopOfMindNotesLoading] = useState(true);
-  const [locale, setLocale] = useState<SupportedLocale>(() => readInitialLocale());
+  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
@@ -1606,7 +1581,7 @@ export function HomePage(): JSX.Element {
   const handleLocaleChange = useCallback(
     (nextLocale: SupportedLocale) => {
       setLocale(nextLocale);
-      writeLocalePreference(nextLocale);
+      writeStoredLocale(nextLocale);
       void updatePreferredLocale(nextLocale);
     },
     [updatePreferredLocale],
@@ -1616,7 +1591,7 @@ export function HomePage(): JSX.Element {
     if (!user) return;
     const preferredLocale = normalizeSupportedLocale(user.preferredLocale);
     setLocale(preferredLocale);
-    writeLocalePreference(preferredLocale);
+    writeStoredLocale(preferredLocale);
   }, [user?.preferredLocale, user?.id]);
 
   useEffect(() => {
@@ -2459,7 +2434,7 @@ export function HomePage(): JSX.Element {
         onSelect={handleSelectInspiration}
       />
     ));
-  }, [cardItems, handleSelectInspiration]);
+  }, [cardItems, handleSelectInspiration, locale]);
 
   const handleCapturePersisted = useCallback(
     (tempId: string, result: PersistedResult) => {
@@ -4107,7 +4082,7 @@ export function HomePage(): JSX.Element {
               aria-label={copy.captureAria}
             >
               <span className="nc-save-cta">
-                {captureSaved ? (locale === "ko-KR" ? "저장됨" : "saved") : copy.captureCta}
+                {captureSaved ? t(locale, "saved") : copy.captureCta}
                 {!captureSaved && captureHasDraft ? (
                   <span className="nc-save-draft" aria-hidden="true">···</span>
                 ) : null}
@@ -4124,7 +4099,7 @@ export function HomePage(): JSX.Element {
                 chooseHomeMode("memoryDrawer");
               }
             }}
-            aria-label={homeMode === "memoryDrawer" ? "close inspiration drawer" : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
+            aria-label={homeMode === "memoryDrawer" ? copy.close : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
           >
             {homeMode === "memoryDrawer" ? (
               <span className="nc-drawer-icon" aria-hidden="true">
@@ -4146,8 +4121,8 @@ export function HomePage(): JSX.Element {
                 </svg>
               </span>
             )}
-            <span className="sr-only">{homeMode === "memoryDrawer" ? "close" : copy.drawerObjectTitle}</span>
-            <small className="sr-only">{entries.length} saved</small>
+            <span className="sr-only">{homeMode === "memoryDrawer" ? copy.close : copy.drawerObjectTitle}</span>
+            <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
           </button>
         </div>
       ) : null}

@@ -48,6 +48,8 @@ import {
   useMemo,
 } from "react";
 
+import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
+
 /**
  * Single reflection record. Mirrors the prototype's
  * `item.reflections[i]` shape (index.html line 2690 onward).
@@ -89,9 +91,11 @@ export interface ReflectionThreadProps {
   hideVerb?: string;
   /**
    * Optional placeholder copy shown on a skipped answer cell. Defaults
-   * to the prototype's "skipped — click to answer" wording.
+   * to the localized prototype's skipped wording.
    */
   skippedPlaceholder?: string;
+  /** Locale for user-visible thread toggle and skipped copy. */
+  locale?: SupportedLocale;
 }
 
 export function ReflectionThread({
@@ -99,9 +103,10 @@ export function ReflectionThread({
   open,
   onToggle,
   onEntryClick,
-  showVerb = "Show",
-  hideVerb = "Hide",
-  skippedPlaceholder = "skipped — click to answer",
+  showVerb,
+  hideVerb,
+  skippedPlaceholder,
+  locale = DEFAULT_LOCALE,
 }: ReflectionThreadProps): JSX.Element | null {
   const count = entries.length;
 
@@ -111,10 +116,13 @@ export function ReflectionThread({
   // NOTE: hooks must run unconditionally; the empty-case early return
   // happens *after* the hook calls below.
   const label = useMemo(() => {
-    const verb = open ? hideVerb : showVerb;
-    const noun = count === 1 ? "note" : "notes";
-    return `${verb} reflection · ${count} ${noun}`;
-  }, [count, hideVerb, open, showVerb]);
+    const action = open
+      ? (hideVerb ?? t(locale, "threadHideReflection"))
+      : (showVerb ?? t(locale, "threadShowReflection"));
+    const noun = count === 1 ? t(locale, "threadNoteSingular") : t(locale, "threadNotePlural");
+    const countLabel = locale === "ko-KR" ? `${count}${noun}` : `${count} ${noun}`;
+    return `${action} · ${countLabel}`;
+  }, [count, hideVerb, locale, open, showVerb]);
 
   /**
    * Toggle is a `<div role="button">` rather than an actual `<button>`
@@ -164,7 +172,7 @@ export function ReflectionThread({
           };
 
           const answerText =
-            entry.skipped || !entry.answer ? skippedPlaceholder : entry.answer;
+            entry.skipped || !entry.answer ? (skippedPlaceholder ?? t(locale, "threadSkipped")) : entry.answer;
           const answerClass = `thread-a${entry.skipped ? " skipped" : ""}`;
 
           return (

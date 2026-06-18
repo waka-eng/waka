@@ -82,16 +82,16 @@ export interface InspirationDetailProps {
  * Component
  * ============================================================ */
 
-function attachmentTitle(attachment: ApiAttachment): string {
+function attachmentTitle(attachment: ApiAttachment, locale: SupportedLocale): string {
   const link = attachment.enrichment?.link;
   if (attachment.type === "link") {
     const title = link?.title?.trim();
-    return title || link?.hostname || attachment.url || "Saved link";
+    return title || link?.hostname || attachment.url || t(locale, "detailSavedLink");
   }
   if (attachment.type === "image") {
-    return attachment.enrichment?.image?.filename ?? attachment.name ?? "Uploaded image";
+    return attachment.enrichment?.image?.filename ?? attachment.name ?? t(locale, "detailUploadedImage");
   }
-  return attachment.name ?? "Attached file";
+  return attachment.name ?? t(locale, "detailAttachedFile");
 }
 
 function attachmentMeta(attachment: ApiAttachment, locale: SupportedLocale): string {
@@ -119,7 +119,7 @@ function firstNonEmpty(...values: Array<string | null | undefined>): string | nu
   return null;
 }
 
-function detailTitle(inspiration: InspirationDetailData): string {
+function detailTitle(inspiration: InspirationDetailData, locale: SupportedLocale): string {
   const attachmentTitleText = firstNonEmpty(
     ...(inspiration.attachments ?? []).map((attachment) =>
       attachment.type === "link" ? attachment.enrichment?.link?.title : null,
@@ -128,7 +128,7 @@ function detailTitle(inspiration: InspirationDetailData): string {
   if (attachmentTitleText) return attachmentTitleText;
 
   const text = inspiration.text.trim().replace(/\s+/g, " ");
-  if (!text) return "Saved inspiration";
+  if (!text) return t(locale, "detailSavedInspiration");
   const sentence = text.match(/^(.{24,160}?[.!?])\s/)?.[1] ?? text;
   return sentence.length > 132 ? `${sentence.slice(0, 129).trimEnd()}…` : sentence;
 }
@@ -223,19 +223,19 @@ export function InspirationDetail({
             ? caught.message
             : caught instanceof Error
               ? caught.message
-              : "Failed to load reflections.";
+              : t(locale, "reflectionLoadError");
         setReflectionState({ status: "error", reflections: [], message });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [inspiration.id]);
+  }, [inspiration.id, locale]);
 
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
   const sourceLinks = inspiration.links?.filter((link) => link.trim().length > 0) ?? [];
-  const heroTitle = useMemo(() => detailTitle(inspiration), [inspiration]);
+  const heroTitle = useMemo(() => detailTitle(inspiration, locale), [inspiration, locale]);
   const heroDescription = useMemo(() => detailDescription(inspiration), [inspiration]);
   const featuredAttachment = useMemo(() => primaryAttachment(inspiration), [inspiration]);
   const featuredPreview = previewImageUrl(featuredAttachment);
@@ -260,11 +260,11 @@ export function InspirationDetail({
             ? caught.message
             : caught instanceof Error
               ? caught.message
-              : "Failed to update signal.";
+              : t(locale, "detailSaveError");
         setSaveState({ status: "error", message });
       }
     })();
-  }, [detailsText, inspiration.id, onInspirationUpdated, saveState.status]);
+  }, [detailsText, inspiration.id, locale, onInspirationUpdated, saveState.status]);
 
   // ----- Delete handlers ---------------------------------------------------
 
@@ -295,11 +295,11 @@ export function InspirationDetail({
             ? caught.message
             : caught instanceof Error
               ? caught.message
-              : "Failed to delete signal.";
+              : t(locale, "detailDeleteError");
         setDeleteState({ status: "error", message });
       }
     })();
-  }, [inspiration.id, onDeleted]);
+  }, [inspiration.id, locale, onDeleted]);
 
   return (
     <div className="detail-view detail-view--mockup visible" id="detailView">
@@ -310,9 +310,9 @@ export function InspirationDetail({
             className="detail-back"
             id="detailBack"
             onClick={onBack}
-            aria-label="Back to saved signals"
+            aria-label={t(locale, "detailBackSignals")}
           >
-            ← Back
+            ← {t(locale, "detailBack")}
           </button>
           {/* Inline two-stage delete pill. Hidden when `onDeleted` is not
               wired so a read-only mount of the detail view stays read-only. */}
@@ -332,7 +332,7 @@ export function InspirationDetail({
               <button
                 type="button"
                 onClick={handleDeleteClick}
-                aria-label="Delete this signal"
+                aria-label={t(locale, "detailDelete")}
                 style={{
                   background: "transparent",
                   border: "1px solid rgba(0,0,0,0.08)",
@@ -346,7 +346,7 @@ export function InspirationDetail({
                   textTransform: "inherit",
                 }}
               >
-                Delete
+                {t(locale, "detailDelete")}
               </button>
             ) : null}
 
@@ -359,12 +359,12 @@ export function InspirationDetail({
                   aria-live="polite"
                   style={{ color: "var(--muted)" }}
                 >
-                  Delete this?
+                  {t(locale, "detailConfirmDelete")}?
                 </span>
                 <button
                   type="button"
                   onClick={handleConfirmDelete}
-                  aria-label="Confirm delete"
+                  aria-label={t(locale, "detailConfirmDelete")}
                   style={{
                     background: "transparent",
                     border: "1px solid var(--line)",
@@ -378,12 +378,12 @@ export function InspirationDetail({
                     textTransform: "inherit",
                   }}
                 >
-                  Confirm
+                  {t(locale, "detailConfirmDelete")}
                 </button>
                 <button
                   type="button"
                   onClick={handleCancelDelete}
-                  aria-label="Cancel delete"
+                  aria-label={t(locale, "detailCancelDelete")}
                   style={{
                     background: "transparent",
                     border: "1px solid transparent",
@@ -397,7 +397,7 @@ export function InspirationDetail({
                     textTransform: "inherit",
                   }}
                 >
-                  Cancel
+                  {t(locale, "detailCancelDelete")}
                 </button>
               </>
             ) : null}
@@ -408,7 +408,7 @@ export function InspirationDetail({
                 aria-live="polite"
                 style={{ color: "var(--muted)" }}
               >
-                Deleting…
+                {t(locale, "detailDeleting")}
               </span>
             ) : null}
 
@@ -443,12 +443,12 @@ export function InspirationDetail({
               />
             ) : (
               <div className="detail-media-placeholder" aria-hidden="true">
-                <span>{featuredAttachment ? attachmentTitle(featuredAttachment) : "Saved signal"}</span>
+                <span>{featuredAttachment ? attachmentTitle(featuredAttachment, locale) : t(locale, "detailSavedSignal")}</span>
               </div>
             )}
             {featuredAttachment ? (
               <div className="detail-media-caption">
-                <span>{attachmentTitle(featuredAttachment)}</span>
+                <span>{attachmentTitle(featuredAttachment, locale)}</span>
                 <small>{attachmentMeta(featuredAttachment, locale)}</small>
               </div>
             ) : null}
@@ -460,7 +460,7 @@ export function InspirationDetail({
             </h1>
             <div className="detail-meta detail-meta--hero">
               {featuredAttachment?.enrichment?.link?.hostname ? `${featuredAttachment.enrichment.link.hostname} · ` : ""}
-              Saved {inspiration.timestamp}
+              {t(locale, "saved")} {inspiration.timestamp}
             </div>
             {heroDescription ? (
               <p className="detail-hero-description">{heroDescription}</p>
@@ -469,8 +469,8 @@ export function InspirationDetail({
         </section>
 
         {featuredUrl ? (
-          <section className="detail-links-section" aria-label="Primary source link">
-            <div className="detail-section-label">Link</div>
+          <section className="detail-links-section" aria-label={t(locale, "detailSavedLink")}>
+            <div className="detail-section-label">{t(locale, "linkChipPrefix")}</div>
             <a
               className="detail-primary-link"
               href={featuredUrl}
@@ -484,7 +484,7 @@ export function InspirationDetail({
 
         <form
           className="detail-editor"
-          aria-label="Inspiration details"
+          aria-label={t(locale, "detailInspirationDetails")}
           onSubmit={(event) => {
             event.preventDefault();
             handleSaveDetails();
@@ -494,7 +494,7 @@ export function InspirationDetail({
             htmlFor="inspirationDetailText"
             className="detail-section-label detail-section-title"
           >
-            Highlights
+            {t(locale, "detailInspirationDetails")}
           </label>
           <textarea
             id="inspirationDetailText"
@@ -504,7 +504,7 @@ export function InspirationDetail({
               if (saveState.status !== "idle") setSaveState({ status: "idle" });
             }}
             rows={7}
-            aria-label="Inspiration details"
+            aria-label={t(locale, "detailInspirationDetails")}
             className="detail-text detail-textarea"
           />
           <div className="detail-editor-actions">
@@ -513,11 +513,11 @@ export function InspirationDetail({
               disabled={!detailsChanged || detailsEmpty || saveState.status === "saving"}
               className="detail-save-button"
             >
-              {saveState.status === "saving" ? "Saving…" : "Save details"}
+              {saveState.status === "saving" ? t(locale, "detailSaving") : t(locale, "detailSaveDetails")}
             </button>
             {saveState.status === "saved" ? (
               <span role="status" aria-live="polite" className="detail-inline-status">
-                Saved.
+                {t(locale, "saved")}.
               </span>
             ) : null}
             {saveState.status === "error" ? (
@@ -529,22 +529,22 @@ export function InspirationDetail({
         </form>
 
         {reflectionState.status === "loading" ? (
-          <section className="detail-reflections-section" aria-label="Saved reflections">
-            <div className="detail-section-label">Reflect deeper</div>
-            <p className="detail-reflection-status" role="status" aria-live="polite">Loading reflections…</p>
+          <section className="detail-reflections-section" aria-label={t(locale, "threadShowReflection")}>
+            <div className="detail-section-label">{t(locale, "processThisInspiration")}</div>
+            <p className="detail-reflection-status" role="status" aria-live="polite">{t(locale, "wowMomentsLoading")}</p>
           </section>
         ) : null}
 
         {reflectionState.status === "error" ? (
-          <section className="detail-reflections-section" aria-label="Saved reflections">
-            <div className="detail-section-label">Reflect deeper</div>
+          <section className="detail-reflections-section" aria-label={t(locale, "threadShowReflection")}>
+            <div className="detail-section-label">{t(locale, "processThisInspiration")}</div>
             <p className="detail-reflection-status" role="alert">{reflectionState.message}</p>
           </section>
         ) : null}
 
         {reflectionState.status === "loaded" && reflectionState.reflections.length > 0 ? (
-          <section className="detail-reflections-section" aria-label="Saved reflections">
-            <div className="detail-section-label">Reflect deeper</div>
+          <section className="detail-reflections-section" aria-label={t(locale, "threadShowReflection")}>
+            <div className="detail-section-label">{t(locale, "processThisInspiration")}</div>
             <div className="detail-reflections-list">
               {reflectionState.reflections.map((reflection) => (
                 <article key={reflection.id} className="detail-reflection-card">
@@ -561,9 +561,9 @@ export function InspirationDetail({
             type="button"
             className="detail-next-button"
             onClick={onNextInspiration}
-            aria-label="View next inspiration"
+            aria-label={t(locale, "detailViewNext")}
           >
-            View next inspiration <span aria-hidden="true">→</span>
+            {t(locale, "detailViewNext")} <span aria-hidden="true">→</span>
           </button>
         ) : null}
       </div>

@@ -209,7 +209,7 @@ describe("CaptureForm multi-input quick capture", () => {
       "What almost slipped away?",
     );
     expect(container?.querySelector("#capResonance")).toBeNull();
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Tip: highlight what inspired you.");
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect deeper");
     expect(container?.textContent?.toLowerCase()).not.toMatch(
@@ -237,7 +237,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.value).toBe(
       "A private draft that should not disappear",
     );
-    expect(container?.querySelector("#capDraftState")?.textContent).toContain("tip: highlight what inspired you the most");
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("Tip: highlight what inspired you.");
   });
 
   it("drops expired local capture drafts instead of restoring sensitive text indefinitely", async () => {
@@ -269,6 +269,8 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
     expect(selectionToolbar?.textContent).toContain("highlight");
+    expect(selectionToolbar?.querySelector("button")?.getAttribute("aria-label")).toBe("Highlight selected text");
+    expect(selectionToolbar?.querySelector("button")?.getAttribute("title")).toBe("Highlight selected text");
     expect(selectionToolbar?.style.getPropertyValue("--highlight-top")).not.toBe("");
     await act(async () => {
       selectionToolbar?.querySelector<HTMLButtonElement>("button")?.click();
@@ -297,6 +299,28 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(container?.querySelector(".cap-save-mirror")).toBeNull();
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
+  it("localizes the active selection toolbar copy in Korean", async () => {
+    await renderCaptureForm({ locale: "ko-KR" });
+    await act(async () => {
+      setText("북향 창이 큰 작업실이 계속 떠오른다");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      textarea?.setSelectionRange(0, 7);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+
+    const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
+    const selectionButton = selectionToolbar?.querySelector<HTMLButtonElement>("button");
+    expect(selectionToolbar).not.toBeNull();
+    expect(selectionButton?.getAttribute("aria-label")).toBe("선택한 텍스트 표시");
+    expect(selectionButton?.getAttribute("title")).toBe("선택한 텍스트 표시");
+    expect(selectionButton?.textContent).toContain("표시");
+    expect(selectionButton?.textContent).not.toContain("highlight");
+    expect(selectionButton?.getAttribute("aria-label")).not.toBe("highlight selected text");
   });
 
   it("supports multiple explicit highlights without blocking save", async () => {
@@ -665,10 +689,12 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.disabled).toBe(false);
   });
 
-  it("localizes capture action tooltips and removable chip labels in Korean", async () => {
+  it("localizes capture action tooltips, tip copy, and removable chip labels in Korean", async () => {
     await renderCaptureForm({ locale: "ko-KR" });
     await pasteText("https://example.com/article");
 
+    expect(container?.querySelector("#capDraftState")?.textContent).toContain("팁: 마음을 움직인 부분을 표시하세요.");
+    expect(container?.querySelector("#capDraftState")?.textContent).not.toContain("Tip: highlight what inspired you.");
     expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.title).toBe(
       "이 영감을 저장하기 전에 짧은 생각 하나 더하기",
     );
