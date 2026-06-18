@@ -648,7 +648,7 @@ export default function LoginPage(): JSX.Element {
             }
             onClick={() => setMode("signup")}
           >
-            {t(locale, "loginCreateAccount")}
+            {t(locale, "signupTab")}
           </button>
         </div>
 

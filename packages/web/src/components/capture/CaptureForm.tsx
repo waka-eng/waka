@@ -954,7 +954,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 message:
                   err instanceof Error
                     ? err.message
-                    : "Failed to save inspiration",
+                    : t(locale, "reflectionSaveError"),
               });
         onPersistError?.(tempId, error);
         flashConfirm(error.message, 2800);
@@ -1121,7 +1121,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                 message:
                   err instanceof Error
                     ? err.message
-                    : "Failed to save reflection",
+                    : t(locale, "reflectionSaveError"),
               });
         flashConfirm(error.message, 2800);
       } finally {
