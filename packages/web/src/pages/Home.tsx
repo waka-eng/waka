@@ -1289,7 +1289,7 @@ const HOME_COPY = {
       <>
         떠오른 생각은 자주 사라집니다.
         <br />
-        사라지기 전에 붙잡은 조각들이
+        Waka가 사라지기 전에 붙잡은 조각들이
         <br />
         천천히 한 방향을 만들기 시작합니다.
         <br />
@@ -1352,7 +1352,7 @@ const HOME_COPY = {
       <>
         Most inspiration disappears.
         <br />
-        They caught what almost slipped away.
+        Waka caught what almost slipped away.
         <br />
         And slowly, the things they saved began to take shape.
         <br />

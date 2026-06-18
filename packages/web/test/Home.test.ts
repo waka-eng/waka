@@ -765,6 +765,8 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
     expect(container.textContent).toContain("Most inspiration disappears.");
+    expect(container.textContent).toContain("Waka caught what almost slipped away.");
+    expect(container.textContent).not.toContain("They caught what almost slipped away.");
     expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
   });
 
@@ -1392,6 +1394,14 @@ describe("HomePage current home experience", () => {
     });
     expect(mockAuthState.value.updatePreferredLocale).toHaveBeenCalledWith("ko-KR");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).toContain("Waka가 사라지기 전에 붙잡은 조각들이");
+  });
+
+  it("keeps the inspiration evidence sticky text large enough to read", () => {
+    const css = readFileSync("src/styles/global.css", "utf8");
+
+    expect(css).toMatch(/\.nc-note-evidence-head p\s*\{[\s\S]*?font-size:\s*17px;/);
+    expect(css).toMatch(/\.nc-note-evidence-trigger span\s*\{[\s\S]*?font-size:\s*17px;/);
   });
 
   it("opens an anchored memory drawer stack from the wall drawer object", async () => {
