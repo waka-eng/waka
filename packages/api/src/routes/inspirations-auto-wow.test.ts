@@ -1,8 +1,31 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    randomUUID: vi.fn(() => "00000000-0000-4000-8000-000000000002"),
+  };
+});
+
 vi.mock("../lib/signal-packets.js", () => ({
   persistSignalPacketForSignal: vi.fn(async () => null),
+}));
+
+vi.mock("../vault/materialize.js", () => ({
+  writeSignalDraftToVault: vi.fn(async () => ({
+    id: inspirationId,
+    path: "vault/signals/2026-01-01/00000000-0000-4000-8000-000000000002.yaml",
+    contentHash: "test-draft-hash",
+    docType: "signal",
+  })),
+  materializeSignalDocument: vi.fn(async () => ({
+    id: inspirationId,
+    path: "vault/signals/2026-01-01/00000000-0000-4000-8000-000000000002.yaml",
+    contentHash: "test-materialized-hash",
+    docType: "signal",
+  })),
 }));
 
 import { createInspirationsRoutes } from "./inspirations.js";
@@ -47,7 +70,7 @@ function createInsertDb() {
     createdAt: new Date("2026-01-01T00:00:00.001Z"),
   };
   const valuesCalls: unknown[] = [];
-  const returningRows = [[inserted], [insertedReflection]];
+  const returningRows = [[inserted], [], [insertedReflection]];
   let db: any;
   db = {
     insert: vi.fn(() => ({
@@ -135,7 +158,7 @@ describe("POST /api/inspirations automatic WOW generation", () => {
       answer: "A room for longer experiments.",
       skipped: false,
     });
-    expect(valuesCalls[1]).toMatchObject([
+    expect(valuesCalls[2]).toMatchObject([
       {
         inspirationId,
         userId: user.id,
