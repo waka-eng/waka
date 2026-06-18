@@ -1704,8 +1704,9 @@
   align-content: start;
   gap: 10px;
   width: min(620px, calc(100vw - 48px));
+  max-height: calc(100dvh - var(--memory-drawer-bottom-clearance));
   margin: 0 auto;
-  padding: clamp(72px, 12vh, 130px) 8px 120px;
+  padding: clamp(72px, 12vh, 130px) 8px 24px;
   overflow: auto;
   min-height: 0;
   pointer-events: auto;
@@ -1841,12 +1842,14 @@
 }
 
 .memory-drawer-stack .memory-stack-detail {
+  max-height: calc(100dvh - var(--memory-drawer-bottom-clearance));
+  overflow: auto;
   background: transparent;
   border: 0;
   box-shadow: none;
   color: #2d2925;
   min-height: 0;
-  padding: clamp(66px, 11vh, 120px) 8px 120px;
+  padding: clamp(66px, 11vh, 120px) 8px 24px;
 }
 
 .memory-drawer-stack .memory-stack-detail--mockup {
@@ -12901,6 +12904,8 @@ body.reflect-bg {
 }
 
 .memory-drawer-stack {
+  --memory-drawer-bottom-clearance: clamp(156px, 20vh, 220px);
+
   position: fixed;
   inset: 0;
   right: auto;
@@ -12950,8 +12955,9 @@ body.reflect-bg {
 }
 
 .memory-stack-level--categories {
+  bottom: var(--memory-drawer-bottom-clearance);
   overflow: auto;
-  padding: clamp(64px, 10vh, 96px) clamp(20px, 5vw, 56px) 132px;
+  padding: clamp(64px, 10vh, 96px) clamp(20px, 5vw, 56px) 24px;
   pointer-events: auto;
 }
 
@@ -13525,6 +13531,8 @@ body.reflect-bg {
   }
 
   .memory-drawer-stack {
+    --memory-drawer-bottom-clearance: clamp(176px, 28vh, 260px);
+
     padding: 0;
   }
 

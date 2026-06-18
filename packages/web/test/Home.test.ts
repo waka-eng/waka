@@ -1704,13 +1704,19 @@ describe("HomePage current home experience", () => {
 
     expect(css).toMatch(/\.memory-drawer-stack\s*\{[\s\S]*?left: 50%;[\s\S]*?transform: translateX\(-50%\);/);
     expect(css).toMatch(
-      /\.memory-drawer-stack\s*\{[\s\S]*?inset: 0;[\s\S]*?width: 100vw;[\s\S]*?transform: none;[\s\S]*?animation: memoryDrawerOverlayIn/,
+      /\.memory-drawer-stack\s*\{[\s\S]*?--memory-drawer-bottom-clearance: clamp\(156px, 20vh, 220px\);[\s\S]*?inset: 0;[\s\S]*?width: 100vw;[\s\S]*?transform: none;[\s\S]*?animation: memoryDrawerOverlayIn/,
     );
     expect(css).toMatch(
-      /\.memory-stack-level--categories\s*\{[\s\S]*?padding: clamp\(64px, 10vh, 96px\) clamp\(20px, 5vw, 56px\) 132px;/,
+      /\.memory-stack-level--categories\s*\{[\s\S]*?bottom: var\(--memory-drawer-bottom-clearance\);[\s\S]*?padding: clamp\(64px, 10vh, 96px\) clamp\(20px, 5vw, 56px\) 24px;/,
     );
     expect(css).toMatch(/\.memory-category-panel\s*\{[\s\S]*?width: min\(680px, 100%\);[\s\S]*?margin: 0 auto;/);
     expect(css).toMatch(/\.memory-path-list\s*\{[\s\S]*?width: min\(680px, 100%\);[\s\S]*?margin: 0 auto;/);
+    expect(css).toMatch(
+      /\.memory-contents-flow\s*\{[\s\S]*?max-height: calc\(100dvh - var\(--memory-drawer-bottom-clearance\)\);[\s\S]*?padding: clamp\(72px, 12vh, 130px\) 8px 24px;/,
+    );
+    expect(css).toMatch(
+      /\.memory-drawer-stack \.memory-stack-detail\s*\{[\s\S]*?max-height: calc\(100dvh - var\(--memory-drawer-bottom-clearance\)\);[\s\S]*?overflow: auto;[\s\S]*?padding: clamp\(66px, 11vh, 120px\) 8px 24px;/,
+    );
     expect(css).toMatch(
       /@media \(max-width: 760px\) \{[\s\S]*?\.signal-revisit-page\.memory-drawer-stack\s*\{[\s\S]*?left: 14px;[\s\S]*?width: auto;[\s\S]*?transform: none;/,
     );
