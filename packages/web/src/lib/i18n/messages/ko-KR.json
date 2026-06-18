@@ -41,6 +41,8 @@
   "partialAttachmentFailure": "저장됨 — 첨부 {count}개가 실패했어요. 영감은 안전하게 남아 있어요.",
   "autosavedLocally": "개인 초안은 로컬에 자동 저장되고, 저장 성공 뒤에만 지워집니다.",
   "captureTip": "팁: 마음을 움직인 부분을 표시하세요.",
+  "captureHighlightSelectionLabel": "선택한 텍스트 표시",
+  "captureHighlightSelectionText": "표시",
   "markWhatHit": "걸린 부분 표시",
   "removeHighlight": "표시한 문장 제거",
   "resonanceQuestion": "왜 마음에 걸렸나요?",

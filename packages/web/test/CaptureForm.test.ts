@@ -269,6 +269,8 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
     expect(selectionToolbar?.textContent).toContain("highlight");
+    expect(selectionToolbar?.querySelector("button")?.getAttribute("aria-label")).toBe("Highlight selected text");
+    expect(selectionToolbar?.querySelector("button")?.getAttribute("title")).toBe("Highlight selected text");
     expect(selectionToolbar?.style.getPropertyValue("--highlight-top")).not.toBe("");
     await act(async () => {
       selectionToolbar?.querySelector<HTMLButtonElement>("button")?.click();
@@ -297,6 +299,28 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(container?.querySelector(".cap-save-mirror")).toBeNull();
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
+  });
+
+  it("localizes the active selection toolbar copy in Korean", async () => {
+    await renderCaptureForm({ locale: "ko-KR" });
+    await act(async () => {
+      setText("북향 창이 큰 작업실이 계속 떠오른다");
+    });
+    const textarea = container?.querySelector<HTMLTextAreaElement>("#capNote");
+    expect(textarea).not.toBeNull();
+    await act(async () => {
+      textarea?.setSelectionRange(0, 7);
+      textarea?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+
+    const selectionToolbar = container?.querySelector<HTMLElement>(".cap-selection-toolbar");
+    const selectionButton = selectionToolbar?.querySelector<HTMLButtonElement>("button");
+    expect(selectionToolbar).not.toBeNull();
+    expect(selectionButton?.getAttribute("aria-label")).toBe("선택한 텍스트 표시");
+    expect(selectionButton?.getAttribute("title")).toBe("선택한 텍스트 표시");
+    expect(selectionButton?.textContent).toContain("표시");
+    expect(selectionButton?.textContent).not.toContain("highlight");
+    expect(selectionButton?.getAttribute("aria-label")).not.toBe("highlight selected text");
   });
 
   it("supports multiple explicit highlights without blocking save", async () => {

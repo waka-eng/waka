@@ -1213,14 +1213,14 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
                   setPendingHighlight(null);
                   setHighlightPopoverPosition(null);
                 }}
-                aria-label="highlight selected text"
-                title="highlight selected text"
+                aria-label={t(locale, "captureHighlightSelectionLabel")}
+                title={t(locale, "captureHighlightSelectionLabel")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="m9 11-6 6v4h4l6-6" />
                   <path d="m22 12-7.5 7.5L4.5 9.5 12 2l10 10Z" />
                 </svg>
-                <span>highlight</span>
+                <span>{t(locale, "captureHighlightSelectionText")}</span>
               </button>
             </div>
           ) : null
