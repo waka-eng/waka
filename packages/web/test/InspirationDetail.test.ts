@@ -4,6 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { fetchReflections } from "../src/lib/api";
 import { InspirationDetail } from "../src/components/history/InspirationDetail";
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -13,6 +14,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     updateInspiration: vi.fn(async () => {
       throw new Error("updateInspiration mock not configured");
     }),
+    fetchReflections: vi.fn(async () => []),
     deleteInspiration: vi.fn(async () => undefined),
   };
 });
@@ -32,6 +34,7 @@ afterEach(() => {
   mountedContainer?.remove();
   mountedContainer = null;
   vi.clearAllMocks();
+  vi.mocked(fetchReflections).mockResolvedValue([]);
 });
 
 async function flushReactWork(): Promise<void> {
@@ -117,6 +120,46 @@ describe("InspirationDetail", () => {
       next?.click();
     });
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders saved Reflect Deeper responses fetched for the selected inspiration", async () => {
+    vi.mocked(fetchReflections).mockResolvedValueOnce([
+      {
+        id: "reflection-guided-1",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What caught you first?",
+        answer: "The north-facing window.",
+        skipped: false,
+        createdAt: "2026-05-18T19:02:00.000Z",
+      },
+      {
+        id: "reflection-guided-2",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What does it make you want more of?",
+        answer: "A quieter working cadence.",
+        skipped: false,
+        createdAt: "2026-05-18T19:03:00.000Z",
+      },
+      {
+        id: "reflection-guided-3",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What is the next move?",
+        answer: "Book one protected morning.",
+        skipped: false,
+        createdAt: "2026-05-18T19:04:00.000Z",
+      },
+    ]);
+
+    const container = await renderDetail();
+
+    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(container.textContent).toContain("What caught you first?");
+    expect(container.textContent).toContain("The north-facing window.");
+    expect(container.textContent).toContain("A quieter working cadence.");
+    expect(container.textContent).toContain("Book one protected morning.");
   });
 
   it("hides next navigation at the end of the list", async () => {

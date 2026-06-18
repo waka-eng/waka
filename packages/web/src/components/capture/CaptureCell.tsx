@@ -140,6 +140,8 @@ export interface CaptureCellProps {
   /** Placeholder copy for the note textarea. Defaults to the prototype's. */
   notePlaceholder?: string;
   processSaveLabel?: string;
+  processSaveInProgress?: boolean;
+  processSaveInProgressLabel?: string;
   processSaveTitle?: string;
   quickSaveLabel?: string;
   quickSaveTitle?: string;
@@ -264,6 +266,8 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       onNoteKeyDown,
       notePlaceholder = "Drop what hit: a note, link, or image. Save it fast or reflect deeper.",
       processSaveLabel = "Reflect deeper",
+      processSaveInProgress = false,
+      processSaveInProgressLabel = "Reflect Deeper in progress",
       processSaveTitle = "Add one small thought before saving this inspiration",
       quickSaveLabel = "Save it now",
       quickSaveTitle = "Save this inspiration now",
@@ -376,6 +380,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
     };
 
     const isReflectView = view === "reflect";
+    const reflectiveSaveLabel = processSaveInProgress ? processSaveInProgressLabel : processSaveLabel;
 
     return (
       <div
@@ -455,88 +460,95 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
         </div>
 
         {/* --- Capture bar: utilities (attach · expand) on the left, save
-             actions on the right — placed directly, no enclosing pill. --- */}
-        <div className="cap-bar" id="capBar" hidden={isReflectView}>
-          <div className="cap-bar-left">
-            <label className="cap-file-btn" htmlFor="capFile" title="attach an image">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.7}
-                strokeLinecap="round"
-                strokeLinejoin="round"
+             actions on the right — placed directly, no enclosing pill.
+             Once the guided reflection journey starts, remove these normal
+             capture controls entirely so Back/Continue/Save reflection are
+             the only visible journey actions. --- */}
+        {!isReflectView ? (
+          <div className="cap-bar" id="capBar">
+            <div className="cap-bar-left">
+              <label className="cap-file-btn" htmlFor="capFile" title="attach an image">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.7}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21.4 11.6 12.2 20.8a6 6 0 0 1-8.5-8.5l9.8-9.8a4 4 0 0 1 5.7 5.7l-9.8 9.8a2 2 0 1 1-2.8-2.8l9.2-9.2" />
+                </svg>
+              </label>
+              <input
+                id="capFile"
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleFileChange}
+              />
+              <button
+                type="button"
+                className="cap-expand"
+                id="capExpand"
+                title={focused ? "exit focus mode" : "focus mode"}
+                aria-label={focused ? "exit focus mode" : "enter focus mode"}
+                aria-pressed={focused}
+                onClick={() => onToggleFocus?.(!focused)}
               >
-                <path d="M21.4 11.6 12.2 20.8a6 6 0 0 1-8.5-8.5l9.8-9.8a4 4 0 0 1 5.7 5.7l-9.8 9.8a2 2 0 1 1-2.8-2.8l9.2-9.2" />
-              </svg>
-            </label>
-            <input
-              id="capFile"
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={handleFileChange}
-            />
-            <button
-              type="button"
-              className="cap-expand"
-              id="capExpand"
-              title={focused ? "exit focus mode" : "focus mode"}
-              aria-label={focused ? "exit focus mode" : "enter focus mode"}
-              aria-pressed={focused}
-              onClick={() => onToggleFocus?.(!focused)}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.7}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.7}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  {focused ? (
+                    <>
+                      <polyline points="4 14 10 14 10 20" />
+                      <polyline points="20 10 14 10 14 4" />
+                      <line x1="14" y1="10" x2="21" y2="3" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </>
+                  ) : (
+                    <>
+                      <polyline points="15 3 21 3 21 9" />
+                      <polyline points="9 21 3 21 3 15" />
+                      <line x1="21" y1="3" x2="14" y2="10" />
+                      <line x1="3" y1="21" x2="10" y2="14" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            </div>
+            <div className="cap-bar-right">
+              <button
+                type="button"
+                className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}${processSaveInProgress ? " cap-save--reflecting" : ""}`}
+                id="capReflectiveSave"
+                onClick={onReflectiveSave}
+                title={processSaveTitle}
+                aria-label={reflectiveSaveLabel}
+                aria-pressed={processSaveInProgress}
+                disabled={!saveVisible}
               >
-                {focused ? (
-                  <>
-                    <polyline points="4 14 10 14 10 20" />
-                    <polyline points="20 10 14 10 14 4" />
-                    <line x1="14" y1="10" x2="21" y2="3" />
-                    <line x1="3" y1="21" x2="10" y2="14" />
-                  </>
-                ) : (
-                  <>
-                    <polyline points="15 3 21 3 21 9" />
-                    <polyline points="9 21 3 21 3 15" />
-                    <line x1="21" y1="3" x2="14" y2="10" />
-                    <line x1="3" y1="21" x2="10" y2="14" />
-                  </>
-                )}
-              </svg>
-            </button>
+                {reflectiveSaveLabel}
+              </button>
+              <button
+                type="button"
+                className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
+                id="capSave"
+                onClick={onSave}
+                title={quickSaveTitle}
+                aria-label={quickSaveTitle}
+                disabled={!saveVisible}
+              >
+                {quickSaveLabel}
+              </button>
+            </div>
           </div>
-          <div className="cap-bar-right">
-            <button
-              type="button"
-              className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}`}
-              id="capReflectiveSave"
-              onClick={onReflectiveSave}
-              title={processSaveTitle}
-              disabled={!saveVisible}
-            >
-              {processSaveLabel}
-            </button>
-            <button
-              type="button"
-              className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
-              id="capSave"
-              onClick={onSave}
-              title={quickSaveTitle}
-              aria-label={quickSaveTitle}
-              disabled={!saveVisible}
-            >
-              {quickSaveLabel}
-            </button>
-          </div>
-        </div>
+        ) : null}
 
         {/* --- Reflect bar (Done · Continue) --- */}
         <div

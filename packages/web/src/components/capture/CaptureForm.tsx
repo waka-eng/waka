@@ -125,6 +125,7 @@ export interface PendingInspiration {
 export interface PersistedResult {
   inspiration: ApiInspiration;
   attachments: ApiAttachment[];
+  reflections?: CreateReflectionResponse[];
   reflection?: CreateReflectionResponse;
   /** Per-attachment failures. Surfaces the original `localId` so the parent
    *  can keep the failed one visible (e.g. with a retry affordance) while
@@ -184,10 +185,12 @@ const GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS = [
 ] as const satisfies readonly MessageKey[];
 const GUIDED_REFLECTION_MAX_STEPS = 3;
 
-interface GuidedReflectionPayload {
+interface GuidedReflectionPayloadItem {
   question: string;
   answer: string;
 }
+
+type GuidedReflectionPayload = GuidedReflectionPayloadItem[];
 
 type CaptureResonanceAnswer =
   | "pulled_me"
@@ -762,8 +765,11 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         return;
       }
 
-      const reflectiveAnswer = options.reflection?.answer.trim() ?? "";
-      if (options.reflection && reflectiveAnswer.length === 0) {
+      const reflectiveAnswers = options.reflection?.map((item) => ({
+        question: item.question.trim(),
+        answer: item.answer.trim(),
+      })) ?? [];
+      if (options.reflection && reflectiveAnswers.some((item) => item.question.length === 0 || item.answer.length === 0)) {
         flashConfirm(t(locale, "addThoughtBeforeReflectiveSave"), 2600);
         setActiveView("reflect");
         return;
@@ -844,13 +850,19 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           ...(captureSparks ? { sparks: captureSparks } : {}),
         });
 
-        const reflection = options.reflection
-          ? await createReflection(inspiration.id, {
-              question: options.reflection.question,
-              answer: reflectiveAnswer,
-              skipped: false,
-            })
-          : undefined;
+        const reflections: CreateReflectionResponse[] = [];
+        if (options.reflection) {
+          for (const item of reflectiveAnswers) {
+            reflections.push(
+              await createReflection(inspiration.id, {
+                question: item.question,
+                answer: item.answer,
+                skipped: false,
+              }),
+            );
+          }
+        }
+        const reflection = reflections[reflections.length - 1];
 
         // 3. Fan out each attachment. We persist in parallel because they
         //    don't depend on one another. `Promise.allSettled` lets a single
@@ -888,6 +900,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onPersisted?.(tempId, {
           inspiration,
           attachments,
+          reflections,
           reflection,
           failedAttachments: failed,
         });
@@ -989,16 +1002,13 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     }, [fallbackGuidedQuestion, note, pending, requestGuidedQuestion, saving, onToggleFocus]);
 
     const buildGuidedReflectionPayload = useCallback((answers: string[]): GuidedReflectionPayload => {
-      return {
-        question: t(locale, "guidedReflectionUmbrellaQuestion"),
-        answer: answers
-          .map((answer, index) => {
-            const question = guidedReflectionQuestions[index] ?? fallbackGuidedQuestion(index);
-            return `${question}\n${answer.trim()}`;
-          })
-          .join("\n\n"),
-      };
-    }, [fallbackGuidedQuestion, guidedReflectionQuestions, locale]);
+      return answers
+        .map((answer, index) => ({
+          question: guidedReflectionQuestions[index] ?? fallbackGuidedQuestion(index),
+          answer: answer.trim(),
+        }))
+        .filter((item) => item.question.trim().length > 0 && item.answer.length > 0);
+    }, [fallbackGuidedQuestion, guidedReflectionQuestions]);
 
     const handleGuidedReflectionBack = useCallback((): void => {
       if (saving) return;
@@ -1154,6 +1164,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
     const saveVisible =
       !saving && (note.trim().length > 0 || pending.length > 0);
+    const guidedReflectionInProgress = activeView === "reflect" && !postSaveReflectionTargetId;
     const reflectStepCount = GUIDED_REFLECTION_MAX_STEPS;
     const reflectQuestion = guidedReflectionQuestions[reflectionStepIndex] ?? fallbackGuidedQuestion(reflectionStepIndex);
     const reflectProgress = formatMessage(locale, "guidedReflectionProgress", {
@@ -1225,6 +1236,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }}
         onReflectiveSave={handleStartReflectiveSave}
         processSaveLabel={t(locale, "processThisInspiration")}
+        processSaveInProgress={guidedReflectionInProgress}
+        processSaveInProgressLabel={t(locale, "reflectDeeperInProgress")}
         processSaveTitle={t(locale, "processSaveTitle")}
         quickSaveLabel={t(locale, "quickSave")}
         quickSaveTitle={t(locale, "quickSaveTitle")}
@@ -1247,7 +1260,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }
         reflectQuestion={
           <>
-            <span className="reflect-kicker">{t(locale, "processThisInspiration")}</span>
+            <span className="reflect-kicker">{guidedReflectionInProgress ? t(locale, "reflectDeeperInProgress") : t(locale, "processThisInspiration")}</span>
             {reflectQuestion}
             <span className="reflect-progress">{reflectProgress}</span>
           </>

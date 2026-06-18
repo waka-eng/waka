@@ -9931,10 +9931,48 @@ body.reflect-bg {
 }
 
 .detail-links-section,
-.detail-attachments {
+.detail-attachments,
+.detail-reflections-section {
   display: grid;
   gap: 12px;
   margin: 0;
+}
+
+.detail-reflections-list {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-reflection-card {
+  display: grid;
+  gap: 8px;
+  border: var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 253, 247, 0.62);
+  padding: clamp(18px, 3vw, 24px);
+}
+
+.detail-reflection-card h2 {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.detail-reflection-card p,
+.detail-reflection-status {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: clamp(16px, 1.6vw, 19px);
+  font-style: italic;
+  font-weight: 300;
+  line-height: 1.65;
+  white-space: pre-wrap;
 }
 
 .detail-links {
