@@ -19,7 +19,10 @@ import {
   type WowJudgeClient,
 } from "../src/lib/wow-judge.js";
 
-import { createInspirationFixture } from "./fixtures/inspirations.js";
+import {
+  createInspirationFixture,
+  createReflectionFixture,
+} from "./fixtures/inspirations.js";
 import { createUserFixture } from "./fixtures/users.js";
 import { createTestDatabase, type TestDatabase } from "./helpers/db.js";
 
@@ -1334,6 +1337,96 @@ describe("judgeWowMomentForInspiration", () => {
         locale: "ko-KR",
       }),
     );
+    expect(await countWowMoments(testDb)).toBe(0);
+  });
+
+  it("feeds answered Reflect Deeper Q/A into the judge input for trigger and candidates", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger shell text without the real reflective meaning.",
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate shell text without the real reflective meaning.",
+    });
+    await createReflectionFixture(testDb.db, alice.user.id, trigger.id, {
+      question: "What fear is hiding under the desire to share?",
+      answer: "The answer names a fear that my rough work will cost belonging.",
+      createdAt: new Date("2026-06-01T10:00:00.000Z"),
+    });
+    await createReflectionFixture(testDb.db, alice.user.id, trigger.id, {
+      question: "What should be filtered out?",
+      answer: "This skipped trigger answer must not reach the judge.",
+      skipped: true,
+      createdAt: new Date("2026-06-01T10:01:00.000Z"),
+    });
+    await createReflectionFixture(testDb.db, alice.user.id, candidate.id, {
+      question: "What does this make possible?",
+      answer: "The answer says a public room can make courage feel normal.",
+      createdAt: new Date("2026-06-01T10:02:00.000Z"),
+    });
+    await createReflectionFixture(testDb.db, alice.user.id, candidate.id, {
+      question: "What empty answer should be ignored?",
+      answer: "   ",
+      createdAt: new Date("2026-06-01T10:03:00.000Z"),
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidate, [0.55, Math.sqrt(1 - 0.55 ** 2)]);
+
+    const client: WowJudgeClient = {
+      judgeWowMoment: vi.fn().mockResolvedValue({
+        isWowMoment: true,
+        kind: "bridge",
+        title: "Rooms for Rough Work",
+        why: "The trigger and candidate connect belonging fears with public rooms that normalize courage.",
+        beliefStatement: "rough work needs rooms where courage feels normal",
+        relatedInspirationIds: [trigger.id, candidate.id],
+        sourceEvidence: [
+          {
+            inspirationId: trigger.id,
+            role: "The belonging fear",
+            reason: "This source names the belonging risk behind sharing rough work.",
+          },
+          {
+            inspirationId: candidate.id,
+            role: "The public room",
+            reason: "This source shows a room where visible practice makes courage normal.",
+          },
+        ],
+      }),
+    };
+
+    const result = await judgeWowMomentForInspiration({
+      db: testDb.db,
+      userId: alice.user.id,
+      triggerInspirationId: trigger.id,
+      limit: 5,
+      client,
+    });
+
+    expect(result).toMatchObject({
+      isWowMoment: true,
+      relatedInspirationIds: [trigger.id, candidate.id],
+    });
+    expect(client.judgeWowMoment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trigger: expect.objectContaining({
+          text: expect.stringContaining(
+            "The answer names a fear that my rough work will cost belonging.",
+          ),
+        }),
+        candidates: [
+          expect.objectContaining({
+            text: expect.stringContaining(
+              "The answer says a public room can make courage feel normal.",
+            ),
+          }),
+        ],
+      }),
+    );
+    const input = vi.mocked(client.judgeWowMoment).mock.calls[0]?.[0];
+    expect(input?.trigger.text).toContain("What fear is hiding under the desire to share?");
+    expect(input?.trigger.text).not.toContain("This skipped trigger answer must not reach the judge.");
+    expect(input?.candidates[0]?.text).not.toContain("What empty answer should be ignored?");
     expect(await countWowMoments(testDb)).toBe(0);
   });
 

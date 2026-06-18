@@ -1,8 +1,9 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import {
   inspirations,
+  reflections,
   wowKindEnumValues,
   wowMomentInspirations,
   wowMoments,
@@ -1546,17 +1547,84 @@ export interface PersistWowMomentForInspirationParams {
 
 export const MAX_WOW_MOMENT_SOURCE_LINKS = 3;
 
-function toPromptInput(
+async function loadPromptReflectionTextByInspiration(
+  db: WakaDb,
+  userId: string,
+  inspirationIds: string[],
+): Promise<Map<string, string>> {
+  const uniqueIds = Array.from(new Set(inspirationIds));
+  if (uniqueIds.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      inspirationId: reflections.inspirationId,
+      question: reflections.question,
+      answer: reflections.answer,
+      skipped: reflections.skipped,
+    })
+    .from(reflections)
+    .where(
+      and(
+        eq(reflections.userId, userId),
+        inArray(reflections.inspirationId, uniqueIds),
+      ),
+    )
+    .orderBy(asc(reflections.createdAt));
+
+  const linesByInspiration = new Map<string, string[]>();
+  for (const row of rows) {
+    if (row.skipped) continue;
+    const answer = row.answer?.trim();
+    if (!answer) continue;
+
+    const question = row.question.trim();
+    const lines = linesByInspiration.get(row.inspirationId) ?? [];
+    lines.push(question ? `Q: ${question}\nA: ${answer}` : `A: ${answer}`);
+    linesByInspiration.set(row.inspirationId, lines);
+  }
+
+  return new Map(
+    Array.from(linesByInspiration.entries()).map(([inspirationId, lines]) => [
+      inspirationId,
+      lines.join("\n"),
+    ]),
+  );
+}
+
+function appendPromptReflectionText(
+  inspirationText: string,
+  reflectionText: string | undefined,
+): string {
+  const base = inspirationText.trim();
+  if (!reflectionText) return base;
+  return `${base}\n\nReflect Deeper Q/A:\n${reflectionText}`.trim();
+}
+
+async function toPromptInput(
   result: Awaited<ReturnType<typeof findWowMomentCandidates>>,
+  db: WakaDb,
+  userId: string,
   locale: SupportedLocale = DEFAULT_LOCALE,
-): WowJudgeInput | null {
+): Promise<WowJudgeInput | null> {
   if (!result.trigger) return null;
+
+  const reflectionTextByInspiration = await loadPromptReflectionTextByInspiration(
+    db,
+    userId,
+    [
+      result.trigger.id,
+      ...result.candidates.map((candidate) => candidate.inspiration.id),
+    ],
+  );
 
   return {
     locale,
     trigger: {
       id: result.trigger.id,
-      text: result.trigger.text,
+      text: appendPromptReflectionText(
+        result.trigger.text,
+        reflectionTextByInspiration.get(result.trigger.id),
+      ),
       kind: result.trigger.kind,
       category: result.trigger.category,
       cluster: result.trigger.cluster,
@@ -1564,7 +1632,10 @@ function toPromptInput(
     },
     candidates: result.candidates.map((candidate) => ({
       id: candidate.inspiration.id,
-      text: candidate.inspiration.text,
+      text: appendPromptReflectionText(
+        candidate.inspiration.text,
+        reflectionTextByInspiration.get(candidate.inspiration.id),
+      ),
       kind: candidate.inspiration.kind,
       category: candidate.inspiration.category,
       cluster: candidate.inspiration.cluster,
@@ -1738,7 +1809,7 @@ export async function persistWowMomentForInspirationJudgment(
     limit: params.limit,
   });
   const locale = normalizeSupportedLocale(params.locale);
-  const input = toPromptInput(retrieved, locale) ?? {
+  const input = (await toPromptInput(retrieved, db, params.userId, locale)) ?? {
     locale,
     trigger: {
       id: params.triggerInspirationId,
@@ -1867,7 +1938,7 @@ export async function judgeWowMomentForInspiration(
     limit: params.limit,
   });
   const locale = normalizeSupportedLocale(params.locale);
-  const input = toPromptInput(retrieved, locale);
+  const input = await toPromptInput(retrieved, db, params.userId, locale);
   if (!input) {
     return defaultFalseJudgment(
       "not_enough_candidates",
