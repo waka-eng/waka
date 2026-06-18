@@ -10,6 +10,7 @@ import {
   createFeedback,
   createInspiration,
   createInspirationSpark,
+  createReflection,
   deleteInspirationSpark,
   finalizeAttachment,
   fetchInspirations,
@@ -18,6 +19,7 @@ import {
   fetchSavedSignals,
   fetchTopOfMind,
   fetchTopOfMindNotes,
+  generateGuidedReflectionQuestion,
   presignAttachment,
   recordInspirationRevisit,
   updateInspiration,
@@ -99,6 +101,10 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     createReflection: vi.fn(async () => {
       throw new Error("createReflection mock not configured");
     }),
+    generateGuidedReflectionQuestion: vi.fn(async () => ({
+      question: "What does this signal want you to notice next?",
+      source: "fallback",
+    })),
     updateInspiration: vi.fn(async () => {
       throw new Error("updateInspiration mock not configured");
     }),
@@ -2064,6 +2070,81 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Fast save without reflective friction",
       kind: "note",
+    });
+  });
+
+  it("advances and saves Reflect Deeper from the capture modal with all three answers", async () => {
+    setApiFixtures();
+    vi.mocked(createInspiration).mockResolvedValue(
+      persistedInspiration({ id: "insp-guided-save", text: "A windowed studio signal", wowScore: 8 }),
+    );
+    vi.mocked(createReflection).mockResolvedValue({
+      reflection: persistedReflection({
+        id: "reflection-guided-save",
+        inspirationId: "insp-guided-save",
+        question: "Reflect deeper guided reflection",
+        answer: "saved guided answer",
+      }),
+      inspiration: { id: "insp-guided-save", wowScore: 9 },
+    });
+    vi.mocked(generateGuidedReflectionQuestion)
+      .mockResolvedValueOnce({ question: "What caught you first?", source: "model" })
+      .mockResolvedValueOnce({ question: "What does it ask you to protect?", source: "model" })
+      .mockResolvedValueOnce({ question: "What is the smallest next move?", source: "model" });
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLTextAreaElement>("#capNote")!, "A windowed studio signal");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("What caught you first?");
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "The soft north light.");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("What does it ask you to protect?");
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Protected quiet mornings.");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("What is the smallest next move?");
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 3 of 3");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Block tomorrow morning.");
+    });
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+    await flushReactWork();
+
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "A windowed studio signal",
+      kind: "note",
+    });
+    expect(createReflection).toHaveBeenCalledWith("insp-guided-save", {
+      question: "Reflect deeper guided reflection",
+      answer: [
+        "What caught you first?\nThe soft north light.",
+        "What does it ask you to protect?\nProtected quiet mornings.",
+        "What is the smallest next move?\nBlock tomorrow morning.",
+      ].join("\n\n"),
+      skipped: false,
     });
   });
 

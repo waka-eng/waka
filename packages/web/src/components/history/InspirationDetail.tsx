@@ -6,9 +6,9 @@
  * with a declarative component that:
  *
  *   1. Renders the mockup-style source/preview hero, primary link, and
- *      editable Highlights area.
+ *      editable Highlights area, and any saved Reflect Deeper responses.
  *   2. Keeps the close/back/delete and next-inspiration navigation affordances
- *      available while intentionally omitting lower reflection/context panels.
+ *      available without reviving the prototype's broader lower context panels.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -16,9 +16,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   deleteInspiration,
+  fetchReflections,
   updateInspiration,
   type ApiAttachment,
   type ApiInspiration,
+  type ApiReflection,
 } from "../../lib/api";
 import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
 
@@ -193,6 +195,11 @@ export function InspirationDetail({
     | { status: "deleting" }
     | { status: "error"; message: string }
   >({ status: "idle" });
+  const [reflectionState, setReflectionState] = useState<
+    | { status: "loading"; reflections: ApiReflection[] }
+    | { status: "loaded"; reflections: ApiReflection[] }
+    | { status: "error"; reflections: ApiReflection[]; message: string }
+  >({ status: "loading", reflections: [] });
   useEffect(() => {
     // Reset the delete affordance whenever the user navigates to a
     // different inspiration so a half-confirmed delete on row A doesn't
@@ -201,6 +208,29 @@ export function InspirationDetail({
     setDetailsText(inspiration.text);
     setSaveState({ status: "idle" });
   }, [inspiration.id, inspiration.text]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setReflectionState({ status: "loading", reflections: [] });
+    void (async () => {
+      try {
+        const reflections = await fetchReflections(inspiration.id);
+        if (!cancelled) setReflectionState({ status: "loaded", reflections });
+      } catch (caught) {
+        if (cancelled) return;
+        const message =
+          caught instanceof ApiError
+            ? caught.message
+            : caught instanceof Error
+              ? caught.message
+              : "Failed to load reflections.";
+        setReflectionState({ status: "error", reflections: [], message });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [inspiration.id]);
 
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
@@ -497,6 +527,34 @@ export function InspirationDetail({
             ) : null}
           </div>
         </form>
+
+        {reflectionState.status === "loading" ? (
+          <section className="detail-reflections-section" aria-label="Saved reflections">
+            <div className="detail-section-label">Reflect deeper</div>
+            <p className="detail-reflection-status" role="status" aria-live="polite">Loading reflections…</p>
+          </section>
+        ) : null}
+
+        {reflectionState.status === "error" ? (
+          <section className="detail-reflections-section" aria-label="Saved reflections">
+            <div className="detail-section-label">Reflect deeper</div>
+            <p className="detail-reflection-status" role="alert">{reflectionState.message}</p>
+          </section>
+        ) : null}
+
+        {reflectionState.status === "loaded" && reflectionState.reflections.length > 0 ? (
+          <section className="detail-reflections-section" aria-label="Saved reflections">
+            <div className="detail-section-label">Reflect deeper</div>
+            <div className="detail-reflections-list">
+              {reflectionState.reflections.map((reflection) => (
+                <article key={reflection.id} className="detail-reflection-card">
+                  <h2>{reflection.question}</h2>
+                  <p>{reflection.answer}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {onNextInspiration ? (
           <button
