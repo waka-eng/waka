@@ -598,22 +598,28 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
 
     expect(createInspiration).toHaveBeenCalledTimes(1);
-    expect(createReflection).toHaveBeenCalledTimes(3);
-    expect(createReflection).toHaveBeenNthCalledWith(1, "insp-post-save", {
-      question: "What private weather does this signal name?",
-      answer: "The feeling of wanting to protect it.",
-      skipped: false,
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "A messy thing I want safe before I understand it",
+      kind: "note",
+      reflections: [
+        {
+          question: "What private weather does this signal name?",
+          answer: "The feeling of wanting to protect it.",
+          skipped: false,
+        },
+        {
+          question: "What would protecting that weather ask you to change?",
+          answer: "More quiet studio time.",
+          skipped: false,
+        },
+        {
+          question: "What is one small room-temperature experiment for tomorrow?",
+          answer: "Book one hour tomorrow.",
+          skipped: false,
+        },
+      ],
     });
-    expect(createReflection).toHaveBeenNthCalledWith(2, "insp-post-save", {
-      question: "What would protecting that weather ask you to change?",
-      answer: "More quiet studio time.",
-      skipped: false,
-    });
-    expect(createReflection).toHaveBeenNthCalledWith(3, "insp-post-save", {
-      question: "What is one small room-temperature experiment for tomorrow?",
-      answer: "Book one hour tomorrow.",
-      skipped: false,
-    });
+    expect(createReflection).not.toHaveBeenCalled();
     // No mirror card — the parent is signalled to close and flash "saved".
     expect(container?.querySelector(".cap-save-mirror")).toBeNull();
     expect(onSaved).toHaveBeenCalledTimes(1);
@@ -949,12 +955,24 @@ describe("CaptureForm Reflect Deeper journey", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Process this richer input",
       kind: "note",
+      reflections: [
+        {
+          question: "What first caught you here — the idea, feeling, person, or possibility?",
+          answer: "It connects to the next project.",
+          skipped: false,
+        },
+        {
+          question: "What first caught you here — the idea, feeling, person, or possibility?",
+          answer: "A protected weekly making block.",
+          skipped: false,
+        },
+        {
+          question: "What first caught you here — the idea, feeling, person, or possibility?",
+          answer: "Schedule Friday morning.",
+          skipped: false,
+        },
+      ],
     });
-    expect(createReflection).toHaveBeenCalledTimes(3);
-    expect(createReflection).toHaveBeenNthCalledWith(3, "insp-new", {
-      question: "What first caught you here — the idea, feeling, person, or possibility?",
-      answer: "Schedule Friday morning.",
-      skipped: false,
-    });
+    expect(createReflection).not.toHaveBeenCalled();
   });
 });

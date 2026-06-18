@@ -409,6 +409,8 @@ export interface CreateInspirationRequest {
     isPrimary?: boolean;
     note?: string;
   }>;
+  /** Optional Reflect Deeper Q/A saved with the inspiration to avoid a partial post-save gap. */
+  reflections?: CreateReflectionRequest[];
 }
 
 export interface UpdateInspirationRequest {
@@ -445,6 +447,8 @@ export interface ApiInspirationSpark {
 
 export interface CreateInspirationResponse {
   inspiration: ApiInspiration;
+  /** Present when Reflect Deeper Q/A was submitted in the create request. */
+  reflections?: ApiReflection[];
 }
 
 export interface UpdateInspirationResponse {
