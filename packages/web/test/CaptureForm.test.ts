@@ -64,6 +64,16 @@ async function flushDraftAutosave(): Promise<void> {
   });
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (reason?: unknown) => void } {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function renderCaptureForm(props: ComponentProps<typeof CaptureForm> = {}): Promise<HTMLDivElement> {
   container = document.createElement("div");
   document.body.append(container);
@@ -536,7 +546,8 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
     expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith({
       locale: "en-US",
       inspiration: {
@@ -560,7 +571,8 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await flushReactWork();
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 2 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("2");
     expect(container?.querySelector("#capBar")).toBeNull();
     expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
@@ -583,7 +595,8 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await flushReactWork();
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("one small room-temperature experiment");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 3 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 3 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
     expect(container?.querySelector("#capBar")).toBeNull();
     expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
@@ -881,6 +894,108 @@ describe("CaptureForm multi-input quick capture", () => {
 });
 
 describe("CaptureForm Reflect Deeper journey", () => {
+  it("shows an animation-only loading state for the first adaptive question", async () => {
+    const firstQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion).mockReturnValueOnce(firstQuestion.promise);
+    await renderCaptureForm();
+    expect(container?.textContent).not.toContain("What caught you first");
+    await act(async () => {
+      setText("A room-temperature clue I do not want to lose");
+    });
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+    });
+
+    expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Finding a question that fits…");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("What caught you first");
+    expect(container?.querySelector(".reflect-question-spinner")).not.toBeNull();
+    expect(container?.querySelector(".reflect-kicker")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.disabled).toBe(true);
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
+
+    await act(async () => {
+      firstQuestion.resolve({ question: "What private weather does this signal name?", source: "model" });
+      await firstQuestion.promise;
+    });
+
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("What caught you first");
+    expect(container?.querySelector(".reflect-question-loading")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.disabled).toBe(false);
+  });
+
+  it("waits for the next adaptive question instead of swapping a fallback under the user", async () => {
+    const secondQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion)
+      .mockResolvedValueOnce({ question: "What private weather does this signal name?", source: "model" })
+      .mockReturnValueOnce(secondQuestion.promise);
+    await renderCaptureForm();
+    await act(async () => {
+      setText("Another clue that should keep its question stable");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+    });
+    await flushReactWork();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
+
+    await act(async () => {
+      setReflectText("It feels like a threshold.");
+    });
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#reflectNext")?.click();
+    });
+
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Finding a question that fits…");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("What does it make you want more of");
+    expect(container?.querySelector(".reflect-question-spinner")).not.toBeNull();
+    expect(container?.querySelector(".reflect-kicker")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.disabled).toBe(true);
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("2");
+
+    await act(async () => {
+      secondQuestion.resolve({ question: "What would protecting that weather ask you to change?", source: "model" });
+      await secondQuestion.promise;
+    });
+
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("What does it make you want more of");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.disabled).toBe(false);
+    await act(async () => {
+      setReflectText("Keep Friday quiet.");
+    });
+    await flushReactWork();
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
+  });
+
+  it("falls back to the local question only when adaptive generation fails", async () => {
+    const failedQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion).mockReturnValueOnce(failedQuestion.promise);
+    await renderCaptureForm();
+    await act(async () => {
+      setText("A fallback should be stable only after failure");
+    });
+
+    await act(async () => {
+      container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+    });
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Finding a question that fits…");
+    expect(container?.querySelector(".reflect-question-spinner")).not.toBeNull();
+    expect(container?.querySelector(".reflect-kicker")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.disabled).toBe(true);
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("What caught you first");
+
+    await act(async () => {
+      failedQuestion.reject(new Error("model unavailable"));
+      await failedQuestion.promise.catch(() => undefined);
+    });
+
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("What caught you first");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.disabled).toBe(false);
+  });
+
   it("blocks blank steps, supports back, and saves after the final guided answer", async () => {
     await renderCaptureForm();
     await act(async () => {
@@ -895,14 +1010,16 @@ describe("CaptureForm Reflect Deeper journey", () => {
 
     expect(createInspiration).not.toHaveBeenCalled();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
 
     const continueButton = container?.querySelector<HTMLButtonElement>("#reflectNext");
     await act(async () => {
       continueButton?.click();
     });
     expect(createInspiration).not.toHaveBeenCalled();
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
     expect(container?.querySelector("#capConfirm")?.textContent).toContain("Add a few words to keep going");
 
     await act(async () => {
@@ -911,7 +1028,8 @@ describe("CaptureForm Reflect Deeper journey", () => {
     await act(async () => {
       continueButton?.click();
     });
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 2 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("2");
 
     await act(async () => {
       setReflectText("A protected weekly making block.");
@@ -919,7 +1037,8 @@ describe("CaptureForm Reflect Deeper journey", () => {
     await act(async () => {
       container?.querySelector<HTMLButtonElement>("#reflectLater")?.click();
     });
-    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container?.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
+    expect(container?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
     expect(container?.querySelector<HTMLTextAreaElement>("#reflectAns")?.value).toBe("It connects to the next project.");
 
     await act(async () => {

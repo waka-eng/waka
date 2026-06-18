@@ -443,6 +443,16 @@ async function flushReactWork(): Promise<void> {
   });
 }
 
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (reason?: unknown) => void } {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 async function waitForTimers(ms = 0): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -551,7 +561,19 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
-  it("renders processed Reflect Deeper analysis in saved inspiration detail after fetch", async () => {
+  it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
+    setApiFixtures();
+    vi.mocked(fetchReflections).mockResolvedValue([]);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.textContent).toContain("Reflect Deeper");
+    expect(detail.textContent).not.toContain("No deeper reflection yet.");
+    expect(detail.querySelector('[aria-label="Reflect Deeper analysis"]')).toBeNull();
+  });
+
+  it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([
       persistedReflection({
@@ -574,20 +596,66 @@ describe("HomePage current home experience", () => {
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(fetchReflections).toHaveBeenCalledWith("insp-1");
     expect(detail.textContent).toContain("Inspiration details");
-    expect(detail.textContent).toContain("Reflect Deeper on this inspiration");
-    expect(detail.textContent).toContain("Processed reflection analysis");
-    expect(detail.textContent).toContain("Synthesized from 2 answered Reflect Deeper notes.");
-    expect(detail.textContent).toContain("What the reflection points toward Mossy light and imperfect ceramic edges.");
-    expect(detail.textContent).toContain("What the reflection points toward The Reflect Deeper transcript should be readable in detail.");
+    expect(detail.textContent).toContain("Reflect Deeper analysis");
+    expect(detail.textContent).not.toContain("2 of 2 answered");
+    expect(detail.textContent).toContain("Read against the original inspiration");
+    expect(detail.textContent).toContain("What this reveals: Mossy light and imperfect ceramic edges.");
+    expect(detail.textContent).toContain("A useful next thread: The Reflect Deeper transcript should be readable in detail.");
     expect(detail.textContent).not.toContain("Q1 What texture did this save point toward?");
     expect(detail.textContent).not.toContain("Answer Mossy light and imperfect ceramic edges.");
+  });
+
+  it("keeps a saved-memory CTA reflection when the initial reflections fetch resolves late", async () => {
+    setApiFixtures();
+    const delayedReflections = deferred<Awaited<ReturnType<typeof fetchReflections>>>();
+    vi.mocked(fetchReflections).mockReturnValueOnce(delayedReflections.promise);
+    vi.mocked(createReflection).mockResolvedValueOnce({
+      reflection: persistedReflection({
+        id: "reflection-memory-race",
+        answer: "Keep the memory drawer answer visible.",
+        createdAt: "2026-05-14T16:33:00.000Z",
+      }),
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const reflectButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Reflect Deeper"),
+    );
+    expect(reflectButton).not.toBeNull();
+
+    await act(async () => {
+      reflectButton!.click();
+    });
+    const answer = detail.querySelector<HTMLTextAreaElement>("textarea.reflect-answer");
+    expect(answer).not.toBeNull();
+    await act(async () => {
+      setInputValue(answer!, "Keep the memory drawer answer visible.");
+    });
+    const save = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "Save",
+    );
+    expect(save).not.toBeNull();
+    await act(async () => {
+      save!.click();
+      await Promise.resolve();
+    });
+    expect(detail.textContent).toContain("A useful next thread: Keep the memory drawer answer visible.");
+
+    await act(async () => {
+      delayedReflections.resolve([]);
+      await delayedReflections.promise;
+    });
+
+    expect(detail.textContent).toContain("A useful next thread: Keep the memory drawer answer visible.");
+    expect(detail.textContent).not.toContain("No deeper reflection yet.");
   });
 
   it("enriches an existing saved inspiration through Reflect Deeper without duplicating the inspiration", async () => {
     setApiFixtures();
     const serverReflection = persistedReflection({
       id: "reflection-existing-new",
-      question: "What does this inspiration want you to notice now?",
+      question: "What does this inspiration ask you to notice next?",
       answer: "It wants the bridge rhythm to become a daily walk.",
       createdAt: "2026-05-14T16:33:00.000Z",
     });
@@ -595,24 +663,37 @@ describe("HomePage current home experience", () => {
 
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
-    const answer = detail.querySelector<HTMLTextAreaElement>(".reflect-answer");
+    const reflectButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Reflect Deeper"),
+    );
+    expect(reflectButton).not.toBeNull();
+
+    await act(async () => {
+      reflectButton!.click();
+    });
+    const answer = detail.querySelector<HTMLTextAreaElement>("textarea.reflect-answer");
     expect(answer).not.toBeNull();
 
     await act(async () => {
       setInputValue(answer!, "It wants the bridge rhythm to become a daily walk.");
     });
+    const save = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "Save",
+    );
+    expect(save).not.toBeNull();
     await act(async () => {
-      detail.querySelector<HTMLButtonElement>(".reflect-next")?.click();
+      save!.click();
+      await Promise.resolve();
     });
     await flushReactWork();
 
     expect(createReflection).toHaveBeenCalledWith("insp-1", {
-      question: "What does this inspiration want you to notice now?",
+      question: "What does this inspiration ask you to notice next?",
       answer: "It wants the bridge rhythm to become a daily walk.",
     });
     expect(createInspiration).not.toHaveBeenCalled();
-    expect(detail.textContent).toContain("Processed reflection analysis");
-    expect(detail.textContent).toContain("What the reflection points toward It wants the bridge rhythm to become a daily walk.");
+    expect(detail.textContent).toContain("Reflect Deeper analysis");
+    expect(detail.textContent).toContain("A useful next thread: It wants the bridge rhythm to become a daily walk.");
   });
 
   it("loads current Home data from signals and top-of-mind endpoints", async () => {
@@ -1153,7 +1234,6 @@ describe("HomePage current home experience", () => {
     expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail?.textContent).toContain("Inspiration details");
-    expect(detail?.textContent).toContain("Reflect Deeper on this inspiration");
     expect(detail?.textContent).not.toContain("Signal packet");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
@@ -2015,8 +2095,7 @@ describe("HomePage current home experience", () => {
     expect(detail?.querySelector(".memory-detail-source-card")?.textContent).toContain("youtube.com/watch");
     expect(detail?.textContent).toContain("Link");
     expect(detail?.textContent).toContain("https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s");
-    expect(detail?.textContent).not.toContain("Highlights");
-    expect(detail?.textContent).toContain("Reflect Deeper on this inspiration");
+    expect(detail?.textContent).toContain("Reflect Deeper");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
     expect(detail?.textContent).not.toContain("does this still fit?");
@@ -2250,7 +2329,8 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(container.querySelector("#reflectQ")?.textContent).toContain("What caught you first?");
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
     expect(container.querySelector("#capBar")).toBeNull();
     expect(container.querySelector("#capSave")).toBeNull();
     expect(container.querySelector("#capReflectiveSave")).toBeNull();
@@ -2266,7 +2346,8 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(container.querySelector("#reflectQ")?.textContent).toContain("What does it ask you to protect?");
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 2 of 3");
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("2");
     expect(container.querySelector("#capBar")).toBeNull();
     expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
@@ -2280,7 +2361,8 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     expect(container.querySelector("#reflectQ")?.textContent).toContain("What is the smallest next move?");
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 3 of 3");
+    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 3 of 3");
+    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
     expect(container.querySelector("#capBar")).toBeNull();
     expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");

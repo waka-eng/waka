@@ -209,6 +209,8 @@ export interface CaptureCellProps {
   onReflectLater?: () => void;
   /** Fires when the user clicks the "Continue" reflect-next button. */
   onReflectNext?: () => void;
+  /** Disables the reflect-next button while a guided question is still loading. */
+  reflectNextDisabled?: boolean;
 
   /**
    * Optional reflection-complete overlay copy. Surfaces inside
@@ -290,6 +292,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       reflectPlaceholder = "Your reflection…",
       onReflectLater,
       onReflectNext,
+      reflectNextDisabled = false,
       reflectComplete,
       reflectCompleteVisible = false,
     },
@@ -476,6 +479,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
               className="reflect-btn reflect-next"
               id="reflectNext"
               onClick={onReflectNext}
+              disabled={reflectNextDisabled}
             >
               {continueLabel}
             </button>

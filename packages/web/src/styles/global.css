@@ -7957,15 +7957,43 @@ body.dragging .drop-overlay {
   color: var(--muted);
 }
 .reflect-progress {
+  --reflect-progress: 0%;
   display: block;
-  margin-top: 10px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
+  margin-top: 12px;
+}
+.reflect-progress-track {
+  display: block;
+  width: min(156px, 100%);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+.reflect-progress-fill {
+  display: block;
+  width: var(--reflect-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--ink) 42%, transparent);
+  transition: width 180ms ease;
+}
+.reflect-question-loading {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+}
+.reflect-question-spinner {
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--muted) 28%, transparent);
+  border-top-color: color-mix(in srgb, var(--ink) 54%, transparent);
+  border-radius: 999px;
+  animation: reflectQuestionSpin 900ms linear infinite;
+}
+@keyframes reflectQuestionSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 @keyframes qFade {
   from {
@@ -8033,6 +8061,10 @@ body.dragging .drop-overlay {
 }
 .reflect-next:hover {
   opacity: 0.85;
+}
+.reflect-next:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 
 .reflect-complete {

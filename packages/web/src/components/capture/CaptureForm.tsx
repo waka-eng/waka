@@ -422,9 +422,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [reflectionAnswer, setReflectionAnswer] = useState("");
     const [reflectionStepIndex, setReflectionStepIndex] = useState(0);
     const [guidedReflectionAnswers, setGuidedReflectionAnswers] = useState<string[]>([]);
-    const [guidedReflectionQuestions, setGuidedReflectionQuestions] = useState<string[]>(() => [
-      t(locale, GUIDED_REFLECTION_FALLBACK_QUESTION_KEYS[0]),
-    ]);
+    const [guidedReflectionQuestions, setGuidedReflectionQuestions] = useState<string[]>([]);
     const [postSaveReflectionTargetId, setPostSaveReflectionTargetId] = useState<string | null>(null);
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
@@ -445,6 +443,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const reflectGlowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const draftWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const guidedReflectionRequestSeqRef = useRef(0);
     const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -980,17 +979,21 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const firstFallback = fallbackGuidedQuestion(0);
       setPostSaveReflectionTargetId(null);
       setGuidedReflectionAnswers([]);
-      setGuidedReflectionQuestions([firstFallback]);
+      setGuidedReflectionQuestions([]);
       setReflectionStepIndex(0);
       setReflectionAnswer("");
       setActiveView("reflect");
       setReflectGlow(false);
       onToggleFocus?.(true);
+      const requestId = guidedReflectionRequestSeqRef.current + 1;
+      guidedReflectionRequestSeqRef.current = requestId;
       void requestGuidedQuestion([], []).then(
         (question) => {
+          if (guidedReflectionRequestSeqRef.current !== requestId) return;
           setGuidedReflectionQuestions([question]);
         },
         () => {
+          if (guidedReflectionRequestSeqRef.current !== requestId) return;
           setGuidedReflectionQuestions([firstFallback]);
         },
       );
@@ -1031,6 +1034,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const handleGuidedReflectionNext = useCallback((): void => {
       if (saving) return;
       const answer = reflectionAnswer.trim();
+      if (activeView === "reflect" && !postSaveReflectionTargetId && !guidedReflectionQuestions[reflectionStepIndex]) {
+        return;
+      }
       if (answer.length === 0) {
         flashConfirm(t(locale, "addThoughtBeforeReflectiveSave"), 2600);
         return;
@@ -1048,13 +1054,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
       const nextStepIndex = reflectionStepIndex + 1;
       const nextFallback = fallbackGuidedQuestion(nextStepIndex);
-      const questionsSnapshot = [...guidedReflectionQuestions];
-      if (!questionsSnapshot[nextStepIndex]) questionsSnapshot[nextStepIndex] = nextFallback;
+      const questionsSnapshot = guidedReflectionQuestions.slice(0, nextStepIndex);
       setGuidedReflectionQuestions(questionsSnapshot);
       setReflectionStepIndex(nextStepIndex);
       setReflectionAnswer(nextAnswers[nextStepIndex] ?? "");
+      const requestId = guidedReflectionRequestSeqRef.current + 1;
+      guidedReflectionRequestSeqRef.current = requestId;
       void requestGuidedQuestion(nextAnswers, questionsSnapshot).then(
         (question) => {
+          if (guidedReflectionRequestSeqRef.current !== requestId) return;
           setGuidedReflectionQuestions((current) => {
             const updated = [...current];
             updated[nextStepIndex] = question;
@@ -1062,6 +1070,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           });
         },
         () => {
+          if (guidedReflectionRequestSeqRef.current !== requestId) return;
           setGuidedReflectionQuestions((current) => {
             const updated = [...current];
             updated[nextStepIndex] = nextFallback;
@@ -1073,10 +1082,12 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus();
       });
     }, [
+      activeView,
       buildGuidedReflectionPayload,
       fallbackGuidedQuestion,
       flashConfirm,
       guidedReflectionAnswers,
+      postSaveReflectionTargetId,
       guidedReflectionQuestions,
       locale,
       reflectionAnswer,
@@ -1164,11 +1175,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       !saving && (note.trim().length > 0 || pending.length > 0);
     const guidedReflectionInProgress = activeView === "reflect" && !postSaveReflectionTargetId;
     const reflectStepCount = GUIDED_REFLECTION_MAX_STEPS;
-    const reflectQuestion = guidedReflectionQuestions[reflectionStepIndex] ?? fallbackGuidedQuestion(reflectionStepIndex);
+    const reflectQuestion = postSaveReflectionTargetId
+      ? t(locale, "reflectionQuestion")
+      : guidedReflectionQuestions[reflectionStepIndex];
+    const guidedReflectionQuestionLoading = guidedReflectionInProgress && !reflectQuestion;
     const reflectProgress = formatMessage(locale, "guidedReflectionProgress", {
       current: reflectionStepIndex + 1,
       total: reflectStepCount,
     });
+    const reflectProgressPercent = Math.round(((reflectionStepIndex + 1) / reflectStepCount) * 100);
 
     /* --------------------------------------------------------
      * Render
@@ -1258,15 +1273,39 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }
         reflectQuestion={
           <>
-            <span className="reflect-kicker">{guidedReflectionInProgress ? t(locale, "reflectDeeperInProgress") : t(locale, "processThisInspiration")}</span>
-            {reflectQuestion}
-            <span className="reflect-progress">{reflectProgress}</span>
+            {guidedReflectionQuestionLoading ? (
+              <span className="reflect-question-loading" role="status" aria-live="polite">
+                <span className="reflect-question-spinner" aria-hidden="true" />
+                <span className="sr-only">{t(locale, "guidedReflectionLoading")}</span>
+              </span>
+            ) : (
+              <>
+                <span className="reflect-kicker">{guidedReflectionInProgress ? t(locale, "reflectDeeperInProgress") : t(locale, "processThisInspiration")}</span>
+                {reflectQuestion}
+              </>
+            )}
+            {guidedReflectionInProgress ? (
+              <span
+                className="reflect-progress"
+                role="progressbar"
+                aria-label={reflectProgress}
+                aria-valuemin={0}
+                aria-valuemax={reflectStepCount}
+                aria-valuenow={reflectionStepIndex + 1}
+                style={{ ["--reflect-progress" as string]: `${reflectProgressPercent}%` }}
+              >
+                <span className="reflect-progress-track" aria-hidden="true">
+                  <span className="reflect-progress-fill" />
+                </span>
+              </span>
+            ) : null}
           </>
         }
         reflectValue={reflectionAnswer}
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
         reflectPlaceholder={t(locale, "reflectionPlaceholder")}
+        reflectNextDisabled={guidedReflectionQuestionLoading}
         onReflectLater={() => {
           if (postSaveReflectionTargetId) {
             setActiveView("note");

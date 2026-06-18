@@ -4,6 +4,7 @@ import {
   buildWowGenerateContentUrl,
   buildWowJudgmentRequest,
   buildWowRepairJudgmentRequest,
+  GeminiWowJudgeClient,
   parseWowJudgmentFromResponse,
   type WowJudgeInput,
 } from "./wow-judge.js";
@@ -44,12 +45,12 @@ const sampleInput: WowJudgeInput = {
   ],
 };
 
-function geminiEnvelope(text: string) {
+function geminiEnvelope(text: string, finishReason = "STOP") {
   return {
     candidates: [
       {
         content: { parts: [{ text }] },
-        finishReason: "STOP",
+        finishReason,
       },
     ],
   };
@@ -195,6 +196,8 @@ describe("wow judge concrete contract", () => {
     for (const beliefStatement of [
       "letting go is not weakness but the prerequisite for new growth",
       "build the future through the quiet architecture of daily choices",
+      "city repair starts through small visible acts of care",
+      "neighbors make civic repair feel possible when care is visible",
     ]) {
       const judgment = parseWowJudgmentFromResponse(
         geminiEnvelope(
@@ -253,6 +256,88 @@ describe("wow judge concrete contract", () => {
       isWowMoment: false,
       reason: "invalid_judge_json",
       parseFailureStage: "initial_non_json",
+    });
+  });
+
+  it("finalizes Korean MAX_TOKENS true prefixes without falling through to repair_non_json", async () => {
+    const koreanInput: WowJudgeInput = {
+      ...sampleInput,
+      locale: "ko-KR",
+      trigger: {
+        ...sampleInput.trigger,
+        text: "인연의 자연스러운 흐름 안에서 비움과 채움이 함께 움직이는 느낌이 든다.",
+      },
+      candidates: [
+        {
+          ...sampleInput.candidates[0]!,
+          text: "무언가를 억지로 붙잡지 않을 때 새로운 만남과 가능성이 자연스럽게 들어온다.",
+        },
+      ],
+    };
+    const truncatedKoreanTruePrefix = `{"isWowMoment":true,"kind":"bridge","title":"비움과 채움의 자연스러운 리듬","why":"두 신호는 붙잡기보다 흐름을 신뢰할 때 새로운 가능성이 들어오는 감각을 함께 보여줍니다.","beliefStatement":"비움과 채움이 자연스럽게 이어질 수 있습니다","reflectionQuestion":"지금 무엇을 조금 덜 붙잡아도 괜찮을까요?","reflectionGuide":"여기서 시작해 보세요\\n이 신호들이 말하는 흐름의 감각을 천천히 살펴보세요.`;
+    const responses = [
+      geminiEnvelope(truncatedKoreanTruePrefix, "MAX_TOKENS"),
+      geminiEnvelope("not json", "MAX_TOKENS"),
+    ];
+    const client = new GeminiWowJudgeClient({
+      apiKey: "test-key",
+      fetchFn: async () =>
+        new Response(JSON.stringify(responses.shift()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    await expect(client.judgeWowMoment(koreanInput)).resolves.toMatchObject({
+      isWowMoment: true,
+      kind: "bridge",
+      title: "비움과 채움의 자연스러운 리듬",
+      beliefStatement: "비움과 채움이 자연스럽게 이어질 수 있습니다",
+      relatedInspirationIds: [triggerId, candidateId],
+      sourceEvidence: [
+        { inspirationId: triggerId },
+        { inspirationId: candidateId },
+      ],
+    });
+    expect(responses).toHaveLength(1);
+  });
+
+  it("turns unrepaired hard belief wording into a non-defect false reason", async () => {
+    const hardBeliefPayload = JSON.stringify({
+      isWowMoment: true,
+      kind: "bridge",
+      title: "Civic repair through visible care",
+      why: "The signals connect civic maintenance with neighbors making repair feel possible.",
+      beliefStatement: "I need civic repair to become visible neighbor care",
+      relatedInspirationIds: [triggerId, candidateId],
+      sourceEvidence: [
+        {
+          inspirationId: triggerId,
+          role: "The civic pull",
+          reason: "Names the desire for local repair to feel tangible.",
+        },
+        {
+          inspirationId: candidateId,
+          role: "The visible practice",
+          reason: "Connects public maintenance with neighbors seeing possibility.",
+        },
+      ],
+    });
+    const responses = [geminiEnvelope(hardBeliefPayload), geminiEnvelope(hardBeliefPayload)];
+    const client = new GeminiWowJudgeClient({
+      apiKey: "test-key",
+      fetchFn: async () =>
+        new Response(JSON.stringify(responses.shift()), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    await expect(client.judgeWowMoment(sampleInput)).resolves.toEqual({
+      isWowMoment: false,
+      reason: "unclear_pattern",
+      debugSummary:
+        "Gemini returned an over-presumptive sticky-note belief statement.",
     });
   });
 });

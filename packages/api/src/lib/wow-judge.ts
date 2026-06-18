@@ -41,9 +41,9 @@ const MAX_OUTPUT_TOKENS = 1536;
 const MAX_REPAIR_OUTPUT_TOKENS = 512;
 const MIN_WOW_MOMENT_SOURCE_LINKS = 2;
 const ENGLISH_POST_IT_THOUGHT_PATTERN =
-  /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(people|peers|rooms?|places?|city|cities|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b)(?=.*\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b).{3,120}$/i;
+  /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(people|peers|rooms?|places?|city|cities|civic|public|streets?|neighbors?|neighborhoods?|community|communities|commons|repair|maintenance|care|trust|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b)(?=.*\b(before|after|without|instead|than|where|when|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity|through|with|for|from|into|toward|between|possible|visible|repairable|starts?|feels?)\b).{3,120}$/i;
 const ENGLISH_SOFT_APHORISTIC_THOUGHT_PATTERN =
-  /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(before|after|without|instead|than|where|who|because|until|against|not|but|through|for|from|into|with)\b)(?=.*\b(growth|future|choices?|practice|architecture|weakness|strength|daily|quiet|build|building|letting go|release|change|possibility|ambition)\b).{3,120}$/i;
+  /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(before|after|without|instead|than|where|when|who|because|until|against|not|but|through|for|from|into|with|toward|between)\b)(?=.*\b(growth|future|choices?|practice|architecture|weakness|strength|daily|quiet|build|building|letting go|release|change|possibility|ambition|repair|civic|public|commons|maintenance|care)\b).{3,120}$/i;
 const KOREAN_SOFT_BELIEF_PATTERN =
   /(수\s*있|듯(?:합니|해|하)|것\s*같|지도\s*모|여길\s*수|보입니|보여요)/;
 const KOREAN_HARD_BELIEF_PATTERN =
@@ -1150,10 +1150,18 @@ function finalizeTruncatedTrueJudgmentPrefix(
     text,
     "relatedInspirationIds",
   );
-  const relatedInspirationIds = explicitRelatedIds ?? allowedIds;
-  if (relatedInspirationIds.length === 0) return null;
+  const relatedInspirationIds = (explicitRelatedIds ?? allowedIds).slice(
+    0,
+    MAX_WOW_MOMENT_SOURCE_LINKS,
+  );
+  if (!hasEnoughSourceLinks(relatedInspirationIds)) return null;
+  if (relatedInspirationIds[0] !== input.trigger.id) return null;
   if (relatedInspirationIds.some((id) => !allowedIdSet.has(id))) return null;
 
+  const sourceEvidence = normalizeWowSourceEvidence(
+    undefined,
+    relatedInspirationIds,
+  );
   const candidate = {
     isWowMoment: true,
     kind: kind as WowKind,
@@ -1172,6 +1180,7 @@ function finalizeTruncatedTrueJudgmentPrefix(
       ? { reflectionGuide: sanitizeReflectionGuideText(reflectionGuide) }
       : {}),
     relatedInspirationIds,
+    sourceEvidence,
   };
 
   const validated = trueJudgmentSchema.safeParse(candidate);
@@ -1254,6 +1263,18 @@ function summarizeSchemaIssues(error: z.ZodError): string {
     })
     .join("; ");
   return sanitizeDiagnosticText(issueSummary, MAX_SCHEMA_ISSUE_SUMMARY_CHARS);
+}
+
+function isOnlyBeliefStatementPhrasingIssue(error: z.ZodError): boolean {
+  return (
+    error.issues.length > 0 &&
+    error.issues.every(
+      (issue) =>
+        issue.path.join(".") === "beliefStatement" &&
+        issue.message ===
+          "beliefStatement must use soft, non-presumptive phrasing",
+    )
+  );
 }
 
 interface WowJudgmentParseResult {
@@ -1370,6 +1391,16 @@ function parseWowJudgmentDetailed(
           ? (enrichedFalseJudgmentSchema.safeParse(parsed).error ??
             judgment.error)
           : judgment.error;
+    if (phase === "repair" && isOnlyBeliefStatementPhrasingIssue(schemaError)) {
+      return {
+        judgment: defaultFalseJudgment(
+          "unclear_pattern",
+          "Gemini returned an over-presumptive sticky-note belief statement.",
+        ),
+        rawText: text,
+        repairable: false,
+      };
+    }
     return {
       judgment: defaultFalseJudgment(
         "invalid_judge_json",

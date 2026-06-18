@@ -2,7 +2,7 @@ import type { ApiReflection } from "./api";
 import { formatMessage, t, type SupportedLocale } from "./locales";
 
 const TITLE_MAX_LENGTH = 132;
-const FIRST_SENTENCE_MAX_LENGTH = 160;
+const TITLE_EXCERPT_LENGTH = 96;
 const ANALYSIS_EXCERPT_MAX_LENGTH = 150;
 
 export function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
@@ -13,24 +13,35 @@ export function firstNonEmpty(...values: Array<string | null | undefined>): stri
   return null;
 }
 
-export function deriveInspirationTitle(text: string, locale: SupportedLocale): string {
-  const normalized = text.trim().replace(/\s+/g, " ");
+export function normalizeDetailText(text: string | null | undefined): string {
+  return (text ?? "").trim().replace(/\s+/g, " ");
+}
+
+export function deriveInspirationTitle(text: string | null | undefined, locale: SupportedLocale): string {
+  const normalized = normalizeDetailText(text);
   if (!normalized) return t(locale, "detailSavedInspiration");
 
-  const sentenceEnd = normalized.search(/[.!?。！？](?:\s|$)/u);
-  const candidate = sentenceEnd >= 0 && sentenceEnd + 1 <= FIRST_SENTENCE_MAX_LENGTH
-    ? normalized.slice(0, sentenceEnd + 1)
+  const sentenceMatch = normalized.match(/^(.+?[.!?。！？])(?:\s|$)/u);
+  const firstSentence = sentenceMatch?.[1]?.trim() ?? "";
+  const candidate = firstSentence.length > 0 && firstSentence.length <= TITLE_MAX_LENGTH
+    ? firstSentence
     : normalized;
+  const maxLength = candidate === normalized ? TITLE_EXCERPT_LENGTH : TITLE_MAX_LENGTH;
 
-  return candidate.length > TITLE_MAX_LENGTH
-    ? `${candidate.slice(0, TITLE_MAX_LENGTH - 1).trimEnd()}…`
-    : candidate;
+  if (candidate.length <= maxLength) return candidate;
+  return `${candidate.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+export const deriveTitleFromText = deriveInspirationTitle;
+
+function answerText(reflection: ApiReflection): string | null {
+  if (reflection.skipped) return null;
+  const answer = reflection.answer?.trim();
+  return answer && answer.length > 0 ? answer : null;
 }
 
 export function answeredReflections(reflections: ApiReflection[]): ApiReflection[] {
-  return reflections.filter(
-    (reflection) => !reflection.skipped && typeof reflection.answer === "string" && reflection.answer.trim().length > 0,
-  );
+  return reflections.filter((reflection) => answerText(reflection) !== null);
 }
 
 function normalizeAnswer(answer: string): string {
@@ -40,12 +51,12 @@ function normalizeAnswer(answer: string): string {
     .trim();
 }
 
-function excerptInsight(answer: string): string {
+function excerptInsight(answer: string, maxLength = ANALYSIS_EXCERPT_MAX_LENGTH): string {
   const normalized = normalizeAnswer(answer);
   const sentenceEnd = normalized.search(/[.!?。！？](?:\s|$)/u);
   const firstSentence = sentenceEnd >= 0 ? normalized.slice(0, sentenceEnd + 1) : normalized;
-  return firstSentence.length > ANALYSIS_EXCERPT_MAX_LENGTH
-    ? `${firstSentence.slice(0, ANALYSIS_EXCERPT_MAX_LENGTH - 1).trimEnd()}…`
+  return firstSentence.length > maxLength
+    ? `${firstSentence.slice(0, maxLength - 1).trimEnd()}…`
     : firstSentence;
 }
 
@@ -53,11 +64,23 @@ export interface ReflectionAnalysis {
   title: string;
   summary: string;
   insights: string[];
+  overview: string;
+  bullets: string[];
   answeredCount: number;
   totalCount: number;
 }
 
-export function buildReflectionAnalysis(reflections: ApiReflection[], locale: SupportedLocale): ReflectionAnalysis | null {
+export function reflectionDefaultQuestion(locale: SupportedLocale): string {
+  return t(locale, "reflectionDetailDefaultQuestion");
+}
+
+export function buildReflectionAnalysis(
+  reflections: ApiReflection[],
+  titleOrLocale: string | SupportedLocale,
+  maybeLocale?: SupportedLocale,
+): ReflectionAnalysis | null {
+  const locale = maybeLocale ?? (titleOrLocale as SupportedLocale);
+  const title = maybeLocale ? titleOrLocale : null;
   const answered = answeredReflections(reflections);
   if (answered.length === 0) return null;
 
@@ -68,6 +91,17 @@ export function buildReflectionAnalysis(reflections: ApiReflection[], locale: Su
 
   if (insights.length === 0) return null;
 
+  const first = insights[0];
+  const last = insights[insights.length - 1];
+  const middle = insights.length > 2 ? insights[Math.floor(insights.length / 2)] : null;
+  const bullets = [
+    formatMessage(locale, "reflectDeeperAnalysisReveals", { insight: first }),
+    middle && middle !== first && middle !== last
+      ? formatMessage(locale, "reflectDeeperAnalysisPattern", { insight: middle })
+      : null,
+    formatMessage(locale, "reflectDeeperAnalysisNextThread", { insight: last }),
+  ].filter((bullet): bullet is string => Boolean(bullet));
+
   return {
     title: t(locale, "reflectionAnalysisTitle"),
     summary: formatMessage(locale, "reflectionAnalysisSummary", {
@@ -75,11 +109,12 @@ export function buildReflectionAnalysis(reflections: ApiReflection[], locale: Su
       total: reflections.length,
     }),
     insights,
+    overview: formatMessage(locale, "reflectDeeperAnalysisOverview", {
+      title: title ?? t(locale, "detailSavedInspiration"),
+      count: answered.length,
+    }),
+    bullets,
     answeredCount: answered.length,
     totalCount: reflections.length,
   };
-}
-
-export function reflectionDefaultQuestion(locale: SupportedLocale): string {
-  return t(locale, "reflectionDetailDefaultQuestion");
 }

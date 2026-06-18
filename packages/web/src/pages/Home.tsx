@@ -44,11 +44,11 @@ import type {
   PendingInspiration,
   PersistedResult,
 } from "../components/capture";
+import type { PendingReflection } from "../components/history/ReflectionForm";
 import {
   InspirationDetail,
   type InspirationDetailData,
 } from "../components/history";
-import type { PendingReflection } from "../components/history/ReflectionForm";
 import {
   SavedInspirationDetail,
 } from "../components/home-surfaces";
@@ -56,7 +56,6 @@ import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout
 import {
   type ApiAttachment,
   type ApiAmbitionDimension,
-  type CreateReflectionResponse,
   type ApiFeedbackValue,
   type ApiError,
   type ApiInspiration,
@@ -69,6 +68,7 @@ import {
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
   type ClusterKind,
+  type CreateReflectionResponse,
   createFeedback,
   createInspirationSpark,
   deleteInspirationSpark,
@@ -91,6 +91,16 @@ import {
 } from "../lib/locales";
 
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
+
+function mergeReflectionsPreservingLocal(
+  incoming: ApiReflection[],
+  local: ApiReflection[],
+): ApiReflection[] {
+  const merged = new Map<string, ApiReflection>();
+  for (const reflection of incoming) merged.set(reflection.id, reflection);
+  for (const reflection of local) merged.set(reflection.id, reflection);
+  return Array.from(merged.values());
+}
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -1534,6 +1544,7 @@ export function HomePage(): JSX.Element {
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [savedSignalReflections, setSavedSignalReflections] = useState<ApiReflection[]>([]);
+  const [savedSignalReflectionComposerOpen, setSavedSignalReflectionComposerOpen] = useState(false);
   const [savedSignalReflectionsLoading, setSavedSignalReflectionsLoading] = useState(false);
   const [savedSignalReflectionsError, setSavedSignalReflectionsError] = useState<string | null>(null);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
@@ -2411,6 +2422,7 @@ export function HomePage(): JSX.Element {
       setSavedSignalReflections([]);
       setSavedSignalReflectionsError(null);
       setSavedSignalReflectionsLoading(false);
+      setSavedSignalReflectionComposerOpen(false);
       return;
     }
 
@@ -2435,7 +2447,7 @@ export function HomePage(): JSX.Element {
       try {
         const reflections = await fetchReflections(selectedSavedSignalId);
         if (cancelled) return;
-        setSavedSignalReflections(reflections);
+        setSavedSignalReflections((prev) => mergeReflectionsPreservingLocal(reflections, prev));
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : t(locale, "reflectionLoadError");
@@ -2450,6 +2462,37 @@ export function HomePage(): JSX.Element {
       cancelled = true;
     };
   }, [homeMode, locale, selectedSavedSignalId]);
+
+  const handleSavedSignalReflectionOptimisticAdd = useCallback((pending: PendingReflection) => {
+    setSavedSignalReflections((prev) => [
+      ...prev.filter((reflection) => reflection.id !== pending.tempId),
+      {
+        id: pending.tempId,
+        inspirationId: pending.inspirationId,
+        userId: user?.id ?? "",
+        question: pending.question,
+        answer: pending.answer,
+        skipped: pending.skipped,
+        createdAt: pending.createdAt,
+      },
+    ]);
+    setSavedSignalReflectionsError(null);
+  }, [user?.id]);
+
+  const handleSavedSignalReflectionPersisted = useCallback((tempId: string, server: CreateReflectionResponse) => {
+    setSavedSignalReflections((prev) => {
+      const replaced = prev.some((reflection) => reflection.id === tempId);
+      return replaced
+        ? prev.map((reflection) => (reflection.id === tempId ? server.reflection : reflection))
+        : mergeReflectionsPreservingLocal([server.reflection], prev);
+    });
+    setSavedSignalReflectionComposerOpen(false);
+  }, []);
+
+  const handleSavedSignalReflectionPersistError = useCallback((tempId: string, error: ApiError) => {
+    setSavedSignalReflections((prev) => prev.filter((reflection) => reflection.id !== tempId));
+    setSavedSignalReflectionsError(error.message);
+  }, []);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -3140,31 +3183,6 @@ export function HomePage(): JSX.Element {
     recordRevisit(signal.id, "detail_opened");
   };
 
-  const handleSavedReflectionOptimisticAdd = useCallback((pending: PendingReflection): void => {
-    const optimistic: ApiReflection = {
-      id: pending.tempId,
-      inspirationId: pending.inspirationId,
-      userId: user.id,
-      question: pending.question,
-      answer: pending.answer,
-      skipped: pending.skipped,
-      createdAt: pending.createdAt,
-    };
-    setSavedSignalReflectionsError(null);
-    setSavedSignalReflections((current) => [...current, optimistic]);
-  }, [user.id]);
-
-  const handleSavedReflectionPersisted = useCallback((tempId: string, server: CreateReflectionResponse): void => {
-    setSavedSignalReflections((current) => current.map((reflection) =>
-      reflection.id === tempId ? server.reflection : reflection,
-    ));
-  }, []);
-
-  const handleSavedReflectionPersistError = useCallback((tempId: string, error: ApiError): void => {
-    setSavedSignalReflections((current) => current.filter((reflection) => reflection.id !== tempId));
-    setSavedSignalReflectionsError(error.message);
-  }, []);
-
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
     const sourceLabel = signalSourceLabel(signal);
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
@@ -3295,20 +3313,24 @@ export function HomePage(): JSX.Element {
         })}
         selectionPopover={renderMemorySelectionPopover(selectedSavedSignal.id)}
         existingHighlightPopover={renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
-        onReflectionOptimisticAdd={handleSavedReflectionOptimisticAdd}
-        onReflectionPersisted={handleSavedReflectionPersisted}
-        onReflectionPersistError={handleSavedReflectionPersistError}
         onBack={() => {
           setSelectedSavedSignalId(null);
           setSelectedSupportingSignalFallback(null);
           setSavedSignalDetail(null);
           setSavedSignalReflections([]);
           setSavedSignalReflectionsError(null);
+          setSavedSignalReflectionComposerOpen(false);
         }}
         onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
+        reflectionComposerOpen={savedSignalReflectionComposerOpen}
+        onToggleReflectionComposer={() => setSavedSignalReflectionComposerOpen((open) => !open)}
+        onCloseReflectionComposer={() => setSavedSignalReflectionComposerOpen(false)}
+        onReflectionOptimisticAdd={handleSavedSignalReflectionOptimisticAdd}
+        onReflectionPersisted={handleSavedSignalReflectionPersisted}
+        onReflectionPersistError={handleSavedSignalReflectionPersistError}
       />
     );
   };

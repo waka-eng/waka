@@ -18,16 +18,14 @@ import {
   deleteInspiration,
   fetchReflections,
   updateInspiration,
-  type CreateReflectionResponse,
   type ApiAttachment,
   type ApiInspiration,
   type ApiReflection,
+  type CreateReflectionResponse,
 } from "../../lib/api";
 import {
   buildReflectionAnalysis,
-  deriveInspirationTitle,
-  firstNonEmpty,
-  reflectionDefaultQuestion,
+  deriveTitleFromText,
 } from "../../lib/inspiration-detail";
 import { DEFAULT_LOCALE, t, type SupportedLocale } from "../../lib/locales";
 import { ReflectionForm, type PendingReflection } from "./ReflectionForm";
@@ -86,6 +84,16 @@ export interface InspirationDetailProps {
   onNextInspiration?: () => void;
 }
 
+function mergeReflectionsPreservingLocal(
+  incoming: ApiReflection[],
+  local: ApiReflection[],
+): ApiReflection[] {
+  const merged = new Map<string, ApiReflection>();
+  for (const reflection of incoming) merged.set(reflection.id, reflection);
+  for (const reflection of local) merged.set(reflection.id, reflection);
+  return Array.from(merged.values());
+}
+
 /* ============================================================
  * Component
  * ============================================================ */
@@ -119,8 +127,16 @@ function attachmentMeta(attachment: ApiAttachment, locale: SupportedLocale): str
   return [attachment.contentType, sizeLabel, source].filter(Boolean).join(" · ") || t(locale, "attachmentSourceUserUpload");
 }
 
+function firstNonEmpty(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
 function detailTitle(inspiration: InspirationDetailData, locale: SupportedLocale): string {
-  return deriveInspirationTitle(inspiration.text, locale);
+  return deriveTitleFromText(inspiration.text, locale);
 }
 
 function detailDescription(inspiration: InspirationDetailData): string | null {
@@ -146,6 +162,33 @@ function previewImageUrl(attachment: ApiAttachment | null): string | null {
   if (attachment.type === "link") return attachment.enrichment?.link?.previewImageUrl ?? null;
   if (attachment.type === "image") return attachment.url ?? null;
   return null;
+}
+
+function linkAttachments(inspiration: InspirationDetailData): Array<{ id: string; href: string; label: string }> {
+  const fromAttachments = (inspiration.attachments ?? [])
+    .filter((attachment) => attachment.type === "link")
+    .map((attachment) => {
+      const href = firstNonEmpty(
+        attachment.enrichment?.link?.finalUrl,
+        attachment.enrichment?.link?.originalUrl,
+        attachment.url,
+      );
+      if (!href) return null;
+      return {
+        id: attachment.id,
+        href,
+        label: firstNonEmpty(attachment.enrichment?.link?.title, attachment.name, href) ?? href,
+      };
+    })
+    .filter((link): link is { id: string; href: string; label: string } => link !== null);
+
+  if (fromAttachments.length > 0) return fromAttachments;
+  return (inspiration.links ?? [])
+    .map((link, index) => {
+      const href = link.trim();
+      return href ? { id: `link-${index}`, href, label: href } : null;
+    })
+    .filter((link): link is { id: string; href: string; label: string } => link !== null);
 }
 
 export function InspirationDetail({
@@ -191,7 +234,6 @@ export function InspirationDetail({
     | { status: "error"; reflections: ApiReflection[]; message: string }
   >({ status: "loading", reflections: [] });
   const [reflectionComposerOpen, setReflectionComposerOpen] = useState(false);
-  const [reflectionComposerError, setReflectionComposerError] = useState<string | null>(null);
   useEffect(() => {
     // Reset the delete affordance whenever the user navigates to a
     // different inspiration so a half-confirmed delete on row A doesn't
@@ -200,7 +242,6 @@ export function InspirationDetail({
     setDetailsText(inspiration.text);
     setSaveState({ status: "idle" });
     setReflectionComposerOpen(false);
-    setReflectionComposerError(null);
   }, [inspiration.id, inspiration.text]);
 
   useEffect(() => {
@@ -209,7 +250,12 @@ export function InspirationDetail({
     void (async () => {
       try {
         const reflections = await fetchReflections(inspiration.id);
-        if (!cancelled) setReflectionState({ status: "loaded", reflections });
+        if (!cancelled) {
+          setReflectionState((prev) => ({
+            status: "loaded",
+            reflections: mergeReflectionsPreservingLocal(reflections, prev.reflections),
+          }));
+        }
       } catch (caught) {
         if (cancelled) return;
         const message =
@@ -228,24 +274,14 @@ export function InspirationDetail({
 
   const detailsChanged = detailsText !== inspiration.text;
   const detailsEmpty = detailsText.trim().length === 0;
-  const sourceLinks = useMemo(() => {
-    const links = [
-      ...(inspiration.attachments ?? [])
-        .filter((attachment) => attachment.type === "link")
-        .map((attachment) => attachment.enrichment?.link?.finalUrl ?? attachment.url),
-      ...(inspiration.links ?? []),
-    ]
-      .map((link) => link?.trim())
-      .filter((link): link is string => Boolean(link));
-    return Array.from(new Set(links));
-  }, [inspiration.attachments, inspiration.links]);
+  const sourceLinks = useMemo(() => linkAttachments(inspiration), [inspiration]);
   const heroTitle = useMemo(() => detailTitle(inspiration, locale), [inspiration, locale]);
   const heroDescription = useMemo(() => detailDescription(inspiration), [inspiration]);
   const featuredAttachment = useMemo(() => primaryAttachment(inspiration), [inspiration]);
   const featuredPreview = previewImageUrl(featuredAttachment);
-  const reflectionAnalysis = useMemo(
-    () => buildReflectionAnalysis(reflectionState.reflections, locale),
-    [locale, reflectionState.reflections],
+  const analysis = useMemo(
+    () => buildReflectionAnalysis(reflectionState.reflections, heroTitle, locale),
+    [heroTitle, locale, reflectionState.reflections],
   );
 
   const handleSaveDetails = useCallback(() => {
@@ -270,6 +306,47 @@ export function InspirationDetail({
       }
     })();
   }, [detailsText, inspiration.id, locale, onInspirationUpdated, saveState.status]);
+
+  const appendReflection = useCallback((reflection: ApiReflection) => {
+    setReflectionState((prev) => {
+      const reflections = [...prev.reflections.filter((item) => item.id !== reflection.id), reflection];
+      if (prev.status === "error") return { status: "error", reflections, message: prev.message };
+      return { status: "loaded", reflections };
+    });
+  }, []);
+
+  const handleReflectionOptimisticAdd = useCallback((pending: PendingReflection) => {
+    appendReflection({
+      id: pending.tempId,
+      inspirationId: pending.inspirationId,
+      userId: "",
+      question: pending.question,
+      answer: pending.answer,
+      skipped: pending.skipped,
+      createdAt: pending.createdAt,
+    });
+  }, [appendReflection]);
+
+  const handleReflectionPersisted = useCallback((tempId: string, server: CreateReflectionResponse) => {
+    setReflectionState((prev) => {
+      const replaced = prev.reflections.some((reflection) => reflection.id === tempId);
+      const reflections = replaced
+        ? prev.reflections.map((reflection) =>
+          reflection.id === tempId ? server.reflection : reflection,
+        )
+        : mergeReflectionsPreservingLocal([server.reflection], prev.reflections);
+      return { status: "loaded", reflections };
+    });
+    setReflectionComposerOpen(false);
+  }, []);
+
+  const handleReflectionPersistError = useCallback((tempId: string, error: ApiError) => {
+    setReflectionState((prev) => ({
+      status: "error",
+      reflections: prev.reflections.filter((reflection) => reflection.id !== tempId),
+      message: error.message,
+    }));
+  }, []);
 
   // ----- Delete handlers ---------------------------------------------------
 
@@ -305,43 +382,6 @@ export function InspirationDetail({
       }
     })();
   }, [inspiration.id, locale, onDeleted]);
-
-  const addPendingReflection = useCallback((pending: PendingReflection) => {
-    const optimistic: ApiReflection = {
-      id: pending.tempId,
-      inspirationId: pending.inspirationId,
-      userId: "",
-      question: pending.question,
-      answer: pending.answer,
-      skipped: pending.skipped,
-      createdAt: pending.createdAt,
-    };
-    setReflectionComposerError(null);
-    setReflectionState((prev) => ({
-      status: "loaded",
-      reflections: [...prev.reflections, optimistic],
-    }));
-  }, []);
-
-  const replacePendingReflection = useCallback((tempId: string, server: CreateReflectionResponse) => {
-    setReflectionState((prev) => ({
-      status: "loaded",
-      reflections: prev.reflections.map((reflection) =>
-        reflection.id === tempId ? server.reflection : reflection,
-      ),
-    }));
-    setReflectionComposerOpen(false);
-  }, []);
-
-  const removePendingReflection = useCallback((tempId: string, error: ApiError) => {
-    setReflectionState((prev) => {
-      const reflections = prev.reflections.filter((reflection) => reflection.id !== tempId);
-      return prev.status === "error"
-        ? { status: "error", reflections, message: prev.message }
-        : { status: "loaded", reflections };
-    });
-    setReflectionComposerError(error.message);
-  }, []);
 
   return (
     <div className="detail-view detail-view--mockup visible" id="detailView">
@@ -475,6 +515,27 @@ export function InspirationDetail({
       </div>
       <div className="detail-body" id="detailBody">
         <section className="detail-hero" aria-labelledby="inspirationDetailTitle">
+          <div className="detail-media-card">
+            {featuredPreview ? (
+              <img
+                src={featuredPreview}
+                alt=""
+                className="detail-media-image"
+                loading="lazy"
+              />
+            ) : (
+              <div className="detail-media-placeholder" aria-hidden="true">
+                <span>{featuredAttachment ? attachmentTitle(featuredAttachment, locale) : t(locale, "detailSavedSignal")}</span>
+              </div>
+            )}
+            {featuredAttachment ? (
+              <div className="detail-media-caption">
+                <span>{attachmentTitle(featuredAttachment, locale)}</span>
+                <small>{attachmentMeta(featuredAttachment, locale)}</small>
+              </div>
+            ) : null}
+          </div>
+
           <div className="detail-hero-copy">
             <h1 id="inspirationDetailTitle" className="detail-title">
               {heroTitle}
@@ -483,28 +544,22 @@ export function InspirationDetail({
               {featuredAttachment?.enrichment?.link?.hostname ? `${featuredAttachment.enrichment.link.hostname} · ` : ""}
               {t(locale, "saved")} {inspiration.timestamp}
             </div>
-            {heroDescription && sourceLinks.length === 0 ? (
+            {heroDescription ? (
               <p className="detail-hero-description">{heroDescription}</p>
             ) : null}
           </div>
-
-          {featuredPreview && sourceLinks.length === 0 ? (
-            <div className="detail-media-card">
-              <img
-                src={featuredPreview}
-                alt=""
-                className="detail-media-image"
-                loading="lazy"
-              />
-              {featuredAttachment ? (
-                <div className="detail-media-caption">
-                  <span>{attachmentTitle(featuredAttachment, locale)}</span>
-                  <small>{attachmentMeta(featuredAttachment, locale)}</small>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </section>
+
+        <div className="detail-editor-actions detail-reflect-cta-row">
+          <button
+            type="button"
+            className="detail-save-button"
+            onClick={() => setReflectionComposerOpen((open) => !open)}
+            aria-expanded={reflectionComposerOpen}
+          >
+            {t(locale, "reflectDeeperCta")}
+          </button>
+        </div>
 
         {sourceLinks.length > 0 ? (
           <section className="detail-links-section" aria-label={t(locale, "detailSavedLink")}>
@@ -512,13 +567,13 @@ export function InspirationDetail({
             <div className="detail-reflections-list">
               {sourceLinks.map((link) => (
                 <a
-                  key={link}
+                  key={link.id}
                   className="detail-primary-link"
-                  href={link}
+                  href={link.href}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {link}
+                  {link.label === link.href ? link.href : `${link.label} — ${link.href}`}
                 </a>
               ))}
             </div>
@@ -526,39 +581,22 @@ export function InspirationDetail({
         ) : (
           <section className="detail-links-section" aria-label={t(locale, "detailInspirationDetails")}>
             <div className="detail-section-label">{t(locale, "detailInspirationDetails")}</div>
-            <p className="detail-hero-description">{inspiration.text}</p>
+            <p className="detail-text">{inspiration.text}</p>
           </section>
         )}
 
-        <section className="detail-reflections-section" aria-label={t(locale, "reflectionDetailCta")}>
-          <div className="detail-section-label">{t(locale, "reflectionDetailCta")}</div>
-          <p className="detail-reflection-status">{t(locale, "reflectionDetailIntro")}</p>
-          {reflectionComposerOpen ? (
-            <ReflectionForm
-              inspirationId={inspiration.id}
-              defaultQuestion={reflectionDefaultQuestion(locale)}
-              locale={locale}
-              onCancel={() => setReflectionComposerOpen(false)}
-              onOptimisticAdd={addPendingReflection}
-              onPersisted={replacePendingReflection}
-              onPersistError={removePendingReflection}
-            />
-          ) : (
-            <button
-              type="button"
-              className="detail-save-button"
-              onClick={() => {
-                setReflectionComposerError(null);
-                setReflectionComposerOpen(true);
-              }}
-            >
-              {t(locale, "reflectionDetailCta")}
-            </button>
-          )}
-          {reflectionComposerError ? (
-            <p className="detail-reflection-status" role="alert">{reflectionComposerError}</p>
-          ) : null}
-        </section>
+        {reflectionComposerOpen ? (
+          <ReflectionForm
+            key={`reflection-${inspiration.id}`}
+            inspirationId={inspiration.id}
+            defaultQuestion={t(locale, "reflectDeeperDefaultQuestion")}
+            locale={locale}
+            onCancel={() => setReflectionComposerOpen(false)}
+            onOptimisticAdd={handleReflectionOptimisticAdd}
+            onPersisted={handleReflectionPersisted}
+            onPersistError={handleReflectionPersistError}
+          />
+        ) : null}
 
         <form
           className="detail-editor"
@@ -607,33 +645,24 @@ export function InspirationDetail({
         </form>
 
         {reflectionState.status === "loading" ? (
-          <section className="detail-reflections-section" aria-label={t(locale, "threadShowReflection")}>
-            <div className="detail-section-label">{t(locale, "processThisInspiration")}</div>
-            <p className="detail-reflection-status" role="status" aria-live="polite">{t(locale, "wowMomentsLoading")}</p>
-          </section>
+          <p className="detail-reflection-status" role="status" aria-live="polite">{t(locale, "reflectDeeperLoading")}</p>
         ) : null}
 
         {reflectionState.status === "error" ? (
-          <section className="detail-reflections-section" aria-label={t(locale, "threadShowReflection")}>
-            <div className="detail-section-label">{t(locale, "processThisInspiration")}</div>
-            <p className="detail-reflection-status" role="alert">{reflectionState.message}</p>
-          </section>
+          <p className="detail-reflection-status" role="alert">{reflectionState.message}</p>
         ) : null}
 
-        {reflectionState.status === "loaded" && reflectionAnalysis ? (
+        {reflectionState.status === "loaded" && analysis ? (
           <section className="detail-reflections-section" aria-label={t(locale, "threadShowReflection")}>
-            <div className="detail-section-label">{reflectionAnalysis.title}</div>
-            <p className="detail-reflection-status">{reflectionAnalysis.summary}</p>
-            <ul className="signal-revisit-notes memory-detail-reflection-list">
-              {reflectionAnalysis.insights.map((insight) => (
-                <li key={insight} className="thread-entry memory-detail-reflection-row">
-                  <span className="memory-detail-reflection-label">
-                    {t(locale, "reflectionAnalysisInsightLabel")}
-                  </span>{" "}
-                  {insight}
-                </li>
+            <div className="detail-section-label">{t(locale, "reflectDeeperSectionTitle")}</div>
+            <p className="detail-reflection-status">{analysis.overview}</p>
+            <div className="detail-reflections-list">
+              {analysis.bullets.map((bullet) => (
+                <article key={bullet} className="detail-reflection-card">
+                  <p>{bullet}</p>
+                </article>
               ))}
-            </ul>
+            </div>
           </section>
         ) : null}
 

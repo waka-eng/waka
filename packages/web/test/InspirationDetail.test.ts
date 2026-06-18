@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { deleteInspiration, fetchReflections, updateInspiration } from "../src/lib/api";
+import { createReflection, deleteInspiration, fetchReflections, updateInspiration } from "../src/lib/api";
 import { InspirationDetail } from "../src/components/history/InspirationDetail";
 
 vi.mock("../src/lib/api", async (importOriginal) => {
@@ -15,6 +15,9 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       throw new Error("updateInspiration mock not configured");
     }),
     fetchReflections: vi.fn(async () => []),
+    createReflection: vi.fn(async () => {
+      throw new Error("createReflection mock not configured");
+    }),
     deleteInspiration: vi.fn(async () => undefined),
   };
 });
@@ -35,12 +38,23 @@ afterEach(() => {
   mountedContainer = null;
   vi.clearAllMocks();
   vi.mocked(fetchReflections).mockResolvedValue([]);
+  vi.mocked(createReflection).mockRejectedValue(new Error("createReflection mock not configured"));
 });
 
 async function flushReactWork(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
   });
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (reason?: unknown) => void } {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
 }
 
 async function renderDetail(options: { onNextInspiration?: () => void; locale?: "en-US" | "ko-KR"; onDeleted?: (id: string) => void } = {}): Promise<HTMLDivElement> {
@@ -106,13 +120,18 @@ describe("InspirationDetail", () => {
 
     expect(container.querySelector(".detail-view--mockup")).not.toBeNull();
     expect(container.querySelector<HTMLImageElement>(".detail-media-image")?.src).toBe("https://example.com/preview.jpg");
-    expect(container.textContent).toContain("A grounded source title");
+    expect(container.querySelector("#inspirationDetailTitle")?.textContent).toBe(
+      "A saved signal about how ambition becomes concrete when there is a visible next move.",
+    );
+    expect(container.textContent).toContain("A grounded source title — https://example.com/watch?v=ambition");
     expect(container.textContent).toContain("Link");
-    expect(container.textContent).toContain("https://example.com/watch?v=ambition");
+    expect(container.textContent).toContain("Reflect Deeper");
     expect(container.textContent).toContain("Inspiration details");
     expect(container.textContent).not.toContain("Source links");
     expect(container.textContent).not.toContain("Add context");
     expect(container.textContent).not.toContain("No reflections yet.");
+    expect(container.textContent).not.toContain("No deeper reflection yet.");
+    expect(container.querySelector('[aria-label="Reflect Deeper analysis"]')).toBeNull();
 
     const next = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
       button.textContent?.includes("View next inspiration"),
@@ -122,6 +141,33 @@ describe("InspirationDetail", () => {
       next?.click();
     });
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps standalone no-reflection analysis absent while reflections load and after empty results", async () => {
+    const delayedReflections = deferred<Awaited<ReturnType<typeof fetchReflections>>>();
+    vi.mocked(fetchReflections).mockReturnValueOnce(delayedReflections.promise);
+
+    const container = await renderDetail();
+    const reflectButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Reflect Deeper"),
+    );
+
+    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(reflectButton).not.toBeNull();
+    expect(reflectButton?.disabled).toBe(false);
+    expect(container.textContent).not.toContain("Reflect Deeper analysis");
+    expect(container.textContent).not.toContain("No deeper reflection yet.");
+    expect(container.querySelector('[aria-label="Reflect Deeper analysis"]')).toBeNull();
+
+    await act(async () => {
+      delayedReflections.resolve([]);
+      await delayedReflections.promise;
+    });
+
+    expect(container.textContent).toContain("Reflect Deeper");
+    expect(container.textContent).not.toContain("Reflect Deeper analysis");
+    expect(container.textContent).not.toContain("No deeper reflection yet.");
+    expect(container.querySelector('[aria-label="Reflect Deeper analysis"]')).toBeNull();
   });
 
   it("renders saved Reflect Deeper responses fetched for the selected inspiration", async () => {
@@ -158,10 +204,11 @@ describe("InspirationDetail", () => {
     const container = await renderDetail();
 
     expect(fetchReflections).toHaveBeenCalledWith("insp-1");
-    expect(container.textContent).toContain("What caught you first?");
-    expect(container.textContent).toContain("The north-facing window.");
-    expect(container.textContent).toContain("A quieter working cadence.");
-    expect(container.textContent).toContain("Book one protected morning.");
+    expect(container.textContent).toContain("Reflect Deeper analysis");
+    expect(container.textContent).toContain("What this reveals: The north-facing window.");
+    expect(container.textContent).toContain("A useful next thread: Book one protected morning.");
+    expect(container.textContent).not.toContain("What caught you first?");
+    expect(container.textContent).not.toContain("What does it make you want more of?");
   });
 
   it("hides next navigation at the end of the list", async () => {
@@ -252,6 +299,101 @@ describe("InspirationDetail", () => {
 
     expect(container.textContent).toContain("영감을 삭제하지 못했습니다.");
     expect(container.textContent).not.toContain("미리보기를 사용할 수 없습니다");
+  });
+
+  it("saves a new reflection for the existing inspiration without creating a duplicate", async () => {
+    vi.mocked(createReflection).mockResolvedValueOnce({
+      reflection: {
+        id: "reflection-server-1",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What does this inspiration ask you to notice next?",
+        answer: "Name the next concrete move.",
+        skipped: false,
+        createdAt: "2026-05-18T19:05:00.000Z",
+      },
+    });
+
+    const container = await renderDetail();
+    const reflectButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Reflect Deeper"),
+    );
+    expect(reflectButton).not.toBeNull();
+
+    await act(async () => {
+      reflectButton!.click();
+    });
+    const answer = container.querySelector<HTMLTextAreaElement>("textarea.reflect-answer");
+    expect(answer).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(answer, "Name the next concrete move.");
+      answer!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "Save",
+    );
+    expect(save).not.toBeNull();
+    await act(async () => {
+      save!.click();
+      await Promise.resolve();
+    });
+
+    expect(createReflection).toHaveBeenCalledWith("insp-1", {
+      question: "What does this inspiration ask you to notice next?",
+      answer: "Name the next concrete move.",
+    });
+    expect(container.textContent).toContain("A useful next thread: Name the next concrete move.");
+  });
+
+  it("keeps a CTA-saved reflection when the initial reflections fetch resolves late", async () => {
+    const delayedReflections = deferred<Awaited<ReturnType<typeof fetchReflections>>>();
+    vi.mocked(fetchReflections).mockReturnValueOnce(delayedReflections.promise);
+    vi.mocked(createReflection).mockResolvedValueOnce({
+      reflection: {
+        id: "reflection-server-race",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What does this inspiration ask you to notice next?",
+        answer: "Hold the locally saved answer.",
+        skipped: false,
+        createdAt: "2026-05-18T19:06:00.000Z",
+      },
+    });
+
+    const container = await renderDetail();
+    const reflectButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Reflect Deeper"),
+    );
+    expect(reflectButton).not.toBeNull();
+
+    await act(async () => {
+      reflectButton!.click();
+    });
+    const answer = container.querySelector<HTMLTextAreaElement>("textarea.reflect-answer");
+    expect(answer).not.toBeNull();
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+      setter?.call(answer, "Hold the locally saved answer.");
+      answer!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "Save",
+    );
+    expect(save).not.toBeNull();
+    await act(async () => {
+      save!.click();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain("A useful next thread: Hold the locally saved answer.");
+
+    await act(async () => {
+      delayedReflections.resolve([]);
+      await delayedReflections.promise;
+    });
+
+    expect(container.textContent).toContain("A useful next thread: Hold the locally saved answer.");
+    expect(container.textContent).not.toContain("No deeper reflection yet.");
   });
 
 });
