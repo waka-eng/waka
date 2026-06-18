@@ -5,11 +5,19 @@ import type {
 } from "react";
 
 import type {
+  CreateReflectionResponse,
   ApiReflection,
   ApiSavedSignalDetail,
   ApiSavedSignalSearchResult,
+  ApiError,
 } from "../lib/api";
-import { formatMessage, t, type SupportedLocale } from "../lib/locales";
+import {
+  buildReflectionAnalysis,
+  deriveInspirationTitle,
+  reflectionDefaultQuestion,
+} from "../lib/inspiration-detail";
+import { t, type SupportedLocale } from "../lib/locales";
+import { ReflectionForm, type PendingReflection } from "./history/ReflectionForm";
 
 interface SavedInspirationDetailProps {
   signal: ApiSavedSignalSearchResult;
@@ -24,12 +32,14 @@ interface SavedInspirationDetailProps {
   sourceText: ReactNode;
   selectionPopover: ReactNode;
   existingHighlightPopover: ReactNode;
+  onReflectionOptimisticAdd: (pending: PendingReflection) => void;
+  onReflectionPersisted: (tempId: string, server: CreateReflectionResponse) => void;
+  onReflectionPersistError: (tempId: string, error: ApiError) => void;
   onBack: () => void;
   onTextMouseUp: (event: MouseEvent<HTMLElement>) => void;
   onTextKeyUp: (event: KeyboardEvent<HTMLElement>) => void;
   formatTimestamp: (date: string) => string;
   signalSourceLabel: (signal: ApiSavedSignalSearchResult) => string | null;
-  shortText: (text: string, maxLength: number) => string;
 }
 
 export function SavedInspirationDetail({
@@ -45,12 +55,14 @@ export function SavedInspirationDetail({
   sourceText,
   selectionPopover,
   existingHighlightPopover,
+  onReflectionOptimisticAdd,
+  onReflectionPersisted,
+  onReflectionPersistError,
   onBack,
   onTextMouseUp,
   onTextKeyUp,
   formatTimestamp,
   signalSourceLabel,
-  shortText,
 }: SavedInspirationDetailProps): JSX.Element {
   const sourceLabel = signalSourceLabel(signal);
   const meta = [sourceLabel, formatTimestamp(signal.capturedAt)].filter(Boolean).join(" · ");
@@ -73,8 +85,14 @@ export function SavedInspirationDetail({
       }));
   const primaryAttachment = attachments[0] ?? null;
   const primaryImageUrl = primaryAttachment?.type === "image" ? primaryAttachment.url : null;
-  const primaryUrl = primaryAttachment?.url ?? null;
-  const answeredReflectionCount = reflections.filter((reflection) => !reflection.skipped).length;
+  const sourceLinks = Array.from(
+    new Set(
+      attachments
+        .filter((attachment) => attachment.type === "link" && attachment.url)
+        .map((attachment) => attachment.url as string),
+    ),
+  );
+  const analysis = buildReflectionAnalysis(reflections, locale);
 
   return (
     <div
@@ -115,66 +133,68 @@ export function SavedInspirationDetail({
             ← back to {backLabel}
           </button>
           <span>saved inspiration</span>
-          <h2 id="savedInspirationDetailTitle">{shortText(signal.textPreview, 132)}</h2>
+          <h2 id="savedInspirationDetailTitle">{deriveInspirationTitle(signal.textPreview, locale)}</h2>
           <p>{meta}</p>
         </header>
       </section>
 
       {loading ? <p className="signal-revisit-state">Opening the inspiration...</p> : null}
-      {primaryUrl ? (
-        <section className="memory-detail-link" aria-label="Primary source link">
-          <span>Link</span>
-          <a href={primaryUrl} target="_blank" rel="noreferrer">
-            {primaryUrl}
-          </a>
+      {sourceLinks.length > 0 ? (
+        <section className="memory-detail-link" aria-label={t(locale, "detailSavedLink")}>
+          <span>{t(locale, "linkChipPrefix")}</span>
+          {sourceLinks.map((link) => (
+            <a key={link} href={link} target="_blank" rel="noreferrer">
+              {link}
+            </a>
+          ))}
         </section>
-      ) : null}
-      <section className="memory-stack-readable memory-stack-readable--mockup" aria-label="Highlights">
-        <span>Highlights</span>
-        <p
-          className="signal-revisit-raw memory-readable-signal"
-          onMouseUp={onTextMouseUp}
-          onKeyUp={onTextKeyUp}
-        >
-          {sourceText}
-        </p>
+      ) : (
+        <section className="memory-stack-readable memory-stack-readable--mockup" aria-label={t(locale, "detailInspirationDetails")}>
+          <span>{t(locale, "detailInspirationDetails")}</span>
+          <p
+            className="signal-revisit-raw memory-readable-signal"
+            onMouseUp={onTextMouseUp}
+            onKeyUp={onTextKeyUp}
+          >
+            {sourceText}
+          </p>
+        </section>
+      )}
+
+      <section className="memory-stack-readable memory-stack-readable--mockup memory-detail-reflections" aria-label={t(locale, "reflectionDetailCta")}>
+        <span>{t(locale, "reflectionDetailCta")}</span>
+        <p className="signal-revisit-state">{t(locale, "reflectionDetailIntro")}</p>
+        <ReflectionForm
+          inspirationId={signal.id}
+          defaultQuestion={reflectionDefaultQuestion(locale)}
+          locale={locale}
+          autoFocus={false}
+          onOptimisticAdd={onReflectionOptimisticAdd}
+          onPersisted={onReflectionPersisted}
+          onPersistError={onReflectionPersistError}
+        />
       </section>
       {reflectionsLoading ? (
         <p className="signal-revisit-state">{t(locale, "reflectDeeperLoading")}</p>
       ) : null}
       {reflectionError ? <p className="signal-revisit-state">{reflectionError}</p> : null}
-      {reflections.length > 0 ? (
+      {analysis ? (
         <section
           className="memory-stack-readable memory-stack-readable--mockup memory-detail-reflections"
-          aria-label={t(locale, "reflectDeeperSectionTitle")}
+          aria-label={analysis.title}
         >
-          <span>{t(locale, "reflectDeeperSectionTitle")}</span>
-          <p className="signal-revisit-state">
-            {formatMessage(locale, "reflectDeeperCount", {
-              answered: answeredReflectionCount,
-              total: reflections.length,
-            })}
-          </p>
-          <ol className="signal-revisit-notes memory-detail-reflection-list">
-            {reflections.map((reflection, index) => (
-              <li className="thread-entry memory-detail-reflection-row" key={reflection.id}>
-                <div className="thread-q">
-                  <span className="memory-detail-reflection-label">
-                    {formatMessage(locale, "reflectDeeperQuestionLabel", { index: index + 1 })}
-                  </span>{" "}
-                  {reflection.question}
-                </div>
-                <div className={`thread-a${reflection.skipped ? " skipped" : ""}`}>
-                  <span className="memory-detail-reflection-label">
-                    {t(locale, "reflectDeeperAnswerLabel")}
-                  </span>{" "}
-                  {reflection.skipped || !reflection.answer
-                    ? t(locale, "reflectDeeperSkipped")
-                    : reflection.answer}
-                </div>
+          <span>{analysis.title}</span>
+          <p className="signal-revisit-state">{analysis.summary}</p>
+          <ul className="signal-revisit-notes memory-detail-reflection-list">
+            {analysis.insights.map((insight) => (
+              <li className="thread-entry memory-detail-reflection-row" key={insight}>
+                <span className="memory-detail-reflection-label">
+                  {t(locale, "reflectionAnalysisInsightLabel")}
+                </span>{" "}
+                {insight}
               </li>
             ))}
-          </ol>
+          </ul>
         </section>
       ) : null}
       {selectionPopover}
