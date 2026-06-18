@@ -4045,6 +4045,11 @@
   animation: nc-note-modal-open 120ms ease-out both;
 }
 
+.nc-note-modal--evidence-expanded {
+  width: min(760px, calc(100vw - 40px));
+  max-height: min(860px, calc(100dvh - 32px));
+}
+
 .nc-note-modal .nc-note-body {
   font-size: clamp(34px, 5vw, 62px);
   font-weight: 420;
