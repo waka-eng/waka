@@ -1280,6 +1280,20 @@ routes.post("/:id/reflections", async (c) => {
     });
   }
 
+  try {
+    await persistSignalPacketForSignal({
+      db,
+      userId: user.id,
+      signalId: parent.id,
+    });
+  } catch (err) {
+    console.warn("[inspirations] failed to refresh signal packet after reflection:", {
+      inspirationId: parent.id,
+      reflectionId: inserted.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   const updatedScores = await persistScores(db, parent);
   await materializeSignalDocument({
     db,

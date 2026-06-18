@@ -4,12 +4,42 @@ import {
   GEMINI_EMBEDDING_DIMENSIONS,
   GEMINI_EMBEDDING_MODEL,
   GeminiEmbeddingHttpClient,
+  buildCanonicalInspirationEmbeddingInput,
   buildEmbedContentUrl,
+  hashEmbeddingInput,
 } from "./inspiration-embeddings.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+describe("canonical inspiration embedding input", () => {
+  it("includes saved Reflect Deeper answers so reflection-created captures can regenerate embeddings", () => {
+    const base = buildCanonicalInspirationEmbeddingInput({
+      text: "A small studio near serious peers made the work feel possible.",
+      kind: "note",
+      category: null,
+    });
+    const withReflection = buildCanonicalInspirationEmbeddingInput({
+      text: "A small studio near serious peers made the work feel possible.",
+      kind: "note",
+      category: null,
+      reflections: [
+        {
+          question: "What does this ask for?",
+          answer: "Protected morning light with serious peers nearby.",
+          skipped: false,
+          createdAt: new Date("2026-05-30T12:01:00.000Z"),
+        },
+      ],
+    });
+
+    expect(withReflection).toContain("waka.inspiration_embedding_input.v2");
+    expect(withReflection).toContain("What does this ask for?");
+    expect(withReflection).toContain("Protected morning light");
+    expect(hashEmbeddingInput(withReflection)).not.toBe(hashEmbeddingInput(base));
+  });
 });
 
 describe("GeminiEmbeddingHttpClient", () => {

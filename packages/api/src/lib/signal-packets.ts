@@ -8,7 +8,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as dbSchema from "../db/index.js";
@@ -16,9 +16,11 @@ import {
   inspirationSparks,
   inspirations,
   meaningPackets,
+  reflections,
   type Inspiration,
   type InspirationSpark,
   type MeaningPacket,
+  type Reflection,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 
@@ -57,9 +59,15 @@ type PacketSpark = Pick<
   | "updatedAt"
 >;
 
+type PacketReflection = Pick<
+  Reflection,
+  "id" | "question" | "answer" | "skipped" | "createdAt"
+>;
+
 export interface BuildSignalPacketInput {
   signal: PacketSignal;
   sparks: PacketSpark[];
+  reflections?: PacketReflection[];
 }
 
 export interface BuiltSignalPacket {
@@ -122,6 +130,13 @@ export function buildSignalPacket(
   input: BuildSignalPacketInput,
 ): BuiltSignalPacket {
   const sparks = orderSparks(input.sparks).slice(0, MAX_SPARKS_IN_PACKET);
+  const reflectionLines = (input.reflections ?? [])
+    .filter((reflection) => !reflection.skipped && normalizeText(reflection.answer ?? "").length > 0)
+    .map((reflection, index) => {
+      const question = normalizeText(reflection.question);
+      const answer = normalizeText(reflection.answer ?? "");
+      return `reflection_${index + 1}: ${question}\nanswer_${index + 1}: ${answer}`;
+    });
   const primarySpark = sparks.find((spark) => spark.isPrimary) ?? sparks[0] ?? null;
   const sparkText = primarySpark ? normalizeText(primarySpark.text) : "";
   const artifactExcerpt = truncateText(
@@ -145,6 +160,7 @@ export function buildSignalPacket(
     createdAt: input.signal.createdAt.toISOString(),
     updatedAt: input.signal.updatedAt.toISOString(),
     sparkCount: input.sparks.length,
+    reflectionCount: reflectionLines.length,
     hasPrimarySpark: Boolean(primarySpark),
   };
   const rawPacketText = [
@@ -153,6 +169,8 @@ export function buildSignalPacket(
     sparkLines.length > 0 ? sparkLines.join("\n") : "none",
     "WHY_IT_MATTERS",
     `cluster=${input.signal.cluster ?? "unclassified"}`,
+    "REFLECTIONS",
+    reflectionLines.length > 0 ? reflectionLines.join("\n") : "none",
     "CONTEXT_EXCERPT",
     artifactExcerpt,
   ].join("\n");
@@ -176,6 +194,13 @@ export function buildSignalPacket(
       note: spark.note,
       startOffset: spark.startOffset,
       endOffset: spark.endOffset,
+    })),
+    reflections: (input.reflections ?? []).map((reflection) => ({
+      id: reflection.id,
+      question: reflection.question,
+      answer: reflection.answer,
+      skipped: reflection.skipped,
+      createdAt: reflection.createdAt.toISOString(),
     })),
   });
 
@@ -244,7 +269,24 @@ export async function persistSignalPacketForSignal(
       inspirationSparks.createdAt,
     );
 
-  const built = buildSignalPacket({ signal: inspiration, sparks });
+  const reflectionRows = await db
+    .select({
+      id: reflections.id,
+      question: reflections.question,
+      answer: reflections.answer,
+      skipped: reflections.skipped,
+      createdAt: reflections.createdAt,
+    })
+    .from(reflections)
+    .where(
+      and(
+        eq(reflections.inspirationId, params.signalId),
+        eq(reflections.userId, params.userId),
+      ),
+    )
+    .orderBy(asc(reflections.createdAt), asc(reflections.id));
+
+  const built = buildSignalPacket({ signal: inspiration, sparks, reflections: reflectionRows });
   const [packet] = await db
     .insert(meaningPackets)
     .values({

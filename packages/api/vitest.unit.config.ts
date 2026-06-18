@@ -20,6 +20,8 @@ export default defineConfig({
       "src/lib/feedback-application.test.ts",
       "src/lib/guided-reflection-question.test.ts",
       "src/lib/model-provider.test.ts",
+      "src/lib/inspiration-embeddings.test.ts",
+      "src/lib/signal-packets.test.ts",
       "src/lib/top-of-mind-notes.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",
       "src/lib/wow-judge-model.test.ts",

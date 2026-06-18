@@ -1009,7 +1009,8 @@
   background: transparent;
 }
 
-.reference-capture-modal .cap-body {
+.reference-capture-modal .cap-body,
+.reference-capture-modal .reflect-area {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 2px;
   background:
@@ -1020,7 +1021,8 @@
   padding: 22px 24px;
 }
 
-.reference-capture-modal .cap-body textarea {
+.reference-capture-modal .cap-body textarea,
+.reference-capture-modal .reflect-answer {
   color: #1a1a1a;
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-size: 18px;
@@ -1078,6 +1080,23 @@
 .reference-capture-modal .cap-expand {
   border-color: rgba(0, 0, 0, 0.1);
   color: #999;
+}
+
+.reference-capture-modal .reflect-question {
+  color: #1a1a1a;
+}
+
+.reference-capture-modal .reflect-bar.visible {
+  display: flex;
+  margin-top: 16px;
+}
+
+.reference-capture-modal .reflect-btn {
+  height: 32px;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
 }
 
 .reference-saves-page {

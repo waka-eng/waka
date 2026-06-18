@@ -440,7 +440,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           </div>
         </div>
 
-        {/* --- Reflect area (question + answer textarea) --- */}
+        {/* --- Reflect area (question + answer textarea + guided controls) --- */}
         <div
           className={`reflect-area${isReflectView ? " visible" : ""}`}
           id="reflectArea"
@@ -457,6 +457,29 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             onChange={handleReflectChange}
             onKeyDown={onReflectKeyDown}
           />
+          {/* --- Reflect bar (Back · Continue/Save) lives inside the reflective card
+               so modal captures keep the journey controls together with the prompt. --- */}
+          <div
+            className={`reflect-bar${isReflectView ? " visible" : ""}`}
+            id="reflectBar"
+          >
+            <button
+              type="button"
+              className="reflect-btn reflect-later"
+              id="reflectLater"
+              onClick={onReflectLater}
+            >
+              {doneLabel}
+            </button>
+            <button
+              type="button"
+              className="reflect-btn reflect-next"
+              id="reflectNext"
+              onClick={onReflectNext}
+            >
+              {continueLabel}
+            </button>
+          </div>
         </div>
 
         {/* --- Capture bar: utilities (attach · expand) on the left, save
@@ -550,28 +573,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           </div>
         ) : null}
 
-        {/* --- Reflect bar (Done · Continue) --- */}
-        <div
-          className={`reflect-bar${isReflectView ? " visible" : ""}`}
-          id="reflectBar"
-        >
-          <button
-            type="button"
-            className="reflect-btn reflect-later"
-            id="reflectLater"
-            onClick={onReflectLater}
-          >
-            {doneLabel}
-          </button>
-          <button
-            type="button"
-            className="reflect-btn reflect-next"
-            id="reflectNext"
-            onClick={onReflectNext}
-          >
-            {continueLabel}
-          </button>
-        </div>
       </div>
     );
   },
