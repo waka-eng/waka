@@ -5,14 +5,20 @@ import type {
 } from "react";
 
 import type {
+  ApiReflection,
   ApiSavedSignalDetail,
   ApiSavedSignalSearchResult,
 } from "../lib/api";
+import { formatMessage, t, type SupportedLocale } from "../lib/locales";
 
 interface SavedInspirationDetailProps {
   signal: ApiSavedSignalSearchResult;
   detail: ApiSavedSignalDetail | null;
   loading: boolean;
+  reflections: ApiReflection[];
+  reflectionsLoading: boolean;
+  reflectionError: string | null;
+  locale: SupportedLocale;
   backLabel: string;
   highlightError: string | null;
   sourceText: ReactNode;
@@ -30,6 +36,10 @@ export function SavedInspirationDetail({
   signal,
   detail,
   loading,
+  reflections,
+  reflectionsLoading,
+  reflectionError,
+  locale,
   backLabel,
   highlightError,
   sourceText,
@@ -64,6 +74,7 @@ export function SavedInspirationDetail({
   const primaryAttachment = attachments[0] ?? null;
   const primaryImageUrl = primaryAttachment?.type === "image" ? primaryAttachment.url : null;
   const primaryUrl = primaryAttachment?.url ?? null;
+  const answeredReflectionCount = reflections.filter((reflection) => !reflection.skipped).length;
 
   return (
     <div
@@ -128,6 +139,44 @@ export function SavedInspirationDetail({
           {sourceText}
         </p>
       </section>
+      {reflectionsLoading ? (
+        <p className="signal-revisit-state">{t(locale, "reflectDeeperLoading")}</p>
+      ) : null}
+      {reflectionError ? <p className="signal-revisit-state">{reflectionError}</p> : null}
+      {reflections.length > 0 ? (
+        <section
+          className="memory-stack-readable memory-stack-readable--mockup memory-detail-reflections"
+          aria-label={t(locale, "reflectDeeperSectionTitle")}
+        >
+          <span>{t(locale, "reflectDeeperSectionTitle")}</span>
+          <p className="signal-revisit-state">
+            {formatMessage(locale, "reflectDeeperCount", {
+              answered: answeredReflectionCount,
+              total: reflections.length,
+            })}
+          </p>
+          <ol className="signal-revisit-notes memory-detail-reflection-list">
+            {reflections.map((reflection, index) => (
+              <li className="thread-entry memory-detail-reflection-row" key={reflection.id}>
+                <div className="thread-q">
+                  <span className="memory-detail-reflection-label">
+                    {formatMessage(locale, "reflectDeeperQuestionLabel", { index: index + 1 })}
+                  </span>{" "}
+                  {reflection.question}
+                </div>
+                <div className={`thread-a${reflection.skipped ? " skipped" : ""}`}>
+                  <span className="memory-detail-reflection-label">
+                    {t(locale, "reflectDeeperAnswerLabel")}
+                  </span>{" "}
+                  {reflection.skipped || !reflection.answer
+                    ? t(locale, "reflectDeeperSkipped")
+                    : reflection.answer}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
       {selectionPopover}
       {existingHighlightPopover}
       {highlightError ? <p className="signal-revisit-state">{highlightError}</p> : null}

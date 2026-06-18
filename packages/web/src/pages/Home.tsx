@@ -61,6 +61,7 @@ import {
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
+  type ApiReflection,
   type ApiInspirationSpark,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
@@ -71,6 +72,7 @@ import {
   deleteInspirationSpark,
   fetchSavedSignalDetail,
   fetchSavedSignals,
+  fetchReflections,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
@@ -1529,6 +1531,9 @@ export function HomePage(): JSX.Element {
     useState<ApiSavedSignalSearchResult | null>(null);
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
+  const [savedSignalReflections, setSavedSignalReflections] = useState<ApiReflection[]>([]);
+  const [savedSignalReflectionsLoading, setSavedSignalReflectionsLoading] = useState(false);
+  const [savedSignalReflectionsError, setSavedSignalReflectionsError] = useState<string | null>(null);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
   const [activeMemoryHighlightControls, setActiveMemoryHighlightControls] =
     useState<ActiveMemoryHighlightControls | null>(null);
@@ -2401,11 +2406,17 @@ export function HomePage(): JSX.Element {
     if (homeMode !== "memoryDrawer") return;
     if (!selectedSavedSignalId) {
       setSavedSignalDetail(null);
+      setSavedSignalReflections([]);
+      setSavedSignalReflectionsError(null);
+      setSavedSignalReflectionsLoading(false);
       return;
     }
 
     let cancelled = false;
     setSavedSignalDetailLoading(true);
+    setSavedSignalReflectionsLoading(true);
+    setSavedSignalReflectionsError(null);
+    setSavedSignalReflections([]);
     void (async () => {
       try {
         const detail = await fetchSavedSignalDetail(selectedSavedSignalId);
@@ -2418,11 +2429,25 @@ export function HomePage(): JSX.Element {
         if (!cancelled) setSavedSignalDetailLoading(false);
       }
     })();
+    void (async () => {
+      try {
+        const reflections = await fetchReflections(selectedSavedSignalId);
+        if (cancelled) return;
+        setSavedSignalReflections(reflections);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : t(locale, "reflectionLoadError");
+        setSavedSignalReflections([]);
+        setSavedSignalReflectionsError(message);
+      } finally {
+        if (!cancelled) setSavedSignalReflectionsLoading(false);
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [homeMode, selectedSavedSignalId]);
+  }, [homeMode, locale, selectedSavedSignalId]);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -3228,6 +3253,10 @@ export function HomePage(): JSX.Element {
         signal={selectedSavedSignal}
         detail={savedSignalDetail}
         loading={savedSignalDetailLoading}
+        reflections={savedSignalReflections}
+        reflectionsLoading={savedSignalReflectionsLoading}
+        reflectionError={savedSignalReflectionsError}
+        locale={locale}
         backLabel={selectedMemoryGroup ? "list" : (selectedMemoryPathFilter?.label ?? "list")}
         highlightError={
           highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id
@@ -3243,6 +3272,8 @@ export function HomePage(): JSX.Element {
           setSelectedSavedSignalId(null);
           setSelectedSupportingSignalFallback(null);
           setSavedSignalDetail(null);
+          setSavedSignalReflections([]);
+          setSavedSignalReflectionsError(null);
         }}
         onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}

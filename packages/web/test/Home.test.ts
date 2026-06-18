@@ -551,6 +551,37 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
+  it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
+    setApiFixtures();
+    vi.mocked(fetchReflections).mockResolvedValue([
+      persistedReflection({
+        id: "reflection-1",
+        question: "What texture did this save point toward?",
+        answer: "Mossy light and imperfect ceramic edges.",
+        createdAt: "2026-05-14T16:31:00.000Z",
+      }),
+      persistedReflection({
+        id: "reflection-2",
+        question: "What should stay attached after refresh?",
+        answer: "The Reflect Deeper transcript should be readable in detail.",
+        createdAt: "2026-05-14T16:32:00.000Z",
+      }),
+    ]);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
+    expect(fetchReflections).toHaveBeenCalledWith("insp-1");
+    expect(detail.textContent).toContain("Highlights");
+    expect(detail.textContent).toContain("Reflect Deeper transcript");
+    expect(detail.textContent).toContain("2 of 2 answered");
+    expect(detail.textContent).toContain("Q1 What texture did this save point toward?");
+    expect(detail.textContent).toContain("Answer Mossy light and imperfect ceramic edges.");
+    expect(detail.textContent).toContain("Q2 What should stay attached after refresh?");
+    expect(detail.textContent).toContain("Answer The Reflect Deeper transcript should be readable in detail.");
+  });
+
   it("loads current Home data from signals and top-of-mind endpoints", async () => {
     setApiFixtures();
     await renderHomePage();
