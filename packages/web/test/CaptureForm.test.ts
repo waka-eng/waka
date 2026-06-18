@@ -502,9 +502,12 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Reflect Deeper in progress");
-    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect Deeper in progress");
-    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.className).toContain("cap-save--reflecting");
-    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.getAttribute("aria-pressed")).toBe("true");
+    expect(container?.querySelector("#capBar")).toBeNull();
+    expect(container?.querySelector("#capSave")).toBeNull();
+    expect(container?.querySelector("#capReflectiveSave")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
     expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith({
@@ -531,6 +534,10 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+    expect(container?.querySelector("#capBar")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
+    expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
     expect(generateGuidedReflectionQuestion).toHaveBeenLastCalledWith(expect.objectContaining({
       priorAnswers: [
         {
@@ -550,6 +557,8 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("one small room-temperature experiment");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 3 of 3");
+    expect(container?.querySelector("#capBar")).toBeNull();
+    expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
     expect(createInspiration).not.toHaveBeenCalled();
 

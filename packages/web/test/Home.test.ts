@@ -2103,6 +2103,12 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     expect(container.querySelector("#reflectQ")?.textContent).toContain("What caught you first?");
     expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
+    expect(container.querySelector("#capBar")).toBeNull();
+    expect(container.querySelector("#capSave")).toBeNull();
+    expect(container.querySelector("#capReflectiveSave")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
 
     await act(async () => {
       setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "The soft north light.");
@@ -2113,6 +2119,10 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     expect(container.querySelector("#reflectQ")?.textContent).toContain("What does it ask you to protect?");
     expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
+    expect(container.querySelector("#capBar")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
 
     await act(async () => {
       setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Protected quiet mornings.");
@@ -2123,6 +2133,8 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     expect(container.querySelector("#reflectQ")?.textContent).toContain("What is the smallest next move?");
     expect(container.querySelector("#reflectQ")?.textContent).toContain("Step 3 of 3");
+    expect(container.querySelector("#capBar")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
     expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
 
     await act(async () => {
