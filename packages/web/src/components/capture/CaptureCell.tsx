@@ -140,6 +140,8 @@ export interface CaptureCellProps {
   /** Placeholder copy for the note textarea. Defaults to the prototype's. */
   notePlaceholder?: string;
   processSaveLabel?: string;
+  processSaveInProgress?: boolean;
+  processSaveInProgressLabel?: string;
   processSaveTitle?: string;
   quickSaveLabel?: string;
   quickSaveTitle?: string;
@@ -264,6 +266,8 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       onNoteKeyDown,
       notePlaceholder = "Drop what hit: a note, link, or image. Save it fast or reflect deeper.",
       processSaveLabel = "Reflect deeper",
+      processSaveInProgress = false,
+      processSaveInProgressLabel = "Reflect Deeper in progress",
       processSaveTitle = "Add one small thought before saving this inspiration",
       quickSaveLabel = "Save it now",
       quickSaveTitle = "Save this inspiration now",
@@ -376,6 +380,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
     };
 
     const isReflectView = view === "reflect";
+    const reflectiveSaveLabel = processSaveInProgress ? processSaveInProgressLabel : processSaveLabel;
 
     return (
       <div
@@ -516,13 +521,15 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           <div className="cap-bar-right">
             <button
               type="button"
-              className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}`}
+              className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}${processSaveInProgress ? " cap-save--reflecting" : ""}`}
               id="capReflectiveSave"
               onClick={onReflectiveSave}
               title={processSaveTitle}
+              aria-label={reflectiveSaveLabel}
+              aria-pressed={processSaveInProgress}
               disabled={!saveVisible}
             >
-              {processSaveLabel}
+              {reflectiveSaveLabel}
             </button>
             <button
               type="button"

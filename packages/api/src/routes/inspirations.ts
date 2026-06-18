@@ -1387,10 +1387,10 @@ routes.get("/:id/reflections", async (c) => {
         eq(reflections.userId, user.id),
       ),
     )
-    // Ascending — render the reflection thread in authored order. Aligned
-    // with `reflections_inspiration_created_idx (inspiration_id, created_at)`
-    // so the query is index-ordered without a sort step.
-    .orderBy(asc(reflections.createdAt));
+    // Ascending — render the reflection thread in authored order. The id tie-breaker
+    // keeps multi-row guided saves deterministic even when several inserts share
+    // the same database timestamp precision.
+    .orderBy(asc(reflections.createdAt), asc(reflections.id));
 
   return c.json({ reflections: rows }, 200);
 });

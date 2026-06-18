@@ -128,22 +128,37 @@ describe("InspirationDetail", () => {
         id: "reflection-guided-1",
         inspirationId: "insp-1",
         userId: "user-1",
-        question: "Reflect deeper guided reflection",
-        answer: [
-          "What caught you first?\nThe north-facing window.",
-          "What does it make you want more of?\nA quieter working cadence.",
-          "What is the next move?\nBook one protected morning.",
-        ].join("\n\n"),
+        question: "What caught you first?",
+        answer: "The north-facing window.",
         skipped: false,
         createdAt: "2026-05-18T19:02:00.000Z",
+      },
+      {
+        id: "reflection-guided-2",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What does it make you want more of?",
+        answer: "A quieter working cadence.",
+        skipped: false,
+        createdAt: "2026-05-18T19:03:00.000Z",
+      },
+      {
+        id: "reflection-guided-3",
+        inspirationId: "insp-1",
+        userId: "user-1",
+        question: "What is the next move?",
+        answer: "Book one protected morning.",
+        skipped: false,
+        createdAt: "2026-05-18T19:04:00.000Z",
       },
     ]);
 
     const container = await renderDetail();
 
     expect(fetchReflections).toHaveBeenCalledWith("insp-1");
-    expect(container.textContent).toContain("Reflect deeper guided reflection");
+    expect(container.textContent).toContain("What caught you first?");
     expect(container.textContent).toContain("The north-facing window.");
+    expect(container.textContent).toContain("A quieter working cadence.");
     expect(container.textContent).toContain("Book one protected morning.");
   });
 

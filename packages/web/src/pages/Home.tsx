@@ -1781,7 +1781,9 @@ export function HomePage(): JSX.Element {
 
   const handlePersisted = useCallback(
     (tempId: string, result: PersistedResult) => {
-      const reflectionScorePatch = result.reflection?.inspiration;
+      const reflectionScorePatch = [...(result.reflections ?? [])]
+        .reverse()
+        .find((item) => item.inspiration)?.inspiration ?? result.reflection?.inspiration;
       const scoredInspiration = reflectionScorePatch
         ? {
             ...result.inspiration,
@@ -1804,7 +1806,7 @@ export function HomePage(): JSX.Element {
                 scoredInspiration,
                 result.attachments,
                 result.failedAttachments.length,
-                result.reflection ? 1 : 0,
+                result.reflections?.length ?? (result.reflection ? 1 : 0),
               )
             : e,
         ),

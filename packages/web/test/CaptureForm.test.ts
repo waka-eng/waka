@@ -501,6 +501,10 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await flushReactWork();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Reflect Deeper in progress");
+    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.textContent).toContain("Reflect Deeper in progress");
+    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.className).toContain("cap-save--reflecting");
+    expect(container?.querySelector<HTMLButtonElement>("#capReflectiveSave")?.getAttribute("aria-pressed")).toBe("true");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("What private weather does this signal name?");
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 1 of 3");
     expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith({
@@ -526,6 +530,7 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await flushReactWork();
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("What would protecting that weather ask you to change?");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 2 of 3");
     expect(generateGuidedReflectionQuestion).toHaveBeenLastCalledWith(expect.objectContaining({
       priorAnswers: [
         {
@@ -544,6 +549,7 @@ describe("CaptureForm multi-input quick capture", () => {
     });
     await flushReactWork();
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("one small room-temperature experiment");
+    expect(container?.querySelector("#reflectQ")?.textContent).toContain("Step 3 of 3");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
     expect(createInspiration).not.toHaveBeenCalled();
 
@@ -556,14 +562,20 @@ describe("CaptureForm multi-input quick capture", () => {
     await flushReactWork();
 
     expect(createInspiration).toHaveBeenCalledTimes(1);
-    expect(createReflection).toHaveBeenCalledTimes(1);
-    expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
-      question: "Reflect deeper guided reflection",
-      answer: [
-        "What private weather does this signal name?\nThe feeling of wanting to protect it.",
-        "What would protecting that weather ask you to change?\nMore quiet studio time.",
-        "What is one small room-temperature experiment for tomorrow?\nBook one hour tomorrow.",
-      ].join("\n\n"),
+    expect(createReflection).toHaveBeenCalledTimes(3);
+    expect(createReflection).toHaveBeenNthCalledWith(1, "insp-post-save", {
+      question: "What private weather does this signal name?",
+      answer: "The feeling of wanting to protect it.",
+      skipped: false,
+    });
+    expect(createReflection).toHaveBeenNthCalledWith(2, "insp-post-save", {
+      question: "What would protecting that weather ask you to change?",
+      answer: "More quiet studio time.",
+      skipped: false,
+    });
+    expect(createReflection).toHaveBeenNthCalledWith(3, "insp-post-save", {
+      question: "What is one small room-temperature experiment for tomorrow?",
+      answer: "Book one hour tomorrow.",
       skipped: false,
     });
     // No mirror card — the parent is signalled to close and flash "saved".
@@ -900,9 +912,10 @@ describe("CaptureForm Reflect Deeper journey", () => {
       text: "Process this richer input",
       kind: "note",
     });
-    expect(createReflection).toHaveBeenCalledWith("insp-new", {
-      question: "Reflect deeper guided reflection",
-      answer: expect.stringContaining("Schedule Friday morning."),
+    expect(createReflection).toHaveBeenCalledTimes(3);
+    expect(createReflection).toHaveBeenNthCalledWith(3, "insp-new", {
+      question: "What first caught you here — the idea, feeling, person, or possibility?",
+      answer: "Schedule Friday morning.",
       skipped: false,
     });
   });
