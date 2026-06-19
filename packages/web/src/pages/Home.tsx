@@ -2646,6 +2646,10 @@ export function HomePage(): JSX.Element {
     }, 360);
   };
 
+  const closeCaptureFromBackdrop = (event: ReactMouseEvent<HTMLElement>) => {
+    if (event.target === event.currentTarget && !captureClosing) closeCapture();
+  };
+
   // On a successful save we close the capture surface and flash an ephemeral
   // "saved" confirmation on the capture button (a yellow glow that fades),
   // replacing the old in-cell post-save mirror card.
@@ -4217,6 +4221,7 @@ export function HomePage(): JSX.Element {
           role="dialog"
           aria-modal="true"
           aria-label={copy.captureDialog}
+          onClick={closeCaptureFromBackdrop}
         >
           <button
             type="button"

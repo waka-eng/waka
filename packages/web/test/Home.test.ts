@@ -2259,6 +2259,37 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).not.toHaveBeenCalled();
   });
 
+  it("dismisses the capture modal when clicking outside the capture card", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    await act(async () => {
+      container.querySelector<HTMLElement>(".reference-capture-modal")?.click();
+    });
+
+    expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
+    await waitForTimers(380);
+    await flushReactWork();
+    expect(container.querySelector(".reference-capture-modal")).toBeNull();
+    expect(createInspiration).not.toHaveBeenCalled();
+  });
+
+  it("keeps the capture modal open when clicking inside the capture card", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    await act(async () => {
+      container.querySelector<HTMLElement>(".reference-capture-shell")?.click();
+      container.querySelector<HTMLTextAreaElement>("#capNote")?.click();
+    });
+
+    expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
+    expect(container.querySelector(".reference-capture-modal--closing")).toBeNull();
+    expect(createInspiration).not.toHaveBeenCalled();
+  });
+
   it("toggles focus mode from the expand control in the capture bar", async () => {
     setApiFixtures();
     const container = await renderHomePage();
