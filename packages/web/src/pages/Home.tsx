@@ -3132,6 +3132,13 @@ export function HomePage(): JSX.Element {
     recordRevisit(signal.id, "detail_opened");
   };
 
+  const reflectDeeperOnSavedSignal = (signal: ApiSavedSignalSearchResult): void => {
+    setSelectedId(signal.id);
+    setHistoryOpen(true);
+    closeMemoryDrawer();
+    recordRevisit(signal.id, "detail_opened");
+  };
+
   const undoDeletedSavedSignal = () => {
     if (!deletedSavedSignalUndo) return;
     if (deletedSavedSignalUndoTimerRef.current !== null) {
@@ -3257,6 +3264,13 @@ export function HomePage(): JSX.Element {
                 onClick={() => setMemoryHighlightMode((current) => !current)}
               >
                 highlight mode
+              </button>
+              <button
+                type="button"
+                className="memory-contents-secondary-action"
+                onClick={() => reflectDeeperOnSavedSignal(signal)}
+              >
+                reflect deeper
               </button>
               {hasEditedDraft ? (
                 <button
