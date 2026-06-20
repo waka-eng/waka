@@ -85,6 +85,7 @@ import {
 } from "../lib/locales";
 
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
+const TOP_OF_MIND_NAME_STORAGE_PREFIX = "waka.topOfMindName";
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -989,58 +990,13 @@ function sortSignalsForGrouping(
   return [...signals].sort((a, b) => signalRelevanceScore(b, terms) - signalRelevanceScore(a, terms));
 }
 
-function categoryTitleFromTerm(value: string): string {
-  const clean = userFacingCopy(value).replace(/[\s_/-]+/g, " ").trim();
-  if (!clean) return "recently saved";
-  return shortText(
-    clean
-      .split(" ")
-      .map((word) => (word.length <= 2 ? word : `${word[0].toUpperCase()}${word.slice(1)}`))
-      .join(" "),
-    42,
-  );
-}
-
-function isInternalMemoryPathTopic(value: string): boolean {
-  const normalized = value
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/[_:/.-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  if (!normalized) return true;
-  if (/\b(?:meaning|context|memory)?\s*nodes?\b/.test(normalized)) return true;
-  if (/\b(?:context|memory|graph)\s*edges?\b/.test(normalized)) return true;
-  if (/\bnode\s*ids?\b/.test(normalized)) return true;
-  if (/\b(?:ctx|node|edge|debug|internal)\s*[a-z0-9]{4,}\b/.test(normalized)) return true;
-  return false;
-}
-
-function memoryPathSlug(value: string): string {
-  const cleaned = userFacingCopy(value)
-    .replace(/[’']/g, "")
-    .toLowerCase()
-    .split(/\s+/)
-    .map((word) => word.replace(/[^a-z0-9-]/g, ""))
-    .filter((word) =>
-      (word.length > 1 || /^\d+$/.test(word)) && !["the", "and", "for", "with", "from", "that", "this"].includes(word),
-    )
-    .slice(0, 4)
-    .join("-");
-  return cleaned || "inspirations";
-}
-
 function sortedSignalsNewest(signals: ApiSavedSignalSearchResult[]): ApiSavedSignalSearchResult[] {
   return [...signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
 }
 
 function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPathFilter[] {
   const sortedSignals = sortedSignalsNewest(signals);
-  const highlightedSignals = sortedSignals.filter(
-    (signal) => signal.highlightedSnippets.length > 0 || signal.matchingSnippets.length > 0,
-  );
-  const recentWindow = sortedSignals.filter((signal) => signalAgeDays(signal) <= 30);
-  const recentlySavedSignals = recentWindow.length > 0 ? recentWindow : sortedSignals.slice(0, Math.min(6, sortedSignals.length));
+  const recentlySavedSignals = sortedSignals.filter((signal) => signalAgeDays(signal) <= 2);
   const filters: MemoryPathFilter[] = [
     {
       id: "all-saved",
@@ -1051,66 +1007,15 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
     },
   ];
 
-  if (highlightedSignals.length > 0) {
-    filters.push({
-      id: "highlights",
-      path: "/highlights",
-      label: "highlights",
-      description: "saved inspirations with highlights",
-      signals: highlightedSignals,
-    });
-  }
+  filters.push({
+    id: "recently-saved",
+    path: "/recently-saved",
+    label: "recently saved",
+    description: "saved in the last 2 days",
+    signals: recentlySavedSignals,
+  });
 
-  if (recentlySavedSignals.length > 0) {
-    filters.push({
-      id: "recently-saved",
-      path: "/recently-saved",
-      label: "recently saved",
-      description: "newest saved inspirations",
-      signals: recentlySavedSignals,
-    });
-  }
-
-  const topicGroups = new Map<string, { label: string; signals: ApiSavedSignalSearchResult[]; newest: number }>();
-  const addTopic = (rawLabel: string, signal: ApiSavedSignalSearchResult): void => {
-    if (isInternalMemoryPathTopic(rawLabel)) return;
-    const label = categoryTitleFromTerm(rawLabel);
-    const slug = memoryPathSlug(label);
-    if (
-      !slug ||
-      ["signal", "signals", "memory", "memories", "node", "nodes", "graph", "resonance", "waka"].includes(slug) ||
-      isInternalMemoryPathTopic(label) ||
-      isInternalMemoryPathTopic(slug)
-    )
-      return;
-    const existing = topicGroups.get(slug);
-    if (existing) {
-      if (!existing.signals.some((item) => item.id === signal.id)) existing.signals.push(signal);
-      existing.newest = Math.max(existing.newest, capturedAtMs(signal));
-      return;
-    }
-    topicGroups.set(slug, { label, signals: [signal], newest: capturedAtMs(signal) });
-  };
-
-  for (const signal of sortedSignals) {
-    signal.relatedTopOfMindNoteTitles.filter((title) => title.trim()).forEach((title) => addTopic(title, signal));
-  }
-  for (const signal of sortedSignals) {
-    signal.relatedContextTerms.filter((term) => term.trim()).forEach((term) => addTopic(term, signal));
-  }
-
-  const dynamicFilters = [...topicGroups.entries()]
-    .filter(([, group]) => group.signals.length > 0)
-    .sort(([, a], [, b]) => b.signals.length - a.signals.length || b.newest - a.newest)
-    .map(([slug, group]) => ({
-      id: `topic-${slug}`,
-      path: `/${slug}`,
-      label: group.label.toLowerCase(),
-      description: `${group.signals.length === 1 ? "1 inspiration" : `${group.signals.length} inspirations`} sharing this path`,
-      signals: sortedSignalsNewest(group.signals),
-    }));
-
-  return [...filters, ...dynamicFilters];
+  return filters;
 }
 
 function applySearchToSignals(signals: ApiSavedSignalSearchResult[], query: string): ApiSavedSignalSearchResult[] {
@@ -1466,6 +1371,7 @@ export function HomePage(): JSX.Element {
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
   const [selectedMemoryPathFilterId, setSelectedMemoryPathFilterId] = useState("all-saved");
   const [showAllMemoryPathFilters, setShowAllMemoryPathFilters] = useState(false);
+  const [topOfMindDisplayName, setTopOfMindDisplayName] = useState<string | null>(null);
   // The cleaned-up contents view always reads newest-first; the explicit
   // sort toggle was removed in favor of a calmer, text-forward layout.
   const memoryBrowseOrder: MemoryBrowseOrder = "newest";
@@ -1539,7 +1445,6 @@ export function HomePage(): JSX.Element {
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
-  const [confirmingSavedSignalDeleteId, setConfirmingSavedSignalDeleteId] = useState<string | null>(null);
   const [memoryHighlightMode, setMemoryHighlightMode] = useState(false);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
   const [highlightStatus, setHighlightStatus] = useState<
@@ -1594,6 +1499,13 @@ export function HomePage(): JSX.Element {
     setLocale(preferredLocale);
     writeStoredLocale(preferredLocale);
   }, [user?.preferredLocale, user?.id]);
+
+  useEffect(() => {
+    if (!user) return;
+    const key = `${TOP_OF_MIND_NAME_STORAGE_PREFIX}.${user.id}`;
+    const stored = window.localStorage.getItem(key)?.trim();
+    setTopOfMindDisplayName(stored || null);
+  }, [user?.id]);
 
   useEffect(() => {
     return () => {
@@ -2421,7 +2333,20 @@ export function HomePage(): JSX.Element {
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
+  const editableTopOfMindName = topOfMindDisplayName ?? displayHandle;
   const copy = HOME_COPY[locale];
+
+  const updateTopOfMindDisplayName = (nextName: string): void => {
+    const normalized = nextName.replace(/\s+/g, " ").trim();
+    setTopOfMindDisplayName(nextName);
+    if (!user) return;
+    const key = `${TOP_OF_MIND_NAME_STORAGE_PREFIX}.${user.id}`;
+    if (normalized.length === 0 || normalized === displayHandle) {
+      window.localStorage.removeItem(key);
+    } else {
+      window.localStorage.setItem(key, normalized);
+    }
+  };
 
   useEffect(() => {
     if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
@@ -3149,7 +3074,6 @@ export function HomePage(): JSX.Element {
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
     setSelectedInspirationText(null);
-    setConfirmingSavedSignalDeleteId(null);
   };
   const saveEditedSavedSignal = async (): Promise<void> => {
     if (!selectedDrawerSignal || !selectedDrawerHasEdit || savedSignalEditSaving) return;
@@ -3194,7 +3118,6 @@ export function HomePage(): JSX.Element {
 
   const openStackSignal = (signal: ApiSavedSignalSearchResult): void => {
     setSelectedInspirationText(null);
-    setConfirmingSavedSignalDeleteId(null);
     if (selectedSavedSignalId === signal.id) {
       setSelectedSavedSignalId(null);
       setSavedSignalDetail(null);
@@ -3235,7 +3158,6 @@ export function HomePage(): JSX.Element {
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
     setSelectedInspirationText(null);
-    setConfirmingSavedSignalDeleteId(null);
     setSavedSignalDrafts((current) => {
       const next = { ...current };
       delete next[signal.id];
@@ -3285,7 +3207,6 @@ export function HomePage(): JSX.Element {
               setSelectedSavedSignalId(null);
               setSavedSignalDetail(null);
               setSelectedInspirationText(null);
-              setConfirmingSavedSignalDeleteId(null);
             }}
           >
             <svg
@@ -3313,7 +3234,6 @@ export function HomePage(): JSX.Element {
                   ...current,
                   [signal.id]: event.currentTarget.innerText,
                 }));
-                setConfirmingSavedSignalDeleteId(null);
               }}
               onMouseUp={() => handleMemoryTextSelection(signal.id)}
               onKeyUp={() => handleMemoryTextSelection(signal.id)}
@@ -3347,32 +3267,13 @@ export function HomePage(): JSX.Element {
                   undo edit and leave
                 </button>
               ) : null}
-              {confirmingSavedSignalDeleteId === signal.id ? (
-                <>
-                  <button
-                    type="button"
-                    className="memory-contents-secondary-action"
-                    onClick={() => setConfirmingSavedSignalDeleteId(null)}
-                  >
-                    keep
-                  </button>
-                  <button
-                    type="button"
-                    className="memory-contents-secondary-action memory-contents-secondary-action--danger"
-                    onClick={() => deleteSavedSignalFromDrawer(signal)}
-                  >
-                    confirm delete
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
-                  onClick={() => setConfirmingSavedSignalDeleteId(signal.id)}
-                >
-                  delete
-                </button>
-              )}
+              <button
+                type="button"
+                className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
+                onClick={() => deleteSavedSignalFromDrawer(signal)}
+              >
+                delete
+              </button>
             </div>
           </div>
         </article>
@@ -4201,7 +4102,20 @@ export function HomePage(): JSX.Element {
       >
         <section className="nc-titlecard">
           <h1 className="nc-title">
-            {copy.titleLineOne(displayHandle)}
+            <input
+              className="nc-title-name nc-title-name-input"
+              style={{ ["--title-name-ch" as string]: `${Math.max(2, editableTopOfMindName.length)}ch` }}
+              aria-label="top of mind name"
+              value={editableTopOfMindName}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => updateTopOfMindDisplayName(event.target.value)}
+              onBlur={() => {
+                const normalized = editableTopOfMindName.replace(/\s+/g, " ").trim();
+                setTopOfMindDisplayName(normalized || null);
+              }}
+              onFocus={(event) => event.currentTarget.select()}
+              spellCheck={false}
+            />
+            's top of mind
             {copy.titleLineTwo ? (
               <>
                 <br />

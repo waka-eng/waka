@@ -1238,7 +1238,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         reflectValue={reflectionAnswer}
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
-        reflectPlaceholder={t(locale, "reflectionPlaceholder")}
+        reflectPlaceholder={guidedReflectionQuestionLoading ? "loading" : ""}
         reflectNextDisabled={guidedReflectionQuestionLoading}
         onReflectLater={() => {
           if (postSaveReflectionTargetId) {
