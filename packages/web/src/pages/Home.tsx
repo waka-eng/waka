@@ -456,39 +456,12 @@ function userFacingCopy(value: string): string {
     .replace(/\bAI\b/g, "the read");
 }
 
-type HighlightReaction = "pulled_me" | "envy" | "taste" | "reject" | "person" | "place" | "work";
-
 type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text"> & { note?: string | null };
 type SavedSignalHighlight = ApiSavedSignalSearchResult["highlightedSnippets"][number];
 
 interface MemoryHighlightSelection {
   signalId: string;
   text: string;
-  position: { top: number; left: number };
-  reaction: HighlightReaction | null;
-  note: string;
-}
-
-function buildHighlightMetadata(input: {
-  reaction: HighlightReaction | null;
-  note: string;
-}): string | undefined {
-  if (!input.reaction && input.note.trim().length === 0) return undefined;
-  return `highlight_reaction:v1:${JSON.stringify({
-    reaction: input.reaction,
-    note: input.note.trim() || null,
-  })}`;
-}
-
-function selectionPopoverPosition(): { top: number; left: number } {
-  const selection = window.getSelection();
-  const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-  const rect = range?.getBoundingClientRect();
-  if (!rect || (rect.width === 0 && rect.height === 0)) return { top: 24, left: 24 };
-  return {
-    top: Math.max(8, rect.top),
-    left: Math.max(72, Math.min(rect.left + rect.width / 2, window.innerWidth - 72)),
-  };
 }
 
 function renderHighlightedInspirationText(
@@ -1818,51 +1791,42 @@ export function HomePage(): JSX.Element {
     [],
   );
 
-  const handleMemoryTextSelection = useCallback((signalId: string): void => {
-    if (!memoryHighlightMode) {
-      setSelectedInspirationText(null);
-      return;
-    }
-    const selection = window.getSelection();
-    const selected = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
-    if (selected.length < 2) {
-      setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
-      return;
-    }
-    setSelectedInspirationText({
-      signalId,
-      text: selected.slice(0, 4096),
-      position: selectionPopoverPosition(),
-      reaction: null,
-      note: "",
-    });
-    setHighlightStatus({ status: "idle" });
-  }, [memoryHighlightMode]);
-
-  const handleMemoryTextareaSelection = useCallback(
-    (signalId: string, element: HTMLTextAreaElement): void => {
+  const captureMemoryHighlightSelection = useCallback(
+    (signalId: string, selected: string): void => {
       if (!memoryHighlightMode) {
         setSelectedInspirationText(null);
         return;
       }
-      const start = element.selectionStart;
-      const end = element.selectionEnd;
-      const selected = element.value.slice(Math.min(start, end), Math.max(start, end)).replace(/\s+/g, " ").trim();
-      if (selected.length < 2) {
+      const normalizedSelection = selected.replace(/\s+/g, " ").trim();
+      if (normalizedSelection.length < 2) {
         setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
         return;
       }
       setSelectedInspirationText({
         signalId,
-        text: selected.slice(0, 4096),
-        position: selectionPopoverPosition(),
-        reaction: null,
-        note: "",
+        text: normalizedSelection.slice(0, 4096),
       });
       setHighlightStatus({ status: "idle" });
-      element.setSelectionRange(end, end);
     },
     [memoryHighlightMode],
+  );
+
+  const handleMemoryTextSelection = useCallback(
+    (signalId: string): void => {
+      captureMemoryHighlightSelection(signalId, window.getSelection()?.toString() ?? "");
+    },
+    [captureMemoryHighlightSelection],
+  );
+
+  const handleMemoryTextareaSelection = useCallback(
+    (signalId: string, element: HTMLTextAreaElement): void => {
+      const start = element.selectionStart;
+      const end = element.selectionEnd;
+      const selected = element.value.slice(Math.min(start, end), Math.max(start, end));
+      captureMemoryHighlightSelection(signalId, selected);
+      element.setSelectionRange(end, end);
+    },
+    [captureMemoryHighlightSelection],
   );
 
   const addMemoryHighlight = useCallback(
@@ -1914,10 +1878,6 @@ export function HomePage(): JSX.Element {
           source: "user_selected",
           confidence: 100,
           isPrimary: false,
-          note: buildHighlightMetadata({
-            reaction: selected.reaction,
-            note: selected.note,
-          }),
         });
         updateLocalHighlight((current) =>
           current.map((highlight) => (highlight.id === tempHighlight.id ? spark : highlight)),
