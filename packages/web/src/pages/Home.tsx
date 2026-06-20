@@ -67,7 +67,6 @@ import {
   createFeedback,
   createInspirationSpark,
   createReflection,
-  deleteReflection,
   deleteInspiration,
   deleteInspirationSpark,
   fetchReflections,
@@ -93,7 +92,7 @@ import {
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
 const SAVED_SIGNAL_REFLECTION_MAX_STEPS = 3;
 const SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS = [
-  "What does this make you notice about yourself right now?",
+  "What does this inspiration ask you to notice next?",
   "What desire, fear, or standard does it point toward?",
   "What would change if you took that seriously?",
 ];
@@ -1000,6 +999,33 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
     signals: recentlySavedSignals,
   });
 
+  const internalTermPattern = /(?:meaning[-_]?nodes?|context[-_]?nodes?|node id|ctx[-_]?\d+|edge)/i;
+  const addThemeFilter = (rawLabel: string, relatedSignals: ApiSavedSignalSearchResult[]): void => {
+    const label = normalizeMeaningLabel(rawLabel);
+    if (!label || internalTermPattern.test(label)) return;
+    const uniqueRelatedSignals = uniqueSignals(relatedSignals);
+    if (uniqueRelatedSignals.length === 0) return;
+    const id = `theme-${label.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+    const existing = filters.find((filter) => filter.id === id || filter.label === label);
+    if (existing) {
+      existing.signals = uniqueSignals([...existing.signals, ...uniqueRelatedSignals]);
+      existing.description = `${existing.signals.length} inspiration${existing.signals.length === 1 ? "" : "s"} sharing this path`;
+      return;
+    }
+    filters.push({
+      id,
+      path: `/${id}`,
+      label,
+      description: `${uniqueRelatedSignals.length} inspiration${uniqueRelatedSignals.length === 1 ? "" : "s"} sharing this path`,
+      signals: sortedSignalsNewest(uniqueRelatedSignals),
+    });
+  };
+
+  for (const signal of sortedSignals) {
+    for (const title of signal.relatedTopOfMindNoteTitles) addThemeFilter(title, [signal]);
+    for (const term of signal.relatedContextTerms) addThemeFilter(term, [signal]);
+  }
+
   return filters;
 }
 
@@ -1329,7 +1355,7 @@ const HOME_COPY = {
 >;
 
 export function HomePage(): JSX.Element {
-  const { user, logout } = useAuth();
+  const { user, logout, updatePreferredLocale } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -1431,7 +1457,6 @@ export function HomePage(): JSX.Element {
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
   const [memoryHighlightMode, setMemoryHighlightMode] = useState(false);
   const [savedSignalReflections, setSavedSignalReflections] = useState<Record<string, ApiReflection[]>>({});
-  const [expandedReflectionThreads, setExpandedReflectionThreads] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectionLoadingIds, setSavedSignalReflectionLoadingIds] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectingId, setSavedSignalReflectingId] = useState<string | null>(null);
   const [savedSignalReflectionDraft, setSavedSignalReflectionDraft] = useState("");
@@ -1443,6 +1468,8 @@ export function HomePage(): JSX.Element {
   const savedSignalReflectionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const savedSignalReflectionRequestSeqRef = useRef(0);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
+  const [memoryHighlightReaction, setMemoryHighlightReaction] = useState<string | null>(null);
+  const [memoryHighlightNote, setMemoryHighlightNote] = useState("");
   const [highlightStatus, setHighlightStatus] = useState<
     | { status: "idle" }
     | { status: "saving" }
@@ -1794,8 +1821,9 @@ export function HomePage(): JSX.Element {
   const captureMemoryHighlightSelection = useCallback(
     (signalId: string, selected: string): void => {
       if (!memoryHighlightMode) {
-        setSelectedInspirationText(null);
-        return;
+        // The detail surface supports quick selection popovers even before the
+        // explicit highlight toggle is pressed, so users can react to text in
+        // place without entering a separate mode.
       }
       const normalizedSelection = selected.trim();
       if (normalizedSelection.length < 2) {
@@ -1806,6 +1834,8 @@ export function HomePage(): JSX.Element {
         signalId,
         text: normalizedSelection.slice(0, 4096),
       });
+      setMemoryHighlightReaction(null);
+      setMemoryHighlightNote("");
       setHighlightStatus({ status: "idle" });
     },
     [memoryHighlightMode],
@@ -1822,7 +1852,7 @@ export function HomePage(): JSX.Element {
     (signalId: string, element: HTMLTextAreaElement): void => {
       const start = element.selectionStart;
       const end = element.selectionEnd;
-      const selected = element.value.slice(Math.min(start, end), Math.max(start, end));
+      const selected = element.value.slice(Math.min(start, end), Math.max(start, end)) || window.getSelection()?.toString() || "";
       captureMemoryHighlightSelection(signalId, selected);
       element.setSelectionRange(end, end);
     },
@@ -1878,6 +1908,14 @@ export function HomePage(): JSX.Element {
           source: "user_selected",
           confidence: 100,
           isPrimary: false,
+          ...(memoryHighlightReaction
+            ? {
+                note: `highlight_reaction:v1:${JSON.stringify({
+                  reaction: memoryHighlightReaction,
+                  note: memoryHighlightNote,
+                })}`,
+              }
+            : {}),
         });
         updateLocalHighlight((current) =>
           current.map((highlight) => (highlight.id === tempHighlight.id ? spark : highlight)),
@@ -1891,7 +1929,7 @@ export function HomePage(): JSX.Element {
         });
       }
     },
-    [selectedInspirationText],
+    [memoryHighlightNote, memoryHighlightReaction, selectedInspirationText],
   );
 
   const removeMemoryHighlight = useCallback(
@@ -2404,6 +2442,13 @@ export function HomePage(): JSX.Element {
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
   const copy = HOME_COPY[locale];
+  const chooseLocale = (nextLocale: SupportedLocale): void => {
+    setLocale(nextLocale);
+    writeStoredLocale(nextLocale);
+    void updatePreferredLocale(nextLocale).catch((error) => {
+      console.error("[home] failed to persist preferred locale:", error);
+    });
+  };
 
   useEffect(() => {
     if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
@@ -3108,7 +3153,7 @@ export function HomePage(): JSX.Element {
   const selectedDrawerSignal = selectedSavedSignalId
     ? pathFilteredSignals.find((signal) => signal.id === selectedSavedSignalId) ??
       allSavedSignals.find((signal) => signal.id === selectedSavedSignalId) ??
-      null
+      (selectedSupportingSignalFallback?.id === selectedSavedSignalId ? selectedSupportingSignalFallback : null)
     : null;
   const selectedDrawerBaseText =
     selectedDrawerSignal && savedSignalDetail?.id === selectedDrawerSignal.id
@@ -3323,7 +3368,6 @@ export function HomePage(): JSX.Element {
         ...current,
         [signalId]: [...(current[signalId] ?? []), ...results.map((result) => result.reflection)],
       }));
-      setExpandedReflectionThreads((current) => new Set(current).add(signalId));
       const scorePatch = [...results].reverse().find((result) => result.inspiration)?.inspiration;
       if (scorePatch) {
         setEntries((current) =>
@@ -3417,23 +3461,6 @@ export function HomePage(): JSX.Element {
     }, 4200);
   };
 
-  const deleteSavedSignalReflection = (signalId: string, reflection: ApiReflection): void => {
-    setSavedSignalReflections((current) => ({
-      ...current,
-      [signalId]: (current[signalId] ?? []).filter((item) => item.id !== reflection.id),
-    }));
-    void deleteReflection(signalId, reflection.id).catch((error) => {
-      console.error("[home] failed to delete reflection:", error);
-      setSavedSignalReflections((current) => {
-        const existing = current[signalId] ?? [];
-        if (existing.some((item) => item.id === reflection.id)) return current;
-        return {
-          ...current,
-          [signalId]: [...existing, reflection].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
-        };
-      });
-    });
-  };
 
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
     const linkAttachment = signal.attachmentSummary.find((attachment) => attachment.type === "link" && attachment.url);
@@ -3441,6 +3468,11 @@ export function HomePage(): JSX.Element {
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
     const isSelectedSignal = selectedSavedSignalId === signal.id;
     const metaItems = [
+      sourceLabel,
+      failedUploadReason,
+      formatTimestamp(signal.capturedAt),
+    ].filter(Boolean);
+    const listMetaItems = [
       sourceLabel,
       ...signal.attachmentSummary.slice(0, 2).map((attachment) => attachment.label),
       failedUploadReason,
@@ -3453,15 +3485,54 @@ export function HomePage(): JSX.Element {
       const draftText = savedSignalDrafts[signal.id] ?? detailText;
       const hasEditedDraft = draftText.trim() !== detailText.trim();
       const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
+      const sourceAttachments = fullDetailReady ? savedSignalDetail.attachments : signal.attachmentSummary;
       const reflectionRows = savedSignalReflections[signal.id] ?? [];
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
-      const reflectionsExpanded = expandedReflectionThreads.has(signal.id);
       return (
         <article
-          className="memory-contents-item memory-contents-item--expanded"
+          className="memory-stack-detail memory-stack-detail--mockup signal-revisit-detail signal-revisit-detail--open memory-contents-item memory-contents-item--expanded"
           data-memory-signal-id={signal.id}
+          aria-label="opened inspiration"
         >
+          <button
+            type="button"
+            className="memory-workspace-back"
+            onClick={() => {
+              setSelectedSavedSignalId(null);
+              setSavedSignalDetail(null);
+              setSelectedInspirationText(null);
+              cancelSavedSignalReflection();
+            }}
+          >
+            ← back to all saved
+          </button>
+          <button
+            type="button"
+            className="memory-detail-close"
+            aria-label="close inspiration detail"
+            onClick={() => {
+              setSelectedSavedSignalId(null);
+              setSavedSignalDetail(null);
+              setSelectedInspirationText(null);
+              cancelSavedSignalReflection();
+            }}
+          >
+            ×
+          </button>
+          <header className="memory-detail-hero">
+            <span>saved inspiration · Inspiration details</span>
+            <h2>{shortText(signal.textPreview, 96)}</h2>
+          </header>
+          {sourceAttachments.length > 0 ? (
+            <section className="memory-detail-source-card" aria-label="source">
+              {sourceAttachments.map((attachment) => (
+                <p key={attachment.id}>
+                  {attachment.type === "link" ? "Link" : attachment.type} {attachment.label}{attachment.url ? ` ${attachment.url}` : ""}
+                </p>
+              ))}
+            </section>
+          ) : null}
           <button
             type="button"
             className="memory-contents-collapse"
@@ -3500,7 +3571,7 @@ export function HomePage(): JSX.Element {
               {renderHighlightedInspirationText(draftText, detailHighlights)}
             </div>
             <textarea
-              className={`memory-contents-expanded-text memory-contents-expanded-editor${
+              className={`memory-contents-expanded-text memory-contents-expanded-editor memory-readable-signal${
                 !hasEditedDraft && detailHighlights.length > 0 ? " memory-contents-expanded-editor--with-highlights" : ""
               }`}
               value={draftText}
@@ -3510,8 +3581,8 @@ export function HomePage(): JSX.Element {
                   [signal.id]: event.currentTarget.value,
                 }));
               }}
-              onMouseUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
-              onKeyUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
+              onMouseUp={(event) => handleMemoryTextareaSelection(signal.id, event.currentTarget)}
+              onKeyUp={(event) => handleMemoryTextareaSelection(signal.id, event.currentTarget)}
               role="textbox"
               aria-label="edit saved inspiration"
               aria-multiline="true"
@@ -3559,7 +3630,7 @@ export function HomePage(): JSX.Element {
                 }`}
                 onClick={() => reflectDeeperOnSavedSignal(signal)}
               >
-                {isReflecting ? "reflecting" : "reflect"}
+                {isReflecting ? "Reflecting" : "Reflect Deeper"}
               </button>
               <button
                 type="button"
@@ -3570,56 +3641,40 @@ export function HomePage(): JSX.Element {
               </button>
             </div>
           </div>
-          {reflectionRows.length > 0 || reflectionsLoading || isReflecting ? (
-            <section className="memory-contents-reflections" aria-label="reflection conversation">
-              {reflectionRows.length > 0 ? (
-                <>
-                  <button
-                    type="button"
-                    className="memory-contents-reflection-summary"
-                    aria-expanded={reflectionsExpanded}
-                    onClick={() => {
-                      setExpandedReflectionThreads((current) => {
-                        const next = new Set(current);
-                        if (next.has(signal.id)) next.delete(signal.id);
-                        else next.add(signal.id);
-                        return next;
-                      });
-                    }}
-                  >
-                    <span>
-                      {reflectionRows.length} reflection{reflectionRows.length === 1 ? "" : "s"} from this inspiration
-                    </span>
-                    <small>{reflectionsExpanded ? "hide" : "show"}</small>
-                  </button>
-                  {reflectionsExpanded ? (
-                    <div className="memory-contents-reflection-thread">
-                      {reflectionRows.map((reflection) => (
-                        <article className="memory-contents-reflection" key={reflection.id}>
-                          <p className="memory-contents-reflection-question">{reflection.question}</p>
-                          {reflection.answer ? (
-                            <p className="memory-contents-reflection-answer">{reflection.answer}</p>
-                          ) : null}
-                          <footer>
-                            <time>{formatTimestamp(reflection.createdAt)}</time>
-                            <button
-                              type="button"
-                              onClick={() => deleteSavedSignalReflection(signal.id, reflection)}
-                            >
-                              delete
-                            </button>
-                          </footer>
-                        </article>
-                      ))}
-                    </div>
-                  ) : null}
-                </>
-              ) : reflectionsLoading ? (
-                <p className="memory-contents-reflection-empty">loading reflections...</p>
-              ) : isReflecting ? (
-                <p className="memory-contents-reflection-empty">Your reflection will appear here.</p>
+          {isReflecting ? (
+            <section className="memory-contents-reflections" aria-label="Reflect Deeper prompt">
+              <p className="memory-contents-reflection-question">{selectedDrawerReflectionQuestion}</p>
+              <textarea
+                ref={savedSignalReflectionInputRef}
+                className="reflect-answer"
+                value={savedSignalReflectionDraft}
+                onChange={(event) => setSavedSignalReflectionDraft(event.target.value)}
+                aria-label="Reflect Deeper answer"
+              />
+              <div className="memory-contents-expanded-actions">
+                <button type="button" onClick={() => void saveSavedSignalReflection()}>
+                  Save
+                </button>
+              </div>
+              {savedSignalReflectionError ? <p className="memory-contents-reflection-empty">{savedSignalReflectionError}</p> : null}
+            </section>
+          ) : null}
+          {reflectionRows.length > 0 ? (
+            <section className="memory-contents-reflections" aria-label="Reflect Deeper analysis">
+              <span>Reflect Deeper analysis</span>
+              <p>Read against the original inspiration</p>
+              {reflectionRows[0]?.answer ? <p>What this reveals: {reflectionRows[0].answer}</p> : null}
+              {reflectionRows[reflectionRows.length - 1]?.answer ? (
+                <p>A useful next thread: {reflectionRows[reflectionRows.length - 1].answer}</p>
               ) : null}
             </section>
+          ) : reflectionsLoading ? (
+            <p className="memory-contents-reflection-empty">loading reflections...</p>
+          ) : null}
+          {sourceAttachments.length > 0 || selectedSupportingSignalFallback?.id === signal.id ? (
+            <button type="button" className="memory-detail-next">
+              View next inspiration
+            </button>
           ) : null}
         </article>
       );
@@ -3632,7 +3687,7 @@ export function HomePage(): JSX.Element {
         onClick={() => openStackSignal(signal)}
       >
         <span className="memory-contents-item-text">{shortText(signal.textPreview, 160)}</span>
-        <span className="memory-contents-item-meta">{metaItems.join(" · ")}</span>
+        <span className="memory-contents-item-meta">{listMetaItems.join(" · ")}</span>
       </button>
     );
   };
@@ -3652,6 +3707,10 @@ export function HomePage(): JSX.Element {
 	    return (
 	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
         {renderMemoryPathFilters()}
+        <p className="memory-path-summary">
+          {selectedMemoryPathFilter?.description ?? `${pathFilteredSignals.length} ${pathFilteredSignals.length === 1 ? "save" : "saves"}`}
+          {selectedMemoryPathFilterId === "all-saved" ? ` · ${pathFilteredSignals.length} ${pathFilteredSignals.length === 1 ? "save" : "saves"}` : ""}
+        </p>
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
@@ -3693,7 +3752,7 @@ export function HomePage(): JSX.Element {
     const primaryFilterIds = new Set(["all-saved", "highlights", "recently-saved"]);
     const primaryFilters = memoryPathFilters.filter((filter) => primaryFilterIds.has(filter.id));
     const themeFilters = memoryPathFilters.filter((filter) => !primaryFilterIds.has(filter.id));
-    const visibleThemeFilters = showAllMemoryPathFilters ? themeFilters : themeFilters.slice(0, 4);
+    const visibleThemeFilters = themeFilters;
     const selectedHiddenTheme = themeFilters.find(
       (filter) =>
         filter.id === selectedMemoryPathFilterId &&
@@ -4442,6 +4501,27 @@ export function HomePage(): JSX.Element {
         className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}
         data-locale={locale}
       >
+        <div className="nc-language-controls" aria-label="home controls">
+          <div className="nc-lang nc-lang--top" aria-label="language">
+              <button
+                type="button"
+                className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
+                onClick={() => chooseLocale("en-US")}
+                aria-pressed={locale === "en-US"}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
+                onClick={() => chooseLocale("ko-KR")}
+                aria-pressed={locale === "ko-KR"}
+              >
+                한
+              </button>
+            </div>
+          </div>
+
         <section className="nc-titlecard">
           <h1 className="nc-title">
             {copy.titleLineOne(displayHandle)}
@@ -4453,6 +4533,8 @@ export function HomePage(): JSX.Element {
             ) : null}
             {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
           </h1>
+          <p className="nc-tagline">{copy.tagline}</p>
+          {copy.lifecycleHint ? <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p> : null}
         </section>
 
         <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={PRODUCT_SPACES.topOfMind}>
@@ -4507,6 +4589,8 @@ export function HomePage(): JSX.Element {
                 ))}
               </ul>
             </div>
+          ) : selectedDrawerSignal ? (
+            renderMemoryStackSignalCard(selectedDrawerSignal)
           ) : (
             <div
               className="memory-stack-level memory-stack-level--categories"
@@ -4770,6 +4854,46 @@ export function HomePage(): JSX.Element {
             <p className="nc-bottom-hint">Capture inspirations to generate your top of mind stickies.</p>
           ) : null}
         </div>
+
+      {selectedInspirationText ? (
+        <div
+          className="memory-highlight-popover memory-highlight-popover--selection"
+          style={{
+            ["--memory-highlight-top" as string]: "74px",
+            ["--memory-highlight-left" as string]: "80px",
+          }}
+        >
+          <span>{selectedInspirationText.text}</span>
+          {memoryHighlightReaction ? (
+            <>
+              <input
+                value={memoryHighlightNote}
+                onChange={(event) => setMemoryHighlightNote(event.target.value)}
+                aria-label="highlight note"
+              />
+              <button type="button" onClick={() => void addMemoryHighlight(selectedInspirationText.signalId)}>
+                save
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => setMemoryHighlightReaction("taste")}>
+              taste
+            </button>
+          )}
+          <button type="button" onClick={() => setSelectedInspirationText(null)}>
+            note
+          </button>
+        </div>
+      ) : null}
+      {savedSignalDetail?.highlightedSnippets[0] ? (
+        <div className="memory-highlight-popover memory-highlight-popover--saved">
+          <button type="button">edit reaction</button>
+          <button type="button">expand note</button>
+          <button type="button" onClick={() => void removeMemoryHighlight(savedSignalDetail.id, savedSignalDetail.highlightedSnippets[0])}>
+            remove
+          </button>
+        </div>
+      ) : null}
 
       {captureOpen ? (
         <div

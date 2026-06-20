@@ -1389,6 +1389,7 @@
 
 .memory-drawer-stack {
   --memory-drawer-top: clamp(72px, 10vh, 112px);
+  --memory-drawer-bottom-clearance: clamp(156px, 20vh, 220px);
 
   position: fixed;
   top: var(--memory-drawer-top);
@@ -1404,6 +1405,10 @@
   overflow: hidden;
   background: color-mix(in srgb, white 86%, transparent);
   transform: translateX(-50%);
+  inset: 0;
+  width: 100vw;
+  transform: none;
+  animation: memoryDrawerOverlayIn 220ms ease-out both;
   border: 1px solid rgba(31, 29, 24, 0.1);
   box-shadow:
     0 24px 70px rgba(25, 22, 18, 0.16),
@@ -1478,8 +1483,9 @@
 }
 
 .memory-stack-level--categories {
+  bottom: var(--memory-drawer-bottom-clearance);
   overflow-x: hidden;
-  padding: 10px 6px 6px;
+  padding: clamp(64px, 10vh, 96px) clamp(20px, 5vw, 56px) 24px;
 }
 
 .memory-category-panel {
