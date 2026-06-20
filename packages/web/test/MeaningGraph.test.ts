@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MEANING_GRAPH_COPY,
   filterMeaningGraphNodes,
   meaningGraphDragModeSummary,
   rebuildJobResult,
@@ -63,6 +64,26 @@ function graphNode(input: Partial<ApiMeaningGraphNode> & Pick<ApiMeaningGraphNod
     ...input,
   };
 }
+
+describe("meaning graph Korean admin copy", () => {
+  it("localizes the admin graph strings that previously leaked visible English", () => {
+    const koreanVisibleCopy = [
+      MEANING_GRAPH_COPY["ko-KR"].graphEyebrow,
+      MEANING_GRAPH_COPY["ko-KR"].rebuildConfirmTitle,
+      MEANING_GRAPH_COPY["ko-KR"].rebuildConfirmBody,
+      MEANING_GRAPH_COPY["ko-KR"].noSelectionIntro,
+      MEANING_GRAPH_COPY["ko-KR"].recentSignalsEyebrow,
+      MEANING_GRAPH_COPY["ko-KR"].recentSignalsIntro,
+      MEANING_GRAPH_COPY["ko-KR"].allTypes,
+      MEANING_GRAPH_COPY["ko-KR"].confidence,
+      MEANING_GRAPH_COPY["ko-KR"].noRecentSignals,
+    ].join(" ");
+
+    expect(koreanVisibleCopy).not.toMatch(/context graph|The graph above|recent signals|Newest saves|All types|Confidence|No recent signals/i);
+    expect(koreanVisibleCopy).toContain("맥락 그래프");
+    expect(MEANING_GRAPH_COPY["en-US"].recentSignalsIntro).toContain("context graph");
+  });
+});
 
 describe("rebuildJobResult", () => {
   it("derives the completed inspiration count from durable rebuild progress payloads", () => {
