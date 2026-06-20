@@ -502,16 +502,18 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
                 hidden
                 onChange={handleFileChange}
               />
-              <button
-                type="button"
-                className={`cap-highlight-mode${highlightMode ? " cap-highlight-mode--active" : ""}`}
-                title={highlightMode ? "turn off highlight mode" : "highlight mode"}
-                aria-label={highlightMode ? "turn off highlight mode" : "turn on highlight mode"}
-                aria-pressed={highlightMode}
-                onClick={onToggleHighlightMode}
-              >
-                {highlightMode ? "highlighting" : "highlight"}
-              </button>
+              {noteText.trim().length > 0 ? (
+                <button
+                  type="button"
+                  className={`cap-highlight-mode${highlightMode ? " cap-highlight-mode--active" : ""}`}
+                  title={highlightMode ? "turn off highlight mode" : "highlight mode"}
+                  aria-label={highlightMode ? "turn off highlight mode" : "turn on highlight mode"}
+                  aria-pressed={highlightMode}
+                  onClick={onToggleHighlightMode}
+                >
+                  {highlightMode ? "highlighting" : "highlight"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="cap-expand"

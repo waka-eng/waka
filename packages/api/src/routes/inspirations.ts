@@ -1454,6 +1454,37 @@ routes.get("/:id/reflections", async (c) => {
   return c.json({ reflections: rows }, 200);
 });
 
+// DELETE /api/inspirations/:id/reflections/:reflectionId
+routes.delete("/:id/reflections/:reflectionId", async (c) => {
+  const inspirationIdCheck = z.string().uuid().safeParse(c.req.param("id"));
+  const reflectionIdCheck = z.string().uuid().safeParse(c.req.param("reflectionId"));
+  if (!inspirationIdCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+  if (!reflectionIdCheck.success) {
+    return c.json({ error: "Invalid reflection id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+  const [deleted] = await db
+    .delete(reflections)
+    .where(
+      and(
+        eq(reflections.id, reflectionIdCheck.data),
+        eq(reflections.inspirationId, inspirationIdCheck.data),
+        eq(reflections.userId, user.id),
+      ),
+    )
+    .returning({ id: reflections.id });
+
+  if (!deleted) {
+    return c.json({ error: "Reflection not found" }, 404);
+  }
+
+  return c.json({ deleted: true, id: deleted.id }, 200);
+});
+
 // ---------------------------------------------------------------------------
 // DELETE /api/inspirations/:id
 // ---------------------------------------------------------------------------

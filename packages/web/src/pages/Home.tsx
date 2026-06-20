@@ -54,6 +54,8 @@ import {
   type ApiFeedbackValue,
   type ApiError,
   type ApiInspiration,
+  type ApiInspirationKind,
+  type ApiReflection,
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
@@ -64,13 +66,17 @@ import {
   type ClusterKind,
   createFeedback,
   createInspirationSpark,
+  createReflection,
+  deleteReflection,
   deleteInspiration,
   deleteInspirationSpark,
+  fetchReflections,
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
+  generateGuidedReflectionQuestion,
   recordInspirationRevisit,
   updateInspiration,
 } from "../lib/api";
@@ -85,7 +91,12 @@ import {
 } from "../lib/locales";
 
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
-const TOP_OF_MIND_NAME_STORAGE_PREFIX = "waka.topOfMindName";
+const SAVED_SIGNAL_REFLECTION_MAX_STEPS = 3;
+const SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS = [
+  "What does this make you notice about yourself right now?",
+  "What desire, fear, or standard does it point toward?",
+  "What would change if you took that seriously?",
+];
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -448,6 +459,7 @@ function userFacingCopy(value: string): string {
 type HighlightReaction = "pulled_me" | "envy" | "taste" | "reject" | "person" | "place" | "work";
 
 type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text"> & { note?: string | null };
+type SavedSignalHighlight = ApiSavedSignalSearchResult["highlightedSnippets"][number];
 
 interface MemoryHighlightSelection {
   signalId: string;
@@ -1371,7 +1383,6 @@ export function HomePage(): JSX.Element {
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
   const [selectedMemoryPathFilterId, setSelectedMemoryPathFilterId] = useState("all-saved");
   const [showAllMemoryPathFilters, setShowAllMemoryPathFilters] = useState(false);
-  const [topOfMindDisplayName, setTopOfMindDisplayName] = useState<string | null>(null);
   // The cleaned-up contents view always reads newest-first; the explicit
   // sort toggle was removed in favor of a calmer, text-forward layout.
   const memoryBrowseOrder: MemoryBrowseOrder = "newest";
@@ -1446,6 +1457,18 @@ export function HomePage(): JSX.Element {
   const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
   const [memoryHighlightMode, setMemoryHighlightMode] = useState(false);
+  const [savedSignalReflections, setSavedSignalReflections] = useState<Record<string, ApiReflection[]>>({});
+  const [expandedReflectionThreads, setExpandedReflectionThreads] = useState<Set<string>>(() => new Set());
+  const [savedSignalReflectionLoadingIds, setSavedSignalReflectionLoadingIds] = useState<Set<string>>(() => new Set());
+  const [savedSignalReflectingId, setSavedSignalReflectingId] = useState<string | null>(null);
+  const [savedSignalReflectionDraft, setSavedSignalReflectionDraft] = useState("");
+  const [savedSignalReflectionAnswers, setSavedSignalReflectionAnswers] = useState<string[]>([]);
+  const [savedSignalReflectionQuestions, setSavedSignalReflectionQuestions] = useState<string[]>([]);
+  const [savedSignalReflectionStepIndex, setSavedSignalReflectionStepIndex] = useState(0);
+  const [savedSignalReflectionSaving, setSavedSignalReflectionSaving] = useState(false);
+  const [savedSignalReflectionError, setSavedSignalReflectionError] = useState<string | null>(null);
+  const savedSignalReflectionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const savedSignalReflectionRequestSeqRef = useRef(0);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
   const [highlightStatus, setHighlightStatus] = useState<
     | { status: "idle" }
@@ -1499,13 +1522,6 @@ export function HomePage(): JSX.Element {
     setLocale(preferredLocale);
     writeStoredLocale(preferredLocale);
   }, [user?.preferredLocale, user?.id]);
-
-  useEffect(() => {
-    if (!user) return;
-    const key = `${TOP_OF_MIND_NAME_STORAGE_PREFIX}.${user.id}`;
-    const stored = window.localStorage.getItem(key)?.trim();
-    setTopOfMindDisplayName(stored || null);
-  }, [user?.id]);
 
   useEffect(() => {
     return () => {
@@ -1826,21 +1842,20 @@ export function HomePage(): JSX.Element {
   const addMemoryHighlight = useCallback(
     async (signalId: string): Promise<void> => {
       if (!selectedInspirationText || selectedInspirationText.signalId !== signalId) return;
-      setHighlightStatus({ status: "saving" });
-      try {
-        const spark = await createInspirationSpark(signalId, {
-          text: selectedInspirationText.text,
-          source: "user_selected",
-          confidence: 100,
-          isPrimary: false,
-          note: buildHighlightMetadata({
-            reaction: selectedInspirationText.reaction,
-            note: selectedInspirationText.note,
-          }),
-        });
+      const selected = selectedInspirationText;
+      const tempHighlight: SavedSignalHighlight = {
+        id: `temp-highlight-${signalId}-${Date.now()}`,
+        text: selected.text,
+        source: "user_selected",
+        confidence: 100,
+        isPrimary: false,
+      };
+      const updateLocalHighlight = (
+        updater: (current: SavedSignalHighlight[]) => SavedSignalHighlight[],
+      ): void => {
         setSavedSignalDetail((current) =>
           current && current.id === signalId
-            ? { ...current, highlightedSnippets: [spark, ...current.highlightedSnippets] }
+            ? { ...current, highlightedSnippets: updater(current.highlightedSnippets) }
             : current,
         );
         setMemoryWindowDetails((current) => {
@@ -1850,21 +1865,40 @@ export function HomePage(): JSX.Element {
             ...current,
             [signalId]: {
               ...detail,
-              highlightedSnippets: [spark, ...detail.highlightedSnippets],
+              highlightedSnippets: updater(detail.highlightedSnippets),
             },
           };
         });
         setSavedSignals((current) =>
           current.map((signal) =>
             signal.id === signalId
-              ? { ...signal, highlightedSnippets: [spark, ...signal.highlightedSnippets] }
+              ? { ...signal, highlightedSnippets: updater(signal.highlightedSnippets) }
               : signal,
           ),
         );
-        setSelectedInspirationText(null);
+      };
+
+      setHighlightStatus({ status: "saving" });
+      updateLocalHighlight((current) => [tempHighlight, ...current]);
+      setSelectedInspirationText(null);
+      window.getSelection()?.removeAllRanges();
+      try {
+        const spark = await createInspirationSpark(signalId, {
+          text: selected.text,
+          source: "user_selected",
+          confidence: 100,
+          isPrimary: false,
+          note: buildHighlightMetadata({
+            reaction: selected.reaction,
+            note: selected.note,
+          }),
+        });
+        updateLocalHighlight((current) =>
+          current.map((highlight) => (highlight.id === tempHighlight.id ? spark : highlight)),
+        );
         setHighlightStatus({ status: "idle" });
-        window.getSelection()?.removeAllRanges();
       } catch (caught) {
+        updateLocalHighlight((current) => current.filter((highlight) => highlight.id !== tempHighlight.id));
         setHighlightStatus({
           status: "error",
           message: caught instanceof Error ? caught.message : "Highlight did not save",
@@ -2035,6 +2069,10 @@ export function HomePage(): JSX.Element {
     return [...entries].reverse().map(entryToCardData);
   }, [entries]);
 
+  const savedInspirationTextById = useMemo(() => {
+    return new Map(entries.map((entry) => [entry.id, displayTextForEntry(entry)] as const));
+  }, [entries]);
+
   const filteredEntries = useMemo(() => {
     return filterAndSortInspirationEntries(entries, inspirationFilters);
   }, [entries, inspirationFilters]);
@@ -2063,6 +2101,7 @@ export function HomePage(): JSX.Element {
       id: attachment.id,
       type: attachment.type,
       label: attachmentContextLabel(attachment, locale),
+      ...(attachment.type === "link" && attachment.url ? { url: attachment.url } : {}),
     })),
     relevanceReasons: entry.errorMessage ? [entry.errorMessage] : [],
   } satisfies ApiSavedSignalSearchResult));
@@ -2217,8 +2256,8 @@ export function HomePage(): JSX.Element {
         setSavedSignalDetail(detail);
         setSavedSignalDrafts((current) => {
           const existingDraft = current[detail.id];
-          const previewText = allSavedSignals.find((signal) => signal.id === detail.id)?.textPreview;
-          if (existingDraft !== undefined && existingDraft !== previewText) return current;
+          const previousBaseText = savedInspirationTextById.get(detail.id);
+          if (existingDraft !== undefined && previousBaseText && existingDraft !== previousBaseText) return current;
           return {
             ...current,
             [detail.id]: detail.rawText,
@@ -2235,7 +2274,46 @@ export function HomePage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [homeMode, selectedSavedSignalId]);
+  }, [homeMode, savedInspirationTextById, selectedSavedSignalId]);
+
+  useEffect(() => {
+    if (homeMode !== "memoryDrawer" || !selectedSavedSignalId) {
+      setSavedSignalReflectingId(null);
+      setSavedSignalReflectionDraft("");
+      setSavedSignalReflectionError(null);
+      return;
+    }
+    if (savedSignalReflections[selectedSavedSignalId]) return;
+
+    let cancelled = false;
+    setSavedSignalReflectionLoadingIds((current) => new Set(current).add(selectedSavedSignalId));
+    void (async () => {
+      try {
+        const reflections = await fetchReflections(selectedSavedSignalId);
+        if (cancelled) return;
+        setSavedSignalReflections((current) => ({
+          ...current,
+          [selectedSavedSignalId]: reflections,
+        }));
+      } catch (error) {
+        if (!cancelled) {
+          console.error("[home] failed to load saved inspiration reflections:", error);
+        }
+      } finally {
+        if (!cancelled) {
+          setSavedSignalReflectionLoadingIds((current) => {
+            const next = new Set(current);
+            next.delete(selectedSavedSignalId);
+            return next;
+          });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [homeMode, savedSignalReflections, selectedSavedSignalId]);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -2333,20 +2411,7 @@ export function HomePage(): JSX.Element {
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
-  const editableTopOfMindName = topOfMindDisplayName ?? displayHandle;
   const copy = HOME_COPY[locale];
-
-  const updateTopOfMindDisplayName = (nextName: string): void => {
-    const normalized = nextName.replace(/\s+/g, " ").trim();
-    setTopOfMindDisplayName(nextName);
-    if (!user) return;
-    const key = `${TOP_OF_MIND_NAME_STORAGE_PREFIX}.${user.id}`;
-    if (normalized.length === 0 || normalized === displayHandle) {
-      window.localStorage.removeItem(key);
-    } else {
-      window.localStorage.setItem(key, normalized);
-    }
-  };
 
   useEffect(() => {
     if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
@@ -3056,12 +3121,123 @@ export function HomePage(): JSX.Element {
   const selectedDrawerBaseText =
     selectedDrawerSignal && savedSignalDetail?.id === selectedDrawerSignal.id
       ? savedSignalDetail.rawText
-      : selectedDrawerSignal?.textPreview ?? "";
+      : selectedDrawerSignal
+        ? savedInspirationTextById.get(selectedDrawerSignal.id) ?? selectedDrawerSignal.textPreview
+        : "";
   const selectedDrawerDraftText = selectedDrawerSignal
     ? savedSignalDrafts[selectedDrawerSignal.id] ?? selectedDrawerBaseText
     : "";
   const selectedDrawerHasEdit =
     Boolean(selectedDrawerSignal) && selectedDrawerDraftText.trim() !== selectedDrawerBaseText.trim();
+  const selectedDrawerIsReflecting =
+    homeMode === "memoryDrawer" &&
+    Boolean(selectedDrawerSignal) &&
+    savedSignalReflectingId === selectedDrawerSignal?.id;
+  const selectedDrawerReflectionCanSave = savedSignalReflectionDraft.trim().length > 0;
+  const selectedDrawerReflectionQuestion =
+    savedSignalReflectionQuestions[savedSignalReflectionStepIndex] ??
+    SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[savedSignalReflectionStepIndex] ??
+    SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
+  const selectedDrawerReflectionProgress = `${savedSignalReflectionStepIndex + 1}/${SAVED_SIGNAL_REFLECTION_MAX_STEPS}`;
+  const selectedDrawerReflectionCanGoNext =
+    selectedDrawerReflectionCanSave &&
+    savedSignalReflectionStepIndex < SAVED_SIGNAL_REFLECTION_MAX_STEPS - 1;
+  const selectedDrawerReflectionCanFinish =
+    savedSignalReflectionAnswers
+      .map((answer, index) => (index === savedSignalReflectionStepIndex ? savedSignalReflectionDraft : answer))
+      .filter((answer) => answer.trim().length > 0).length >= SAVED_SIGNAL_REFLECTION_MAX_STEPS;
+
+  const cancelSavedSignalReflection = (): void => {
+    setSavedSignalReflectingId(null);
+    setSavedSignalReflectionDraft("");
+    setSavedSignalReflectionAnswers([]);
+    setSavedSignalReflectionQuestions([]);
+    setSavedSignalReflectionStepIndex(0);
+    setSavedSignalReflectionError(null);
+  };
+
+  const savedSignalKindForReflection = (signal: ApiSavedSignalSearchResult): ApiInspirationKind => {
+    return signal.kind === "link" || signal.kind === "image" || signal.kind === "mixed" ? signal.kind : "note";
+  };
+
+  const requestSavedSignalReflectionQuestion = (
+    signal: ApiSavedSignalSearchResult,
+    stepIndex: number,
+    answers: string[],
+    questions: string[],
+  ): void => {
+    const requestId = savedSignalReflectionRequestSeqRef.current + 1;
+    savedSignalReflectionRequestSeqRef.current = requestId;
+    const fallback =
+      SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[stepIndex] ??
+      SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
+    const text =
+      savedSignalDetail?.id === signal.id
+        ? savedSignalDetail.rawText
+        : savedInspirationTextById.get(signal.id) ?? signal.textPreview;
+    void generateGuidedReflectionQuestion({
+      locale,
+      inspiration: {
+        text,
+        kind: savedSignalKindForReflection(signal),
+        attachmentKinds: signal.attachmentSummary.map((attachment) => attachment.type),
+        highlights: signal.highlightedSnippets.map((highlight) => highlight.text),
+      },
+      priorAnswers: answers
+        .map((answer, index) => ({
+          question: questions[index] ?? SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[index] ?? fallback,
+          answer: answer.trim(),
+        }))
+        .filter((item) => item.answer.length > 0),
+    }).then(
+      (response) => {
+        if (savedSignalReflectionRequestSeqRef.current !== requestId) return;
+        setSavedSignalReflectionQuestions((current) => {
+          const next = [...current];
+          next[stepIndex] = response.question.trim() || fallback;
+          return next;
+        });
+      },
+      () => {
+        if (savedSignalReflectionRequestSeqRef.current !== requestId) return;
+        setSavedSignalReflectionQuestions((current) => {
+          const next = [...current];
+          next[stepIndex] = fallback;
+          return next;
+        });
+      },
+    );
+  };
+
+  const syncCurrentReflectionAnswer = (): string[] => {
+    const nextAnswers = [...savedSignalReflectionAnswers];
+    nextAnswers[savedSignalReflectionStepIndex] = savedSignalReflectionDraft;
+    setSavedSignalReflectionAnswers(nextAnswers);
+    return nextAnswers;
+  };
+
+  const goToPreviousSavedSignalReflection = (): void => {
+    if (savedSignalReflectionSaving || savedSignalReflectionStepIndex === 0) return;
+    const nextAnswers = syncCurrentReflectionAnswer();
+    const previousIndex = savedSignalReflectionStepIndex - 1;
+    setSavedSignalReflectionStepIndex(previousIndex);
+    setSavedSignalReflectionDraft(nextAnswers[previousIndex] ?? "");
+    window.setTimeout(() => savedSignalReflectionInputRef.current?.focus(), 0);
+  };
+
+  const goToNextSavedSignalReflection = (): void => {
+    if (!selectedDrawerSignal || savedSignalReflectionSaving) return;
+    const answer = savedSignalReflectionDraft.trim();
+    if (answer.length === 0 || savedSignalReflectionStepIndex >= SAVED_SIGNAL_REFLECTION_MAX_STEPS - 1) return;
+    const nextAnswers = syncCurrentReflectionAnswer();
+    const nextStepIndex = savedSignalReflectionStepIndex + 1;
+    const nextQuestions = savedSignalReflectionQuestions.slice(0, nextStepIndex);
+    setSavedSignalReflectionQuestions(nextQuestions);
+    setSavedSignalReflectionStepIndex(nextStepIndex);
+    setSavedSignalReflectionDraft(nextAnswers[nextStepIndex] ?? "");
+    requestSavedSignalReflectionQuestion(selectedDrawerSignal, nextStepIndex, nextAnswers, nextQuestions);
+    window.setTimeout(() => savedSignalReflectionInputRef.current?.focus(), 0);
+  };
 
   const discardSavedSignalEditAndCollapse = (): void => {
     if (selectedSavedSignalId) {
@@ -3074,6 +3250,15 @@ export function HomePage(): JSX.Element {
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
     setSelectedInspirationText(null);
+    cancelSavedSignalReflection();
+  };
+  const cancelSavedSignalEdit = (): void => {
+    if (!selectedSavedSignalId) return;
+    setSavedSignalDrafts((current) => {
+      const next = { ...current };
+      delete next[selectedSavedSignalId];
+      return next;
+    });
   };
   const saveEditedSavedSignal = async (): Promise<void> => {
     if (!selectedDrawerSignal || !selectedDrawerHasEdit || savedSignalEditSaving) return;
@@ -3116,14 +3301,68 @@ export function HomePage(): JSX.Element {
     }
   };
 
+  const saveSavedSignalReflection = async (): Promise<void> => {
+    const signalId = savedSignalReflectingId;
+    if (!signalId || savedSignalReflectionSaving) return;
+    const answers = syncCurrentReflectionAnswer();
+    const payload = answers
+      .map((answer, index) => ({
+        question:
+          savedSignalReflectionQuestions[index] ??
+          SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[index] ??
+          SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1],
+        answer: answer.trim(),
+      }))
+      .filter((item) => item.answer.length > 0)
+      .slice(0, SAVED_SIGNAL_REFLECTION_MAX_STEPS);
+    if (payload.length === 0 || payload.length < SAVED_SIGNAL_REFLECTION_MAX_STEPS) return;
+    setSavedSignalReflectionSaving(true);
+    setSavedSignalReflectionError(null);
+    try {
+      const results = await Promise.all(
+        payload.map((item) =>
+          createReflection(signalId, {
+            question: item.question,
+            answer: item.answer,
+          }),
+        ),
+      );
+      setSavedSignalReflections((current) => ({
+        ...current,
+        [signalId]: [...(current[signalId] ?? []), ...results.map((result) => result.reflection)],
+      }));
+      setExpandedReflectionThreads((current) => new Set(current).add(signalId));
+      const scorePatch = [...results].reverse().find((result) => result.inspiration)?.inspiration;
+      if (scorePatch) {
+        setEntries((current) =>
+          current.map((entry) => applyInspirationScorePatch(entry, scorePatch)),
+        );
+      }
+      cancelSavedSignalReflection();
+    } catch (error) {
+      setSavedSignalReflectionError(
+        error instanceof Error ? error.message : "Could not save that reflection.",
+      );
+    } finally {
+      setSavedSignalReflectionSaving(false);
+    }
+  };
+
   const openStackSignal = (signal: ApiSavedSignalSearchResult): void => {
     setSelectedInspirationText(null);
+    setSavedSignalReflectionError(null);
     if (selectedSavedSignalId === signal.id) {
       setSelectedSavedSignalId(null);
       setSavedSignalDetail(null);
+      cancelSavedSignalReflection();
       return;
     }
     setSelectedSavedSignalId(signal.id);
+    setSavedSignalDrafts((current) => {
+      if (current[signal.id] !== undefined) return current;
+      const immediateText = savedInspirationTextById.get(signal.id);
+      return immediateText ? { ...current, [signal.id]: immediateText } : current;
+    });
     window.setTimeout(() => {
       document
         .querySelector(`[data-memory-signal-id="${CSS.escape(signal.id)}"]`)
@@ -3133,9 +3372,18 @@ export function HomePage(): JSX.Element {
   };
 
   const reflectDeeperOnSavedSignal = (signal: ApiSavedSignalSearchResult): void => {
-    setSelectedId(signal.id);
-    setHistoryOpen(true);
-    closeMemoryDrawer();
+    if (selectedSavedSignalId !== signal.id) {
+      setSelectedSavedSignalId(signal.id);
+    }
+    setMemoryHighlightMode(false);
+    setSelectedInspirationText(null);
+    setSavedSignalReflectingId(signal.id);
+    setSavedSignalReflectionAnswers([]);
+    setSavedSignalReflectionQuestions([SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[0]]);
+    setSavedSignalReflectionStepIndex(0);
+    setSavedSignalReflectionDraft("");
+    setSavedSignalReflectionError(null);
+    window.setTimeout(() => savedSignalReflectionInputRef.current?.focus(), 0);
     recordRevisit(signal.id, "detail_opened");
   };
 
@@ -3165,6 +3413,7 @@ export function HomePage(): JSX.Element {
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
     setSelectedInspirationText(null);
+    cancelSavedSignalReflection();
     setSavedSignalDrafts((current) => {
       const next = { ...current };
       delete next[signal.id];
@@ -3181,7 +3430,26 @@ export function HomePage(): JSX.Element {
     }, 4200);
   };
 
+  const deleteSavedSignalReflection = (signalId: string, reflection: ApiReflection): void => {
+    setSavedSignalReflections((current) => ({
+      ...current,
+      [signalId]: (current[signalId] ?? []).filter((item) => item.id !== reflection.id),
+    }));
+    void deleteReflection(signalId, reflection.id).catch((error) => {
+      console.error("[home] failed to delete reflection:", error);
+      setSavedSignalReflections((current) => {
+        const existing = current[signalId] ?? [];
+        if (existing.some((item) => item.id === reflection.id)) return current;
+        return {
+          ...current,
+          [signalId]: [...existing, reflection].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+        };
+      });
+    });
+  };
+
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
+    const linkAttachment = signal.attachmentSummary.find((attachment) => attachment.type === "link" && attachment.url);
     const sourceLabel = signalSourceLabel(signal);
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
     const isSelectedSignal = selectedSavedSignalId === signal.id;
@@ -3193,10 +3461,15 @@ export function HomePage(): JSX.Element {
     ].filter(Boolean);
     if (isSelectedSignal) {
       const fullDetailReady = savedSignalDetail?.id === signal.id;
-      const detailText = fullDetailReady ? savedSignalDetail.rawText : signal.textPreview;
+      const immediateFullText = savedInspirationTextById.get(signal.id);
+      const detailText = fullDetailReady ? savedSignalDetail.rawText : immediateFullText ?? signal.textPreview;
       const draftText = savedSignalDrafts[signal.id] ?? detailText;
       const hasEditedDraft = draftText.trim() !== detailText.trim();
-      const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
+      const reflectionRows = savedSignalReflections[signal.id] ?? [];
+      const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
+      const isReflecting = savedSignalReflectingId === signal.id;
+      const reflectionsExpanded = expandedReflectionThreads.has(signal.id);
+      const latestReflection = reflectionRows[reflectionRows.length - 1] ?? null;
       return (
         <article
           className="memory-contents-item memory-contents-item--expanded"
@@ -3231,29 +3504,45 @@ export function HomePage(): JSX.Element {
           <div
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
-            <div
-              key={`${signal.id}:${fullDetailReady ? "full" : "preview"}`}
+            <textarea
               className="memory-contents-expanded-text memory-contents-expanded-editor"
-              contentEditable
-              suppressContentEditableWarning
-              onInput={(event) => {
+              value={draftText}
+              ref={(node) => {
+                if (!node) return;
+                node.style.height = "auto";
+                node.style.height = `${node.scrollHeight}px`;
+              }}
+              onChange={(event) => {
                 setSavedSignalDrafts((current) => ({
                   ...current,
-                  [signal.id]: event.currentTarget.innerText,
+                  [signal.id]: event.currentTarget.value,
                 }));
+                event.currentTarget.style.height = "auto";
+                event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
               }}
-              onMouseUp={() => handleMemoryTextSelection(signal.id)}
-              onKeyUp={() => handleMemoryTextSelection(signal.id)}
+              onMouseUp={memoryHighlightMode ? () => handleMemoryTextSelection(signal.id) : undefined}
+              onKeyUp={memoryHighlightMode ? () => handleMemoryTextSelection(signal.id) : undefined}
               role="textbox"
               aria-label="edit saved inspiration"
               aria-multiline="true"
               spellCheck={true}
-            >
-              {renderHighlightedInspirationText(draftText, detailHighlights)}
-            </div>
+            />
           </div>
           <div className="memory-contents-expanded-footer">
-            <span className="memory-contents-item-meta">{metaItems.join(" · ")}</span>
+            <span className="memory-contents-item-meta">
+              {metaItems.map((item, index) => (
+                <span key={`${signal.id}-meta-${index}`}>
+                  {index > 0 ? " · " : null}
+                  {index === 0 && linkAttachment?.url ? (
+                    <a href={linkAttachment.url} target="_blank" rel="noreferrer">
+                      {item}
+                    </a>
+                  ) : (
+                    item
+                  )}
+                </span>
+              ))}
+            </span>
             <div className="memory-contents-expanded-actions" aria-label="inspiration actions">
               <button
                 type="button"
@@ -3261,26 +3550,25 @@ export function HomePage(): JSX.Element {
                   memoryHighlightMode ? " memory-contents-secondary-action--active" : ""
                 }`}
                 aria-pressed={memoryHighlightMode}
-                onClick={() => setMemoryHighlightMode((current) => !current)}
+                onClick={() => {
+                  setMemoryHighlightMode((current) => {
+                    const next = !current;
+                    if (next) cancelSavedSignalReflection();
+                    return next;
+                  });
+                }}
               >
-                highlight mode
+                {memoryHighlightMode ? "highlighting" : "highlight"}
               </button>
               <button
                 type="button"
-                className="memory-contents-secondary-action"
+                className={`memory-contents-secondary-action${
+                  isReflecting ? " memory-contents-secondary-action--active" : ""
+                }`}
                 onClick={() => reflectDeeperOnSavedSignal(signal)}
               >
-                reflect deeper
+                reflect
               </button>
-              {hasEditedDraft ? (
-                <button
-                  type="button"
-                  className="memory-contents-secondary-action"
-                  onClick={discardSavedSignalEditAndCollapse}
-                >
-                  undo edit and leave
-                </button>
-              ) : null}
               <button
                 type="button"
                 className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
@@ -3290,6 +3578,58 @@ export function HomePage(): JSX.Element {
               </button>
             </div>
           </div>
+          {reflectionRows.length > 0 || reflectionsLoading || isReflecting ? (
+            <section className="memory-contents-reflections" aria-label="reflection conversation">
+              {reflectionRows.length > 0 ? (
+                <>
+                  <button
+                    type="button"
+                    className="memory-contents-reflection-summary"
+                    aria-expanded={reflectionsExpanded}
+                    onClick={() => {
+                      setExpandedReflectionThreads((current) => {
+                        const next = new Set(current);
+                        if (next.has(signal.id)) next.delete(signal.id);
+                        else next.add(signal.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    <span>
+                      {reflectionRows.length} reflection{reflectionRows.length === 1 ? "" : "s"} from this thread
+                    </span>
+                    {latestReflection?.answer ? <strong>{shortText(latestReflection.answer, 96)}</strong> : null}
+                    <small>{reflectionsExpanded ? "hide" : "show"}</small>
+                  </button>
+                  {reflectionsExpanded ? (
+                    <div className="memory-contents-reflection-thread">
+                      {reflectionRows.map((reflection) => (
+                        <article className="memory-contents-reflection" key={reflection.id}>
+                          <p className="memory-contents-reflection-question">{reflection.question}</p>
+                          {reflection.answer ? (
+                            <p className="memory-contents-reflection-answer">{reflection.answer}</p>
+                          ) : null}
+                          <footer>
+                            <time>{formatTimestamp(reflection.createdAt)}</time>
+                            <button
+                              type="button"
+                              onClick={() => deleteSavedSignalReflection(signal.id, reflection)}
+                            >
+                              delete
+                            </button>
+                          </footer>
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : reflectionsLoading ? (
+                <p className="memory-contents-reflection-empty">loading reflections...</p>
+              ) : isReflecting ? (
+                <p className="memory-contents-reflection-empty">Your reflection will appear here.</p>
+              ) : null}
+            </section>
+          ) : null}
         </article>
       );
     }
@@ -4116,20 +4456,7 @@ export function HomePage(): JSX.Element {
       >
         <section className="nc-titlecard">
           <h1 className="nc-title">
-            <input
-              className="nc-title-name nc-title-name-input"
-              style={{ ["--title-name-ch" as string]: `${Math.max(2, editableTopOfMindName.length)}ch` }}
-              aria-label="top of mind name"
-              value={editableTopOfMindName}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => updateTopOfMindDisplayName(event.target.value)}
-              onBlur={() => {
-                const normalized = editableTopOfMindName.replace(/\s+/g, " ").trim();
-                setTopOfMindDisplayName(normalized || null);
-              }}
-              onFocus={(event) => event.currentTarget.select()}
-              spellCheck={false}
-            />
-            's top of mind
+            {copy.titleLineOne(displayHandle)}
             {copy.titleLineTwo ? (
               <>
                 <br />
@@ -4210,12 +4537,19 @@ export function HomePage(): JSX.Element {
       >
         <div
           className={`nc-primary-action${
-            homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit
+            homeMode === "memoryDrawer" &&
+            !deletedSavedSignalUndo &&
+            !selectedDrawerHasEdit &&
+            !selectedDrawerIsReflecting
               ? " nc-primary-action--search"
               : ""
           }${
             homeMode === "memoryDrawer" && selectedDrawerHasEdit && !deletedSavedSignalUndo
               ? " nc-primary-action--save"
+              : ""
+          }${
+            selectedDrawerIsReflecting && !deletedSavedSignalUndo && !selectedDrawerHasEdit
+              ? " nc-primary-action--reflect"
               : ""
           }${
             (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
@@ -4253,7 +4587,13 @@ export function HomePage(): JSX.Element {
                 : copy.captureAria
             }
             tabIndex={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? -1 : undefined}
-            aria-hidden={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? "true" : undefined}
+            aria-hidden={
+              homeMode === "memoryDrawer" &&
+              !deletedSavedSignalUndo &&
+              !selectedDrawerHasEdit
+                ? "true"
+                : undefined
+            }
             disabled={homeMode === "memoryDrawer" && selectedDrawerHasEdit && savedSignalEditSaving}
           >
             <span className="nc-save-cta">
@@ -4273,6 +4613,16 @@ export function HomePage(): JSX.Element {
               ) : null}
             </span>
           </button>
+          <button
+            type="button"
+            className="nc-edit-cancel"
+            onClick={cancelSavedSignalEdit}
+            aria-label="cancel edit"
+            tabIndex={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : -1}
+            aria-hidden={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : "true"}
+          >
+            cancel edit
+          </button>
           <label
             className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}
             aria-hidden={homeMode === "memoryDrawer" ? undefined : "true"}
@@ -4286,13 +4636,101 @@ export function HomePage(): JSX.Element {
                 setSelectedMemoryGroupId(null);
                 setSelectedSavedSignalId(null);
                 setSavedSignalDetail(null);
+                cancelSavedSignalReflection();
               }}
               placeholder={copy.searchPlaceholder}
-              disabled={homeMode !== "memoryDrawer" || selectedDrawerHasEdit || Boolean(deletedSavedSignalUndo)}
-              tabIndex={homeMode === "memoryDrawer" && !selectedDrawerHasEdit && !deletedSavedSignalUndo ? undefined : -1}
+              disabled={
+                homeMode !== "memoryDrawer" ||
+                selectedDrawerHasEdit ||
+                Boolean(deletedSavedSignalUndo) ||
+                selectedDrawerIsReflecting
+              }
+              tabIndex={
+                homeMode === "memoryDrawer" &&
+                !selectedDrawerHasEdit &&
+                !deletedSavedSignalUndo &&
+                !selectedDrawerIsReflecting
+                  ? undefined
+                  : -1
+              }
             />
           </label>
+          <form
+            className="nc-drawer-reflect"
+            aria-hidden={selectedDrawerIsReflecting ? undefined : "true"}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveSavedSignalReflection();
+            }}
+          >
+            <div className="nc-drawer-reflect-question">
+              <span>{selectedDrawerReflectionProgress}</span>
+              <p>{selectedDrawerReflectionQuestion}</p>
+            </div>
+            <textarea
+              ref={savedSignalReflectionInputRef}
+              value={savedSignalReflectionDraft}
+              onChange={(event) => {
+                setSavedSignalReflectionDraft(event.target.value);
+                event.currentTarget.style.height = "auto";
+                event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
+              }}
+              placeholder="answer here"
+              disabled={!selectedDrawerIsReflecting || savedSignalReflectionSaving}
+              tabIndex={selectedDrawerIsReflecting ? undefined : -1}
+              rows={1}
+            />
+            <div className="nc-drawer-reflect-actions">
+              <button
+                type="button"
+                onClick={goToPreviousSavedSignalReflection}
+                disabled={
+                  !selectedDrawerIsReflecting ||
+                  savedSignalReflectionSaving ||
+                  savedSignalReflectionStepIndex === 0
+                }
+                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
+              >
+                previous
+              </button>
+              <button
+                type="button"
+                onClick={goToNextSavedSignalReflection}
+                disabled={
+                  !selectedDrawerIsReflecting ||
+                  !selectedDrawerReflectionCanGoNext ||
+                  savedSignalReflectionSaving
+                }
+                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
+              >
+                next
+              </button>
+              <button
+                type="submit"
+                disabled={
+                  !selectedDrawerIsReflecting ||
+                  !selectedDrawerReflectionCanFinish ||
+                  savedSignalReflectionSaving
+                }
+                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
+              >
+                {savedSignalReflectionSaving ? "saving..." : "save"}
+              </button>
+              <button
+                type="button"
+                onClick={cancelSavedSignalReflection}
+                disabled={!selectedDrawerIsReflecting}
+                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
+              >
+                cancel
+              </button>
+            </div>
+            {savedSignalReflectionError ? (
+              <span className="nc-drawer-reflect-error">{savedSignalReflectionError}</span>
+            ) : null}
+          </form>
         </div>
+        {!selectedDrawerIsReflecting ? (
           <button
             type="button"
             className={`nc-drawer-object${homeMode === "memoryDrawer" ? " nc-drawer-object--close" : ""}`}
@@ -4303,11 +4741,22 @@ export function HomePage(): JSX.Element {
                 chooseHomeMode("memoryDrawer");
               }
             }}
-            aria-label={homeMode === "memoryDrawer" ? copy.close : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
+            aria-label={homeMode === "memoryDrawer" ? "back home" : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
           >
             {homeMode === "memoryDrawer" ? (
               <span className="nc-drawer-icon" aria-hidden="true">
-                <span className="nc-drawer-close-mark" />
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m3 10.5 9-7 9 7" />
+                  <path d="M5 9.5V20h14V9.5" />
+                  <path d="M9.5 20v-6h5v6" />
+                </svg>
               </span>
             ) : (
               <span className="nc-drawer-icon" aria-hidden="true">
@@ -4325,9 +4774,10 @@ export function HomePage(): JSX.Element {
                 </svg>
               </span>
             )}
-            <span className="sr-only">{homeMode === "memoryDrawer" ? copy.close : copy.drawerObjectTitle}</span>
+            <span className="sr-only">{homeMode === "memoryDrawer" ? "back home" : copy.drawerObjectTitle}</span>
             <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
           </button>
+        ) : null}
           {homeMode !== "memoryDrawer" ? (
             <p className="nc-bottom-hint">Capture inspirations to generate your top of mind stickies.</p>
           ) : null}

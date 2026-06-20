@@ -918,6 +918,7 @@ export interface ApiSavedSignalSearchResult {
     id: string;
     type: AttachmentType;
     label: string;
+    url?: string;
   }>;
   relevanceReasons: string[];
 }
@@ -1905,6 +1906,44 @@ export async function fetchReflections(
 
   const payload = (body ?? {}) as Partial<ListReflectionsResponse>;
   return Array.isArray(payload.reflections) ? payload.reflections : [];
+}
+
+export async function deleteReflection(
+  inspirationId: string,
+  reflectionId: string,
+): Promise<void> {
+  const path = apiPath(
+    `/inspirations/${encodeURIComponent(inspirationId)}/reflections/${encodeURIComponent(reflectionId)}`,
+  );
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while deleting reflection",
+    });
+  }
+
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      // Non-JSON response — handled below.
+    }
+    const errorBody = (body ?? {}) as { error?: string };
+    throw new ApiError({
+      status: res.status,
+      message:
+        errorBody.error ??
+        `Failed to delete reflection (HTTP ${res.status}). Please try again.`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
