@@ -13149,7 +13149,7 @@ body.reflect-bg {
 
 .nc-primary-action {
   position: relative;
-  width: clamp(190px, 18vw, 250px);
+  width: 178px;
   height: 54px;
   flex: 0 0 auto;
   transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -13203,10 +13203,10 @@ body.reflect-bg {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   justify-self: stretch;
   width: 100%;
-  max-width: 100%;
+  max-width: 980px;
   overflow: visible;
   padding: 0;
   scrollbar-width: auto;
@@ -13216,43 +13216,53 @@ body.reflect-bg {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 1 auto;
-  min-height: 34px;
-  padding: 7px 12px;
+  min-height: 28px;
+  max-width: min(270px, 100%);
+  padding: 4px 9px;
   border: 1px solid rgba(31, 29, 24, 0.09);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.68);
-  color: rgba(31, 29, 24, 0.72);
+  background: rgba(255, 255, 255, 0.58);
+  color: rgba(31, 29, 24, 0.64);
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 520;
   line-height: 1.1;
   text-align: left;
   white-space: nowrap;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  box-shadow: none;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.memory-path-filter span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memory-path-filter:nth-child(-n + 3) {
+  max-width: none;
 }
 
 .memory-path-filter:hover,
-.memory-path-filter:focus-visible,
 .memory-path-filter--active {
-  border-color: rgba(31, 29, 24, 0.16);
-  background: rgba(255, 255, 255, 0.94);
-  color: #171614;
-  transform: translateY(-1px);
+  border-color: rgba(31, 29, 24, 0.14);
+  background: rgba(255, 255, 255, 0.82);
+  color: rgba(23, 22, 20, 0.92);
 }
 
 .memory-path-filter:focus-visible {
-  outline: 2px solid rgba(199, 154, 62, 0.35);
-  outline-offset: 4px;
+  outline: 2px solid rgba(199, 154, 62, 0.28);
+  outline-offset: 2px;
 }
 
 .memory-path-filter small {
   color: currentColor;
   font-family: var(--font-mono);
-  font-size: 10px;
-  opacity: 0.54;
+  font-size: 9px;
+  opacity: 0.46;
 }
 
 .nc-drawer-search {
@@ -13549,9 +13559,12 @@ body.reflect-bg {
 }
 
 @media (max-width: 760px) {
+  .nc-primary-action {
+    width: min(178px, calc(100vw - 96px));
+  }
+
   .nc-save-cta {
     min-height: 42px;
-    min-width: min(230px, calc(100vw - 96px));
     padding: 0 18px;
     font-size: 13px;
   }
