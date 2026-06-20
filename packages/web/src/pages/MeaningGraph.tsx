@@ -126,13 +126,9 @@ const AMBITION_LABEL: Record<AmbitionDimension, string> = {
   next_experiment: "next experiment",
 };
 
-const EDGE_LABEL: Record<string, string> = {
-  supports: "supports",
-  challenges: "challenges",
-  points_to: "points to",
-  asks_for: "asks for",
-  reactivates: "reactivates",
-};
+const EDGE_KIND_KEYS = ["supports", "challenges", "points_to", "asks_for", "reactivates"] as const;
+type EdgeKindKey = (typeof EDGE_KIND_KEYS)[number];
+type EdgeKindLabels = Record<EdgeKindKey, string>;
 
 interface MeaningGraphCopy {
   eyebrow: string;
@@ -162,6 +158,9 @@ interface MeaningGraphCopy {
   confidence: string;
   recentCorrections: string;
   shown: (count: number) => string;
+  dragEnabledSummary: string;
+  dragDisabledSummary: string;
+  edgeLabels: EdgeKindLabels;
   signals: (count: number) => string;
   contextNodes: (count: number) => string;
   relationshipEdges: (count: number) => string;
@@ -252,6 +251,16 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     confidence: "Confidence",
     recentCorrections: "Recent corrections",
     shown: (count) => `${count} shown`,
+    dragEnabledSummary:
+      "Individual node dragging is enabled; moved nodes keep their positions until the graph is refreshed.",
+    dragDisabledSummary: "Node dragging is disabled.",
+    edgeLabels: {
+      supports: "supports",
+      challenges: "challenges",
+      points_to: "points to",
+      asks_for: "asks for",
+      reactivates: "reactivates",
+    },
     signals: (count) => `${count} signals`,
     contextNodes: (count) => `${count} context nodes`,
     relationshipEdges: (count) => `${count} relationship edges`,
@@ -345,6 +354,15 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     confidence: "신뢰도",
     recentCorrections: "최근 수정",
     shown: (count) => `${count}개 표시`,
+    dragEnabledSummary: "개별 노드 이동이 켜져 있습니다. 옮긴 노드는 그래프를 새로고침할 때까지 위치가 유지됩니다.",
+    dragDisabledSummary: "노드 이동이 꺼져 있습니다.",
+    edgeLabels: {
+      supports: "뒷받침",
+      challenges: "긴장시킴",
+      points_to: "가리킴",
+      asks_for: "요청함",
+      reactivates: "다시 활성화",
+    },
     signals: (count) => `영감 ${count}개`,
     contextNodes: (count) => `맥락 노드 ${count}개`,
     relationshipEdges: (count) => `관계 ${count}개`,
@@ -511,10 +529,12 @@ function hasRecentCorrection(node: ApiMeaningGraphNode): boolean {
   });
 }
 
-export function meaningGraphDragModeSummary(nodesDraggable: boolean): string {
-  return nodesDraggable
-    ? "Individual node dragging is enabled; moved nodes keep their positions until the graph is refreshed."
-    : "Node dragging is disabled.";
+export function meaningGraphDragModeSummary(
+  nodesDraggable: boolean,
+  locale: SupportedLocale = "en-US",
+): string {
+  const copy = MEANING_GRAPH_COPY[locale];
+  return nodesDraggable ? copy.dragEnabledSummary : copy.dragDisabledSummary;
 }
 
 export function updateManualNodePosition(
@@ -581,16 +601,19 @@ function shortPreview(value: string): string {
   return `${normalized.slice(0, 127)}...`;
 }
 
-function relationshipLabel(edge: Pick<ApiMeaningGraphEdge, "kind">): string {
-  return EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ");
+export function relationshipLabel(
+  edge: Pick<ApiMeaningGraphEdge, "kind">,
+  locale: SupportedLocale = "en-US",
+): string {
+  return MEANING_GRAPH_COPY[locale].edgeLabels[edge.kind as EdgeKindKey] ?? edge.kind.replace(/_/g, " ");
 }
 
-function relationshipSummary(edge: {
+export function relationshipSummary(edge: {
   kind: string;
   sourceLabel: string;
   targetLabel: string;
-}): string {
-  return `${edge.sourceLabel} ${EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ")} ${edge.targetLabel}`;
+}, locale: SupportedLocale = "en-US"): string {
+  return `${edge.sourceLabel} ${relationshipLabel(edge, locale)} ${edge.targetLabel}`;
 }
 
 function compactReason(reason: string): string {
@@ -1018,7 +1041,7 @@ export default function MeaningGraphPage(): JSX.Element {
           source: edge.sourceNodeId,
           target: edge.targetNodeId,
           type: "floating",
-          label: EDGE_LABEL[edge.kind] ?? edge.kind,
+          label: relationshipLabel(edge, locale),
           style: {
             stroke: edgeColor(edge.kind),
             strokeWidth: isSelected ? 3 : 0.8 + normalized * 2.8,
@@ -1040,7 +1063,7 @@ export default function MeaningGraphPage(): JSX.Element {
           labelShowBg: true,
         };
       }),
-    [focusNodeId, hoverNodeId, selectedEdgeId, visibleMeaningEdges],
+    [focusNodeId, hoverNodeId, locale, selectedEdgeId, visibleMeaningEdges],
   );
 
   const handleNodeDragStop = useCallback((_: unknown, node: Node<MeaningNodeData>) => {
@@ -1066,7 +1089,7 @@ export default function MeaningGraphPage(): JSX.Element {
       : copy.graphEvidence;
 
   const evidenceIntro = selectedEdge
-    ? `${selectedEdgeSource?.label ?? (locale === "ko-KR" ? "알 수 없는 출처" : "Unknown source")} ${relationshipLabel(selectedEdge)} ${
+    ? `${selectedEdgeSource?.label ?? (locale === "ko-KR" ? "알 수 없는 출처" : "Unknown source")} ${relationshipLabel(selectedEdge, locale)} ${
         selectedEdgeTarget?.label ?? (locale === "ko-KR" ? "알 수 없는 대상" : "unknown target")
       }`
     : selectedNode
@@ -1122,8 +1145,8 @@ export default function MeaningGraphPage(): JSX.Element {
               <ul>
                 {signal.relationshipEdges.map((edge) => (
                   <li key={`${signal.id}-${edge.id}`}>
-                    <strong>{relationshipSummary(edge)}</strong>
-                    <span>{relationshipLabel(edge)}</span>
+                    <strong>{relationshipSummary(edge, locale)}</strong>
+                    <span>{relationshipLabel(edge, locale)}</span>
                     {edge.sourceReason || edge.targetReason ? (
                       <p>
                         {[edge.sourceReason, edge.targetReason]
@@ -1301,7 +1324,7 @@ export default function MeaningGraphPage(): JSX.Element {
                   {copy.recentCorrections}
                 </label>
                 <span>{copy.shown(visibleMeaningNodes.length)}</span>
-                <span>{meaningGraphDragModeSummary(true)}</span>
+                <span>{meaningGraphDragModeSummary(true, locale)}</span>
               </div>
               <div className="meaning-graph-flow-shell">
                 {nodes.length === 0 ? (

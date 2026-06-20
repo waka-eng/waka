@@ -4,6 +4,8 @@ import {
   MEANING_GRAPH_COPY,
   filterMeaningGraphNodes,
   meaningGraphDragModeSummary,
+  relationshipLabel,
+  relationshipSummary,
   rebuildJobResult,
   updateManualNodePosition,
 } from "../src/pages/MeaningGraph";
@@ -82,6 +84,45 @@ describe("meaning graph Korean admin copy", () => {
     expect(koreanVisibleCopy).not.toMatch(/context graph|The graph above|recent signals|Newest saves|All types|Confidence|No recent signals/i);
     expect(koreanVisibleCopy).toContain("맥락 그래프");
     expect(MEANING_GRAPH_COPY["en-US"].recentSignalsIntro).toContain("context graph");
+  });
+
+  it("localizes helper-rendered drag and relationship copy in Korean mode", () => {
+    const edge = {
+      kind: "points_to",
+      sourceLabel: "공개 제작 공간",
+      targetLabel: "야망 있는 동료",
+    };
+
+    expect(meaningGraphDragModeSummary(true, "ko-KR")).toBe(
+      "개별 노드 이동이 켜져 있습니다. 옮긴 노드는 그래프를 새로고침할 때까지 위치가 유지됩니다.",
+    );
+    expect(meaningGraphDragModeSummary(false, "ko-KR")).toBe("노드 이동이 꺼져 있습니다.");
+    expect(relationshipLabel(edge, "ko-KR")).toBe("가리킴");
+    expect(relationshipSummary(edge, "ko-KR")).toBe("공개 제작 공간 가리킴 야망 있는 동료");
+
+    const renderedKoreanHelperCopy = [
+      meaningGraphDragModeSummary(true, "ko-KR"),
+      meaningGraphDragModeSummary(false, "ko-KR"),
+      relationshipLabel(edge, "ko-KR"),
+      relationshipSummary(edge, "ko-KR"),
+    ].join(" ");
+
+    expect(renderedKoreanHelperCopy).not.toMatch(
+      /Individual node dragging|Node dragging is disabled|points to|supports|challenges|asks for|reactivates/i,
+    );
+  });
+
+  it("preserves English helper copy for en-US admins", () => {
+    const edge = {
+      kind: "points_to",
+      sourceLabel: "public building rooms",
+      targetLabel: "ambitious peers",
+    };
+
+    expect(meaningGraphDragModeSummary(true, "en-US")).toContain("Individual node dragging is enabled");
+    expect(meaningGraphDragModeSummary(false, "en-US")).toBe("Node dragging is disabled.");
+    expect(relationshipLabel(edge, "en-US")).toBe("points to");
+    expect(relationshipSummary(edge, "en-US")).toBe("public building rooms points to ambitious peers");
   });
 });
 
