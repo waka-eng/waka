@@ -413,6 +413,7 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
+  mockAuthState.value.user.name = "River";
   mockAuthState.value.user.preferredLocale = "en-US";
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
@@ -913,6 +914,31 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("Waka caught what almost slipped away.");
     expect(container.textContent).not.toContain("They caught what almost slipped away.");
     expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
+  });
+
+  it("uses Korean home and capture chrome when preferred locale is Korean", async () => {
+    setApiFixtures();
+    mockAuthState.value.user.name = "qa";
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    const container = await renderHomePage();
+
+    expect(container.querySelector(".nc-titlecard")?.textContent).toContain("qa님의 탑오브마인드");
+    expect(container.querySelector(".nc-titlecard")?.textContent).not.toContain("qa's top of mind");
+    expect(container.querySelector(".nc-bottom-hint")?.textContent).toBe(
+      "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
+    );
+    expect(container.querySelector(".nc-bottom-hint")?.textContent).not.toContain("Capture inspirations");
+    expect(container.querySelector(".nc-stage")?.getAttribute("aria-label")).toBe("탑오브마인드 포스트잇 다섯 장");
+    expect(container.querySelector(".admin-entry-pill")?.getAttribute("aria-label")).toBe("관리자 점검 도구 열기");
+
+    await openCaptureModal(container);
+    const modal = container.querySelector<HTMLElement>(".reference-capture-modal");
+    expect(modal?.getAttribute("aria-label")).toBe("영감 기록");
+    expect(modal?.textContent).toContain("닫기");
+    expect(modal?.querySelector(".cap-file-btn")?.getAttribute("title")).toBe("이미지 첨부");
+    expect(modal?.querySelector("#capExpand")?.getAttribute("aria-label")).toBe("집중 모드로 들어가기");
+    expect(modal?.textContent).not.toContain("attach an image");
+    expect(modal?.textContent).not.toContain("enter focus mode");
   });
 
   it("names the primary product spaces without surfacing internal graph UI", async () => {
@@ -1513,7 +1539,8 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("river's top of mind");
+    expect(container.textContent).toContain("river님의 탑오브마인드");
+    expect(container.textContent).not.toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).toContain("make the thing before explaining it");
   });

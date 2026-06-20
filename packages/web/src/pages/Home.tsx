@@ -144,13 +144,6 @@ type SupportingThoughtSignal = HomeThoughtCard["supportingSignals"][number];
 const TOP_OF_MIND_NOTE_LIMIT = 5;
 const MEMORY_DRAWER_CLOSE_MS = 360;
 
-const PRODUCT_SPACES = {
-  capture: "Capture",
-  topOfMind: "Five Top of Mind post-its",
-  memoryDrawer: "Inspiration Drawer",
-  internalDebug: "Internal Debug",
-} as const;
-
 interface InspirationListEntry {
   /** Server-assigned id once persisted; equals `tempId` while saving. */
   id: string;
@@ -1193,7 +1186,7 @@ const HOME_COPY = {
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
-        <span className="nc-title-name">{name}'s</span> top of mind
+        <span className="nc-title-name">{name}님의</span> 탑오브마인드
       </>
     ),
     titleLineTwo: "",
@@ -1251,6 +1244,12 @@ const HOME_COPY = {
     captureHint: () => "",
     captureDialog: "영감 기록",
     close: "닫기",
+    bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
+    topOfMindAria: "탑오브마인드 포스트잇 다섯 장",
+    memoryDrawerTitle: "영감 서랍",
+    backHome: "홈으로 돌아가기",
+    adminInspectionAria: "관리자 점검 도구 열기",
+    adminInspectionTitle: "내부 점검",
   },
   "en-US": {
     thoughtTab: "top of mind",
@@ -1320,6 +1319,12 @@ const HOME_COPY = {
     captureHint: () => "",
     captureDialog: "capture inspiration",
     close: "close",
+    bottomHint: "Capture inspirations to generate your top of mind stickies.",
+    topOfMindAria: "Five Top of Mind post-its",
+    memoryDrawerTitle: "Inspiration Drawer",
+    backHome: "back home",
+    adminInspectionAria: "Open admin inspection tools",
+    adminInspectionTitle: "Internal Debug",
   },
 } satisfies Record<
   SupportedLocale,
@@ -1363,6 +1368,12 @@ const HOME_COPY = {
     captureHint: (count: number) => string;
     captureDialog: string;
     close: string;
+    bottomHint: string;
+    topOfMindAria: string;
+    memoryDrawerTitle: string;
+    backHome: string;
+    adminInspectionAria: string;
+    adminInspectionTitle: string;
   }
 >;
 
@@ -4499,7 +4510,7 @@ export function HomePage(): JSX.Element {
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        title={PRODUCT_SPACES.memoryDrawer}
+        title={copy.memoryDrawerTitle}
         detail={historyDetail}
       >
         {historyContent}
@@ -4549,7 +4560,7 @@ export function HomePage(): JSX.Element {
           {copy.lifecycleHint ? <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p> : null}
         </section>
 
-        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={PRODUCT_SPACES.topOfMind}>
+        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMindAria}>
           {topOfMindLoading ? (
             <p className="nc-loading">{copy.loadingThoughts}</p>
           ) : topOfMindError ? (
@@ -4825,7 +4836,7 @@ export function HomePage(): JSX.Element {
                 chooseHomeMode("memoryDrawer");
               }
             }}
-            aria-label={homeMode === "memoryDrawer" ? "back home" : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
+            aria-label={homeMode === "memoryDrawer" ? copy.backHome : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
           >
             {homeMode === "memoryDrawer" ? (
               <span className="nc-drawer-icon" aria-hidden="true">
@@ -4858,12 +4869,12 @@ export function HomePage(): JSX.Element {
                 </svg>
               </span>
             )}
-            <span className="sr-only">{homeMode === "memoryDrawer" ? "back home" : copy.drawerObjectTitle}</span>
+            <span className="sr-only">{homeMode === "memoryDrawer" ? copy.backHome : copy.drawerObjectTitle}</span>
             <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
           </button>
         ) : null}
           {homeMode !== "memoryDrawer" ? (
-            <p className="nc-bottom-hint">Capture inspirations to generate your top of mind stickies.</p>
+            <p className="nc-bottom-hint">{copy.bottomHint}</p>
           ) : null}
         </div>
 
@@ -5036,8 +5047,8 @@ export function HomePage(): JSX.Element {
         <Link
           to="/admin"
           className="admin-entry-pill"
-          aria-label="Open admin inspection tools"
-          title={PRODUCT_SPACES.internalDebug}
+          aria-label={copy.adminInspectionAria}
+          title={copy.adminInspectionTitle}
         >
           Debug
         </Link>
