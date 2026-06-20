@@ -25,6 +25,7 @@ export default defineConfig({
       "src/lib/top-of-mind-notes.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",
       "src/lib/wow-judge-model.test.ts",
+      "src/routes/auth-profile.test.ts",
       "src/routes/feedback.test.ts",
       "src/routes/wow-moments.test.ts",
       "src/vault/*.test.ts",
