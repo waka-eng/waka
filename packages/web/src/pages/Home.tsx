@@ -1797,7 +1797,7 @@ export function HomePage(): JSX.Element {
         setSelectedInspirationText(null);
         return;
       }
-      const normalizedSelection = selected.replace(/\s+/g, " ").trim();
+      const normalizedSelection = selected.trim();
       if (normalizedSelection.length < 2) {
         setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
         return;
@@ -1949,7 +1949,13 @@ export function HomePage(): JSX.Element {
         : savedSignals.find((item) => item.id === selectedInspirationText.signalId);
     const matchingHighlight = signal?.highlightedSnippets.find((snippet) => {
       const snippetText = snippet.text.trim();
-      return snippetText === selectedText || snippetText.includes(selectedText) || selectedText.includes(snippetText);
+      const comparableSnippetText = snippetText.replace(/\s+/g, " ");
+      const comparableSelectedText = selectedText.replace(/\s+/g, " ");
+      return (
+        comparableSnippetText === comparableSelectedText ||
+        comparableSnippetText.includes(comparableSelectedText) ||
+        comparableSelectedText.includes(comparableSnippetText)
+      );
     });
     if (matchingHighlight) {
       setSelectedInspirationText(null);

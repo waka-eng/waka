@@ -1938,6 +1938,27 @@
   transition: opacity 220ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.memory-contents-highlight-layer {
+  grid-area: 1 / 1;
+  min-width: 0;
+  color: #2d2925;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 460;
+  letter-spacing: 0;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.memory-contents-highlight-layer--hidden {
+  opacity: 0;
+}
+
+.memory-contents-highlight-layer mark {
+  color: inherit;
+}
+
 .memory-contents-expanded-editor {
   display: block;
   width: 100%;
@@ -1949,6 +1970,11 @@
   resize: none;
   overflow: visible;
   field-sizing: content;
+}
+
+.memory-contents-expanded-editor--with-highlights {
+  color: transparent;
+  caret-color: #2d2925;
 }
 
 .memory-contents-expanded-editor::selection {
