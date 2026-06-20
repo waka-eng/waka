@@ -1296,6 +1296,18 @@ const HOME_COPY = {
     adminInspectionLabel: "점검",
     adminInspectionAria: "관리자 점검 도구 열기",
     adminInspectionTitle: "내부 점검",
+    bottomActionsAria: "하단 작업",
+    undoDeletedInspiration: "영감이 삭제되었습니다 · 되돌리기",
+    undoDeletedSticky: "포스트잇이 삭제되었습니다 · 되돌리기",
+    saveEditedInspiration: "수정한 영감 저장",
+    saveEdit: "저장",
+    cancelEdit: "수정 취소",
+    reflectionAnswerPlaceholder: "여기에 답변",
+    previous: "이전",
+    next: "다음",
+    saving: "저장 중...",
+    save: "저장",
+    cancel: "취소",
   },
   "en-US": {
     thoughtTab: "top of mind",
@@ -1377,6 +1389,18 @@ const HOME_COPY = {
     adminInspectionLabel: "Debug",
     adminInspectionAria: "Open admin inspection tools",
     adminInspectionTitle: "Internal Debug",
+    bottomActionsAria: "bottom actions",
+    undoDeletedInspiration: "inspiration was deleted · undo",
+    undoDeletedSticky: "sticky note was deleted · undo",
+    saveEditedInspiration: "save edited inspiration",
+    saveEdit: "save",
+    cancelEdit: "cancel edit",
+    reflectionAnswerPlaceholder: "answer here",
+    previous: "previous",
+    next: "next",
+    saving: "saving...",
+    save: "save",
+    cancel: "cancel",
   },
 } satisfies Record<
   SupportedLocale,
@@ -1432,6 +1456,18 @@ const HOME_COPY = {
     adminInspectionLabel: string;
     adminInspectionAria: string;
     adminInspectionTitle: string;
+    bottomActionsAria: string;
+    undoDeletedInspiration: string;
+    undoDeletedSticky: string;
+    saveEditedInspiration: string;
+    saveEdit: string;
+    cancelEdit: string;
+    reflectionAnswerPlaceholder: string;
+    previous: string;
+    next: string;
+    saving: string;
+    save: string;
+    cancel: string;
   }
 >;
 
@@ -4688,7 +4724,7 @@ export function HomePage(): JSX.Element {
       <div
         className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`}
         data-locale={locale}
-        aria-label="bottom actions"
+        aria-label={copy.bottomActionsAria}
       >
         <div
           className={`nc-primary-action${
@@ -4734,11 +4770,11 @@ export function HomePage(): JSX.Element {
             }
             aria-label={
               deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? "inspiration was deleted, undo"
+                ? copy.undoDeletedInspiration
                 : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? "save edited inspiration"
+                  ? copy.saveEditedInspiration
                 : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                ? "sticky note was deleted, undo"
+                ? copy.undoDeletedSticky
                 : copy.captureAria
             }
             tabIndex={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? -1 : undefined}
@@ -4753,13 +4789,13 @@ export function HomePage(): JSX.Element {
           >
             <span className="nc-save-cta">
               {deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? "inspiration was deleted · undo"
+                ? copy.undoDeletedInspiration
                 : homeMode === "memoryDrawer" && selectedDrawerHasEdit
                   ? savedSignalEditSaving
-                    ? "saving..."
-                    : "save"
+                    ? copy.saving
+                    : copy.saveEdit
                 : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                ? "sticky note was deleted · undo"
+                ? copy.undoDeletedSticky
                 : captureSaved
                   ? t(locale, "saved")
                   : copy.captureCta}
@@ -4772,11 +4808,11 @@ export function HomePage(): JSX.Element {
             type="button"
             className="nc-edit-cancel"
             onClick={cancelSavedSignalEdit}
-            aria-label="cancel edit"
+            aria-label={copy.cancelEdit}
             tabIndex={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : -1}
             aria-hidden={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : "true"}
           >
-            cancel edit
+            {copy.cancelEdit}
           </button>
           <label
             className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}
@@ -4830,7 +4866,7 @@ export function HomePage(): JSX.Element {
                 event.currentTarget.style.height = "auto";
                 event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
               }}
-              placeholder="answer here"
+              placeholder={copy.reflectionAnswerPlaceholder}
               disabled={!selectedDrawerIsReflecting || savedSignalReflectionSaving}
               tabIndex={selectedDrawerIsReflecting ? undefined : -1}
               rows={1}
@@ -4846,7 +4882,7 @@ export function HomePage(): JSX.Element {
                 }
                 tabIndex={selectedDrawerIsReflecting ? undefined : -1}
               >
-                previous
+                {copy.previous}
               </button>
               <button
                 type="button"
@@ -4858,7 +4894,7 @@ export function HomePage(): JSX.Element {
                 }
                 tabIndex={selectedDrawerIsReflecting ? undefined : -1}
               >
-                next
+                {copy.next}
               </button>
               <button
                 type="submit"
@@ -4869,7 +4905,7 @@ export function HomePage(): JSX.Element {
                 }
                 tabIndex={selectedDrawerIsReflecting ? undefined : -1}
               >
-                {savedSignalReflectionSaving ? "saving..." : "save"}
+                {savedSignalReflectionSaving ? copy.saving : copy.save}
               </button>
               <button
                 type="button"
@@ -4877,7 +4913,7 @@ export function HomePage(): JSX.Element {
                 disabled={!selectedDrawerIsReflecting}
                 tabIndex={selectedDrawerIsReflecting ? undefined : -1}
               >
-                cancel
+                {copy.cancel}
               </button>
             </div>
             {savedSignalReflectionError ? (

@@ -933,6 +933,8 @@ describe("HomePage current home experience", () => {
     expect(adminEntry?.getAttribute("aria-label")).toBe("관리자 점검 도구 열기");
     expect(adminEntry?.textContent).toBe("점검");
     expect(adminEntry?.textContent).not.toContain("Debug");
+    expect(container.querySelector(".nc-bottom-bar")?.getAttribute("aria-label")).toBe("하단 작업");
+    expect(container.innerHTML).not.toMatch(/bottom actions|cancel edit|answer here|>previous<|>next<|>save<|>cancel</i);
 
     await openCaptureModal(container);
     const modal = container.querySelector<HTMLElement>(".reference-capture-modal");

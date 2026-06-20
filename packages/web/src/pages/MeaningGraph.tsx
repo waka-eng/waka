@@ -18,6 +18,8 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import { FloatingEdge } from "../components/FloatingEdge";
+import { useAuth } from "../lib/auth-context";
+import { normalizeSupportedLocale, readStoredLocale, type SupportedLocale } from "../lib/locales";
 import {
   fetchMeaningGraph,
   fetchMeaningGraphRebuildJob,
@@ -130,6 +132,74 @@ const EDGE_LABEL: Record<string, string> = {
   points_to: "points to",
   asks_for: "asks for",
   reactivates: "reactivates",
+};
+
+const MEANING_GRAPH_COPY: Record<
+  SupportedLocale,
+  {
+    eyebrow: string;
+    title: string;
+    intro: string;
+    rebuild: string;
+    rebuilding: string;
+    refresh: string;
+    refreshing: string;
+    graphEyebrow: string;
+    graphTitle: string;
+    graphIntro: string;
+    graphSnapshotAria: string;
+    graphFiltersAria: string;
+    searchPlaceholder: string;
+    signals: (count: number) => string;
+    contextNodes: (count: number) => string;
+    relationshipEdges: (count: number) => string;
+    graphEvidence: string;
+    selectGraphEntry: string;
+    graphEntryReview: string;
+  }
+> = {
+  "en-US": {
+    eyebrow: "admin context dashboard",
+    title: "Context dashboard",
+    intro: "Monitor how saved signals become context nodes and relationship edges.",
+    rebuild: "Rebuild graph",
+    rebuilding: "Rebuilding graph...",
+    refresh: "Refresh",
+    refreshing: "Refreshing...",
+    graphEyebrow: "context graph",
+    graphTitle: "Graph",
+    graphIntro: "Filter context claims, select evidence, and drag one node at a time while debugging.",
+    graphSnapshotAria: "Context graph snapshot",
+    graphFiltersAria: "Context graph filters",
+    searchPlaceholder: "node, evidence, note, feedback",
+    signals: (count) => `${count} signals`,
+    contextNodes: (count) => `${count} context nodes`,
+    relationshipEdges: (count) => `${count} relationship edges`,
+    graphEvidence: "Graph evidence",
+    selectGraphEntry: "Select a context node or relationship edge in the graph.",
+    graphEntryReview: "Graph entry review",
+  },
+  "ko-KR": {
+    eyebrow: "관리자 맥락 대시보드",
+    title: "맥락 대시보드",
+    intro: "저장된 영감이 맥락 노드와 관계로 이어지는 흐름을 확인합니다.",
+    rebuild: "그래프 다시 만들기",
+    rebuilding: "그래프 다시 만드는 중...",
+    refresh: "새로고침",
+    refreshing: "새로고침 중...",
+    graphEyebrow: "맥락 그래프",
+    graphTitle: "그래프",
+    graphIntro: "맥락 주장을 필터링하고 근거를 선택하며 노드 하나씩 이동합니다.",
+    graphSnapshotAria: "맥락 그래프 요약",
+    graphFiltersAria: "맥락 그래프 필터",
+    searchPlaceholder: "노드, 근거, 노트, 피드백",
+    signals: (count) => `영감 ${count}개`,
+    contextNodes: (count) => `맥락 노드 ${count}개`,
+    relationshipEdges: (count) => `관계 ${count}개`,
+    graphEvidence: "그래프 근거",
+    selectGraphEntry: "그래프에서 맥락 노드나 관계를 선택하세요.",
+    graphEntryReview: "그래프 입력 검토",
+  },
 };
 
 function colorForType(type: string): string {
@@ -402,6 +472,9 @@ const edgeTypes = { floating: FloatingEdge };
 const EMPTY_NEIGHBORS = new Set<string>();
 
 export default function MeaningGraphPage(): JSX.Element {
+  const { user } = useAuth();
+  const locale = normalizeSupportedLocale(user?.preferredLocale ?? readStoredLocale());
+  const copy = MEANING_GRAPH_COPY[locale];
   const [graph, setGraph] = useState<ApiMeaningGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -765,7 +838,7 @@ export default function MeaningGraphPage(): JSX.Element {
     ? "Relationship evidence"
     : selectedNode
       ? "Context node evidence"
-      : "Graph evidence";
+      : copy.graphEvidence;
 
   const evidenceIntro = selectedEdge
     ? `${selectedEdgeSource?.label ?? "Unknown source"} ${relationshipLabel(selectedEdge)} ${
@@ -773,7 +846,7 @@ export default function MeaningGraphPage(): JSX.Element {
       }`
     : selectedNode
       ? selectedNode.label
-      : "Select a context node or relationship edge in the graph.";
+      : copy.selectGraphEntry;
 
   const renderRecentInspiration = (
     signal: ApiMeaningGraphRecentInspiration,
@@ -856,11 +929,9 @@ export default function MeaningGraphPage(): JSX.Element {
     <main className="meaning-graph-page">
       <header className="meaning-graph-header">
         <div>
-          <span>admin context dashboard</span>
-          <h1>Context dashboard</h1>
-          <p>
-            Monitor how saved signals become context nodes and relationship edges.
-          </p>
+          <span>{copy.eyebrow}</span>
+          <h1>{copy.title}</h1>
+          <p>{copy.intro}</p>
         </div>
         <div className="meaning-graph-actions">
           <button
@@ -868,10 +939,10 @@ export default function MeaningGraphPage(): JSX.Element {
             disabled={rebuilding || loading}
             onClick={handleRequestRebuild}
           >
-            {rebuilding ? "Rebuilding graph..." : "Rebuild graph"}
+            {rebuilding ? copy.rebuilding : copy.rebuild}
           </button>
           <button type="button" onClick={() => void loadGraph()} disabled={loading || rebuilding}>
-            {loading ? "Refreshing..." : "Refresh"}
+            {loading ? copy.refreshing : copy.refresh}
           </button>
         </div>
       </header>
@@ -917,15 +988,15 @@ export default function MeaningGraphPage(): JSX.Element {
             <section className="meaning-graph-workbench meaning-graph-workbench--flow">
               <div className="meaning-dashboard-section-heading">
                 <div>
-                  <span>context graph</span>
-                  <h2>Graph</h2>
-                  <p>Filter context claims, select evidence, and drag one node at a time while debugging.</p>
+                  <span>{copy.graphEyebrow}</span>
+                  <h2>{copy.graphTitle}</h2>
+                  <p>{copy.graphIntro}</p>
                 </div>
                 {health ? (
-                  <div className="meaning-dashboard-inline-meta" aria-label="Context graph snapshot">
-                    <span>{health.inspirationCount} signals</span>
-                    <span>{health.nodeCount} context nodes</span>
-                    <span>{health.edgeCount} relationship edges</span>
+                  <div className="meaning-dashboard-inline-meta" aria-label={copy.graphSnapshotAria}>
+                    <span>{copy.signals(health.inspirationCount)}</span>
+                    <span>{copy.contextNodes(health.nodeCount)}</span>
+                    <span>{copy.relationshipEdges(health.edgeCount)}</span>
                   </div>
                 ) : null}
               </div>
@@ -942,13 +1013,13 @@ export default function MeaningGraphPage(): JSX.Element {
                   ))}
                 </div>
               ) : null}
-              <div className="meaning-graph-filterbar" aria-label="Context graph filters">
+              <div className="meaning-graph-filterbar" aria-label={copy.graphFiltersAria}>
                 <label>
                   Search
                   <input
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="node, evidence, note, feedback"
+                    placeholder={copy.searchPlaceholder}
                   />
                 </label>
                 <label>
@@ -1236,7 +1307,7 @@ export default function MeaningGraphPage(): JSX.Element {
               <div className="meaning-dashboard-section-heading">
                 <div>
                   <span>recent signals</span>
-                  <h2 id="recent-inspirations-title">Graph entry review</h2>
+                  <h2 id="recent-inspirations-title">{copy.graphEntryReview}</h2>
                   <p>Newest saves and what they added to the context graph.</p>
                 </div>
                 <div className="meaning-dashboard-inline-meta" aria-label="Recent graph entry summary">
