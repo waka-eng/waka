@@ -32,6 +32,7 @@ interface SavedInspirationDetailProps {
   selectionPopover: ReactNode;
   existingHighlightPopover: ReactNode;
   onBack: () => void;
+  onNext?: () => void;
   onTextMouseUp: (event: MouseEvent<HTMLElement>) => void;
   onTextKeyUp: (event: KeyboardEvent<HTMLElement>) => void;
   formatTimestamp: (date: string) => string;
@@ -58,6 +59,7 @@ export function SavedInspirationDetail({
   selectionPopover,
   existingHighlightPopover,
   onBack,
+  onNext,
   onTextMouseUp,
   onTextKeyUp,
   formatTimestamp,
@@ -212,6 +214,14 @@ export function SavedInspirationDetail({
       {selectionPopover}
       {existingHighlightPopover}
       {highlightError ? <p className="signal-revisit-state">{highlightError}</p> : null}
+      {onNext ? (
+        <footer className="memory-detail-next">
+          <button type="button" onClick={onNext}>
+            <span>View next inspiration</span>
+            <span aria-hidden="true">→</span>
+          </button>
+        </footer>
+      ) : null}
     </div>
   );
 }

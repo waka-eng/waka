@@ -128,7 +128,7 @@ type MemoryBrowseOrder = "newest" | "relevance";
 type MemoryFolderView = "grid" | "vertical" | "horizontal";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
-  "partly" | "not_true"
+  "important" | "partly" | "not_true"
 >;
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
@@ -733,17 +733,13 @@ function uniqueThoughtCards(cards: HomeThoughtCard[]): HomeThoughtCard[] {
 function thoughtCardPreviewLabel(card: HomeThoughtCard, locale: string): string {
   const displayLabel =
     locale === "en-US" ? card.label : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(card.label)] ?? card.label;
-  return shortText(userFacingCopy(displayLabel), card.feedbackTargetId ? 96 : 120);
+  return userFacingCopy(displayLabel);
 }
 
-function explainThoughtCard(card: HomeThoughtCard): string {
-  const explanation =
-    card.reason ||
-    card.evidenceRationale ||
-    card.matchedEnvironment ||
-    card.ambientSignal ||
-    "Still forming from saved inspirations.";
-  return shortText(userFacingCopy(explanation), 78);
+function thoughtCardDisplayLabel(card: HomeThoughtCard, locale: string): string {
+  return locale === "en-US"
+    ? card.label
+    : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(card.label)] ?? card.label;
 }
 
 const NOTE_LAYOUTS: Array<{ tilt: number; w: string }> = [
@@ -1318,8 +1314,10 @@ const HOME_COPY = {
     reactionGroup: "포스트잇 조정",
     correctionLabel: "포스트잇 수정",
     correctionPlaceholder: "벽에 남길 문장으로 다듬기",
+    pinCta: "PIN",
     rewriteCta: "저장",
     removeCta: "삭제",
+    feedbackPinned: "고정됨",
     feedbackSaved: "저장됨",
     feedbackSaving: "저장 중...",
     feedbackError: "포스트잇을 바꾸지 못했습니다",
@@ -1383,8 +1381,10 @@ const HOME_COPY = {
     reactionGroup: "post-it controls",
     correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
+    pinCta: "PIN",
     rewriteCta: "save",
     removeCta: "delete",
+    feedbackPinned: "pinned",
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
@@ -1434,8 +1434,10 @@ const HOME_COPY = {
     reactionGroup: string;
     correctionLabel: string;
     correctionPlaceholder: string;
+    pinCta: string;
     rewriteCta: string;
     removeCta: string;
+    feedbackPinned: string;
     feedbackSaved: string;
     feedbackSaving: string;
     feedbackError: string;
@@ -2740,6 +2742,52 @@ export function HomePage(): JSX.Element {
     }
   };
 
+  const pinTopOfMindNote = async (signal: HomeThoughtCard) => {
+    if (!signal.feedbackTargetId) return;
+    const previousFeedback = noteFeedback[signal.id] ?? {
+      value: null,
+      status: "idle" as FeedbackStatus,
+      error: null,
+      correctionText: "",
+    };
+
+    setNoteFeedback((prev) => ({
+      ...prev,
+      [signal.id]: {
+        value: "important",
+        status: "saving",
+        error: null,
+        correctionText: prev[signal.id]?.correctionText ?? signal.label,
+      },
+    }));
+
+    try {
+      await createFeedback({
+        targetType: "top_of_mind_note",
+        targetId: signal.feedbackTargetId,
+        value: "important",
+      });
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          value: "important",
+          status: "saved",
+          error: null,
+          correctionText: prev[signal.id]?.correctionText ?? signal.label,
+        },
+      }));
+    } catch {
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          ...previousFeedback,
+          status: "error",
+          error: copy.feedbackError,
+        },
+      }));
+    }
+  };
+
   const pullDownTopOfMindNote = async (signal: HomeThoughtCard) => {
     if (!signal.feedbackTargetId) return;
 
@@ -2795,52 +2843,63 @@ export function HomePage(): JSX.Element {
     }
   };
 
-  const renderPostItSaveAction = (signal: HomeThoughtCard): JSX.Element | null => {
+  const renderPostItActions = (signal: HomeThoughtCard): JSX.Element | null => {
     if (!signal.feedbackTargetId) return null;
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
+    const currentText = thoughtCardDisplayLabel(signal, locale);
+    const draftText = feedbackState?.correctionText ?? currentText;
+    const hasEditedText = draftText.trim() !== currentText.trim();
     return (
-      <div className="nc-note-save-action">
-        <button
-          type="button"
-          className="nc-note-control-btn nc-note-control-btn--save"
-          disabled={saving || !(noteFeedback[signal.id]?.correctionText || signal.label).trim()}
-          onClick={(event) => {
-            event.stopPropagation();
-            void submitTopOfMindEdit(signal, noteFeedback[signal.id]?.correctionText || signal.label);
-          }}
-        >
-          {copy.rewriteCta}
-        </button>
+      <div className="nc-note-actions" role="group" aria-label={copy.reactionGroup}>
+        <div className="nc-note-action-buttons">
+          <button
+            type="button"
+            className="nc-note-control-btn nc-note-control-btn--pin"
+            disabled={saving}
+            onClick={(event) => {
+              event.stopPropagation();
+              void pinTopOfMindNote(signal);
+            }}
+          >
+            {copy.pinCta}
+          </button>
+          {hasEditedText ? (
+            <button
+              type="button"
+              className="nc-note-control-btn nc-note-control-btn--save"
+              disabled={saving || !draftText.trim()}
+              onClick={(event) => {
+                event.stopPropagation();
+                void submitTopOfMindEdit(signal, draftText);
+              }}
+            >
+              {copy.rewriteCta}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="nc-note-control-btn nc-note-control-btn--delete"
+            disabled={saving}
+            onClick={(event) => {
+              event.stopPropagation();
+              void pullDownTopOfMindNote(signal);
+            }}
+          >
+            {copy.removeCta}
+          </button>
+        </div>
         {feedbackState?.status === "saving" ? (
           <p className="nc-note-feedback-status">{copy.feedbackSaving}</p>
         ) : feedbackState?.status === "saved" ? (
-          <p className="nc-note-feedback-status">{copy.feedbackSaved}</p>
+          <p className="nc-note-feedback-status">
+            {feedbackState.value === "important" ? copy.feedbackPinned : copy.feedbackSaved}
+          </p>
         ) : feedbackState?.status === "error" ? (
           <p className="nc-note-feedback-status nc-note-feedback-status--error">
             {feedbackState.error ?? copy.feedbackError}
           </p>
         ) : null}
-      </div>
-    );
-  };
-
-  const renderPostItDeleteAction = (signal: HomeThoughtCard): JSX.Element | null => {
-    if (!signal.feedbackTargetId) return null;
-    const saving = noteFeedback[signal.id]?.status === "saving";
-    return (
-      <div className="nc-note-delete-action" role="group" aria-label={copy.reactionGroup}>
-        <button
-          type="button"
-          className="nc-note-control-btn nc-note-control-btn--delete"
-          disabled={saving}
-          onClick={(event) => {
-            event.stopPropagation();
-            void pullDownTopOfMindNote(signal);
-          }}
-        >
-          {copy.removeCta}
-        </button>
       </div>
     );
   };
@@ -3218,18 +3277,33 @@ export function HomePage(): JSX.Element {
         ? `No saved inspirations match “${inspirationFilters.search.trim()}” in ${activePath}.`
         : `No saved inspirations in ${activePath} yet.`;
 
-    return (
-      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
-        <header className="memory-category-intro memory-path-intro">
-          <span>inspiration drawer</span>
-          <h2>{activePath}</h2>
-          <p>
-            {hasMatches
-              ? `${pathFilteredSignals.length === 1 ? "1 save" : `${pathFilteredSignals.length} saves`} · ${selectedMemoryPathFilter?.description ?? "newest first"}`
-              : selectedMemoryPathFilter?.description ?? "newest first"}
-          </p>
-        </header>
-        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+	    return (
+	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
+	        <header className="memory-category-intro memory-path-intro">
+	          <span>inspiration drawer</span>
+	          <h2>{selectedMemoryPathFilter?.label ?? "all saved"}</h2>
+	          <p>
+	            {hasMatches
+	              ? `${pathFilteredSignals.length === 1 ? "1 save" : `${pathFilteredSignals.length} saves`} · ${selectedMemoryPathFilter?.description ?? "newest first"}`
+	              : selectedMemoryPathFilter?.description ?? "newest first"}
+	          </p>
+	        </header>
+	        {renderMemoryPathFilters()}
+	        <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
+	          <span className="sr-only">{copy.searchLabel}</span>
+	          <input
+	            type="search"
+	            value={inspirationFilters.search}
+	            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+	              setInspirationFilters({ search: event.target.value });
+	              setSelectedMemoryGroupId(null);
+	              setSelectedSavedSignalId(null);
+	              setSavedSignalDetail(null);
+	            }}
+	            placeholder={copy.searchPlaceholder}
+	          />
+	        </label>
+	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
         ) : null}
@@ -3264,8 +3338,8 @@ export function HomePage(): JSX.Element {
   const renderMemoryPathFilters = (): JSX.Element | null => {
     if (homeMode !== "memoryDrawer" || selectedSavedSignal) return null;
     return (
-      <nav className="memory-path-filters" aria-label="saved inspiration paths">
-        {memoryPathFilters.map((filter) => {
+	      <nav className="memory-path-filters" aria-label="saved inspiration paths">
+	        {memoryPathFilters.map((filter) => {
           const count = applySearchToSignals(filter.signals, savedSignalQuery).length;
           return (
             <button
@@ -3281,20 +3355,27 @@ export function HomePage(): JSX.Element {
               }}
               title={`${filter.description} (${count})`}
             >
-              {filter.path}
-            </button>
+	              <span>{filter.label}</span>
+	              <small>{count}</small>
+	            </button>
           );
         })}
       </nav>
     );
   };
 
-  const renderMemoryStackDetail = (): JSX.Element | null => {
-    if (!selectedSavedSignal) return null;
-    const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
-    const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
-    return (
-      <SavedInspirationDetail
+	  const renderMemoryStackDetail = (): JSX.Element | null => {
+	    if (!selectedSavedSignal) return null;
+	    const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
+	    const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
+	    const nextSignalList = selectedMemoryGroup ? selectedMemoryGroupSignals : pathFilteredSignals;
+	    const currentSignalIndex = nextSignalList.findIndex((signal) => signal.id === selectedSavedSignal.id);
+	    const nextSignal =
+	      currentSignalIndex >= 0 && nextSignalList.length > 1
+	        ? nextSignalList[(currentSignalIndex + 1) % nextSignalList.length]
+	        : null;
+	    return (
+	      <SavedInspirationDetail
         signal={selectedSavedSignal}
         detail={savedSignalDetail}
         loading={savedSignalDetailLoading}
@@ -3313,15 +3394,22 @@ export function HomePage(): JSX.Element {
         })}
         selectionPopover={renderMemorySelectionPopover(selectedSavedSignal.id)}
         existingHighlightPopover={renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
-        onBack={() => {
-          setSelectedSavedSignalId(null);
-          setSelectedSupportingSignalFallback(null);
+	        onBack={() => {
+	          setSelectedSavedSignalId(null);
+	          setSelectedSupportingSignalFallback(null);
           setSavedSignalDetail(null);
           setSavedSignalReflections([]);
           setSavedSignalReflectionsError(null);
-          setSavedSignalReflectionComposerOpen(false);
-        }}
-        onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
+	          setSavedSignalReflectionComposerOpen(false);
+	        }}
+	        onNext={
+	          nextSignal
+	            ? () => {
+	                openStackSignal(nextSignal);
+	              }
+	            : undefined
+	        }
+	        onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
         formatTimestamp={formatTimestamp}
         signalSourceLabel={signalSourceLabel}
@@ -3869,14 +3957,9 @@ export function HomePage(): JSX.Element {
       onClick={onNoteClick(index)}
       onKeyDown={onNoteKeyDown(index)}
     >
-      <div className="nc-note-preview" aria-label="post-it preview">
-        <p className="nc-note-body nc-note-body--preview">{thoughtCardPreviewLabel(signal, locale)}</p>
-
-        <div className="nc-note-explain nc-note-explain--preview">
-          <p>{explainThoughtCard(signal)}</p>
-        </div>
-      </div>
-      <span className="nc-note-open-hint" aria-hidden="true">open note</span>
+	      <div className="nc-note-preview" aria-label="post-it preview">
+	        <p className="nc-note-body nc-note-body--preview">{thoughtCardPreviewLabel(signal, locale)}</p>
+	      </div>
     </article>
   );
   };
@@ -3901,7 +3984,6 @@ export function HomePage(): JSX.Element {
         }}
         onClick={(event) => event.stopPropagation()}
       >
-        {renderPostItSaveAction(signal)}
         <button
           type="button"
           className="nc-note-peel-close"
@@ -3917,32 +3999,21 @@ export function HomePage(): JSX.Element {
               <textarea
                 className="nc-note-body nc-note-body-edit"
                 id={`top-of-mind-note-${signal.id}`}
-                aria-label={copy.correctionLabel}
-                value={
-                  noteFeedback[signal.id]?.correctionText ??
-                  (locale === "en-US"
-                    ? signal.label
-                    : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label)
-                }
+	                aria-label={copy.correctionLabel}
+	                value={
+	                  noteFeedback[signal.id]?.correctionText ??
+	                  thoughtCardDisplayLabel(signal, locale)
+	                }
                 rows={3}
                 onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
                   updateCorrectionText(signal.id, event.target.value)
                 }
               />
             ) : (
-              <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
-                {locale === "en-US"
-                  ? signal.label
-                  : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(signal.label)] ?? signal.label}
-              </p>
+	              <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
+	                {thoughtCardDisplayLabel(signal, locale)}
+	              </p>
             )}
-            <p className="nc-note-one-read">
-              {userFacingCopy(
-                signal.evidenceRationale ||
-                  signal.reason ||
-                  "This showed up because a few saved inspirations are leaning in the same direction.",
-              )}
-            </p>
           </section>
 
           <section
@@ -4016,7 +4087,7 @@ export function HomePage(): JSX.Element {
           </section>
 
           <footer className="nc-note-expanded-foot">
-            {renderPostItDeleteAction(signal)}
+            {renderPostItActions(signal)}
           </footer>
         </div>
       </article>
@@ -4056,7 +4127,10 @@ export function HomePage(): JSX.Element {
           {renderExpandedThoughtCard(expandedNoteIndex)}
         </div>
       ) : null}
-      <main className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}>
+      <main
+        className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}
+        data-locale={locale}
+      >
         <section className="nc-titlecard">
           <h1 className="nc-title">
             {copy.titleLineOne(displayHandle)}
@@ -4086,12 +4160,13 @@ export function HomePage(): JSX.Element {
       </main>
 
       {homeMode === "memoryDrawer" ? (
-        <section
-          className={`reference-saves-page signal-revisit-page memory-drawer-stack${
-            drawerClosing ? " memory-drawer-stack--closing" : ""
-          }`}
-          aria-label={copy.savesTitle}
-        >
+	        <section
+	          className={`reference-saves-page signal-revisit-page memory-drawer-stack${
+	            drawerClosing ? " memory-drawer-stack--closing" : ""
+	          }`}
+	          data-locale={locale}
+	          aria-label={copy.savesTitle}
+	        >
           <span className="memory-stack-glass" aria-hidden="true" />
           {selectedSavedSignal ? (
             renderMemoryStackDetail()
@@ -4136,41 +4211,24 @@ export function HomePage(): JSX.Element {
         </section>
       ) : null}
 
-      {expandedNoteIndex === null ? (
-        <div className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`} aria-label="bottom actions">
-          {homeMode === "memoryDrawer" ? (
-            <>
-              {renderMemoryPathFilters()}
-              <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
-                <span className="sr-only">{copy.searchLabel}</span>
-                <input
-                  type="search"
-                  value={inspirationFilters.search}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    setInspirationFilters({ search: event.target.value });
-                    setSelectedMemoryGroupId(null);
-                    setSelectedSavedSignalId(null);
-                    setSavedSignalDetail(null);
-                  }}
-                  placeholder={copy.searchPlaceholder}
-                />
-              </label>
-            </>
-          ) : (
-            <button
-              type="button"
-              className={`nc-save${captureSaved ? " nc-save--saved" : ""}`}
-              onClick={openCapture}
-              aria-label={copy.captureAria}
-            >
-              <span className="nc-save-cta">
-                {captureSaved ? t(locale, "saved") : copy.captureCta}
-                {!captureSaved && captureHasDraft ? (
-                  <span className="nc-save-draft" aria-hidden="true">···</span>
-                ) : null}
-              </span>
-            </button>
-          )}
+      <div
+        className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`}
+        data-locale={locale}
+        aria-label="bottom actions"
+      >
+          <button
+            type="button"
+            className={`nc-save${captureSaved ? " nc-save--saved" : ""}`}
+            onClick={openCapture}
+            aria-label={copy.captureAria}
+          >
+            <span className="nc-save-cta">
+              {captureSaved ? t(locale, "saved") : copy.captureCta}
+              {!captureSaved && captureHasDraft ? (
+                <span className="nc-save-draft" aria-hidden="true">···</span>
+              ) : null}
+            </span>
+          </button>
           <button
             type="button"
             className={`nc-drawer-object${homeMode === "memoryDrawer" ? " nc-drawer-object--close" : ""}`}
@@ -4207,7 +4265,6 @@ export function HomePage(): JSX.Element {
             <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
           </button>
         </div>
-      ) : null}
 
       {captureOpen ? (
         <div
