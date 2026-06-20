@@ -944,6 +944,38 @@ describe("HomePage current home experience", () => {
     expect(modal?.textContent).not.toContain("enter focus mode");
   });
 
+  it("localizes Korean memory drawer path labels and empty summaries", async () => {
+    mockAuthState.value.user.name = "qa";
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({ savedSignals: [], inspirations: [] });
+    const container = await renderHomePage();
+
+    const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
+    expect(drawerObject).not.toBeNull();
+    await act(async () => {
+      drawerObject?.click();
+    });
+    await flushReactWork();
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const panel = container.querySelector<HTMLElement>(".memory-category-panel");
+    expect(panel).not.toBeNull();
+    expect(panel?.getAttribute("aria-label")).toBe("저장된 영감 목록");
+    const pathNav = container.querySelector<HTMLElement>(".memory-path-filters");
+    expect(pathNav?.getAttribute("aria-label")).toBe("저장된 영감 길");
+    const filters = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-path-filter"));
+    expect(filters.map((filter) => filter.textContent)).toEqual(["전체 저장0", "최근 저장0"]);
+    expect(filters[0]?.getAttribute("title")).toBe("저장된 영감 전체, 최신순 (0)");
+    expect(filters[1]?.getAttribute("title")).toBe("최근 2일 안에 저장한 영감 (0)");
+    expect(container.querySelector(".memory-path-summary")?.textContent).toBe("저장된 영감 전체, 최신순 · 0개 저장");
+    expect(container.querySelector(".memory-relationship-empty")?.textContent).toBe("아직 저장된 영감이 없습니다.");
+    expect(panel?.textContent).not.toContain("all saved");
+    expect(panel?.textContent).not.toContain("recently saved");
+    expect(panel?.textContent).not.toContain("saves");
+    expect(panel?.getAttribute("aria-label")).not.toBe("saved inspiration list");
+  });
+
   it("names the primary product spaces without surfacing internal graph UI", async () => {
     setApiFixtures();
     const container = await renderHomePage();

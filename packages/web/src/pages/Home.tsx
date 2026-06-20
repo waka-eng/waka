@@ -586,6 +586,7 @@ interface MemoryGrouping {
 interface MemoryPathFilter {
   id: string;
   path: string;
+  displayPath: string;
   label: string;
   description: string;
   signals: ApiSavedSignalSearchResult[];
@@ -983,15 +984,52 @@ function sortedSignalsNewest(signals: ApiSavedSignalSearchResult[]): ApiSavedSig
   return [...signals].sort((a, b) => capturedAtMs(b) - capturedAtMs(a));
 }
 
-function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPathFilter[] {
+const MEMORY_PATH_COPY: Record<
+  SupportedLocale,
+  {
+    allSavedLabel: string;
+    allSavedDescription: string;
+    allSavedPath: string;
+    recentlySavedLabel: string;
+    recentlySavedDescription: string;
+    recentlySavedPath: string;
+    inspirationCount: (count: number) => string;
+    sharedPathDescription: (count: number) => string;
+  }
+> = {
+  "ko-KR": {
+    allSavedLabel: "전체 저장",
+    allSavedDescription: "저장된 영감 전체, 최신순",
+    allSavedPath: "/전체-저장",
+    recentlySavedLabel: "최근 저장",
+    recentlySavedDescription: "최근 2일 안에 저장한 영감",
+    recentlySavedPath: "/최근-저장",
+    inspirationCount: (count) => `${count}개 저장`,
+    sharedPathDescription: (count) => `이 길에 함께 놓인 영감 ${count}개`,
+  },
+  "en-US": {
+    allSavedLabel: "all saved",
+    allSavedDescription: "all saved inspirations, newest first",
+    allSavedPath: "/all-saved",
+    recentlySavedLabel: "recently saved",
+    recentlySavedDescription: "saved in the last 2 days",
+    recentlySavedPath: "/recently-saved",
+    inspirationCount: (count) => `${count} ${count === 1 ? "save" : "saves"}`,
+    sharedPathDescription: (count) => `${count} inspiration${count === 1 ? "" : "s"} sharing this path`,
+  },
+};
+
+function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[], locale: SupportedLocale): MemoryPathFilter[] {
+  const pathCopy = MEMORY_PATH_COPY[locale];
   const sortedSignals = sortedSignalsNewest(signals);
   const recentlySavedSignals = sortedSignals.filter((signal) => signalAgeDays(signal) <= 2);
   const filters: MemoryPathFilter[] = [
     {
       id: "all-saved",
       path: "/all-saved",
-      label: "all saved",
-      description: "all saved inspirations, newest first",
+      displayPath: pathCopy.allSavedPath,
+      label: pathCopy.allSavedLabel,
+      description: pathCopy.allSavedDescription,
       signals: sortedSignals,
     },
   ];
@@ -999,8 +1037,9 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
   filters.push({
     id: "recently-saved",
     path: "/recently-saved",
-    label: "recently saved",
-    description: "saved in the last 2 days",
+    displayPath: pathCopy.recentlySavedPath,
+    label: pathCopy.recentlySavedLabel,
+    description: pathCopy.recentlySavedDescription,
     signals: recentlySavedSignals,
   });
 
@@ -1014,14 +1053,15 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
     const existing = filters.find((filter) => filter.id === id || filter.label === label);
     if (existing) {
       existing.signals = uniqueSignals([...existing.signals, ...uniqueRelatedSignals]);
-      existing.description = `${existing.signals.length} inspiration${existing.signals.length === 1 ? "" : "s"} sharing this path`;
+      existing.description = pathCopy.sharedPathDescription(existing.signals.length);
       return;
     }
     filters.push({
       id,
       path: `/${id}`,
+      displayPath: `/${label}`,
       label,
-      description: `${uniqueRelatedSignals.length} inspiration${uniqueRelatedSignals.length === 1 ? "" : "s"} sharing this path`,
+      description: pathCopy.sharedPathDescription(uniqueRelatedSignals.length),
       signals: sortedSignalsNewest(uniqueRelatedSignals),
     });
   };
@@ -1247,6 +1287,11 @@ const HOME_COPY = {
     bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
     topOfMindAria: "탑오브마인드 포스트잇 다섯 장",
     memoryDrawerTitle: "영감 서랍",
+    memoryPathListAria: "저장된 영감 목록",
+    memoryPathNavAria: "저장된 영감 길",
+    memoryPathClearAll: "전체 저장 보기",
+    memoryPathNoSearchResults: (query: string, path: string) => `“${query}”와 일치하는 저장된 영감이 ${path}에 없습니다.`,
+    memoryPathEmpty: (path: string) => `아직 ${path}에 저장된 영감이 없습니다.`,
     backHome: "홈으로 돌아가기",
     adminInspectionLabel: "점검",
     adminInspectionAria: "관리자 점검 도구 열기",
@@ -1323,6 +1368,11 @@ const HOME_COPY = {
     bottomHint: "Capture inspirations to generate your top of mind stickies.",
     topOfMindAria: "Five Top of Mind post-its",
     memoryDrawerTitle: "Inspiration Drawer",
+    memoryPathListAria: "saved inspiration list",
+    memoryPathNavAria: "saved inspiration paths",
+    memoryPathClearAll: "show /all-saved",
+    memoryPathNoSearchResults: (query: string, path: string) => `No saved inspirations match “${query}” in ${path}.`,
+    memoryPathEmpty: (path: string) => `No saved inspirations in ${path} yet.`,
     backHome: "back home",
     adminInspectionLabel: "Debug",
     adminInspectionAria: "Open admin inspection tools",
@@ -1373,6 +1423,11 @@ const HOME_COPY = {
     bottomHint: string;
     topOfMindAria: string;
     memoryDrawerTitle: string;
+    memoryPathListAria: string;
+    memoryPathNavAria: string;
+    memoryPathClearAll: string;
+    memoryPathNoSearchResults: (query: string, path: string) => string;
+    memoryPathEmpty: (path: string) => string;
     backHome: string;
     adminInspectionLabel: string;
     adminInspectionAria: string;
@@ -2189,7 +2244,7 @@ export function HomePage(): JSX.Element {
       ),
     [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, topOfMindNotes, userMemoryGroups],
   );
-  const memoryPathFilters = useMemo(() => buildMemoryPathFilters(allSavedSignals), [allSavedSignals]);
+  const memoryPathFilters = useMemo(() => buildMemoryPathFilters(allSavedSignals, locale), [allSavedSignals, locale]);
   const selectedMemoryPathFilter =
     memoryPathFilters.find((filter) => filter.id === selectedMemoryPathFilterId) ?? memoryPathFilters[0] ?? null;
   const pathFilteredSignals = selectedMemoryPathFilter
@@ -3721,23 +3776,25 @@ export function HomePage(): JSX.Element {
   const renderMemoryPathDrawer = (): JSX.Element => {
     const hasSavedInspirations = allSavedSignals.length > 0;
     const hasMatches = pathFilteredSignals.length > 0;
-    const activePath = selectedMemoryPathFilter?.path ?? "/all-saved";
+    const pathCopy = MEMORY_PATH_COPY[locale];
+    const activePath = selectedMemoryPathFilter?.displayPath ?? pathCopy.allSavedPath;
     const emptyCopy = !hasSavedInspirations
       ? initialLoading
         ? copy.loadingSaves
         : copy.emptySaves
       : savedSignalQuery
-        ? `No saved inspirations match “${inspirationFilters.search.trim()}” in ${activePath}.`
-        : `No saved inspirations in ${activePath} yet.`;
+        ? copy.memoryPathNoSearchResults(inspirationFilters.search.trim(), activePath)
+        : copy.memoryPathEmpty(activePath);
+
 
 	    return (
-	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
+      <div className="memory-category-panel memory-path-panel" aria-label={copy.memoryPathListAria}>
         {renderMemoryPathFilters()}
         <p className="memory-path-summary">
-          {selectedMemoryPathFilter?.description ?? `${pathFilteredSignals.length} ${pathFilteredSignals.length === 1 ? "save" : "saves"}`}
-          {selectedMemoryPathFilterId === "all-saved" ? ` · ${pathFilteredSignals.length} ${pathFilteredSignals.length === 1 ? "save" : "saves"}` : ""}
+          {selectedMemoryPathFilter?.description ?? pathCopy.inspirationCount(pathFilteredSignals.length)}
+          {selectedMemoryPathFilterId === "all-saved" ? ` · ${pathCopy.inspirationCount(pathFilteredSignals.length)}` : ""}
         </p>
-	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
+        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
         ) : null}
@@ -3753,7 +3810,7 @@ export function HomePage(): JSX.Element {
                   if (savedSignalQuery) setInspirationFilters({ search: "" });
                 }}
               >
-                show /all-saved
+                {copy.memoryPathClearAll}
               </button>
             ) : null}
           </p>
@@ -3791,7 +3848,7 @@ export function HomePage(): JSX.Element {
     ];
     const hiddenThemeCount = Math.max(themeFilters.length - visibleThemeFilters.length, 0);
     return (
-	      <nav className="memory-path-filters" aria-label="saved inspiration paths">
+	      <nav className="memory-path-filters" aria-label={copy.memoryPathNavAria}>
 	        {visibleFilters.map((filter) => {
           const count = applySearchToSignals(filter.signals, savedSignalQuery).length;
           return (
