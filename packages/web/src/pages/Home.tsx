@@ -1839,6 +1839,32 @@ export function HomePage(): JSX.Element {
     setHighlightStatus({ status: "idle" });
   }, [memoryHighlightMode]);
 
+  const handleMemoryTextareaSelection = useCallback(
+    (signalId: string, element: HTMLTextAreaElement): void => {
+      if (!memoryHighlightMode) {
+        setSelectedInspirationText(null);
+        return;
+      }
+      const start = element.selectionStart;
+      const end = element.selectionEnd;
+      const selected = element.value.slice(Math.min(start, end), Math.max(start, end)).replace(/\s+/g, " ").trim();
+      if (selected.length < 2) {
+        setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
+        return;
+      }
+      setSelectedInspirationText({
+        signalId,
+        text: selected.slice(0, 4096),
+        position: selectionPopoverPosition(),
+        reaction: null,
+        note: "",
+      });
+      setHighlightStatus({ status: "idle" });
+      element.setSelectionRange(end, end);
+    },
+    [memoryHighlightMode],
+  );
+
   const addMemoryHighlight = useCallback(
     async (signalId: string): Promise<void> => {
       if (!selectedInspirationText || selectedInspirationText.signalId !== signalId) return;
@@ -3363,11 +3389,6 @@ export function HomePage(): JSX.Element {
       const immediateText = savedInspirationTextById.get(signal.id);
       return immediateText ? { ...current, [signal.id]: immediateText } : current;
     });
-    window.setTimeout(() => {
-      document
-        .querySelector(`[data-memory-signal-id="${CSS.escape(signal.id)}"]`)
-        ?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }, 0);
     recordRevisit(signal.id, "detail_opened");
   };
 
@@ -3465,11 +3486,11 @@ export function HomePage(): JSX.Element {
       const detailText = fullDetailReady ? savedSignalDetail.rawText : immediateFullText ?? signal.textPreview;
       const draftText = savedSignalDrafts[signal.id] ?? detailText;
       const hasEditedDraft = draftText.trim() !== detailText.trim();
+      const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
       const reflectionRows = savedSignalReflections[signal.id] ?? [];
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
       const reflectionsExpanded = expandedReflectionThreads.has(signal.id);
-      const latestReflection = reflectionRows[reflectionRows.length - 1] ?? null;
       return (
         <article
           className="memory-contents-item memory-contents-item--expanded"
@@ -3504,24 +3525,27 @@ export function HomePage(): JSX.Element {
           <div
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
+            <div
+              className={`memory-contents-highlight-layer${
+                hasEditedDraft ? " memory-contents-highlight-layer--hidden" : ""
+              }`}
+              aria-hidden="true"
+            >
+              {renderHighlightedInspirationText(draftText, detailHighlights)}
+            </div>
             <textarea
-              className="memory-contents-expanded-text memory-contents-expanded-editor"
+              className={`memory-contents-expanded-text memory-contents-expanded-editor${
+                !hasEditedDraft && detailHighlights.length > 0 ? " memory-contents-expanded-editor--with-highlights" : ""
+              }`}
               value={draftText}
-              ref={(node) => {
-                if (!node) return;
-                node.style.height = "auto";
-                node.style.height = `${node.scrollHeight}px`;
-              }}
               onChange={(event) => {
                 setSavedSignalDrafts((current) => ({
                   ...current,
                   [signal.id]: event.currentTarget.value,
                 }));
-                event.currentTarget.style.height = "auto";
-                event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
               }}
-              onMouseUp={memoryHighlightMode ? () => handleMemoryTextSelection(signal.id) : undefined}
-              onKeyUp={memoryHighlightMode ? () => handleMemoryTextSelection(signal.id) : undefined}
+              onMouseUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
+              onKeyUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
               role="textbox"
               aria-label="edit saved inspiration"
               aria-multiline="true"
@@ -3551,6 +3575,8 @@ export function HomePage(): JSX.Element {
                 }`}
                 aria-pressed={memoryHighlightMode}
                 onClick={() => {
+                  window.getSelection()?.removeAllRanges();
+                  setSelectedInspirationText(null);
                   setMemoryHighlightMode((current) => {
                     const next = !current;
                     if (next) cancelSavedSignalReflection();
@@ -3567,7 +3593,7 @@ export function HomePage(): JSX.Element {
                 }`}
                 onClick={() => reflectDeeperOnSavedSignal(signal)}
               >
-                reflect
+                {isReflecting ? "reflecting" : "reflect"}
               </button>
               <button
                 type="button"
@@ -3596,9 +3622,8 @@ export function HomePage(): JSX.Element {
                     }}
                   >
                     <span>
-                      {reflectionRows.length} reflection{reflectionRows.length === 1 ? "" : "s"} from this thread
+                      {reflectionRows.length} reflection{reflectionRows.length === 1 ? "" : "s"} from this inspiration
                     </span>
-                    {latestReflection?.answer ? <strong>{shortText(latestReflection.answer, 96)}</strong> : null}
                     <small>{reflectionsExpanded ? "hide" : "show"}</small>
                   </button>
                   {reflectionsExpanded ? (

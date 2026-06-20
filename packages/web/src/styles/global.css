@@ -1964,10 +1964,21 @@
   background: transparent;
   outline: 0;
   resize: none;
-  overflow: hidden;
+  overflow: visible;
+  field-sizing: content;
 }
 
 .memory-contents-expanded-editor::selection {
+  background: rgba(140, 180, 255, 0.36);
+}
+
+.memory-contents-expanded-reader {
+  min-height: clamp(180px, 34vh, 340px);
+  outline: 0;
+  user-select: text;
+}
+
+.memory-contents-expanded-reader::selection {
   background: rgba(140, 180, 255, 0.36);
 }
 
@@ -2016,9 +2027,10 @@
 
 .memory-contents-reflection-summary {
   appearance: none;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
   width: 100%;
   padding: 0;
   border: 0;
@@ -2036,22 +2048,7 @@
   letter-spacing: 0;
 }
 
-.memory-contents-reflection-summary strong {
-  min-width: 0;
-  overflow: hidden;
-  color: rgba(45, 41, 37, 0.42);
-  font-size: 12px;
-  font-weight: 460;
-  letter-spacing: 0;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .memory-contents-reflection-summary small {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  align-self: center;
   color: rgba(45, 41, 37, 0.42);
   font-size: 11px;
   font-weight: 620;
@@ -13500,7 +13497,7 @@ body.reflect-bg {
 .nc-primary-action--reflect {
   width: min(820px, calc(100vw - 72px));
   height: auto;
-  min-height: 154px;
+  min-height: 0;
 }
 
 .nc-primary-action > .nc-save,
@@ -13634,6 +13631,8 @@ body.reflect-bg {
 }
 
 .nc-primary-action--reflect > .nc-drawer-reflect {
+  position: relative;
+  inset: auto;
   opacity: 1;
   pointer-events: auto;
   transform: scaleX(1) translateY(0);
@@ -13851,6 +13850,7 @@ body.reflect-bg {
   width: 100%;
   min-height: 58px;
   overflow: hidden;
+  field-sizing: content;
   padding: 16px 20px;
   border: 0;
   border-radius: 24px;
