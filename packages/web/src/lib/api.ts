@@ -26,6 +26,7 @@ export interface ApiUser {
   email: string;
   name: string;
   preferredLocale: SupportedLocale;
+  onboardingCompletedAt: string | null;
 }
 
 /**
@@ -99,6 +100,7 @@ export interface SignupRequest {
   email: string;
   password: string;
   name?: string;
+  preferredLocale?: SupportedLocale;
 }
 
 export interface SignupResponse {
@@ -263,6 +265,53 @@ export async function updateAuthPreferences(
     input,
     "Failed to update preferences",
   );
+}
+
+
+export interface UpdateAuthProfileRequest {
+  name: string;
+  preferredLocale: SupportedLocale;
+  completeOnboarding?: boolean;
+}
+
+export interface UpdateAuthProfileResponse {
+  user: ApiUser;
+}
+
+export async function updateAuthProfile(
+  input: UpdateAuthProfileRequest,
+): Promise<UpdateAuthProfileResponse> {
+  return patchJson<UpdateAuthProfileResponse>(
+    apiPath("/auth/me/profile"),
+    input,
+    "Failed to update profile",
+  );
+}
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(apiPath("/auth/me"), {
+    method: "DELETE",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ confirmation: "DELETE" }),
+  });
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      // ignore malformed error bodies
+    }
+    const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors };
+    throw new ApiError({
+      status: res.status,
+      message: errorBody.error ?? `Failed to delete account (HTTP ${res.status}).`,
+      fieldErrors: errorBody.details,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

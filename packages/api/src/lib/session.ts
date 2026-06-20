@@ -80,6 +80,7 @@ export interface AuthenticatedUser {
   name: string;
   avatarUrl: string | null;
   preferredLocale: SupportedLocale;
+  onboardingCompletedAt: Date | null;
 }
 
 /**
@@ -110,6 +111,7 @@ export async function lookupSessionUser(
       name: users.name,
       avatarUrl: users.avatarUrl,
       preferredLocale: users.preferredLocale,
+      onboardingCompletedAt: users.onboardingCompletedAt,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -135,6 +137,7 @@ export async function lookupSessionUser(
     name: row.name,
     avatarUrl: row.avatarUrl,
     preferredLocale: normalizeSupportedLocale(row.preferredLocale),
+    onboardingCompletedAt: row.onboardingCompletedAt,
   };
 }
 

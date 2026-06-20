@@ -91,11 +91,23 @@ import {
 
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
 const SAVED_SIGNAL_REFLECTION_MAX_STEPS = 3;
-const SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS = [
-  "What does this inspiration ask you to notice next?",
-  "What desire, fear, or standard does it point toward?",
-  "What would change if you took that seriously?",
-];
+const SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS: Record<SupportedLocale, readonly string[]> = {
+  "en-US": [
+    "What does this inspiration ask you to notice next?",
+    "What desire, fear, or standard does it point toward?",
+    "What would change if you took that seriously?",
+  ],
+  "ko-KR": [
+    "이 영감은 지금 무엇을 알아차리라고 하나요?",
+    "어떤 바람, 두려움, 기준을 가리키나요?",
+    "그 신호를 진지하게 받아들이면 무엇이 달라질까요?",
+  ],
+};
+
+function savedSignalReflectionFallbackQuestion(locale: SupportedLocale, index: number): string {
+  const questions = SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[locale];
+  return questions[index] ?? questions[questions.length - 1] ?? "";
+}
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -3177,8 +3189,7 @@ export function HomePage(): JSX.Element {
   const selectedDrawerReflectionCanSave = savedSignalReflectionDraft.trim().length > 0;
   const selectedDrawerReflectionQuestion =
     savedSignalReflectionQuestions[savedSignalReflectionStepIndex] ??
-    SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[savedSignalReflectionStepIndex] ??
-    SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
+    savedSignalReflectionFallbackQuestion(locale, savedSignalReflectionStepIndex);
   const selectedDrawerReflectionProgress = `${savedSignalReflectionStepIndex + 1}/${SAVED_SIGNAL_REFLECTION_MAX_STEPS}`;
   const selectedDrawerReflectionCanGoNext =
     selectedDrawerReflectionCanSave &&
@@ -3209,9 +3220,7 @@ export function HomePage(): JSX.Element {
   ): void => {
     const requestId = savedSignalReflectionRequestSeqRef.current + 1;
     savedSignalReflectionRequestSeqRef.current = requestId;
-    const fallback =
-      SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[stepIndex] ??
-      SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
+    const fallback = savedSignalReflectionFallbackQuestion(locale, stepIndex);
     const text =
       savedSignalDetail?.id === signal.id
         ? savedSignalDetail.rawText
@@ -3226,7 +3235,7 @@ export function HomePage(): JSX.Element {
       },
       priorAnswers: answers
         .map((answer, index) => ({
-          question: questions[index] ?? SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[index] ?? fallback,
+          question: questions[index] ?? savedSignalReflectionFallbackQuestion(locale, index) ?? fallback,
           answer: answer.trim(),
         }))
         .filter((item) => item.answer.length > 0),
@@ -3350,8 +3359,7 @@ export function HomePage(): JSX.Element {
       .map((answer, index) => ({
         question:
           savedSignalReflectionQuestions[index] ??
-          SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[index] ??
-          SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1],
+          savedSignalReflectionFallbackQuestion(locale, index),
         answer: answer.trim(),
       }))
       .filter((item) => item.answer.length > 0)
@@ -3414,7 +3422,7 @@ export function HomePage(): JSX.Element {
     setSelectedInspirationText(null);
     setSavedSignalReflectingId(signal.id);
     setSavedSignalReflectionAnswers([]);
-    setSavedSignalReflectionQuestions([SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[0]]);
+    setSavedSignalReflectionQuestions([savedSignalReflectionFallbackQuestion(locale, 0)]);
     setSavedSignalReflectionStepIndex(0);
     setSavedSignalReflectionDraft("");
     setSavedSignalReflectionError(null);
@@ -4972,6 +4980,31 @@ export function HomePage(): JSX.Element {
           {loadError}
         </div>
       ) : null}
+      <Link
+        to="/profile"
+        style={{
+          position: "fixed",
+          bottom: 10,
+          right: 92,
+          zIndex: 300,
+          background: "rgba(255, 253, 247, 0.52)",
+          border: "1px solid rgba(15, 15, 14, 0.12)",
+          borderRadius: 999,
+          padding: "4px 9px",
+          fontFamily: "var(--font-mono)",
+          fontSize: 8,
+          letterSpacing: "0.1em",
+          textTransform: "uppercase",
+          color: "var(--muted)",
+          opacity: 0.72,
+          cursor: "pointer",
+          textDecoration: "none",
+        }}
+        aria-label={t(locale, "profileTitle")}
+        title={t(locale, "profileTitle")}
+      >
+        {t(locale, "profileLink")}
+      </Link>
       <button
         type="button"
         onClick={() => {

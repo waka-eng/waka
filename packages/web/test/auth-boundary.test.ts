@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequireAuth } from "../src/components/RequireAuth";
-import { fetchCurrentUser, login, updateAuthPreferences } from "../src/lib/api";
+import { deleteAccount, fetchCurrentUser, login, updateAuthPreferences, updateAuthProfile } from "../src/lib/api";
 import {
   AuthProvider,
   useAuth,
@@ -23,6 +23,8 @@ vi.mock("../src/lib/api", async (importOriginal) => {
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),
     updateAuthPreferences: vi.fn(),
+    updateAuthProfile: vi.fn(),
+    deleteAccount: vi.fn(async () => undefined),
   };
 });
 
@@ -36,6 +38,7 @@ const cachedUser = {
   email: "cached@example.com",
   name: "Cached User",
   preferredLocale: "en-US" as const,
+  onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
 };
 
 let mountedRoot: Root | null = null;
@@ -64,6 +67,8 @@ beforeEach(() => {
   vi.mocked(fetchCurrentUser).mockReset();
   vi.mocked(login).mockReset();
   vi.mocked(updateAuthPreferences).mockReset();
+  vi.mocked(updateAuthProfile).mockReset();
+  vi.mocked(deleteAccount).mockReset();
   latestAuth = null;
 });
 
@@ -124,6 +129,14 @@ async function renderAuthRoutes({
             createElement(Route, {
               path: "/login",
               element: loginElement,
+            }),
+            createElement(Route, {
+              path: "/onboarding",
+              element: createElement(
+                RequireAuth,
+                null,
+                createElement("main", null, "ONBOARDING"),
+              ),
             }),
             createElement(Route, {
               path: "/",
@@ -192,6 +205,7 @@ describe("auth boundary", () => {
         email: "fresh@example.com",
         name: "Fresh User",
         preferredLocale: "en-US",
+        onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
       },
     });
 
@@ -220,12 +234,28 @@ describe("auth boundary", () => {
     });
   });
 
+  it("routes authenticated users with incomplete onboarding to onboarding", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue({
+      id: "fresh-user",
+      email: "fresh@example.com",
+      name: "",
+      preferredLocale: "ko-KR",
+      onboardingCompletedAt: null,
+    });
+
+    const container = await renderAuthRoutes({ initialPath: "/" });
+
+    expect(container.textContent).toContain("ONBOARDING");
+    expect(container.textContent).not.toContain("PROTECTED HOME DATA");
+  });
+
   it("persists locale preference updates through auth state and localStorage", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue({
       id: "fresh-user",
       email: "fresh@example.com",
       name: "Fresh User",
       preferredLocale: "en-US",
+      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
     });
     vi.mocked(updateAuthPreferences).mockResolvedValue({
       user: {
@@ -233,6 +263,7 @@ describe("auth boundary", () => {
         email: "fresh@example.com",
         name: "Fresh User",
         preferredLocale: "ko-KR",
+        onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
       },
     });
 

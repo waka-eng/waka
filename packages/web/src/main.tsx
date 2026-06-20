@@ -33,6 +33,8 @@ import { AuthProvider } from "./lib/auth-context";
 import AdminWowStatusPage from "./pages/AdminWowStatus";
 import HomePage from "./pages/Home";
 import LoginPage from "./pages/Login";
+import OnboardingPage from "./pages/Onboarding";
+import ProfilePage from "./pages/Profile";
 import MeaningGraphPage from "./pages/MeaningGraph";
 import "./styles/global.css";
 
@@ -54,6 +56,22 @@ ReactDOM.createRoot(root).render(
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/onboarding"
+            element={
+              <RequireAuth>
+                <OnboardingPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <ProfilePage />
+              </RequireAuth>
+            }
+          />
           {/*
             The home route is protected. <RequireAuth> handles three cases:
               - still hydrating  → render a neutral loading state,
