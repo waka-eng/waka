@@ -35,6 +35,11 @@ const DEFAULT_LIMIT = 120;
 const MAX_LIMIT = 300;
 const MAX_PREVIEW_LENGTH = 180;
 
+function isMissingMeaningGraphRebuildJobType(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /invalid input value for enum background_job_type/i.test(message) && /meaning_graph_rebuild/i.test(message);
+}
+
 function ambitionDimensionForContextType(
   type: ReturnType<typeof normalizeContextNodeType>,
 ):
@@ -478,14 +483,29 @@ export function createAdminMeaningGraphRoutes(
 
   routes.post("/rebuild", async (c) => {
     const userId = c.get("user").id;
-    const { job } = await enqueueMeaningGraphRebuild(userId);
-    return c.json(
-      {
-        job: serializeBackgroundJob(job),
-        statusUrl: `/api/admin/meaning-graph/rebuild/${job.id}`,
-      },
-      202,
-    );
+    try {
+      const { job } = await enqueueMeaningGraphRebuild(userId);
+      return c.json(
+        {
+          job: serializeBackgroundJob(job),
+          statusUrl: `/api/admin/meaning-graph/rebuild/${job.id}`,
+        },
+        202,
+      );
+    } catch (err) {
+      if (isMissingMeaningGraphRebuildJobType(err)) {
+        return c.json(
+          {
+            error: "Local database migration required",
+            code: "MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE",
+            detail:
+              "Run the repo Drizzle migrations so background_job_type includes meaning_graph_rebuild before rebuilding the admin meaning graph.",
+          },
+          409,
+        );
+      }
+      throw err;
+    }
   });
 
   routes.get("/rebuild", async (c) => {

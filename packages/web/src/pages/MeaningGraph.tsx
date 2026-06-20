@@ -90,7 +90,9 @@ const MEMORY_STATES = [
   "needs_testing",
 ] as const;
 
-const MEMORY_LABEL: Record<(typeof MEMORY_STATES)[number], string> = {
+type MemoryStateFilter = (typeof MEMORY_STATES)[number];
+
+const MEMORY_LABEL: Record<MemoryStateFilter, string> = {
   emerging: "emerging",
   active: "active",
   fading: "fading",
@@ -125,6 +127,10 @@ const AMBITION_LABEL: Record<AmbitionDimension, string> = {
   rejection: "rejection",
   next_experiment: "next experiment",
 };
+
+type ContextTypeLabelMap = Record<string, string>;
+type AmbitionLabelMap = Record<AmbitionDimension, string>;
+type MemoryStateLabelMap = Record<MemoryStateFilter, string>;
 
 const EDGE_KIND_KEYS = ["supports", "challenges", "points_to", "asks_for", "reactivates"] as const;
 type EdgeKindKey = (typeof EDGE_KIND_KEYS)[number];
@@ -220,6 +226,9 @@ interface MeaningGraphCopy {
   relationshipStoredEvidence: string;
   noRelationshipFromSave: string;
   noRelationshipYet: string;
+  contextTypeLabels: ContextTypeLabelMap;
+  ambitionLabels: AmbitionLabelMap;
+  memoryStateLabels: MemoryStateLabelMap;
 }
 
 export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
@@ -325,6 +334,9 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     relationshipStoredEvidence: "This save is stored as evidence for the relationship.",
     noRelationshipFromSave: "No relationship edge was created from this save.",
     noRelationshipYet: "No relationship edge yet.",
+    contextTypeLabels: TYPE_LABEL,
+    ambitionLabels: AMBITION_LABEL,
+    memoryStateLabels: MEMORY_LABEL,
   },
   "ko-KR": {
     eyebrow: "관리자 맥락 대시보드",
@@ -426,8 +438,53 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     relationshipStoredEvidence: "이 저장 항목은 관계의 근거로 저장되어 있습니다.",
     noRelationshipFromSave: "이 저장 항목에서는 관계가 생성되지 않았습니다.",
     noRelationshipYet: "아직 관계가 없습니다.",
+    contextTypeLabels: {
+      theme: "주제",
+      value: "가치",
+      person: "사람",
+      aesthetic: "미감",
+      tension: "긴장",
+      project: "프로젝트",
+      open_question: "열린 질문",
+      hypothesis: "가설",
+      environment: "환경",
+      question: "질문",
+      desire: "욕구",
+      life_direction: "삶의 방향",
+      person_archetype: "사람",
+    },
+    ambitionLabels: {
+      place: "장소",
+      people: "사람들",
+      work: "일",
+      taste: "취향",
+      identity: "정체성",
+      rejection: "거절",
+      next_experiment: "다음 실험",
+    },
+    memoryStateLabels: {
+      emerging: "떠오름",
+      active: "활성",
+      fading: "희미해짐",
+      dormant: "잠잠함",
+      reactivated: "다시 활성화됨",
+      contradicted: "반박됨",
+      needs_testing: "검증 필요",
+    },
   },
 };
+
+export function meaningGraphContextTypeLabel(type: string, locale: SupportedLocale): string {
+  return MEANING_GRAPH_COPY[locale].contextTypeLabels[type] ?? TYPE_LABEL[type] ?? type;
+}
+
+export function meaningGraphAmbitionLabel(dimension: AmbitionDimension, locale: SupportedLocale): string {
+  return MEANING_GRAPH_COPY[locale].ambitionLabels[dimension];
+}
+
+export function meaningGraphMemoryStateLabel(state: MemoryStateFilter, locale: SupportedLocale): string {
+  return MEANING_GRAPH_COPY[locale].memoryStateLabels[state];
+}
 
 function colorForType(type: string): string {
   switch (type) {
@@ -1268,7 +1325,7 @@ export default function MeaningGraphPage(): JSX.Element {
                     <option value="all">{copy.allTypes}</option>
                     {contextTypeOptions.map((type) => (
                       <option key={type} value={type}>
-                        {TYPE_LABEL[type] ?? type}
+                        {meaningGraphContextTypeLabel(type, locale)}
                       </option>
                     ))}
                   </select>
@@ -1279,7 +1336,7 @@ export default function MeaningGraphPage(): JSX.Element {
                     <option value="all">{copy.allDimensions}</option>
                     {AMBITION_DIMENSIONS.map((dimension) => (
                       <option key={dimension} value={dimension}>
-                        {AMBITION_LABEL[dimension]}
+                        {meaningGraphAmbitionLabel(dimension, locale)}
                       </option>
                     ))}
                   </select>
@@ -1298,7 +1355,7 @@ export default function MeaningGraphPage(): JSX.Element {
                     <option value="all">{copy.allMemoryStates}</option>
                     {MEMORY_STATES.map((state) => (
                       <option key={state} value={state}>
-                        {MEMORY_LABEL[state]}
+                        {meaningGraphMemoryStateLabel(state, locale)}
                       </option>
                     ))}
                   </select>
@@ -1453,7 +1510,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 </div>
                 <div className="meaning-graph-evidence-list">
                   <h3>{copy.whyAmbitionTitle}</h3>
-                  <p>{copy.whyAmbitionBody(AMBITION_LABEL[ambitionDimensionForNode(selectedNode)])}</p>
+                  <p>{copy.whyAmbitionBody(meaningGraphAmbitionLabel(ambitionDimensionForNode(selectedNode), locale))}</p>
                 </div>
                 <div className="meaning-graph-evidence-list">
                   <h3>{copy.evidenceSignals}</h3>

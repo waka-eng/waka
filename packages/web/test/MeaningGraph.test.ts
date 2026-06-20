@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   MEANING_GRAPH_COPY,
   filterMeaningGraphNodes,
+  meaningGraphAmbitionLabel,
+  meaningGraphContextTypeLabel,
   meaningGraphDragModeSummary,
+  meaningGraphMemoryStateLabel,
   relationshipLabel,
   relationshipSummary,
   rebuildJobResult,
@@ -84,6 +87,34 @@ describe("meaning graph Korean admin copy", () => {
     expect(koreanVisibleCopy).not.toMatch(/context graph|The graph above|recent signals|Newest saves|All types|Confidence|No recent signals/i);
     expect(koreanVisibleCopy).toContain("맥락 그래프");
     expect(MEANING_GRAPH_COPY["en-US"].recentSignalsIntro).toContain("context graph");
+  });
+
+  it("localizes Korean graph filter option labels without exposing internal English values", () => {
+    const koreanFilterLabels = [
+      meaningGraphContextTypeLabel("environment", "ko-KR"),
+      meaningGraphContextTypeLabel("open_question", "ko-KR"),
+      meaningGraphAmbitionLabel("place", "ko-KR"),
+      meaningGraphAmbitionLabel("people", "ko-KR"),
+      meaningGraphAmbitionLabel("work", "ko-KR"),
+      meaningGraphAmbitionLabel("taste", "ko-KR"),
+      meaningGraphAmbitionLabel("identity", "ko-KR"),
+      meaningGraphAmbitionLabel("rejection", "ko-KR"),
+      meaningGraphAmbitionLabel("next_experiment", "ko-KR"),
+      meaningGraphMemoryStateLabel("emerging", "ko-KR"),
+      meaningGraphMemoryStateLabel("active", "ko-KR"),
+      meaningGraphMemoryStateLabel("fading", "ko-KR"),
+      meaningGraphMemoryStateLabel("dormant", "ko-KR"),
+      meaningGraphMemoryStateLabel("reactivated", "ko-KR"),
+      meaningGraphMemoryStateLabel("contradicted", "ko-KR"),
+      meaningGraphMemoryStateLabel("needs_testing", "ko-KR"),
+    ].join(" ");
+
+    expect(koreanFilterLabels).not.toMatch(
+      /\b(place|people|work|taste|identity|rejection|next experiment|emerging|active|fading|dormant|reactivated|contradicted|needs testing|environment|open question)\b/i,
+    );
+    expect(koreanFilterLabels).toContain("장소");
+    expect(koreanFilterLabels).toContain("검증 필요");
+    expect(meaningGraphAmbitionLabel("next_experiment", "en-US")).toBe("next experiment");
   });
 
   it("localizes helper-rendered drag and relationship copy in Korean mode", () => {

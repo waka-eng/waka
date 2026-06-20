@@ -105,6 +105,19 @@ describe("POST /api/admin/meaning-graph/rebuild", () => {
     });
     expect(body.job.createdAt).toBe("2026-05-24T12:00:00.000Z");
   });
+  it("returns a non-500 migration hint when local DB is missing the rebuild job enum", async () => {
+    queueMocks.enqueueMeaningGraphRebuild.mockRejectedValue(
+      new Error('invalid input value for enum background_job_type: "meaning_graph_rebuild"'),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { code: string; detail: string };
+    expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
+    expect(body.detail).toContain("Run the repo Drizzle migrations");
+  });
 });
 
 describe("GET /api/admin/meaning-graph/rebuild", () => {
@@ -359,7 +372,7 @@ describe("GET /api/admin/meaning-graph", () => {
       relatedTopOfMindNotes: [
         expect.objectContaining({
           id: "note-1",
-          title: "I need rooms where honest builders make in public",
+          title: "a room where unfinished ambition is allowed",
           whyNow: expect.stringContaining("current memory pattern"),
           changedRecently: expect.stringContaining("recent supporting signal"),
           rejectedAlternativeInterpretation: null,
