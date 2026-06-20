@@ -929,7 +929,10 @@ describe("HomePage current home experience", () => {
     );
     expect(container.querySelector(".nc-bottom-hint")?.textContent).not.toContain("Capture inspirations");
     expect(container.querySelector(".nc-stage")?.getAttribute("aria-label")).toBe("탑오브마인드 포스트잇 다섯 장");
-    expect(container.querySelector(".admin-entry-pill")?.getAttribute("aria-label")).toBe("관리자 점검 도구 열기");
+    const adminEntry = container.querySelector(".admin-entry-pill");
+    expect(adminEntry?.getAttribute("aria-label")).toBe("관리자 점검 도구 열기");
+    expect(adminEntry?.textContent).toBe("점검");
+    expect(adminEntry?.textContent).not.toContain("Debug");
 
     await openCaptureModal(container);
     const modal = container.querySelector<HTMLElement>(".reference-capture-modal");

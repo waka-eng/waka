@@ -1248,6 +1248,7 @@ const HOME_COPY = {
     topOfMindAria: "탑오브마인드 포스트잇 다섯 장",
     memoryDrawerTitle: "영감 서랍",
     backHome: "홈으로 돌아가기",
+    adminInspectionLabel: "점검",
     adminInspectionAria: "관리자 점검 도구 열기",
     adminInspectionTitle: "내부 점검",
   },
@@ -1323,6 +1324,7 @@ const HOME_COPY = {
     topOfMindAria: "Five Top of Mind post-its",
     memoryDrawerTitle: "Inspiration Drawer",
     backHome: "back home",
+    adminInspectionLabel: "Debug",
     adminInspectionAria: "Open admin inspection tools",
     adminInspectionTitle: "Internal Debug",
   },
@@ -1372,6 +1374,7 @@ const HOME_COPY = {
     topOfMindAria: string;
     memoryDrawerTitle: string;
     backHome: string;
+    adminInspectionLabel: string;
     adminInspectionAria: string;
     adminInspectionTitle: string;
   }
@@ -5050,7 +5053,7 @@ export function HomePage(): JSX.Element {
           aria-label={copy.adminInspectionAria}
           title={copy.adminInspectionTitle}
         >
-          Debug
+          {copy.adminInspectionLabel}
         </Link>
       ) : null}
     </>
