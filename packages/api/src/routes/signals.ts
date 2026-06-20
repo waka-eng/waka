@@ -343,6 +343,7 @@ function serializeSearchResult(
       id: attachment.id,
       type: attachment.type,
       label: attachmentLabel(attachment),
+      ...(attachment.type === "link" && attachment.url ? { url: attachment.url } : {}),
     })),
     relevanceReasons: [...reasons].slice(0, 4),
   };

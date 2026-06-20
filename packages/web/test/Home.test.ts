@@ -1011,17 +1011,14 @@ describe("HomePage current home experience", () => {
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
     expect(note?.querySelector(".nc-note-preview")?.getAttribute("aria-label")).toBe("post-it preview");
-    expect(note?.querySelector(".nc-note-body--preview")?.textContent).toMatch(/…$/);
-    expect(note?.querySelector(".nc-note-body--preview")?.textContent).not.toContain("real object");
-    const previewExplanation = note?.querySelector(".nc-note-explain--preview")?.textContent ?? "";
-    expect(previewExplanation).toContain("saved inspirations");
-    expect(previewExplanation).toMatch(/…$/);
+    expect(note?.querySelector(".nc-note-body--preview")?.textContent).toBe(fullTitle);
+    expect(note?.querySelector(".nc-note-explain--preview")).toBeNull();
     expect(note?.querySelector(".nc-note-inspirations")).toBeNull();
     expect(note?.textContent).not.toContain("where it began");
     expect(note?.textContent).not.toContain("Architecture essay about bridge rhythms");
     expect(note?.textContent).not.toContain("This signal anchors the pattern.");
     expect(note?.textContent).not.toContain("insp-1");
-    expect(note?.querySelector(".nc-note-open-hint")?.textContent).toBe("open note");
+    expect(note?.querySelector(".nc-note-open-hint")).toBeNull();
 
     await act(async () => {
       note?.click();
@@ -1030,7 +1027,7 @@ describe("HomePage current home experience", () => {
 
     const expandedTitle = container.querySelector<HTMLTextAreaElement>(".nc-note-modal .nc-note-body-edit");
     expect(expandedTitle?.value).toBe(fullTitle);
-    expect(container.querySelector(".nc-note-modal")?.textContent).toContain(
+    expect(container.querySelector(".nc-note-modal")?.textContent).not.toContain(
       "Several saved inspirations cluster around city walks",
     );
   });
@@ -1098,7 +1095,7 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).not.toContain("This inspiration anchors the pattern.");
     expect(expanded?.textContent?.toLowerCase()).not.toContain("memory movement");
-    expect(expanded?.textContent).toContain("Several saved inspirations cluster around city walks");
+    expect(expanded?.textContent).not.toContain("Several saved inspirations cluster around city walks");
     expect(expanded?.textContent).not.toContain("theme-1");
     expect(expanded?.textContent).not.toContain("meaning_nodes");
 
@@ -1124,8 +1121,9 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("nearby saves");
     expect(container.querySelector(".nc-note-related-block")).toBeNull();
     expect(container.querySelector(".nc-note-drawer-link")).toBeNull();
-    expect(container.querySelector(".nc-note-save-action .nc-note-control-btn--save")?.textContent).toBe("save");
-    expect(container.querySelector(".nc-note-delete-action .nc-note-control-btn--delete")?.textContent).toBe("delete");
+    expect(container.querySelector(".nc-note-actions .nc-note-control-btn--pin")?.textContent).toBe("PIN");
+    expect(container.querySelector(".nc-note-actions .nc-note-control-btn--save")).toBeNull();
+    expect(container.querySelector(".nc-note-actions .nc-note-control-btn--delete")?.textContent).toBe("delete");
   });
 
   it("expands the opened post-it around a non-first evidence inspiration", async () => {
@@ -1240,7 +1238,7 @@ describe("HomePage current home experience", () => {
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.textContent).not.toContain("View next inspiration");
+    expect(detail?.textContent).toContain("View next inspiration");
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
@@ -1352,9 +1350,11 @@ describe("HomePage current home experience", () => {
 
     const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
     expect(rewrite).not.toBeNull();
+    expect(container.querySelector(".nc-note-actions .nc-note-control-btn--save")).toBeNull();
     await act(async () => {
       setInputValue(rewrite!, "make rooms where rough drafts can breathe");
     });
+    await flushReactWork();
     const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
       (button) => button.textContent === "save",
     );
@@ -1422,9 +1422,11 @@ describe("HomePage current home experience", () => {
 
     const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
     expect(rewrite).not.toBeNull();
+    expect(container.querySelector(".nc-note-actions .nc-note-control-btn--save")).toBeNull();
     await act(async () => {
       setInputValue(rewrite!, "make the public room first");
     });
+    await flushReactWork();
     const pinButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-note-modal .nc-note-control-btn")).find(
       (button) => button.textContent === "save",
     );
@@ -1568,7 +1570,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".memory-category-panel")).not.toBeNull();
     expect(container.querySelector(".memory-category-column")).toBeNull();
     expect(container.querySelector(".memory-path-filters")).not.toBeNull();
-    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("/all-saved");
+    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("all saved");
     expect(container.querySelector(".memory-group-board")).toBeNull();
     expect(container.querySelector(".memory-contents-flow")).toBeNull();
     expect(container.querySelector(".memory-mode-switcher")).toBeNull();
@@ -1579,11 +1581,9 @@ describe("HomePage current home experience", () => {
     const css = readFileSync("src/styles/global.css", "utf8");
     const mobileDrawerRules = css.match(/@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar--drawer[\s\S]*?\.nc-bottom-bar--drawer \.nc-drawer-object[\s\S]*?\n  \}/)?.[0] ?? "";
 
-    expect(mobileDrawerRules).toContain("left: 12px");
-    expect(mobileDrawerRules).toContain("right: 12px");
-    expect(mobileDrawerRules).toContain("grid-template-columns: minmax(0, 1fr) auto");
-    expect(mobileDrawerRules).toContain("max-width: 100%");
-    expect(mobileDrawerRules).toContain("width: 100%");
+    expect(mobileDrawerRules).toContain("left: 50%");
+    expect(mobileDrawerRules).toContain("display: inline-flex");
+    expect(mobileDrawerRules).toContain("transform: translateX(-50%)");
     expect(mobileDrawerRules).toContain("min-width: 0");
   });
 
@@ -1604,7 +1604,7 @@ describe("HomePage current home experience", () => {
     expect(stack?.querySelector(".memory-stack-detail")).toBeNull();
     expect(columns?.textContent).toContain("Architecture essay about bridge rhythms");
     expect(columns?.textContent).toContain("2 saves");
-    expect(container.querySelector(".memory-path-filter--active")?.textContent).toContain("/all-saved");
+    expect(container.querySelector(".memory-path-filter--active")?.textContent).toContain("all saved");
 
     const firstInspiration = columns?.querySelector<HTMLButtonElement>(".memory-contents-item");
     expect(firstInspiration).not.toBeNull();
@@ -1659,7 +1659,7 @@ describe("HomePage current home experience", () => {
     await waitForTimers(130);
     await flushReactWork();
 
-    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("/all-saved");
+    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("all saved");
 
     await act(async () => {
       container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.click();
@@ -1674,7 +1674,7 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".memory-category-panel")).not.toBeNull();
-    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("/all-saved");
+    expect(container.querySelector(".memory-path-filter")?.textContent).toContain("all saved");
     expect(container.querySelector(".memory-category-panel")?.textContent).toContain("save");
   });
 
@@ -1704,9 +1704,9 @@ describe("HomePage current home experience", () => {
     const contents = drawer?.querySelector<HTMLElement>(".memory-contents-flow");
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(panel).not.toBeNull();
-    expect(pathFilters?.textContent).toContain("/all-saved");
-    expect(pathFilters?.textContent).toContain("/recently-saved");
-    expect(pathFilters?.textContent).toContain("/make-thing-before-explaining");
+    expect(pathFilters?.textContent).toContain("all saved");
+    expect(pathFilters?.textContent).toContain("recently saved");
+    expect(pathFilters?.textContent).toContain("make the thing before explaining it");
     expect(panel?.textContent).toContain("2 saves");
     expect(contents).toBeNull();
     expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
@@ -1792,12 +1792,12 @@ describe("HomePage current home experience", () => {
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(panel).not.toBeNull();
     expect(pathFilters).not.toBeNull();
-    expect(pathFilters?.textContent).toContain("/make-thing-before-explaining");
-    expect(pathFilters?.textContent).toContain("/recently-saved");
+    expect(pathFilters?.textContent).toContain("make the thing before explaining it");
+    expect(pathFilters?.textContent).toContain("recently saved");
     expect(pathFilters?.textContent).not.toMatch(/meaning[-_]?nodes?|context[-_]?nodes?|node id|ctx[-_]?1234/i);
 
     const makingPath = Array.from(pathFilters?.querySelectorAll<HTMLButtonElement>(".memory-path-filter") ?? []).find(
-      (button) => button.textContent === "/make-thing-before-explaining",
+      (button) => button.textContent?.includes("make the thing before explaining it"),
     );
     expect(makingPath).not.toBeNull();
     await act(async () => {
@@ -1849,7 +1849,7 @@ describe("HomePage current home experience", () => {
     const filterText = pathFilters?.textContent ?? "";
     for (const signal of categorySignals) {
       const index = Number(signal.id.replace("category-signal-", ""));
-      expect(filterText).toContain(`/category-path-${index}`);
+      expect(filterText).toContain(`category path ${index}`);
     }
     expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBeGreaterThanOrEqual(categorySignals.length + 2);
   });
@@ -2101,8 +2101,8 @@ describe("HomePage current home experience", () => {
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.textContent).not.toContain("View next inspiration");
-    expect(detail?.querySelector(".memory-detail-next")).toBeNull();
+    expect(detail?.textContent).toContain("View next inspiration");
+    expect(detail?.querySelector(".memory-detail-next")).not.toBeNull();
   });
 
   it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {

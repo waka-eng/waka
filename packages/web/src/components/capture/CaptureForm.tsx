@@ -219,11 +219,6 @@ interface HighlightedSignalText {
   endOffset: number;
 }
 
-interface CapturePopoverPosition {
-  top: number;
-  left: number;
-}
-
 interface StoredCaptureDraft {
   note?: string;
   resonance?: CaptureResonanceAnswer | null;
@@ -427,9 +422,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [highlights, setHighlights] = useState<HighlightedSignalText[]>([]);
-    const [pendingHighlight, setPendingHighlight] = useState<HighlightedSignalText | null>(null);
-    const [highlightPopoverPosition, setHighlightPopoverPosition] = useState<CapturePopoverPosition | null>(null);
-    const [, setHighlightDetailsOpen] = useState(false);
+    const [highlightMode, setHighlightMode] = useState(false);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [resonanceNote, setResonanceNote] = useState("");
     const [saving, setSaving] = useState(false);
@@ -608,24 +601,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       setHighlights((current) =>
         current.filter((item) => next.slice(item.startOffset, item.endOffset) === item.text),
       );
-      setPendingHighlight((current) => {
-        if (!current) return current;
-        const stillMatches = next.slice(current.startOffset, current.endOffset) === current.text;
-        if (!stillMatches) setHighlightPopoverPosition(null);
-        return stillMatches ? current : null;
-      });
     }, []);
 
     const handleNoteSelect = useCallback((event: SyntheticEvent<HTMLTextAreaElement>): void => {
+      if (!highlightMode) return;
       const target = event.currentTarget;
       const start = target.selectionStart;
       const end = target.selectionEnd;
       const text = target.value.slice(start, end).trim();
-      if (!text || start === end) {
-        setPendingHighlight(null);
-        setHighlightPopoverPosition(null);
-        return;
-      }
+      if (!text || start === end) return;
       const rawSelection = target.value.slice(start, end);
       const leadingWhitespace = rawSelection.match(/^\s*/)?.[0].length ?? 0;
       const trailingWhitespace = rawSelection.match(/\s*$/)?.[0].length ?? 0;
@@ -635,23 +619,22 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         startOffset: selectionStart,
         endOffset: end - trailingWhitespace,
       };
-      const beforeSelection = target.value.slice(0, selectionStart);
-      const lines = beforeSelection.split("\n");
-      const line = Math.max(0, lines.length - 1);
-      const column = lines[lines.length - 1]?.length ?? 0;
-      const computed = window.getComputedStyle(target);
-      const fontSize = Number.parseFloat(computed.fontSize) || 24;
-      const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.22;
-      const averageCharacterWidth = fontSize * 0.54;
-      const top = target.offsetTop + line * lineHeight - target.scrollTop - 10;
-      const left = target.offsetLeft + Math.min(column * averageCharacterWidth, target.clientWidth - 48) - target.scrollLeft;
-      setPendingHighlight(nextHighlight);
-      setHighlightPopoverPosition({
-        top: Math.max(12, top),
-        left: Math.max(12, left),
+      setHighlights((current) => {
+        const overlapping = current.filter(
+          (item) =>
+            item.startOffset < nextHighlight.endOffset &&
+            item.endOffset > nextHighlight.startOffset,
+        );
+        if (overlapping.length > 0) {
+          return current.filter((item) => !overlapping.includes(item));
+        }
+        return [...current, nextHighlight].sort((a, b) => a.startOffset - b.startOffset);
       });
-      setHighlightDetailsOpen(false);
-    }, []);
+      window.setTimeout(() => {
+        target.setSelectionRange(nextHighlight.endOffset, nextHighlight.endOffset);
+        target.focus();
+      }, 0);
+    }, [highlightMode]);
 
     const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
       const pasted = event.clipboardData.getData("text/plain") || event.clipboardData.getData("text");
@@ -908,9 +891,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         }
         setNote("");
         setHighlights([]);
-        setPendingHighlight(null);
-        setHighlightPopoverPosition(null);
-        setHighlightDetailsOpen(false);
+        setHighlightMode(false);
         setResonance(null);
         setResonanceNote("");
         setReflectionAnswer("");
@@ -1196,48 +1177,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         visualState={{ ...visualState, focused, reflectGlow }}
         noteValue={note}
         noteHighlights={highlights}
-        onRemoveNoteHighlight={(index) => {
-          setHighlights((current) => current.filter((_, itemIndex) => itemIndex !== index));
-        }}
-        noteSelectionToolbar={
-          pendingHighlight && highlightPopoverPosition ? (
-            <div
-              className="cap-selection-toolbar"
-              style={{
-                ["--highlight-top" as string]: `${highlightPopoverPosition.top}px`,
-                ["--highlight-left" as string]: `${highlightPopoverPosition.left}px`,
-              }}
-            >
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  setHighlights((current) => {
-                    const withoutOverlaps = current.filter(
-                      (item) =>
-                        item.endOffset <= pendingHighlight.startOffset ||
-                        item.startOffset >= pendingHighlight.endOffset,
-                    );
-                    return [...withoutOverlaps, pendingHighlight].sort((a, b) => a.startOffset - b.startOffset);
-                  });
-                  const textarea = document.querySelector<HTMLTextAreaElement>("#capNote");
-                  textarea?.setSelectionRange(pendingHighlight.endOffset, pendingHighlight.endOffset);
-                  textarea?.focus();
-                  setPendingHighlight(null);
-                  setHighlightPopoverPosition(null);
-                }}
-                aria-label={t(locale, "captureHighlightSelectionLabel")}
-                title={t(locale, "captureHighlightSelectionLabel")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m9 11-6 6v4h4l6-6" />
-                  <path d="m22 12-7.5 7.5L4.5 9.5 12 2l10 10Z" />
-                </svg>
-                <span>{t(locale, "captureHighlightSelectionText")}</span>
-              </button>
-            </div>
-          ) : null
-        }
+        highlightMode={highlightMode}
+        onToggleHighlightMode={() => setHighlightMode((current) => !current)}
         notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
         onNotePaste={handleNotePaste}
@@ -1264,13 +1205,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onFileSelect={addFile}
         confirmVisible={confirmVisible}
         confirmMessage={confirmMessage}
-        captureMeta={
-          <div className="cap-meta" id="capMeta">
-            <span className="cap-draft-state" id="capDraftState">
-              {t(locale, "captureTip")}
-            </span>
-          </div>
-        }
         reflectQuestion={
           <>
             {guidedReflectionQuestionLoading ? (
@@ -1304,7 +1238,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         reflectValue={reflectionAnswer}
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
-        reflectPlaceholder={t(locale, "reflectionPlaceholder")}
+        reflectPlaceholder={guidedReflectionQuestionLoading ? "loading" : ""}
         reflectNextDisabled={guidedReflectionQuestionLoading}
         onReflectLater={() => {
           if (postSaveReflectionTargetId) {
