@@ -120,10 +120,9 @@ export interface CaptureCellProps {
   noteValue?: string;
   /** Optional selected ranges to render as in-text highlights behind the textarea. */
   noteHighlights?: Array<{ startOffset: number; endOffset: number; text: string }>;
-  /** Removes one existing note highlight. */
-  onRemoveNoteHighlight?: (index: number) => void;
-  /** Optional floating action shown while text is selected but not yet highlighted. */
-  noteSelectionToolbar?: ReactNode;
+  /** When on, selecting text toggles highlight state. */
+  highlightMode?: boolean;
+  onToggleHighlightMode?: () => void;
   /** Fires on every textarea keystroke. */
   onNoteChange?: (value: string) => void;
   /** Fires when text is pasted into the universal composer. */
@@ -260,8 +259,8 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       visualState = {},
       noteValue,
       noteHighlights = [],
-      onRemoveNoteHighlight,
-      noteSelectionToolbar,
+      highlightMode = false,
+      onToggleHighlightMode,
       onNoteChange,
       onNotePaste,
       onNoteSelect,
@@ -319,16 +318,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
               <span>{noteText.slice(previousEnd, item.startOffset)}</span>
               <mark>
                 {item.text}
-                {onRemoveNoteHighlight ? (
-                  <button
-                    type="button"
-                    className="cap-unhighlight"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => onRemoveNoteHighlight(item.index)}
-                  >
-                    unhighlight
-                  </button>
-                ) : null}
               </mark>
               {itemIndex === visibleNoteHighlights.length - 1 ? (
                 <span>{noteText.slice(item.endOffset) || "\n"}</span>
@@ -423,9 +412,10 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
         */}
         <div className="cap-body" id="capBody" hidden={isReflectView}>
           {noteHighlightLayer}
-          {noteSelectionToolbar}
           <textarea
-            className={visibleNoteHighlights.length > 0 ? "cap-note-input cap-note-input--has-highlight" : "cap-note-input"}
+            className={`cap-note-input${visibleNoteHighlights.length > 0 ? " cap-note-input--has-highlight" : ""}${
+              highlightMode ? " cap-note-input--highlight-mode" : ""
+            }`}
             id="capNote"
             placeholder={notePlaceholder}
             spellCheck={false}
@@ -513,6 +503,16 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
                 hidden
                 onChange={handleFileChange}
               />
+              <button
+                type="button"
+                className={`cap-highlight-mode${highlightMode ? " cap-highlight-mode--active" : ""}`}
+                title={highlightMode ? "turn off highlight mode" : "highlight mode"}
+                aria-label={highlightMode ? "turn off highlight mode" : "turn on highlight mode"}
+                aria-pressed={highlightMode}
+                onClick={onToggleHighlightMode}
+              >
+                highlight
+              </button>
               <button
                 type="button"
                 className="cap-expand"

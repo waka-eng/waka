@@ -27,7 +27,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -44,14 +43,10 @@ import type {
   PendingInspiration,
   PersistedResult,
 } from "../components/capture";
-import type { PendingReflection } from "../components/history/ReflectionForm";
 import {
   InspirationDetail,
   type InspirationDetailData,
 } from "../components/history";
-import {
-  SavedInspirationDetail,
-} from "../components/home-surfaces";
 import { BackgroundField, DropOverlay, HistoryPanel } from "../components/layout";
 import {
   type ApiAttachment,
@@ -62,23 +57,22 @@ import {
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
-  type ApiReflection,
   type ApiInspirationSpark,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
   type ClusterKind,
-  type CreateReflectionResponse,
   createFeedback,
   createInspirationSpark,
+  deleteInspiration,
   deleteInspirationSpark,
   fetchSavedSignalDetail,
   fetchSavedSignals,
-  fetchReflections,
   fetchInspirations,
   fetchTopOfMind,
   fetchTopOfMindNotes,
   recordInspirationRevisit,
+  updateInspiration,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
@@ -91,16 +85,6 @@ import {
 } from "../lib/locales";
 
 const ATTACHMENT_ONLY_SENTINEL = "(attachment-only inspiration)";
-
-function mergeReflectionsPreservingLocal(
-  incoming: ApiReflection[],
-  local: ApiReflection[],
-): ApiReflection[] {
-  const merged = new Map<string, ApiReflection>();
-  for (const reflection of incoming) merged.set(reflection.id, reflection);
-  for (const reflection of local) merged.set(reflection.id, reflection);
-  return Array.from(merged.values());
-}
 
 interface InternalEntryEnv {
   DEV?: boolean;
@@ -280,6 +264,33 @@ function apiInspirationToEntry(row: ApiInspiration): InspirationListEntry {
   };
 }
 
+function signalToListEntry(signal: ApiSavedSignalSearchResult): InspirationListEntry {
+  return {
+    id: signal.id,
+    tempId: signal.id,
+    status: "saved",
+    text: signal.textPreview,
+    kind: signal.kind,
+    links: [],
+    attachments: signal.attachmentSummary.map((attachment) => ({
+      id: attachment.id,
+      inspirationId: signal.id,
+      type: attachment.type,
+      url: undefined,
+      name: attachment.label,
+      contentType: null,
+      size: null,
+      createdAt: signal.capturedAt,
+    })),
+    cluster: null,
+    wowScore: signal.resonanceScore,
+    reflectionsAnswered: 0,
+    reflectionsTotal: 0,
+    createdAt: signal.capturedAt,
+    timestamp: formatTimestamp(signal.capturedAt),
+  };
+}
+
 function buildOptimisticEntry(
   pending: PendingInspiration,
 ): InspirationListEntry {
@@ -435,16 +446,6 @@ function userFacingCopy(value: string): string {
 
 type HighlightReaction = "pulled_me" | "envy" | "taste" | "reject" | "person" | "place" | "work";
 
-const highlightReactionOptions: Array<{ value: HighlightReaction; label: string }> = [
-  { value: "pulled_me", label: "pulled me" },
-  { value: "envy", label: "envy" },
-  { value: "taste", label: "taste" },
-  { value: "reject", label: "reject" },
-  { value: "person", label: "person" },
-  { value: "place", label: "place" },
-  { value: "work", label: "work" },
-];
-
 type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text"> & { note?: string | null };
 
 interface MemoryHighlightSelection {
@@ -453,13 +454,6 @@ interface MemoryHighlightSelection {
   position: { top: number; left: number };
   reaction: HighlightReaction | null;
   note: string;
-}
-
-interface ActiveMemoryHighlightControls {
-  signalId: string;
-  highlight: HighlightableSnippet;
-  position: { top: number; left: number };
-  editing: boolean;
 }
 
 function buildHighlightMetadata(input: {
@@ -473,37 +467,20 @@ function buildHighlightMetadata(input: {
   })}`;
 }
 
-function parseHighlightMetadata(note: string | null | undefined): { reaction: string | null; note: string | null } {
-  if (!note?.startsWith("highlight_reaction:v1:")) return { reaction: null, note: null };
-  try {
-    const parsed = JSON.parse(note.slice("highlight_reaction:v1:".length)) as {
-      reaction?: unknown;
-      note?: unknown;
-    };
-    return {
-      reaction: typeof parsed.reaction === "string" ? parsed.reaction : null,
-      note: typeof parsed.note === "string" ? parsed.note : null,
-    };
-  } catch {
-    return { reaction: null, note: null };
-  }
-}
-
 function selectionPopoverPosition(): { top: number; left: number } {
   const selection = window.getSelection();
   const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
   const rect = range?.getBoundingClientRect();
   if (!rect || (rect.width === 0 && rect.height === 0)) return { top: 24, left: 24 };
   return {
-    top: Math.max(8, rect.top - 46),
-    left: Math.max(8, Math.min(rect.left, window.innerWidth - 292)),
+    top: Math.max(8, rect.top),
+    left: Math.max(72, Math.min(rect.left + rect.width / 2, window.innerWidth - 72)),
   };
 }
 
 function renderHighlightedInspirationText(
   text: string,
   highlights: HighlightableSnippet[],
-  onShowControls: (highlight: HighlightableSnippet, event: ReactMouseEvent<HTMLElement> | ReactFocusEvent<HTMLElement>) => void,
 ): ReactNode {
   const usableHighlights = highlights
     .filter((highlight) => highlight.text.trim().length > 0)
@@ -531,8 +508,6 @@ function renderHighlightedInspirationText(
         className="memory-inline-highlight"
         key={next.highlight.id || key++}
         tabIndex={0}
-        onMouseEnter={(event) => onShowControls(next.highlight, event)}
-        onFocus={(event) => onShowControls(next.highlight, event)}
       >
         {next.highlight.text}
       </mark>,
@@ -1464,7 +1439,7 @@ const HOME_COPY = {
 >;
 
 export function HomePage(): JSX.Element {
-  const { user, logout, updatePreferredLocale } = useAuth();
+  const { user, logout } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -1490,6 +1465,7 @@ export function HomePage(): JSX.Element {
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
   const [selectedMemoryPathFilterId, setSelectedMemoryPathFilterId] = useState("all-saved");
+  const [showAllMemoryPathFilters, setShowAllMemoryPathFilters] = useState(false);
   // The cleaned-up contents view always reads newest-first; the explicit
   // sort toggle was removed in favor of a calmer, text-forward layout.
   const memoryBrowseOrder: MemoryBrowseOrder = "newest";
@@ -1518,6 +1494,8 @@ export function HomePage(): JSX.Element {
   const [captureHasDraft, setCaptureHasDraft] = useState<boolean>(() => captureDraftHasContent());
   const captureSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deletedTopOfMindUndoTimerRef = useRef<number | null>(null);
+  const deletedSavedSignalUndoTimerRef = useRef<number | null>(null);
   const [noteFeedback, setNoteFeedback] = useState<
     Record<
       string,
@@ -1530,6 +1508,20 @@ export function HomePage(): JSX.Element {
     >
   >({});
   const [removedTopOfMindNoteIds, setRemovedTopOfMindNoteIds] = useState<Set<string>>(() => new Set());
+  const [deletedTopOfMindUndo, setDeletedTopOfMindUndo] = useState<{
+    note: ApiTopOfMindNoteSurface;
+    signalId: string;
+    feedback: {
+      value: TopOfMindFeedbackValue | null;
+      status: FeedbackStatus;
+      error: string | null;
+      correctionText: string;
+    };
+  } | null>(null);
+  const [deletedSavedSignalUndo, setDeletedSavedSignalUndo] = useState<{
+    signal: ApiSavedSignalSearchResult;
+    detail: ApiSavedSignalDetail | null;
+  } | null>(null);
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
@@ -1545,13 +1537,11 @@ export function HomePage(): JSX.Element {
     useState<ApiSavedSignalSearchResult | null>(null);
   const [savedSignalDetail, setSavedSignalDetail] = useState<ApiSavedSignalDetail | null>(null);
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
-  const [savedSignalReflections, setSavedSignalReflections] = useState<ApiReflection[]>([]);
-  const [savedSignalReflectionComposerOpen, setSavedSignalReflectionComposerOpen] = useState(false);
-  const [savedSignalReflectionsLoading, setSavedSignalReflectionsLoading] = useState(false);
-  const [savedSignalReflectionsError, setSavedSignalReflectionsError] = useState<string | null>(null);
+  const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
+  const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
+  const [confirmingSavedSignalDeleteId, setConfirmingSavedSignalDeleteId] = useState<string | null>(null);
+  const [memoryHighlightMode, setMemoryHighlightMode] = useState(false);
   const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
-  const [activeMemoryHighlightControls, setActiveMemoryHighlightControls] =
-    useState<ActiveMemoryHighlightControls | null>(null);
   const [highlightStatus, setHighlightStatus] = useState<
     | { status: "idle" }
     | { status: "saving" }
@@ -1598,15 +1588,6 @@ export function HomePage(): JSX.Element {
     drawerCloseTimerRef.current = null;
   };
 
-  const handleLocaleChange = useCallback(
-    (nextLocale: SupportedLocale) => {
-      setLocale(nextLocale);
-      writeStoredLocale(nextLocale);
-      void updatePreferredLocale(nextLocale);
-    },
-    [updatePreferredLocale],
-  );
-
   useEffect(() => {
     if (!user) return;
     const preferredLocale = normalizeSupportedLocale(user.preferredLocale);
@@ -1618,6 +1599,12 @@ export function HomePage(): JSX.Element {
     return () => {
       if (captureSaveFlashTimerRef.current !== null) {
         window.clearTimeout(captureSaveFlashTimerRef.current);
+      }
+      if (deletedTopOfMindUndoTimerRef.current !== null) {
+        window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
+      }
+      if (deletedSavedSignalUndoTimerRef.current !== null) {
+        window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
       }
       clearDrawerCloseTimer();
     };
@@ -1904,6 +1891,10 @@ export function HomePage(): JSX.Element {
   );
 
   const handleMemoryTextSelection = useCallback((signalId: string): void => {
+    if (!memoryHighlightMode) {
+      setSelectedInspirationText(null);
+      return;
+    }
     const selection = window.getSelection();
     const selected = selection?.toString().replace(/\s+/g, " ").trim() ?? "";
     if (selected.length < 2) {
@@ -1917,31 +1908,8 @@ export function HomePage(): JSX.Element {
       reaction: null,
       note: "",
     });
-    setActiveMemoryHighlightControls(null);
     setHighlightStatus({ status: "idle" });
-  }, []);
-
-  const showMemoryHighlightControls = useCallback(
-    (
-      signalId: string,
-      highlight: HighlightableSnippet,
-      event: ReactMouseEvent<HTMLElement> | ReactFocusEvent<HTMLElement>,
-    ): void => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setActiveMemoryHighlightControls({
-        signalId,
-        highlight,
-        position: {
-          top: Math.max(8, rect.top - 44),
-          left: Math.max(8, Math.min(rect.left, window.innerWidth - 292)),
-        },
-        editing: false,
-      });
-      setSelectedInspirationText(null);
-      setHighlightStatus({ status: "idle" });
-    },
-    [],
-  );
+  }, [memoryHighlightMode]);
 
   const addMemoryHighlight = useCallback(
     async (signalId: string): Promise<void> => {
@@ -2039,121 +2007,33 @@ export function HomePage(): JSX.Element {
     [],
   );
 
-  const renderMemorySelectionPopover = (signalId: string): JSX.Element | null => {
-    if (!selectedInspirationText || selectedInspirationText.signalId !== signalId) return null;
-    return (
-      <div
-        className="memory-highlight-popover memory-highlight-popover--selection"
-        style={{
-          ["--memory-highlight-top" as string]: `${selectedInspirationText.position.top}px`,
-          ["--memory-highlight-left" as string]: `${selectedInspirationText.position.left}px`,
-        }}
-      >
-        <span>{shortText(selectedInspirationText.text, 90)}</span>
-        <div className="memory-highlight-reactions" aria-label="why this selection mattered">
-          <button
-            type="button"
-            disabled={highlightStatus.status === "saving"}
-            onClick={() => void addMemoryHighlight(signalId)}
-          >
-            {highlightStatus.status === "saving" ? "adding..." : "highlight"}
-          </button>
-          {highlightReactionOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={selectedInspirationText.reaction === option.value ? "selected" : ""}
-              aria-pressed={selectedInspirationText.reaction === option.value}
-              onClick={() =>
-                setSelectedInspirationText((current) =>
-                  current && current.signalId === signalId
-                    ? {
-                        ...current,
-                        reaction: current.reaction === option.value ? null : option.value,
-                      }
-                    : current,
-                )
-              }
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-        <label>
-          <span>my own note</span>
-          <input
-            type="text"
-            value={selectedInspirationText.note}
-            onChange={(event) => {
-              const next = event.currentTarget.value;
-              setSelectedInspirationText((current) =>
-                current && current.signalId === signalId ? { ...current, note: next } : current,
-              );
-            }}
-            placeholder="Optional. Keep it tiny."
-          />
-        </label>
-      </div>
-    );
-  };
-
-  const renderExistingMemoryHighlightPopover = (signalId: string): JSX.Element | null => {
-    if (!activeMemoryHighlightControls || activeMemoryHighlightControls.signalId !== signalId) return null;
-    const metadata = parseHighlightMetadata(activeMemoryHighlightControls.highlight.note);
-    return (
-      <div
-        className="memory-highlight-popover memory-highlight-popover--saved"
-        style={{
-          ["--memory-highlight-top" as string]: `${activeMemoryHighlightControls.position.top}px`,
-          ["--memory-highlight-left" as string]: `${activeMemoryHighlightControls.position.left}px`,
-        }}
-      >
-        <span>{metadata.reaction ?? "highlighted"}{metadata.note ? ` · ${metadata.note}` : ""}</span>
-        <div className="memory-highlight-reactions" aria-label="highlight controls">
-          <button
-            type="button"
-            onClick={() =>
-              setActiveMemoryHighlightControls((current) =>
-                current && current.signalId === signalId ? { ...current, editing: !current.editing } : current,
-              )
-            }
-          >
-            edit reaction
-          </button>
-          <button
-            type="button"
-            onClick={() =>
-              setActiveMemoryHighlightControls((current) =>
-                current && current.signalId === signalId ? { ...current, editing: !current.editing } : current,
-              )
-            }
-          >
-            expand note
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const highlight = activeMemoryHighlightControls.highlight;
-              setActiveMemoryHighlightControls(null);
-              void removeMemoryHighlight(signalId, highlight);
-            }}
-          >
-            remove
-          </button>
-        </div>
-        {activeMemoryHighlightControls.editing ? (
-          <div className="memory-highlight-reactions memory-highlight-reactions--edit">
-            {highlightReactionOptions.map((option) => (
-              <button key={option.value} type="button" disabled>
-                {option.label}
-              </button>
-            ))}
-            <small>{metadata.note ?? "No note yet."}</small>
-          </div>
-        ) : null}
-      </div>
-    );
-  };
+  useEffect(() => {
+    if (!memoryHighlightMode || !selectedInspirationText) return;
+    const selectedText = selectedInspirationText.text.trim();
+    if (selectedText.length < 2) return;
+    const signal =
+      savedSignalDetail?.id === selectedInspirationText.signalId
+        ? savedSignalDetail
+        : savedSignals.find((item) => item.id === selectedInspirationText.signalId);
+    const matchingHighlight = signal?.highlightedSnippets.find((snippet) => {
+      const snippetText = snippet.text.trim();
+      return snippetText === selectedText || snippetText.includes(selectedText) || selectedText.includes(snippetText);
+    });
+    if (matchingHighlight) {
+      setSelectedInspirationText(null);
+      window.getSelection()?.removeAllRanges();
+      void removeMemoryHighlight(selectedInspirationText.signalId, matchingHighlight);
+      return;
+    }
+    void addMemoryHighlight(selectedInspirationText.signalId);
+  }, [
+    addMemoryHighlight,
+    memoryHighlightMode,
+    removeMemoryHighlight,
+    savedSignalDetail,
+    savedSignals,
+    selectedInspirationText,
+  ]);
 
   const handleSelectInspiration = useCallback(
     (id: string) => {
@@ -2318,14 +2198,6 @@ export function HomePage(): JSX.Element {
   const constellationRelationships = buildMemoryConstellationRelationships(inPlaceSignals, topOfMindNotes);
   const selectedMemoryRelationship = constellationRelationships[0] ?? null;
 
-  const selectedSavedSignal = useMemo(() => {
-    const listedSignal = inPlaceSignals.find((signal) => signal.id === selectedSavedSignalId) ?? null;
-    if (listedSignal) return listedSignal;
-    if (savedSignalDetail?.id === selectedSavedSignalId) return savedSignalDetail;
-    if (selectedSupportingSignalFallback?.id === selectedSavedSignalId) return selectedSupportingSignalFallback;
-    return null;
-  }, [inPlaceSignals, savedSignalDetail, selectedSavedSignalId, selectedSupportingSignalFallback]);
-
   const visibleMemoryWindows = useMemo(
     () =>
       memoryWindows
@@ -2421,23 +2293,25 @@ export function HomePage(): JSX.Element {
     if (homeMode !== "memoryDrawer") return;
     if (!selectedSavedSignalId) {
       setSavedSignalDetail(null);
-      setSavedSignalReflections([]);
-      setSavedSignalReflectionsError(null);
-      setSavedSignalReflectionsLoading(false);
-      setSavedSignalReflectionComposerOpen(false);
       return;
     }
 
     let cancelled = false;
     setSavedSignalDetailLoading(true);
-    setSavedSignalReflectionsLoading(true);
-    setSavedSignalReflectionsError(null);
-    setSavedSignalReflections([]);
     void (async () => {
       try {
         const detail = await fetchSavedSignalDetail(selectedSavedSignalId);
         if (cancelled) return;
         setSavedSignalDetail(detail);
+        setSavedSignalDrafts((current) => {
+          const existingDraft = current[detail.id];
+          const previewText = allSavedSignals.find((signal) => signal.id === detail.id)?.textPreview;
+          if (existingDraft !== undefined && existingDraft !== previewText) return current;
+          return {
+            ...current,
+            [detail.id]: detail.rawText,
+          };
+        });
       } catch {
         if (cancelled) return;
         setSavedSignalDetail(null);
@@ -2445,56 +2319,11 @@ export function HomePage(): JSX.Element {
         if (!cancelled) setSavedSignalDetailLoading(false);
       }
     })();
-    void (async () => {
-      try {
-        const reflections = await fetchReflections(selectedSavedSignalId);
-        if (cancelled) return;
-        setSavedSignalReflections((prev) => mergeReflectionsPreservingLocal(reflections, prev));
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : t(locale, "reflectionLoadError");
-        setSavedSignalReflections([]);
-        setSavedSignalReflectionsError(message);
-      } finally {
-        if (!cancelled) setSavedSignalReflectionsLoading(false);
-      }
-    })();
 
     return () => {
       cancelled = true;
     };
-  }, [homeMode, locale, selectedSavedSignalId]);
-
-  const handleSavedSignalReflectionOptimisticAdd = useCallback((pending: PendingReflection) => {
-    setSavedSignalReflections((prev) => [
-      ...prev.filter((reflection) => reflection.id !== pending.tempId),
-      {
-        id: pending.tempId,
-        inspirationId: pending.inspirationId,
-        userId: user?.id ?? "",
-        question: pending.question,
-        answer: pending.answer,
-        skipped: pending.skipped,
-        createdAt: pending.createdAt,
-      },
-    ]);
-    setSavedSignalReflectionsError(null);
-  }, [user?.id]);
-
-  const handleSavedSignalReflectionPersisted = useCallback((tempId: string, server: CreateReflectionResponse) => {
-    setSavedSignalReflections((prev) => {
-      const replaced = prev.some((reflection) => reflection.id === tempId);
-      return replaced
-        ? prev.map((reflection) => (reflection.id === tempId ? server.reflection : reflection))
-        : mergeReflectionsPreservingLocal([server.reflection], prev);
-    });
-    setSavedSignalReflectionComposerOpen(false);
-  }, []);
-
-  const handleSavedSignalReflectionPersistError = useCallback((tempId: string, error: ApiError) => {
-    setSavedSignalReflections((prev) => prev.filter((reflection) => reflection.id !== tempId));
-    setSavedSignalReflectionsError(error.message);
-  }, []);
+  }, [homeMode, selectedSavedSignalId]);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -2744,12 +2573,26 @@ export function HomePage(): JSX.Element {
 
   const pinTopOfMindNote = async (signal: HomeThoughtCard) => {
     if (!signal.feedbackTargetId) return;
+    const currentlyPinned = noteFeedback[signal.id]?.value === "important";
     const previousFeedback = noteFeedback[signal.id] ?? {
       value: null,
       status: "idle" as FeedbackStatus,
       error: null,
       correctionText: "",
     };
+
+    if (currentlyPinned) {
+      setNoteFeedback((prev) => ({
+        ...prev,
+        [signal.id]: {
+          value: null,
+          status: "idle",
+          error: null,
+          correctionText: prev[signal.id]?.correctionText ?? signal.label,
+        },
+      }));
+      return;
+    }
 
     setNoteFeedback((prev) => ({
       ...prev,
@@ -2788,10 +2631,51 @@ export function HomePage(): JSX.Element {
     }
   };
 
+  const showDeletedTopOfMindUndo = (
+    note: ApiTopOfMindNoteSurface,
+    signal: HomeThoughtCard,
+    feedback: {
+      value: TopOfMindFeedbackValue | null;
+      status: FeedbackStatus;
+      error: string | null;
+      correctionText: string;
+    },
+  ) => {
+    if (deletedTopOfMindUndoTimerRef.current !== null) {
+      window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
+    }
+    setDeletedTopOfMindUndo({ note, signalId: signal.id, feedback });
+    deletedTopOfMindUndoTimerRef.current = window.setTimeout(() => {
+      setDeletedTopOfMindUndo(null);
+      deletedTopOfMindUndoTimerRef.current = null;
+    }, 4200);
+  };
+
+  const undoDeletedTopOfMindNote = () => {
+    if (!deletedTopOfMindUndo) return;
+    if (deletedTopOfMindUndoTimerRef.current !== null) {
+      window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
+      deletedTopOfMindUndoTimerRef.current = null;
+    }
+    const { note, signalId, feedback } = deletedTopOfMindUndo;
+    setTopOfMindNotes((prev) => (prev.some((item) => item.id === note.id) ? prev : [note, ...prev]));
+    setRemovedTopOfMindNoteIds((prev) => {
+      const next = new Set(prev);
+      next.delete(note.id);
+      return next;
+    });
+    setNoteFeedback((prev) => ({
+      ...prev,
+      [signalId]: feedback,
+    }));
+    setDeletedTopOfMindUndo(null);
+  };
+
   const pullDownTopOfMindNote = async (signal: HomeThoughtCard) => {
     if (!signal.feedbackTargetId) return;
 
     const previousNotes = topOfMindNotes;
+    const deletedNote = topOfMindNotes.find((note) => note.id === signal.feedbackTargetId);
     const previousRemovedIds = removedTopOfMindNoteIds;
     const previousFeedback = noteFeedback[signal.id] ?? {
       value: null,
@@ -2812,6 +2696,7 @@ export function HomePage(): JSX.Element {
     setRemovedTopOfMindNoteIds((prev) => new Set(prev).add(signal.feedbackTargetId!));
     setTopOfMindNotes((prev) => prev.filter((note) => note.id !== signal.feedbackTargetId));
     setExpandedNoteIndex(null);
+    if (deletedNote) showDeletedTopOfMindUndo(deletedNote, signal, previousFeedback);
 
     try {
       await createFeedback({
@@ -2830,6 +2715,11 @@ export function HomePage(): JSX.Element {
         },
       }));
     } catch {
+      if (deletedTopOfMindUndoTimerRef.current !== null) {
+        window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
+        deletedTopOfMindUndoTimerRef.current = null;
+      }
+      setDeletedTopOfMindUndo(null);
       setTopOfMindNotes(previousNotes);
       setRemovedTopOfMindNoteIds(previousRemovedIds);
       setNoteFeedback((prev) => ({
@@ -2847,6 +2737,7 @@ export function HomePage(): JSX.Element {
     if (!signal.feedbackTargetId) return null;
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
+    const pinned = feedbackState?.value === "important";
     const currentText = thoughtCardDisplayLabel(signal, locale);
     const draftText = feedbackState?.correctionText ?? currentText;
     const hasEditedText = draftText.trim() !== currentText.trim();
@@ -2855,14 +2746,14 @@ export function HomePage(): JSX.Element {
         <div className="nc-note-action-buttons">
           <button
             type="button"
-            className="nc-note-control-btn nc-note-control-btn--pin"
+            className={`nc-note-control-btn nc-note-control-btn--pin${pinned ? " nc-note-control-btn--pinned" : ""}`}
             disabled={saving}
             onClick={(event) => {
               event.stopPropagation();
               void pinTopOfMindNote(signal);
             }}
           >
-            {copy.pinCta}
+            {pinned ? "unpin" : copy.pinCta}
           </button>
           {hasEditedText ? (
             <button
@@ -2891,9 +2782,9 @@ export function HomePage(): JSX.Element {
         </div>
         {feedbackState?.status === "saving" ? (
           <p className="nc-note-feedback-status">{copy.feedbackSaving}</p>
-        ) : feedbackState?.status === "saved" ? (
+        ) : feedbackState?.status === "saved" && feedbackState.value !== "important" ? (
           <p className="nc-note-feedback-status">
-            {feedbackState.value === "important" ? copy.feedbackPinned : copy.feedbackSaved}
+            {copy.feedbackSaved}
           </p>
         ) : feedbackState?.status === "error" ? (
           <p className="nc-note-feedback-status nc-note-feedback-status--error">
@@ -3183,13 +3074,9 @@ export function HomePage(): JSX.Element {
               onMouseUp={() => handleMemoryTextSelection(signal.id)}
               onKeyUp={() => handleMemoryTextSelection(signal.id)}
             >
-              {renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
-                showMemoryHighlightControls(signal.id, highlight, event);
-              })}
+              {renderHighlightedInspirationText(detailText, detailHighlights)}
             </p>
             </section>
-            {renderMemorySelectionPopover(signal.id)}
-            {renderExistingMemoryHighlightPopover(signal.id)}
             {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
               <p className="signal-revisit-state">{highlightStatus.message}</p>
             ) : null}
@@ -3236,10 +3123,133 @@ export function HomePage(): JSX.Element {
     );
   };
 
+  const selectedDrawerSignal = selectedSavedSignalId
+    ? pathFilteredSignals.find((signal) => signal.id === selectedSavedSignalId) ??
+      allSavedSignals.find((signal) => signal.id === selectedSavedSignalId) ??
+      null
+    : null;
+  const selectedDrawerBaseText =
+    selectedDrawerSignal && savedSignalDetail?.id === selectedDrawerSignal.id
+      ? savedSignalDetail.rawText
+      : selectedDrawerSignal?.textPreview ?? "";
+  const selectedDrawerDraftText = selectedDrawerSignal
+    ? savedSignalDrafts[selectedDrawerSignal.id] ?? selectedDrawerBaseText
+    : "";
+  const selectedDrawerHasEdit =
+    Boolean(selectedDrawerSignal) && selectedDrawerDraftText.trim() !== selectedDrawerBaseText.trim();
+
+  const discardSavedSignalEditAndCollapse = (): void => {
+    if (selectedSavedSignalId) {
+      setSavedSignalDrafts((current) => {
+        const next = { ...current };
+        delete next[selectedSavedSignalId];
+        return next;
+      });
+    }
+    setSelectedSavedSignalId(null);
+    setSavedSignalDetail(null);
+    setSelectedInspirationText(null);
+    setConfirmingSavedSignalDeleteId(null);
+  };
+  const saveEditedSavedSignal = async (): Promise<void> => {
+    if (!selectedDrawerSignal || !selectedDrawerHasEdit || savedSignalEditSaving) return;
+    const nextText = selectedDrawerDraftText.trim();
+    setSavedSignalEditSaving(true);
+    try {
+      const updated = await updateInspiration(selectedDrawerSignal.id, { text: nextText });
+      const nextSignal = {
+        ...selectedDrawerSignal,
+        textPreview: updated.text,
+        kind: updated.kind,
+        updatedAt: updated.updatedAt,
+      };
+      setSavedSignals((current) =>
+        current.map((signal) => (signal.id === updated.id ? nextSignal : signal)),
+      );
+      setEntries((current) =>
+        current.map((entry) => (entry.id === updated.id ? apiInspirationToEntry(updated) : entry)),
+      );
+      setSavedSignalDetail((current) =>
+        current?.id === updated.id
+          ? {
+              ...current,
+              textPreview: updated.text,
+              rawText: updated.text,
+              kind: updated.kind,
+              updatedAt: updated.updatedAt,
+            }
+          : current,
+      );
+      setSavedSignalDrafts((current) => {
+        const next = { ...current };
+        delete next[updated.id];
+        return next;
+      });
+    } catch (error) {
+      console.error("[home] failed to update saved inspiration:", error);
+    } finally {
+      setSavedSignalEditSaving(false);
+    }
+  };
+
   const openStackSignal = (signal: ApiSavedSignalSearchResult): void => {
     setSelectedInspirationText(null);
+    setConfirmingSavedSignalDeleteId(null);
+    if (selectedSavedSignalId === signal.id) {
+      setSelectedSavedSignalId(null);
+      setSavedSignalDetail(null);
+      return;
+    }
     setSelectedSavedSignalId(signal.id);
+    window.setTimeout(() => {
+      document
+        .querySelector(`[data-memory-signal-id="${CSS.escape(signal.id)}"]`)
+        ?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 0);
     recordRevisit(signal.id, "detail_opened");
+  };
+
+  const undoDeletedSavedSignal = () => {
+    if (!deletedSavedSignalUndo) return;
+    if (deletedSavedSignalUndoTimerRef.current !== null) {
+      window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
+      deletedSavedSignalUndoTimerRef.current = null;
+    }
+    const { signal, detail } = deletedSavedSignalUndo;
+    setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
+    setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+    if (detail) setSavedSignalDetail(detail);
+    setSelectedSavedSignalId(signal.id);
+    setDeletedSavedSignalUndo(null);
+  };
+
+  const deleteSavedSignalFromDrawer = (signal: ApiSavedSignalSearchResult): void => {
+    if (deletedSavedSignalUndoTimerRef.current !== null) {
+      window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
+      deletedSavedSignalUndoTimerRef.current = null;
+    }
+    const detail = savedSignalDetail?.id === signal.id ? savedSignalDetail : null;
+    setDeletedSavedSignalUndo({ signal, detail });
+    setSavedSignals((prev) => prev.filter((item) => item.id !== signal.id));
+    setEntries((prev) => prev.filter((item) => item.id !== signal.id));
+    setSelectedSavedSignalId(null);
+    setSavedSignalDetail(null);
+    setSelectedInspirationText(null);
+    setConfirmingSavedSignalDeleteId(null);
+    setSavedSignalDrafts((current) => {
+      const next = { ...current };
+      delete next[signal.id];
+      return next;
+    });
+    deletedSavedSignalUndoTimerRef.current = window.setTimeout(() => {
+      void deleteInspiration(signal.id).catch((error) => {
+        console.error("[home] failed to delete saved inspiration:", error);
+        setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
+        setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+      });
+      setDeletedSavedSignalUndo(null);
+      deletedSavedSignalUndoTimerRef.current = null;
+    }, 4200);
   };
 
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
@@ -3252,6 +3262,122 @@ export function HomePage(): JSX.Element {
       failedUploadReason,
       formatTimestamp(signal.capturedAt),
     ].filter(Boolean);
+    if (isSelectedSignal) {
+      const fullDetailReady = savedSignalDetail?.id === signal.id;
+      const detailText = fullDetailReady ? savedSignalDetail.rawText : signal.textPreview;
+      const draftText = savedSignalDrafts[signal.id] ?? detailText;
+      const hasEditedDraft = draftText.trim() !== detailText.trim();
+      const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
+      return (
+        <article
+          className="memory-contents-item memory-contents-item--expanded"
+          data-memory-signal-id={signal.id}
+        >
+          <button
+            type="button"
+            className="memory-contents-collapse"
+            aria-label="collapse inspiration"
+            onClick={() => {
+              if (hasEditedDraft) {
+                discardSavedSignalEditAndCollapse();
+                return;
+              }
+              setSelectedSavedSignalId(null);
+              setSavedSignalDetail(null);
+              setSelectedInspirationText(null);
+              setConfirmingSavedSignalDeleteId(null);
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m18 15-6-6-6 6" />
+            </svg>
+          </button>
+          <div
+            className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
+          >
+            <div
+              key={`${signal.id}:${fullDetailReady ? "full" : "preview"}`}
+              className="memory-contents-expanded-text memory-contents-expanded-editor"
+              contentEditable
+              suppressContentEditableWarning
+              onInput={(event) => {
+                setSavedSignalDrafts((current) => ({
+                  ...current,
+                  [signal.id]: event.currentTarget.innerText,
+                }));
+                setConfirmingSavedSignalDeleteId(null);
+              }}
+              onMouseUp={() => handleMemoryTextSelection(signal.id)}
+              onKeyUp={() => handleMemoryTextSelection(signal.id)}
+              role="textbox"
+              aria-label="edit saved inspiration"
+              aria-multiline="true"
+              spellCheck={true}
+            >
+              {renderHighlightedInspirationText(draftText, detailHighlights)}
+            </div>
+          </div>
+          <div className="memory-contents-expanded-footer">
+            <span className="memory-contents-item-meta">{metaItems.join(" · ")}</span>
+            <div className="memory-contents-expanded-actions" aria-label="inspiration actions">
+              <button
+                type="button"
+                className={`memory-contents-secondary-action${
+                  memoryHighlightMode ? " memory-contents-secondary-action--active" : ""
+                }`}
+                aria-pressed={memoryHighlightMode}
+                onClick={() => setMemoryHighlightMode((current) => !current)}
+              >
+                highlight mode
+              </button>
+              {hasEditedDraft ? (
+                <button
+                  type="button"
+                  className="memory-contents-secondary-action"
+                  onClick={discardSavedSignalEditAndCollapse}
+                >
+                  undo edit and leave
+                </button>
+              ) : null}
+              {confirmingSavedSignalDeleteId === signal.id ? (
+                <>
+                  <button
+                    type="button"
+                    className="memory-contents-secondary-action"
+                    onClick={() => setConfirmingSavedSignalDeleteId(null)}
+                  >
+                    keep
+                  </button>
+                  <button
+                    type="button"
+                    className="memory-contents-secondary-action memory-contents-secondary-action--danger"
+                    onClick={() => deleteSavedSignalFromDrawer(signal)}
+                  >
+                    confirm delete
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
+                  onClick={() => setConfirmingSavedSignalDeleteId(signal.id)}
+                >
+                  delete inspiration
+                </button>
+              )}
+            </div>
+          </div>
+        </article>
+      );
+    }
     return (
       <button
         type="button"
@@ -3280,13 +3406,7 @@ export function HomePage(): JSX.Element {
 	    return (
 	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
 	        <header className="memory-category-intro memory-path-intro">
-	          <span>inspiration drawer</span>
 	          <h2>{selectedMemoryPathFilter?.label ?? "all saved"}</h2>
-	          <p>
-	            {hasMatches
-	              ? `${pathFilteredSignals.length === 1 ? "1 save" : `${pathFilteredSignals.length} saves`} · ${selectedMemoryPathFilter?.description ?? "newest first"}`
-	              : selectedMemoryPathFilter?.description ?? "newest first"}
-	          </p>
 	        </header>
 	        {renderMemoryPathFilters()}
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
@@ -3311,7 +3431,11 @@ export function HomePage(): JSX.Element {
           </p>
         ) : null}
         {hasMatches ? (
-          <ul className="memory-contents-list memory-path-list">
+          <ul
+            className={`memory-contents-list memory-path-list${
+              selectedSavedSignalId ? " memory-contents-list--has-expanded" : ""
+            }`}
+          >
             {pathFilteredSignals.map((signal) => (
               <li key={signal.id}>{renderMemoryStackSignalCard(signal)}</li>
             ))}
@@ -3322,10 +3446,25 @@ export function HomePage(): JSX.Element {
   };
 
   const renderMemoryPathFilters = (): JSX.Element | null => {
-    if (homeMode !== "memoryDrawer" || selectedSavedSignal) return null;
+    if (homeMode !== "memoryDrawer") return null;
+    const primaryFilterIds = new Set(["all-saved", "highlights", "recently-saved"]);
+    const primaryFilters = memoryPathFilters.filter((filter) => primaryFilterIds.has(filter.id));
+    const themeFilters = memoryPathFilters.filter((filter) => !primaryFilterIds.has(filter.id));
+    const visibleThemeFilters = showAllMemoryPathFilters ? themeFilters : themeFilters.slice(0, 4);
+    const selectedHiddenTheme = themeFilters.find(
+      (filter) =>
+        filter.id === selectedMemoryPathFilterId &&
+        !visibleThemeFilters.some((visibleFilter) => visibleFilter.id === filter.id),
+    );
+    const visibleFilters = [
+      ...primaryFilters,
+      ...visibleThemeFilters,
+      ...(selectedHiddenTheme ? [selectedHiddenTheme] : []),
+    ];
+    const hiddenThemeCount = Math.max(themeFilters.length - visibleThemeFilters.length, 0);
     return (
 	      <nav className="memory-path-filters" aria-label="saved inspiration paths">
-	        {memoryPathFilters.map((filter) => {
+	        {visibleFilters.map((filter) => {
           const count = applySearchToSignals(filter.signals, savedSignalQuery).length;
           return (
             <button
@@ -3346,66 +3485,25 @@ export function HomePage(): JSX.Element {
 	            </button>
           );
         })}
+        {hiddenThemeCount > 0 ? (
+          <button
+            type="button"
+            className="memory-path-filter memory-path-filter--more"
+            onClick={() => setShowAllMemoryPathFilters(true)}
+          >
+            <span>more themes</span>
+            <small>{hiddenThemeCount}</small>
+          </button>
+        ) : showAllMemoryPathFilters && themeFilters.length > 4 ? (
+          <button
+            type="button"
+            className="memory-path-filter memory-path-filter--more"
+            onClick={() => setShowAllMemoryPathFilters(false)}
+          >
+            <span>fewer themes</span>
+          </button>
+        ) : null}
       </nav>
-    );
-  };
-
-	  const renderMemoryStackDetail = (): JSX.Element | null => {
-	    if (!selectedSavedSignal) return null;
-	    const detailText = savedSignalDetail?.rawText ?? selectedSavedSignal.textPreview;
-	    const detailHighlights = savedSignalDetail?.highlightedSnippets ?? selectedSavedSignal.highlightedSnippets;
-	    const nextSignalList = selectedMemoryGroup ? selectedMemoryGroupSignals : pathFilteredSignals;
-	    const currentSignalIndex = nextSignalList.findIndex((signal) => signal.id === selectedSavedSignal.id);
-	    const nextSignal =
-	      currentSignalIndex >= 0 && nextSignalList.length > 1
-	        ? nextSignalList[(currentSignalIndex + 1) % nextSignalList.length]
-	        : null;
-	    return (
-	      <SavedInspirationDetail
-        signal={selectedSavedSignal}
-        detail={savedSignalDetail}
-        loading={savedSignalDetailLoading}
-        reflections={savedSignalReflections}
-        reflectionsLoading={savedSignalReflectionsLoading}
-        reflectionError={savedSignalReflectionsError}
-        locale={locale}
-        backLabel={selectedMemoryGroup ? "list" : (selectedMemoryPathFilter?.label ?? "list")}
-        highlightError={
-          highlightStatus.status === "error" && selectedInspirationText?.signalId === selectedSavedSignal.id
-            ? highlightStatus.message
-            : null
-        }
-        sourceText={renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
-          showMemoryHighlightControls(selectedSavedSignal.id, highlight, event);
-        })}
-        selectionPopover={renderMemorySelectionPopover(selectedSavedSignal.id)}
-        existingHighlightPopover={renderExistingMemoryHighlightPopover(selectedSavedSignal.id)}
-	        onBack={() => {
-	          setSelectedSavedSignalId(null);
-	          setSelectedSupportingSignalFallback(null);
-          setSavedSignalDetail(null);
-          setSavedSignalReflections([]);
-          setSavedSignalReflectionsError(null);
-	          setSavedSignalReflectionComposerOpen(false);
-	        }}
-	        onNext={
-	          nextSignal
-	            ? () => {
-	                openStackSignal(nextSignal);
-	              }
-	            : undefined
-	        }
-	        onTextMouseUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
-        onTextKeyUp={() => handleMemoryTextSelection(selectedSavedSignal.id)}
-        formatTimestamp={formatTimestamp}
-        signalSourceLabel={signalSourceLabel}
-        reflectionComposerOpen={savedSignalReflectionComposerOpen}
-        onToggleReflectionComposer={() => setSavedSignalReflectionComposerOpen((open) => !open)}
-        onCloseReflectionComposer={() => setSavedSignalReflectionComposerOpen(false)}
-        onReflectionOptimisticAdd={handleSavedSignalReflectionOptimisticAdd}
-        onReflectionPersisted={handleSavedSignalReflectionPersisted}
-        onReflectionPersistError={handleSavedSignalReflectionPersistError}
-      />
     );
   };
 
@@ -3564,13 +3662,9 @@ export function HomePage(): JSX.Element {
                 onMouseUp={() => handleMemoryTextSelection(signal.id)}
                 onKeyUp={() => handleMemoryTextSelection(signal.id)}
               >
-                {renderHighlightedInspirationText(detailText, detailHighlights, (highlight, event) => {
-                  showMemoryHighlightControls(signal.id, highlight, event);
-                })}
+                {renderHighlightedInspirationText(detailText, detailHighlights)}
               </p>
             </section>
-            {renderMemorySelectionPopover(signal.id)}
-            {renderExistingMemoryHighlightPopover(signal.id)}
             {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
               <p className="signal-revisit-state">{highlightStatus.message}</p>
             ) : null}
@@ -3923,9 +4017,10 @@ export function HomePage(): JSX.Element {
   const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
     const layout = NOTE_LAYOUTS[index] ?? NOTE_LAYOUTS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
+    const pinned = noteFeedback[signal.id]?.value === "important";
     return (
     <article
-      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}`}
+      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${pinned ? " nc-note--pinned" : ""}`}
       key={signal.id}
       role="button"
       tabIndex={0}
@@ -3943,6 +4038,7 @@ export function HomePage(): JSX.Element {
       onClick={onNoteClick(index)}
       onKeyDown={onNoteKeyDown(index)}
     >
+      {pinned ? <span className="nc-note-pin" aria-label="pinned" /> : null}
 	      <div className="nc-note-preview" aria-label="post-it preview">
 	        <p className="nc-note-body nc-note-body--preview">{thoughtCardPreviewLabel(signal, locale)}</p>
 	      </div>
@@ -3953,6 +4049,7 @@ export function HomePage(): JSX.Element {
   const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
     const signal = meaningfulThoughtCards[index];
     if (!signal) return null;
+    const pinned = noteFeedback[signal.id]?.value === "important";
     const supportingCount = signal.supportingSignals.length;
     const hasExpandedSupportingSignal = signal.supportingSignals.some((support) => {
       const supportSignalId = signalIdForSupportingSignal(support);
@@ -3960,7 +4057,7 @@ export function HomePage(): JSX.Element {
     });
     return (
       <article
-        className={`nc-note-modal${hasExpandedSupportingSignal ? " nc-note-modal--evidence-expanded" : ""}`}
+        className={`nc-note-modal${hasExpandedSupportingSignal ? " nc-note-modal--evidence-expanded" : ""}${pinned ? " nc-note-modal--pinned" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`top-of-mind-note-${signal.id}`}
@@ -3970,6 +4067,7 @@ export function HomePage(): JSX.Element {
         }}
         onClick={(event) => event.stopPropagation()}
       >
+        {pinned ? <span className="nc-note-pin nc-note-pin--modal" aria-label="pinned" /> : null}
         <button
           type="button"
           className="nc-note-peel-close"
@@ -4084,22 +4182,6 @@ export function HomePage(): JSX.Element {
     <>
       <BackgroundField />
       <DropOverlay />
-      <div className="nc-lang nc-lang--top" aria-label="language">
-        <button
-          type="button"
-          className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
-          onClick={() => handleLocaleChange("ko-KR")}
-        >
-          한
-        </button>
-        <button
-          type="button"
-          className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
-          onClick={() => handleLocaleChange("en-US")}
-        >
-          en
-        </button>
-      </div>
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -4128,8 +4210,6 @@ export function HomePage(): JSX.Element {
             ) : null}
             {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
           </h1>
-          <p className="nc-tagline">{copy.tagline}</p>
-          {copy.lifecycleHint ? <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p> : null}
         </section>
 
         <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={PRODUCT_SPACES.topOfMind}>
@@ -4154,9 +4234,7 @@ export function HomePage(): JSX.Element {
 	          aria-label={copy.savesTitle}
 	        >
           <span className="memory-stack-glass" aria-hidden="true" />
-          {selectedSavedSignal ? (
-            renderMemoryStackDetail()
-          ) : selectedMemoryGroup ? (
+          {selectedMemoryGroup ? (
             <div className="memory-contents-flow" aria-label="grouping contents">
               <button
                 type="button"
@@ -4202,19 +4280,68 @@ export function HomePage(): JSX.Element {
         data-locale={locale}
         aria-label="bottom actions"
       >
-        <div className={`nc-primary-action${homeMode === "memoryDrawer" ? " nc-primary-action--search" : ""}`}>
+        <div
+          className={`nc-primary-action${
+            homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit
+              ? " nc-primary-action--search"
+              : ""
+          }${
+            homeMode === "memoryDrawer" && selectedDrawerHasEdit && !deletedSavedSignalUndo
+              ? " nc-primary-action--save"
+              : ""
+          }${
+            (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
+            (deletedSavedSignalUndo && homeMode === "memoryDrawer")
+              ? " nc-primary-action--undo"
+              : ""
+          }`}
+        >
           <button
             type="button"
-            className={`nc-save${captureSaved ? " nc-save--saved" : ""}`}
-            onClick={openCapture}
-            aria-label={copy.captureAria}
-            tabIndex={homeMode === "memoryDrawer" ? -1 : undefined}
-            aria-hidden={homeMode === "memoryDrawer" ? "true" : undefined}
+            className={`nc-save${captureSaved ? " nc-save--saved" : ""}${
+              (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
+              (deletedSavedSignalUndo && homeMode === "memoryDrawer")
+                ? " nc-save--undo"
+                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
+                  ? " nc-save--save"
+                : ""
+            }`}
+            onClick={
+              deletedSavedSignalUndo && homeMode === "memoryDrawer"
+                ? undoDeletedSavedSignal
+                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
+                  ? () => void saveEditedSavedSignal()
+                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
+                  ? undoDeletedTopOfMindNote
+                  : openCapture
+            }
+            aria-label={
+              deletedSavedSignalUndo && homeMode === "memoryDrawer"
+                ? "inspiration was deleted, undo"
+                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
+                  ? "save edited inspiration"
+                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
+                ? "sticky note was deleted, undo"
+                : copy.captureAria
+            }
+            tabIndex={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? -1 : undefined}
+            aria-hidden={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? "true" : undefined}
+            disabled={homeMode === "memoryDrawer" && selectedDrawerHasEdit && savedSignalEditSaving}
           >
             <span className="nc-save-cta">
-              {captureSaved ? t(locale, "saved") : copy.captureCta}
-              {!captureSaved && captureHasDraft ? (
-                <span className="nc-save-draft" aria-hidden="true">···</span>
+              {deletedSavedSignalUndo && homeMode === "memoryDrawer"
+                ? "inspiration was deleted · undo"
+                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
+                  ? savedSignalEditSaving
+                    ? "saving..."
+                    : "save"
+                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
+                ? "sticky note was deleted · undo"
+                : captureSaved
+                  ? t(locale, "saved")
+                  : copy.captureCta}
+              {homeMode !== "memoryDrawer" && !deletedTopOfMindUndo && !captureSaved && captureHasDraft ? (
+                <span className="nc-save-draft">(draft)</span>
               ) : null}
             </span>
           </button>
@@ -4233,8 +4360,8 @@ export function HomePage(): JSX.Element {
                 setSavedSignalDetail(null);
               }}
               placeholder={copy.searchPlaceholder}
-              disabled={homeMode !== "memoryDrawer"}
-              tabIndex={homeMode === "memoryDrawer" ? undefined : -1}
+              disabled={homeMode !== "memoryDrawer" || selectedDrawerHasEdit || Boolean(deletedSavedSignalUndo)}
+              tabIndex={homeMode === "memoryDrawer" && !selectedDrawerHasEdit && !deletedSavedSignalUndo ? undefined : -1}
             />
           </label>
         </div>
@@ -4273,6 +4400,9 @@ export function HomePage(): JSX.Element {
             <span className="sr-only">{homeMode === "memoryDrawer" ? copy.close : copy.drawerObjectTitle}</span>
             <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
           </button>
+          {homeMode !== "memoryDrawer" ? (
+            <p className="nc-bottom-hint">Capture inspirations to generate your top of mind stickies.</p>
+          ) : null}
         </div>
 
       {captureOpen ? (
