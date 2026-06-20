@@ -3145,7 +3145,7 @@ export function HomePage(): JSX.Element {
   const selectedDrawerReflectionCanFinish =
     savedSignalReflectionAnswers
       .map((answer, index) => (index === savedSignalReflectionStepIndex ? savedSignalReflectionDraft : answer))
-      .filter((answer) => answer.trim().length > 0).length >= SAVED_SIGNAL_REFLECTION_MAX_STEPS;
+      .filter((answer) => answer.trim().length > 0).length > 0;
 
   const cancelSavedSignalReflection = (): void => {
     setSavedSignalReflectingId(null);
@@ -3315,7 +3315,7 @@ export function HomePage(): JSX.Element {
       }))
       .filter((item) => item.answer.length > 0)
       .slice(0, SAVED_SIGNAL_REFLECTION_MAX_STEPS);
-    if (payload.length === 0 || payload.length < SAVED_SIGNAL_REFLECTION_MAX_STEPS) return;
+    if (payload.length === 0) return;
     setSavedSignalReflectionSaving(true);
     setSavedSignalReflectionError(null);
     try {
@@ -3660,10 +3660,7 @@ export function HomePage(): JSX.Element {
 
 	    return (
 	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
-	        <header className="memory-category-intro memory-path-intro">
-	          <h2>{selectedMemoryPathFilter?.label ?? "all saved"}</h2>
-	        </header>
-	        {renderMemoryPathFilters()}
+        {renderMemoryPathFilters()}
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>

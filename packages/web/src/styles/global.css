@@ -13207,7 +13207,7 @@ body.reflect-bg {
 }
 
 .memory-drawer-stack {
-  --memory-drawer-bottom-clearance: clamp(88px, 10vh, 112px);
+  --memory-drawer-bottom-clearance: clamp(128px, 14vh, 168px);
 
   position: fixed;
   inset: 0;
@@ -13814,7 +13814,7 @@ body.reflect-bg {
   gap: 10px;
   padding: 12px;
   border-radius: 34px;
-  background: rgba(60, 56, 51, 0.22);
+  background: #d4d2cc;
   box-shadow:
     0 12px 26px rgba(26, 23, 20, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
