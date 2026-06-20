@@ -3289,20 +3289,6 @@ export function HomePage(): JSX.Element {
 	          </p>
 	        </header>
 	        {renderMemoryPathFilters()}
-	        <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
-	          <span className="sr-only">{copy.searchLabel}</span>
-	          <input
-	            type="search"
-	            value={inspirationFilters.search}
-	            onChange={(event: ChangeEvent<HTMLInputElement>) => {
-	              setInspirationFilters({ search: event.target.value });
-	              setSelectedMemoryGroupId(null);
-	              setSelectedSavedSignalId(null);
-	              setSavedSignalDetail(null);
-	            }}
-	            placeholder={copy.searchPlaceholder}
-	          />
-	        </label>
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
@@ -4216,11 +4202,14 @@ export function HomePage(): JSX.Element {
         data-locale={locale}
         aria-label="bottom actions"
       >
+        <div className={`nc-primary-action${homeMode === "memoryDrawer" ? " nc-primary-action--search" : ""}`}>
           <button
             type="button"
             className={`nc-save${captureSaved ? " nc-save--saved" : ""}`}
             onClick={openCapture}
             aria-label={copy.captureAria}
+            tabIndex={homeMode === "memoryDrawer" ? -1 : undefined}
+            aria-hidden={homeMode === "memoryDrawer" ? "true" : undefined}
           >
             <span className="nc-save-cta">
               {captureSaved ? t(locale, "saved") : copy.captureCta}
@@ -4229,6 +4218,26 @@ export function HomePage(): JSX.Element {
               ) : null}
             </span>
           </button>
+          <label
+            className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}
+            aria-hidden={homeMode === "memoryDrawer" ? undefined : "true"}
+          >
+            <span className="sr-only">{copy.searchLabel}</span>
+            <input
+              type="search"
+              value={inspirationFilters.search}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                setInspirationFilters({ search: event.target.value });
+                setSelectedMemoryGroupId(null);
+                setSelectedSavedSignalId(null);
+                setSavedSignalDetail(null);
+              }}
+              placeholder={copy.searchPlaceholder}
+              disabled={homeMode !== "memoryDrawer"}
+              tabIndex={homeMode === "memoryDrawer" ? undefined : -1}
+            />
+          </label>
+        </div>
           <button
             type="button"
             className={`nc-drawer-object${homeMode === "memoryDrawer" ? " nc-drawer-object--close" : ""}`}

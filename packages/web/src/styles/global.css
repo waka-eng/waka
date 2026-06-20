@@ -12375,23 +12375,11 @@ body.reflect-bg {
   box-shadow:
     0 12px 26px rgba(26, 23, 20, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  /* Mirror the drawer-search entry so returning capture<-search also animates. */
-  animation: ncSaveMorphIn 440ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
   transition:
+    opacity 220ms ease,
     transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1),
     background 220ms ease,
     box-shadow 220ms ease;
-}
-
-@keyframes ncSaveMorphIn {
-  from {
-    opacity: 0.6;
-    transform: scaleX(0.78);
-  }
-  to {
-    opacity: 1;
-    transform: scaleX(1);
-  }
 }
 
 .nc-save:hover {
@@ -12438,6 +12426,7 @@ body.reflect-bg {
   justify-content: center;
   gap: 6px;
   min-height: 42px;
+  width: 100%;
   min-width: 0;
   padding: 0 18px;
   background: rgba(255, 255, 255, 0.96);
@@ -13156,6 +13145,50 @@ body.reflect-bg {
   align-items: center;
   gap: 6px;
   transform: translateX(-50%);
+}
+
+.nc-primary-action {
+  position: relative;
+  width: clamp(190px, 18vw, 250px);
+  height: 54px;
+  flex: 0 0 auto;
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nc-primary-action--search {
+  width: min(420px, calc(100vw - 96px));
+}
+
+.nc-primary-action > .nc-save,
+.nc-primary-action > .nc-drawer-search {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 54px;
+}
+
+.nc-primary-action > .nc-save {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scaleX(1);
+}
+
+.nc-primary-action > .nc-drawer-search {
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0.78);
+}
+
+.nc-primary-action--search > .nc-save {
+  opacity: 0;
+  pointer-events: none;
+  transform: scaleX(0.78);
+}
+
+.nc-primary-action--search > .nc-drawer-search {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scaleX(1);
 }
 
 .nc-bottom-bar--drawer {
