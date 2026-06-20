@@ -3370,7 +3370,7 @@ export function HomePage(): JSX.Element {
                   className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
                   onClick={() => setConfirmingSavedSignalDeleteId(signal.id)}
                 >
-                  delete inspiration
+                  delete
                 </button>
               )}
             </div>

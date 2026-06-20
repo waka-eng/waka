@@ -422,7 +422,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             value={noteValue ?? ""}
             onChange={handleNoteChange}
             onPaste={onNotePaste}
-            onSelect={onNoteSelect}
             onMouseUp={onNoteSelect}
             onKeyUp={onNoteSelect}
             onKeyDown={onNoteKeyDown}
@@ -511,7 +510,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
                 aria-pressed={highlightMode}
                 onClick={onToggleHighlightMode}
               >
-                highlight
+                {highlightMode ? "highlighting" : "highlight"}
               </button>
               <button
                 type="button"

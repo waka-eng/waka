@@ -13313,7 +13313,7 @@ body.reflect-bg {
 .nc-bottom-bar {
   position: fixed;
   left: 50%;
-  bottom: 34px;
+  bottom: 54px;
   z-index: 45;
   display: inline-flex;
   align-items: center;
