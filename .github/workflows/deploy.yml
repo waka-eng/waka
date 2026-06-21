@@ -5,6 +5,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      release_legacy_alias:
+        description: "Remove waka.im from the existing non-SST CloudFront distribution before deploying"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-production
@@ -24,6 +30,7 @@ env:
   AWS_DEFAULT_REGION: us-west-2
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
+  PRODUCTION_DOMAIN: waka.im
   AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
   AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
   AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
@@ -81,6 +88,48 @@ jobs:
             exit 1
           fi
 
+      - name: Release legacy CloudFront alias
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_legacy_alias }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          mapfile -t distribution_ids < <(
+            aws cloudfront list-distributions \
+              --query "DistributionList.Items[?Aliases.Items && contains(Aliases.Items, '${PRODUCTION_DOMAIN}')].Id" \
+              --output text | tr '\t' '\n' | sed '/^$/d'
+          )
+
+          if (( ${#distribution_ids[@]} == 0 )); then
+            printf 'No existing CloudFront distribution currently owns %s.\n' "$PRODUCTION_DOMAIN"
+            exit 0
+          fi
+
+          for distribution_id in "${distribution_ids[@]}"; do
+            resource_arn="arn:aws:cloudfront::${account_id}:distribution/${distribution_id}"
+            if aws cloudfront list-tags-for-resource --resource "$resource_arn" \
+              | jq -e '.Tags.Items[]? | select(.Key == "sst:app" and .Value == "waka")' >/dev/null; then
+              printf 'Keeping SST-managed distribution %s.\n' "$distribution_id"
+              continue
+            fi
+
+            printf 'Removing %s from legacy CloudFront distribution %s.\n' "$PRODUCTION_DOMAIN" "$distribution_id"
+            aws cloudfront get-distribution-config --id "$distribution_id" > distribution.json
+            etag="$(jq -r '.ETag' distribution.json)"
+            jq --arg domain "$PRODUCTION_DOMAIN" '
+              .DistributionConfig
+              | .Aliases.Items = ((.Aliases.Items // []) | map(select(. != $domain)))
+              | .Aliases.Quantity = (.Aliases.Items | length)
+              | if .Aliases.Quantity == 0 then .Aliases |= del(.Items) else . end
+            ' distribution.json > distribution-config.json
+            aws cloudfront update-distribution \
+              --id "$distribution_id" \
+              --if-match "$etag" \
+              --distribution-config file://distribution-config.json >/dev/null
+            aws cloudfront wait distribution-deployed --id "$distribution_id"
+          done
+
       - name: Set SST production secrets
         shell: bash
         run: |
@@ -97,3 +146,66 @@ jobs:
 
       - name: Deploy SST production stage
         run: pnpm sst deploy --stage "$SST_STAGE"
+
+      - name: Connect Route53 production domain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          distribution_domain="$(
+            aws cloudfront list-distributions \
+              --query "DistributionList.Items[?Aliases.Items && contains(Aliases.Items, '${PRODUCTION_DOMAIN}')].DomainName | [0]" \
+              --output text
+          )"
+          if [[ -z "$distribution_domain" || "$distribution_domain" == "None" ]]; then
+            printf 'Could not find a CloudFront distribution for %s after deploy.\n' "$PRODUCTION_DOMAIN" >&2
+            exit 1
+          fi
+
+          hosted_zone_id="$(
+            aws route53 list-hosted-zones-by-name --dns-name "${PRODUCTION_DOMAIN}." \
+              | jq -r --arg name "${PRODUCTION_DOMAIN}." '
+                .HostedZones[]
+                | select(.Name == $name and (.Config.PrivateZone | not))
+                | .Id
+              ' \
+              | sed 's#^/hostedzone/##' \
+              | head -n 1
+          )"
+          if [[ -z "$hosted_zone_id" ]]; then
+            printf 'Could not find a public Route53 hosted zone for %s.\n' "$PRODUCTION_DOMAIN" >&2
+            exit 1
+          fi
+
+          jq -n --arg domain "${PRODUCTION_DOMAIN}." --arg target "$distribution_domain" '{
+            Changes: [
+              {
+                Action: "UPSERT",
+                ResourceRecordSet: {
+                  Name: $domain,
+                  Type: "A",
+                  AliasTarget: {
+                    HostedZoneId: "Z2FDTNDATAQYW2",
+                    DNSName: $target,
+                    EvaluateTargetHealth: false
+                  }
+                }
+              },
+              {
+                Action: "UPSERT",
+                ResourceRecordSet: {
+                  Name: $domain,
+                  Type: "AAAA",
+                  AliasTarget: {
+                    HostedZoneId: "Z2FDTNDATAQYW2",
+                    DNSName: $target,
+                    EvaluateTargetHealth: false
+                  }
+                }
+              }
+            ]
+          }' > route53-change-batch.json
+
+          aws route53 change-resource-record-sets \
+            --hosted-zone-id "$hosted_zone_id" \
+            --change-batch file://route53-change-batch.json
