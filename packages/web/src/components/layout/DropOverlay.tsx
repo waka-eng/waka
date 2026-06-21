@@ -13,10 +13,14 @@
  * toggle the body class — no DOM injection.
  */
 
-export function DropOverlay(): JSX.Element {
+interface DropOverlayProps {
+  label?: string;
+}
+
+export function DropOverlay({ label = "Drop anywhere — link, image, or note" }: DropOverlayProps): JSX.Element {
   return (
     <div className="drop-overlay" aria-hidden="true">
-      <div className="card">Drop anywhere — link, image, or note</div>
+      <div className="card">{label}</div>
     </div>
   );
 }

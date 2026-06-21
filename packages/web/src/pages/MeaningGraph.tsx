@@ -181,10 +181,17 @@ interface MeaningGraphCopy {
   cancel: string;
   rebuildQueuedPoll: string;
   loadingGraph: string;
+  rebuildStatusPending: string;
+  rebuildStatusRunning: (phase: string, count: string) => string;
+  rebuildStatusSucceeded: string;
+  rebuildStatusFailed: string;
+  rebuildStatusPhaseFallback: string;
   rebuildFinished: (signals: number, nodes: number, edges: number) => string;
   noGraphRowsTitle: string;
   noGraphRowsBody: string;
   noSelectionIntro: string;
+  unknownSource: string;
+  unknownTarget: string;
   recentSignalsEyebrow: string;
   recentSignalsIntro: string;
   recentGraphEntrySummaryAria: string;
@@ -193,6 +200,10 @@ interface MeaningGraphCopy {
   notAdded: (count: number) => string;
   processing: (count: number) => string;
   noRecentSignals: string;
+  recentStatusProcessing: string;
+  recentStatusAddedNotesAndRelationships: string;
+  recentStatusAddedContextNodes: string;
+  recentStatusNotAdded: string;
   relationshipSummary: string;
   updated: string;
   evidenceSignals: string;
@@ -219,6 +230,7 @@ interface MeaningGraphCopy {
   noPostItFeedback: string;
   noNodeFeedback: string;
   noRelationshipEvidence: string;
+  noReasonStored: string;
   contextNodesHeading: string;
   relationshipEdgesHeading: string;
   noContextNodeProcessed: string;
@@ -285,12 +297,19 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     cancel: "Cancel",
     rebuildQueuedPoll: "Rebuild queued. This page will poll for progress.",
     loadingGraph: "Loading context graph...",
+    rebuildStatusPending: "Rebuild queued. The worker will start shortly.",
+    rebuildStatusRunning: (phase, count) => `Rebuild running: ${phase}${count}. This page will refresh when it finishes.`,
+    rebuildStatusSucceeded: "Rebuild finished. Dashboard refreshed.",
+    rebuildStatusFailed: "Rebuild failed. Check server logs.",
+    rebuildStatusPhaseFallback: "processing",
     rebuildFinished: (signals, nodes, edges) =>
       `Rebuild finished: ${signals} signals / ${nodes} notes / ${edges} edges. Dashboard refreshed.`,
     noGraphRowsTitle: "No graph rows yet",
     noGraphRowsBody: "Click rebuild after saving signals locally.",
     noSelectionIntro:
       "The graph above is the current context structure. Select a context node to see the signals behind it, or select a relationship edge to see what supports that connection.",
+    unknownSource: "Unknown source",
+    unknownTarget: "unknown target",
     recentSignalsEyebrow: "recent signals",
     recentSignalsIntro: "Newest saves and what they added to the context graph.",
     recentGraphEntrySummaryAria: "Recent graph entry summary",
@@ -299,6 +318,10 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     notAdded: (count) => `${count} not added`,
     processing: (count) => `${count} processing`,
     noRecentSignals: "No recent signals found.",
+    recentStatusProcessing: "Processing",
+    recentStatusAddedNotesAndRelationships: "Added notes and relationships",
+    recentStatusAddedContextNodes: "Added context nodes",
+    recentStatusNotAdded: "Not added to graph",
     relationshipSummary: "Relationship summary",
     updated: "updated",
     evidenceSignals: "evidence signals",
@@ -327,6 +350,7 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     noNodeFeedback: "No user feedback has been stored for this context node yet.",
     noRelationshipEvidence:
       "This relationship has stored evidence ids, but no recent matching signal is in the current feed.",
+    noReasonStored: "No reason stored yet.",
     contextNodesHeading: "Context nodes",
     relationshipEdgesHeading: "Relationship edges",
     noContextNodeProcessed: "No context node was created or reinforced from this save.",
@@ -390,12 +414,19 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     cancel: "취소",
     rebuildQueuedPoll: "다시 만들기가 대기열에 추가되었습니다. 이 페이지가 진행 상황을 확인합니다.",
     loadingGraph: "맥락 그래프 불러오는 중...",
+    rebuildStatusPending: "다시 만들기가 대기열에 있습니다. 작업자가 곧 시작합니다.",
+    rebuildStatusRunning: (phase, count) => `다시 만들기 진행 중: ${phase}${count}. 완료되면 이 페이지가 새로고침됩니다.`,
+    rebuildStatusSucceeded: "다시 만들기 완료. 대시보드가 새로고침되었습니다.",
+    rebuildStatusFailed: "다시 만들기 실패. 서버 로그를 확인하세요.",
+    rebuildStatusPhaseFallback: "처리",
     rebuildFinished: (signals, nodes, edges) =>
       `다시 만들기 완료: 영감 ${signals}개 / 노트 ${nodes}개 / 관계 ${edges}개. 대시보드가 새로고침되었습니다.`,
     noGraphRowsTitle: "아직 그래프 행이 없습니다",
     noGraphRowsBody: "로컬에 영감을 저장한 뒤 다시 만들기를 누르세요.",
     noSelectionIntro:
       "위 그래프는 현재 맥락 구조입니다. 맥락 노드를 선택하면 관련 영감을, 관계를 선택하면 연결을 뒷받침하는 근거를 볼 수 있습니다.",
+    unknownSource: "알 수 없는 출처",
+    unknownTarget: "알 수 없는 대상",
     recentSignalsEyebrow: "최근 영감",
     recentSignalsIntro: "가장 최근 저장 항목과 그것이 맥락 그래프에 더한 내용입니다.",
     recentGraphEntrySummaryAria: "최근 그래프 입력 요약",
@@ -404,6 +435,10 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     notAdded: (count) => `${count}개 미추가`,
     processing: (count) => `${count}개 처리 중`,
     noRecentSignals: "최근 영감이 없습니다.",
+    recentStatusProcessing: "처리 중",
+    recentStatusAddedNotesAndRelationships: "노트와 관계 추가됨",
+    recentStatusAddedContextNodes: "맥락 노드 추가됨",
+    recentStatusNotAdded: "그래프에 추가되지 않음",
     relationshipSummary: "관계 요약",
     updated: "업데이트됨",
     evidenceSignals: "근거 영감",
@@ -431,6 +466,7 @@ export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
     noPostItFeedback: "아직 이 포스트잇을 조정한 사용자 피드백이 없습니다.",
     noNodeFeedback: "아직 이 맥락 노드에 저장된 사용자 피드백이 없습니다.",
     noRelationshipEvidence: "이 관계에는 저장된 근거 ID가 있지만 현재 피드에는 일치하는 최근 영감이 없습니다.",
+    noReasonStored: "아직 저장된 이유가 없습니다.",
     contextNodesHeading: "맥락 노드",
     relationshipEdgesHeading: "관계",
     noContextNodeProcessed: "이 저장 항목에서는 맥락 노드가 생성되거나 강화되지 않았습니다.",
@@ -625,29 +661,49 @@ export function rebuildJobResult(job: ApiMeaningGraphRebuildJob | null): ApiMean
   };
 }
 
-function formatRebuildJobStatus(job: ApiMeaningGraphRebuildJob | null, locale: SupportedLocale): string | null {
+export function meaningGraphRebuildPhaseLabel(phase: string | undefined, locale: SupportedLocale): string {
+  const copy = MEANING_GRAPH_COPY[locale];
+  if (!phase) return copy.rebuildStatusPhaseFallback;
+  if (locale === "ko-KR") {
+    switch (phase) {
+      case "queued":
+        return "대기";
+      case "loading_inspirations":
+        return "영감 불러오기";
+      case "materializing_packets":
+        return "신호 패킷 준비";
+      case "clearing_graph":
+        return "기존 그래프 정리";
+      case "writing_graph":
+        return "그래프 작성";
+      case "completed":
+        return "완료";
+      default:
+        return copy.rebuildStatusPhaseFallback;
+    }
+  }
+  return phase.replace(/_/g, " ");
+}
+
+export function formatRebuildJobStatus(job: ApiMeaningGraphRebuildJob | null, locale: SupportedLocale): string | null {
   if (!job) return null;
+  const copy = MEANING_GRAPH_COPY[locale];
   if (job.status === "pending") {
-    return locale === "ko-KR"
-      ? "다시 만들기가 대기열에 있습니다. 작업자가 곧 시작합니다."
-      : "Rebuild queued. The worker will start shortly.";
+    return copy.rebuildStatusPending;
   }
   if (job.status === "running") {
-    const phase = job.payload.phase?.replace(/_/g, " ") ?? (locale === "ko-KR" ? "처리" : "processing");
+    const phase = meaningGraphRebuildPhaseLabel(job.payload.phase, locale);
     const current = job.payload.processedInspirations;
     const total = job.payload.totalInspirations;
     const count = typeof current === "number" && typeof total === "number" && total > 0
       ? ` (${Math.min(current, total)} / ${total})`
       : "";
-    return locale === "ko-KR"
-      ? `다시 만들기 진행 중: ${phase}${count}. 완료되면 이 페이지가 새로고침됩니다.`
-      : `Rebuild running: ${phase}${count}. This page will refresh when it finishes.`;
+    return copy.rebuildStatusRunning(phase, count);
   }
-  if (job.status === "succeeded") return locale === "ko-KR" ? "다시 만들기 완료. 대시보드가 새로고침되었습니다." : "Rebuild finished. Dashboard refreshed.";
+  if (job.status === "succeeded") return copy.rebuildStatusSucceeded;
   if (job.status === "failed") {
-    return locale === "ko-KR"
-      ? `다시 만들기 실패: ${job.lastError ?? "서버 로그 확인"}`
-      : `Rebuild failed: ${job.lastError ?? "check server logs"}`;
+    if (locale === "ko-KR") return copy.rebuildStatusFailed;
+    return job.lastError ? `Rebuild failed: ${job.lastError}` : copy.rebuildStatusFailed;
   }
   return null;
 }
@@ -673,9 +729,9 @@ export function relationshipSummary(edge: {
   return `${edge.sourceLabel} ${relationshipLabel(edge, locale)} ${edge.targetLabel}`;
 }
 
-function compactReason(reason: string): string {
+function compactReason(reason: string, locale: SupportedLocale): string {
   const normalized = reason.replace(/\s+/g, " ").trim();
-  if (!normalized) return "No reason stored yet.";
+  if (!normalized) return MEANING_GRAPH_COPY[locale].noReasonStored;
   if (normalized.length <= 150) return normalized;
   return `${normalized.slice(0, 147).trimEnd()}...`;
 }
@@ -838,10 +894,10 @@ export default function MeaningGraphPage(): JSX.Element {
       setRebuildJob(result.job);
       setRebuilding(isActiveRebuildJob(result.job));
     } catch (err) {
-      setError(formatMeaningGraphRebuildError(err));
+      setError(formatMeaningGraphRebuildError(err, locale));
       setRebuilding(false);
     }
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -885,7 +941,7 @@ export default function MeaningGraphPage(): JSX.Element {
           }
         } catch (err) {
           if (!cancelled) {
-            setError(formatMeaningGraphRebuildError(err));
+            setError(formatMeaningGraphRebuildError(err, locale));
           }
         }
       })();
@@ -895,7 +951,7 @@ export default function MeaningGraphPage(): JSX.Element {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [loadGraph, rebuildJob]);
+  }, [loadGraph, locale, rebuildJob]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
@@ -1146,8 +1202,8 @@ export default function MeaningGraphPage(): JSX.Element {
       : copy.graphEvidence;
 
   const evidenceIntro = selectedEdge
-    ? `${selectedEdgeSource?.label ?? (locale === "ko-KR" ? "알 수 없는 출처" : "Unknown source")} ${relationshipLabel(selectedEdge, locale)} ${
-        selectedEdgeTarget?.label ?? (locale === "ko-KR" ? "알 수 없는 대상" : "unknown target")
+    ? `${selectedEdgeSource?.label ?? copy.unknownSource} ${relationshipLabel(selectedEdge, locale)} ${
+        selectedEdgeTarget?.label ?? copy.unknownTarget
       }`
     : selectedNode
       ? selectedNode.label
@@ -1159,12 +1215,12 @@ export default function MeaningGraphPage(): JSX.Element {
     const hasMeaningNotes = signal.meaningNotes.length > 0;
     const hasRelationships = signal.relationshipEdges.length > 0;
     const status = !signal.packetCreatedAt
-      ? locale === "ko-KR" ? "처리 중" : "Processing"
+      ? copy.recentStatusProcessing
       : hasMeaningNotes
         ? hasRelationships
-          ? locale === "ko-KR" ? "노트와 관계 추가됨" : "Added notes and relationships"
-          : locale === "ko-KR" ? "맥락 노드 추가됨" : "Added context nodes"
-        : locale === "ko-KR" ? "그래프에 추가되지 않음" : "Not added to graph";
+          ? copy.recentStatusAddedNotesAndRelationships
+          : copy.recentStatusAddedContextNodes
+        : copy.recentStatusNotAdded;
 
     return (
       <article className="meaning-recent-inspiration" key={signal.id}>
@@ -1184,7 +1240,7 @@ export default function MeaningGraphPage(): JSX.Element {
                   <li key={`${signal.id}-${note.id}`}>
                     <strong>{note.label}</strong>
                     <span>{TYPE_LABEL[note.type] ?? note.type}</span>
-                    <p>{compactReason(note.reason)}</p>
+                    <p>{compactReason(note.reason, locale)}</p>
                   </li>
                 ))}
               </ul>
@@ -1208,7 +1264,7 @@ export default function MeaningGraphPage(): JSX.Element {
                       <p>
                         {[edge.sourceReason, edge.targetReason]
                           .filter(Boolean)
-                          .map(compactReason)
+                          .map((reason) => compactReason(reason, locale))
                           .join(" ")}
                       </p>
                     ) : (

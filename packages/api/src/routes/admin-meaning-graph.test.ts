@@ -118,6 +118,21 @@ describe("POST /api/admin/meaning-graph/rebuild", () => {
     expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
     expect(body.detail).toContain("Run the repo Drizzle migrations");
   });
+
+  it("returns the migration hint for Drizzle errors that wrap the enum failure in cause", async () => {
+    queueMocks.enqueueMeaningGraphRebuild.mockRejectedValue(
+      new Error("Failed query: insert into background_jobs", {
+        cause: new Error('invalid input value for enum background_job_type: "meaning_graph_rebuild"'),
+      }),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { code: string };
+    expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
+  });
 });
 
 describe("GET /api/admin/meaning-graph/rebuild", () => {
@@ -134,6 +149,22 @@ describe("GET /api/admin/meaning-graph/rebuild", () => {
     expect(queueMocks.scheduleBackgroundJobDrain).toHaveBeenCalledTimes(1);
     const body = (await response.json()) as { job: Record<string, any> };
     expect(body.job).toMatchObject({ status: "running", payload: expect.objectContaining({ phase: "processing" }) });
+  });
+
+  it("returns a non-500 migration hint when reading latest job hits a missing enum", async () => {
+    queueMocks.getLatestMeaningGraphRebuildJob.mockRejectedValue(
+      new Error("Failed query: select from background_jobs", {
+        cause: new Error('invalid input value for enum background_job_type: "meaning_graph_rebuild"'),
+      }),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild");
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { code: string; detail: string };
+    expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
+    expect(body.detail).toContain("Run the repo Drizzle migrations");
   });
 });
 

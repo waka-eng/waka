@@ -1580,6 +1580,10 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("river's top of mind");
     expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).toContain("make the thing before explaining it");
+    expect(container.textContent).toContain("어디에든 놓기 — 링크, 이미지, 메모");
+    expect(container.textContent).not.toContain("Drop anywhere — link, image, or note");
+    expect(container.querySelector(".nc-language-controls")?.getAttribute("aria-label")).toBe("홈 컨트롤");
+    expect(container.querySelector(".nc-lang--top")?.getAttribute("aria-label")).toBe("언어");
   });
 
   it("localizes the logout affordance in Korean", async () => {

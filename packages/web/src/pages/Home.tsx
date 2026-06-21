@@ -80,6 +80,7 @@ import {
   updateInspiration,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { mergeReflectionRows } from "../lib/inspiration-detail";
 import {
   formatSavedCount,
   normalizeSupportedLocale,
@@ -1285,6 +1286,9 @@ const HOME_COPY = {
     captureDialog: "영감 기록",
     close: "닫기",
     bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
+    dropOverlay: "어디에든 놓기 — 링크, 이미지, 메모",
+    homeControlsAria: "홈 컨트롤",
+    languageControlsAria: "언어",
     topOfMindAria: "탑오브마인드 포스트잇 다섯 장",
     memoryDrawerTitle: "영감 서랍",
     memoryPathListAria: "저장된 영감 목록",
@@ -1378,6 +1382,9 @@ const HOME_COPY = {
     captureDialog: "capture inspiration",
     close: "close",
     bottomHint: "Capture inspirations to generate your top of mind stickies.",
+    dropOverlay: "Drop anywhere — link, image, or note",
+    homeControlsAria: "home controls",
+    languageControlsAria: "language",
     topOfMindAria: "Five Top of Mind post-its",
     memoryDrawerTitle: "Inspiration Drawer",
     memoryPathListAria: "saved inspiration list",
@@ -1445,6 +1452,9 @@ const HOME_COPY = {
     captureDialog: string;
     close: string;
     bottomHint: string;
+    dropOverlay: string;
+    homeControlsAria: string;
+    languageControlsAria: string;
     topOfMindAria: string;
     memoryDrawerTitle: string;
     memoryPathListAria: string;
@@ -2440,7 +2450,7 @@ export function HomePage(): JSX.Element {
         if (cancelled) return;
         setSavedSignalReflections((current) => ({
           ...current,
-          [selectedSavedSignalId]: reflections,
+          [selectedSavedSignalId]: mergeReflectionRows(current[selectedSavedSignalId] ?? [], reflections),
         }));
       } catch (error) {
         if (!cancelled) {
@@ -3483,7 +3493,7 @@ export function HomePage(): JSX.Element {
       );
       setSavedSignalReflections((current) => ({
         ...current,
-        [signalId]: [...(current[signalId] ?? []), ...results.map((result) => result.reflection)],
+        [signalId]: mergeReflectionRows(current[signalId] ?? [], results.map((result) => result.reflection)),
       }));
       const scorePatch = [...results].reverse().find((result) => result.inspiration)?.inspiration;
       if (scorePatch) {
@@ -4602,7 +4612,7 @@ export function HomePage(): JSX.Element {
   return (
     <>
       <BackgroundField />
-      <DropOverlay />
+      <DropOverlay label={copy.dropOverlay} />
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
@@ -4620,8 +4630,8 @@ export function HomePage(): JSX.Element {
         className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}
         data-locale={locale}
       >
-        <div className="nc-language-controls" aria-label="home controls">
-          <div className="nc-lang nc-lang--top" aria-label="language">
+        <div className="nc-language-controls" aria-label={copy.homeControlsAria}>
+          <div className="nc-lang nc-lang--top" aria-label={copy.languageControlsAria}>
               <button
                 type="button"
                 className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}

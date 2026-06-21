@@ -539,4 +539,13 @@ describe("formatMeaningGraphRebuildError", () => {
       formatMeaningGraphRebuildError(new ApiError({ status: 500, message: "Gemini quota exhausted" })),
     ).toBe("Rebuild failed: Gemini quota exhausted");
   });
+
+  it("uses localized Korean rebuild failure copy without leaking server English", () => {
+    expect(
+      formatMeaningGraphRebuildError(
+        new ApiError({ status: 500, message: "Failed to enqueue context graph rebuild" }),
+        "ko-KR",
+      ),
+    ).toBe("다시 만들기 실패: 그래프를 다시 만들지 못했습니다. 잠시 뒤 다시 시도하세요.");
+  });
 });

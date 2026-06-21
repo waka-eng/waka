@@ -44,6 +44,20 @@ export function answeredReflections(reflections: ApiReflection[]): ApiReflection
   return reflections.filter((reflection) => answerText(reflection) !== null);
 }
 
+export function mergeReflectionRows(
+  current: ApiReflection[],
+  incoming: ApiReflection[],
+): ApiReflection[] {
+  const merged = [...incoming];
+  const seenIds = new Set(merged.map((reflection) => reflection.id));
+  for (const reflection of current) {
+    if (seenIds.has(reflection.id)) continue;
+    merged.push(reflection);
+    seenIds.add(reflection.id);
+  }
+  return merged;
+}
+
 function normalizeAnswer(answer: string): string {
   return answer
     .replace(/\s+/g, " ")
