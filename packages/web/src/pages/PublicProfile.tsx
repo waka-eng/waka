@@ -8,6 +8,23 @@ import {
 } from "../lib/api";
 import { useOptionalAuth } from "../lib/auth-context";
 import { normalizeSupportedLocale } from "../lib/locales";
+import { BackgroundField } from "../components/layout/BackgroundField";
+
+const NOTE_LAYOUTS: Array<{ tilt: number; w: string }> = [
+  { tilt: -1.4, w: "420px" },
+  { tilt: -2.2, w: "292px" },
+  { tilt: 1.8, w: "300px" },
+  { tilt: 1.2, w: "292px" },
+  { tilt: -0.8, w: "312px" },
+];
+
+const NOTE_COLORS = [
+  { hue: "#ece4cb", ink: "#4a3e1f" },
+  { hue: "#e8d4ce", ink: "#6b3c34" },
+  { hue: "#d8ddc6", ink: "#3f4a2a" },
+  { hue: "#cdd3df", ink: "#3a4456" },
+  { hue: "#f1d7a8", ink: "#4f3921" },
+];
 
 const COPY = {
   "en-US": {
@@ -16,9 +33,14 @@ const COPY = {
     missingBody: "This handle is not shared yet, or the owner turned the page off.",
     topOfMind: "Top of mind",
     empty: "No public top-of-mind notes yet.",
+    title: (name: string) => (
+      <>
+        <span className="nc-title-name">{name}'s</span> top of mind
+      </>
+    ),
     start: "Create your WAKA",
     open: "Open WAKA",
-    evidence: "Evidence",
+    controls: "public profile controls",
   },
   "ko-KR": {
     loading: "공개 프로필을 불러오는 중...",
@@ -26,11 +48,20 @@ const COPY = {
     missingBody: "아직 공유되지 않았거나 소유자가 공개를 꺼둔 핸들입니다.",
     topOfMind: "탑오브마인드",
     empty: "공개된 탑오브마인드가 아직 없어요.",
+    title: (name: string) => (
+      <>
+        <span className="nc-title-name">{name}님의</span> 탑오브마인드
+      </>
+    ),
     start: "내 WAKA 만들기",
     open: "WAKA 열기",
-    evidence: "근거",
+    controls: "공개 프로필 컨트롤",
   },
 } as const;
+
+function publicNoteText(note: FetchPublicProfileResponse["topOfMindNotes"][number]): string {
+  return note.body || note.ambientSignal || note.title;
+}
 
 export default function PublicProfilePage(): JSX.Element {
   const { handle = "" } = useParams();
@@ -104,44 +135,49 @@ export default function PublicProfilePage(): JSX.Element {
   }
 
   return (
-    <main className="public-profile-shell">
-      <header className="public-profile-hero">
-        <div>
-          <p className="login-eyebrow">@{data.profile.handle}</p>
-          <h1>{data.profile.name}</h1>
+    <>
+      <BackgroundField />
+      <main className="nc-canvas nc-canvas--top-of-mind" data-locale={locale}>
+        <div className="nc-language-controls" aria-label={copy.controls}>
+          <button
+            className="nc-profile-link nc-lang--top"
+            type="button"
+            onClick={goToPrivateApp}
+          >
+            {auth?.isAuthenticated ? copy.open : copy.start}
+          </button>
         </div>
-        <button className="profile-signout-button" type="button" onClick={goToPrivateApp}>
-          {auth?.isAuthenticated ? copy.open : copy.start}
-        </button>
-      </header>
 
-      <section className="public-top-of-mind" aria-labelledby="public-top-of-mind-title">
-        <div className="public-section-heading">
-          <h2 id="public-top-of-mind-title">{copy.topOfMind}</h2>
-        </div>
-        {data.topOfMindNotes.length > 0 ? (
-          <div className="public-note-grid">
-            {data.topOfMindNotes.map((note, index) => (
-              <article className="public-note" key={`${note.title}-${index}`}>
-                <div className="public-note-meta">
-                  <span>{note.type}</span>
-                  <span>{note.confidence}%</span>
+        <section className="nc-titlecard">
+          <h1 className="nc-title">{copy.title(data.profile.name)}</h1>
+        </section>
+
+        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMind}>
+          {data.topOfMindNotes.length > 0 ? (
+            data.topOfMindNotes.map((note, index) => (
+              <article
+                className={`nc-note${index === 0 ? " nc-note--featured" : ""}`}
+                key={`${note.title}-${index}`}
+                style={{
+                  ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
+                  ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
+                  ["--tilt" as string]: `${(NOTE_LAYOUTS[index] ?? NOTE_LAYOUTS[0]).tilt}deg`,
+                  ["--w" as string]: (NOTE_LAYOUTS[index] ?? NOTE_LAYOUTS[0]).w,
+                  ["--dx" as string]: "0px",
+                  ["--dy" as string]: "0px",
+                  ["--decay" as string]: String(1 - index * 0.08),
+                }}
+              >
+                <div className="nc-note-preview" aria-label="post-it preview">
+                  <p className="nc-note-body nc-note-body--preview">{publicNoteText(note)}</p>
                 </div>
-                <h3>{note.title}</h3>
-                <p>{note.body || note.ambientSignal}</p>
-                {note.evidencePreviews.length > 0 ? (
-                  <div className="public-note-evidence">
-                    <span className="field-label">{copy.evidence}</span>
-                    <p>{note.evidencePreviews[0]?.textPreview}</p>
-                  </div>
-                ) : null}
               </article>
-            ))}
-          </div>
-        ) : (
-          <p className="public-profile-state">{copy.empty}</p>
-        )}
-      </section>
-    </main>
+            ))
+          ) : (
+            <p className="nc-loading">{copy.empty}</p>
+          )}
+        </section>
+      </main>
+    </>
   );
 }
