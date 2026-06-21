@@ -12,7 +12,7 @@ vi.mock("../lib/queue.js", () => queueMocks);
 
 import { createAdminMeaningGraphRoutes } from "./admin-meaning-graph.js";
 
-const user = { id: "00000000-0000-4000-8000-000000000001" };
+const user = { id: "00000000-0000-4000-8000-000000000001", email: "admin@example.com" };
 
 function authMiddleware() {
   return async (c: any, next: () => Promise<void>) => {
@@ -81,6 +81,20 @@ function makeJob(overrides: Record<string, any> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.WAKA_ADMIN_EMAILS = user.email;
+});
+
+describe("admin authorization", () => {
+  it("forbids authenticated users who are not in the admin allowlist", async () => {
+    process.env.WAKA_ADMIN_EMAILS = "other-admin@example.com";
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Admin authorization required" });
+    expect(queueMocks.enqueueMeaningGraphRebuild).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/admin/meaning-graph/rebuild", () => {

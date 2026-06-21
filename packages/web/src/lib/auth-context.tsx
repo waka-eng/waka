@@ -86,6 +86,7 @@ function readCachedUser(): ApiUser | null {
           typeof parsed.onboardingCompletedAt === "string"
             ? parsed.onboardingCompletedAt
             : null,
+        isAdmin: parsed.isAdmin === true,
       };
     }
     return null;
