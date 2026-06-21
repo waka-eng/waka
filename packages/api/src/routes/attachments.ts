@@ -61,6 +61,8 @@ import {
 import { getDb } from "../lib/db.js";
 import { persistSingleLocalInspirationScoreById } from "../lib/inspiration-scores.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { materializeSignalDocument } from "../vault/materialize.js";
+import { getRuntimeVault } from "../vault/runtime.js";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -703,6 +705,21 @@ attachmentsRoutes.post("/", async (c) => {
     });
   } catch (err) {
     console.warn("[attachments] failed to refresh inspiration scores:", err);
+  }
+
+  try {
+    await materializeSignalDocument({
+      db,
+      vault: getRuntimeVault(),
+      userId: user.id,
+      signalId: parsed.data.inspirationId,
+    });
+  } catch (err) {
+    console.warn("[attachments] failed to materialize signal document:", {
+      inspirationId: parsed.data.inspirationId,
+      attachmentId: inserted.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   return c.json({ attachment: attachmentResponse(inserted) }, 201);
