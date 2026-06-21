@@ -1,0 +1,99 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Avoid GitHub's 2026 Node 20 actions-runtime deprecation warning while still
+  # building the app itself with Node 20 below.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PNPM_VERSION: "9.12.0"
+  NODE_VERSION: "20"
+  SST_STAGE: production
+  AWS_REGION: us-west-2
+  AWS_DEFAULT_REGION: us-west-2
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
+  AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+  AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+  AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
+  DB_CONNECTION_URL: ${{ secrets.DB_CONNECTION_URL }}
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+jobs:
+  deploy:
+    name: SST deploy waka.im
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate deployment environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            AWS_ACCESS_KEY_ID
+            AWS_SECRET_ACCESS_KEY
+            AWS_REGION
+            AUTH_GOOGLE_ID
+            AUTH_GOOGLE_SECRET
+            AUTH_SECRET
+            JWT_SECRET
+            DB_CONNECTION_URL
+            GEMINI_API_KEY
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required production deployment environment: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Set SST production secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm sst secret set GoogleClientId "$AUTH_GOOGLE_ID" --stage "$SST_STAGE"
+          pnpm sst secret set GoogleClientSecret "$AUTH_GOOGLE_SECRET" --stage "$SST_STAGE"
+          pnpm sst secret set SessionSecret "$AUTH_SECRET" --stage "$SST_STAGE"
+          pnpm sst secret set JwtSecret "$JWT_SECRET" --stage "$SST_STAGE"
+          pnpm sst secret set DbConnectionUrl "$DB_CONNECTION_URL" --stage "$SST_STAGE"
+          pnpm sst secret set GeminiApiKey "$GEMINI_API_KEY" --stage "$SST_STAGE"
+
+      - name: Apply production database migrations
+        run: pnpm db:migrate
+
+      - name: Deploy SST production stage
+        run: pnpm sst deploy --stage "$SST_STAGE"

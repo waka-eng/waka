@@ -59,6 +59,13 @@
  * "PermanentRedirect" at PUT time.
  */
 const AWS_REGION = "us-west-2";
+const PUBLIC_DOMAINS: Partial<Record<string, string>> = {
+  development: "dev.waka.im",
+  dev: "dev.waka.im",
+  production: "waka.im",
+};
+const WAKA_CERT_ARN =
+  "arn:aws:acm:us-east-1:182498323408:certificate/742541cb-5e84-4d88-9e5b-d2695f92df12";
 
 export default $config({
   app(input) {
@@ -194,9 +201,10 @@ export default $config({
      * was fine, the role just had no permission.
      *
      */
+    const publicDomain = PUBLIC_DOMAINS[$app.stage];
+    const publicWebUrl = publicDomain ? `https://${publicDomain}` : undefined;
+    const publicApiUrl = publicWebUrl;
     const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
-    const publicWebUrl = isDevelopmentDomain ? "https://dev.waka.im" : undefined;
-    const publicApiUrl = isDevelopmentDomain ? "https://dev.waka.im" : undefined;
 
     const api = new sst.aws.Function("Api", {
       handler: "packages/api/src/lambda.handler",
@@ -252,16 +260,16 @@ export default $config({
 
     const web = new sst.aws.StaticSite("Web", {
       path: "packages/web",
-      ...(isDevelopmentDomain
+      ...(publicDomain
         ? {
             domain: {
-              name: "dev.waka.im",
-              // Route53 already has a live dev.waka.im record from the legacy
-              // CloudFront distribution. Let SST attach the CloudFront alias
-              // using the existing ACM cert, then we manually UPSERT Route53
-              // after deployment to avoid unmanaged-record create conflicts.
+              name: publicDomain,
+              // Route53 already has live waka.im/dev.waka.im records from the
+              // legacy CloudFront distributions. Let SST attach the CloudFront
+              // alias using the existing ACM cert, then manually UPSERT
+              // Route53 after deployment to avoid unmanaged-record conflicts.
               dns: false,
-              cert: "arn:aws:acm:us-east-1:182498323408:certificate/742541cb-5e84-4d88-9e5b-d2695f92df12",
+              cert: WAKA_CERT_ARN,
             },
           }
         : {}),
@@ -273,7 +281,7 @@ export default $config({
         // Vite inlines anything prefixed VITE_ at build time. We expose only
         // the API URL — never any secret — so the SPA can talk to the
         // Function URL without hard-coding a value.
-        VITE_API_URL: isDevelopmentDomain ? "" : api.url,
+        VITE_API_URL: publicDomain ? "" : api.url,
       },
       dev: {
         command: "pnpm --filter @waka/web dev",
