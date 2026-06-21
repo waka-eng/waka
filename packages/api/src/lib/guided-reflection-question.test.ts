@@ -46,11 +46,15 @@ describe("guided reflection question contract", () => {
     const request = buildGuidedReflectionQuestionRequest(baseInput);
 
     expect(request.generationConfig.responseMimeType).toBe("application/json");
+    expect(request.generationConfig.maxOutputTokens).toBe(512);
+    expect(request.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 256 });
     expect(request.generationConfig.responseSchema).toEqual({
       type: "OBJECT",
       properties: { question: { type: "STRING" } },
       required: ["question"],
     });
+    expect(request.systemInstruction.parts[0]!.text).toContain("tacit knowledge");
+    expect(request.systemInstruction.parts[0]!.text).toContain("Do not output your reasoning");
 
     const prompt = JSON.parse(request.contents[0]!.parts[0]!.text) as {
       inspiration: { untrustedText: string; untrustedHighlights: string[] };
