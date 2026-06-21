@@ -21,6 +21,7 @@ import {
   wowMomentInspirations,
   wowMoments,
 } from "../db/index.js";
+import { requireAdminUser } from "../lib/admin-auth.js";
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 
@@ -41,6 +42,7 @@ export interface AdminBackgroundJobsRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   adminGate?: MiddlewareHandler<AuthEnv>;
+  adminAuthorization?: MiddlewareHandler<AuthEnv>;
 }
 
 export interface AdminBackgroundJobSummary {
@@ -277,6 +279,7 @@ export function createAdminBackgroundJobsRoutes(
 
   routes.use("*", deps.adminGate ?? requireAdminBackgroundJobsEnabled);
   routes.use("*", deps.authMiddleware ?? requireAuth);
+  routes.use("*", deps.adminAuthorization ?? requireAdminUser);
 
   routes.get("/", async (c) => {
     const status = parseStatus(c.req.query("status"));

@@ -67,10 +67,11 @@ class QueryStub<T> implements PromiseLike<T> {
   }
 }
 
-function refreshDbStub() {
+function refreshDbStub(preferredLocale = "en-US") {
   const insertedWowMoments: unknown[] = [];
   const insertedEvidenceLinks: unknown[] = [];
   const selectResults = [
+    [{ preferredLocale }],
     [
       node({
         id: "public-building-room",
@@ -495,6 +496,52 @@ describe("refreshTopOfMindNotesFromContextGraph", () => {
     expect(insertedWowMoments[0]).toMatchObject({
       title: "people who make courage feel normal",
       beliefStatement: "people who make courage feel normal",
+      locale: "en-US",
+      wowScore: 88,
+    });
+  });
+
+  it("propagates ko-KR into generation, synthesis, and persisted active notes", async () => {
+    const { db, insertedWowMoments } = refreshDbStub("ko-KR");
+    const generateTopOfMindNotes = vi.fn(async (input: TopOfMindNoteGenerationInput) =>
+      rankTopOfMindRefreshCandidates(input),
+    );
+    const synthesizeAmbition = vi.fn().mockResolvedValue({
+      firstPersonPostItCandidate: "용기가 평범해지는 사람들 곁에서 일을 만들기",
+      memoryState: "active",
+      environmentDirection:
+        "공개적으로 만들고 내보내는 일이 자연스럽게 여겨지는 사람들과 방이 이 야망을 지지한다.",
+      rejectedEnvironment:
+        "허락과 포장을 먼저 요구하며 움직임을 사적인 계획으로만 남기는 방은 이 감각을 약하게 만든다.",
+      evidenceRationale:
+        "저장된 두 신호는 도시라는 범주보다 보이는 일을 평범하게 만드는 동료를 향한다.",
+      confidence: 88,
+      rejectedAlternativeInterpretation:
+        "얕은 해석은 도시 취향이지만 더 정확한 해석은 용기를 보통으로 만드는 사람들에 대한 끌림이다.",
+    });
+
+    const result = await refreshTopOfMindNotesFromContextGraph(db as never, {
+      userId,
+      now,
+      modelProvider: {
+        generateTopOfMindNotes,
+        synthesizeAmbition,
+      } as never,
+    });
+
+    expect(result.generated).toBe(1);
+    expect(generateTopOfMindNotes).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredLocale: "ko-KR" }),
+    );
+    expect(synthesizeAmbition).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredLocale: "ko-KR" }),
+    );
+    expect(insertedWowMoments[0]).toMatchObject({
+      title: "용기가 평범해지는 사람들 곁에서 일을 만들기",
+      beliefStatement: "용기가 평범해지는 사람들 곁에서 일을 만들기",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "ko-KR",
       wowScore: 88,
     });
   });

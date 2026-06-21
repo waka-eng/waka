@@ -391,6 +391,12 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
     // openid+email scope guarantees this; if missing, something is very wrong.
     return failTo("invalid_id_token");
   }
+  if (claims.email_verified !== true) {
+    // Never link or create a WAKA account from an unverified email claim.
+    // Google `sub` is stable, but our fallback/linking path below uses email
+    // for account ownership, so the email must be provider-verified first.
+    return failTo("unverified_email");
+  }
 
   // -------------------------------------------------------------------------
   // Upsert the user row.

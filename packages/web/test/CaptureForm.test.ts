@@ -216,7 +216,7 @@ describe("CaptureForm multi-input quick capture", () => {
     await renderCaptureForm();
 
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.placeholder).toBe(
-      "What almost slipped away?",
+      "What caught your attention?",
     );
     expect(container?.querySelector("#capResonance")).toBeNull();
     expect(container?.querySelector("#capDraftState")?.textContent).toContain("Tip: highlight what inspired you.");

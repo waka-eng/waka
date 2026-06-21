@@ -32,9 +32,10 @@ import { readStoredLocale, t } from "../lib/locales";
 
 export interface RequireAuthProps {
   children: ReactNode;
+  requireAdmin?: boolean;
 }
 
-export function RequireAuth({ children }: RequireAuthProps): JSX.Element {
+export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
   const locale = readStoredLocale();
@@ -83,6 +84,10 @@ export function RequireAuth({ children }: RequireAuthProps): JSX.Element {
   }
 
   if (user?.onboardingCompletedAt && location.pathname === "/onboarding") {
+    return <Navigate to="/" replace />;
+  }
+
+  if (requireAdmin && !user?.isAdmin) {
     return <Navigate to="/" replace />;
   }
 

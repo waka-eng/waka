@@ -122,9 +122,7 @@ export function SavedInspirationDetail({
           {primaryImageUrl ? (
             <img src={primaryImageUrl} alt="" className="memory-detail-source-image" loading="lazy" />
           ) : (
-            <div className="memory-detail-source-placeholder" aria-hidden="true">
-              <span>{primaryAttachment?.label ?? sourceLabel ?? "Saved inspiration"}</span>
-            </div>
+            <div className="memory-detail-source-placeholder" aria-hidden="true" />
           )}
           {primaryAttachment ? (
             <div className="memory-detail-source-caption">
@@ -141,7 +139,6 @@ export function SavedInspirationDetail({
           >
             ← back to {backLabel}
           </button>
-          <span>saved inspiration</span>
           <h2 id="savedInspirationDetailTitle">{title}</h2>
           <p>{meta}</p>
         </header>
@@ -169,7 +166,6 @@ export function SavedInspirationDetail({
         </section>
       ) : (
         <section className="memory-stack-readable memory-stack-readable--mockup" aria-label={t(locale, "detailInspirationDetails")}>
-          <span>{t(locale, "detailInspirationDetails")}</span>
           <p
             className="signal-revisit-raw memory-readable-signal"
             onMouseUp={onTextMouseUp}

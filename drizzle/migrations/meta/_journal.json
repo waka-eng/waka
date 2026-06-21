@@ -124,43 +124,57 @@
     {
       "idx": 17,
       "version": "7",
+      "when": 1779836400000,
+      "tag": "0017_meaning_graph_rebuild_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
       "when": 1780001200000,
       "tag": "0018_attachment_enrichment",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 19,
       "version": "7",
       "when": 1780270200000,
       "tag": "0019_add_feedback",
       "breakpoints": true
     },
     {
-      "idx": 19,
+      "idx": 20,
       "version": "7",
       "when": 1781197200000,
       "tag": "0020_signal_table_cutover",
       "breakpoints": true
     },
     {
-      "idx": 20,
+      "idx": 21,
       "version": "7",
       "when": 1781197300000,
       "tag": "0021_drop_legacy_inspirations",
       "breakpoints": true
     },
     {
-      "idx": 21,
+      "idx": 22,
       "version": "7",
       "when": 1781200000000,
       "tag": "0022_documents_index",
       "breakpoints": true
     },
     {
-      "idx": 22,
+      "idx": 23,
       "version": "7",
       "when": 1781943373631,
       "tag": "0023_user_onboarding_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782002100000,
+      "tag": "0024_meaning_graph_rebuild_job_index",
       "breakpoints": true
     }
   ]

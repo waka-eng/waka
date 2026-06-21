@@ -68,6 +68,8 @@ function makeDeleteDb() {
 }
 
 beforeEach(() => {
+  delete process.env.WAKA_ADMIN_EMAILS;
+  delete process.env.WAKA_ADMIN_ALLOWLIST;
   authState.user = {
     id: "00000000-0000-4000-8000-000000000001",
     email: "user@example.com",
@@ -78,6 +80,40 @@ beforeEach(() => {
   };
   dbState.db = {};
   vi.clearAllMocks();
+});
+
+describe("GET /api/auth/me", () => {
+  it("marks allowlisted users as admins", async () => {
+    process.env.WAKA_ADMIN_EMAILS = "admin@example.com, user@example.com";
+
+    const response = await app().request("/api/auth/me", {
+      headers: { Authorization: "Bearer test-token" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      user: {
+        email: "user@example.com",
+        isAdmin: true,
+      },
+    });
+  });
+
+  it("marks authenticated non-admin users as non-admin", async () => {
+    process.env.WAKA_ADMIN_EMAILS = "admin@example.com";
+
+    const response = await app().request("/api/auth/me", {
+      headers: { Authorization: "Bearer test-token" },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      user: {
+        email: "user@example.com",
+        isAdmin: false,
+      },
+    });
+  });
 });
 
 describe("PATCH /api/auth/me/profile", () => {

@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   MEANING_GRAPH_COPY,
   filterMeaningGraphNodes,
+  formatRebuildJobStatus,
   meaningGraphAmbitionLabel,
   meaningGraphContextTypeLabel,
   meaningGraphDragModeSummary,
   meaningGraphMemoryStateLabel,
+  meaningGraphRebuildPhaseLabel,
   relationshipLabel,
   relationshipSummary,
   rebuildJobResult,
@@ -141,6 +143,52 @@ describe("meaning graph Korean admin copy", () => {
     expect(renderedKoreanHelperCopy).not.toMatch(
       /Individual node dragging|Node dragging is disabled|points to|supports|challenges|asks for|reactivates/i,
     );
+  });
+
+  it("localizes hidden fallback and recent-status copy used by the admin DOM", () => {
+    const koreanFallbackAndStatusCopy = [
+      MEANING_GRAPH_COPY["ko-KR"].unknownSource,
+      MEANING_GRAPH_COPY["ko-KR"].unknownTarget,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusProcessing,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusAddedNotesAndRelationships,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusAddedContextNodes,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusNotAdded,
+      MEANING_GRAPH_COPY["ko-KR"].noReasonStored,
+    ].join(" ");
+
+    expect(koreanFallbackAndStatusCopy).not.toMatch(
+      /Unknown source|unknown target|Processing|Added notes and relationships|Added context nodes|Not added to graph|No reason stored/i,
+    );
+    expect(koreanFallbackAndStatusCopy).toContain("알 수 없는 출처");
+    expect(koreanFallbackAndStatusCopy).toContain("그래프에 추가되지 않음");
+  });
+
+  it("localizes Korean rebuild status and suppresses raw English server errors", () => {
+    expect(meaningGraphRebuildPhaseLabel("processing", "ko-KR")).toBe("그래프 처리");
+    expect(
+      formatRebuildJobStatus(
+        rebuildJob({
+          status: "running",
+          payload: {
+            phase: "processing",
+            totalInspirations: 5,
+            processedInspirations: 2,
+          },
+        }),
+        "ko-KR",
+      ),
+    ).toBe("다시 만들기 진행 중: 그래프 처리 (2 / 5). 완료되면 이 페이지가 새로고침됩니다.");
+
+    expect(
+      formatRebuildJobStatus(
+        rebuildJob({
+          status: "failed",
+          lastError: "Failed to enqueue context graph rebuild",
+          payload: {},
+        }),
+        "ko-KR",
+      ),
+    ).toBe("다시 만들기 실패. 서버 로그를 확인하세요.");
   });
 
   it("preserves English helper copy for en-US admins", () => {

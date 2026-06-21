@@ -15,7 +15,7 @@ import type { SupportedLocale } from "../lib/locales";
 const DELETE_CONFIRMATION = "DELETE";
 
 export default function ProfilePage(): JSX.Element {
-  const { user, updateProfile, deleteAccount } = useAuth();
+  const { user, logout, updateProfile, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name ?? "");
   const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
@@ -67,14 +67,37 @@ export default function ProfilePage(): JSX.Element {
     }
   }
 
+  async function handleSignOut(): Promise<void> {
+    setStatus(null);
+    setError(null);
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileSignOutError"));
+    }
+  }
+
   return (
-    <main className="login-shell">
-      <section className="login-card" aria-labelledby="profile-title">
-        <p className="login-eyebrow">{t(locale, "profileEyebrow")}</p>
-        <h1 id="profile-title" className="login-title">
-          {t(locale, "profileTitle")}
-        </h1>
-        <p className="login-subtitle">{user?.email}</p>
+    <main className="login-shell profile-shell">
+      <section className="login-card profile-card" aria-labelledby="profile-title">
+        <header className="profile-header">
+          <div>
+            <p className="login-eyebrow">{t(locale, "profileEyebrow")}</p>
+            <h1 id="profile-title" className="login-title">
+              {t(locale, "profileTitle")}
+            </h1>
+            <p className="login-subtitle profile-email">{user?.email}</p>
+          </div>
+          <button
+            className="profile-signout-button"
+            type="button"
+            disabled={submitting || deleting}
+            onClick={handleSignOut}
+          >
+            {t(locale, "signOut")}
+          </button>
+        </header>
         {status ? <div className="form-success" role="status">{status}</div> : null}
         {error ? <div className="form-error" role="alert">{error}</div> : null}
         <form className="login-form" onSubmit={handleSubmit} noValidate>
@@ -114,30 +137,32 @@ export default function ProfilePage(): JSX.Element {
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>
         </form>
-        <div className="login-divider" role="separator" aria-orientation="horizontal">
-          <span className="login-divider__line" aria-hidden="true" />
-          <span className="login-divider__label">{t(locale, "profileDangerZone")}</span>
-          <span className="login-divider__line" aria-hidden="true" />
-        </div>
-        <p className="login-subtitle">{t(locale, "profileDeleteHint")}</p>
-        <label className="field">
-          <span className="field-label">{t(locale, "profileDeleteConfirmLabel")}</span>
-          <input
-            className="field-input"
-            type="text"
-            value={deleteText}
-            disabled={deleting}
-            onChange={(event) => setDeleteText(event.currentTarget.value)}
-          />
-        </label>
-        <button
-          className="btn-google"
-          type="button"
-          disabled={deleteText !== DELETE_CONFIRMATION || deleting}
-          onClick={handleDelete}
-        >
-          {deleting ? t(locale, "profileDeleting") : t(locale, "profileDelete")}
-        </button>
+        <section className="profile-danger-panel" aria-labelledby="profile-danger-title">
+          <div className="profile-danger-heading">
+            <p className="login-eyebrow" id="profile-danger-title">
+              {t(locale, "profileDangerZone")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileDeleteHint")}</p>
+          </div>
+          <label className="field">
+            <span className="field-label">{t(locale, "profileDeleteConfirmLabel")}</span>
+            <input
+              className="field-input"
+              type="text"
+              value={deleteText}
+              disabled={deleting}
+              onChange={(event) => setDeleteText(event.currentTarget.value)}
+            />
+          </label>
+          <button
+            className="btn-destructive"
+            type="button"
+            disabled={deleteText !== DELETE_CONFIRMATION || deleting}
+            onClick={handleDelete}
+          >
+            {deleting ? t(locale, "profileDeleting") : t(locale, "profileDelete")}
+          </button>
+        </section>
         <p className="login-footer">
           <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>
         </p>

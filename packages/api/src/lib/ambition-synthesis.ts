@@ -3,6 +3,7 @@ import type {
   TopOfMindRefreshCandidate,
   TopOfMindRefreshEvidenceInput,
 } from "./top-of-mind-refresh.js";
+import type { SupportedLocale } from "./locales.js";
 
 export const ambitionSynthesisTriggerValues = [
   "qualified_cluster",
@@ -38,6 +39,7 @@ export interface AmbitionSynthesisSavedSignalInput {
 
 export interface AmbitionSynthesisInput {
   userId: string;
+  preferredLocale: SupportedLocale;
   trigger: AmbitionSynthesisTrigger;
   synthesisKey: string;
   contextNode: {
@@ -124,6 +126,7 @@ const CONCRETE_AMBITION_OBJECT_PATTERN =
   /\b(people|peers|rooms?|places?|city|cities|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b/i;
 const INTERPRETABLE_POST_IT_PATTERN =
   /\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b/i;
+const HANGUL_PATTERN = /[\u3131-\u318E\uAC00-\uD7A3]/u;
 
 function safeExceptionName(error: unknown): SafeExceptionName | undefined {
   if (!(error instanceof Error)) {
@@ -294,6 +297,7 @@ export function createAmbitionSynthesisInput(
 
   return {
     userId: input.userId,
+    preferredLocale: candidate.preferredLocale,
     trigger: input.trigger,
     synthesisKey: `ambition_synthesis:v1:${candidate.idempotencyKey}:${candidate.memoryPattern.state}`,
     contextNode: {
@@ -392,6 +396,22 @@ export function isSpecificAmbitionSynthesisOutput(
   }
   if (output.rejectedAlternativeInterpretation.trim().length === 0) return false;
   return PERSONAL_EDGE_PATTERN.test(text);
+}
+
+export function isLocaleSafeAmbitionSynthesisOutput(
+  output: AmbitionSynthesisOutput,
+  preferredLocale: SupportedLocale,
+): boolean {
+  if (preferredLocale !== "ko-KR") return isSpecificAmbitionSynthesisOutput(output);
+
+  const userFacingFields = [
+    output.firstPersonPostItCandidate,
+    output.environmentDirection,
+    output.rejectedEnvironment,
+    output.evidenceRationale,
+    output.rejectedAlternativeInterpretation,
+  ];
+  return userFacingFields.every((field) => HANGUL_PATTERN.test(field));
 }
 
 export function applyAmbitionSynthesisOutput(
@@ -506,7 +526,7 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
       continue;
     }
 
-    if (output && isSpecificAmbitionSynthesisOutput(output)) {
+    if (output && isLocaleSafeAmbitionSynthesisOutput(output, synthesisInput.preferredLocale)) {
       synthesized += 1;
       nextCandidates.push(applyAmbitionSynthesisOutput(candidate, output));
       continue;

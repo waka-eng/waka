@@ -43,6 +43,8 @@ const mockAuthState = vi.hoisted(() => ({
       email: "river@example.com",
       name: "River",
       preferredLocale: "en-US" as "en-US" | "ko-KR",
+      onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
+      isAdmin: true,
     },
     isLoading: false,
     isAuthenticated: true,
@@ -55,6 +57,8 @@ const mockAuthState = vi.hoisted(() => ({
       email: "river@example.com",
       name: "River",
       preferredLocale: "en-US" as "en-US" | "ko-KR",
+      onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
+      isAdmin: true,
     })),
   },
 }));
@@ -415,6 +419,7 @@ afterEach(() => {
   mountedContainer = null;
   mockAuthState.value.user.name = "River";
   mockAuthState.value.user.preferredLocale = "en-US";
+  mockAuthState.value.user.isAdmin = true;
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
   }
@@ -525,6 +530,22 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 }
 
 describe("HomePage current home experience", () => {
+  it("uses the home chrome for profile access instead of language or sign-out controls", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+
+    const chrome = container.querySelector<HTMLElement>(".nc-language-controls");
+    expect(chrome).not.toBeNull();
+    expect(chrome?.querySelector(".nc-lang-btn")).toBeNull();
+    expect(chrome?.textContent).toContain("Profile");
+    expect(chrome?.textContent).not.toContain("EN");
+    expect(chrome?.textContent).not.toContain("한");
+    expect(container.querySelector<HTMLAnchorElement>('a.nc-profile-link[href="/profile"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Sign out");
+    expect(mockAuthState.value.updatePreferredLocale).not.toHaveBeenCalled();
+  });
+
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
     const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
     expect(drawerObject?.textContent).toContain(`${count} saved`);
@@ -562,6 +583,38 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
+  it("renders saved inspiration detail with a first-sentence full-width title and no left-side labels", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          textPreview: "Architecture essay about bridge rhythms in city walks. This second sentence stays only in the readable body.",
+          highlightedSnippets: [],
+        },
+        sampleSavedSignals[1],
+      ],
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        rawText: "Architecture essay about bridge rhythms in city walks. This second sentence stays only in the readable body.",
+        highlightedSnippets: [],
+      },
+    });
+    vi.mocked(fetchReflections).mockResolvedValue([]);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.querySelector(".memory-detail-hero--full-title h2")?.textContent).toBe(
+      "Architecture essay about bridge rhythms in city walks.",
+    );
+    expect(detail.querySelector(".memory-detail-hero--full-title > span")).toBeNull();
+    expect(detail.querySelector(".memory-contents-highlight-layer")).toBeNull();
+    expect(detail.textContent).not.toContain("saved inspiration · Inspiration details");
+    expect(detail.querySelector<HTMLTextAreaElement>(".memory-readable-signal")?.value).toContain(
+      "This second sentence stays only in the readable body.",
+    );
+  });
+
   it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([]);
@@ -596,7 +649,7 @@ describe("HomePage current home experience", () => {
 
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(fetchReflections).toHaveBeenCalledWith("insp-1");
-    expect(detail.textContent).toContain("Inspiration details");
+    expect(detail.textContent).not.toContain("Inspiration details");
     expect(detail.textContent).toContain("Reflect Deeper analysis");
     expect(detail.textContent).not.toContain("2 of 2 answered");
     expect(detail.textContent).toContain("Read against the original inspiration");
@@ -910,8 +963,10 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
-    expect(container.textContent).toContain("Most inspiration disappears.");
-    expect(container.textContent).toContain("Waka caught what almost slipped away.");
+    expect(container.textContent).toContain("Saved inspirations start to form a map.");
+    expect(container.textContent).toContain("provisional notes from the things they saved");
+    expect(container.textContent).not.toContain("Most inspiration disappears.");
+    expect(container.textContent).not.toContain("Waka caught what almost slipped away.");
     expect(container.textContent).not.toContain("They caught what almost slipped away.");
     expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
   });
@@ -1294,7 +1349,7 @@ describe("HomePage current home experience", () => {
     expect(detail).not.toBeNull();
     expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
-    expect(detail?.textContent).toContain("Inspiration details");
+    expect(detail?.textContent).not.toContain("Inspiration details");
     expect(detail?.textContent).not.toContain("Signal packet");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
@@ -1578,38 +1633,33 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river님의 탑오브마인드");
     expect(container.textContent).not.toContain("river's top of mind");
-    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).toContain("저장한 영감들이 조금씩 하나의 지도를 만듭니다.");
+    expect(container.textContent).not.toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).toContain("어디에든 놓기 — 링크, 이미지, 메모");
     expect(container.textContent).not.toContain("Drop anywhere — link, image, or note");
     expect(container.querySelector(".nc-language-controls")?.getAttribute("aria-label")).toBe("홈 컨트롤");
-    expect(container.querySelector(".nc-lang--top")?.getAttribute("aria-label")).toBe("언어");
+    expect(container.querySelector(".nc-profile-link")?.getAttribute("aria-label")).toBe("프로필");
   });
 
-  it("localizes the logout affordance in Korean", async () => {
+  it("localizes the home profile affordance in Korean", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")?.title).toBe(
-      "River 로그아웃",
-    );
+    const profileLink = container.querySelector<HTMLAnchorElement>('a.nc-profile-link[href="/profile"]');
+    expect(profileLink?.title).toBe("프로필");
+    expect(profileLink?.textContent).toBe("프로필");
+    expect(container.textContent).not.toContain("로그아웃");
   });
 
-  it("lets the language buttons persist a Korean locale preference", async () => {
+  it("keeps language preference changes on the Profile page instead of Home chrome", async () => {
     setApiFixtures();
     const container = await renderHomePage();
-    const koreanButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-lang-btn")).find(
-      (button) => button.textContent === "한",
-    );
 
-    expect(koreanButton).not.toBeNull();
-    await act(async () => {
-      koreanButton?.click();
-    });
-    expect(mockAuthState.value.updatePreferredLocale).toHaveBeenCalledWith("ko-KR");
-    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("Waka가 사라지기 전에 붙잡은 조각들이");
+    expect(container.querySelector(".nc-lang-btn")).toBeNull();
+    expect(container.querySelector<HTMLAnchorElement>('a.nc-profile-link[href="/profile"]')).not.toBeNull();
+    expect(mockAuthState.value.updatePreferredLocale).not.toHaveBeenCalled();
   });
 
   it("keeps the inspiration evidence sticky text large enough to read", () => {
@@ -2102,7 +2152,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".memory-window")).toBeNull();
     expect(detail.textContent).not.toContain("highlighted scrap");
-    expect(detail.textContent).toContain("saved inspiration");
+    expect(detail.textContent).not.toContain("saved inspiration");
     expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
@@ -2786,6 +2836,15 @@ describe("HomePage current home experience", () => {
     const adminEntry = container.querySelector<HTMLAnchorElement>(".admin-entry-pill");
     expect(adminEntry).not.toBeNull();
     expect(adminEntry?.getAttribute("href")).toBe("/admin");
+  });
+
+  it("hides the admin inspection entry for authenticated non-admin users", async () => {
+    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
+    mockAuthState.value.user.isAdmin = false;
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.querySelector<HTMLAnchorElement>(".admin-entry-pill")).toBeNull();
   });
 
   it("does not reintroduce the old internal WOW STATUS Home tab", async () => {

@@ -778,7 +778,8 @@ export type ApiTopOfMindNoteStatus =
   | "active"
   | "dismissed"
   | "stale"
-  | "replaced";
+  | "replaced"
+  | "unavailable";
 
 export type ApiAmbitionDimension =
   | "place"

@@ -39,6 +39,7 @@ const cachedUser = {
   name: "Cached User",
   preferredLocale: "en-US" as const,
   onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+  isAdmin: false,
 };
 
 let mountedRoot: Root | null = null;
@@ -146,6 +147,14 @@ async function renderAuthRoutes({
                 createElement("main", null, "PROTECTED HOME DATA"),
               ),
             }),
+            createElement(Route, {
+              path: "/admin",
+              element: createElement(
+                RequireAuth,
+                { requireAdmin: true },
+                createElement("main", null, "ADMIN DATA"),
+              ),
+            }),
           ),
         ),
       ),
@@ -206,6 +215,7 @@ describe("auth boundary", () => {
         name: "Fresh User",
         preferredLocale: "en-US",
         onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+        isAdmin: false,
       },
     });
 
@@ -241,12 +251,44 @@ describe("auth boundary", () => {
       name: "",
       preferredLocale: "ko-KR",
       onboardingCompletedAt: null,
+      isAdmin: false,
     });
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
     expect(container.textContent).toContain("ONBOARDING");
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
+  });
+
+  it("redirects authenticated non-admin users away from admin routes", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue({
+      id: "fresh-user",
+      email: "fresh@example.com",
+      name: "Fresh User",
+      preferredLocale: "en-US",
+      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+      isAdmin: false,
+    });
+
+    const container = await renderAuthRoutes({ initialPath: "/admin" });
+
+    expect(container.textContent).toContain("PROTECTED HOME DATA");
+    expect(container.textContent).not.toContain("ADMIN DATA");
+  });
+
+  it("allows authenticated admin users through admin routes", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue({
+      id: "admin-user",
+      email: "admin@example.com",
+      name: "Admin User",
+      preferredLocale: "en-US",
+      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+      isAdmin: true,
+    });
+
+    const container = await renderAuthRoutes({ initialPath: "/admin" });
+
+    expect(container.textContent).toContain("ADMIN DATA");
   });
 
   it("persists locale preference updates through auth state and localStorage", async () => {
@@ -256,6 +298,7 @@ describe("auth boundary", () => {
       name: "Fresh User",
       preferredLocale: "en-US",
       onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+      isAdmin: false,
     });
     vi.mocked(updateAuthPreferences).mockResolvedValue({
       user: {
@@ -264,6 +307,7 @@ describe("auth boundary", () => {
         name: "Fresh User",
         preferredLocale: "ko-KR",
         onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
+        isAdmin: false,
       },
     });
 

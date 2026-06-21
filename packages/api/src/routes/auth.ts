@@ -27,6 +27,7 @@ import {
   signSessionToken,
   verifyPassword,
 } from "../lib/auth.js";
+import { isAdminUser } from "../lib/admin-auth.js";
 import { getDb } from "../lib/db.js";
 import { DEFAULT_LOCALE, normalizeSupportedLocale, supportedLocaleSchema } from "../lib/locales.js";
 import {
@@ -258,6 +259,7 @@ authRoutes.post("/signup", async (c) => {
         name: inserted.name,
         preferredLocale: normalizeSupportedLocale(inserted.preferredLocale),
         onboardingCompletedAt: inserted.onboardingCompletedAt?.toISOString() ?? null,
+        isAdmin: isAdminUser(inserted),
       },
       token,
     },
@@ -362,6 +364,7 @@ authRoutes.post("/login", async (c) => {
         name: candidate.name,
         preferredLocale: normalizeSupportedLocale(candidate.preferredLocale),
         onboardingCompletedAt: candidate.onboardingCompletedAt?.toISOString() ?? null,
+        isAdmin: isAdminUser(candidate),
       },
       token,
     },
@@ -390,6 +393,7 @@ authRoutes.get("/me", requireAuth, (c) => {
       avatarUrl: user.avatarUrl,
       preferredLocale: user.preferredLocale,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+      isAdmin: isAdminUser(user),
     },
   });
 });

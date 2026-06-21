@@ -224,4 +224,33 @@ describe("top-of-mind note compatibility model", () => {
 
     expect(note.body).toBe(legitimateProse);
   });
+
+  it("maps fully Hangul generated Korean moments without English fallback text", () => {
+    const note = topOfMindNoteFromWowMoment({
+      moment: {
+        ...baseMoment,
+        title: "완벽함보다 먼저 작게 공개하는 실험",
+        why:
+          "Ambient signal: 완벽함보다 먼저 작게 공개하는 실험. " +
+          "Matched environment: 동료가 초안을 보고 함께 고쳐 주는 방. " +
+          "Anti-environment: 준비가 끝날 때까지 혼자 숨기는 환경. " +
+          "Evidence rationale: 저장된 신호들이 공개 실험의 용기를 반복해서 보여 줍니다.",
+        beliefStatement: "완벽함보다 먼저 작게 공개하는 실험",
+      },
+      preferredLocale: "ko-KR",
+      relatedSignalIds: ["signal-1"],
+    });
+
+    expect(note).toMatchObject({
+      title: "완벽함보다 먼저 작게 공개하는 실험",
+      ambientSignal: "완벽함보다 먼저 작게 공개하는 실험",
+      matchedEnvironment: "동료가 초안을 보고 함께 고쳐 주는 방.",
+      antiEnvironment: "준비가 끝날 때까지 혼자 숨기는 환경.",
+      evidenceRationale: "저장된 신호들이 공개 실험의 용기를 반복해서 보여 줍니다.",
+      status: "active",
+      relatedSignalIds: ["signal-1"],
+    });
+    expect(JSON.stringify(note)).not.toContain("a room where unfinished ambition is allowed");
+    expect(JSON.stringify(note)).not.toContain("people who make courage feel normal");
+  });
 });

@@ -35,7 +35,7 @@
   "savedStatus": "saved",
   "resultsLabelSingular": "inspiration",
   "resultsLabelPlural": "inspirations",
-  "capturePlaceholder": "What almost slipped away?",
+  "capturePlaceholder": "What caught your attention?",
   "emptyCapturePrompt": "Add what hit: a note, link, or image to save.",
   "unsupportedImage": "This image is too large or not supported.",
   "partialAttachmentFailure": "Saved — {count} {count, plural, one {attachment} other {attachments}} failed. Your inspiration is still safe.",
@@ -262,5 +262,6 @@
   "profileDelete": "Delete account",
   "profileDeleting": "Deleting…",
   "profileDeleteError": "Failed to delete account.",
+  "profileSignOutError": "Failed to sign out.",
   "profileBackHome": "Back home"
 }

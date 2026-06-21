@@ -229,6 +229,84 @@ describe("bounded ambition synthesis", () => {
     });
   });
 
+  it("rejects English-only synthesis for ko-KR instead of persisting a deterministic fallback", async () => {
+    const englishOnly: AmbitionSynthesisOutput = {
+      firstPersonPostItCandidate: "people who make courage feel normal",
+      memoryState: "active",
+      environmentDirection:
+        "People and rooms where shipping in public feels like the expected rhythm.",
+      rejectedEnvironment:
+        "Rooms that turn courage into private planning or generic startup theater.",
+      evidenceRationale:
+        "Two saved signals point toward peers as the personal edge, not cities as a category.",
+      confidence: 88,
+      rejectedAlternativeInterpretation:
+        "The shallow read would call this cities, but the user's edge is wanting peers who normalize visible work.",
+    };
+    const koCandidates = candidates().map((candidate) => ({
+      ...candidate,
+      preferredLocale: "ko-KR" as const,
+    }));
+
+    const result = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: koCandidates,
+      synthesize: vi.fn().mockResolvedValue(englishOnly),
+    });
+
+    expect(result).toMatchObject({
+      attempted: 1,
+      synthesized: 0,
+      failed: 1,
+      fellBack: 0,
+    });
+    expect(result.candidates).toEqual([]);
+    expect(result.failures[0]).toMatchObject({
+      contextNodeId: "public-building-room",
+      reason: "invalid_output",
+    });
+  });
+
+  it("accepts Hangul synthesis for ko-KR and carries the locale through", async () => {
+    const korean: AmbitionSynthesisOutput = {
+      firstPersonPostItCandidate: "용기가 평범해지는 사람들 곁에서 일을 만들기",
+      memoryState: "active",
+      environmentDirection:
+        "공개적으로 만들고 내보내는 일이 자연스럽게 여겨지는 사람들과 방이 이 야망을 지지한다.",
+      rejectedEnvironment:
+        "허락과 포장을 먼저 요구하며 움직임을 사적인 계획으로만 남기는 방은 이 감각을 약하게 만든다.",
+      evidenceRationale:
+        "저장된 두 신호는 도시라는 범주보다 보이는 일을 평범하게 만드는 동료를 향한다.",
+      confidence: 88,
+      rejectedAlternativeInterpretation:
+        "얕은 해석은 도시 취향이지만 더 정확한 해석은 용기를 보통으로 만드는 사람들에 대한 끌림이다.",
+    };
+    const koCandidates = candidates().map((candidate) => ({
+      ...candidate,
+      preferredLocale: "ko-KR" as const,
+    }));
+
+    const result = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: koCandidates,
+      synthesize: vi.fn().mockResolvedValue(korean),
+    });
+
+    expect(result).toMatchObject({
+      attempted: 1,
+      synthesized: 1,
+      failed: 0,
+    });
+    expect(result.candidates[0]).toMatchObject({
+      preferredLocale: "ko-KR",
+      title: "용기가 평범해지는 사람들 곁에서 일을 만들기",
+      matchedEnvironment:
+        "공개적으로 만들고 내보내는 일이 자연스럽게 여겨지는 사람들과 방이 이 야망을 지지한다.",
+    });
+  });
+
   it("surfaces null and thrown synthesis failures without deterministic titles", async () => {
     const nullResult = await runBoundedAmbitionSynthesisLoop({
       userId,

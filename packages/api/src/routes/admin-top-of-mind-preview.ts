@@ -11,6 +11,7 @@ import {
   buildTopOfMindPreviewForUser,
   type TopOfMindPreview,
 } from "../lib/top-of-mind-preview.js";
+import { requireAdminUser } from "../lib/admin-auth.js";
 import { getDb } from "../lib/db.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { requireAdminMeaningGraphEnabled } from "./admin-meaning-graph.js";
@@ -20,6 +21,7 @@ export interface AdminTopOfMindPreviewRouteDependencies {
   getPreview?: (db: ReturnType<typeof getDb>, userId: string) => Promise<TopOfMindPreview>;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   adminGate?: MiddlewareHandler<AuthEnv>;
+  adminAuthorization?: MiddlewareHandler<AuthEnv>;
 }
 
 export function createAdminTopOfMindPreviewRoutes(
@@ -31,6 +33,7 @@ export function createAdminTopOfMindPreviewRoutes(
 
   routes.use("*", deps.adminGate ?? requireAdminMeaningGraphEnabled);
   routes.use("*", deps.authMiddleware ?? requireAuth);
+  routes.use("*", deps.adminAuthorization ?? requireAdminUser);
 
   routes.get("/", async (c) => {
     const userId = c.get("user").id;

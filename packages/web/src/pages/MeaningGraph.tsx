@@ -668,6 +668,12 @@ export function meaningGraphRebuildPhaseLabel(phase: string | undefined, locale:
     switch (phase) {
       case "queued":
         return "대기";
+      case "counting":
+        return "영감 세기";
+      case "clearing":
+        return "기존 그래프 정리";
+      case "processing":
+        return "그래프 처리";
       case "loading_inspirations":
         return "영감 불러오기";
       case "materializing_packets":

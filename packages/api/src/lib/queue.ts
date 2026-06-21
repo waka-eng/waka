@@ -171,7 +171,7 @@ async function upsertMeaningGraphRebuildJob(
       NULL
     )
     ON CONFLICT (user_id, type)
-    WHERE type = 'meaning_graph_rebuild'::background_job_type
+    WHERE "public"."background_job_type_label"(type) = 'meaning_graph_rebuild'
       AND status IN ('pending'::background_job_status, 'running'::background_job_status)
     DO UPDATE SET
       updated_at = now()

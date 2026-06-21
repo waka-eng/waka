@@ -35,7 +35,7 @@
   "savedStatus": "저장됨",
   "resultsLabelSingular": "영감",
   "resultsLabelPlural": "영감",
-  "capturePlaceholder": "거의 놓칠 뻔한 것은 무엇인가요?",
+  "capturePlaceholder": "무엇이 마음에 들어왔나요?",
   "emptyCapturePrompt": "저장할 영감을 메모, 링크, 이미지로 추가하세요.",
   "unsupportedImage": "이미지가 너무 크거나 지원되지 않는 형식이에요.",
   "partialAttachmentFailure": "저장됨 — 첨부 {count}개가 실패했어요. 영감은 안전하게 남아 있어요.",
@@ -262,5 +262,6 @@
   "profileDelete": "계정 삭제",
   "profileDeleting": "삭제 중…",
   "profileDeleteError": "계정을 삭제하지 못했어요.",
+  "profileSignOutError": "로그아웃하지 못했어요.",
   "profileBackHome": "홈으로 돌아가기"
 }

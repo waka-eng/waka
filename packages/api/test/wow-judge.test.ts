@@ -1575,6 +1575,49 @@ describe("judgeWowMomentForInspiration", () => {
     ]);
   });
 
+  it("rejects malformed true judgment source evidence before fallback source text can persist", async () => {
+    const alice = await createUserFixture(testDb.db);
+    const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Trigger: unsafe source evidence should never become a note signal.",
+    });
+    const candidate = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate: the related signal is valid but its evidence copy is not.",
+    });
+    await createEmbedding(testDb, trigger, [1, 0]);
+    await createEmbedding(testDb, candidate, [1, 0]);
+
+    await expect(
+      persistWowMomentForInspirationJudgment({
+        db: testDb.db,
+        userId: alice.user.id,
+        triggerInspirationId: trigger.id,
+        limit: 5,
+        judgment: {
+          isWowMoment: true,
+          kind: "bridge",
+          title: "Unsafe Evidence Boundary",
+          why: "The related signals are present, but one evidence row is not product-facing.",
+          beliefStatement: "source evidence needs real language before it becomes memory",
+          relatedInspirationIds: [trigger.id, candidate.id],
+          sourceEvidence: [
+            {
+              inspirationId: trigger.id,
+              role: "runtimeCandidateScore",
+              reason: "This internal score label would previously normalize to fallback text.",
+            },
+            {
+              inspirationId: candidate.id,
+              role: "The related signal",
+              reason: "This source gives the second grounded user-facing signal.",
+            },
+          ],
+        },
+      }),
+    ).rejects.toBeInstanceOf(GeminiWowJudgeValidationError);
+    expect(await countWowMoments(testDb)).toBe(0);
+    expect(await countWowMomentLinks(testDb)).toBe(0);
+  });
+
   it("does not persist a true judgment with fewer than two unique source inspirations", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {

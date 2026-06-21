@@ -13,6 +13,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { readAppliedTopOfMindStatus } from "../lib/feedback-application.js";
+import type { SupportedLocale } from "../lib/locales.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
   topOfMindNoteFromWowMoment,
@@ -114,11 +115,11 @@ export interface TopOfMindRouteDependencies {
   getTopOfMind?: (db: WakaDb, userId: string) => Promise<TopOfMindPreview>;
   listNotes?: (
     db: WakaDb,
-    input: { userId: string; limit: number },
+    input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
   ) => Promise<TopOfMindNoteSurface[]>;
   getNote?: (
     db: WakaDb,
-    input: { userId: string; noteId: string },
+    input: { userId: string; noteId: string; preferredLocale?: SupportedLocale },
   ) => Promise<TopOfMindNoteSurface | null>;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
@@ -129,11 +130,61 @@ function truncatePreview(value: string): string {
   return `${normalized.slice(0, MAX_EVIDENCE_PREVIEW_LENGTH - 3).trimEnd()}...`;
 }
 
+function hasHangul(value: string | null | undefined): boolean {
+  return /[\u3131-\u318E\uAC00-\uD7A3]/u.test(value ?? "");
+}
+
+function topOfMindNoteHasHangul(note: TopOfMindNote): boolean {
+  return [
+    note.title,
+    note.ambientSignal,
+    note.matchedEnvironment,
+    note.antiEnvironment,
+    note.evidenceRationale,
+    note.body,
+  ].some(hasHangul);
+}
+
+function topOfMindNoteHasUnsafeKoreanUserFacingFields(note: TopOfMindNote): boolean {
+  if (!hasHangul(note.title) || !hasHangul(note.ambientSignal)) return true;
+
+  return [
+    note.title,
+    note.ambientSignal,
+    note.matchedEnvironment,
+    note.antiEnvironment,
+    note.evidenceRationale,
+    note.body,
+    note.prompt,
+    note.guidance,
+  ].some((value) => {
+    const normalized = (value ?? "").replace(/\s+/g, " ").trim();
+    return normalized.length > 0 && !hasHangul(normalized);
+  });
+}
+
+function scrubEnglishOnlyKoreanUserFacingFields(note: TopOfMindNote): TopOfMindNote {
+  const keepIfHangul = (value: string): string => (hasHangul(value) ? value : "");
+  return {
+    ...note,
+    status: "unavailable",
+    title: keepIfHangul(note.title),
+    ambientSignal: keepIfHangul(note.ambientSignal),
+    matchedEnvironment: keepIfHangul(note.matchedEnvironment),
+    antiEnvironment: keepIfHangul(note.antiEnvironment),
+    evidenceRationale: keepIfHangul(note.evidenceRationale),
+    body: keepIfHangul(note.body),
+    prompt: hasHangul(note.prompt) ? note.prompt : null,
+    guidance: hasHangul(note.guidance) ? note.guidance : null,
+  };
+}
+
 function serializeTopOfMindSurface(
   moment: TopOfMindWowMomentRow,
   relatedRows: TopOfMindRelatedSignalRow[],
   relatedContextNodeIds: string[],
   status?: TopOfMindNoteStatus,
+  preferredLocale: SupportedLocale = "en-US",
 ): TopOfMindNoteSurface {
   const limitedRows = relatedRows.slice(0, MAX_WOW_MOMENT_SOURCE_LINKS);
   const note = topOfMindNoteFromWowMoment({
@@ -141,7 +192,16 @@ function serializeTopOfMindSurface(
     relatedSignalIds: limitedRows.map((row) => row.inspirationId),
     relatedContextNodeIds,
     status,
+    preferredLocale,
   });
+  const surfacedNote: TopOfMindNote =
+    preferredLocale === "ko-KR" &&
+    note.status === "active" &&
+    (!hasHangul(note.title) ||
+      !topOfMindNoteHasHangul(note) ||
+      topOfMindNoteHasUnsafeKoreanUserFacingFields(note))
+      ? scrubEnglishOnlyKoreanUserFacingFields(note)
+      : note;
 
   const evidencePreviews = limitedRows.map((row) => {
     const [source] = normalizeWowSourceEvidence(
@@ -182,7 +242,7 @@ function serializeTopOfMindSurface(
     }));
 
   return {
-    ...note,
+    ...surfacedNote,
     evidencePreviews,
     relatedSignals,
   };
@@ -302,7 +362,7 @@ function groupRelatedRowsByMomentId(
 
 export async function listTopOfMindNotesForUser(
   db: WakaDb,
-  input: { userId: string; limit: number },
+  input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
 ): Promise<TopOfMindNoteSurface[]> {
   const moments = await db
     .select({
@@ -343,13 +403,14 @@ export async function listTopOfMindNotesForUser(
       relatedByMomentId.get(moment.id) ?? [],
       relatedContextNodeIds.get(moment.id) ?? [],
       feedbackStatuses.get(moment.id),
+      input.preferredLocale,
     ),
   );
 }
 
 export async function getTopOfMindNoteForUser(
   db: WakaDb,
-  input: { userId: string; noteId: string },
+  input: { userId: string; noteId: string; preferredLocale?: SupportedLocale },
 ): Promise<TopOfMindNoteSurface | null> {
   const [moment] = await db
     .select({
@@ -391,6 +452,7 @@ export async function getTopOfMindNoteForUser(
     relatedRows,
     relatedContextNodeIds.get(moment.id) ?? [],
     feedbackStatuses.get(moment.id),
+    input.preferredLocale,
   );
 }
 
@@ -406,7 +468,8 @@ export function createTopOfMindRoutes(
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
   routes.get("/", async (c) => {
-    const userId = c.get("user").id;
+    const user = c.get("user");
+    const userId = user.id;
     const parsedQuery = listTopOfMindQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
@@ -422,7 +485,7 @@ export function createTopOfMindRoutes(
     const limit = parsedQuery.data.limit ?? DEFAULT_TOP_OF_MIND_LIMIT;
     const [topOfMind, topOfMindNotes] = await Promise.all([
       getTopOfMind(db, userId),
-      listNotes(db, { userId, limit }),
+      listNotes(db, { userId, limit, preferredLocale: user.preferredLocale }),
     ]);
 
     return c.json({
@@ -432,7 +495,8 @@ export function createTopOfMindRoutes(
   });
 
   routes.get("/:noteId", async (c) => {
-    const userId = c.get("user").id;
+    const user = c.get("user");
+    const userId = user.id;
     const parsedParams = topOfMindNoteParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
@@ -447,6 +511,7 @@ export function createTopOfMindRoutes(
     const topOfMindNote = await getNote(getDatabase(), {
       userId,
       noteId: parsedParams.data.noteId,
+      preferredLocale: user.preferredLocale,
     });
 
     if (!topOfMindNote) {

@@ -7,6 +7,7 @@ import {
   meaningEvidence,
   meaningNodes,
   meaningPackets,
+  users,
   wowMomentInspirations,
   wowMoments,
   type WowKind,
@@ -19,6 +20,7 @@ import {
 } from "./ambition-synthesis.js";
 import { normalizeContextNodeType, type ContextNodeType } from "./context-node-types.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
@@ -59,6 +61,7 @@ export interface TopOfMindRefreshEvidenceInput {
 }
 
 export interface TopOfMindRefreshCandidate {
+  preferredLocale: SupportedLocale;
   node: TopOfMindRefreshNodeInput;
   contextType: ContextNodeType;
   evidence: TopOfMindRefreshEvidenceInput[];
@@ -345,6 +348,7 @@ function groupEvidenceByNodeId(
 
 export function rankTopOfMindRefreshCandidates(input: {
   userId: string;
+  preferredLocale?: SupportedLocale;
   nodes: TopOfMindRefreshNodeInput[];
   evidence: TopOfMindRefreshEvidenceInput[];
   existingIdempotencyKeys?: Set<string>;
@@ -357,6 +361,7 @@ export function rankTopOfMindRefreshCandidates(input: {
     MAX_REFRESH_LIMIT,
   );
   const existing = input.existingIdempotencyKeys ?? new Set<string>();
+  const preferredLocale = input.preferredLocale ?? "en-US";
   const evidenceByNodeId = groupEvidenceByNodeId(input.evidence);
 
   return input.nodes
@@ -375,6 +380,7 @@ export function rankTopOfMindRefreshCandidates(input: {
       const ambitionDimension = ambitionDimensionForContextType(contextType);
       const frequency = buildInternalFrequency(node, contextType, evidence);
       return {
+        preferredLocale,
         node,
         contextType,
         evidence,
@@ -386,8 +392,10 @@ export function rankTopOfMindRefreshCandidates(input: {
         why: "",
         ambitionDimension,
         kind: noteKindForContextType(contextType),
-        reflectionQuestion: reflectionQuestionForContextType(node, contextType),
-        reflectionGuide: reflectionGuideForContextType(contextType),
+        reflectionQuestion:
+          preferredLocale === "ko-KR" ? null : reflectionQuestionForContextType(node, contextType),
+        reflectionGuide:
+          preferredLocale === "ko-KR" ? null : reflectionGuideForContextType(contextType),
         wowScore: clampInt(
           35 + node.evidenceCount * 8 + node.weight * 0.08 + node.confidence * 0.25,
           1,
@@ -430,16 +438,30 @@ async function loadExistingContextNoteKeys(
   return new Set(rows.map((row) => row.idempotencyKey));
 }
 
+async function loadPreferredLocale(
+  db: WakaDb,
+  userId: string,
+): Promise<SupportedLocale> {
+  const [user] = await db
+    .select({ preferredLocale: users.preferredLocale })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return normalizeSupportedLocale(user?.preferredLocale);
+}
+
 export async function refreshTopOfMindNotesFromContextGraph(
   db: WakaDb,
   input: {
     userId: string;
+    preferredLocale?: SupportedLocale;
     limit?: number;
     now?: Date;
     modelProvider?: ModelProvider;
     synthesisTrigger?: AmbitionSynthesisTrigger;
   },
 ): Promise<RefreshTopOfMindNotesResult> {
+  const preferredLocale = input.preferredLocale ?? (await loadPreferredLocale(db, input.userId));
   const nodes = await db
     .select({
       id: meaningNodes.id,
@@ -508,6 +530,7 @@ export async function refreshTopOfMindNotesFromContextGraph(
   const modelProvider = input.modelProvider ?? (await getDefaultModelProvider());
   const rankedCandidates = await modelProvider.generateTopOfMindNotes({
     userId: input.userId,
+    preferredLocale,
     nodes,
     evidence,
     existingIdempotencyKeys,
@@ -591,6 +614,7 @@ export async function refreshTopOfMindNotesFromContextGraph(
           beliefStatement: candidate.title,
           reflectionQuestion: candidate.reflectionQuestion,
           reflectionGuide: candidate.reflectionGuide,
+          locale: candidate.preferredLocale,
           wowScore: candidate.wowScore,
         } as typeof wowMoments.$inferInsert)
         .onConflictDoNothing({ target: wowMoments.idempotencyKey })

@@ -80,7 +80,7 @@ import {
   updateInspiration,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { mergeReflectionRows } from "../lib/inspiration-detail";
+import { deriveTitleFromText, mergeReflectionRows } from "../lib/inspiration-detail";
 import {
   formatSavedCount,
   normalizeSupportedLocale,
@@ -1234,15 +1234,11 @@ const HOME_COPY = {
     titleSuffix: "",
     tagline: (
       <>
-        떠오른 생각은 자주 사라집니다.
-        <br />
-        Waka가 사라지기 전에 붙잡은 조각들이
-        <br />
-        천천히 한 방향을 만들기 시작합니다.
+        저장한 영감들이 조금씩 하나의 지도를 만듭니다.
         <br />
         누구와 생각하고 싶은지. 어디에 머물고 싶은지. 무엇을 만들고 싶은지.
         <br />
-        <span className="nc-tagline-en">— 쓴 것이 아니라, 놓칠 뻔한 것을 붙잡았습니다.</span>
+        <span className="nc-tagline-en">— 저장한 것들에서 나온 임시 노트입니다. 새 영감이 들어오면 달라집니다.</span>
       </>
     ),
     lifecycleHint: "",
@@ -1261,7 +1257,7 @@ const HOME_COPY = {
     loadingThoughts: "생각을 모으는 중...",
     emptyThoughts: "관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
-    captureBody: "정리하지 않아도 됩니다. 어설프고 덜 완성된 것도 사라지기 전에 저장하세요.",
+    captureBody: "정리하지 않아도 됩니다. 어설프고 덜 완성된 생각도 그대로 저장하세요.",
     captureInlineKicker: "영감 기록",
     footnote: (name: string) => (
       <>
@@ -1326,16 +1322,12 @@ const HOME_COPY = {
     titleSuffix: "",
     tagline: (
       <>
-        Most inspiration disappears.
-        <br />
-        Waka caught what almost slipped away.
-        <br />
-        And slowly, the things they saved began to take shape.
+        Saved inspirations start to form a map.
         <br />
         Who they want to think with. Where they want to be. What they are here to build.
         <br />
         <span className="nc-tagline-en">
-          — they did not write any of this. they only saved what almost slipped away. the rest emerged.
+          — provisional notes from the things they saved. changing as new inspirations arrive.
         </span>
       </>
     ),
@@ -1355,7 +1347,7 @@ const HOME_COPY = {
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "When 2–3 related inspirations gather, provisional notes will appear here.",
     captureTitle: "Catch the first inspiration",
-    captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing before it disappears.",
+    captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing as it is.",
     captureInlineKicker: "inspiration capture",
     footnote: (name: string) => (
       <>
@@ -1482,7 +1474,7 @@ const HOME_COPY = {
 >;
 
 export function HomePage(): JSX.Element {
-  const { user, logout, updatePreferredLocale } = useAuth();
+  const { user } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -2541,7 +2533,7 @@ export function HomePage(): JSX.Element {
     );
   }
 
-  const showAdminEntry = shouldShowAdminEntry(import.meta.env);
+  const showAdminEntry = user?.isAdmin === true && shouldShowAdminEntry(import.meta.env);
 
   const historyDetail = detailData ? (
     <InspirationDetail
@@ -2569,14 +2561,6 @@ export function HomePage(): JSX.Element {
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
   const copy = HOME_COPY[locale];
-  const chooseLocale = (nextLocale: SupportedLocale): void => {
-    setLocale(nextLocale);
-    writeStoredLocale(nextLocale);
-    void updatePreferredLocale(nextLocale).catch((error) => {
-      console.error("[home] failed to persist preferred locale:", error);
-    });
-  };
-
   useEffect(() => {
     if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
     setHomeMode((current) => (current === "memoryDrawer" ? current : "topOfMind"));
@@ -3616,6 +3600,7 @@ export function HomePage(): JSX.Element {
       const reflectionRows = savedSignalReflections[signal.id] ?? [];
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
+      const showHighlightOverlay = !hasEditedDraft && detailHighlights.length > 0;
       return (
         <article
           className="memory-stack-detail memory-stack-detail--mockup signal-revisit-detail signal-revisit-detail--open memory-contents-item memory-contents-item--expanded"
@@ -3647,9 +3632,8 @@ export function HomePage(): JSX.Element {
           >
             ×
           </button>
-          <header className="memory-detail-hero">
-            <span>saved inspiration · Inspiration details</span>
-            <h2>{shortText(signal.textPreview, 96)}</h2>
+          <header className="memory-detail-hero memory-detail-hero--full-title">
+            <h2>{deriveTitleFromText(detailText, locale)}</h2>
           </header>
           {sourceAttachments.length > 0 ? (
             <section className="memory-detail-source-card" aria-label="source">
@@ -3689,17 +3673,17 @@ export function HomePage(): JSX.Element {
           <div
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
-            <div
-              className={`memory-contents-highlight-layer${
-                hasEditedDraft ? " memory-contents-highlight-layer--hidden" : ""
-              }`}
-              aria-hidden="true"
-            >
-              {renderHighlightedInspirationText(draftText, detailHighlights)}
-            </div>
+            {showHighlightOverlay ? (
+              <div
+                className="memory-contents-highlight-layer"
+                aria-hidden="true"
+              >
+                {renderHighlightedInspirationText(draftText, detailHighlights)}
+              </div>
+            ) : null}
             <textarea
               className={`memory-contents-expanded-text memory-contents-expanded-editor memory-readable-signal${
-                !hasEditedDraft && detailHighlights.length > 0 ? " memory-contents-expanded-editor--with-highlights" : ""
+                showHighlightOverlay ? " memory-contents-expanded-editor--with-highlights" : ""
               }`}
               value={draftText}
               onChange={(event) => {
@@ -4631,25 +4615,15 @@ export function HomePage(): JSX.Element {
         data-locale={locale}
       >
         <div className="nc-language-controls" aria-label={copy.homeControlsAria}>
-          <div className="nc-lang nc-lang--top" aria-label={copy.languageControlsAria}>
-              <button
-                type="button"
-                className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
-                onClick={() => chooseLocale("en-US")}
-                aria-pressed={locale === "en-US"}
-              >
-                EN
-              </button>
-              <button
-                type="button"
-                className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
-                onClick={() => chooseLocale("ko-KR")}
-                aria-pressed={locale === "ko-KR"}
-              >
-                한
-              </button>
-            </div>
-          </div>
+          <Link
+            to="/profile"
+            className="nc-profile-link nc-lang--top"
+            aria-label={t(locale, "profileTitle")}
+            title={t(locale, "profileTitle")}
+          >
+            {t(locale, "profileLink")}
+          </Link>
+        </div>
 
         <section className="nc-titlecard">
           <h1 className="nc-title">
@@ -5097,58 +5071,6 @@ export function HomePage(): JSX.Element {
           {loadError}
         </div>
       ) : null}
-      <Link
-        to="/profile"
-        style={{
-          position: "fixed",
-          bottom: 10,
-          right: 92,
-          zIndex: 300,
-          background: "rgba(255, 253, 247, 0.52)",
-          border: "1px solid rgba(15, 15, 14, 0.12)",
-          borderRadius: 999,
-          padding: "4px 9px",
-          fontFamily: "var(--font-mono)",
-          fontSize: 8,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: "var(--muted)",
-          opacity: 0.72,
-          cursor: "pointer",
-          textDecoration: "none",
-        }}
-        aria-label={t(locale, "profileTitle")}
-        title={t(locale, "profileTitle")}
-      >
-        {t(locale, "profileLink")}
-      </Link>
-      <button
-        type="button"
-        onClick={() => {
-          void logout();
-        }}
-        style={{
-          position: "fixed",
-          bottom: 10,
-          right: 10,
-          zIndex: 300,
-          background: "rgba(255, 253, 247, 0.52)",
-          border: "1px solid rgba(15, 15, 14, 0.12)",
-          borderRadius: 999,
-          padding: "4px 9px",
-          fontFamily: "var(--font-mono)",
-          fontSize: 8,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: "var(--muted)",
-          opacity: 0.72,
-          cursor: "pointer",
-        }}
-        aria-label={`${t(locale, "signOut")} ${user.email}`}
-        title={`${user.name} ${t(locale, "signOutPerson")}`}
-      >
-        {t(locale, "signOut")}
-      </button>
       {showAdminEntry ? (
         <Link
           to="/admin"
