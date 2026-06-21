@@ -206,9 +206,30 @@ export default $config({
     const publicApiUrl = publicWebUrl;
     const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
 
+    const router = publicDomain
+      ? new sst.aws.Router("Router", {
+          domain: {
+            name: publicDomain,
+            // Route53 already has live waka.im/dev.waka.im records from the
+            // legacy CloudFront distributions. Let SST attach the CloudFront
+            // alias using the existing ACM cert, then manually UPSERT
+            // Route53 after deployment to avoid unmanaged-record conflicts.
+            dns: false,
+            cert: WAKA_CERT_ARN,
+          },
+        })
+      : undefined;
+
     const api = new sst.aws.Function("Api", {
       handler: "packages/api/src/lambda.handler",
-      url: true,
+      url: router
+        ? {
+            router: {
+              instance: router,
+              path: "/api",
+            },
+          }
+        : true,
       link: [
         googleClientId,
         googleClientSecret,
@@ -260,16 +281,10 @@ export default $config({
 
     const web = new sst.aws.StaticSite("Web", {
       path: "packages/web",
-      ...(publicDomain
+      ...(router
         ? {
-            domain: {
-              name: publicDomain,
-              // Route53 already has live waka.im/dev.waka.im records from the
-              // legacy CloudFront distributions. Let SST attach the CloudFront
-              // alias using the existing ACM cert, then manually UPSERT
-              // Route53 after deployment to avoid unmanaged-record conflicts.
-              dns: false,
-              cert: WAKA_CERT_ARN,
+            router: {
+              instance: router,
             },
           }
         : {}),

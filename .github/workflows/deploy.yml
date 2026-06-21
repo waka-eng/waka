@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_legacy_alias:
-        description: "Remove waka.im from the existing non-SST CloudFront distribution before deploying"
+        description: "Remove waka.im from the existing CloudFront distribution before deploying"
         required: false
         default: false
         type: boolean
@@ -107,14 +107,7 @@ jobs:
           fi
 
           for distribution_id in "${distribution_ids[@]}"; do
-            resource_arn="arn:aws:cloudfront::${account_id}:distribution/${distribution_id}"
-            if aws cloudfront list-tags-for-resource --resource "$resource_arn" \
-              | jq -e '.Tags.Items[]? | select(.Key == "sst:app" and .Value == "waka")' >/dev/null; then
-              printf 'Keeping SST-managed distribution %s.\n' "$distribution_id"
-              continue
-            fi
-
-            printf 'Removing %s from legacy CloudFront distribution %s.\n' "$PRODUCTION_DOMAIN" "$distribution_id"
+            printf 'Removing %s from existing CloudFront distribution %s.\n' "$PRODUCTION_DOMAIN" "$distribution_id"
             aws cloudfront get-distribution-config --id "$distribution_id" > distribution.json
             etag="$(jq -r '.ETag' distribution.json)"
             jq --arg domain "$PRODUCTION_DOMAIN" '
