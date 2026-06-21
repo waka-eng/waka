@@ -205,6 +205,38 @@ export default $config({
     const publicWebUrl = publicDomain ? `https://${publicDomain}` : undefined;
     const publicApiUrl = publicWebUrl;
     const isDevelopmentDomain = $app.stage === "development" || $app.stage === "dev";
+    const runtimeLinks = [
+      googleClientId,
+      googleClientSecret,
+      sessionSecret,
+      jwtSecret,
+      dbConnectionUrl,
+      geminiApiKey,
+      attachmentsBucket,
+      vaultBucket,
+    ];
+    const runtimeEnvironment = {
+      AUTH_GOOGLE_ID: googleClientId.value,
+      AUTH_GOOGLE_SECRET: googleClientSecret.value,
+      AUTH_SECRET: sessionSecret.value,
+      JWT_SECRET: jwtSecret.value,
+      DB_CONNECTION_URL: dbConnectionUrl.value,
+      GEMINI_API_KEY: geminiApiKey.value,
+      ATTACHMENTS_BUCKET: attachmentsBucket.name,
+      ATTACHMENTS_REGION: AWS_REGION,
+      WAKA_VAULT_BUCKET: vaultBucket.name,
+      WAKA_VAULT_PREFIX: "vault/",
+      WAKA_VAULT_REGION: AWS_REGION,
+      ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
+      ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
+      ...(isDevelopmentDomain
+        ? {
+            WAKA_ENABLE_ADMIN_ROUTES: "true",
+            WAKA_SHOW_INTERNAL_STATUS: "true",
+            WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",
+          }
+        : {}),
+    };
 
     const router = publicDomain
       ? new sst.aws.Router("Router", {
@@ -230,16 +262,7 @@ export default $config({
             },
           }
         : true,
-      link: [
-        googleClientId,
-        googleClientSecret,
-        sessionSecret,
-        jwtSecret,
-        dbConnectionUrl,
-        geminiApiKey,
-        attachmentsBucket,
-        vaultBucket,
-      ],
+      link: runtimeLinks,
       // Fallback environment names so the existing Hono code that reads
       // `process.env.JWT_SECRET` / `process.env.DB_CONNECTION_URL` keeps
       // working without a refactor. SST also exposes the same values as
@@ -251,27 +274,20 @@ export default $config({
       // depending on SST's auto-injected `SST_RESOURCE_Attachments` JSON
       // env var. That keeps the handler unit-testable outside Lambda
       // (vitest / smoke runs) where the SST env is not present.
-      environment: {
-        AUTH_GOOGLE_ID: googleClientId.value,
-        AUTH_GOOGLE_SECRET: googleClientSecret.value,
-        AUTH_SECRET: sessionSecret.value,
-        JWT_SECRET: jwtSecret.value,
-        DB_CONNECTION_URL: dbConnectionUrl.value,
-        GEMINI_API_KEY: geminiApiKey.value,
-        ATTACHMENTS_BUCKET: attachmentsBucket.name,
-        ATTACHMENTS_REGION: AWS_REGION,
-        WAKA_VAULT_BUCKET: vaultBucket.name,
-        WAKA_VAULT_PREFIX: "vault/",
-        WAKA_VAULT_REGION: AWS_REGION,
-        ...(publicApiUrl ? { PUBLIC_API_URL: publicApiUrl } : {}),
-        ...(publicWebUrl ? { PUBLIC_WEB_URL: publicWebUrl } : {}),
-        ...(isDevelopmentDomain
-          ? {
-              WAKA_ENABLE_ADMIN_ROUTES: "true",
-              WAKA_SHOW_INTERNAL_STATUS: "true",
-              WAKA_ENABLE_BACKGROUND_JOBS_ADMIN: "true",
-            }
-          : {}),
+      environment: runtimeEnvironment,
+    });
+
+    new sst.aws.Cron("BackgroundJobDrain", {
+      schedule: "rate(1 minute)",
+      enabled: $app.stage === "production",
+      function: {
+        handler: "packages/api/src/background-worker.handler",
+        timeout: "4 minutes",
+        link: runtimeLinks,
+        environment: {
+          ...runtimeEnvironment,
+          WAKA_BACKGROUND_JOB_CRON_LIMIT: "5",
+        },
       },
     });
 
