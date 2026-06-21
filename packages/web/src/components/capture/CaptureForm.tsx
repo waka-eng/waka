@@ -1195,9 +1195,15 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         processSaveTitle={t(locale, "processSaveTitle")}
         quickSaveLabel={t(locale, "quickSave")}
         quickSaveTitle={t(locale, "quickSaveTitle")}
+        attachImageLabel={t(locale, "attachImage")}
         focusModeLabel={t(locale, "focusMode")}
         enterFocusModeLabel={t(locale, "enterFocusMode")}
         exitFocusModeLabel={t(locale, "exitFocusMode")}
+        highlightModeLabel={t(locale, "highlightMode")}
+        turnOnHighlightModeLabel={t(locale, "turnOnHighlightMode")}
+        turnOffHighlightModeLabel={t(locale, "turnOffHighlightMode")}
+        highlightingLabel={t(locale, "highlighting")}
+        highlightLabel={t(locale, "highlight")}
         doneLabel={t(locale, "done")}
         continueLabel={reflectionStepIndex === reflectStepCount - 1 && !postSaveReflectionTargetId ? t(locale, "guidedReflectionSave") : t(locale, "continue")}
         focused={focused}
@@ -1238,7 +1244,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         reflectValue={reflectionAnswer}
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
-        reflectPlaceholder={guidedReflectionQuestionLoading ? "loading" : ""}
+        reflectPlaceholder={guidedReflectionQuestionLoading ? t(locale, "loading") : ""}
         reflectNextDisabled={guidedReflectionQuestionLoading}
         onReflectLater={() => {
           if (postSaveReflectionTargetId) {

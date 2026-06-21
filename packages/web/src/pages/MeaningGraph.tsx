@@ -18,6 +18,8 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import { FloatingEdge } from "../components/FloatingEdge";
+import { useAuth } from "../lib/auth-context";
+import { normalizeSupportedLocale, readStoredLocale, type SupportedLocale } from "../lib/locales";
 import {
   fetchMeaningGraph,
   fetchMeaningGraphRebuildJob,
@@ -88,7 +90,9 @@ const MEMORY_STATES = [
   "needs_testing",
 ] as const;
 
-const MEMORY_LABEL: Record<(typeof MEMORY_STATES)[number], string> = {
+type MemoryStateFilter = (typeof MEMORY_STATES)[number];
+
+const MEMORY_LABEL: Record<MemoryStateFilter, string> = {
   emerging: "emerging",
   active: "active",
   fading: "fading",
@@ -124,13 +128,399 @@ const AMBITION_LABEL: Record<AmbitionDimension, string> = {
   next_experiment: "next experiment",
 };
 
-const EDGE_LABEL: Record<string, string> = {
-  supports: "supports",
-  challenges: "challenges",
-  points_to: "points to",
-  asks_for: "asks for",
-  reactivates: "reactivates",
+type ContextTypeLabelMap = Record<string, string>;
+type AmbitionLabelMap = Record<AmbitionDimension, string>;
+type MemoryStateLabelMap = Record<MemoryStateFilter, string>;
+
+const EDGE_KIND_KEYS = ["supports", "challenges", "points_to", "asks_for", "reactivates"] as const;
+type EdgeKindKey = (typeof EDGE_KIND_KEYS)[number];
+type EdgeKindLabels = Record<EdgeKindKey, string>;
+
+interface MeaningGraphCopy {
+  eyebrow: string;
+  title: string;
+  intro: string;
+  rebuild: string;
+  rebuilding: string;
+  refresh: string;
+  refreshing: string;
+  graphEyebrow: string;
+  graphTitle: string;
+  graphIntro: string;
+  graphSnapshotAria: string;
+  graphFiltersAria: string;
+  search: string;
+  searchPlaceholder: string;
+  nodeType: string;
+  allTypes: string;
+  ambition: string;
+  allDimensions: string;
+  status: string;
+  allStatuses: string;
+  active: string;
+  stale: string;
+  memory: string;
+  allMemoryStates: string;
+  confidence: string;
+  recentCorrections: string;
+  shown: (count: number) => string;
+  dragEnabledSummary: string;
+  dragDisabledSummary: string;
+  edgeLabels: EdgeKindLabels;
+  signals: (count: number) => string;
+  contextNodes: (count: number) => string;
+  relationshipEdges: (count: number) => string;
+  graphEvidence: string;
+  relationshipEvidence: string;
+  contextNodeEvidence: string;
+  selectGraphEntry: string;
+  graphEntryReview: string;
+  rebuildConfirmTitle: string;
+  rebuildConfirmBody: string;
+  startRebuild: string;
+  cancel: string;
+  rebuildQueuedPoll: string;
+  loadingGraph: string;
+  rebuildStatusPending: string;
+  rebuildStatusRunning: (phase: string, count: string) => string;
+  rebuildStatusSucceeded: string;
+  rebuildStatusFailed: string;
+  rebuildStatusPhaseFallback: string;
+  rebuildFinished: (signals: number, nodes: number, edges: number) => string;
+  noGraphRowsTitle: string;
+  noGraphRowsBody: string;
+  noSelectionIntro: string;
+  unknownSource: string;
+  unknownTarget: string;
+  recentSignalsEyebrow: string;
+  recentSignalsIntro: string;
+  recentGraphEntrySummaryAria: string;
+  addedNotes: (count: number) => string;
+  addedRelationships: (count: number) => string;
+  notAdded: (count: number) => string;
+  processing: (count: number) => string;
+  noRecentSignals: string;
+  recentStatusProcessing: string;
+  recentStatusAddedNotesAndRelationships: string;
+  recentStatusAddedContextNodes: string;
+  recentStatusNotAdded: string;
+  relationshipSummary: string;
+  updated: string;
+  evidenceSignals: string;
+  type: string;
+  ambitionDimension: string;
+  memoryState: string;
+  reinforcement: string;
+  reinforcementTotalRecent: (total: number, recent: number) => string;
+  decay: string;
+  movementScore: string;
+  memoryQuality: string;
+  whyAmbitionTitle: string;
+  whyAmbitionBody: (dimension: string) => string;
+  relatedTopOfMindNotes: string;
+  feedback: string;
+  matchedRejected: (matched: string, rejected: string) => string;
+  rejectedAlternateRead: string;
+  feedbackSource: (source: string) => string;
+  noDescription: string;
+  noQualityWarnings: string;
+  noSavedSignalEvidence: string;
+  noActiveTopOfMind: string;
+  noRejectedAlternative: string;
+  noPostItFeedback: string;
+  noNodeFeedback: string;
+  noRelationshipEvidence: string;
+  noReasonStored: string;
+  contextNodesHeading: string;
+  relationshipEdgesHeading: string;
+  noContextNodeProcessed: string;
+  notFinishedProcessing: string;
+  relationshipStoredEvidence: string;
+  noRelationshipFromSave: string;
+  noRelationshipYet: string;
+  contextTypeLabels: ContextTypeLabelMap;
+  ambitionLabels: AmbitionLabelMap;
+  memoryStateLabels: MemoryStateLabelMap;
+}
+
+export const MEANING_GRAPH_COPY: Record<SupportedLocale, MeaningGraphCopy> = {
+  "en-US": {
+    eyebrow: "admin context dashboard",
+    title: "Context dashboard",
+    intro: "Monitor how saved signals become context nodes and relationship edges.",
+    rebuild: "Rebuild graph",
+    rebuilding: "Rebuilding graph...",
+    refresh: "Refresh",
+    refreshing: "Refreshing...",
+    graphEyebrow: "context graph",
+    graphTitle: "Graph",
+    graphIntro: "Filter context claims, select evidence, and drag one node at a time while debugging.",
+    graphSnapshotAria: "Context graph snapshot",
+    graphFiltersAria: "Context graph filters",
+    search: "Search",
+    searchPlaceholder: "node, evidence, note, feedback",
+    nodeType: "Node type",
+    allTypes: "All types",
+    ambition: "Ambition",
+    allDimensions: "All dimensions",
+    status: "Status",
+    allStatuses: "All statuses",
+    active: "Active",
+    stale: "Stale",
+    memory: "Memory",
+    allMemoryStates: "All memory states",
+    confidence: "Confidence",
+    recentCorrections: "Recent corrections",
+    shown: (count) => `${count} shown`,
+    dragEnabledSummary:
+      "Individual node dragging is enabled; moved nodes keep their positions until the graph is refreshed.",
+    dragDisabledSummary: "Node dragging is disabled.",
+    edgeLabels: {
+      supports: "supports",
+      challenges: "challenges",
+      points_to: "points to",
+      asks_for: "asks for",
+      reactivates: "reactivates",
+    },
+    signals: (count) => `${count} signals`,
+    contextNodes: (count) => `${count} context nodes`,
+    relationshipEdges: (count) => `${count} relationship edges`,
+    graphEvidence: "Graph evidence",
+    relationshipEvidence: "Relationship evidence",
+    contextNodeEvidence: "Context node evidence",
+    selectGraphEntry: "Select a context node or relationship edge in the graph.",
+    graphEntryReview: "Graph entry review",
+    rebuildConfirmTitle: "Before you rebuild the context graph",
+    rebuildConfirmBody:
+      "Rebuild rereads your saved signals, regenerates missing signal packets, clears the current context graph rows for this account, then rebuilds context nodes, evidence, and relationship edges. It now runs as a background job, so the dashboard will poll progress and refresh itself when the job finishes. Starting another rebuild while one is active will return the existing job.",
+    startRebuild: "Start rebuild",
+    cancel: "Cancel",
+    rebuildQueuedPoll: "Rebuild queued. This page will poll for progress.",
+    loadingGraph: "Loading context graph...",
+    rebuildStatusPending: "Rebuild queued. The worker will start shortly.",
+    rebuildStatusRunning: (phase, count) => `Rebuild running: ${phase}${count}. This page will refresh when it finishes.`,
+    rebuildStatusSucceeded: "Rebuild finished. Dashboard refreshed.",
+    rebuildStatusFailed: "Rebuild failed. Check server logs.",
+    rebuildStatusPhaseFallback: "processing",
+    rebuildFinished: (signals, nodes, edges) =>
+      `Rebuild finished: ${signals} signals / ${nodes} notes / ${edges} edges. Dashboard refreshed.`,
+    noGraphRowsTitle: "No graph rows yet",
+    noGraphRowsBody: "Click rebuild after saving signals locally.",
+    noSelectionIntro:
+      "The graph above is the current context structure. Select a context node to see the signals behind it, or select a relationship edge to see what supports that connection.",
+    unknownSource: "Unknown source",
+    unknownTarget: "unknown target",
+    recentSignalsEyebrow: "recent signals",
+    recentSignalsIntro: "Newest saves and what they added to the context graph.",
+    recentGraphEntrySummaryAria: "Recent graph entry summary",
+    addedNotes: (count) => `${count} added notes`,
+    addedRelationships: (count) => `${count} added relationships`,
+    notAdded: (count) => `${count} not added`,
+    processing: (count) => `${count} processing`,
+    noRecentSignals: "No recent signals found.",
+    recentStatusProcessing: "Processing",
+    recentStatusAddedNotesAndRelationships: "Added notes and relationships",
+    recentStatusAddedContextNodes: "Added context nodes",
+    recentStatusNotAdded: "Not added to graph",
+    relationshipSummary: "Relationship summary",
+    updated: "updated",
+    evidenceSignals: "evidence signals",
+    type: "type",
+    ambitionDimension: "ambition dimension",
+    memoryState: "memory state",
+    reinforcement: "reinforcement",
+    reinforcementTotalRecent: (total, recent) => `${total} total / ${recent} recent`,
+    decay: "decay",
+    movementScore: "movement score",
+    memoryQuality: "Memory and synthesis quality",
+    whyAmbitionTitle: "Why this may matter for ambition",
+    whyAmbitionBody: (dimension) =>
+      `This node is currently treated as a ${dimension} signal: use the supporting saved signals, related Top of Mind notes, and feedback below to decide whether that read is useful or misleading.`,
+    relatedTopOfMindNotes: "Related Top of Mind notes",
+    feedback: "Feedback",
+    matchedRejected: (matched, rejected) => `Matched: ${matched} Rejected: ${rejected}`,
+    rejectedAlternateRead: "Rejected alternate read:",
+    feedbackSource: (source) => `Feedback source: ${source}`,
+    noDescription: "No description yet.",
+    noQualityWarnings: "No quality warnings are attached to this context node.",
+    noSavedSignalEvidence: "No saved-signal evidence is attached to this context node yet.",
+    noActiveTopOfMind: "No active Top of Mind note is currently tied to this context node.",
+    noRejectedAlternative: "No rejected alternative stored yet.",
+    noPostItFeedback: "No user feedback has shaped this post-it yet.",
+    noNodeFeedback: "No user feedback has been stored for this context node yet.",
+    noRelationshipEvidence:
+      "This relationship has stored evidence ids, but no recent matching signal is in the current feed.",
+    noReasonStored: "No reason stored yet.",
+    contextNodesHeading: "Context nodes",
+    relationshipEdgesHeading: "Relationship edges",
+    noContextNodeProcessed: "No context node was created or reinforced from this save.",
+    notFinishedProcessing: "This save has not finished processing yet.",
+    relationshipStoredEvidence: "This save is stored as evidence for the relationship.",
+    noRelationshipFromSave: "No relationship edge was created from this save.",
+    noRelationshipYet: "No relationship edge yet.",
+    contextTypeLabels: TYPE_LABEL,
+    ambitionLabels: AMBITION_LABEL,
+    memoryStateLabels: MEMORY_LABEL,
+  },
+  "ko-KR": {
+    eyebrow: "관리자 맥락 대시보드",
+    title: "맥락 대시보드",
+    intro: "저장된 영감이 맥락 노드와 관계로 이어지는 흐름을 확인합니다.",
+    rebuild: "그래프 다시 만들기",
+    rebuilding: "그래프 다시 만드는 중...",
+    refresh: "새로고침",
+    refreshing: "새로고침 중...",
+    graphEyebrow: "맥락 그래프",
+    graphTitle: "그래프",
+    graphIntro: "맥락 주장을 필터링하고 근거를 선택하며 노드 하나씩 이동합니다.",
+    graphSnapshotAria: "맥락 그래프 요약",
+    graphFiltersAria: "맥락 그래프 필터",
+    search: "검색",
+    searchPlaceholder: "노드, 근거, 노트, 피드백",
+    nodeType: "노드 유형",
+    allTypes: "모든 유형",
+    ambition: "야망",
+    allDimensions: "모든 차원",
+    status: "상태",
+    allStatuses: "모든 상태",
+    active: "활성",
+    stale: "오래됨",
+    memory: "기억",
+    allMemoryStates: "모든 기억 상태",
+    confidence: "신뢰도",
+    recentCorrections: "최근 수정",
+    shown: (count) => `${count}개 표시`,
+    dragEnabledSummary: "개별 노드 이동이 켜져 있습니다. 옮긴 노드는 그래프를 새로고침할 때까지 위치가 유지됩니다.",
+    dragDisabledSummary: "노드 이동이 꺼져 있습니다.",
+    edgeLabels: {
+      supports: "뒷받침",
+      challenges: "긴장시킴",
+      points_to: "가리킴",
+      asks_for: "요청함",
+      reactivates: "다시 활성화",
+    },
+    signals: (count) => `영감 ${count}개`,
+    contextNodes: (count) => `맥락 노드 ${count}개`,
+    relationshipEdges: (count) => `관계 ${count}개`,
+    graphEvidence: "그래프 근거",
+    relationshipEvidence: "관계 근거",
+    contextNodeEvidence: "맥락 노드 근거",
+    selectGraphEntry: "그래프에서 맥락 노드나 관계를 선택하세요.",
+    graphEntryReview: "그래프 입력 검토",
+    rebuildConfirmTitle: "맥락 그래프를 다시 만들기 전에",
+    rebuildConfirmBody:
+      "다시 만들기는 저장된 영감을 다시 읽고, 누락된 신호 패킷을 생성하며, 이 계정의 현재 맥락 그래프 행을 지운 뒤 맥락 노드와 근거, 관계를 다시 만듭니다. 이제 백그라운드 작업으로 실행되므로 대시보드가 진행 상황을 확인하고 완료되면 새로고침됩니다. 이미 작업이 실행 중이면 새 작업 대신 기존 작업을 반환합니다.",
+    startRebuild: "다시 만들기 시작",
+    cancel: "취소",
+    rebuildQueuedPoll: "다시 만들기가 대기열에 추가되었습니다. 이 페이지가 진행 상황을 확인합니다.",
+    loadingGraph: "맥락 그래프 불러오는 중...",
+    rebuildStatusPending: "다시 만들기가 대기열에 있습니다. 작업자가 곧 시작합니다.",
+    rebuildStatusRunning: (phase, count) => `다시 만들기 진행 중: ${phase}${count}. 완료되면 이 페이지가 새로고침됩니다.`,
+    rebuildStatusSucceeded: "다시 만들기 완료. 대시보드가 새로고침되었습니다.",
+    rebuildStatusFailed: "다시 만들기 실패. 서버 로그를 확인하세요.",
+    rebuildStatusPhaseFallback: "처리",
+    rebuildFinished: (signals, nodes, edges) =>
+      `다시 만들기 완료: 영감 ${signals}개 / 노트 ${nodes}개 / 관계 ${edges}개. 대시보드가 새로고침되었습니다.`,
+    noGraphRowsTitle: "아직 그래프 행이 없습니다",
+    noGraphRowsBody: "로컬에 영감을 저장한 뒤 다시 만들기를 누르세요.",
+    noSelectionIntro:
+      "위 그래프는 현재 맥락 구조입니다. 맥락 노드를 선택하면 관련 영감을, 관계를 선택하면 연결을 뒷받침하는 근거를 볼 수 있습니다.",
+    unknownSource: "알 수 없는 출처",
+    unknownTarget: "알 수 없는 대상",
+    recentSignalsEyebrow: "최근 영감",
+    recentSignalsIntro: "가장 최근 저장 항목과 그것이 맥락 그래프에 더한 내용입니다.",
+    recentGraphEntrySummaryAria: "최근 그래프 입력 요약",
+    addedNotes: (count) => `노트 ${count}개 추가`,
+    addedRelationships: (count) => `관계 ${count}개 추가`,
+    notAdded: (count) => `${count}개 미추가`,
+    processing: (count) => `${count}개 처리 중`,
+    noRecentSignals: "최근 영감이 없습니다.",
+    recentStatusProcessing: "처리 중",
+    recentStatusAddedNotesAndRelationships: "노트와 관계 추가됨",
+    recentStatusAddedContextNodes: "맥락 노드 추가됨",
+    recentStatusNotAdded: "그래프에 추가되지 않음",
+    relationshipSummary: "관계 요약",
+    updated: "업데이트됨",
+    evidenceSignals: "근거 영감",
+    type: "유형",
+    ambitionDimension: "야망 차원",
+    memoryState: "기억 상태",
+    reinforcement: "강화",
+    reinforcementTotalRecent: (total, recent) => `전체 ${total}회 / 최근 ${recent}회`,
+    decay: "감쇠",
+    movementScore: "움직임 점수",
+    memoryQuality: "기억과 종합 품질",
+    whyAmbitionTitle: "이것이 야망에 중요할 수 있는 이유",
+    whyAmbitionBody: (dimension) =>
+      `이 노드는 현재 ${dimension} 신호로 해석됩니다. 아래의 저장된 영감, 관련 Top of Mind 노트, 피드백을 바탕으로 이 해석이 유용한지 오해를 부르는지 판단하세요.`,
+    relatedTopOfMindNotes: "관련 Top of Mind 노트",
+    feedback: "피드백",
+    matchedRejected: (matched, rejected) => `일치: ${matched} 제외: ${rejected}`,
+    rejectedAlternateRead: "제외한 다른 해석:",
+    feedbackSource: (source) => `피드백 출처: ${source}`,
+    noDescription: "아직 설명이 없습니다.",
+    noQualityWarnings: "이 맥락 노드에는 품질 경고가 없습니다.",
+    noSavedSignalEvidence: "이 맥락 노드에는 아직 저장된 영감 근거가 없습니다.",
+    noActiveTopOfMind: "현재 이 맥락 노드와 연결된 활성 Top of Mind 노트가 없습니다.",
+    noRejectedAlternative: "아직 제외한 다른 해석이 저장되지 않았습니다.",
+    noPostItFeedback: "아직 이 포스트잇을 조정한 사용자 피드백이 없습니다.",
+    noNodeFeedback: "아직 이 맥락 노드에 저장된 사용자 피드백이 없습니다.",
+    noRelationshipEvidence: "이 관계에는 저장된 근거 ID가 있지만 현재 피드에는 일치하는 최근 영감이 없습니다.",
+    noReasonStored: "아직 저장된 이유가 없습니다.",
+    contextNodesHeading: "맥락 노드",
+    relationshipEdgesHeading: "관계",
+    noContextNodeProcessed: "이 저장 항목에서는 맥락 노드가 생성되거나 강화되지 않았습니다.",
+    notFinishedProcessing: "이 저장 항목은 아직 처리가 완료되지 않았습니다.",
+    relationshipStoredEvidence: "이 저장 항목은 관계의 근거로 저장되어 있습니다.",
+    noRelationshipFromSave: "이 저장 항목에서는 관계가 생성되지 않았습니다.",
+    noRelationshipYet: "아직 관계가 없습니다.",
+    contextTypeLabels: {
+      theme: "주제",
+      value: "가치",
+      person: "사람",
+      aesthetic: "미감",
+      tension: "긴장",
+      project: "프로젝트",
+      open_question: "열린 질문",
+      hypothesis: "가설",
+      environment: "환경",
+      question: "질문",
+      desire: "욕구",
+      life_direction: "삶의 방향",
+      person_archetype: "사람",
+    },
+    ambitionLabels: {
+      place: "장소",
+      people: "사람들",
+      work: "일",
+      taste: "취향",
+      identity: "정체성",
+      rejection: "거절",
+      next_experiment: "다음 실험",
+    },
+    memoryStateLabels: {
+      emerging: "떠오름",
+      active: "활성",
+      fading: "희미해짐",
+      dormant: "잠잠함",
+      reactivated: "다시 활성화됨",
+      contradicted: "반박됨",
+      needs_testing: "검증 필요",
+    },
+  },
 };
+
+export function meaningGraphContextTypeLabel(type: string, locale: SupportedLocale): string {
+  return MEANING_GRAPH_COPY[locale].contextTypeLabels[type] ?? TYPE_LABEL[type] ?? type;
+}
+
+export function meaningGraphAmbitionLabel(dimension: AmbitionDimension, locale: SupportedLocale): string {
+  return MEANING_GRAPH_COPY[locale].ambitionLabels[dimension];
+}
+
+export function meaningGraphMemoryStateLabel(state: MemoryStateFilter, locale: SupportedLocale): string {
+  return MEANING_GRAPH_COPY[locale].memoryStateLabels[state];
+}
 
 function colorForType(type: string): string {
   switch (type) {
@@ -232,10 +622,12 @@ function hasRecentCorrection(node: ApiMeaningGraphNode): boolean {
   });
 }
 
-export function meaningGraphDragModeSummary(nodesDraggable: boolean): string {
-  return nodesDraggable
-    ? "Individual node dragging is enabled; moved nodes keep their positions until the graph is refreshed."
-    : "Node dragging is disabled.";
+export function meaningGraphDragModeSummary(
+  nodesDraggable: boolean,
+  locale: SupportedLocale = "en-US",
+): string {
+  const copy = MEANING_GRAPH_COPY[locale];
+  return nodesDraggable ? copy.dragEnabledSummary : copy.dragDisabledSummary;
 }
 
 export function updateManualNodePosition(
@@ -269,20 +661,56 @@ export function rebuildJobResult(job: ApiMeaningGraphRebuildJob | null): ApiMean
   };
 }
 
-function formatRebuildJobStatus(job: ApiMeaningGraphRebuildJob | null): string | null {
+export function meaningGraphRebuildPhaseLabel(phase: string | undefined, locale: SupportedLocale): string {
+  const copy = MEANING_GRAPH_COPY[locale];
+  if (!phase) return copy.rebuildStatusPhaseFallback;
+  if (locale === "ko-KR") {
+    switch (phase) {
+      case "queued":
+        return "대기";
+      case "counting":
+        return "영감 세기";
+      case "clearing":
+        return "기존 그래프 정리";
+      case "processing":
+        return "그래프 처리";
+      case "loading_inspirations":
+        return "영감 불러오기";
+      case "materializing_packets":
+        return "신호 패킷 준비";
+      case "clearing_graph":
+        return "기존 그래프 정리";
+      case "writing_graph":
+        return "그래프 작성";
+      case "completed":
+        return "완료";
+      default:
+        return copy.rebuildStatusPhaseFallback;
+    }
+  }
+  return phase.replace(/_/g, " ");
+}
+
+export function formatRebuildJobStatus(job: ApiMeaningGraphRebuildJob | null, locale: SupportedLocale): string | null {
   if (!job) return null;
-  if (job.status === "pending") return "Rebuild queued. The worker will start shortly.";
+  const copy = MEANING_GRAPH_COPY[locale];
+  if (job.status === "pending") {
+    return copy.rebuildStatusPending;
+  }
   if (job.status === "running") {
-    const phase = job.payload.phase?.replace(/_/g, " ") ?? "processing";
+    const phase = meaningGraphRebuildPhaseLabel(job.payload.phase, locale);
     const current = job.payload.processedInspirations;
     const total = job.payload.totalInspirations;
     const count = typeof current === "number" && typeof total === "number" && total > 0
       ? ` (${Math.min(current, total)} / ${total})`
       : "";
-    return `Rebuild running: ${phase}${count}. This page will refresh when it finishes.`;
+    return copy.rebuildStatusRunning(phase, count);
   }
-  if (job.status === "succeeded") return "Rebuild finished. Dashboard refreshed.";
-  if (job.status === "failed") return `Rebuild failed: ${job.lastError ?? "check server logs"}`;
+  if (job.status === "succeeded") return copy.rebuildStatusSucceeded;
+  if (job.status === "failed") {
+    if (locale === "ko-KR") return copy.rebuildStatusFailed;
+    return job.lastError ? `Rebuild failed: ${job.lastError}` : copy.rebuildStatusFailed;
+  }
   return null;
 }
 
@@ -292,34 +720,43 @@ function shortPreview(value: string): string {
   return `${normalized.slice(0, 127)}...`;
 }
 
-function relationshipLabel(edge: Pick<ApiMeaningGraphEdge, "kind">): string {
-  return EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ");
+export function relationshipLabel(
+  edge: Pick<ApiMeaningGraphEdge, "kind">,
+  locale: SupportedLocale = "en-US",
+): string {
+  return MEANING_GRAPH_COPY[locale].edgeLabels[edge.kind as EdgeKindKey] ?? edge.kind.replace(/_/g, " ");
 }
 
-function relationshipSummary(edge: {
+export function relationshipSummary(edge: {
   kind: string;
   sourceLabel: string;
   targetLabel: string;
-}): string {
-  return `${edge.sourceLabel} ${EDGE_LABEL[edge.kind] ?? edge.kind.replace(/_/g, " ")} ${edge.targetLabel}`;
+}, locale: SupportedLocale = "en-US"): string {
+  return `${edge.sourceLabel} ${relationshipLabel(edge, locale)} ${edge.targetLabel}`;
 }
 
-function compactReason(reason: string): string {
+function compactReason(reason: string, locale: SupportedLocale): string {
   const normalized = reason.replace(/\s+/g, " ").trim();
-  if (!normalized) return "No reason stored yet.";
+  if (!normalized) return MEANING_GRAPH_COPY[locale].noReasonStored;
   if (normalized.length <= 150) return normalized;
   return `${normalized.slice(0, 147).trimEnd()}...`;
 }
 
-function readableGraphWarning(type: string): string | null {
+function readableGraphWarning(type: string, locale: SupportedLocale): string | null {
   switch (type) {
     case "no_data":
-      return "No signals have been saved for this user yet.";
+      return locale === "ko-KR"
+        ? "이 사용자에게 아직 저장된 영감이 없습니다."
+        : "No signals have been saved for this user yet.";
     case "no_packets":
     case "stale":
-      return "Some saves have not been processed into the graph yet. Rebuild should fix this.";
+      return locale === "ko-KR"
+        ? "일부 저장 항목이 아직 그래프로 처리되지 않았습니다. 다시 만들기로 해결할 수 있습니다."
+        : "Some saves have not been processed into the graph yet. Rebuild should fix this.";
     case "writer_failed":
-      return "The graph writer did not finish cleanly. Rebuild, then check the server logs if this remains.";
+      return locale === "ko-KR"
+        ? "그래프 작성기가 정상적으로 완료되지 않았습니다. 다시 만든 뒤에도 계속되면 서버 로그를 확인하세요."
+        : "The graph writer did not finish cleanly. Rebuild, then check the server logs if this remains.";
     default:
       return null;
   }
@@ -402,6 +839,9 @@ const edgeTypes = { floating: FloatingEdge };
 const EMPTY_NEIGHBORS = new Set<string>();
 
 export default function MeaningGraphPage(): JSX.Element {
+  const { user } = useAuth();
+  const locale = normalizeSupportedLocale(user?.preferredLocale ?? readStoredLocale());
+  const copy = MEANING_GRAPH_COPY[locale];
   const [graph, setGraph] = useState<ApiMeaningGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -422,7 +862,7 @@ export default function MeaningGraphPage(): JSX.Element {
   const [confirmingRebuild, setConfirmingRebuild] = useState(false);
   const [rebuildJob, setRebuildJob] = useState<ApiMeaningGraphRebuildJob | null>(null);
   const lastRebuild = rebuildJobResult(rebuildJob);
-  const rebuildStatusMessage = formatRebuildJobStatus(rebuildJob);
+  const rebuildStatusMessage = formatRebuildJobStatus(rebuildJob, locale);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -432,11 +872,11 @@ export default function MeaningGraphPage(): JSX.Element {
       setGraph(next);
       setSelectedNodeId((current) => current ?? next.nodes[0]?.id ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load context graph");
+      setError(err instanceof Error ? err.message : copy.loadingGraph);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [copy.loadingGraph]);
 
   useEffect(() => {
     void loadGraph();
@@ -460,10 +900,10 @@ export default function MeaningGraphPage(): JSX.Element {
       setRebuildJob(result.job);
       setRebuilding(isActiveRebuildJob(result.job));
     } catch (err) {
-      setError(formatMeaningGraphRebuildError(err));
+      setError(formatMeaningGraphRebuildError(err, locale));
       setRebuilding(false);
     }
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -507,7 +947,7 @@ export default function MeaningGraphPage(): JSX.Element {
           }
         } catch (err) {
           if (!cancelled) {
-            setError(formatMeaningGraphRebuildError(err));
+            setError(formatMeaningGraphRebuildError(err, locale));
           }
         }
       })();
@@ -517,7 +957,7 @@ export default function MeaningGraphPage(): JSX.Element {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [loadGraph, rebuildJob]);
+  }, [loadGraph, locale, rebuildJob]);
 
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
@@ -526,9 +966,9 @@ export default function MeaningGraphPage(): JSX.Element {
   const visibleHealthWarnings = useMemo(
     () =>
       (health?.warnings ?? [])
-        .map((warning) => readableGraphWarning(warning.type))
+        .map((warning) => readableGraphWarning(warning.type, locale))
         .filter((message): message is string => Boolean(message)),
-    [health],
+    [health, locale],
   );
 
   const recentReviewStats = useMemo(() => {
@@ -720,7 +1160,7 @@ export default function MeaningGraphPage(): JSX.Element {
           source: edge.sourceNodeId,
           target: edge.targetNodeId,
           type: "floating",
-          label: EDGE_LABEL[edge.kind] ?? edge.kind,
+          label: relationshipLabel(edge, locale),
           style: {
             stroke: edgeColor(edge.kind),
             strokeWidth: isSelected ? 3 : 0.8 + normalized * 2.8,
@@ -742,7 +1182,7 @@ export default function MeaningGraphPage(): JSX.Element {
           labelShowBg: true,
         };
       }),
-    [focusNodeId, hoverNodeId, selectedEdgeId, visibleMeaningEdges],
+    [focusNodeId, hoverNodeId, locale, selectedEdgeId, visibleMeaningEdges],
   );
 
   const handleNodeDragStop = useCallback((_: unknown, node: Node<MeaningNodeData>) => {
@@ -762,18 +1202,18 @@ export default function MeaningGraphPage(): JSX.Element {
     : [];
 
   const evidenceHeading = selectedEdge
-    ? "Relationship evidence"
+    ? copy.relationshipEvidence
     : selectedNode
-      ? "Context node evidence"
-      : "Graph evidence";
+      ? copy.contextNodeEvidence
+      : copy.graphEvidence;
 
   const evidenceIntro = selectedEdge
-    ? `${selectedEdgeSource?.label ?? "Unknown source"} ${relationshipLabel(selectedEdge)} ${
-        selectedEdgeTarget?.label ?? "unknown target"
+    ? `${selectedEdgeSource?.label ?? copy.unknownSource} ${relationshipLabel(selectedEdge, locale)} ${
+        selectedEdgeTarget?.label ?? copy.unknownTarget
       }`
     : selectedNode
       ? selectedNode.label
-      : "Select a context node or relationship edge in the graph.";
+      : copy.selectGraphEntry;
 
   const renderRecentInspiration = (
     signal: ApiMeaningGraphRecentInspiration,
@@ -781,12 +1221,12 @@ export default function MeaningGraphPage(): JSX.Element {
     const hasMeaningNotes = signal.meaningNotes.length > 0;
     const hasRelationships = signal.relationshipEdges.length > 0;
     const status = !signal.packetCreatedAt
-      ? "Processing"
+      ? copy.recentStatusProcessing
       : hasMeaningNotes
         ? hasRelationships
-          ? "Added notes and relationships"
-          : "Added context nodes"
-        : "Not added to graph";
+          ? copy.recentStatusAddedNotesAndRelationships
+          : copy.recentStatusAddedContextNodes
+        : copy.recentStatusNotAdded;
 
     return (
       <article className="meaning-recent-inspiration" key={signal.id}>
@@ -799,42 +1239,42 @@ export default function MeaningGraphPage(): JSX.Element {
         <blockquote>{shortPreview(signal.preview)}</blockquote>
         <div className="meaning-recent-outcomes">
           <section>
-            <h3>Context nodes</h3>
+            <h3>{copy.contextNodesHeading}</h3>
             {hasMeaningNotes ? (
               <ul>
                 {signal.meaningNotes.map((note) => (
                   <li key={`${signal.id}-${note.id}`}>
                     <strong>{note.label}</strong>
                     <span>{TYPE_LABEL[note.type] ?? note.type}</span>
-                    <p>{compactReason(note.reason)}</p>
+                    <p>{compactReason(note.reason, locale)}</p>
                   </li>
                 ))}
               </ul>
             ) : (
               <p>
                 {signal.packetCreatedAt
-                  ? "No context node was created or reinforced from this save."
-                  : "This save has not finished processing yet."}
+                  ? copy.noContextNodeProcessed
+                  : copy.notFinishedProcessing}
               </p>
             )}
           </section>
           <section>
-            <h3>Relationship edges</h3>
+            <h3>{copy.relationshipEdgesHeading}</h3>
             {hasRelationships ? (
               <ul>
                 {signal.relationshipEdges.map((edge) => (
                   <li key={`${signal.id}-${edge.id}`}>
-                    <strong>{relationshipSummary(edge)}</strong>
-                    <span>{relationshipLabel(edge)}</span>
+                    <strong>{relationshipSummary(edge, locale)}</strong>
+                    <span>{relationshipLabel(edge, locale)}</span>
                     {edge.sourceReason || edge.targetReason ? (
                       <p>
                         {[edge.sourceReason, edge.targetReason]
                           .filter(Boolean)
-                          .map(compactReason)
+                          .map((reason) => compactReason(reason, locale))
                           .join(" ")}
                       </p>
                     ) : (
-                      <p>This save is stored as evidence for the relationship.</p>
+                      <p>{copy.relationshipStoredEvidence}</p>
                     )}
                   </li>
                 ))}
@@ -842,8 +1282,8 @@ export default function MeaningGraphPage(): JSX.Element {
             ) : (
               <p>
                 {hasMeaningNotes
-                  ? "No relationship edge was created from this save."
-                  : "No relationship edge yet."}
+                  ? copy.noRelationshipFromSave
+                  : copy.noRelationshipYet}
               </p>
             )}
           </section>
@@ -856,11 +1296,9 @@ export default function MeaningGraphPage(): JSX.Element {
     <main className="meaning-graph-page">
       <header className="meaning-graph-header">
         <div>
-          <span>admin context dashboard</span>
-          <h1>Context dashboard</h1>
-          <p>
-            Monitor how saved signals become context nodes and relationship edges.
-          </p>
+          <span>{copy.eyebrow}</span>
+          <h1>{copy.title}</h1>
+          <p>{copy.intro}</p>
         </div>
         <div className="meaning-graph-actions">
           <button
@@ -868,10 +1306,10 @@ export default function MeaningGraphPage(): JSX.Element {
             disabled={rebuilding || loading}
             onClick={handleRequestRebuild}
           >
-            {rebuilding ? "Rebuilding graph..." : "Rebuild graph"}
+            {rebuilding ? copy.rebuilding : copy.rebuild}
           </button>
           <button type="button" onClick={() => void loadGraph()} disabled={loading || rebuilding}>
-            {loading ? "Refreshing..." : "Refresh"}
+            {loading ? copy.refreshing : copy.refresh}
           </button>
         </div>
       </header>
@@ -879,20 +1317,15 @@ export default function MeaningGraphPage(): JSX.Element {
       {confirmingRebuild ? (
         <section className="meaning-graph-rebuild-alert" role="alert" aria-live="polite">
           <div>
-            <strong>Before you rebuild the context graph</strong>
-            <p>
-              Rebuild rereads your saved signals, regenerates missing signal packets, clears the current
-              context graph rows for this account, then rebuilds context nodes, evidence, and relationship edges.
-              It now runs as a background job, so the dashboard will poll progress and refresh itself when the job
-              finishes. Starting another rebuild while one is active will return the existing job.
-            </p>
+            <strong>{copy.rebuildConfirmTitle}</strong>
+            <p>{copy.rebuildConfirmBody}</p>
           </div>
           <div className="meaning-graph-rebuild-alert-actions">
             <button type="button" onClick={() => void handleRebuild()} disabled={rebuilding}>
-              Start rebuild
+              {copy.startRebuild}
             </button>
             <button type="button" onClick={handleCancelRebuild} disabled={rebuilding}>
-              Cancel
+              {copy.cancel}
             </button>
           </div>
         </section>
@@ -903,12 +1336,12 @@ export default function MeaningGraphPage(): JSX.Element {
           className={`meaning-graph-status${rebuildJob?.status === "failed" ? " meaning-graph-status--error" : " meaning-graph-status--running"}`}
           aria-live="polite"
         >
-          {rebuildStatusMessage ?? "Rebuild queued. This page will poll for progress."}
+          {rebuildStatusMessage ?? copy.rebuildQueuedPoll}
         </p>
       ) : null}
 
       {loading ? (
-        <p className="meaning-graph-status">Loading context graph...</p>
+        <p className="meaning-graph-status">{copy.loadingGraph}</p>
       ) : error ? (
         <p className="meaning-graph-status meaning-graph-status--error">{error}</p>
       ) : (
@@ -917,83 +1350,80 @@ export default function MeaningGraphPage(): JSX.Element {
             <section className="meaning-graph-workbench meaning-graph-workbench--flow">
               <div className="meaning-dashboard-section-heading">
                 <div>
-                  <span>context graph</span>
-                  <h2>Graph</h2>
-                  <p>Filter context claims, select evidence, and drag one node at a time while debugging.</p>
+                  <span>{copy.graphEyebrow}</span>
+                  <h2>{copy.graphTitle}</h2>
+                  <p>{copy.graphIntro}</p>
                 </div>
                 {health ? (
-                  <div className="meaning-dashboard-inline-meta" aria-label="Context graph snapshot">
-                    <span>{health.inspirationCount} signals</span>
-                    <span>{health.nodeCount} context nodes</span>
-                    <span>{health.edgeCount} relationship edges</span>
+                  <div className="meaning-dashboard-inline-meta" aria-label={copy.graphSnapshotAria}>
+                    <span>{copy.signals(health.inspirationCount)}</span>
+                    <span>{copy.contextNodes(health.nodeCount)}</span>
+                    <span>{copy.relationshipEdges(health.edgeCount)}</span>
                   </div>
                 ) : null}
               </div>
               {visibleHealthWarnings.length > 0 || lastRebuild ? (
                 <div className="meaning-dashboard-compact-status">
                   {lastRebuild ? (
-                    <span>
-                      Rebuild finished: {lastRebuild.inspirations} signals / {lastRebuild.nodesTouched} notes /{" "}
-                      {lastRebuild.edgesTouched} edges. Dashboard refreshed.
-                    </span>
+                    <span>{copy.rebuildFinished(lastRebuild.inspirations, lastRebuild.nodesTouched, lastRebuild.edgesTouched)}</span>
                   ) : null}
                   {visibleHealthWarnings.map((message) => (
                     <span key={message}>{message}</span>
                   ))}
                 </div>
               ) : null}
-              <div className="meaning-graph-filterbar" aria-label="Context graph filters">
+              <div className="meaning-graph-filterbar" aria-label={copy.graphFiltersAria}>
                 <label>
-                  Search
+                  {copy.search}
                   <input
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="node, evidence, note, feedback"
+                    placeholder={copy.searchPlaceholder}
                   />
                 </label>
                 <label>
-                  Node type
+                  {copy.nodeType}
                   <select value={contextTypeFilter} onChange={(event) => setContextTypeFilter(event.target.value)}>
-                    <option value="all">All types</option>
+                    <option value="all">{copy.allTypes}</option>
                     {contextTypeOptions.map((type) => (
                       <option key={type} value={type}>
-                        {TYPE_LABEL[type] ?? type}
+                        {meaningGraphContextTypeLabel(type, locale)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
-                  Ambition
+                  {copy.ambition}
                   <select value={ambitionFilter} onChange={(event) => setAmbitionFilter(event.target.value)}>
-                    <option value="all">All dimensions</option>
+                    <option value="all">{copy.allDimensions}</option>
                     {AMBITION_DIMENSIONS.map((dimension) => (
                       <option key={dimension} value={dimension}>
-                        {AMBITION_LABEL[dimension]}
+                        {meaningGraphAmbitionLabel(dimension, locale)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
-                  Status
+                  {copy.status}
                   <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                    <option value="all">All statuses</option>
-                    <option value="active">Active</option>
-                    <option value="stale">Stale</option>
+                    <option value="all">{copy.allStatuses}</option>
+                    <option value="active">{copy.active}</option>
+                    <option value="stale">{copy.stale}</option>
                   </select>
                 </label>
                 <label>
-                  Memory
+                  {copy.memory}
                   <select value={memoryStateFilter} onChange={(event) => setMemoryStateFilter(event.target.value)}>
-                    <option value="all">All memory states</option>
+                    <option value="all">{copy.allMemoryStates}</option>
                     {MEMORY_STATES.map((state) => (
                       <option key={state} value={state}>
-                        {MEMORY_LABEL[state]}
+                        {meaningGraphMemoryStateLabel(state, locale)}
                       </option>
                     ))}
                   </select>
                 </label>
                 <label>
-                  Confidence
+                  {copy.confidence}
                   <input
                     type="range"
                     min="0"
@@ -1010,16 +1440,16 @@ export default function MeaningGraphPage(): JSX.Element {
                     checked={onlyRecentCorrections}
                     onChange={(event) => setOnlyRecentCorrections(event.target.checked)}
                   />
-                  Recent corrections
+                  {copy.recentCorrections}
                 </label>
-                <span>{visibleMeaningNodes.length} shown</span>
-                <span>{meaningGraphDragModeSummary(true)}</span>
+                <span>{copy.shown(visibleMeaningNodes.length)}</span>
+                <span>{meaningGraphDragModeSummary(true, locale)}</span>
               </div>
               <div className="meaning-graph-flow-shell">
                 {nodes.length === 0 ? (
                   <div className="meaning-graph-empty">
-                    <strong>No graph rows yet</strong>
-                    <span>Click rebuild after saving signals locally.</span>
+                    <strong>{copy.noGraphRowsTitle}</strong>
+                    <span>{copy.noGraphRowsBody}</span>
                   </div>
                 ) : (
                   <ReactFlow
@@ -1062,16 +1492,16 @@ export default function MeaningGraphPage(): JSX.Element {
               <>
                 <dl>
                   <div>
-                    <dt>evidence signals</dt>
+                    <dt>{copy.evidenceSignals}</dt>
                     <dd>{selectedEdge.evidenceCount}</dd>
                   </div>
                   <div>
-                    <dt>updated</dt>
+                    <dt>{copy.updated}</dt>
                     <dd>{formatDate(selectedEdge.lastReinforcedAt)}</dd>
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Evidence signals</h3>
+                  <h3>{copy.evidenceSignals}</h3>
                   {selectedEdgeEvidence.length > 0 ? (
                     selectedEdgeEvidence.map((signal) => (
                       <article key={`${selectedEdge.id}-${signal.id}`}>
@@ -1080,52 +1510,54 @@ export default function MeaningGraphPage(): JSX.Element {
                       </article>
                     ))
                   ) : (
-                    <p>This relationship has stored evidence ids, but no recent matching signal is in the current feed.</p>
+                    <p>{copy.noRelationshipEvidence}</p>
                   )}
                 </div>
               </>
             ) : selectedNode ? (
               <>
-                <p>{selectedNode.description || "No description yet."}</p>
+                <p>{selectedNode.description || copy.noDescription}</p>
                 <dl>
                   <div>
-                    <dt>type</dt>
+                    <dt>{copy.type}</dt>
                     <dd>{TYPE_LABEL[selectedNode.contextType] ?? selectedNode.contextType}</dd>
                   </div>
                   <div>
-                    <dt>ambition dimension</dt>
+                    <dt>{copy.ambitionDimension}</dt>
                     <dd>{AMBITION_LABEL[ambitionDimensionForNode(selectedNode)]}</dd>
                   </div>
                   <div>
-                    <dt>evidence signals</dt>
+                    <dt>{copy.evidenceSignals}</dt>
                     <dd>{selectedNode.evidenceCount}</dd>
                   </div>
                   <div>
-                    <dt>updated</dt>
+                    <dt>{copy.updated}</dt>
                     <dd>{formatDate(selectedNode.lastReinforcedAt)}</dd>
                   </div>
                   <div>
-                    <dt>memory state</dt>
+                    <dt>{copy.memoryState}</dt>
                     <dd>{MEMORY_LABEL[selectedNode.memory.state]}</dd>
                   </div>
                   <div>
-                    <dt>reinforcement</dt>
+                    <dt>{copy.reinforcement}</dt>
                     <dd>
-                      {selectedNode.memory.reinforcementCount} total /{" "}
-                      {selectedNode.memory.recentReinforcementCount} recent
+                      {copy.reinforcementTotalRecent(
+                        selectedNode.memory.reinforcementCount,
+                        selectedNode.memory.recentReinforcementCount,
+                      )}
                     </dd>
                   </div>
                   <div>
-                    <dt>decay</dt>
+                    <dt>{copy.decay}</dt>
                     <dd>{selectedNode.memory.decay}</dd>
                   </div>
                   <div>
-                    <dt>movement score</dt>
+                    <dt>{copy.movementScore}</dt>
                     <dd>{selectedNode.memory.movementScore}</dd>
                   </div>
                 </dl>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Memory and synthesis quality</h3>
+                  <h3>{copy.memoryQuality}</h3>
                   {selectedNode.qualityIndicators.length > 0 ? (
                     selectedNode.qualityIndicators.map((indicator) => (
                       <article key={`${selectedNode.id}-${indicator.type}`}>
@@ -1135,19 +1567,15 @@ export default function MeaningGraphPage(): JSX.Element {
                       </article>
                     ))
                   ) : (
-                    <p>No quality warnings are attached to this context node.</p>
+                    <p>{copy.noQualityWarnings}</p>
                   )}
                 </div>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Why this may matter for ambition</h3>
-                  <p>
-                    This node is currently treated as a {AMBITION_LABEL[ambitionDimensionForNode(selectedNode)]} signal:
-                    use the supporting saved signals, related Top of Mind notes, and feedback below to decide whether
-                    that read is useful or misleading.
-                  </p>
+                  <h3>{copy.whyAmbitionTitle}</h3>
+                  <p>{copy.whyAmbitionBody(meaningGraphAmbitionLabel(ambitionDimensionForNode(selectedNode), locale))}</p>
                 </div>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Evidence signals</h3>
+                  <h3>{copy.evidenceSignals}</h3>
                   {selectedNode.evidence.length > 0 ? (
                     selectedNode.evidence.slice(0, 6).map((evidence) => (
                       <article key={`${selectedNode.id}-${evidence.inspirationId}-${evidence.packetId}`}>
@@ -1159,11 +1587,11 @@ export default function MeaningGraphPage(): JSX.Element {
                       </article>
                     ))
                   ) : (
-                    <p>No saved-signal evidence is attached to this context node yet.</p>
+                    <p>{copy.noSavedSignalEvidence}</p>
                   )}
                 </div>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Related Top of Mind notes</h3>
+                  <h3>{copy.relatedTopOfMindNotes}</h3>
                   {selectedNode.relatedTopOfMindNotes.length > 0 ? (
                     selectedNode.relatedTopOfMindNotes.map((note) => (
                       <article key={`${selectedNode.id}-${note.id}`}>
@@ -1173,11 +1601,11 @@ export default function MeaningGraphPage(): JSX.Element {
                         <p>{note.changedRecently}</p>
                         <p>{note.evidenceRationale}</p>
                         <p>
-                          Matched: {note.matchedEnvironment} Rejected: {note.antiEnvironment}
+                          {copy.matchedRejected(note.matchedEnvironment, note.antiEnvironment)}
                         </p>
                         <p>
-                          Rejected alternate read:{" "}
-                          {note.rejectedAlternativeInterpretation ?? "No rejected alternative stored yet."}
+                          {copy.rejectedAlternateRead}{" "}
+                          {note.rejectedAlternativeInterpretation ?? copy.noRejectedAlternative}
                         </p>
                         {note.qualityIndicators.length > 0 ? (
                           <ul className="meaning-quality-list">
@@ -1194,21 +1622,21 @@ export default function MeaningGraphPage(): JSX.Element {
                             {note.feedback.map((item) => (
                               <li key={`${note.id}-${item.id}`}>
                                 <strong>{item.value.replaceAll("_", " ")}</strong>
-                                <span>{item.correctionText || `Feedback source: ${item.source}`}</span>
+                                <span>{item.correctionText || copy.feedbackSource(item.source)}</span>
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p>No user feedback has shaped this post-it yet.</p>
+                          <p>{copy.noPostItFeedback}</p>
                         )}
                       </article>
                     ))
                   ) : (
-                    <p>No active Top of Mind note is currently tied to this context node.</p>
+                    <p>{copy.noActiveTopOfMind}</p>
                   )}
                 </div>
                 <div className="meaning-graph-evidence-list">
-                  <h3>Feedback</h3>
+                  <h3>{copy.feedback}</h3>
                   {selectedNode.feedback.length > 0 ? (
                     selectedNode.feedback.map((item) => (
                       <article key={`${selectedNode.id}-${item.id}`}>
@@ -1217,16 +1645,16 @@ export default function MeaningGraphPage(): JSX.Element {
                           {item.value.replaceAll("_", " ")}
                           {item.emotionLabel ? ` / ${item.emotionLabel.replaceAll("_", " ")}` : ""}
                         </blockquote>
-                        <p>{item.correctionText || `Feedback source: ${item.source}`}</p>
+                        <p>{item.correctionText || copy.feedbackSource(item.source)}</p>
                       </article>
                     ))
                   ) : (
-                    <p>No user feedback has been stored for this context node yet.</p>
+                    <p>{copy.noNodeFeedback}</p>
                   )}
                 </div>
               </>
             ) : (
-              <p>The graph above is the current context structure. Select a context node to see the signals behind it, or select a relationship edge to see what supports that connection.</p>
+              <p>{copy.noSelectionIntro}</p>
             )}
             </section>
           </section>
@@ -1235,16 +1663,16 @@ export default function MeaningGraphPage(): JSX.Element {
             <section className="meaning-dashboard-panel meaning-recent-feed" aria-labelledby="recent-inspirations-title">
               <div className="meaning-dashboard-section-heading">
                 <div>
-                  <span>recent signals</span>
-                  <h2 id="recent-inspirations-title">Graph entry review</h2>
-                  <p>Newest saves and what they added to the context graph.</p>
+                  <span>{copy.recentSignalsEyebrow}</span>
+                  <h2 id="recent-inspirations-title">{copy.graphEntryReview}</h2>
+                  <p>{copy.recentSignalsIntro}</p>
                 </div>
-                <div className="meaning-dashboard-inline-meta" aria-label="Recent graph entry summary">
-                  <span>{recentReviewStats.enteredGraph} added notes</span>
-                  <span>{recentReviewStats.withRelationships} added relationships</span>
-                  <span>{recentReviewStats.processedWithoutNotes} not added</span>
+                <div className="meaning-dashboard-inline-meta" aria-label={copy.recentGraphEntrySummaryAria}>
+                  <span>{copy.addedNotes(recentReviewStats.enteredGraph)}</span>
+                  <span>{copy.addedRelationships(recentReviewStats.withRelationships)}</span>
+                  <span>{copy.notAdded(recentReviewStats.processedWithoutNotes)}</span>
                   {recentReviewStats.processing > 0 ? (
-                    <span>{recentReviewStats.processing} processing</span>
+                    <span>{copy.processing(recentReviewStats.processing)}</span>
                   ) : null}
                 </div>
               </div>
@@ -1252,7 +1680,7 @@ export default function MeaningGraphPage(): JSX.Element {
                 {recentInspirations.length > 0 ? (
                   recentInspirations.map(renderRecentInspiration)
                 ) : (
-                  <p>No recent signals found.</p>
+                  <p>{copy.noRecentSignals}</p>
                 )}
               </div>
             </section>

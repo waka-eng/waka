@@ -515,6 +515,10 @@ export function InspirationDetail({
       </div>
       <div className="detail-body" id="detailBody">
         <section className="detail-hero" aria-labelledby="inspirationDetailTitle">
+          <h1 id="inspirationDetailTitle" className="detail-title detail-title--full-width">
+            {heroTitle}
+          </h1>
+
           <div className="detail-media-card">
             {featuredPreview ? (
               <img
@@ -537,9 +541,6 @@ export function InspirationDetail({
           </div>
 
           <div className="detail-hero-copy">
-            <h1 id="inspirationDetailTitle" className="detail-title">
-              {heroTitle}
-            </h1>
             <div className="detail-meta detail-meta--hero">
               {featuredAttachment?.enrichment?.link?.hostname ? `${featuredAttachment.enrichment.link.hostname} · ` : ""}
               {t(locale, "saved")} {inspiration.timestamp}
@@ -578,12 +579,7 @@ export function InspirationDetail({
               ))}
             </div>
           </section>
-        ) : (
-          <section className="detail-links-section" aria-label={t(locale, "detailInspirationDetails")}>
-            <div className="detail-section-label">{t(locale, "detailInspirationDetails")}</div>
-            <p className="detail-text">{inspiration.text}</p>
-          </section>
-        )}
+        ) : null}
 
         {reflectionComposerOpen ? (
           <ReflectionForm
@@ -606,12 +602,6 @@ export function InspirationDetail({
             handleSaveDetails();
           }}
         >
-          <label
-            htmlFor="inspirationDetailText"
-            className="detail-section-label detail-section-title"
-          >
-            {t(locale, "detailInspirationDetails")}
-          </label>
           <textarea
             id="inspirationDetailText"
             value={detailsText}

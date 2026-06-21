@@ -7,7 +7,7 @@
  */
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 
 import {
   feedback,
@@ -21,6 +21,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { normalizeContextNodeType } from "../lib/context-node-types.js";
 import { deriveMemoryPattern, type MemoryState } from "../lib/memory-movement.js";
+import { requireAdminUser } from "../lib/admin-auth.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import {
   enqueueMeaningGraphRebuild,
@@ -34,6 +35,34 @@ import { topOfMindNoteFromWowMoment } from "../lib/top-of-mind-notes.js";
 const DEFAULT_LIMIT = 120;
 const MAX_LIMIT = 300;
 const MAX_PREVIEW_LENGTH = 180;
+
+function isMissingMeaningGraphRebuildJobType(err: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const message = current instanceof Error ? current.message : String(current);
+    if (/invalid input value for enum background_job_type/i.test(message) && /meaning_graph_rebuild/i.test(message)) {
+      return true;
+    }
+    current = typeof current === "object" && "cause" in current ? (current as { cause?: unknown }).cause : null;
+  }
+
+  return false;
+}
+
+function missingMeaningGraphRebuildJobTypeResponse(c: Context<AuthEnv>) {
+  return c.json(
+    {
+      error: "Local database migration required",
+      code: "MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE",
+      detail:
+        "Run the repo Drizzle migrations so background_job_type includes meaning_graph_rebuild before rebuilding the admin meaning graph.",
+    },
+    409,
+  );
+}
 
 function ambitionDimensionForContextType(
   type: ReturnType<typeof normalizeContextNodeType>,
@@ -114,6 +143,7 @@ export interface AdminMeaningGraphRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   adminGate?: MiddlewareHandler<AuthEnv>;
+  adminAuthorization?: MiddlewareHandler<AuthEnv>;
 }
 
 export function isAdminMeaningGraphEnabled(): boolean {
@@ -475,38 +505,60 @@ export function createAdminMeaningGraphRoutes(
 
   routes.use("*", deps.adminGate ?? requireAdminMeaningGraphEnabled);
   routes.use("*", deps.authMiddleware ?? requireAuth);
+  routes.use("*", deps.adminAuthorization ?? requireAdminUser);
 
   routes.post("/rebuild", async (c) => {
     const userId = c.get("user").id;
-    const { job } = await enqueueMeaningGraphRebuild(userId);
-    return c.json(
-      {
-        job: serializeBackgroundJob(job),
-        statusUrl: `/api/admin/meaning-graph/rebuild/${job.id}`,
-      },
-      202,
-    );
+    try {
+      const { job } = await enqueueMeaningGraphRebuild(userId);
+      return c.json(
+        {
+          job: serializeBackgroundJob(job),
+          statusUrl: `/api/admin/meaning-graph/rebuild/${job.id}`,
+        },
+        202,
+      );
+    } catch (err) {
+      if (isMissingMeaningGraphRebuildJobType(err)) {
+        return missingMeaningGraphRebuildJobTypeResponse(c);
+      }
+      throw err;
+    }
   });
 
   routes.get("/rebuild", async (c) => {
     const userId = c.get("user").id;
-    const job = await getLatestMeaningGraphRebuildJob(userId);
-    if (job?.status === "pending" || job?.status === "running") {
-      scheduleBackgroundJobDrain();
+    try {
+      const job = await getLatestMeaningGraphRebuildJob(userId);
+      if (job?.status === "pending" || job?.status === "running") {
+        scheduleBackgroundJobDrain();
+      }
+      return c.json({ job: job ? serializeBackgroundJob(job) : null });
+    } catch (err) {
+      if (isMissingMeaningGraphRebuildJobType(err)) {
+        return missingMeaningGraphRebuildJobTypeResponse(c);
+      }
+      throw err;
     }
-    return c.json({ job: job ? serializeBackgroundJob(job) : null });
   });
 
   routes.get("/rebuild/:jobId", async (c) => {
     const userId = c.get("user").id;
-    const job = await getMeaningGraphRebuildJob(userId, c.req.param("jobId"));
-    if (!job) {
-      return c.json({ error: "Meaning graph rebuild job not found" }, 404);
+    try {
+      const job = await getMeaningGraphRebuildJob(userId, c.req.param("jobId"));
+      if (!job) {
+        return c.json({ error: "Meaning graph rebuild job not found" }, 404);
+      }
+      if (job.status === "pending" || job.status === "running") {
+        scheduleBackgroundJobDrain();
+      }
+      return c.json({ job: serializeBackgroundJob(job) });
+    } catch (err) {
+      if (isMissingMeaningGraphRebuildJobType(err)) {
+        return missingMeaningGraphRebuildJobTypeResponse(c);
+      }
+      throw err;
     }
-    if (job.status === "pending" || job.status === "running") {
-      scheduleBackgroundJobDrain();
-    }
-    return c.json({ job: serializeBackgroundJob(job) });
   });
 
   routes.get("/", async (c) => {

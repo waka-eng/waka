@@ -1,4 +1,5 @@
 import type { WowKind, WowMoment } from "../db/index.js";
+import type { SupportedLocale } from "./locales.js";
 
 export const topOfMindNoteTypeValues = [
   "pattern",
@@ -15,6 +16,7 @@ export const topOfMindNoteStatusValues = [
   "dismissed",
   "stale",
   "replaced",
+  "unavailable",
 ] as const;
 
 export type TopOfMindNoteStatus = (typeof topOfMindNoteStatusValues)[number];
@@ -81,6 +83,7 @@ export interface TopOfMindNoteFromWowMomentInput {
   relatedSignalIds?: string[];
   relatedContextNodeIds?: string[];
   status?: TopOfMindNoteStatus;
+  preferredLocale?: SupportedLocale;
 }
 
 function confidenceFromWowScore(value: number): number {
@@ -94,6 +97,10 @@ function uniqueIds(ids: string[]): string[] {
 
 function normalizeTitleText(value: string): string {
   return value.replace(/\s+/g, " ").trim().replace(/[.。]+$/, "");
+}
+
+function hasHangul(value: string | null | undefined): boolean {
+  return /[\u3131-\u318E\uAC00-\uD7A3]/u.test(value ?? "");
 }
 
 function lowerFirst(value: string): string {
@@ -189,6 +196,18 @@ function primaryPostItText(value: string | null | undefined, dimension: Ambition
   return null;
 }
 
+function primaryGeneratedTextForLocale(
+  value: string | null | undefined,
+  dimension: AmbitionDimension,
+  preferredLocale: SupportedLocale,
+): string | null {
+  if (preferredLocale !== "ko-KR") return primaryPostItText(value, dimension);
+
+  const sanitized = sanitizeUserFacingTopOfMindText(value);
+  if (!hasHangul(sanitized)) return null;
+  return normalizeTitleText(sanitized);
+}
+
 const AMBIENT_FIELD_LABELS = [
   "Ambient signal",
   "Matched environment",
@@ -246,11 +265,34 @@ function sanitizeTopOfMindBody(body: string): string {
   return sanitizeUserFacingTopOfMindText(withoutLabeledFields);
 }
 
-function titleFromLegacyMoment(moment: TopOfMindNoteWowMoment): string {
+function titleFromLegacyMoment(
+  moment: TopOfMindNoteWowMoment,
+  preferredLocale: SupportedLocale,
+): string {
   const belief = normalizeTitleText(moment.beliefStatement ?? "");
   const dimension = ambitionDimensionFromMoment(moment);
-  const postItBelief = primaryPostItText(belief, dimension);
+  const postItBelief = primaryGeneratedTextForLocale(
+    belief,
+    dimension,
+    preferredLocale,
+  );
   if (postItBelief) return postItBelief;
+
+  if (preferredLocale === "ko-KR") {
+    const koreanTitle = primaryGeneratedTextForLocale(
+      moment.title,
+      dimension,
+      preferredLocale,
+    );
+    if (koreanTitle) return koreanTitle;
+
+    const koreanAmbientSignal = primaryGeneratedTextForLocale(
+      extractAmbientField(moment.why, "Ambient signal"),
+      dimension,
+      preferredLocale,
+    );
+    return koreanAmbientSignal ?? "";
+  }
 
   const label = lowerFirst(
     /^you keep circling\b/i.test(belief)
@@ -278,11 +320,13 @@ export function topOfMindNoteFromWowMoment(
   input: TopOfMindNoteFromWowMomentInput,
 ): TopOfMindNote {
   const moment = input.moment;
+  const preferredLocale = input.preferredLocale ?? "en-US";
   const ambitionDimension = ambitionDimensionFromMoment(moment);
-  const title = titleFromLegacyMoment(moment);
-  const embeddedAmbientSignal = primaryPostItText(
+  const title = titleFromLegacyMoment(moment, preferredLocale);
+  const embeddedAmbientSignal = primaryGeneratedTextForLocale(
     extractAmbientField(moment.why, "Ambient signal"),
     ambitionDimension,
+    preferredLocale,
   );
   return {
     id: moment.id,

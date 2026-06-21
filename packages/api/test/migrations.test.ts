@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -18,6 +18,23 @@ function repoRoot(): string {
     }
   }
   throw new Error("Unable to locate repo root from migrations.test.ts");
+}
+
+type DrizzleJournal = {
+  entries: Array<{ idx: number; tag: string; breakpoints: boolean }>;
+};
+
+function migrationSqlTags(): string[] {
+  return readdirSync(resolve(repoRoot(), "drizzle/migrations"))
+    .filter((entry) => extname(entry) === ".sql")
+    .sort((a, b) => a.localeCompare(b))
+    .map((entry) => entry.slice(0, -".sql".length));
+}
+
+function migrationJournal(): DrizzleJournal {
+  return JSON.parse(
+    readFileSync(resolve(repoRoot(), "drizzle/migrations/meta/_journal.json"), "utf8"),
+  ) as DrizzleJournal;
 }
 
 function migration0007(): string {
@@ -47,6 +64,19 @@ function migration0013(): string {
     "utf8",
   );
 }
+
+describe("Drizzle migration journal", () => {
+  it("registers every checked-in SQL migration in order with contiguous indexes", () => {
+    const journal = migrationJournal();
+    const journalTags = journal.entries.map((entry) => entry.tag);
+
+    expect(journalTags).toEqual(migrationSqlTags());
+    expect(journal.entries.map((entry) => entry.idx)).toEqual(
+      journal.entries.map((_, index) => index),
+    );
+  });
+});
+
 
 describe("migration 0007", () => {
   it("cleans up legacy cross-tenant wow_moment_inspirations before adding tenant FKs", () => {

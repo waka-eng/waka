@@ -27,6 +27,7 @@ import {
   signSessionToken,
   verifyPassword,
 } from "../lib/auth.js";
+import { isAdminUser } from "../lib/admin-auth.js";
 import { getDb } from "../lib/db.js";
 import { DEFAULT_LOCALE, normalizeSupportedLocale, supportedLocaleSchema } from "../lib/locales.js";
 import {
@@ -71,6 +72,7 @@ const signupSchema = z.object({
     .trim()
     .max(120, "Name is too long")
     .optional(),
+  preferredLocale: supportedLocaleSchema.optional(),
 });
 
 export type SignupInput = z.infer<typeof signupSchema>;
@@ -112,6 +114,22 @@ const preferencesSchema = z
   .strict();
 
 export type PreferencesInput = z.infer<typeof preferencesSchema>;
+
+const profileSchema = z
+  .object({
+    name: z.string().trim().min(1, "Nickname is required").max(120, "Nickname is too long"),
+    preferredLocale: supportedLocaleSchema,
+    completeOnboarding: z.boolean().optional(),
+  })
+  .strict();
+
+export type ProfileInput = z.infer<typeof profileSchema>;
+
+const deleteAccountSchema = z
+  .object({
+    confirmation: z.literal("DELETE"),
+  })
+  .strict();
 
 // ---------------------------------------------------------------------------
 // Router
@@ -164,7 +182,7 @@ authRoutes.post("/signup", async (c) => {
     );
   }
 
-  const { email, password, name } = parsed.data;
+  const { email, password, name, preferredLocale } = parsed.data;
   const db = getDb();
 
   // 2. Email uniqueness check. We do this BEFORE hashing the password so we
@@ -186,7 +204,7 @@ authRoutes.post("/signup", async (c) => {
   // 4. Insert. We rely on the unique index to catch the rare race where two
   //    concurrent signups slip past the SELECT above; Postgres throws
   //    `23505` (unique_violation) which we map to the same 409.
-  let inserted: { id: string; email: string; name: string; preferredLocale: string };
+  let inserted: { id: string; email: string; name: string; preferredLocale: string; onboardingCompletedAt: Date | null };
   try {
     const rows = await db
       .insert(users)
@@ -194,12 +212,15 @@ authRoutes.post("/signup", async (c) => {
         email,
         passwordHash,
         name: name ?? "",
+        preferredLocale: preferredLocale ?? DEFAULT_LOCALE,
+        onboardingCompletedAt: name?.trim() ? new Date() : null,
       })
       .returning({
         id: users.id,
         email: users.email,
         name: users.name,
         preferredLocale: users.preferredLocale,
+        onboardingCompletedAt: users.onboardingCompletedAt,
       });
     inserted = rows[0]!;
   } catch (err) {
@@ -237,6 +258,8 @@ authRoutes.post("/signup", async (c) => {
         email: inserted.email,
         name: inserted.name,
         preferredLocale: normalizeSupportedLocale(inserted.preferredLocale),
+        onboardingCompletedAt: inserted.onboardingCompletedAt?.toISOString() ?? null,
+        isAdmin: isAdminUser(inserted),
       },
       token,
     },
@@ -300,6 +323,7 @@ authRoutes.post("/login", async (c) => {
       email: users.email,
       name: users.name,
       preferredLocale: users.preferredLocale,
+      onboardingCompletedAt: users.onboardingCompletedAt,
       passwordHash: users.passwordHash,
     })
     .from(users)
@@ -339,6 +363,8 @@ authRoutes.post("/login", async (c) => {
         email: candidate.email,
         name: candidate.name,
         preferredLocale: normalizeSupportedLocale(candidate.preferredLocale),
+        onboardingCompletedAt: candidate.onboardingCompletedAt?.toISOString() ?? null,
+        isAdmin: isAdminUser(candidate),
       },
       token,
     },
@@ -366,6 +392,8 @@ authRoutes.get("/me", requireAuth, (c) => {
       name: user.name,
       avatarUrl: user.avatarUrl,
       preferredLocale: user.preferredLocale,
+      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+      isAdmin: isAdminUser(user),
     },
   });
 });
@@ -403,6 +431,7 @@ authRoutes.patch("/me/preferences", requireAuth, async (c) => {
       name: users.name,
       avatarUrl: users.avatarUrl,
       preferredLocale: users.preferredLocale,
+      onboardingCompletedAt: users.onboardingCompletedAt,
     });
 
   const user = updated ?? { ...currentUser, preferredLocale: DEFAULT_LOCALE };
@@ -413,8 +442,90 @@ authRoutes.patch("/me/preferences", requireAuth, async (c) => {
       name: user.name,
       avatarUrl: user.avatarUrl,
       preferredLocale: normalizeSupportedLocale(user.preferredLocale),
+      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
     },
   });
+});
+
+
+
+authRoutes.patch("/me/profile", requireAuth, async (c) => {
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "Request body must be valid JSON" }, 400);
+  }
+
+  const parsed = profileSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "Invalid profile payload",
+        details: parsed.error.flatten().fieldErrors,
+      },
+      400,
+    );
+  }
+
+  const currentUser = c.get("user");
+  const now = new Date();
+  const [updated] = await getDb()
+    .update(users)
+    .set({
+      name: parsed.data.name,
+      preferredLocale: parsed.data.preferredLocale,
+      onboardingCompletedAt: parsed.data.completeOnboarding
+        ? (currentUser.onboardingCompletedAt ?? now)
+        : currentUser.onboardingCompletedAt,
+      updatedAt: now,
+    })
+    .where(eq(users.id, currentUser.id))
+    .returning({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      avatarUrl: users.avatarUrl,
+      preferredLocale: users.preferredLocale,
+      onboardingCompletedAt: users.onboardingCompletedAt,
+    });
+
+  const user = updated ?? currentUser;
+  return c.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      preferredLocale: normalizeSupportedLocale(user.preferredLocale),
+      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+    },
+  });
+});
+
+authRoutes.delete("/me", requireAuth, async (c) => {
+  let rawBody: unknown;
+  try {
+    rawBody = await c.req.json();
+  } catch {
+    return c.json({ error: "Request body must be valid JSON" }, 400);
+  }
+
+  const parsed = deleteAccountSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json(
+      {
+        error: "Invalid delete confirmation",
+        details: parsed.error.flatten().fieldErrors,
+      },
+      400,
+    );
+  }
+
+  const currentUser = c.get("user");
+  await getDb().delete(users).where(eq(users.id, currentUser.id));
+  c.header("Set-Cookie", buildSessionClearCookie());
+  return c.json({ ok: true });
 });
 
 /**

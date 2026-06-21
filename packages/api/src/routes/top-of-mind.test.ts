@@ -3,10 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createTopOfMindRoutes,
+  listTopOfMindNotesForUser,
   type TopOfMindNoteSurface,
 } from "./top-of-mind.js";
 
-const user = { id: "00000000-0000-4000-8000-000000000001" };
+const user = {
+  id: "00000000-0000-4000-8000-000000000001",
+  preferredLocale: "en-US" as const,
+};
 
 function authMiddleware() {
   return async (c: any, next: () => Promise<void>) => {
@@ -123,7 +127,11 @@ describe("GET /api/top-of-mind", () => {
 
     expect(response.status).toBe(200);
     expect(getTopOfMind).toHaveBeenCalledWith(db, user.id);
-    expect(listNotes).toHaveBeenCalledWith(db, { userId: user.id, limit: 7 });
+    expect(listNotes).toHaveBeenCalledWith(db, {
+      userId: user.id,
+      limit: 7,
+      preferredLocale: "en-US",
+    });
     await expect(response.json()).resolves.toMatchObject({
       topOfMind,
       topOfMindNotes: [
@@ -145,7 +153,7 @@ describe("GET /api/top-of-mind", () => {
       userId: user.id,
       title: "Rituals keep returning",
       kind: "recurrence",
-      why: "Multiple signals keep circling the same careful ritual.",
+      why: "Multiple signals keep circling the same careful ritual. Ambient signal: test the question where it can cost something Matched environment: A practical setting where rituals keep returning can be tested in public conditions. Anti-environment: Analysis loops that keep the question safe, abstract, and uncostly. Evidence rationale: This post-it is inferred from saved signals and may change as the graph gets better evidence.",
       reflectionQuestion: null,
       reflectionGuide: "Try one small version this week.",
       wowScore: 82,
@@ -212,8 +220,8 @@ describe("GET /api/top-of-mind", () => {
       expect.objectContaining({
         id: moment.id,
         userId: user.id,
-        title: "test the question where it can cost something",
-        ambitionDimension: "next_experiment",
+        title: "a room where unfinished ambition is allowed",
+        ambitionDimension: "place",
         ambientSignal: "test the question where it can cost something",
         matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
@@ -254,6 +262,201 @@ describe("GET /api/top-of-mind", () => {
     ]);
     expect(JSON.stringify(body.topOfMindNotes)).not.toContain("meaningNodeId");
     expect(JSON.stringify(body.topOfMindNotes)).not.toContain("admin");
+  });
+
+  it("marks active English-only notes unavailable for Korean users while preserving evidence links", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000010",
+      userId: user.id,
+      title: "test the question where it can cost something",
+      kind: "outlier",
+      why: "Ambient signal: test the question where it can cost something Matched environment: A practical setting where a question can be tested in public conditions. Anti-environment: Analysis loops that keep the question safe. Evidence rationale: Two saved signals support this.",
+      beliefStatement: "test the question where it can cost something",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 82,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const relatedRows = [
+      {
+        wowMomentId: moment.id,
+        inspirationId: "00000000-0000-4000-8000-000000000101",
+        role: "Evidence signal",
+        reason: "This signal supports the note.",
+        sortOrder: 0,
+        inspirationText: "한국어로 저장된 첫 번째 영감입니다.",
+        inspirationKind: "note",
+        inspirationCreatedAt: new Date("2026-05-29T10:00:00.000Z"),
+        inspirationWowScore: 64,
+      },
+      {
+        wowMomentId: moment.id,
+        inspirationId: "00000000-0000-4000-8000-000000000102",
+        role: "Evidence signal",
+        reason: "This second signal supports the same note.",
+        sortOrder: 1,
+        inspirationText: "두 번째 관련 영감입니다.",
+        inspirationKind: "note",
+        inspirationCreatedAt: new Date("2026-05-29T11:00:00.000Z"),
+        inspirationWowScore: 70,
+      },
+    ];
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect(relatedRows))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "ko-KR",
+    });
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      id: moment.id,
+      title: "",
+      ambientSignal: "",
+      status: "unavailable",
+      relatedSignalIds: [
+        "00000000-0000-4000-8000-000000000101",
+        "00000000-0000-4000-8000-000000000102",
+      ],
+    });
+    expect(notes[0]?.evidencePreviews).toHaveLength(2);
+    expect(notes[0]?.relatedSignals).toHaveLength(2);
+  });
+
+  it("marks Korean notes unavailable when only non-title fields contain Hangul", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000030",
+      userId: user.id,
+      title: "A room keeps asking for unfinished ambition",
+      kind: "recurrence",
+      why: "한국어 본문이 남아 있지만 제목 후보는 영어입니다. Ambient signal: a room where unfinished ambition is allowed Matched environment: 작은 실험이 안전한 방. Anti-environment: 완벽해질 때까지 미루는 환경. Evidence rationale: 저장된 신호가 같은 감각을 지지합니다.",
+      beliefStatement: "a room where unfinished ambition is allowed",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 82,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "ko-KR",
+    });
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      id: moment.id,
+      title: "",
+      matchedEnvironment: "작은 실험이 안전한 방.",
+      status: "unavailable",
+    });
+  });
+
+  it("keeps Hangul-containing Korean notes active for Korean users", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000020",
+      userId: user.id,
+      title: "people in rooms where 작은 실험 stays alive",
+      kind: "recurrence",
+      why: "한국어 본문이 남아 있는 노트입니다. Ambient signal: people in rooms where 작은 실험 stays alive Matched environment: 동료가 작은 실험을 공개해도 안전한 방. Anti-environment: 질문을 숨기고 완벽해질 때까지 미루는 환경. Evidence rationale: 세 개의 저장된 신호가 같은 감각을 지지합니다.",
+      beliefStatement: "people in rooms where 작은 실험 stays alive",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 82,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "ko-KR",
+    });
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      id: moment.id,
+      title: "people in rooms where 작은 실험 stays alive",
+      ambientSignal: "people in rooms where 작은 실험 stays alive",
+      matchedEnvironment: "동료가 작은 실험을 공개해도 안전한 방.",
+      antiEnvironment: "질문을 숨기고 완벽해질 때까지 미루는 환경.",
+      evidenceRationale: "세 개의 저장된 신호가 같은 감각을 지지합니다.",
+      body: "한국어 본문이 남아 있는 노트입니다.",
+      status: "active",
+    });
+  });
+
+  it("keeps fully Hangul synthesized Korean notes active through list readback", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000021",
+      userId: user.id,
+      title: "작게 공개하는 실험이 용기를 만든다",
+      kind: "recurrence",
+      why: "Ambient signal: 작게 공개하는 실험이 용기를 만든다. Matched environment: 초안을 보여 주고 바로 배우는 동료의 방. Anti-environment: 완벽해질 때까지 혼자 감추는 환경. Evidence rationale: 저장된 신호들이 공개 실험의 리듬을 함께 가리킵니다.",
+      beliefStatement: "작게 공개하는 실험이 용기를 만든다",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 88,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "ko-KR",
+    });
+
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      id: moment.id,
+      title: "작게 공개하는 실험이 용기를 만든다",
+      ambientSignal: "작게 공개하는 실험이 용기를 만든다",
+      matchedEnvironment: "초안을 보여 주고 바로 배우는 동료의 방.",
+      antiEnvironment: "완벽해질 때까지 혼자 감추는 환경.",
+      evidenceRationale: "저장된 신호들이 공개 실험의 리듬을 함께 가리킵니다.",
+      status: "active",
+    });
+    expect(JSON.stringify(notes[0])).not.toContain("a room where unfinished ambition is allowed");
+    expect(JSON.stringify(notes[0])).not.toContain("test the question where it can cost something");
   });
 
   it("derives note status from latest applied feedback provenance", async () => {
@@ -386,7 +589,11 @@ describe("GET /api/top-of-mind/:noteId", () => {
     const response = await app.request(`/api/top-of-mind/${noteId}`);
 
     expect(response.status).toBe(200);
-    expect(getNote).toHaveBeenCalledWith(db, { userId: user.id, noteId });
+    expect(getNote).toHaveBeenCalledWith(db, {
+      userId: user.id,
+      noteId,
+      preferredLocale: "en-US",
+    });
     await expect(response.json()).resolves.toMatchObject({
       topOfMindNote: {
         id: noteId,

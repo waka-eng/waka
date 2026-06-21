@@ -26,7 +26,8 @@ import type { Location } from "react-router-dom";
 import { ApiError, apiPath } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatMessage, readStoredLocale, t } from "../lib/locales";
+import { formatMessage, normalizeSupportedLocale, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
+import type { SupportedLocale } from "../lib/locales";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -110,17 +111,23 @@ interface SignupValues {
   email: string;
   password: string;
   name: string;
+  preferredLocale: SupportedLocale;
 }
 
-const EMPTY_SIGNUP: SignupValues = { email: "", password: "", name: "" };
+const EMPTY_SIGNUP: SignupValues = {
+  email: "",
+  password: "",
+  name: "",
+  preferredLocale: readStoredLocale(),
+};
 
 export function SignupForm(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { signup } = useAuth();
-  const locale = readStoredLocale();
 
   const [values, setValues] = useState<SignupValues>(EMPTY_SIGNUP);
+  const locale = values.preferredLocale;
   const [fieldErrors, setFieldErrors] = useState<SignupFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -157,6 +164,9 @@ export function SignupForm(): JSX.Element {
         formatMessage(locale, "loginPasswordMin", { count: MIN_PASSWORD_LENGTH }),
       ];
     }
+    if (!values.name.trim()) {
+      local.name = [t(locale, "profileNicknameRequired")];
+    }
     if (Object.keys(local).length > 0) {
       setFieldErrors(local);
       return;
@@ -169,7 +179,8 @@ export function SignupForm(): JSX.Element {
       await signup({
         email,
         password: values.password,
-        name: values.name.trim() || undefined,
+        name: values.name.trim(),
+        preferredLocale: values.preferredLocale,
       });
       // AuthContext has already cached the user; the route guard on `/`
       // (or the user's pre-redirect destination) will see them as
@@ -252,7 +263,7 @@ export function SignupForm(): JSX.Element {
       </label>
 
       <label className="field">
-        <span className="field-label">{t(locale, "loginNameOptional")}</span>
+        <span className="field-label">{t(locale, "profileNickname")}</span>
         <input
           className="field-input"
           type="text"
@@ -269,6 +280,27 @@ export function SignupForm(): JSX.Element {
             {nameError}
           </span>
         ) : null}
+      </label>
+
+
+      <label className="field">
+        <span className="field-label">{t(locale, "languageLabel")}</span>
+        <select
+          className="field-input"
+          value={values.preferredLocale}
+          disabled={submitting}
+          onChange={(e) => {
+            const next = normalizeSupportedLocale(e.target.value);
+            handleChange("preferredLocale", next);
+            writeStoredLocale(next);
+          }}
+        >
+          {supportedLocales.map((option) => (
+            <option key={option.code} value={option.code}>
+              {option.nativeLabel}
+            </option>
+          ))}
+        </select>
       </label>
 
       <button className="btn-primary" type="submit" disabled={submitting}>

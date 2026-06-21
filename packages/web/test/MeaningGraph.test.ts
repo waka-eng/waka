@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MEANING_GRAPH_COPY,
   filterMeaningGraphNodes,
+  formatRebuildJobStatus,
+  meaningGraphAmbitionLabel,
+  meaningGraphContextTypeLabel,
   meaningGraphDragModeSummary,
+  meaningGraphMemoryStateLabel,
+  meaningGraphRebuildPhaseLabel,
+  relationshipLabel,
+  relationshipSummary,
   rebuildJobResult,
   updateManualNodePosition,
 } from "../src/pages/MeaningGraph";
@@ -63,6 +71,139 @@ function graphNode(input: Partial<ApiMeaningGraphNode> & Pick<ApiMeaningGraphNod
     ...input,
   };
 }
+
+describe("meaning graph Korean admin copy", () => {
+  it("localizes the admin graph strings that previously leaked visible English", () => {
+    const koreanVisibleCopy = [
+      MEANING_GRAPH_COPY["ko-KR"].graphEyebrow,
+      MEANING_GRAPH_COPY["ko-KR"].rebuildConfirmTitle,
+      MEANING_GRAPH_COPY["ko-KR"].rebuildConfirmBody,
+      MEANING_GRAPH_COPY["ko-KR"].noSelectionIntro,
+      MEANING_GRAPH_COPY["ko-KR"].recentSignalsEyebrow,
+      MEANING_GRAPH_COPY["ko-KR"].recentSignalsIntro,
+      MEANING_GRAPH_COPY["ko-KR"].allTypes,
+      MEANING_GRAPH_COPY["ko-KR"].confidence,
+      MEANING_GRAPH_COPY["ko-KR"].noRecentSignals,
+    ].join(" ");
+
+    expect(koreanVisibleCopy).not.toMatch(/context graph|The graph above|recent signals|Newest saves|All types|Confidence|No recent signals/i);
+    expect(koreanVisibleCopy).toContain("맥락 그래프");
+    expect(MEANING_GRAPH_COPY["en-US"].recentSignalsIntro).toContain("context graph");
+  });
+
+  it("localizes Korean graph filter option labels without exposing internal English values", () => {
+    const koreanFilterLabels = [
+      meaningGraphContextTypeLabel("environment", "ko-KR"),
+      meaningGraphContextTypeLabel("open_question", "ko-KR"),
+      meaningGraphAmbitionLabel("place", "ko-KR"),
+      meaningGraphAmbitionLabel("people", "ko-KR"),
+      meaningGraphAmbitionLabel("work", "ko-KR"),
+      meaningGraphAmbitionLabel("taste", "ko-KR"),
+      meaningGraphAmbitionLabel("identity", "ko-KR"),
+      meaningGraphAmbitionLabel("rejection", "ko-KR"),
+      meaningGraphAmbitionLabel("next_experiment", "ko-KR"),
+      meaningGraphMemoryStateLabel("emerging", "ko-KR"),
+      meaningGraphMemoryStateLabel("active", "ko-KR"),
+      meaningGraphMemoryStateLabel("fading", "ko-KR"),
+      meaningGraphMemoryStateLabel("dormant", "ko-KR"),
+      meaningGraphMemoryStateLabel("reactivated", "ko-KR"),
+      meaningGraphMemoryStateLabel("contradicted", "ko-KR"),
+      meaningGraphMemoryStateLabel("needs_testing", "ko-KR"),
+    ].join(" ");
+
+    expect(koreanFilterLabels).not.toMatch(
+      /\b(place|people|work|taste|identity|rejection|next experiment|emerging|active|fading|dormant|reactivated|contradicted|needs testing|environment|open question)\b/i,
+    );
+    expect(koreanFilterLabels).toContain("장소");
+    expect(koreanFilterLabels).toContain("검증 필요");
+    expect(meaningGraphAmbitionLabel("next_experiment", "en-US")).toBe("next experiment");
+  });
+
+  it("localizes helper-rendered drag and relationship copy in Korean mode", () => {
+    const edge = {
+      kind: "points_to",
+      sourceLabel: "공개 제작 공간",
+      targetLabel: "야망 있는 동료",
+    };
+
+    expect(meaningGraphDragModeSummary(true, "ko-KR")).toBe(
+      "개별 노드 이동이 켜져 있습니다. 옮긴 노드는 그래프를 새로고침할 때까지 위치가 유지됩니다.",
+    );
+    expect(meaningGraphDragModeSummary(false, "ko-KR")).toBe("노드 이동이 꺼져 있습니다.");
+    expect(relationshipLabel(edge, "ko-KR")).toBe("가리킴");
+    expect(relationshipSummary(edge, "ko-KR")).toBe("공개 제작 공간 가리킴 야망 있는 동료");
+
+    const renderedKoreanHelperCopy = [
+      meaningGraphDragModeSummary(true, "ko-KR"),
+      meaningGraphDragModeSummary(false, "ko-KR"),
+      relationshipLabel(edge, "ko-KR"),
+      relationshipSummary(edge, "ko-KR"),
+    ].join(" ");
+
+    expect(renderedKoreanHelperCopy).not.toMatch(
+      /Individual node dragging|Node dragging is disabled|points to|supports|challenges|asks for|reactivates/i,
+    );
+  });
+
+  it("localizes hidden fallback and recent-status copy used by the admin DOM", () => {
+    const koreanFallbackAndStatusCopy = [
+      MEANING_GRAPH_COPY["ko-KR"].unknownSource,
+      MEANING_GRAPH_COPY["ko-KR"].unknownTarget,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusProcessing,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusAddedNotesAndRelationships,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusAddedContextNodes,
+      MEANING_GRAPH_COPY["ko-KR"].recentStatusNotAdded,
+      MEANING_GRAPH_COPY["ko-KR"].noReasonStored,
+    ].join(" ");
+
+    expect(koreanFallbackAndStatusCopy).not.toMatch(
+      /Unknown source|unknown target|Processing|Added notes and relationships|Added context nodes|Not added to graph|No reason stored/i,
+    );
+    expect(koreanFallbackAndStatusCopy).toContain("알 수 없는 출처");
+    expect(koreanFallbackAndStatusCopy).toContain("그래프에 추가되지 않음");
+  });
+
+  it("localizes Korean rebuild status and suppresses raw English server errors", () => {
+    expect(meaningGraphRebuildPhaseLabel("processing", "ko-KR")).toBe("그래프 처리");
+    expect(
+      formatRebuildJobStatus(
+        rebuildJob({
+          status: "running",
+          payload: {
+            phase: "processing",
+            totalInspirations: 5,
+            processedInspirations: 2,
+          },
+        }),
+        "ko-KR",
+      ),
+    ).toBe("다시 만들기 진행 중: 그래프 처리 (2 / 5). 완료되면 이 페이지가 새로고침됩니다.");
+
+    expect(
+      formatRebuildJobStatus(
+        rebuildJob({
+          status: "failed",
+          lastError: "Failed to enqueue context graph rebuild",
+          payload: {},
+        }),
+        "ko-KR",
+      ),
+    ).toBe("다시 만들기 실패. 서버 로그를 확인하세요.");
+  });
+
+  it("preserves English helper copy for en-US admins", () => {
+    const edge = {
+      kind: "points_to",
+      sourceLabel: "public building rooms",
+      targetLabel: "ambitious peers",
+    };
+
+    expect(meaningGraphDragModeSummary(true, "en-US")).toContain("Individual node dragging is enabled");
+    expect(meaningGraphDragModeSummary(false, "en-US")).toBe("Node dragging is disabled.");
+    expect(relationshipLabel(edge, "en-US")).toBe("points to");
+    expect(relationshipSummary(edge, "en-US")).toBe("public building rooms points to ambitious peers");
+  });
+});
 
 describe("rebuildJobResult", () => {
   it("derives the completed inspiration count from durable rebuild progress payloads", () => {

@@ -23,10 +23,8 @@ export function deriveInspirationTitle(text: string | null | undefined, locale: 
 
   const sentenceMatch = normalized.match(/^(.+?[.!?。！？])(?:\s|$)/u);
   const firstSentence = sentenceMatch?.[1]?.trim() ?? "";
-  const candidate = firstSentence.length > 0 && firstSentence.length <= TITLE_MAX_LENGTH
-    ? firstSentence
-    : normalized;
-  const maxLength = candidate === normalized ? TITLE_EXCERPT_LENGTH : TITLE_MAX_LENGTH;
+  const candidate = firstSentence.length > 0 ? firstSentence : normalized;
+  const maxLength = firstSentence.length > 0 ? TITLE_MAX_LENGTH : TITLE_EXCERPT_LENGTH;
 
   if (candidate.length <= maxLength) return candidate;
   return `${candidate.slice(0, maxLength - 1).trimEnd()}…`;
@@ -42,6 +40,20 @@ function answerText(reflection: ApiReflection): string | null {
 
 export function answeredReflections(reflections: ApiReflection[]): ApiReflection[] {
   return reflections.filter((reflection) => answerText(reflection) !== null);
+}
+
+export function mergeReflectionRows(
+  current: ApiReflection[],
+  incoming: ApiReflection[],
+): ApiReflection[] {
+  const merged = [...incoming];
+  const seenIds = new Set(merged.map((reflection) => reflection.id));
+  for (const reflection of current) {
+    if (seenIds.has(reflection.id)) continue;
+    merged.push(reflection);
+    seenIds.add(reflection.id);
+  }
+  return merged;
 }
 
 function normalizeAnswer(answer: string): string {

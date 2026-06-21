@@ -1940,7 +1940,9 @@
   font-weight: 460;
   letter-spacing: 0;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
+  word-break: normal;
   transition: opacity 220ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1953,8 +1955,20 @@
   font-weight: 460;
   letter-spacing: 0;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   pointer-events: none;
   white-space: pre-wrap;
+  word-break: normal;
+}
+
+.memory-detail-hero--full-title {
+  display: block;
+  min-width: 0;
+}
+
+.memory-detail-hero--full-title h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .memory-contents-highlight-layer--hidden {
@@ -2246,6 +2260,8 @@
 
 .memory-detail-head--mockup {
   gap: 12px;
+  grid-column: 1 / -1;
+  min-width: 0;
   padding: 0;
 }
 
@@ -2256,6 +2272,7 @@
   font-weight: 560;
   letter-spacing: 0;
   line-height: 1.12;
+  overflow-wrap: anywhere;
 }
 
 .memory-detail-head--mockup p {
@@ -2280,6 +2297,10 @@
   font-size: clamp(17px, 2vw, 23px);
   font-weight: 460;
   line-height: 1.5;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  word-break: normal;
 }
 
 .memory-detail-next {
@@ -8637,6 +8658,76 @@ body.dragging .drop-overlay {
   padding: var(--space-8) 36px;
 }
 
+.profile-shell {
+  align-items: flex-start;
+  padding-block: clamp(36px, 7vw, 72px);
+}
+
+.profile-card {
+  max-width: 560px;
+  display: grid;
+  gap: var(--space-5);
+}
+
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+
+.profile-email {
+  margin-top: var(--space-2);
+}
+
+.profile-signout-button {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  padding: 9px 12px;
+  text-transform: uppercase;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
+}
+
+.profile-signout-button:hover:not(:disabled),
+.profile-signout-button:focus-visible {
+  border-color: var(--ink);
+  color: var(--ink);
+  outline: 0;
+}
+
+.profile-signout-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.profile-danger-panel {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid rgba(179, 38, 30, 0.22);
+  background: rgba(179, 38, 30, 0.045);
+  padding: var(--space-5);
+}
+
+.profile-danger-heading {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.profile-danger-heading .login-eyebrow,
+.profile-danger-heading .login-subtitle {
+  margin: 0;
+}
+
 .login-eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -8863,6 +8954,35 @@ body.dragging .drop-overlay {
 .btn-google:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.btn-destructive {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #fff8f6;
+  background: var(--error);
+  border: 1px solid var(--error);
+  border-radius: 0;
+  padding: 12px var(--space-4);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
+}
+
+.btn-destructive:hover:not(:disabled),
+.btn-destructive:focus-visible {
+  background: transparent;
+  color: var(--error);
+  outline: 0;
+}
+
+.btn-destructive:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .btn-google__icon {
@@ -10441,6 +10561,12 @@ body.reflect-bg {
   font-weight: 700;
   letter-spacing: -0.045em;
   line-height: 1.08;
+  overflow-wrap: anywhere;
+}
+
+.detail-title--full-width {
+  grid-column: 1 / -1;
+  max-width: 100%;
 }
 
 .detail-meta--hero {
@@ -13935,7 +14061,8 @@ body.reflect-bg {
   transform: translateY(-2px) scale(1.04);
 }
 
-.nc-lang--top {
+.nc-lang--top,
+.nc-profile-link {
   position: fixed;
   top: 18px;
   right: 18px;
@@ -13944,6 +14071,36 @@ body.reflect-bg {
   padding: 0;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+}
+
+.nc-profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border: 1px solid rgba(26, 23, 20, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.62);
+  color: rgba(26, 23, 20, 0.68);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  padding: 0 13px;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.nc-profile-link:hover,
+.nc-profile-link:focus-visible {
+  border-color: rgba(26, 23, 20, 0.28);
+  background: rgba(255, 253, 247, 0.9);
+  color: rgba(26, 23, 20, 0.92);
+  outline: 0;
 }
 
 .nc-drawer-icon {

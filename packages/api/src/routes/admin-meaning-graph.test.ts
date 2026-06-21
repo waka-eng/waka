@@ -12,7 +12,7 @@ vi.mock("../lib/queue.js", () => queueMocks);
 
 import { createAdminMeaningGraphRoutes } from "./admin-meaning-graph.js";
 
-const user = { id: "00000000-0000-4000-8000-000000000001" };
+const user = { id: "00000000-0000-4000-8000-000000000001", email: "admin@example.com" };
 
 function authMiddleware() {
   return async (c: any, next: () => Promise<void>) => {
@@ -81,6 +81,20 @@ function makeJob(overrides: Record<string, any> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.WAKA_ADMIN_EMAILS = user.email;
+});
+
+describe("admin authorization", () => {
+  it("forbids authenticated users who are not in the admin allowlist", async () => {
+    process.env.WAKA_ADMIN_EMAILS = "other-admin@example.com";
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({ error: "Admin authorization required" });
+    expect(queueMocks.enqueueMeaningGraphRebuild).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/admin/meaning-graph/rebuild", () => {
@@ -105,6 +119,34 @@ describe("POST /api/admin/meaning-graph/rebuild", () => {
     });
     expect(body.job.createdAt).toBe("2026-05-24T12:00:00.000Z");
   });
+  it("returns a non-500 migration hint when local DB is missing the rebuild job enum", async () => {
+    queueMocks.enqueueMeaningGraphRebuild.mockRejectedValue(
+      new Error('invalid input value for enum background_job_type: "meaning_graph_rebuild"'),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { code: string; detail: string };
+    expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
+    expect(body.detail).toContain("Run the repo Drizzle migrations");
+  });
+
+  it("returns the migration hint for Drizzle errors that wrap the enum failure in cause", async () => {
+    queueMocks.enqueueMeaningGraphRebuild.mockRejectedValue(
+      new Error("Failed query: insert into background_jobs", {
+        cause: new Error('invalid input value for enum background_job_type: "meaning_graph_rebuild"'),
+      }),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild", { method: "POST" });
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { code: string };
+    expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
+  });
 });
 
 describe("GET /api/admin/meaning-graph/rebuild", () => {
@@ -121,6 +163,22 @@ describe("GET /api/admin/meaning-graph/rebuild", () => {
     expect(queueMocks.scheduleBackgroundJobDrain).toHaveBeenCalledTimes(1);
     const body = (await response.json()) as { job: Record<string, any> };
     expect(body.job).toMatchObject({ status: "running", payload: expect.objectContaining({ phase: "processing" }) });
+  });
+
+  it("returns a non-500 migration hint when reading latest job hits a missing enum", async () => {
+    queueMocks.getLatestMeaningGraphRebuildJob.mockRejectedValue(
+      new Error("Failed query: select from background_jobs", {
+        cause: new Error('invalid input value for enum background_job_type: "meaning_graph_rebuild"'),
+      }),
+    );
+    const app = createApp();
+
+    const response = await app.request("/api/admin/meaning-graph/rebuild");
+
+    expect(response.status).toBe(409);
+    const body = (await response.json()) as { code: string; detail: string };
+    expect(body.code).toBe("MISSING_MEANING_GRAPH_REBUILD_JOB_TYPE");
+    expect(body.detail).toContain("Run the repo Drizzle migrations");
   });
 });
 
@@ -359,7 +417,7 @@ describe("GET /api/admin/meaning-graph", () => {
       relatedTopOfMindNotes: [
         expect.objectContaining({
           id: "note-1",
-          title: "I need rooms where honest builders make in public",
+          title: "a room where unfinished ambition is allowed",
           whyNow: expect.stringContaining("current memory pattern"),
           changedRecently: expect.stringContaining("recent supporting signal"),
           rejectedAlternativeInterpretation: null,

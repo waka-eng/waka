@@ -27,6 +27,7 @@ function fakeProvider(): ModelProvider {
 
 const SYNTHESIS_INPUT = {
   userId,
+  preferredLocale: "en-US" as const,
   trigger: "weekly_refresh" as const,
   synthesisKey: "ambition_synthesis:v1:test",
   contextNode: {

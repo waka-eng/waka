@@ -39,12 +39,14 @@ import type { ReactNode } from "react";
 import {
   fetchCurrentUser,
   login as apiLogin,
+  deleteAccount as apiDeleteAccount,
   logout as apiLogout,
   signup as apiSignup,
   updateAuthPreferences,
+  updateAuthProfile,
 } from "./api";
 import type { ApiUser, LoginRequest, SignupRequest } from "./api";
-import { normalizeSupportedLocale } from "./locales";
+import { normalizeSupportedLocale, writeStoredLocale } from "./locales";
 import type { SupportedLocale } from "./locales";
 
 // ---------------------------------------------------------------------------
@@ -80,6 +82,11 @@ function readCachedUser(): ApiUser | null {
         email: parsed.email,
         name: parsed.name,
         preferredLocale: normalizeSupportedLocale(parsed.preferredLocale),
+        onboardingCompletedAt:
+          typeof parsed.onboardingCompletedAt === "string"
+            ? parsed.onboardingCompletedAt
+            : null,
+        isAdmin: parsed.isAdmin === true,
       };
     }
     return null;
@@ -143,6 +150,8 @@ export interface AuthContextValue {
   refresh: () => Promise<ApiUser | null>;
   /** Persist and apply the account language used by UI and AI-generated copy. */
   updatePreferredLocale: (preferredLocale: SupportedLocale) => Promise<ApiUser>;
+  updateProfile: (input: { name: string; preferredLocale: SupportedLocale; completeOnboarding?: boolean }) => Promise<ApiUser>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -198,6 +207,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       }
       setUser(next);
       writeCachedUser(next);
+      if (next) writeStoredLocale(normalizeSupportedLocale(next.preferredLocale));
     },
     [],
   );
@@ -272,6 +282,25 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     [applyUser],
   );
 
+
+  const updateProfile = useCallback(
+    async (input: {
+      name: string;
+      preferredLocale: SupportedLocale;
+      completeOnboarding?: boolean;
+    }): Promise<ApiUser> => {
+      const { user: updated } = await updateAuthProfile(input);
+      applyUser(updated);
+      return updated;
+    },
+    [applyUser],
+  );
+
+  const deleteAccount = useCallback(async (): Promise<void> => {
+    await apiDeleteAccount();
+    applyUser(null);
+  }, [applyUser]);
+
   /**
    * Memoised so consumers using `useAuth()` only re-render when something
    * meaningful actually changes, not on every parent re-render.
@@ -286,8 +315,10 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       logout,
       refresh,
       updatePreferredLocale,
+      updateProfile,
+      deleteAccount,
     }),
-    [user, isLoading, login, signup, logout, refresh, updatePreferredLocale],
+    [user, isLoading, login, signup, logout, refresh, updatePreferredLocale, updateProfile, deleteAccount],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

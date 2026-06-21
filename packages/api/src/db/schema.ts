@@ -95,6 +95,7 @@ export const users = pgTable(
     // Nullable: email/password signups won't have one until they link OAuth.
     avatarUrl: text("avatar_url"),
     preferredLocale: text("preferred_locale").notNull().default("en-US"),
+    onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

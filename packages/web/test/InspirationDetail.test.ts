@@ -57,7 +57,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reje
   return { promise, resolve, reject };
 }
 
-async function renderDetail(options: { onNextInspiration?: () => void; locale?: "en-US" | "ko-KR"; onDeleted?: (id: string) => void } = {}): Promise<HTMLDivElement> {
+async function renderDetail(options: { onNextInspiration?: () => void; locale?: "en-US" | "ko-KR"; onDeleted?: (id: string) => void; withoutLinks?: boolean } = {}): Promise<HTMLDivElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -70,9 +70,9 @@ async function renderDetail(options: { onNextInspiration?: () => void; locale?: 
         inspiration: {
           id: "insp-1",
           text: "A saved signal about how ambition becomes concrete when there is a visible next move.",
-          links: ["https://example.com/watch?v=ambition"],
+          links: options.withoutLinks ? [] : ["https://example.com/watch?v=ambition"],
           timestamp: "7:00 PM · 5/18/2026",
-          attachments: [
+          attachments: options.withoutLinks ? [] : [
             {
               id: "att-1",
               inspirationId: "insp-1",
@@ -126,7 +126,8 @@ describe("InspirationDetail", () => {
     expect(container.textContent).toContain("A grounded source title — https://example.com/watch?v=ambition");
     expect(container.textContent).toContain("Link");
     expect(container.textContent).toContain("Reflect Deeper");
-    expect(container.textContent).toContain("Inspiration details");
+    expect(container.querySelector("#inspirationDetailTitle")?.classList.contains("detail-title--full-width")).toBe(true);
+    expect(container.textContent).not.toContain("Inspiration details");
     expect(container.textContent).not.toContain("Source links");
     expect(container.textContent).not.toContain("Add context");
     expect(container.textContent).not.toContain("No reflections yet.");
@@ -141,6 +142,17 @@ describe("InspirationDetail", () => {
       next?.click();
     });
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders one editable body surface for text-only details", async () => {
+    const container = await renderDetail({ withoutLinks: true });
+
+    expect(container.querySelector(".detail-links-section")).toBeNull();
+    expect(container.querySelector("p.detail-text")).toBeNull();
+    const textareas = container.querySelectorAll<HTMLTextAreaElement>("#inspirationDetailText");
+    expect(textareas).toHaveLength(1);
+    expect(textareas[0].value).toBe("A saved signal about how ambition becomes concrete when there is a visible next move.");
+    expect(container.textContent).not.toContain("Inspiration details");
   });
 
   it("keeps standalone no-reflection analysis absent while reflections load and after empty results", async () => {
@@ -239,7 +251,6 @@ describe("InspirationDetail", () => {
     expect(container.querySelector<HTMLButtonElement>("#detailBack")?.getAttribute("aria-label")).toBe("저장된 영감으로 돌아가기");
     expect(container.textContent).toContain("저장됨 7:00 PM · 5/18/2026");
     expect(container.textContent).toContain("링크");
-    expect(container.textContent).toContain("영감 상세");
     expect(container.textContent).toContain("내용 저장");
     expect(container.textContent).toContain("삭제");
     expect(container.textContent).toContain("조금 더 생각하기");

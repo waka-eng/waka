@@ -10,6 +10,7 @@ import type {
   AmbitionSynthesisInput,
   AmbitionSynthesisOutput,
 } from "./ambition-synthesis.js";
+import type { SupportedLocale } from "./locales.js";
 import type {
   TopOfMindRefreshCandidate,
   TopOfMindRefreshEvidenceInput,
@@ -19,6 +20,7 @@ import type { WowJudgeClient } from "./wow-judge.js";
 
 export interface TopOfMindNoteGenerationInput {
   userId: string;
+  preferredLocale?: SupportedLocale;
   nodes: TopOfMindRefreshNodeInput[];
   evidence: TopOfMindRefreshEvidenceInput[];
   existingIdempotencyKeys?: Set<string>;

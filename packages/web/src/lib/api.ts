@@ -26,6 +26,8 @@ export interface ApiUser {
   email: string;
   name: string;
   preferredLocale: SupportedLocale;
+  onboardingCompletedAt: string | null;
+  isAdmin: boolean;
 }
 
 /**
@@ -99,6 +101,7 @@ export interface SignupRequest {
   email: string;
   password: string;
   name?: string;
+  preferredLocale?: SupportedLocale;
 }
 
 export interface SignupResponse {
@@ -263,6 +266,53 @@ export async function updateAuthPreferences(
     input,
     "Failed to update preferences",
   );
+}
+
+
+export interface UpdateAuthProfileRequest {
+  name: string;
+  preferredLocale: SupportedLocale;
+  completeOnboarding?: boolean;
+}
+
+export interface UpdateAuthProfileResponse {
+  user: ApiUser;
+}
+
+export async function updateAuthProfile(
+  input: UpdateAuthProfileRequest,
+): Promise<UpdateAuthProfileResponse> {
+  return patchJson<UpdateAuthProfileResponse>(
+    apiPath("/auth/me/profile"),
+    input,
+    "Failed to update profile",
+  );
+}
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(apiPath("/auth/me"), {
+    method: "DELETE",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ confirmation: "DELETE" }),
+  });
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      // ignore malformed error bodies
+    }
+    const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors };
+    throw new ApiError({
+      status: res.status,
+      message: errorBody.error ?? `Failed to delete account (HTTP ${res.status}).`,
+      fieldErrors: errorBody.details,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -728,7 +778,8 @@ export type ApiTopOfMindNoteStatus =
   | "active"
   | "dismissed"
   | "stale"
-  | "replaced";
+  | "replaced"
+  | "unavailable";
 
 export type ApiAmbitionDimension =
   | "place"
@@ -1500,10 +1551,11 @@ export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
   return getJson(apiPath(path), "Failed to load context graph rebuild status");
 }
 
-export function formatMeaningGraphRebuildError(err: unknown): string {
-  const timeoutMessage =
-    "The rebuild status request timed out or the remote proxy returned HTTP 502/504. " +
-    "The rebuild job may still be running server-side. Wait a minute, then click Refresh to check the graph before starting another rebuild.";
+export function formatMeaningGraphRebuildError(err: unknown, locale: SupportedLocale = "en-US"): string {
+  const timeoutMessage = locale === "ko-KR"
+    ? "다시 만들기 상태 요청 시간이 초과되었거나 원격 프록시가 HTTP 502/504를 반환했습니다. 서버에서 작업이 계속 진행 중일 수 있습니다. 잠시 뒤 새로고침으로 그래프를 확인한 다음 다시 시작하세요."
+    : "The rebuild status request timed out or the remote proxy returned HTTP 502/504. " +
+      "The rebuild job may still be running server-side. Wait a minute, then click Refresh to check the graph before starting another rebuild.";
 
   if (err instanceof ApiError && [0, 502, 504].includes(err.status)) {
     return timeoutMessage;
@@ -1511,6 +1563,13 @@ export function formatMeaningGraphRebuildError(err: unknown): string {
 
   if (err instanceof TypeError) {
     return timeoutMessage;
+  }
+
+  if (locale === "ko-KR") {
+    if (err instanceof ApiError && err.status === 409) {
+      return "다시 만들기 실패: 로컬 데이터베이스 마이그레이션이 필요합니다. Drizzle 마이그레이션을 실행한 뒤 다시 시도하세요.";
+    }
+    return "다시 만들기 실패: 그래프를 다시 만들지 못했습니다. 잠시 뒤 다시 시도하세요.";
   }
 
   const message = err instanceof Error ? err.message : "Failed to rebuild context graph";
