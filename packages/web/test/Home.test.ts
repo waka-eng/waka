@@ -964,8 +964,8 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
-    expect(container.textContent).toContain("Saved inspirations start to form a map.");
-    expect(container.textContent).toContain("provisional notes from the things they saved");
+    expect(container.textContent).not.toContain("Saved inspirations start to form a map.");
+    expect(container.textContent).not.toContain("provisional notes from the things they saved");
     expect(container.textContent).not.toContain("Most inspiration disappears.");
     expect(container.textContent).not.toContain("Waka caught what almost slipped away.");
     expect(container.textContent).not.toContain("They caught what almost slipped away.");
@@ -1517,7 +1517,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, notes will appear here.");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
@@ -1585,7 +1585,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-page")).toBeNull();
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, notes will appear here.");
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
@@ -1634,7 +1634,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.textContent).toContain("river님의 탑오브마인드");
     expect(container.textContent).not.toContain("river's top of mind");
-    expect(container.textContent).toContain("저장한 영감들이 조금씩 하나의 지도를 만듭니다.");
+    expect(container.textContent).not.toContain("저장한 영감들이 조금씩 하나의 지도를 만듭니다.");
     expect(container.textContent).not.toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).toContain("make the thing before explaining it");
     expect(container.textContent).toContain("어디에든 놓기 — 링크, 이미지, 메모");

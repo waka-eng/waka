@@ -1232,15 +1232,8 @@ const HOME_COPY = {
     ),
     titleLineTwo: "",
     titleSuffix: "",
-    tagline: (
-      <>
-        저장한 영감들이 조금씩 하나의 지도를 만듭니다.
-        <br />
-        누구와 생각하고 싶은지. 어디에 머물고 싶은지. 무엇을 만들고 싶은지.
-        <br />
-        <span className="nc-tagline-en">— 저장한 것들에서 나온 임시 노트입니다. 새 영감이 들어오면 달라집니다.</span>
-      </>
-    ),
+    tagline: <></>,
+    showTagline: false,
     lifecycleHint: "",
     noteShifted: ["반복됨", "형성 중", "다시 돌아옴", "긴장", "확인 필요"],
     evidenceLabel: "시작된 곳",
@@ -1255,7 +1248,7 @@ const HOME_COPY = {
     feedbackSaving: "저장 중...",
     feedbackError: "포스트잇을 바꾸지 못했습니다",
     loadingThoughts: "생각을 모으는 중...",
-    emptyThoughts: "관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.",
+    emptyThoughts: "관련된 영감이 2~3개 이상 쌓이면 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
     captureBody: "정리하지 않아도 됩니다. 어설프고 덜 완성된 생각도 그대로 저장하세요.",
     captureInlineKicker: "영감 기록",
@@ -1320,17 +1313,8 @@ const HOME_COPY = {
     ),
     titleLineTwo: "",
     titleSuffix: "",
-    tagline: (
-      <>
-        Saved inspirations start to form a map.
-        <br />
-        Who they want to think with. Where they want to be. What they are here to build.
-        <br />
-        <span className="nc-tagline-en">
-          — provisional notes from the things they saved. changing as new inspirations arrive.
-        </span>
-      </>
-    ),
+    tagline: <></>,
+    showTagline: false,
     lifecycleHint: "",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
@@ -1345,7 +1329,7 @@ const HOME_COPY = {
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "When 2–3 related inspirations gather, provisional notes will appear here.",
+    emptyThoughts: "When 2–3 related inspirations gather, notes will appear here.",
     captureTitle: "Catch the first inspiration",
     captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing as it is.",
     captureInlineKicker: "inspiration capture",
@@ -1411,6 +1395,7 @@ const HOME_COPY = {
     titleLineTwo: string;
     titleSuffix: string;
     tagline: JSX.Element;
+    showTagline: boolean;
     lifecycleHint: string;
     noteShifted: string[];
     evidenceLabel: string;
@@ -4629,7 +4614,7 @@ export function HomePage(): JSX.Element {
             ) : null}
             {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
           </h1>
-          <p className="nc-tagline">{copy.tagline}</p>
+          {copy.showTagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
           {copy.lifecycleHint ? <p className="nc-lifecycle-hint">{copy.lifecycleHint}</p> : null}
         </section>
 

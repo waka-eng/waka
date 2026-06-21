@@ -19,7 +19,6 @@ const COPY = {
     start: "Create your WAKA",
     open: "Open WAKA",
     evidence: "Evidence",
-    provisional: "Provisional",
   },
   "ko-KR": {
     loading: "공개 프로필을 불러오는 중...",
@@ -30,7 +29,6 @@ const COPY = {
     start: "내 WAKA 만들기",
     open: "WAKA 열기",
     evidence: "근거",
-    provisional: "임시 포스트잇",
   },
 } as const;
 
@@ -119,7 +117,6 @@ export default function PublicProfilePage(): JSX.Element {
 
       <section className="public-top-of-mind" aria-labelledby="public-top-of-mind-title">
         <div className="public-section-heading">
-          <p className="login-eyebrow">{copy.provisional}</p>
           <h2 id="public-top-of-mind-title">{copy.topOfMind}</h2>
         </div>
         {data.topOfMindNotes.length > 0 ? (
