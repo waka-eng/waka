@@ -409,6 +409,7 @@ function setApiFixtures({
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   if (mountedRoot) {
     act(() => {
       mountedRoot?.unmount();
@@ -2447,6 +2448,54 @@ describe("HomePage current home experience", () => {
       text: "Fast save without reflective friction",
       kind: "note",
     });
+  });
+
+  it("keeps refreshing top-of-mind after classification while auto notes settle", async () => {
+    setApiFixtures({ inspirations: [] });
+    const saved = persistedInspiration({
+      id: "insp-top-of-mind-race",
+      text: "A signal that should keep polling for the sticky note",
+      cluster: null,
+      wowScore: 8,
+    });
+    const classified = { ...saved, cluster: "morph" as const, wowScore: 18 };
+    vi.mocked(createInspiration).mockResolvedValue(saved);
+    const container = await renderHomePage();
+
+    await openCaptureModal(container);
+    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
+    await act(async () => {
+      setInputValue(textarea!, "A signal that should keep polling for the sticky note");
+    });
+
+    vi.mocked(fetchInspirations).mockResolvedValue([classified]);
+    vi.mocked(fetchTopOfMind).mockClear();
+    vi.mocked(fetchTopOfMindNotes).mockClear();
+    vi.useFakeTimers();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
+      await Promise.resolve();
+    });
+    await flushReactWork();
+
+    expect(fetchTopOfMind).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(fetchTopOfMind).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(fetchTopOfMind).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(fetchTopOfMind).toHaveBeenCalledTimes(4);
+    expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 5 });
   });
 
   it("advances and saves Reflect Deeper from the capture modal with all three answers", async () => {

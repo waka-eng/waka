@@ -1844,15 +1844,11 @@ export function HomePage(): JSX.Element {
       const targetId = result.inspiration.id;
       void refreshTopOfMind({ showLoading: false, surfaceErrors: true });
 
-      // The classifier worker (or the dev-mode inline fallback) writes
-      // `cluster` asynchronously after the row is persisted. Without a
-      // refetch the optimistic row stays at `cluster: null` forever in
-      // local state, so the cluster grid never lights up. Poll on a
-      // backoff schedule — fast classifications (warm Gemini, ~1 s)
-      // surface immediately; slower ones still get picked up before the
-      // user gives up.
-      const delays = [1500, 2500, 3500, 5000];
-      let classifiedRefreshRequested = false;
+      // The classifier worker writes `cluster` first, then attempts automatic
+      // top-of-mind generation. Keep polling briefly after classification so a
+      // note created just after the first classified refetch still appears
+      // without requiring a manual refresh.
+      const delays = [1500, 2500, 3500, 5000, 8000, 13000];
       for (const delay of delays) {
         window.setTimeout(() => {
           void (async () => {
@@ -1880,13 +1876,10 @@ export function HomePage(): JSX.Element {
                 );
               });
               if (!target.cluster) return;
-              if (!classifiedRefreshRequested) {
-                classifiedRefreshRequested = true;
-                void refreshTopOfMind({
-                  showLoading: false,
-                  surfaceErrors: false,
-                });
-              }
+              void refreshTopOfMind({
+                showLoading: false,
+                surfaceErrors: false,
+              });
             } catch {
               // Silent — the user will pick up the classification on
               // the next mount or refresh. No banner here because the
