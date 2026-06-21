@@ -18,6 +18,13 @@ export default function ProfilePage(): JSX.Element {
   const { user, logout, updateProfile, deleteAccount } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState(user?.name ?? "");
+  const [publicHandle, setPublicHandle] = useState(user?.publicHandle ?? "");
+  const [publicProfileEnabled, setPublicProfileEnabled] = useState(
+    user?.publicProfileEnabled === true,
+  );
+  const [publicTopOfMindEnabled, setPublicTopOfMindEnabled] = useState(
+    user?.publicTopOfMindEnabled === true,
+  );
   const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
     normalizeSupportedLocale(user?.preferredLocale),
   );
@@ -27,12 +34,22 @@ export default function ProfilePage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const locale = preferredLocale;
+  const normalizedPublicHandle = publicHandle.trim().replace(/^@+/, "");
+  const publicProfileUrl =
+    normalizedPublicHandle.length > 0
+      ? `${typeof window === "undefined" ? "" : window.location.origin}/@${normalizedPublicHandle}`
+      : null;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const nickname = name.trim();
+    const handle = normalizedPublicHandle || null;
     if (!nickname) {
       setError(t(locale, "profileNicknameRequired"));
+      return;
+    }
+    if ((publicProfileEnabled || publicTopOfMindEnabled) && !handle) {
+      setError(t(locale, "profilePublicHandleRequired"));
       return;
     }
     setSubmitting(true);
@@ -43,11 +60,18 @@ export default function ProfilePage(): JSX.Element {
         name: nickname,
         preferredLocale,
         completeOnboarding: true,
+        publicHandle: handle,
+        publicProfileEnabled,
+        publicTopOfMindEnabled,
       });
       writeStoredLocale(preferredLocale);
       setStatus(t(locale, "profileSaved"));
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t(locale, "profileSaveError"));
+      if (err instanceof ApiError) {
+        setError(err.fieldErrors?.publicHandle?.[0] ?? err.message);
+      } else {
+        setError(t(locale, "profileSaveError"));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -133,6 +157,56 @@ export default function ProfilePage(): JSX.Element {
               ))}
             </select>
           </label>
+          <section className="profile-public-panel" aria-labelledby="profile-public-title">
+            <div className="profile-public-heading">
+              <p className="login-eyebrow" id="profile-public-title">
+                {t(locale, "profilePublicTitle")}
+              </p>
+              <p className="login-subtitle">{t(locale, "profilePublicHint")}</p>
+            </div>
+            <label className="field">
+              <span className="field-label">{t(locale, "profilePublicHandle")}</span>
+              <div className="profile-handle-row">
+                <span className="profile-handle-prefix" aria-hidden="true">@</span>
+                <input
+                  className="field-input profile-handle-input"
+                  type="text"
+                  name="publicHandle"
+                  autoComplete="off"
+                  value={publicHandle}
+                  disabled={submitting || deleting}
+                  onChange={(event) => setPublicHandle(event.currentTarget.value)}
+                />
+              </div>
+            </label>
+            <label className="profile-toggle-row">
+              <input
+                type="checkbox"
+                checked={publicProfileEnabled}
+                disabled={submitting || deleting}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setPublicProfileEnabled(checked);
+                  if (!checked) setPublicTopOfMindEnabled(false);
+                }}
+              />
+              <span>{t(locale, "profilePublicEnabled")}</span>
+            </label>
+            <label className="profile-toggle-row">
+              <input
+                type="checkbox"
+                checked={publicTopOfMindEnabled}
+                disabled={submitting || deleting || !publicProfileEnabled}
+                onChange={(event) => setPublicTopOfMindEnabled(event.currentTarget.checked)}
+              />
+              <span>{t(locale, "profilePublicTopOfMindEnabled")}</span>
+            </label>
+            {publicProfileUrl ? (
+              <a className="profile-public-link" href={`/@${normalizedPublicHandle}`}>
+                {publicProfileUrl}
+              </a>
+            ) : null}
+          </section>
           <button className="btn-primary" type="submit" disabled={submitting || deleting}>
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>

@@ -81,11 +81,16 @@ function readCachedUser(): ApiUser | null {
         id: parsed.id,
         email: parsed.email,
         name: parsed.name,
+        avatarUrl: typeof parsed.avatarUrl === "string" ? parsed.avatarUrl : null,
         preferredLocale: normalizeSupportedLocale(parsed.preferredLocale),
         onboardingCompletedAt:
           typeof parsed.onboardingCompletedAt === "string"
             ? parsed.onboardingCompletedAt
             : null,
+        publicHandle:
+          typeof parsed.publicHandle === "string" ? parsed.publicHandle : null,
+        publicProfileEnabled: parsed.publicProfileEnabled === true,
+        publicTopOfMindEnabled: parsed.publicTopOfMindEnabled === true,
         isAdmin: parsed.isAdmin === true,
       };
     }
@@ -150,7 +155,14 @@ export interface AuthContextValue {
   refresh: () => Promise<ApiUser | null>;
   /** Persist and apply the account language used by UI and AI-generated copy. */
   updatePreferredLocale: (preferredLocale: SupportedLocale) => Promise<ApiUser>;
-  updateProfile: (input: { name: string; preferredLocale: SupportedLocale; completeOnboarding?: boolean }) => Promise<ApiUser>;
+  updateProfile: (input: {
+    name: string;
+    preferredLocale: SupportedLocale;
+    completeOnboarding?: boolean;
+    publicHandle?: string | null;
+    publicProfileEnabled?: boolean;
+    publicTopOfMindEnabled?: boolean;
+  }) => Promise<ApiUser>;
   deleteAccount: () => Promise<void>;
 }
 
@@ -288,6 +300,9 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       name: string;
       preferredLocale: SupportedLocale;
       completeOnboarding?: boolean;
+      publicHandle?: string | null;
+      publicProfileEnabled?: boolean;
+      publicTopOfMindEnabled?: boolean;
     }): Promise<ApiUser> => {
       const { user: updated } = await updateAuthProfile(input);
       applyUser(updated);

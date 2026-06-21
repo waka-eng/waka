@@ -81,6 +81,9 @@ export interface AuthenticatedUser {
   avatarUrl: string | null;
   preferredLocale: SupportedLocale;
   onboardingCompletedAt: Date | null;
+  publicHandle: string | null;
+  publicProfileEnabled: boolean;
+  publicTopOfMindEnabled: boolean;
 }
 
 /**
@@ -112,6 +115,9 @@ export async function lookupSessionUser(
       avatarUrl: users.avatarUrl,
       preferredLocale: users.preferredLocale,
       onboardingCompletedAt: users.onboardingCompletedAt,
+      publicHandle: users.publicHandle,
+      publicProfileEnabled: users.publicProfileEnabled,
+      publicTopOfMindEnabled: users.publicTopOfMindEnabled,
     })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
@@ -138,6 +144,9 @@ export async function lookupSessionUser(
     avatarUrl: row.avatarUrl,
     preferredLocale: normalizeSupportedLocale(row.preferredLocale),
     onboardingCompletedAt: row.onboardingCompletedAt,
+    publicHandle: row.publicHandle,
+    publicProfileEnabled: row.publicProfileEnabled,
+    publicTopOfMindEnabled: row.publicTopOfMindEnabled,
   };
 }
 

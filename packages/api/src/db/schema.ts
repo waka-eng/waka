@@ -96,6 +96,9 @@ export const users = pgTable(
     avatarUrl: text("avatar_url"),
     preferredLocale: text("preferred_locale").notNull().default("en-US"),
     onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+    publicHandle: text("public_handle"),
+    publicProfileEnabled: boolean("public_profile_enabled").notNull().default(false),
+    publicTopOfMindEnabled: boolean("public_top_of_mind_enabled").notNull().default(false),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -113,6 +116,9 @@ export const users = pgTable(
     googleSubUnique: uniqueIndex("users_google_sub_unique_idx").on(
       table.googleSub,
     ),
+    publicHandleUnique: uniqueIndex("users_public_handle_unique_idx").on(
+      table.publicHandle,
+    ).where(sql`${table.publicHandle} IS NOT NULL`),
   }),
 );
 

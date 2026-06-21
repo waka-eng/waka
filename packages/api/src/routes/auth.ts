@@ -35,6 +35,10 @@ import {
   requireAuth,
 } from "../lib/middleware.js";
 import {
+  normalizePublicHandle,
+  validatePublicHandle,
+} from "../lib/public-handles.js";
+import {
   createSessionRow,
   revokeSessionByToken,
 } from "../lib/session.js";
@@ -120,6 +124,9 @@ const profileSchema = z
     name: z.string().trim().min(1, "Nickname is required").max(120, "Nickname is too long"),
     preferredLocale: supportedLocaleSchema,
     completeOnboarding: z.boolean().optional(),
+    publicHandle: z.string().trim().max(24, "Handle is too long").nullable().optional(),
+    publicProfileEnabled: z.boolean().optional(),
+    publicTopOfMindEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -136,6 +143,31 @@ const deleteAccountSchema = z
 // ---------------------------------------------------------------------------
 
 export const authRoutes = new Hono<AuthEnv>();
+
+function serializeAuthUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string | null;
+  preferredLocale: string;
+  onboardingCompletedAt?: Date | null;
+  publicHandle?: string | null;
+  publicProfileEnabled?: boolean;
+  publicTopOfMindEnabled?: boolean;
+}) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl ?? null,
+    preferredLocale: normalizeSupportedLocale(user.preferredLocale),
+    onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+    publicHandle: user.publicHandle ?? null,
+    publicProfileEnabled: user.publicProfileEnabled === true,
+    publicTopOfMindEnabled: user.publicTopOfMindEnabled === true,
+    isAdmin: isAdminUser(user),
+  };
+}
 
 // Google OAuth initiation remains at /api/auth/google/login for the SPA, but
 // the callback is also exposed at the historical NextAuth/Auth.js path
@@ -254,12 +286,7 @@ authRoutes.post("/signup", async (c) => {
   return c.json(
     {
       user: {
-        id: inserted.id,
-        email: inserted.email,
-        name: inserted.name,
-        preferredLocale: normalizeSupportedLocale(inserted.preferredLocale),
-        onboardingCompletedAt: inserted.onboardingCompletedAt?.toISOString() ?? null,
-        isAdmin: isAdminUser(inserted),
+        ...serializeAuthUser(inserted),
       },
       token,
     },
@@ -325,6 +352,10 @@ authRoutes.post("/login", async (c) => {
       preferredLocale: users.preferredLocale,
       onboardingCompletedAt: users.onboardingCompletedAt,
       passwordHash: users.passwordHash,
+      avatarUrl: users.avatarUrl,
+      publicHandle: users.publicHandle,
+      publicProfileEnabled: users.publicProfileEnabled,
+      publicTopOfMindEnabled: users.publicTopOfMindEnabled,
     })
     .from(users)
     .where(eq(users.email, email))
@@ -359,12 +390,7 @@ authRoutes.post("/login", async (c) => {
   return c.json(
     {
       user: {
-        id: candidate.id,
-        email: candidate.email,
-        name: candidate.name,
-        preferredLocale: normalizeSupportedLocale(candidate.preferredLocale),
-        onboardingCompletedAt: candidate.onboardingCompletedAt?.toISOString() ?? null,
-        isAdmin: isAdminUser(candidate),
+        ...serializeAuthUser(candidate),
       },
       token,
     },
@@ -386,15 +412,7 @@ authRoutes.post("/login", async (c) => {
 authRoutes.get("/me", requireAuth, (c) => {
   const user = c.get("user");
   return c.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      preferredLocale: user.preferredLocale,
-      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
-      isAdmin: isAdminUser(user),
-    },
+    user: serializeAuthUser(user),
   });
 });
 
@@ -432,18 +450,14 @@ authRoutes.patch("/me/preferences", requireAuth, async (c) => {
       avatarUrl: users.avatarUrl,
       preferredLocale: users.preferredLocale,
       onboardingCompletedAt: users.onboardingCompletedAt,
+      publicHandle: users.publicHandle,
+      publicProfileEnabled: users.publicProfileEnabled,
+      publicTopOfMindEnabled: users.publicTopOfMindEnabled,
     });
 
   const user = updated ?? { ...currentUser, preferredLocale: DEFAULT_LOCALE };
   return c.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      preferredLocale: normalizeSupportedLocale(user.preferredLocale),
-      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
-    },
+    user: serializeAuthUser(user),
   });
 });
 
@@ -469,37 +483,94 @@ authRoutes.patch("/me/profile", requireAuth, async (c) => {
   }
 
   const currentUser = c.get("user");
+  const normalizedHandle =
+    parsed.data.publicHandle === undefined
+      ? currentUser.publicHandle
+      : parsed.data.publicHandle
+        ? normalizePublicHandle(parsed.data.publicHandle)
+        : null;
+  if (normalizedHandle) {
+    const handleError = validatePublicHandle(normalizedHandle);
+    if (handleError) {
+      return c.json(
+        {
+          error: "Invalid public handle",
+          details: { publicHandle: [handleError] },
+        },
+        400,
+      );
+    }
+  }
+  const publicProfileEnabled =
+    parsed.data.publicProfileEnabled ?? currentUser.publicProfileEnabled;
+  const publicTopOfMindEnabled =
+    parsed.data.publicTopOfMindEnabled ?? currentUser.publicTopOfMindEnabled;
+  if ((publicProfileEnabled || publicTopOfMindEnabled) && !normalizedHandle) {
+    return c.json(
+      {
+        error: "Public handle is required before enabling a public profile",
+        details: { publicHandle: ["Choose a public handle first"] },
+      },
+      400,
+    );
+  }
   const now = new Date();
-  const [updated] = await getDb()
-    .update(users)
-    .set({
-      name: parsed.data.name,
-      preferredLocale: parsed.data.preferredLocale,
-      onboardingCompletedAt: parsed.data.completeOnboarding
-        ? (currentUser.onboardingCompletedAt ?? now)
-        : currentUser.onboardingCompletedAt,
-      updatedAt: now,
-    })
-    .where(eq(users.id, currentUser.id))
-    .returning({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      avatarUrl: users.avatarUrl,
-      preferredLocale: users.preferredLocale,
-      onboardingCompletedAt: users.onboardingCompletedAt,
-    });
+  let updated:
+    | {
+        id: string;
+        email: string;
+        name: string;
+        avatarUrl: string | null;
+        preferredLocale: string;
+        onboardingCompletedAt: Date | null;
+        publicHandle: string | null;
+        publicProfileEnabled: boolean;
+        publicTopOfMindEnabled: boolean;
+      }
+    | undefined;
+  try {
+    [updated] = await getDb()
+      .update(users)
+      .set({
+        name: parsed.data.name,
+        preferredLocale: parsed.data.preferredLocale,
+        onboardingCompletedAt: parsed.data.completeOnboarding
+          ? (currentUser.onboardingCompletedAt ?? now)
+          : currentUser.onboardingCompletedAt,
+        publicHandle: normalizedHandle,
+        publicProfileEnabled,
+        publicTopOfMindEnabled,
+        updatedAt: now,
+      })
+      .where(eq(users.id, currentUser.id))
+      .returning({
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        avatarUrl: users.avatarUrl,
+        preferredLocale: users.preferredLocale,
+        onboardingCompletedAt: users.onboardingCompletedAt,
+        publicHandle: users.publicHandle,
+        publicProfileEnabled: users.publicProfileEnabled,
+        publicTopOfMindEnabled: users.publicTopOfMindEnabled,
+      });
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "23505") {
+      return c.json(
+        {
+          error: "That public handle is already taken",
+          details: { publicHandle: ["That public handle is already taken"] },
+        },
+        409,
+      );
+    }
+    throw err;
+  }
 
   const user = updated ?? currentUser;
   return c.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      avatarUrl: user.avatarUrl,
-      preferredLocale: normalizeSupportedLocale(user.preferredLocale),
-      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
-    },
+    user: serializeAuthUser(user),
   });
 });
 

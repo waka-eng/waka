@@ -13,8 +13,12 @@ const mockAuthState = vi.hoisted(() => ({
       id: "user-1",
       email: "river@example.com",
       name: "River",
+      avatarUrl: null,
       preferredLocale: "en-US" as "en-US" | "ko-KR",
       onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
+      publicHandle: "q00",
+      publicProfileEnabled: false,
+      publicTopOfMindEnabled: false,
       isAdmin: false,
     },
     isLoading: false,
@@ -28,8 +32,12 @@ const mockAuthState = vi.hoisted(() => ({
       id: "user-1",
       email: "river@example.com",
       name: "River",
+      avatarUrl: null,
       preferredLocale: "en-US" as "en-US" | "ko-KR",
       onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
+      publicHandle: "q00",
+      publicProfileEnabled: true,
+      publicTopOfMindEnabled: true,
       isAdmin: false,
     })),
     deleteAccount: vi.fn(async () => undefined),
@@ -100,5 +108,34 @@ describe("ProfilePage account actions", () => {
 
     expect(deleteButton).toBeTruthy();
     expect(deleteButton?.className).toContain("btn-destructive");
+  });
+
+  it("saves public profile handle and top-of-mind visibility", async () => {
+    const container = await renderProfilePage();
+
+    const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>("input[type='checkbox']"));
+    const saveButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Save profile"),
+    );
+
+    expect(container.querySelector<HTMLInputElement>("input[name='publicHandle']")).toBeTruthy();
+    expect(checkboxes).toHaveLength(2);
+    await act(async () => {
+      checkboxes[0]!.click();
+    });
+    await act(async () => {
+      checkboxes[1]!.click();
+    });
+    await act(async () => {
+      saveButton?.click();
+    });
+
+    expect(mockAuthState.value.updateProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicHandle: "q00",
+        publicProfileEnabled: true,
+        publicTopOfMindEnabled: true,
+      }),
+    );
   });
 });

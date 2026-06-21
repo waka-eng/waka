@@ -19,6 +19,7 @@ import { decisionMemoRoutes } from "./routes/decision-memo.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { guidedReflectionRoutes } from "./routes/guided-reflection.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalArchiveRoutes } from "./routes/signals.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
 import { wowMomentsRoutes } from "./routes/wow-moments.js";
@@ -34,6 +35,10 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 
 // Auth routes (signup, login, ...) live under /api/auth.
 app.route("/api/auth", authRoutes);
+
+// Public profile routes are deliberately unauthenticated and return only the
+// owner-approved public surface.
+app.route("/api/public/profiles", publicProfileRoutes);
 
 // Internal/dev-only background job observability routes. The router itself
 // applies both env-gate and requireAuth so the namespace stays hidden by

@@ -183,6 +183,13 @@
       "when": 1782059800000,
       "tag": "0025_repair_user_onboarding_completed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1782094200000,
+      "tag": "0026_public_profile_handles",
+      "breakpoints": true
     }
   ]
 }

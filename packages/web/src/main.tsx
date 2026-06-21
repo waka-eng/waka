@@ -36,6 +36,7 @@ import HomePage from "./pages/Home";
 import LoginPage from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
+import PublicProfilePage from "./pages/PublicProfile";
 import MeaningGraphPage from "./pages/MeaningGraph";
 import "./styles/global.css";
 
@@ -57,6 +58,7 @@ ReactDOM.createRoot(root).render(
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/:handle" element={<PublicProfilePage />} />
           <Route
             path="/onboarding"
             element={

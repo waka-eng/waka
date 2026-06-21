@@ -25,8 +25,12 @@ export interface ApiUser {
   id: string;
   email: string;
   name: string;
+  avatarUrl?: string | null;
   preferredLocale: SupportedLocale;
   onboardingCompletedAt: string | null;
+  publicHandle: string | null;
+  publicProfileEnabled: boolean;
+  publicTopOfMindEnabled: boolean;
   isAdmin: boolean;
 }
 
@@ -273,6 +277,9 @@ export interface UpdateAuthProfileRequest {
   name: string;
   preferredLocale: SupportedLocale;
   completeOnboarding?: boolean;
+  publicHandle?: string | null;
+  publicProfileEnabled?: boolean;
+  publicTopOfMindEnabled?: boolean;
 }
 
 export interface UpdateAuthProfileResponse {
@@ -882,6 +889,41 @@ export interface GetTopOfMindNoteResponse {
   topOfMindNote: ApiTopOfMindNoteSurface;
 }
 
+export type ApiPublicTopOfMindEvidencePreview = Omit<
+  ApiTopOfMindEvidencePreview,
+  "signalId"
+>;
+
+export type ApiPublicTopOfMindRelatedSignalReference = Omit<
+  ApiTopOfMindRelatedSignalReference,
+  "id"
+>;
+
+export type ApiPublicTopOfMindNoteSurface = Omit<
+  ApiTopOfMindNoteSurface,
+  | "id"
+  | "userId"
+  | "relatedSignalIds"
+  | "relatedContextNodeIds"
+  | "legacy"
+  | "evidencePreviews"
+  | "relatedSignals"
+> & {
+  evidencePreviews: ApiPublicTopOfMindEvidencePreview[];
+  relatedSignals: ApiPublicTopOfMindRelatedSignalReference[];
+};
+
+export interface ApiPublicProfile {
+  name: string;
+  handle: string;
+  preferredLocale: SupportedLocale;
+}
+
+export interface FetchPublicProfileResponse {
+  profile: ApiPublicProfile;
+  topOfMindNotes: ApiPublicTopOfMindNoteSurface[];
+}
+
 export type ApiFeedbackTarget =
   | "signal"
   | "context_node"
@@ -1200,6 +1242,29 @@ export async function fetchTopOfMindNote(
   }
 
   return body.topOfMindNote;
+}
+
+export async function fetchPublicProfile(
+  handle: string,
+  options: FetchTopOfMindNotesOptions = {},
+): Promise<FetchPublicProfileResponse> {
+  const normalizedHandle = handle.trim().replace(/^@+/, "");
+  const params = new URLSearchParams();
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<FetchPublicProfileResponse>(
+    apiPath(`/public/profiles/${encodeURIComponent(normalizedHandle)}${query ? `?${query}` : ""}`),
+    "Failed to load public profile",
+  );
+
+  if (!body.profile || !Array.isArray(body.topOfMindNotes)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed public profile response",
+    });
+  }
+
+  return body;
 }
 
 export async function fetchSavedSignals(

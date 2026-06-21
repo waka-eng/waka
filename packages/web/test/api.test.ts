@@ -7,6 +7,7 @@ import {
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
+  fetchPublicProfile,
   fetchTopOfMindNote,
   fetchTopOfMindNotes,
   fetchLegacyTopOfMindCompatibilityMoments,
@@ -345,6 +346,43 @@ describe("fetchTopOfMindNote", () => {
       name: "ApiError",
       status: 404,
       message: "Top-of-mind note not found",
+    } satisfies Partial<ApiError>);
+  });
+});
+
+describe("fetchPublicProfile", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns a public profile and calls the public route", async () => {
+    stubFetch(Response.json({
+      profile: {
+        name: "River",
+        handle: "q00",
+        preferredLocale: "en-US",
+      },
+      topOfMindNotes: [topOfMindNote],
+    }));
+
+    await expect(fetchPublicProfile("@Q00", { limit: 2 })).resolves.toMatchObject({
+      profile: { handle: "q00" },
+      topOfMindNotes: [{ title: topOfMindNote.title }],
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/public/profiles/Q00?limit=2", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("throws ApiError for a malformed public profile response", async () => {
+    stubFetch(Response.json({ profile: null, topOfMindNotes: [] }));
+
+    await expect(fetchPublicProfile("q00")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 200,
+      message: "Malformed public profile response",
     } satisfies Partial<ApiError>);
   });
 });

@@ -11,6 +11,9 @@ const authState = vi.hoisted(() => ({
     avatarUrl: null as string | null,
     preferredLocale: "en-US",
     onboardingCompletedAt: null as Date | null,
+    publicHandle: null as string | null,
+    publicProfileEnabled: false,
+    publicTopOfMindEnabled: false,
   },
 }));
 
@@ -77,6 +80,9 @@ beforeEach(() => {
     avatarUrl: null,
     preferredLocale: "en-US",
     onboardingCompletedAt: null,
+    publicHandle: null,
+    publicProfileEnabled: false,
+    publicTopOfMindEnabled: false,
   };
   dbState.db = {};
   vi.clearAllMocks();
@@ -228,6 +234,72 @@ describe("PATCH /api/auth/me/profile", () => {
     );
     await expect(response.json()).resolves.toMatchObject({
       user: { onboardingCompletedAt: existingCompletedAt.toISOString() },
+    });
+  });
+
+  it("persists public handle settings for the signed-in user", async () => {
+    const db = makeProfileDb([
+      {
+        ...authState.user,
+        name: "Mina",
+        preferredLocale: "en-US",
+        publicHandle: "q00",
+        publicProfileEnabled: true,
+        publicTopOfMindEnabled: true,
+      },
+    ]);
+    dbState.db = db;
+
+    const response = await app().request("/api/auth/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Mina",
+        preferredLocale: "en-US",
+        publicHandle: "@Q00",
+        publicProfileEnabled: true,
+        publicTopOfMindEnabled: true,
+      }),
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicHandle: "q00",
+        publicProfileEnabled: true,
+        publicTopOfMindEnabled: true,
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      user: {
+        publicHandle: "q00",
+        publicProfileEnabled: true,
+        publicTopOfMindEnabled: true,
+      },
+    });
+  });
+
+  it("requires a public handle before enabling public sharing", async () => {
+    const response = await app().request("/api/auth/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Mina",
+        preferredLocale: "en-US",
+        publicHandle: "",
+        publicProfileEnabled: true,
+      }),
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      details: { publicHandle: ["Choose a public handle first"] },
     });
   });
 });
