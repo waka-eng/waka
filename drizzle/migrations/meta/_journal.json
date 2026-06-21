@@ -176,6 +176,13 @@
       "when": 1782002100000,
       "tag": "0024_meaning_graph_rebuild_job_index",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782059800000,
+      "tag": "0025_repair_user_onboarding_completed_at",
+      "breakpoints": true
     }
   ]
 }
