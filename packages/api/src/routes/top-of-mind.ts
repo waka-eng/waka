@@ -59,6 +59,12 @@ const topOfMindNoteParamsSchema = z
   })
   .strict();
 
+const updateTopOfMindNoteSchema = z
+  .object({
+    title: z.string().trim().min(1, "title cannot be empty").max(2000, "title is too long"),
+  })
+  .strict();
+
 type WakaDb = ReturnType<typeof getDb>;
 
 type TopOfMindWowMomentRow = {
@@ -85,6 +91,11 @@ type TopOfMindRelatedSignalRow = {
   inspirationKind: string | null;
   inspirationCreatedAt: Date;
   inspirationWowScore: number;
+};
+
+type TopOfMindFeedbackSnapshot = {
+  status?: TopOfMindNoteStatus;
+  correctionText?: string;
 };
 
 export interface TopOfMindEvidencePreview {
@@ -120,6 +131,10 @@ export interface TopOfMindRouteDependencies {
   getNote?: (
     db: WakaDb,
     input: { userId: string; noteId: string; preferredLocale?: SupportedLocale },
+  ) => Promise<TopOfMindNoteSurface | null>;
+  updateNote?: (
+    db: WakaDb,
+    input: { userId: string; noteId: string; title: string; preferredLocale?: SupportedLocale },
   ) => Promise<TopOfMindNoteSurface | null>;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
@@ -183,7 +198,7 @@ function serializeTopOfMindSurface(
   moment: TopOfMindWowMomentRow,
   relatedRows: TopOfMindRelatedSignalRow[],
   relatedContextNodeIds: string[],
-  status?: TopOfMindNoteStatus,
+  feedbackSnapshot?: TopOfMindFeedbackSnapshot,
   preferredLocale: SupportedLocale = "en-US",
 ): TopOfMindNoteSurface {
   const limitedRows = relatedRows.slice(0, MAX_WOW_MOMENT_SOURCE_LINKS);
@@ -191,7 +206,7 @@ function serializeTopOfMindSurface(
     moment,
     relatedSignalIds: limitedRows.map((row) => row.inspirationId),
     relatedContextNodeIds,
-    status,
+    status: feedbackSnapshot?.status,
     preferredLocale,
   });
   const surfacedNote: TopOfMindNote =
@@ -202,6 +217,15 @@ function serializeTopOfMindSurface(
       topOfMindNoteHasUnsafeKoreanUserFacingFields(note))
       ? scrubEnglishOnlyKoreanUserFacingFields(note)
       : note;
+  const correctionText = feedbackSnapshot?.correctionText?.trim();
+  const userEditedNote =
+    correctionText && correctionText.length > 0
+      ? {
+          ...surfacedNote,
+          title: correctionText,
+          ambientSignal: correctionText,
+        }
+      : surfacedNote;
 
   const evidencePreviews = limitedRows.map((row) => {
     const [source] = normalizeWowSourceEvidence(
@@ -242,7 +266,7 @@ function serializeTopOfMindSurface(
     }));
 
   return {
-    ...surfacedNote,
+    ...userEditedNote,
     evidencePreviews,
     relatedSignals,
   };
@@ -284,15 +308,17 @@ async function fetchRelatedContextNodeIdsByMomentId(
   return byMomentId;
 }
 
-async function fetchLatestTopOfMindFeedbackStatuses(
+async function fetchLatestTopOfMindFeedbackSnapshots(
   db: WakaDb,
   input: { userId: string; noteIds: string[] },
-): Promise<Map<string, TopOfMindNoteStatus>> {
+): Promise<Map<string, TopOfMindFeedbackSnapshot>> {
   if (input.noteIds.length === 0) return new Map();
 
   const rows = await db
     .select({
       targetId: feedback.targetId,
+      value: feedback.value,
+      correctionText: feedback.correctionText,
       metadata: feedback.metadata,
     })
     .from(feedback)
@@ -305,14 +331,17 @@ async function fetchLatestTopOfMindFeedbackStatuses(
     )
     .orderBy(desc(feedback.createdAt));
 
-  const statuses = new Map<string, TopOfMindNoteStatus>();
+  const snapshots = new Map<string, TopOfMindFeedbackSnapshot>();
   for (const row of rows) {
-    if (statuses.has(row.targetId)) continue;
+    const snapshot = snapshots.get(row.targetId) ?? {};
     const status = readAppliedTopOfMindStatus(row.metadata);
-    if (status) statuses.set(row.targetId, status);
+    if (!snapshot.status && status) snapshot.status = status;
+    const correctionText = row.value === "partly" ? row.correctionText?.trim() : "";
+    if (!snapshot.correctionText && correctionText) snapshot.correctionText = correctionText;
+    if (snapshot.status || snapshot.correctionText) snapshots.set(row.targetId, snapshot);
   }
 
-  return statuses;
+  return snapshots;
 }
 
 async function fetchRelatedSignalRows(
@@ -391,7 +420,7 @@ export async function listTopOfMindNotesForUser(
     userId: input.userId,
     momentIds: moments.map((moment) => moment.id),
   });
-  const feedbackStatuses = await fetchLatestTopOfMindFeedbackStatuses(db, {
+  const feedbackSnapshots = await fetchLatestTopOfMindFeedbackSnapshots(db, {
     userId: input.userId,
     noteIds: moments.map((moment) => moment.id),
   });
@@ -402,7 +431,7 @@ export async function listTopOfMindNotesForUser(
       moment,
       relatedByMomentId.get(moment.id) ?? [],
       relatedContextNodeIds.get(moment.id) ?? [],
-      feedbackStatuses.get(moment.id),
+      feedbackSnapshots.get(moment.id),
       input.preferredLocale,
     ),
   );
@@ -442,7 +471,7 @@ export async function getTopOfMindNoteForUser(
     userId: input.userId,
     momentIds: [moment.id],
   });
-  const feedbackStatuses = await fetchLatestTopOfMindFeedbackStatuses(db, {
+  const feedbackSnapshots = await fetchLatestTopOfMindFeedbackSnapshots(db, {
     userId: input.userId,
     noteIds: [moment.id],
   });
@@ -451,7 +480,58 @@ export async function getTopOfMindNoteForUser(
     moment,
     relatedRows,
     relatedContextNodeIds.get(moment.id) ?? [],
-    feedbackStatuses.get(moment.id),
+    feedbackSnapshots.get(moment.id),
+    input.preferredLocale,
+  );
+}
+
+export async function updateTopOfMindNoteForUser(
+  db: WakaDb,
+  input: { userId: string; noteId: string; title: string; preferredLocale?: SupportedLocale },
+): Promise<TopOfMindNoteSurface | null> {
+  const [moment] = await db
+    .update(wowMoments)
+    .set({
+      title: input.title,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(wowMoments.userId, input.userId), eq(wowMoments.id, input.noteId)))
+    .returning({
+      id: wowMoments.id,
+      userId: wowMoments.userId,
+      title: wowMoments.title,
+      kind: wowMoments.kind,
+      why: wowMoments.why,
+      beliefStatement: wowMoments.beliefStatement,
+      reflectionQuestion: wowMoments.reflectionQuestion,
+      reflectionGuide: wowMoments.reflectionGuide,
+      wowScore: wowMoments.wowScore,
+      createdAt: wowMoments.createdAt,
+      updatedAt: wowMoments.updatedAt,
+    });
+
+  if (!moment) return null;
+
+  const [relatedRows, relatedContextNodeIds, feedbackSnapshots] = await Promise.all([
+    fetchRelatedSignalRows(db, {
+      userId: input.userId,
+      momentIds: [moment.id],
+    }),
+    fetchRelatedContextNodeIdsByMomentId(db, {
+      userId: input.userId,
+      momentIds: [moment.id],
+    }),
+    fetchLatestTopOfMindFeedbackSnapshots(db, {
+      userId: input.userId,
+      noteIds: [moment.id],
+    }),
+  ]);
+
+  return serializeTopOfMindSurface(
+    moment,
+    relatedRows,
+    relatedContextNodeIds.get(moment.id) ?? [],
+    feedbackSnapshots.get(moment.id),
     input.preferredLocale,
   );
 }
@@ -464,6 +544,7 @@ export function createTopOfMindRoutes(
   const getTopOfMind = deps.getTopOfMind ?? buildTopOfMindPreviewForUser;
   const listNotes = deps.listNotes ?? listTopOfMindNotesForUser;
   const getNote = deps.getNote ?? getTopOfMindNoteForUser;
+  const updateNote = deps.updateNote ?? updateTopOfMindNoteForUser;
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
@@ -511,6 +592,51 @@ export function createTopOfMindRoutes(
     const topOfMindNote = await getNote(getDatabase(), {
       userId,
       noteId: parsedParams.data.noteId,
+      preferredLocale: user.preferredLocale,
+    });
+
+    if (!topOfMindNote) {
+      return c.json({ error: "Top-of-mind note not found" }, 404);
+    }
+
+    return c.json({ topOfMindNote });
+  });
+
+  routes.patch("/:noteId", async (c) => {
+    const user = c.get("user");
+    const userId = user.id;
+    const parsedParams = topOfMindNoteParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        {
+          error: "Invalid top-of-mind note id",
+          details: parsedParams.error.flatten().fieldErrors,
+        },
+        400,
+      );
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsedBody = updateTopOfMindNoteSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return c.json(
+        {
+          error: "Invalid top-of-mind note update",
+          details: parsedBody.error.flatten().fieldErrors,
+        },
+        400,
+      );
+    }
+
+    const topOfMindNote = await updateNote(getDatabase(), {
+      userId,
+      noteId: parsedParams.data.noteId,
+      title: parsedBody.data.title,
       preferredLocale: user.preferredLocale,
     });
 

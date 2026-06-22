@@ -28,7 +28,6 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -80,6 +79,7 @@ import {
   generateGuidedReflectionQuestion,
   recordInspirationRevisit,
   updateInspiration,
+  updateTopOfMindNote,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
@@ -133,6 +133,7 @@ type SupportingThoughtSignal = HomeThoughtCard["supportingSignals"][number];
 
 const TOP_OF_MIND_NOTE_LIMIT = 5;
 const MEMORY_DRAWER_CLOSE_MS = 360;
+const TOP_OF_MIND_AUTOSAVE_MS = 650;
 
 const PRODUCT_SPACES = {
   capture: "Capture",
@@ -444,19 +445,6 @@ function shortText(value: string, maxLength = 220): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function userFacingCopy(value: string): string {
-  return value
-    .replace(/\bsaved signals\b/gi, "saved inspirations")
-    .replace(/\bsignals\b/gi, "inspirations")
-    .replace(/\bsignal\b/gi, "inspiration")
-    .replace(/\bresonance\b/gi, "what hit")
-    .replace(/\bgraph\b/gi, "pattern")
-    .replace(/\bnodes?\b/gi, "claim")
-    .replace(/\bmemory movement\b/gi, "what changed")
-    .replace(/\banalysis\b/gi, "read")
-    .replace(/\bAI\b/g, "the read");
-}
-
 type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text"> & { note?: string | null };
 type SavedSignalHighlight = ApiSavedSignalSearchResult["highlightedSnippets"][number];
 
@@ -517,6 +505,20 @@ const MEANING_NOTE_LABEL_TRANSLATIONS: Record<string, string> = {
 
 function normalizeMeaningLabel(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function memoryPathIdFromLabel(label: string): string {
+  const slug = normalizeMeaningLabel(label)
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9-]/g, ""))
+    .filter(Boolean)
+    .slice(0, 6)
+    .join("-");
+  return slug || "inspirations";
+}
+
+function isPublicMemoryPathLabel(label: string): boolean {
+  return !/(^|[\s_-])(meaning|context|node|nodes|edge|ctx)([\s_-]|$)|node id/i.test(label);
 }
 
 interface HomeThoughtCard {
@@ -692,12 +694,6 @@ function uniqueThoughtCards(cards: HomeThoughtCard[]): HomeThoughtCard[] {
   return out;
 }
 
-function thoughtCardPreviewLabel(card: HomeThoughtCard, locale: string): string {
-  const displayLabel =
-    locale === "en-US" ? card.label : MEANING_NOTE_LABEL_TRANSLATIONS[normalizeMeaningLabel(card.label)] ?? card.label;
-  return userFacingCopy(displayLabel);
-}
-
 function thoughtCardDisplayLabel(card: HomeThoughtCard, locale: string): string {
   return locale === "en-US"
     ? card.label
@@ -706,14 +702,32 @@ function thoughtCardDisplayLabel(card: HomeThoughtCard, locale: string): string 
 
 function thoughtCardTextDensityClass(text: string): string {
   const length = text.trim().length;
+  if (length > 1200) return " nc-note--text-ultra";
+  if (length > 800) return " nc-note--text-nano";
+  if (length > 420) return " nc-note--text-micro";
+  if (length > 260) return " nc-note--text-tiny";
   if (length > 150) return " nc-note--text-compact";
   if (length > 92) return " nc-note--text-long";
   return "";
 }
 
 function thoughtCardTextareaRows(text: string): number {
-  const rows = Math.ceil(text.trim().length / 38);
-  return Math.max(3, Math.min(7, rows));
+  const trimmed = text.trim();
+  const explicitLines = trimmed ? trimmed.split(/\n/).length : 1;
+  const charsPerRow =
+    trimmed.length > 1200
+      ? 70
+      : trimmed.length > 800
+        ? 58
+      : trimmed.length > 420
+        ? 48
+      : trimmed.length > 260
+        ? 38
+      : trimmed.length > 150
+        ? 30
+      : 20;
+  const rows = Math.ceil(trimmed.length / charsPerRow) + explicitLines - 1;
+  return Math.max(3, Math.min(28, rows));
 }
 
 const NOTE_LAYOUTS: Array<{ tilt: number; w: string }> = [
@@ -995,6 +1009,23 @@ function sortedSignalsNewest(signals: ApiSavedSignalSearchResult[]): ApiSavedSig
 function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPathFilter[] {
   const sortedSignals = sortedSignalsNewest(signals);
   const recentlySavedSignals = sortedSignals.filter((signal) => signalAgeDays(signal) <= 2);
+  const highlightedSignals = sortedSignals.filter((signal) => signal.highlightedSnippets.length > 0);
+  const themeBuckets = new Map<string, ApiSavedSignalSearchResult[]>();
+
+  sortedSignals.forEach((signal) => {
+    const labels = [...signal.relatedContextTerms, ...signal.relatedTopOfMindNoteTitles]
+      .map(normalizeMeaningLabel)
+      .filter((label) => label && isPublicMemoryPathLabel(label));
+    const seenLabels = new Set<string>();
+    labels.forEach((label) => {
+      if (seenLabels.has(label)) return;
+      seenLabels.add(label);
+      const current = themeBuckets.get(label) ?? [];
+      current.push(signal);
+      themeBuckets.set(label, current);
+    });
+  });
+
   const filters: MemoryPathFilter[] = [
     {
       id: "all-saved",
@@ -1005,6 +1036,16 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
     },
   ];
 
+  if (highlightedSignals.length > 0) {
+    filters.push({
+      id: "highlights",
+      path: "/highlights",
+      label: "highlights",
+      description: "saved inspirations with highlights",
+      signals: highlightedSignals,
+    });
+  }
+
   filters.push({
     id: "recently-saved",
     path: "/recently-saved",
@@ -1013,7 +1054,21 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
     signals: recentlySavedSignals,
   });
 
-  return filters;
+  const themeFilters = Array.from(themeBuckets.entries())
+    .filter(([, bucketSignals]) => bucketSignals.length > 0)
+    .sort(([, aSignals], [, bSignals]) => {
+      if (bSignals.length !== aSignals.length) return bSignals.length - aSignals.length;
+      return capturedAtMs(bSignals[0]) - capturedAtMs(aSignals[0]);
+    })
+    .map(([label, bucketSignals]) => ({
+      id: `theme-${memoryPathIdFromLabel(label)}`,
+      path: memoryMapLabel(label),
+      label,
+      description: `saved inspirations related to ${label}`,
+      signals: sortSignalsForGrouping(bucketSignals, [label], "relevance"),
+    }));
+
+  return [...filters, ...themeFilters];
 }
 
 function applySearchToSignals(signals: ApiSavedSignalSearchResult[], query: string): ApiSavedSignalSearchResult[] {
@@ -1238,21 +1293,7 @@ const HOME_COPY = {
     ),
     titleLineTwo: "",
     titleSuffix: "",
-    tagline: (
-      <>
-        Most inspiration disappears.
-        <br />
-        Waka caught what almost slipped away.
-        <br />
-        And slowly, the things they saved began to take shape.
-        <br />
-        Who they want to think with. Where they want to be. What they are here to build.
-        <br />
-        <span className="nc-tagline-en">
-          — they did not write any of this. they only saved what almost slipped away. the rest emerged.
-        </span>
-      </>
-    ),
+    tagline: <></>,
     lifecycleHint: "",
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
@@ -1271,18 +1312,8 @@ const HOME_COPY = {
     captureTitle: "Catch the first inspiration",
     captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing before it disappears.",
     captureInlineKicker: "inspiration capture",
-    footnote: (name: string) => (
-      <>
-        This page was not written by {name}.
-        <br />
-        It was made from the things they saved.
-        <br />
-        They gathered, changed shape, and started speaking back.
-        <br />
-        It changes every week. It cannot help itself.
-      </>
-    ),
-    footnoteCredit: "— Ⓒ 2026, for minds that wander",
+    footnote: () => <></>,
+    footnoteCredit: "",
     savesTitle: "inspiration drawer",
     drawerObjectTitle: "saved inspirations",
     drawerObjectBody: "open the drawer",
@@ -1342,7 +1373,7 @@ const HOME_COPY = {
 >;
 
 export function HomePage(): JSX.Element {
-  const { user, logout } = useAuth();
+  const { user, logout, updatePreferredLocale } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -1427,7 +1458,6 @@ export function HomePage(): JSX.Element {
   } | null>(null);
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [expandedNoteIndex, setExpandedNoteIndex] = useState<number | null>(null);
   const [savedSignals, setSavedSignals] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedSignalsLoading, setSavedSignalsLoading] = useState(false);
   const [savedSignalsError, setSavedSignalsError] = useState<string | null>(null);
@@ -1485,6 +1515,7 @@ export function HomePage(): JSX.Element {
   const loadedForUserIdRef = useRef<string | null>(null);
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
+  const topOfMindEditTimersRef = useRef<Record<string, number>>({});
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const memoryGroupDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const memoryWindowDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
@@ -1497,6 +1528,16 @@ export function HomePage(): JSX.Element {
     if (drawerCloseTimerRef.current === null) return;
     clearTimeout(drawerCloseTimerRef.current);
     drawerCloseTimerRef.current = null;
+  };
+
+  const changeLocale = (nextLocale: SupportedLocale): void => {
+    setLocale(nextLocale);
+    writeStoredLocale(nextLocale);
+    void updatePreferredLocale(nextLocale).catch(() => {
+      const fallbackLocale = normalizeSupportedLocale(user?.preferredLocale ?? readStoredLocale());
+      setLocale(fallbackLocale);
+      writeStoredLocale(fallbackLocale);
+    });
   };
 
   useEffect(() => {
@@ -1517,6 +1558,8 @@ export function HomePage(): JSX.Element {
       if (deletedSavedSignalUndoTimerRef.current !== null) {
         window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
       }
+      Object.values(topOfMindEditTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
+      topOfMindEditTimersRef.current = {};
       clearDrawerCloseTimer();
     };
   }, []);
@@ -2549,12 +2592,10 @@ export function HomePage(): JSX.Element {
     );
 
     try {
-      await createFeedback({
-        targetType: "top_of_mind_note",
-        targetId: signal.feedbackTargetId,
-        value: "partly",
-        correctionText: trimmedTitle,
-      });
+      const updatedNote = await updateTopOfMindNote(signal.feedbackTargetId, { title: trimmedTitle });
+      setTopOfMindNotes((prev) =>
+        prev.map((note) => (note.id === updatedNote.id ? updatedNote : note)),
+      );
       setNoteFeedback((prev) => ({
         ...prev,
         [signal.id]: {
@@ -2576,6 +2617,22 @@ export function HomePage(): JSX.Element {
         },
       }));
     }
+  };
+
+  const scheduleTopOfMindAutosave = (signal: HomeThoughtCard, nextTitle: string): void => {
+    if (!signal.feedbackTargetId) return;
+    const trimmedTitle = nextTitle.trim();
+    const currentText = thoughtCardDisplayLabel(signal, locale).trim();
+    const existingTimer = topOfMindEditTimersRef.current[signal.id];
+    if (existingTimer !== undefined) {
+      window.clearTimeout(existingTimer);
+      delete topOfMindEditTimersRef.current[signal.id];
+    }
+    if (!trimmedTitle || trimmedTitle === currentText) return;
+    topOfMindEditTimersRef.current[signal.id] = window.setTimeout(() => {
+      delete topOfMindEditTimersRef.current[signal.id];
+      void submitTopOfMindEdit(signal, trimmedTitle);
+    }, TOP_OF_MIND_AUTOSAVE_MS);
   };
 
   const pinTopOfMindNote = async (signal: HomeThoughtCard) => {
@@ -2702,7 +2759,11 @@ export function HomePage(): JSX.Element {
     }));
     setRemovedTopOfMindNoteIds((prev) => new Set(prev).add(signal.feedbackTargetId!));
     setTopOfMindNotes((prev) => prev.filter((note) => note.id !== signal.feedbackTargetId));
-    setExpandedNoteIndex(null);
+    const pendingEditTimer = topOfMindEditTimersRef.current[signal.id];
+    if (pendingEditTimer !== undefined) {
+      window.clearTimeout(pendingEditTimer);
+      delete topOfMindEditTimersRef.current[signal.id];
+    }
     if (deletedNote) showDeletedTopOfMindUndo(deletedNote, signal, previousFeedback);
 
     try {
@@ -2745,55 +2806,54 @@ export function HomePage(): JSX.Element {
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
     const pinned = feedbackState?.value === "important";
-    const currentText = thoughtCardDisplayLabel(signal, locale);
-    const draftText = feedbackState?.correctionText ?? currentText;
-    const hasEditedText = draftText.trim() !== currentText.trim();
     return (
       <div className="nc-note-actions" role="group" aria-label={copy.reactionGroup}>
         <div className="nc-note-action-buttons">
           <button
             type="button"
-            className={`nc-note-control-btn nc-note-control-btn--pin${pinned ? " nc-note-control-btn--pinned" : ""}`}
+            className={`nc-note-icon-btn nc-note-icon-btn--pin${pinned ? " nc-note-icon-btn--pinned" : ""}`}
             disabled={saving}
+            aria-label={pinned ? "unpin post-it" : copy.pinCta}
+            title={pinned ? "Unpin" : "Pin"}
             onClick={(event) => {
               event.stopPropagation();
               void pinTopOfMindNote(signal);
             }}
           >
-            {pinned ? "unpin" : copy.pinCta}
+            {saving ? (
+              <svg className="nc-note-spinner" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20 12a8 8 0 0 0-14.1-5.2" />
+                <path d="M5.9 6.8H3.6V4.5" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M14.8 3.4 20.6 9.2" />
+                <path d="M15.7 4.3 11.4 8.6 8 8.2 6.4 9.8 14.2 17.6 15.8 16 15.4 12.6 19.7 8.3" />
+                <path d="M10.4 14.4 4 20.8" />
+              </svg>
+            )}
           </button>
-          {hasEditedText ? (
-            <button
-              type="button"
-              className="nc-note-control-btn nc-note-control-btn--save"
-              disabled={saving || !draftText.trim()}
-              onClick={(event) => {
-                event.stopPropagation();
-                void submitTopOfMindEdit(signal, draftText);
-              }}
-            >
-              {copy.rewriteCta}
-            </button>
-          ) : null}
           <button
             type="button"
-            className="nc-note-control-btn nc-note-control-btn--delete"
+            className="nc-note-icon-btn nc-note-icon-btn--delete"
             disabled={saving}
+            aria-label={copy.removeCta}
+            title="Delete"
             onClick={(event) => {
               event.stopPropagation();
               void pullDownTopOfMindNote(signal);
             }}
           >
-            {copy.removeCta}
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 7h16" />
+              <path d="M10 11v6" />
+              <path d="M14 11v6" />
+              <path d="M6.5 7 7.4 20h9.2l.9-13" />
+              <path d="M9 7V4.8h6V7" />
+            </svg>
           </button>
         </div>
-        {feedbackState?.status === "saving" ? (
-          <p className="nc-note-feedback-status">{copy.feedbackSaving}</p>
-        ) : feedbackState?.status === "saved" && feedbackState.value !== "important" ? (
-          <p className="nc-note-feedback-status">
-            {copy.feedbackSaved}
-          </p>
-        ) : feedbackState?.status === "error" ? (
+        {feedbackState?.status === "error" ? (
           <p className="nc-note-feedback-status nc-note-feedback-status--error">
             {feedbackState.error ?? copy.feedbackError}
           </p>
@@ -3682,6 +3742,7 @@ export function HomePage(): JSX.Element {
 	    return (
 	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
         {renderMemoryPathFilters()}
+        <p className="memory-path-count">{formatSavedCount(locale, pathFilteredSignals.length)}</p>
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
@@ -4132,7 +4193,6 @@ export function HomePage(): JSX.Element {
   const onNotePointerDown = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, a, input, textarea")) return;
-    if (expandedNoteIndex === index) return;
     const base = drags[index] ?? { x: 0, y: 0 };
     dragStartRef.current = {
       index,
@@ -4179,24 +4239,6 @@ export function HomePage(): JSX.Element {
     (memoryWindow: MemoryWindowState) => (event: ReactMouseEvent<HTMLElement>) => {
       startMemoryWindowDrag(memoryWindow, event);
     };
-
-  const onNoteClick = (index: number) => () => {
-    if (dragMovedRef.current) {
-      dragMovedRef.current = false;
-      return;
-    }
-    setExpandedNoteIndex((current) => (current === index ? current : index));
-  };
-
-  const onNoteKeyDown = (index: number) => (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    setExpandedNoteIndex((current) => (current === index ? current : index));
-  };
-
-  const closeExpandedNoteOnBackdrop = () => {
-    setExpandedNoteIndex(null);
-  };
 
   const signalIdForSupportingSignal = (support: SupportingThoughtSignal): string | null => {
     const id = support.id?.trim();
@@ -4254,7 +4296,6 @@ export function HomePage(): JSX.Element {
     setSelectedInspirationText(null);
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
-    setExpandedNoteIndex(null);
     clearDrawerCloseTimer();
     setDrawerClosing(false);
     setHomeMode("memoryDrawer");
@@ -4268,15 +4309,15 @@ export function HomePage(): JSX.Element {
     const drag = drags[index] ?? { x: 0, y: 0 };
     const pinned = noteFeedback[signal.id]?.value === "important";
     const noteIsInteractive = homeMode !== "memoryDrawer";
-    const noteText = thoughtCardPreviewLabel(signal, locale);
-    const textDensityClass = thoughtCardTextDensityClass(noteText);
+    const supportingCount = signal.supportingSignals.length;
+    const canOpenEvidenceDrawer = signal.supportingSignals.some((support) => signalIdForSupportingSignal(support));
+    const noteText = thoughtCardDisplayLabel(signal, locale);
+    const draftText = noteFeedback[signal.id]?.correctionText ?? noteText;
+    const textDensityClass = thoughtCardTextDensityClass(draftText);
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${pinned ? " nc-note--pinned" : ""}${textDensityClass}${noteIsInteractive ? "" : " nc-note--passive"}`}
       key={signal.id}
-      role={noteIsInteractive ? "button" : undefined}
-      tabIndex={noteIsInteractive ? 0 : undefined}
-      aria-label={noteIsInteractive ? "open post-it reflection" : undefined}
       style={{
         ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
         ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
@@ -4287,100 +4328,42 @@ export function HomePage(): JSX.Element {
         ["--decay" as string]: String(1 - index * 0.08),
       }}
       onPointerDown={noteIsInteractive ? onNotePointerDown(index) : undefined}
-      onClick={noteIsInteractive ? onNoteClick(index) : undefined}
-      onKeyDown={noteIsInteractive ? onNoteKeyDown(index) : undefined}
     >
-      {pinned ? <span className="nc-note-pin" aria-label="pinned" /> : null}
-		      <div className="nc-note-preview" aria-label="post-it preview">
-		        <p className="nc-note-body nc-note-body--preview">{noteText}</p>
-		      </div>
+      <div className="nc-note-preview" aria-label="post-it preview">
+        {signal.feedbackTargetId ? (
+          <textarea
+            className="nc-note-body nc-note-body-edit nc-note-body-edit--inline"
+            aria-label={copy.correctionLabel}
+            value={draftText}
+            rows={thoughtCardTextareaRows(draftText)}
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+              const nextText = event.target.value;
+              updateCorrectionText(signal.id, nextText);
+              scheduleTopOfMindAutosave(signal, nextText);
+            }}
+          />
+        ) : (
+          <p className="nc-note-body nc-note-body--preview">{noteText}</p>
+        )}
+      </div>
+      <div className="nc-note-footer-row">
+        {supportingCount > 0 ? (
+          <button
+            type="button"
+            className="nc-note-inspiration-slide"
+            disabled={!canOpenEvidenceDrawer || homeMode === "memoryDrawer"}
+            onClick={(event) => {
+              event.stopPropagation();
+              openTopOfMindEvidenceDrawer(signal);
+            }}
+          >
+            {supportingCount} inspiration{supportingCount === 1 ? "" : "s"} led here
+          </button>
+        ) : <span />}
+        {renderPostItActions(signal)}
+      </div>
     </article>
   );
-  };
-
-  const renderExpandedThoughtCard = (index: number): JSX.Element | null => {
-    const signal = meaningfulThoughtCards[index];
-    if (!signal) return null;
-    const pinned = noteFeedback[signal.id]?.value === "important";
-    const supportingCount = signal.supportingSignals.length;
-    const previewSignals = signal.supportingSignals.slice(0, 3);
-    const canOpenEvidenceDrawer = signal.supportingSignals.some((support) => signalIdForSupportingSignal(support));
-    const noteText = thoughtCardDisplayLabel(signal, locale);
-    const draftText = noteFeedback[signal.id]?.correctionText ?? noteText;
-    const textDensityClass = thoughtCardTextDensityClass(draftText);
-    return (
-      <article
-        className={`nc-note-modal${pinned ? " nc-note-modal--pinned" : ""}${textDensityClass}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`top-of-mind-note-${signal.id}`}
-        style={{
-          ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
-          ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
-        {pinned ? <span className="nc-note-pin nc-note-pin--modal" aria-label="pinned" /> : null}
-        <button
-          type="button"
-          className="nc-note-peel-close"
-          aria-label="close post-it reflection"
-          onClick={closeExpandedNoteOnBackdrop}
-        >
-          close
-        </button>
-
-        <div className="nc-note-expanded-content">
-          <section className="nc-note-peel-hero" aria-label="opened post-it">
-            {signal.feedbackTargetId ? (
-              <textarea
-                className="nc-note-body nc-note-body-edit"
-                id={`top-of-mind-note-${signal.id}`}
-	                aria-label={copy.correctionLabel}
-		                value={
-		                  noteFeedback[signal.id]?.correctionText ??
-		                  noteText
-		                }
-                rows={thoughtCardTextareaRows(draftText)}
-                onChange={(event: ChangeEvent<HTMLTextAreaElement>) =>
-                  updateCorrectionText(signal.id, event.target.value)
-                }
-              />
-            ) : (
-		              <p className="nc-note-body" id={`top-of-mind-note-${signal.id}`}>
-		                {noteText}
-		              </p>
-            )}
-          </section>
-
-          <section className="nc-note-evidence" aria-label="inspirations that led here">
-            {supportingCount > 0 ? (
-              <button
-                type="button"
-                className="nc-note-evidence-summary nc-note-evidence-trigger"
-                disabled={!canOpenEvidenceDrawer}
-                onClick={() => openTopOfMindEvidenceDrawer(signal)}
-              >
-                <span className="sr-only">inspirations that led here</span>
-                <span>
-                  {supportingCount} inspiration{supportingCount === 1 ? "" : "s"} led
-                </span>
-                {!canOpenEvidenceDrawer ? <small>preview</small> : null}
-                <div className="nc-note-evidence-previews" aria-hidden="true">
-                  {previewSignals.map((support) => (
-                    <small key={`${support.id}-${support.preview}`}>{shortText(userFacingCopy(support.preview), 96)}</small>
-                  ))}
-                </div>
-              </button>
-            ) : null}
-          </section>
-
-          <footer className="nc-note-expanded-foot">
-            {renderPostItActions(signal)}
-          </footer>
-        </div>
-      </article>
-    );
   };
 
   return (
@@ -4395,11 +4378,24 @@ export function HomePage(): JSX.Element {
       >
         {historyContent}
       </HistoryPanel>
-      {expandedNoteIndex !== null ? (
-        <div className="nc-note-overlay" onClick={closeExpandedNoteOnBackdrop}>
-          {renderExpandedThoughtCard(expandedNoteIndex)}
-        </div>
-      ) : null}
+      <div className="nc-lang nc-lang--top" role="group" aria-label="language">
+        <button
+          type="button"
+          className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
+          aria-pressed={locale === "en-US"}
+          onClick={() => changeLocale("en-US")}
+        >
+          En
+        </button>
+        <button
+          type="button"
+          className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
+          aria-pressed={locale === "ko-KR"}
+          onClick={() => changeLocale("ko-KR")}
+        >
+          한
+        </button>
+      </div>
       <main
         className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}
         data-locale={locale}
@@ -4415,6 +4411,7 @@ export function HomePage(): JSX.Element {
             ) : null}
             {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
           </h1>
+          {copy.tagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
         </section>
 
         <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={PRODUCT_SPACES.topOfMind}>
@@ -4807,25 +4804,9 @@ export function HomePage(): JSX.Element {
       ) : null}
       <button
         type="button"
+        className="home-signout-pill"
         onClick={() => {
           void logout();
-        }}
-        style={{
-          position: "fixed",
-          bottom: 10,
-          right: 10,
-          zIndex: 300,
-          background: "rgba(255, 253, 247, 0.52)",
-          border: "1px solid rgba(15, 15, 14, 0.12)",
-          borderRadius: 999,
-          padding: "4px 9px",
-          fontFamily: "var(--font-mono)",
-          fontSize: 8,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: "var(--muted)",
-          opacity: 0.72,
-          cursor: "pointer",
         }}
         aria-label={`${t(locale, "signOut")} ${user.email}`}
         title={`${user.name} ${t(locale, "signOutPerson")}`}
