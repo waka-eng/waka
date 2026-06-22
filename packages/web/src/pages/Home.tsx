@@ -4354,11 +4354,6 @@ export function HomePage(): JSX.Element {
           >
             <div className="nc-note-evidence-head">
               <p>inspirations that led here</p>
-              <span>
-                {supportingCount > 0
-                  ? `${supportingCount} saved inspiration${supportingCount === 1 ? "" : "s"} nearby`
-                  : "saved inspirations stay private there"}
-              </span>
             </div>
             {supportingCount > 0 ? (
               <ul className="nc-note-evidence-list">
