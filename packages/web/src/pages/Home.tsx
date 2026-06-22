@@ -3449,10 +3449,12 @@ export function HomePage(): JSX.Element {
     if (isSelectedSignal) {
       const fullDetailReady = savedSignalDetail?.id === signal.id;
       const immediateFullText = savedInspirationTextById.get(signal.id);
-      const detailText = fullDetailReady ? savedSignalDetail.rawText : immediateFullText ?? signal.textPreview;
+      const detailPending = savedSignalDetailLoading && !fullDetailReady && !immediateFullText;
+      const detailText = detailPending ? "" : fullDetailReady ? savedSignalDetail.rawText : immediateFullText ?? signal.textPreview;
       const draftText = savedSignalDrafts[signal.id] ?? detailText;
       const hasEditedDraft = draftText.trim() !== detailText.trim();
       const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
+      const showHighlightLayer = !detailPending && !hasEditedDraft && detailHighlights.length > 0;
       const reflectionRows = savedSignalReflections[signal.id] ?? [];
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
@@ -3491,32 +3493,35 @@ export function HomePage(): JSX.Element {
           <div
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
-            <div
-              className={`memory-contents-highlight-layer${
-                hasEditedDraft ? " memory-contents-highlight-layer--hidden" : ""
-              }`}
-              aria-hidden="true"
-            >
-              {renderHighlightedInspirationText(draftText, detailHighlights)}
-            </div>
-            <textarea
-              className={`memory-contents-expanded-text memory-contents-expanded-editor${
-                !hasEditedDraft && detailHighlights.length > 0 ? " memory-contents-expanded-editor--with-highlights" : ""
-              }`}
-              value={draftText}
-              onChange={(event) => {
-                setSavedSignalDrafts((current) => ({
-                  ...current,
-                  [signal.id]: event.currentTarget.value,
-                }));
-              }}
-              onMouseUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
-              onKeyUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
-              role="textbox"
-              aria-label="edit saved inspiration"
-              aria-multiline="true"
-              spellCheck={true}
-            />
+            {detailPending ? (
+              <p className="memory-contents-loading">opening inspiration...</p>
+            ) : (
+              <>
+                {showHighlightLayer ? (
+                  <div className="memory-contents-highlight-layer" aria-hidden="true">
+                    {renderHighlightedInspirationText(draftText, detailHighlights)}
+                  </div>
+                ) : null}
+                <textarea
+                  className={`memory-contents-expanded-text memory-contents-expanded-editor${
+                    showHighlightLayer ? " memory-contents-expanded-editor--with-highlights" : ""
+                  }`}
+                  value={draftText}
+                  onChange={(event) => {
+                    setSavedSignalDrafts((current) => ({
+                      ...current,
+                      [signal.id]: event.currentTarget.value,
+                    }));
+                  }}
+                  onMouseUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
+                  onKeyUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
+                  role="textbox"
+                  aria-label="edit saved inspiration"
+                  aria-multiline="true"
+                  spellCheck={true}
+                />
+              </>
+            )}
           </div>
           <div className="memory-contents-expanded-footer">
             <span className="memory-contents-item-meta">
