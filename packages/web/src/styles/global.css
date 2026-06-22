@@ -14846,13 +14846,13 @@ textarea {
 }
 
 .nc-bottom-bar {
-  contain: layout paint style;
   isolation: isolate;
+  overflow: visible;
   will-change: transform;
 }
 
 .nc-primary-action {
-  contain: layout paint style;
+  contain: layout style;
   transform: translateZ(0);
   transition: width 520ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: width;
