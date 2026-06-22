@@ -1582,7 +1582,7 @@ describe("HomePage current home experience", () => {
     expect(panel).not.toBeNull();
     expect(pathFilters?.textContent).toContain("all saved");
     expect(pathFilters?.textContent).toContain("recently saved");
-    expect(pathFilters?.textContent).toContain("make the thing before explaining it");
+    expect(pathFilters?.textContent).not.toContain("make the thing before explaining it");
     expect(panel?.textContent).toContain("2 saved");
     expect(contents).toBeNull();
     expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
@@ -1740,29 +1740,15 @@ describe("HomePage current home experience", () => {
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(panel).not.toBeNull();
     expect(pathFilters).not.toBeNull();
-    expect(pathFilters?.textContent).toContain("make the thing before explaining it");
+    expect(pathFilters?.textContent).toContain("all saved");
     expect(pathFilters?.textContent).toContain("recently saved");
+    expect(pathFilters?.textContent).not.toContain("make the thing before explaining it");
     expect(pathFilters?.textContent).not.toMatch(/meaning[-_]?nodes?|context[-_]?nodes?|node id|ctx[-_]?1234/i);
 
-    const makingPath = Array.from(pathFilters?.querySelectorAll<HTMLButtonElement>(".memory-path-filter") ?? []).find(
-      (button) => button.textContent?.includes("make the thing before explaining it"),
-    );
-    expect(makingPath).not.toBeNull();
-    await act(async () => {
-      makingPath?.click();
-    });
-    await flushReactWork();
-    expect(panel?.textContent).toContain("2 saved");
-    expect(panel?.textContent).toContain("Handwritten thought about rooms where making feels public");
-    expect(panel?.textContent).toContain("Essay link about people who build in public");
-    expect(panel?.textContent).not.toContain("Image inspiration");
-    expect(panel?.querySelector(".folder-icon")).toBeNull();
-    expect(panel?.querySelector(".mac-folder-front")).toBeNull();
-    expect(panel?.textContent).not.toMatch(/meaning_nodes|context_node|edge|node id/i);
-    expect(panel?.textContent?.toLowerCase()).not.toContain("memory movement");
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(2);
   });
 
-  it("renders every filesystem path category with only its related inspirations", async () => {
+  it("keeps drawer filters limited to the base pills", async () => {
     const categorySignals: ApiSavedSignalSearchResult[] = Array.from({ length: 8 }, (_, index) => ({
       ...sampleSavedSignals[0],
       id: `category-signal-${index + 1}`,
@@ -1793,22 +1779,31 @@ describe("HomePage current home experience", () => {
 
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(pathFilters).not.toBeNull();
+    const filterText = pathFilters?.textContent ?? "";
+    expect(filterText).toContain("all saved");
+    expect(filterText).toContain("recently saved");
+    expect(filterText).not.toContain("category path 1");
+    expect(filterText).not.toContain("more themes");
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(2);
+  });
 
-    const moreThemes = Array.from(pathFilters?.querySelectorAll<HTMLButtonElement>(".memory-path-filter") ?? []).find((button) =>
-      button.textContent?.includes("more themes"),
-    );
-    expect(moreThemes).not.toBeNull();
+  it("shows a temporary top-of-mind filter when opened from the evidence slide", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    const evidenceSummary = note?.querySelector<HTMLButtonElement>(".nc-note-inspiration-slide");
+    expect(evidenceSummary).not.toBeNull();
+
     await act(async () => {
-      moreThemes?.click();
+      evidenceSummary?.click();
     });
     await flushReactWork();
 
-    const filterText = pathFilters?.textContent ?? "";
-    for (const signal of categorySignals) {
-      const index = Number(signal.id.replace("category-signal-", ""));
-      expect(filterText).toContain(`category path ${index}`);
-    }
-    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBeGreaterThanOrEqual(categorySignals.length + 2);
+    const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
+    expect(pathFilters?.textContent).toContain("top of mind");
+    expect(pathFilters?.textContent).toContain("all saved");
+    expect(pathFilters?.textContent).toContain("recently saved");
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(3);
   });
 
   it("keeps the drawer and filesystem list centered across desktop and phone CSS", () => {

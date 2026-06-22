@@ -1399,7 +1399,6 @@ export function HomePage(): JSX.Element {
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
   const [selectedMemoryGroupId, setSelectedMemoryGroupId] = useState<string | null>(null);
   const [selectedMemoryPathFilterId, setSelectedMemoryPathFilterId] = useState("all-saved");
-  const [showAllMemoryPathFilters, setShowAllMemoryPathFilters] = useState(false);
   // The cleaned-up contents view always reads newest-first; the explicit
   // sort toggle was removed in favor of a calmer, text-forward layout.
   const memoryBrowseOrder: MemoryBrowseOrder = "newest";
@@ -3782,21 +3781,12 @@ export function HomePage(): JSX.Element {
 
   const renderMemoryPathFilters = (): JSX.Element | null => {
     if (homeMode !== "memoryDrawer") return null;
-    const primaryFilterIds = new Set(["all-saved", "highlights", "recently-saved"]);
+    const primaryFilterIds = new Set(["all-saved", "recently-saved"]);
     const primaryFilters = memoryPathFilters.filter((filter) => primaryFilterIds.has(filter.id));
-    const themeFilters = memoryPathFilters.filter((filter) => !primaryFilterIds.has(filter.id));
-    const visibleThemeFilters = showAllMemoryPathFilters ? themeFilters : themeFilters.slice(0, 4);
-    const selectedHiddenTheme = themeFilters.find(
-      (filter) =>
-        filter.id === selectedMemoryPathFilterId &&
-        !visibleThemeFilters.some((visibleFilter) => visibleFilter.id === filter.id),
-    );
     const visibleFilters = [
+      ...(activeTopOfMindEvidenceFilter ? [activeTopOfMindEvidenceFilter] : []),
       ...primaryFilters,
-      ...visibleThemeFilters,
-      ...(selectedHiddenTheme ? [selectedHiddenTheme] : []),
     ];
-    const hiddenThemeCount = Math.max(themeFilters.length - visibleThemeFilters.length, 0);
     return (
 	      <nav className="memory-path-filters" aria-label="saved inspiration paths">
 	        {visibleFilters.map((filter) => {
@@ -3823,24 +3813,6 @@ export function HomePage(): JSX.Element {
 	            </button>
           );
         })}
-        {hiddenThemeCount > 0 ? (
-          <button
-            type="button"
-            className="memory-path-filter memory-path-filter--more"
-            onClick={() => setShowAllMemoryPathFilters(true)}
-          >
-            <span>more themes</span>
-            <small>{hiddenThemeCount}</small>
-          </button>
-        ) : showAllMemoryPathFilters && themeFilters.length > 4 ? (
-          <button
-            type="button"
-            className="memory-path-filter memory-path-filter--more"
-            onClick={() => setShowAllMemoryPathFilters(false)}
-          >
-            <span>fewer themes</span>
-          </button>
-        ) : null}
       </nav>
     );
   };
