@@ -3741,7 +3741,6 @@ export function HomePage(): JSX.Element {
 	    return (
 	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
         {renderMemoryPathFilters()}
-        <p className="memory-path-count">{formatSavedCount(locale, pathFilteredSignals.length)}</p>
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>

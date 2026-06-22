@@ -1480,7 +1480,6 @@ describe("HomePage current home experience", () => {
     expect(stack?.querySelector(".memory-contents-flow")).toBeNull();
     expect(stack?.querySelector(".memory-stack-detail")).toBeNull();
     expect(columns?.textContent).toContain("Architecture essay about bridge rhythms");
-    expect(columns?.textContent).toContain("2 saved");
     expect(container.querySelector(".memory-path-filter--active")?.textContent).toContain("all saved");
 
     const firstInspiration = columns?.querySelector<HTMLButtonElement>(".memory-contents-item");
@@ -1583,7 +1582,6 @@ describe("HomePage current home experience", () => {
     expect(pathFilters?.textContent).toContain("all saved");
     expect(pathFilters?.textContent).toContain("recently saved");
     expect(pathFilters?.textContent).not.toContain("make the thing before explaining it");
-    expect(panel?.textContent).toContain("2 saved");
     expect(contents).toBeNull();
     expect(container.querySelector(".nc-drawer-search input")).not.toBeNull();
     expect(panel?.textContent?.indexOf("Architecture essay")).toBeLessThan(
@@ -1875,7 +1873,6 @@ describe("HomePage current home experience", () => {
 
     const columns = container.querySelectorAll(".memory-category-column");
     expect(columns).toHaveLength(0);
-    expect(container.querySelector(".memory-category-panel")?.textContent).toContain("1 save");
     expect(container.querySelector(".memory-bulletin-object")).toBeNull();
   });
 
