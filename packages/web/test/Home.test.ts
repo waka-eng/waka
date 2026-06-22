@@ -43,8 +43,6 @@ const mockAuthState = vi.hoisted(() => ({
       email: "river@example.com",
       name: "River",
       preferredLocale: "en-US" as "en-US" | "ko-KR",
-      onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
-      isAdmin: true,
     },
     isLoading: false,
     isAuthenticated: true,
@@ -57,8 +55,6 @@ const mockAuthState = vi.hoisted(() => ({
       email: "river@example.com",
       name: "River",
       preferredLocale: "en-US" as "en-US" | "ko-KR",
-      onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
-      isAdmin: true,
     })),
   },
 }));
@@ -409,7 +405,6 @@ function setApiFixtures({
 }
 
 afterEach(() => {
-  vi.useRealTimers();
   if (mountedRoot) {
     act(() => {
       mountedRoot?.unmount();
@@ -418,9 +413,7 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
-  mockAuthState.value.user.name = "River";
   mockAuthState.value.user.preferredLocale = "en-US";
-  mockAuthState.value.user.isAdmin = true;
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
   }
@@ -531,22 +524,6 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 }
 
 describe("HomePage current home experience", () => {
-  it("uses the home chrome for profile access instead of language or sign-out controls", async () => {
-    setApiFixtures();
-
-    const container = await renderHomePage();
-
-    const chrome = container.querySelector<HTMLElement>(".nc-language-controls");
-    expect(chrome).not.toBeNull();
-    expect(chrome?.querySelector(".nc-lang-btn")).toBeNull();
-    expect(chrome?.textContent).toContain("Profile");
-    expect(chrome?.textContent).not.toContain("EN");
-    expect(chrome?.textContent).not.toContain("한");
-    expect(container.querySelector<HTMLAnchorElement>('a.nc-profile-link[href="/profile"]')).not.toBeNull();
-    expect(container.textContent).not.toContain("Sign out");
-    expect(mockAuthState.value.updatePreferredLocale).not.toHaveBeenCalled();
-  });
-
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
     const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
     expect(drawerObject?.textContent).toContain(`${count} saved`);
@@ -579,42 +556,10 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await flushReactWork();
-    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail.signal-revisit-detail");
     expect(detail).not.toBeNull();
     return detail!;
   }
-
-  it("renders saved inspiration detail inline without the heavy detail shell", async () => {
-    setApiFixtures({
-      savedSignals: [
-        {
-          ...sampleSavedSignals[0],
-          textPreview: "Architecture essay about bridge rhythms in city walks. This second sentence stays only in the readable body.",
-          highlightedSnippets: [],
-        },
-        sampleSavedSignals[1],
-      ],
-      savedSignalDetail: {
-        ...sampleSavedSignalDetail,
-        rawText: "Architecture essay about bridge rhythms in city walks. This second sentence stays only in the readable body.",
-        highlightedSnippets: [],
-      },
-    });
-    vi.mocked(fetchReflections).mockResolvedValue([]);
-
-    const container = await renderHomePage();
-    const detail = await openBridgeDetail(container);
-
-    expect(detail.querySelector(".memory-detail-hero--full-title")).toBeNull();
-    expect(detail.querySelector(".memory-detail-close")).toBeNull();
-    expect(detail.querySelector(".memory-workspace-back")).toBeNull();
-    expect(detail.querySelector(".memory-detail-source-card")).toBeNull();
-    expect(detail.querySelector(".memory-contents-highlight-layer")).not.toBeNull();
-    expect(detail.textContent).not.toContain("saved inspiration · Inspiration details");
-    expect(detail.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor")?.value).toContain(
-      "This second sentence stays only in the readable body.",
-    );
-  });
 
   it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
     setApiFixtures();
@@ -650,7 +595,7 @@ describe("HomePage current home experience", () => {
 
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(fetchReflections).toHaveBeenCalledWith("insp-1");
-    expect(detail.textContent).not.toContain("Inspiration details");
+    expect(detail.textContent).toContain("Inspiration details");
     expect(detail.textContent).toContain("Reflect Deeper analysis");
     expect(detail.textContent).not.toContain("2 of 2 answered");
     expect(detail.textContent).toContain("Read against the original inspiration");
@@ -964,74 +909,10 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.querySelector(".nc-meta")).toBeNull();
     expect(container.textContent).toContain("river's top of mind");
-    expect(container.textContent).not.toContain("Saved inspirations start to form a map.");
-    expect(container.textContent).not.toContain("provisional notes from the things they saved");
-    expect(container.textContent).not.toContain("Most inspiration disappears.");
-    expect(container.textContent).not.toContain("Waka caught what almost slipped away.");
+    expect(container.textContent).toContain("Most inspiration disappears.");
+    expect(container.textContent).toContain("Waka caught what almost slipped away.");
     expect(container.textContent).not.toContain("They caught what almost slipped away.");
     expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
-  });
-
-  it("uses Korean home and capture chrome when preferred locale is Korean", async () => {
-    setApiFixtures();
-    mockAuthState.value.user.name = "qa";
-    mockAuthState.value.user.preferredLocale = "ko-KR";
-    const container = await renderHomePage();
-
-    expect(container.querySelector(".nc-titlecard")?.textContent).toContain("qa님의 탑오브마인드");
-    expect(container.querySelector(".nc-titlecard")?.textContent).not.toContain("qa's top of mind");
-    expect(container.querySelector(".nc-bottom-hint")?.textContent).toBe(
-      "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
-    );
-    expect(container.querySelector(".nc-bottom-hint")?.textContent).not.toContain("Capture inspirations");
-    expect(container.querySelector(".nc-stage")?.getAttribute("aria-label")).toBe("탑오브마인드 포스트잇 다섯 장");
-    const adminEntry = container.querySelector(".admin-entry-pill");
-    expect(adminEntry?.getAttribute("aria-label")).toBe("관리자 점검 도구 열기");
-    expect(adminEntry?.textContent).toBe("점검");
-    expect(adminEntry?.textContent).not.toContain("Debug");
-    expect(container.querySelector(".nc-bottom-bar")?.getAttribute("aria-label")).toBe("하단 작업");
-    expect(container.innerHTML).not.toMatch(/bottom actions|cancel edit|answer here|>previous<|>next<|>save<|>cancel</i);
-
-    await openCaptureModal(container);
-    const modal = container.querySelector<HTMLElement>(".reference-capture-modal");
-    expect(modal?.getAttribute("aria-label")).toBe("영감 기록");
-    expect(modal?.textContent).toContain("닫기");
-    expect(modal?.querySelector(".cap-file-btn")?.getAttribute("title")).toBe("이미지 첨부");
-    expect(modal?.querySelector("#capExpand")?.getAttribute("aria-label")).toBe("집중 모드로 들어가기");
-    expect(modal?.textContent).not.toContain("attach an image");
-    expect(modal?.textContent).not.toContain("enter focus mode");
-  });
-
-  it("localizes Korean memory drawer path labels and empty summaries", async () => {
-    mockAuthState.value.user.name = "qa";
-    mockAuthState.value.user.preferredLocale = "ko-KR";
-    setApiFixtures({ savedSignals: [], inspirations: [] });
-    const container = await renderHomePage();
-
-    const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
-    expect(drawerObject).not.toBeNull();
-    await act(async () => {
-      drawerObject?.click();
-    });
-    await flushReactWork();
-    await waitForTimers(130);
-    await flushReactWork();
-
-    const panel = container.querySelector<HTMLElement>(".memory-category-panel");
-    expect(panel).not.toBeNull();
-    expect(panel?.getAttribute("aria-label")).toBe("저장된 영감 목록");
-    const pathNav = container.querySelector<HTMLElement>(".memory-path-filters");
-    expect(pathNav?.getAttribute("aria-label")).toBe("저장된 영감 길");
-    const filters = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-path-filter"));
-    expect(filters.map((filter) => filter.textContent)).toEqual(["전체 저장0", "최근 저장0"]);
-    expect(filters[0]?.getAttribute("title")).toBe("저장된 영감 전체, 최신순 (0)");
-    expect(filters[1]?.getAttribute("title")).toBe("최근 2일 안에 저장한 영감 (0)");
-    expect(container.querySelector(".memory-path-summary")?.textContent).toBe("저장된 영감 전체, 최신순 · 0개 저장");
-    expect(container.querySelector(".memory-relationship-empty")?.textContent).toBe("아직 저장된 영감이 없습니다.");
-    expect(panel?.textContent).not.toContain("all saved");
-    expect(panel?.textContent).not.toContain("recently saved");
-    expect(panel?.textContent).not.toContain("saves");
-    expect(panel?.getAttribute("aria-label")).not.toBe("saved inspiration list");
   });
 
   it("names the primary product spaces without surfacing internal graph UI", async () => {
@@ -1346,17 +1227,18 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
-    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
     expect(detail).not.toBeNull();
+    expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
-    expect(detail?.textContent).not.toContain("Inspiration details");
+    expect(detail?.textContent).toContain("Inspiration details");
     expect(detail?.textContent).not.toContain("Signal packet");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.textContent).not.toContain("View next inspiration");
+    expect(detail?.textContent).toContain("View next inspiration");
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
@@ -1392,7 +1274,7 @@ describe("HomePage current home experience", () => {
     expect(evidenceTrigger?.textContent).toContain("preview");
     expect(container.querySelector(".nc-note-evidence-open")).toBeNull();
     expect(container.querySelector(".nc-note-evidence-open--disabled")).toBeNull();
-    expect(container.querySelector(".memory-contents-item--expanded")).toBeNull();
+    expect(container.querySelector(".memory-stack-detail--mockup")).toBeNull();
     expect(fetchSavedSignalDetail).not.toHaveBeenCalled();
   });
 
@@ -1516,7 +1398,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, notes will appear here.");
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
@@ -1584,7 +1466,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-page")).toBeNull();
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, notes will appear here.");
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
@@ -1631,35 +1513,35 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("river님의 탑오브마인드");
-    expect(container.textContent).not.toContain("river's top of mind");
-    expect(container.textContent).not.toContain("저장한 영감들이 조금씩 하나의 지도를 만듭니다.");
-    expect(container.textContent).not.toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).toContain("river's top of mind");
+    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).toContain("make the thing before explaining it");
-    expect(container.textContent).toContain("어디에든 놓기 — 링크, 이미지, 메모");
-    expect(container.textContent).not.toContain("Drop anywhere — link, image, or note");
-    expect(container.querySelector(".nc-language-controls")?.getAttribute("aria-label")).toBe("홈 컨트롤");
-    expect(container.querySelector(".nc-profile-link")?.getAttribute("aria-label")).toBe("프로필");
   });
 
-  it("localizes the home profile affordance in Korean", async () => {
+  it("localizes the logout affordance in Korean", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures();
     const container = await renderHomePage();
 
-    const profileLink = container.querySelector<HTMLAnchorElement>('a.nc-profile-link[href="/profile"]');
-    expect(profileLink?.title).toBe("프로필");
-    expect(profileLink?.textContent).toBe("프로필");
-    expect(container.textContent).not.toContain("로그아웃");
+    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")?.title).toBe(
+      "River 로그아웃",
+    );
   });
 
-  it("keeps language preference changes on the Profile page instead of Home chrome", async () => {
+  it("lets the language buttons persist a Korean locale preference", async () => {
     setApiFixtures();
     const container = await renderHomePage();
+    const koreanButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-lang-btn")).find(
+      (button) => button.textContent === "한",
+    );
 
-    expect(container.querySelector(".nc-lang-btn")).toBeNull();
-    expect(container.querySelector<HTMLAnchorElement>('a.nc-profile-link[href="/profile"]')).not.toBeNull();
-    expect(mockAuthState.value.updatePreferredLocale).not.toHaveBeenCalled();
+    expect(koreanButton).not.toBeNull();
+    await act(async () => {
+      koreanButton?.click();
+    });
+    expect(mockAuthState.value.updatePreferredLocale).toHaveBeenCalledWith("ko-KR");
+    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).toContain("Waka가 사라지기 전에 붙잡은 조각들이");
   });
 
   it("keeps the inspiration evidence sticky text large enough to read", () => {
@@ -1731,11 +1613,13 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    const detail = stack?.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    expect(stack?.querySelector(".memory-category-panel")).toBeNull();
+    const detail = stack?.querySelector<HTMLElement>(".memory-stack-detail");
     expect(detail).not.toBeNull();
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms");
-    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-contents-collapse");
-    expect(detailBack?.getAttribute("aria-label")).toBe("collapse inspiration");
+    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-workspace-back");
+    expect(detailBack?.textContent).toContain("← back to all saved");
+    expect(detailBack?.textContent).not.toContain("map");
     expect(container.querySelector(".memory-window")).toBeNull();
 
     await act(async () => {
@@ -2150,8 +2034,8 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".memory-window")).toBeNull();
     expect(detail.textContent).not.toContain("highlighted scrap");
-    expect(detail.textContent).not.toContain("saved inspiration");
-    expect(detail.classList.contains("memory-contents-item--expanded")).toBe(true);
+    expect(detail.textContent).toContain("saved inspiration");
+    expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("highlighted by me");
@@ -2204,19 +2088,21 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     await flushReactWork();
 
-    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
     expect(detail).not.toBeNull();
-    expect(detail?.querySelector(".memory-detail-close")).toBeNull();
-    expect(detail?.querySelector(".memory-detail-hero")).toBeNull();
-    expect(detail?.querySelector(".memory-detail-source-card")).toBeNull();
+    expect(detail?.querySelector(".memory-detail-close")?.textContent).toContain("×");
+    expect(detail?.querySelector(".memory-detail-hero")).not.toBeNull();
+    expect(detail?.querySelector(".memory-detail-source-card")?.textContent).toContain("youtube.com/watch");
+    expect(detail?.textContent).toContain("Link");
+    expect(detail?.textContent).toContain("https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s");
     expect(detail?.textContent).toContain("Reflect Deeper");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.textContent).not.toContain("View next inspiration");
-    expect(detail?.querySelector(".memory-detail-next")).toBeNull();
+    expect(detail?.textContent).toContain("View next inspiration");
+    expect(detail?.querySelector(".memory-detail-next")).not.toBeNull();
   });
 
   it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {
@@ -2230,7 +2116,7 @@ describe("HomePage current home experience", () => {
     });
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
-    const readable = detail.querySelector<HTMLElement>(".memory-contents-expanded-editor");
+    const readable = detail.querySelector<HTMLElement>(".memory-readable-signal");
     expect(readable).not.toBeNull();
 
     const selection = {
@@ -2328,9 +2214,9 @@ describe("HomePage current home experience", () => {
       cards[0]?.click();
     });
     await flushReactWork();
-    expect(container.querySelector(".memory-contents-item--expanded")?.textContent).toContain("Architecture essay");
+    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Architecture essay");
 
-    const back = container.querySelector<HTMLButtonElement>(".memory-contents-item--expanded .memory-contents-collapse");
+    const back = container.querySelector<HTMLButtonElement>(".memory-stack-detail .memory-workspace-back");
     await act(async () => {
       back?.click();
     });
@@ -2341,8 +2227,8 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.querySelector(".memory-contents-item--expanded")?.textContent).toContain("Synthetic memory note");
-    expect(container.querySelectorAll(".memory-contents-item--expanded")).toHaveLength(1);
+    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Synthetic memory note");
+    expect(container.querySelectorAll(".memory-stack-detail")).toHaveLength(1);
     expect(container.querySelector(".memory-window")).toBeNull();
   });
 
@@ -2370,37 +2256,6 @@ describe("HomePage current home experience", () => {
     await waitForTimers(380);
     await flushReactWork();
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
-    expect(createInspiration).not.toHaveBeenCalled();
-  });
-
-  it("dismisses the capture modal when clicking outside the capture card", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    await openCaptureModal(container);
-    await act(async () => {
-      container.querySelector<HTMLElement>(".reference-capture-modal")?.click();
-    });
-
-    expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
-    await waitForTimers(380);
-    await flushReactWork();
-    expect(container.querySelector(".reference-capture-modal")).toBeNull();
-    expect(createInspiration).not.toHaveBeenCalled();
-  });
-
-  it("keeps the capture modal open when clicking inside the capture card", async () => {
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    await openCaptureModal(container);
-    await act(async () => {
-      container.querySelector<HTMLElement>(".reference-capture-shell")?.click();
-      container.querySelector<HTMLTextAreaElement>("#capNote")?.click();
-    });
-
-    expect(container.querySelector(".reference-capture-modal")).not.toBeNull();
-    expect(container.querySelector(".reference-capture-modal--closing")).toBeNull();
     expect(createInspiration).not.toHaveBeenCalled();
   });
 
@@ -2443,54 +2298,6 @@ describe("HomePage current home experience", () => {
       text: "Fast save without reflective friction",
       kind: "note",
     });
-  });
-
-  it("keeps refreshing top-of-mind after classification while auto notes settle", async () => {
-    setApiFixtures({ inspirations: [] });
-    const saved = persistedInspiration({
-      id: "insp-top-of-mind-race",
-      text: "A signal that should keep polling for the sticky note",
-      cluster: null,
-      wowScore: 8,
-    });
-    const classified = { ...saved, cluster: "morph" as const, wowScore: 18 };
-    vi.mocked(createInspiration).mockResolvedValue(saved);
-    const container = await renderHomePage();
-
-    await openCaptureModal(container);
-    const textarea = container.querySelector<HTMLTextAreaElement>("#capNote");
-    await act(async () => {
-      setInputValue(textarea!, "A signal that should keep polling for the sticky note");
-    });
-
-    vi.mocked(fetchInspirations).mockResolvedValue([classified]);
-    vi.mocked(fetchTopOfMind).mockClear();
-    vi.mocked(fetchTopOfMindNotes).mockClear();
-    vi.useFakeTimers();
-
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#capSave")?.click();
-      await Promise.resolve();
-    });
-    await flushReactWork();
-
-    expect(fetchTopOfMind).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
-    });
-    expect(fetchTopOfMind).toHaveBeenCalledTimes(2);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
-    });
-    expect(fetchTopOfMind).toHaveBeenCalledTimes(3);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000);
-    });
-    expect(fetchTopOfMind).toHaveBeenCalledTimes(4);
-    expect(fetchTopOfMindNotes).toHaveBeenCalledWith({ limit: 5 });
   });
 
   it("advances and saves Reflect Deeper from the capture modal with all three answers", async () => {
@@ -2880,15 +2687,6 @@ describe("HomePage current home experience", () => {
     const adminEntry = container.querySelector<HTMLAnchorElement>(".admin-entry-pill");
     expect(adminEntry).not.toBeNull();
     expect(adminEntry?.getAttribute("href")).toBe("/admin");
-  });
-
-  it("hides the admin inspection entry for authenticated non-admin users", async () => {
-    vi.stubEnv("VITE_SHOW_INTERNAL_STATUS", "true");
-    mockAuthState.value.user.isAdmin = false;
-    setApiFixtures();
-    const container = await renderHomePage();
-
-    expect(container.querySelector<HTMLAnchorElement>(".admin-entry-pill")).toBeNull();
   });
 
   it("does not reintroduce the old internal WOW STATUS Home tab", async () => {
