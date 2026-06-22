@@ -360,6 +360,32 @@
   text-transform: uppercase;
 }
 
+.home-signout-pill {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  z-index: 300;
+  min-height: 32px;
+  border: 1px solid rgba(15, 15, 14, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.52);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  opacity: 0.72;
+  padding: 7px 11px;
+  text-transform: uppercase;
+}
+
+.home-signout-pill:hover,
+.home-signout-pill:focus-visible {
+  color: var(--ink);
+  opacity: 1;
+  outline: none;
+}
+
 .admin-entry-pill:hover,
 .admin-entry-pill:focus-visible {
   color: var(--ink);
@@ -4057,6 +4083,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), max-content));
   align-content: start;
+  align-items: start;
   justify-content: center;
   gap: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 44px);
   width: min(1180px, calc(100vw - 32px));
@@ -4189,13 +4216,15 @@
 .nc-note {
   position: relative;
   width: min(var(--w, 320px), 100%);
+  max-width: min(560px, calc(100vw - 32px));
+  max-height: min(620px, calc(100dvh - 118px));
   min-height: 230px;
   background: var(--bg);
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
     linear-gradient(rgba(0, 0, 0, 0.018), rgba(0, 0, 0, 0.018));
   color: var(--ink);
-  padding: 24px 26px 18px;
+  padding: 24px 26px 72px;
   border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
@@ -4219,12 +4248,29 @@
   filter: saturate(calc(0.5 + 0.5 * var(--decay, 1)));
 }
 
+.nc-note:has(textarea:focus) {
+  cursor: default;
+}
+
 .nc-note--text-long {
   min-height: 250px;
 }
 
 .nc-note--text-compact {
   min-height: 270px;
+}
+
+.nc-note--text-tiny {
+  min-height: 300px;
+}
+
+.nc-note--text-micro {
+  min-height: 320px;
+}
+
+.nc-note--text-nano,
+.nc-note--text-ultra {
+  min-height: 340px;
 }
 
 .nc-note:hover,
@@ -4367,15 +4413,41 @@
 }
 
 .nc-note-modal.nc-note--text-long .nc-note-body,
-.nc-note--text-long .nc-note-body--preview {
+.nc-note--text-long .nc-note-body--preview,
+.nc-note--text-long .nc-note-body-edit--inline {
   font-size: 23px;
   line-height: 1.18;
 }
 
 .nc-note-modal.nc-note--text-compact .nc-note-body,
-.nc-note--text-compact .nc-note-body--preview {
+.nc-note--text-compact .nc-note-body--preview,
+.nc-note--text-compact .nc-note-body-edit--inline {
   font-size: 19px;
   line-height: 1.2;
+}
+
+.nc-note--text-tiny .nc-note-body--preview,
+.nc-note--text-tiny .nc-note-body-edit--inline {
+  font-size: 16px;
+  line-height: 1.22;
+}
+
+.nc-note--text-micro .nc-note-body--preview,
+.nc-note--text-micro .nc-note-body-edit--inline {
+  font-size: 13px;
+  line-height: 1.24;
+}
+
+.nc-note--text-nano .nc-note-body--preview,
+.nc-note--text-nano .nc-note-body-edit--inline {
+  font-size: 10.5px;
+  line-height: 1.24;
+}
+
+.nc-note--text-ultra .nc-note-body--preview,
+.nc-note--text-ultra .nc-note-body-edit--inline {
+  font-size: 9px;
+  line-height: 1.22;
 }
 
 .nc-note-body-edit {
@@ -4395,6 +4467,21 @@
 .nc-note-body-edit:focus {
   outline: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
   outline-offset: 10px;
+}
+
+.nc-note-body-edit--inline {
+  display: block;
+  min-height: 0;
+  max-height: calc(min(620px, calc(100dvh - 118px)) - 128px);
+  resize: none;
+  overflow: hidden;
+  font-size: inherit;
+  line-height: inherit;
+  cursor: text;
+}
+
+.nc-note-body-edit--inline:focus {
+  outline: none;
 }
 
 .nc-note-peel {
@@ -4570,6 +4657,50 @@
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
+}
+
+.nc-note-inspiration-slide {
+  align-self: flex-start;
+  display: inline-flex;
+  max-width: 100%;
+  min-height: 32px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, white 28%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.1;
+  padding: 7px 11px;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease, opacity 160ms ease;
+}
+
+.nc-note-footer-row {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  left: 16px;
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.nc-note-inspiration-slide:hover:not(:disabled),
+.nc-note-inspiration-slide:focus-visible {
+  border-color: color-mix(in srgb, var(--ink) 34%, transparent);
+  background: color-mix(in srgb, white 42%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.nc-note-inspiration-slide:disabled {
+  cursor: default;
+  opacity: 0.48;
 }
 
 .nc-note--featured .nc-note-body--preview {
@@ -4811,16 +4942,71 @@
 
 .nc-note-actions {
   display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: 100%;
+  justify-items: end;
+  gap: 6px;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .nc-note-action-buttons {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.nc-note-icon-btn {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, white 22%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  opacity: 0.72;
+  transition: background 160ms ease, border-color 160ms ease, opacity 160ms ease, transform 160ms ease;
+}
+
+.nc-note-icon-btn svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.nc-note-icon-btn .nc-note-spinner {
+  animation: nc-note-spinner 760ms linear infinite;
+}
+
+@keyframes nc-note-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.nc-note-icon-btn:hover:not(:disabled),
+.nc-note-icon-btn:focus-visible {
+  border-color: color-mix(in srgb, var(--ink) 34%, transparent);
+  background: color-mix(in srgb, white 42%, transparent);
+  opacity: 1;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.nc-note-icon-btn:disabled {
+  cursor: progress;
+  opacity: 0.4;
+}
+
+.nc-note-icon-btn--pinned {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+  opacity: 0.95;
 }
 
 .nc-note-feedback-status {
@@ -13645,6 +13831,16 @@ body.reflect-bg {
   background: rgba(255, 255, 255, 0.36);
 }
 
+.memory-path-count {
+  margin: 2px 0 4px;
+  color: rgba(31, 29, 24, 0.46);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .nc-drawer-search {
   width: 100%;
   min-height: 54px;
@@ -14471,6 +14667,22 @@ textarea {
     right: 12px;
   }
 
+  .nc-lang-btn {
+    min-width: 44px;
+    min-height: 40px;
+    padding: 10px 12px;
+  }
+
+  .home-signout-pill {
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    min-width: 84px;
+    min-height: 40px;
+    padding: 10px 14px;
+    background: rgba(255, 253, 247, 0.82);
+    font-size: 9px;
+  }
+
   .memory-drawer-stack {
     --memory-drawer-bottom-clearance: calc(102px + env(safe-area-inset-bottom));
   }
@@ -14923,6 +15135,32 @@ textarea {
 
 .nc-drawer-search input {
   transform: translateZ(0);
+}
+
+@media (max-width: 760px) {
+  .memory-path-filter {
+    min-height: 40px;
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .memory-path-filter small {
+    font-size: 10px;
+  }
+
+  .admin-entry-pill {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 13px;
+    opacity: 0.58;
+  }
+
+  .admin-entry-pill {
+    left: 10px;
+  }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

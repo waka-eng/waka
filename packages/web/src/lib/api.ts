@@ -889,6 +889,14 @@ export interface GetTopOfMindNoteResponse {
   topOfMindNote: ApiTopOfMindNoteSurface;
 }
 
+export interface UpdateTopOfMindNoteRequest {
+  title: string;
+}
+
+export interface UpdateTopOfMindNoteResponse {
+  topOfMindNote: ApiTopOfMindNoteSurface;
+}
+
 export type ApiPublicTopOfMindEvidencePreview = Omit<
   ApiTopOfMindEvidencePreview,
   "signalId"
@@ -1238,6 +1246,26 @@ export async function fetchTopOfMindNote(
     throw new ApiError({
       status: 200,
       message: "Malformed top-of-mind note response",
+    });
+  }
+
+  return body.topOfMindNote;
+}
+
+export async function updateTopOfMindNote(
+  noteId: string,
+  input: UpdateTopOfMindNoteRequest,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await patchJson<UpdateTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}`),
+    input,
+    "Failed to update top-of-mind note",
+  );
+
+  if (!body.topOfMindNote) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed top-of-mind note update response",
     });
   }
 
