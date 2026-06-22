@@ -579,12 +579,12 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
     await flushReactWork();
-    const detail = container.querySelector<HTMLElement>(".memory-stack-detail.signal-revisit-detail");
+    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
     expect(detail).not.toBeNull();
     return detail!;
   }
 
-  it("renders saved inspiration detail with a first-sentence full-width title and no left-side labels", async () => {
+  it("renders saved inspiration detail inline without the heavy detail shell", async () => {
     setApiFixtures({
       savedSignals: [
         {
@@ -605,13 +605,13 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
 
-    expect(detail.querySelector(".memory-detail-hero--full-title h2")?.textContent).toBe(
-      "Architecture essay about bridge rhythms in city walks.",
-    );
-    expect(detail.querySelector(".memory-detail-hero--full-title > span")).toBeNull();
-    expect(detail.querySelector(".memory-contents-highlight-layer")).toBeNull();
+    expect(detail.querySelector(".memory-detail-hero--full-title")).toBeNull();
+    expect(detail.querySelector(".memory-detail-close")).toBeNull();
+    expect(detail.querySelector(".memory-workspace-back")).toBeNull();
+    expect(detail.querySelector(".memory-detail-source-card")).toBeNull();
+    expect(detail.querySelector(".memory-contents-highlight-layer")).not.toBeNull();
     expect(detail.textContent).not.toContain("saved inspiration · Inspiration details");
-    expect(detail.querySelector<HTMLTextAreaElement>(".memory-readable-signal")?.value).toContain(
+    expect(detail.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor")?.value).toContain(
       "This second sentence stays only in the readable body.",
     );
   });
@@ -1346,9 +1346,8 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
-    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
+    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
     expect(detail).not.toBeNull();
-    expect(detail?.getAttribute("aria-label")).toBe("opened inspiration");
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail?.textContent).not.toContain("Inspiration details");
     expect(detail?.textContent).not.toContain("Signal packet");
@@ -1357,7 +1356,7 @@ describe("HomePage current home experience", () => {
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.textContent).toContain("View next inspiration");
+    expect(detail?.textContent).not.toContain("View next inspiration");
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
@@ -1393,7 +1392,7 @@ describe("HomePage current home experience", () => {
     expect(evidenceTrigger?.textContent).toContain("preview");
     expect(container.querySelector(".nc-note-evidence-open")).toBeNull();
     expect(container.querySelector(".nc-note-evidence-open--disabled")).toBeNull();
-    expect(container.querySelector(".memory-stack-detail--mockup")).toBeNull();
+    expect(container.querySelector(".memory-contents-item--expanded")).toBeNull();
     expect(fetchSavedSignalDetail).not.toHaveBeenCalled();
   });
 
@@ -1732,13 +1731,11 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(stack?.querySelector(".memory-category-panel")).toBeNull();
-    const detail = stack?.querySelector<HTMLElement>(".memory-stack-detail");
+    const detail = stack?.querySelector<HTMLElement>(".memory-contents-item--expanded");
     expect(detail).not.toBeNull();
     expect(detail?.textContent).toContain("Architecture essay about bridge rhythms");
-    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-workspace-back");
-    expect(detailBack?.textContent).toContain("← back to all saved");
-    expect(detailBack?.textContent).not.toContain("map");
+    const detailBack = detail?.querySelector<HTMLButtonElement>(".memory-contents-collapse");
+    expect(detailBack?.getAttribute("aria-label")).toBe("collapse inspiration");
     expect(container.querySelector(".memory-window")).toBeNull();
 
     await act(async () => {
@@ -2154,7 +2151,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".memory-window")).toBeNull();
     expect(detail.textContent).not.toContain("highlighted scrap");
     expect(detail.textContent).not.toContain("saved inspiration");
-    expect(detail.classList.contains("signal-revisit-detail--open")).toBe(true);
+    expect(detail.classList.contains("memory-contents-item--expanded")).toBe(true);
     expect(detail.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("highlighted by me");
@@ -2207,21 +2204,19 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
     await flushReactWork();
 
-    const detail = container.querySelector<HTMLElement>(".memory-stack-detail--mockup");
+    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
     expect(detail).not.toBeNull();
-    expect(detail?.querySelector(".memory-detail-close")?.textContent).toContain("×");
-    expect(detail?.querySelector(".memory-detail-hero")).not.toBeNull();
-    expect(detail?.querySelector(".memory-detail-source-card")?.textContent).toContain("youtube.com/watch");
-    expect(detail?.textContent).toContain("Link");
-    expect(detail?.textContent).toContain("https://www.youtube.com/watch?v=fVK6pYYTN5w&t=1s");
+    expect(detail?.querySelector(".memory-detail-close")).toBeNull();
+    expect(detail?.querySelector(".memory-detail-hero")).toBeNull();
+    expect(detail?.querySelector(".memory-detail-source-card")).toBeNull();
     expect(detail?.textContent).toContain("Reflect Deeper");
     expect(detail?.textContent).not.toContain("what did this mean then?");
     expect(detail?.textContent).not.toContain("what does it mean now?");
     expect(detail?.textContent).not.toContain("does this still fit?");
     expect(detail?.textContent).not.toContain("attachment details");
     expect(detail?.textContent).not.toContain("nearby piles");
-    expect(detail?.textContent).toContain("View next inspiration");
-    expect(detail?.querySelector(".memory-detail-next")).not.toBeNull();
+    expect(detail?.textContent).not.toContain("View next inspiration");
+    expect(detail?.querySelector(".memory-detail-next")).toBeNull();
   });
 
   it("creates opened-inspiration highlights from a selection popover with reaction and note controls", async () => {
@@ -2235,7 +2230,7 @@ describe("HomePage current home experience", () => {
     });
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
-    const readable = detail.querySelector<HTMLElement>(".memory-readable-signal");
+    const readable = detail.querySelector<HTMLElement>(".memory-contents-expanded-editor");
     expect(readable).not.toBeNull();
 
     const selection = {
@@ -2333,9 +2328,9 @@ describe("HomePage current home experience", () => {
       cards[0]?.click();
     });
     await flushReactWork();
-    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Architecture essay");
+    expect(container.querySelector(".memory-contents-item--expanded")?.textContent).toContain("Architecture essay");
 
-    const back = container.querySelector<HTMLButtonElement>(".memory-stack-detail .memory-workspace-back");
+    const back = container.querySelector<HTMLButtonElement>(".memory-contents-item--expanded .memory-contents-collapse");
     await act(async () => {
       back?.click();
     });
@@ -2346,8 +2341,8 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    expect(container.querySelector(".memory-stack-detail")?.textContent).toContain("Synthetic memory note");
-    expect(container.querySelectorAll(".memory-stack-detail")).toHaveLength(1);
+    expect(container.querySelector(".memory-contents-item--expanded")?.textContent).toContain("Synthetic memory note");
+    expect(container.querySelectorAll(".memory-contents-item--expanded")).toHaveLength(1);
     expect(container.querySelector(".memory-window")).toBeNull();
   });
 

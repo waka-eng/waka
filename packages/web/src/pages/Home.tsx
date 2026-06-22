@@ -3574,54 +3574,14 @@ export function HomePage(): JSX.Element {
       const draftText = savedSignalDrafts[signal.id] ?? detailText;
       const hasEditedDraft = draftText.trim() !== detailText.trim();
       const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
-      const sourceAttachments = fullDetailReady ? savedSignalDetail.attachments : signal.attachmentSummary;
       const reflectionRows = savedSignalReflections[signal.id] ?? [];
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
-      const showHighlightOverlay = !hasEditedDraft && detailHighlights.length > 0;
       return (
         <article
-          className="memory-stack-detail memory-stack-detail--mockup signal-revisit-detail signal-revisit-detail--open memory-contents-item memory-contents-item--expanded"
+          className="memory-contents-item memory-contents-item--expanded"
           data-memory-signal-id={signal.id}
-          aria-label="opened inspiration"
         >
-          <button
-            type="button"
-            className="memory-workspace-back"
-            onClick={() => {
-              setSelectedSavedSignalId(null);
-              setSavedSignalDetail(null);
-              setSelectedInspirationText(null);
-              cancelSavedSignalReflection();
-            }}
-          >
-            ← back to all saved
-          </button>
-          <button
-            type="button"
-            className="memory-detail-close"
-            aria-label="close inspiration detail"
-            onClick={() => {
-              setSelectedSavedSignalId(null);
-              setSavedSignalDetail(null);
-              setSelectedInspirationText(null);
-              cancelSavedSignalReflection();
-            }}
-          >
-            ×
-          </button>
-          <header className="memory-detail-hero memory-detail-hero--full-title">
-            <h2>{deriveTitleFromText(detailText, locale)}</h2>
-          </header>
-          {sourceAttachments.length > 0 ? (
-            <section className="memory-detail-source-card" aria-label="source">
-              {sourceAttachments.map((attachment) => (
-                <p key={attachment.id}>
-                  {attachment.type === "link" ? "Link" : attachment.type} {attachment.label}{attachment.url ? ` ${attachment.url}` : ""}
-                </p>
-              ))}
-            </section>
-          ) : null}
           <button
             type="button"
             className="memory-contents-collapse"
@@ -3651,17 +3611,17 @@ export function HomePage(): JSX.Element {
           <div
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
-            {showHighlightOverlay ? (
-              <div
-                className="memory-contents-highlight-layer"
-                aria-hidden="true"
-              >
-                {renderHighlightedInspirationText(draftText, detailHighlights)}
-              </div>
-            ) : null}
+            <div
+              className={`memory-contents-highlight-layer${
+                hasEditedDraft ? " memory-contents-highlight-layer--hidden" : ""
+              }`}
+              aria-hidden="true"
+            >
+              {renderHighlightedInspirationText(draftText, detailHighlights)}
+            </div>
             <textarea
-              className={`memory-contents-expanded-text memory-contents-expanded-editor memory-readable-signal${
-                showHighlightOverlay ? " memory-contents-expanded-editor--with-highlights" : ""
+              className={`memory-contents-expanded-text memory-contents-expanded-editor${
+                !hasEditedDraft && detailHighlights.length > 0 ? " memory-contents-expanded-editor--with-highlights" : ""
               }`}
               value={draftText}
               onChange={(event) => {
@@ -3759,11 +3719,6 @@ export function HomePage(): JSX.Element {
             </section>
           ) : reflectionsLoading ? (
             <p className="memory-contents-reflection-empty">loading reflections...</p>
-          ) : null}
-          {sourceAttachments.length > 0 || selectedSupportingSignalFallback?.id === signal.id ? (
-            <button type="button" className="memory-detail-next">
-              View next inspiration
-            </button>
           ) : null}
         </article>
       );
