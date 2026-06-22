@@ -1540,8 +1540,8 @@ describe("HomePage current home experience", () => {
   it("keeps the inspiration evidence sticky text large enough to read", () => {
     const css = readFileSync("src/styles/global.css", "utf8");
 
-    expect(css).toMatch(/\.nc-note-evidence-head p\s*\{[\s\S]*?font-size:\s*17px;/);
-    expect(css).toMatch(/\.nc-note-evidence-trigger span\s*\{[\s\S]*?font-size:\s*17px;/);
+    expect(css).toMatch(/\.nc-note-evidence-summary > span\s*\{[\s\S]*?font-size:\s*18px;/);
+    expect(css).toMatch(/\.nc-note-evidence-previews small\s*\{[\s\S]*?font-size:\s*11px;/);
   });
 
   it("opens an anchored memory drawer stack from the wall drawer object", async () => {
