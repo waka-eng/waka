@@ -1833,9 +1833,10 @@
 .memory-contents-item--expanded {
   position: relative;
   display: flex;
+  min-width: 0;
   min-height: min(560px, calc(100dvh - var(--memory-drawer-bottom-clearance) - 128px));
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 16px;
   padding: clamp(52px, 8vh, 86px) clamp(54px, 6vw, 88px) clamp(24px, 4vh, 42px);
   background: rgba(255, 255, 255, 0.94);
@@ -1922,7 +1923,8 @@
 .memory-contents-expanded-copy {
   display: grid;
   min-height: clamp(180px, 34vh, 340px);
-  align-items: center;
+  align-items: start;
+  min-width: 0;
 }
 
 .memory-contents-expanded-text,
@@ -1936,6 +1938,7 @@
   font-weight: 460;
   letter-spacing: 0;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
@@ -4943,7 +4946,6 @@
   opacity: 0.86;
 }
 
-.nc-note-evidence-head span,
 .nc-note-evidence-trigger small {
   color: var(--ink);
   font-family: "JetBrains Mono", ui-monospace, monospace;

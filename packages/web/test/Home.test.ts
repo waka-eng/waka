@@ -1091,7 +1091,9 @@ describe("HomePage current home experience", () => {
     expect(expanded?.textContent).not.toContain("opened post-it");
     expect(expanded?.textContent).not.toContain("short, provisional, easy to change");
     expect(expanded?.textContent).toContain("inspirations that led here");
-    expect(expanded?.textContent).toContain("1 saved inspiration nearby");
+    expect(expanded?.textContent).not.toContain("1 saved inspiration nearby");
+    expect(expanded?.textContent).not.toContain("saved inspirations nearby");
+    expect(expanded?.textContent).not.toContain("saved inspirations stay private there");
     expect(expanded?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(expanded?.textContent).not.toContain("This inspiration anchors the pattern.");
     expect(expanded?.textContent?.toLowerCase()).not.toContain("memory movement");
@@ -1306,7 +1308,8 @@ describe("HomePage current home experience", () => {
 
     const expanded = container.querySelector<HTMLElement>(".nc-note-modal");
     expect(expanded?.textContent).toContain("inspirations that led here");
-    expect(expanded?.textContent).toContain("saved inspirations stay private there");
+    expect(expanded?.textContent).not.toContain("saved inspirations stay private there");
+    expect(expanded?.textContent).not.toContain("saved inspirations nearby");
     expect(expanded?.textContent).not.toContain("no saved inspiration attached yet");
     expect(expanded?.textContent).not.toContain("This post-it does not have saved inspiration attached yet.");
     expect(expanded?.textContent).not.toContain("ambition dimension");
@@ -1716,6 +1719,78 @@ describe("HomePage current home experience", () => {
     expect(drawer?.querySelector(".signal-memory-lenses")).toBeNull();
     expect(drawer?.textContent?.toLowerCase()).not.toContain("keeps coming back");
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
+  });
+
+  it("renders expanded saved inspirations with one stable text layer unless highlights need an overlay", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          highlightedSnippets: [],
+        },
+        {
+          ...sampleSavedSignals[1],
+          highlightedSnippets: [
+            {
+              id: "spark-journal",
+              text: "rereading old journals",
+              source: "user",
+              confidence: 0.92,
+              isPrimary: true,
+            },
+          ],
+        },
+      ],
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        highlightedSnippets: [],
+      },
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const firstSave = container.querySelector<HTMLButtonElement>(".memory-contents-item");
+    expect(firstSave?.textContent).toContain("Architecture essay");
+    await act(async () => {
+      firstSave?.click();
+    });
+    await flushReactWork();
+
+    let expanded = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    expect(expanded).not.toBeNull();
+    expect(expanded?.querySelector(".memory-contents-loading")).toBeNull();
+    expect(expanded?.querySelector(".memory-contents-highlight-layer")).toBeNull();
+    const editor = expanded?.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
+    expect(editor).not.toBeNull();
+    expect(editor?.classList.contains("memory-contents-expanded-editor--with-highlights")).toBe(false);
+    expect(editor?.value).toBe("Architecture essay about bridge rhythms in city walks");
+
+    const collapse = expanded?.querySelector<HTMLButtonElement>(".memory-contents-collapse");
+    await act(async () => {
+      collapse?.click();
+    });
+    await flushReactWork();
+
+    const highlightedSave = Array.from(container.querySelectorAll<HTMLButtonElement>(".memory-contents-item")).find((save) =>
+      save.textContent?.includes("Synthetic memory note"),
+    );
+    expect(highlightedSave).not.toBeNull();
+    await act(async () => {
+      highlightedSave?.click();
+    });
+    await flushReactWork();
+
+    expanded = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    expect(expanded?.querySelector(".memory-contents-loading")).toBeNull();
+    const highlightLayer = expanded?.querySelector<HTMLElement>(".memory-contents-highlight-layer");
+    const highlightedEditor = expanded?.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
+    expect(highlightLayer).not.toBeNull();
+    expect(highlightLayer?.textContent).toContain("rereading old journals");
+    expect(highlightedEditor?.classList.contains("memory-contents-expanded-editor--with-highlights")).toBe(true);
+    expect(highlightedEditor?.value).toBe("Synthetic memory note for rereading old journals");
   });
 
   it("generates filesystem path filters from saved inspiration context", async () => {
