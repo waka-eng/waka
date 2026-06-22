@@ -5,6 +5,12 @@ on:
     branches:
       - dev
   workflow_dispatch:
+    inputs:
+      release_legacy_alias:
+        description: "Remove dev.waka.im from the existing CloudFront distribution before deploying"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: deploy-dev
@@ -25,6 +31,7 @@ env:
   AWS_DEFAULT_REGION: us-west-2
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID_APP }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY_APP }}
+  DEV_DOMAIN: dev.waka.im
 
 jobs:
   deploy:
@@ -67,5 +74,102 @@ jobs:
             exit 1
           fi
 
+      - name: Release legacy CloudFront alias
+        if: ${{ (github.event_name == 'workflow_dispatch' && inputs.release_legacy_alias) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release-dev-alias]')) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t distribution_ids < <(
+            aws cloudfront list-distributions \
+              --query "DistributionList.Items[?Aliases.Items && contains(Aliases.Items, '${DEV_DOMAIN}')].Id" \
+              --output text | tr '\t' '\n' | sed '/^$/d'
+          )
+
+          if (( ${#distribution_ids[@]} == 0 )); then
+            printf 'No existing CloudFront distribution currently owns %s.\n' "$DEV_DOMAIN"
+            exit 0
+          fi
+
+          for distribution_id in "${distribution_ids[@]}"; do
+            printf 'Removing %s from existing CloudFront distribution %s.\n' "$DEV_DOMAIN" "$distribution_id"
+            aws cloudfront get-distribution-config --id "$distribution_id" > distribution.json
+            etag="$(jq -r '.ETag' distribution.json)"
+            jq --arg domain "$DEV_DOMAIN" '
+              .DistributionConfig
+              | .Aliases.Items = ((.Aliases.Items // []) | map(select(. != $domain)))
+              | .Aliases.Quantity = (.Aliases.Items | length)
+              | if .Aliases.Quantity == 0 then .Aliases |= del(.Items) else . end
+            ' distribution.json > distribution-config.json
+            aws cloudfront update-distribution \
+              --id "$distribution_id" \
+              --if-match "$etag" \
+              --distribution-config file://distribution-config.json >/dev/null
+            aws cloudfront wait distribution-deployed --id "$distribution_id"
+          done
+
       - name: Deploy SST development stage
         run: pnpm sst deploy --stage "$SST_STAGE"
+
+      - name: Connect Route53 dev domain
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          distribution_domain="$(
+            aws cloudfront list-distributions \
+              --query "DistributionList.Items[?Aliases.Items && contains(Aliases.Items, '${DEV_DOMAIN}')].DomainName | [0]" \
+              --output text
+          )"
+          if [[ -z "$distribution_domain" || "$distribution_domain" == "None" ]]; then
+            printf 'Could not find a CloudFront distribution for %s after deploy.\n' "$DEV_DOMAIN" >&2
+            exit 1
+          fi
+
+          hosted_zone_id="$(
+            aws route53 list-hosted-zones-by-name --dns-name "waka.im." \
+              | jq -r '
+                .HostedZones[]
+                | select(.Name == "waka.im." and (.Config.PrivateZone | not))
+                | .Id
+              ' \
+              | sed 's#^/hostedzone/##' \
+              | head -n 1
+          )"
+          if [[ -z "$hosted_zone_id" ]]; then
+            printf 'Could not find a public Route53 hosted zone for waka.im.\n' >&2
+            exit 1
+          fi
+
+          jq -n --arg domain "${DEV_DOMAIN}." --arg target "$distribution_domain" '{
+            Changes: [
+              {
+                Action: "UPSERT",
+                ResourceRecordSet: {
+                  Name: $domain,
+                  Type: "A",
+                  AliasTarget: {
+                    HostedZoneId: "Z2FDTNDATAQYW2",
+                    DNSName: $target,
+                    EvaluateTargetHealth: false
+                  }
+                }
+              },
+              {
+                Action: "UPSERT",
+                ResourceRecordSet: {
+                  Name: $domain,
+                  Type: "AAAA",
+                  AliasTarget: {
+                    HostedZoneId: "Z2FDTNDATAQYW2",
+                    DNSName: $target,
+                    EvaluateTargetHealth: false
+                  }
+                }
+              }
+            ]
+          }' > route53-change-batch.json
+
+          aws route53 change-resource-record-sets \
+            --hosted-zone-id "$hosted_zone_id" \
+            --change-batch file://route53-change-batch.json
