@@ -1228,19 +1228,7 @@ const HOME_COPY = {
     ),
     titleLineTwo: "",
     titleSuffix: "",
-    tagline: (
-      <>
-        떠오른 생각은 자주 사라집니다.
-        <br />
-        Waka가 사라지기 전에 붙잡은 조각들이
-        <br />
-        천천히 한 방향을 만들기 시작합니다.
-        <br />
-        누구와 생각하고 싶은지. 어디에 머물고 싶은지. 무엇을 만들고 싶은지.
-        <br />
-        <span className="nc-tagline-en">— 쓴 것이 아니라, 놓칠 뻔한 것을 붙잡았습니다.</span>
-      </>
-    ),
+    tagline: <></>,
     lifecycleHint: "",
     noteShifted: ["반복됨", "형성 중", "다시 돌아옴", "긴장", "확인 필요"],
     evidenceLabel: "시작된 곳",

@@ -1386,13 +1386,14 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
   });
 
-  it("renders representative Korean home copy from the user locale", async () => {
+  it("removes Korean intro copy after onboarding owns the explanation", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures();
     const container = await renderHomePage();
 
     expect(container.textContent).toContain("river's top of mind");
-    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).not.toContain("떠오른 생각은 자주 사라집니다.");
+    expect(container.textContent).not.toContain("쓴 것이 아니라");
     expect(container.textContent).toContain("make the thing before explaining it");
   });
 
