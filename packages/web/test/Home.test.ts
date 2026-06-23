@@ -1800,6 +1800,9 @@ describe("HomePage current home experience", () => {
     expect(css).toMatch(
       /@media \(max-width: 760px\) \{[\s\S]*?\.memory-category-panel\s*\{[\s\S]*?width: 100%;[\s\S]*?min-height: 100dvh;[\s\S]*?margin: 0;[\s\S]*?box-sizing: border-box;/,
     );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.memory-path-panel \.memory-path-filters\s*\{[\s\S]*?position: sticky;[\s\S]*?top: calc\(12px \+ env\(safe-area-inset-top\)\);[\s\S]*?max-height: none;[\s\S]*?overflow: visible;/,
+    );
   });
 
   it("keeps the drawer stack visually neutral without decorative folder chrome or loud stack cards", async () => {
