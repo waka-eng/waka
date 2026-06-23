@@ -112,6 +112,8 @@ export interface AmbitionSynthesisFailure {
 const MAX_SYNTHESIS_CANDIDATES = 5;
 const MAX_SIGNALS_PER_SYNTHESIS = 5;
 const DEFAULT_TOKEN_BUDGET = 2400;
+const MAX_POST_IT_WORDS = 42;
+const MAX_POST_IT_CHARS = 360;
 const MAX_FIELD_CHARS = 420;
 const SHALLOW_CATEGORY_PATTERN =
   /\b(startups?|comedy|cities|ai|inspiration|productivity)\b/i;
@@ -381,7 +383,7 @@ export function isSpecificAmbitionSynthesisOutput(
     output.evidenceRationale,
   ].join(" ");
   const wordCount = candidateText.split(/\s+/).filter(Boolean).length;
-  if (wordCount < 5 || wordCount > 14) return false;
+  if (wordCount < 5 || wordCount > MAX_POST_IT_WORDS || candidateText.length > MAX_POST_IT_CHARS) return false;
   if (SLOGAN_LIKE_POST_IT_PATTERN.test(candidateText)) return false;
   if (!CONCRETE_AMBITION_OBJECT_PATTERN.test(candidateText)) return false;
   if (!INTERPRETABLE_POST_IT_PATTERN.test(candidateText)) return false;
@@ -419,7 +421,7 @@ export function applyAmbitionSynthesisOutput(
   output: AmbitionSynthesisOutput,
 ): TopOfMindRefreshCandidate {
   const boundedConfidence = Math.max(1, Math.min(100, Math.round(output.confidence)));
-  const postIt = truncateText(output.firstPersonPostItCandidate, 120);
+  const postIt = truncateText(output.firstPersonPostItCandidate, MAX_POST_IT_CHARS);
   const matchedEnvironment = truncateText(output.environmentDirection);
   const antiEnvironment = truncateText(output.rejectedEnvironment);
   const evidenceRationale = truncateText(output.evidenceRationale);

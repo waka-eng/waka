@@ -242,6 +242,8 @@
   "profileLink": "프로필",
   "profileNickname": "닉네임",
   "profileNicknameRequired": "닉네임을 입력해 주세요",
+  "profileNicknameNoSpacesHint": "WAKA 주소와 패스포트가 깔끔하게 유지되도록 공백 없이 한 단어로 써 주세요.",
+  "profileNicknameNoSpacesError": "닉네임에는 공백을 넣을 수 없어요.",
   "profileSave": "프로필 저장",
   "profileSaving": "저장 중…",
   "profileSaved": "프로필을 저장했어요.",

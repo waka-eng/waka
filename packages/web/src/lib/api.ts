@@ -824,6 +824,8 @@ export interface ApiTopOfMindNote {
   guidance: string | null;
   confidence: number;
   status: ApiTopOfMindNoteStatus;
+  isPinned: boolean;
+  userFeedbackValue: ApiFeedbackValue | null;
   relatedSignalIds: string[];
   relatedContextNodeIds: string[];
   createdAt: string;

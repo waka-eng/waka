@@ -26,7 +26,7 @@ import {
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
 const MAX_OUTPUT_TOKENS = 1024;
 const MAX_EXCERPT_CHARS = 600;
-const MAX_POST_IT_CHARS = 120;
+const MAX_POST_IT_CHARS = 360;
 const MAX_FIELD_CHARS = 420;
 
 const KOREAN_LOCALE_OUTPUT_INSTRUCTION =
@@ -57,7 +57,8 @@ after, no comments, no trailing commas, matching this shape:
 
 Field rules:
 - firstPersonPostItCandidate: a private sticky-note thought in the user's own
-  voice. Usually 6-13 words (never fewer than 5 or more than 14). It MUST name a
+  voice. Usually one or two short sentences, never fewer than 5 words, more than
+  42 words, or more than 360 characters. It MUST name a
   concrete ambition object (people, peers, room, place, city, work, build,
   thing, path, taste, life, self, standard, experiment, question, environment)
   AND imply a reason, contrast, or tension using words like before, after,
@@ -161,7 +162,7 @@ function buildUserPrompt(input: AmbitionSynthesisInput): string {
     ),
     outputLimits: {
       firstPersonPostItCandidate:
-        "5-14 words; concrete ambition object plus reason/contrast/tension; not a slogan or outside voice",
+        "1-2 short sentences, 5-42 words and <=360 chars; concrete ambition object plus reason/contrast/tension; not a slogan or outside voice",
       environmentDirection: "1-2 sentences",
       rejectedEnvironment: "1-2 sentences",
       evidenceRationale: "1-2 sentences grounded in the signals, no ids",

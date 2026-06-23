@@ -593,6 +593,57 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).not.toContain("Answer Mossy light and imperfect ceramic edges.");
   });
 
+  it("requests the first saved-signal Reflect question immediately and preserves the draft while it resolves", async () => {
+    setApiFixtures();
+    const delayedQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion).mockReturnValueOnce(delayedQuestion.promise);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const reflectButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "reflect",
+    );
+    expect(reflectButton).not.toBeNull();
+
+    await act(async () => {
+      reflectButton!.click();
+    });
+
+    expect(generateGuidedReflectionQuestion).toHaveBeenCalledTimes(1);
+    expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priorAnswers: [],
+        inspiration: expect.objectContaining({
+          text: sampleSavedSignalDetail.rawText,
+          kind: "note",
+        }),
+      }),
+    );
+    const question = container.querySelector<HTMLElement>(".nc-drawer-reflect-question");
+    expect(question?.textContent).toContain("Finding a question for this inspiration...");
+    expect(question?.textContent).not.toContain("What does this make you notice about yourself right now?");
+
+    const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
+    expect(answer).not.toBeNull();
+    await act(async () => {
+      setInputValue(answer!, "Second draft while model question resolves.");
+    });
+
+    await act(async () => {
+      delayedQuestion.resolve({
+        question: "When this bridge rhythm appears, what feels safe enough to try next?",
+        source: "model",
+      });
+      await delayedQuestion.promise;
+    });
+    await flushReactWork();
+
+    expect(answer?.value).toBe("Second draft while model question resolves.");
+    expect(question?.textContent).toContain(
+      "When this bridge rhythm appears, what feels safe enough to try next?",
+    );
+  });
+
   it("keeps a saved-memory CTA reflection when the initial reflections fetch resolves late", async () => {
     setApiFixtures();
     const delayedReflections = deferred<Awaited<ReturnType<typeof fetchReflections>>>();
