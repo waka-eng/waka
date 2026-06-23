@@ -14058,6 +14058,36 @@ body.reflect-bg {
   -webkit-backdrop-filter: none;
 }
 
+.nc-profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  border: 1px solid rgba(26, 23, 20, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.62);
+  color: rgba(26, 23, 20, 0.68);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  padding: 0 13px;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+
+.nc-profile-link:hover,
+.nc-profile-link:focus-visible {
+  border-color: rgba(26, 23, 20, 0.28);
+  background: rgba(255, 253, 247, 0.9);
+  color: rgba(26, 23, 20, 0.92);
+  outline: 0;
+}
+
 .nc-drawer-icon {
   display: grid;
   width: 42px;
@@ -14263,12 +14293,71 @@ body.reflect-bg {
   .reference-capture-modal--expanded .reference-capture-shell {
     width: 100%;
     min-height: calc(100dvh - 112px);
+    animation: none;
+    transform: none;
   }
 
   .reference-capture-modal .cap-body,
   .reference-capture-modal .reflect-area.visible {
     border-radius: 22px;
-    padding: 26px 22px;
+    padding: 22px 18px 126px;
+  }
+
+  .reference-capture-modal .cap-note-highlight-layer {
+    inset: 22px 18px auto;
+    width: calc(100% - 36px);
+    min-height: calc(100% - 170px);
+  }
+
+  .reference-capture-modal .cap-bar {
+    left: 18px;
+    right: 18px;
+    bottom: calc(18px + env(safe-area-inset-bottom));
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+
+  .reference-capture-modal .cap-bar-left,
+  .reference-capture-modal .cap-bar-right {
+    min-width: 0;
+  }
+
+  .reference-capture-modal .cap-bar-left {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .reference-capture-modal .cap-bar-left::-webkit-scrollbar {
+    display: none;
+  }
+
+  .reference-capture-modal .cap-bar-right {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .reference-capture-modal .cap-save {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 10px;
+    white-space: normal;
+    line-height: 1.1;
+  }
+
+  .reference-capture-modal .cap-save--reflect {
+    max-width: none;
+  }
+
+  .reference-capture-modal .cap-save--quick {
+    max-width: none;
   }
 
   .memory-drawer-stack {
@@ -14665,6 +14754,11 @@ textarea {
   .nc-lang--top {
     top: max(12px, env(safe-area-inset-top));
     right: 12px;
+  }
+
+  .nc-profile-link {
+    min-height: 40px;
+    padding: 0 14px;
   }
 
   .nc-lang-btn {

@@ -1358,14 +1358,15 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
 
-  it("removes the authorship footnote and keeps language switching top-right", async () => {
+  it("removes the authorship footnote and keeps profile access top-right", async () => {
     setApiFixtures();
     const container = await renderHomePage();
 
     expect(container.textContent).not.toContain("This page was not written by river.");
     expect(container.textContent).not.toContain("— Ⓒ 2026, for minds that wander");
     expect(container.querySelector(".nc-footnote")).toBeNull();
-    expect(container.querySelector(".nc-lang--top")).not.toBeNull();
+    expect(container.querySelector(".nc-lang-btn")).toBeNull();
+    expect(container.querySelector<HTMLAnchorElement>(".nc-profile-link")?.getAttribute("href")).toBe("/profile");
   });
 
   it("filters server-returned inspirations down to the authenticated user", async () => {
@@ -1405,20 +1406,13 @@ describe("HomePage current home experience", () => {
     );
   });
 
-  it("lets the language buttons persist a Korean locale preference", async () => {
+  it("does not render home language buttons after onboarding owns locale selection", async () => {
     setApiFixtures();
     const container = await renderHomePage();
-    const koreanButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-lang-btn")).find(
-      (button) => button.textContent === "한",
-    );
 
-    expect(koreanButton).not.toBeNull();
-    await act(async () => {
-      koreanButton?.click();
-    });
-    expect(mockAuthState.value.updatePreferredLocale).toHaveBeenCalledWith("ko-KR");
-    expect(container.textContent).toContain("떠오른 생각은 자주 사라집니다.");
-    expect(container.textContent).toContain("Waka가 사라지기 전에 붙잡은 조각들이");
+    expect(container.querySelector(".nc-lang-btn")).toBeNull();
+    expect(mockAuthState.value.updatePreferredLocale).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLAnchorElement>(".nc-profile-link")?.textContent).toContain("Profile");
   });
 
   it("keeps the inspiration evidence sticky text large enough to read", () => {

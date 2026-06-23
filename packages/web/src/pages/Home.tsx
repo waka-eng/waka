@@ -1373,7 +1373,7 @@ const HOME_COPY = {
 >;
 
 export function HomePage(): JSX.Element {
-  const { user, logout, updatePreferredLocale } = useAuth();
+  const { user, logout } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -1527,16 +1527,6 @@ export function HomePage(): JSX.Element {
     if (drawerCloseTimerRef.current === null) return;
     clearTimeout(drawerCloseTimerRef.current);
     drawerCloseTimerRef.current = null;
-  };
-
-  const changeLocale = (nextLocale: SupportedLocale): void => {
-    setLocale(nextLocale);
-    writeStoredLocale(nextLocale);
-    void updatePreferredLocale(nextLocale).catch(() => {
-      const fallbackLocale = normalizeSupportedLocale(user?.preferredLocale ?? readStoredLocale());
-      setLocale(fallbackLocale);
-      writeStoredLocale(fallbackLocale);
-    });
   };
 
   useEffect(() => {
@@ -4349,23 +4339,15 @@ export function HomePage(): JSX.Element {
       >
         {historyContent}
       </HistoryPanel>
-      <div className="nc-lang nc-lang--top" role="group" aria-label="language">
-        <button
-          type="button"
-          className={`nc-lang-btn${locale === "en-US" ? " nc-lang-btn--active" : ""}`}
-          aria-pressed={locale === "en-US"}
-          onClick={() => changeLocale("en-US")}
+      <div className="nc-language-controls" aria-label={t(locale, "profileTitle")}>
+        <Link
+          to="/profile"
+          className="nc-profile-link nc-lang--top"
+          aria-label={t(locale, "profileTitle")}
+          title={t(locale, "profileTitle")}
         >
-          En
-        </button>
-        <button
-          type="button"
-          className={`nc-lang-btn${locale === "ko-KR" ? " nc-lang-btn--active" : ""}`}
-          aria-pressed={locale === "ko-KR"}
-          onClick={() => changeLocale("ko-KR")}
-        >
-          한
-        </button>
+          {t(locale, "profileLink")}
+        </Link>
       </div>
       <main
         className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}

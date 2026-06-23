@@ -29,7 +29,7 @@
  * of truth here.
  */
 
-import { DEFAULT_LOCALE, formatSavedCount, supportedLocales, t } from "../../lib/locales";
+import { DEFAULT_LOCALE, formatSavedCount, t } from "../../lib/locales";
 import type { SupportedLocale } from "../../lib/locales";
 
 export interface AppHeaderProps {
@@ -50,8 +50,6 @@ export interface AppHeaderProps {
   onMetaClick: () => void;
   /** Current UI locale. */
   locale?: SupportedLocale;
-  /** Persists a user-selected UI locale in the parent. */
-  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function AppHeader({
@@ -61,7 +59,6 @@ export function AppHeader({
   onCaptureClick,
   onMetaClick,
   locale = DEFAULT_LOCALE,
-  onLocaleChange,
 }: AppHeaderProps): JSX.Element {
 
   const localizedTagline = tagline === "your inspirations" ? t(locale, "tagline") : tagline;
@@ -70,11 +67,6 @@ export function AppHeader({
   // `loading`, swap to a placeholder so the page doesn't read
   // "0 inspirations saved" before the server has answered.
   const metaLabel = loading ? t(locale, "loadingInspirations") : formatSavedCount(locale, count);
-
-  const handleLocaleChange = (nextLocale: SupportedLocale): void => {
-    if (nextLocale === locale) return;
-    onLocaleChange?.(nextLocale);
-  };
 
   return (
     <header>
@@ -107,20 +99,6 @@ export function AppHeader({
           </svg>
           <span className="capture-trigger-label">{t(locale, "capture")}</span>
         </button>
-        <label className="locale-setting">
-          <span>{t(locale, "languageLabel")}</span>
-          <select
-            value={locale}
-            aria-label={t(locale, "languageLabel")}
-            onChange={(event) => handleLocaleChange(event.currentTarget.value as SupportedLocale)}
-          >
-            {supportedLocales.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.nativeLabel}
-              </option>
-            ))}
-          </select>
-        </label>
         <div
           className="meta"
           id="metaCount"
