@@ -144,15 +144,9 @@ export interface CaptureCellProps {
   processSaveTitle?: string;
   quickSaveLabel?: string;
   quickSaveTitle?: string;
-  attachImageLabel?: string;
   focusModeLabel?: string;
   enterFocusModeLabel?: string;
   exitFocusModeLabel?: string;
-  highlightModeLabel?: string;
-  turnOnHighlightModeLabel?: string;
-  turnOffHighlightModeLabel?: string;
-  highlightingLabel?: string;
-  highlightLabel?: string;
   doneLabel?: string;
   continueLabel?: string;
 
@@ -278,15 +272,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       processSaveTitle = "Add one small thought before saving this inspiration",
       quickSaveLabel = "Save it now",
       quickSaveTitle = "Save this inspiration now",
-      attachImageLabel = "attach an image",
-      focusModeLabel = "focus mode",
-      enterFocusModeLabel = "enter focus mode",
-      exitFocusModeLabel = "exit focus mode",
-      highlightModeLabel = "highlight mode",
-      turnOnHighlightModeLabel = "turn on highlight mode",
-      turnOffHighlightModeLabel = "turn off highlight mode",
-      highlightingLabel = "highlighting",
-      highlightLabel = "highlight",
       doneLabel = "Done",
       continueLabel = "Continue",
       saveVisible = false,
@@ -498,7 +483,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
         {!isReflectView ? (
           <div className="cap-bar" id="capBar">
             <div className="cap-bar-left">
-              <label className="cap-file-btn" htmlFor="capFile" title={attachImageLabel} aria-label={attachImageLabel}>
+              <label className="cap-file-btn" htmlFor="capFile" title="attach an image">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -521,20 +506,20 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
                 <button
                   type="button"
                   className={`cap-highlight-mode${highlightMode ? " cap-highlight-mode--active" : ""}`}
-                  title={highlightMode ? turnOffHighlightModeLabel : highlightModeLabel}
-                  aria-label={highlightMode ? turnOffHighlightModeLabel : turnOnHighlightModeLabel}
+                  title={highlightMode ? "turn off highlight mode" : "highlight mode"}
+                  aria-label={highlightMode ? "turn off highlight mode" : "turn on highlight mode"}
                   aria-pressed={highlightMode}
                   onClick={onToggleHighlightMode}
                 >
-                  {highlightMode ? highlightingLabel : highlightLabel}
+                  {highlightMode ? "highlighting" : "highlight"}
                 </button>
               ) : null}
               <button
                 type="button"
                 className="cap-expand"
                 id="capExpand"
-                title={focused ? exitFocusModeLabel : focusModeLabel}
-                aria-label={focused ? exitFocusModeLabel : enterFocusModeLabel}
+                title={focused ? "exit focus mode" : "focus mode"}
+                aria-label={focused ? "exit focus mode" : "enter focus mode"}
                 aria-pressed={focused}
                 onClick={() => onToggleFocus?.(!focused)}
               >

@@ -522,6 +522,116 @@ describe("GET /api/top-of-mind", () => {
     });
   });
 
+  it("surfaces the latest user correction as the top-of-mind note text", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000011",
+      userId: user.id,
+      title: "Original generated note",
+      kind: "bridge",
+      why: "The generated note was close but not exact.",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 58,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: moment.id,
+              value: "important",
+              correctionText: null,
+              metadata: {},
+            },
+            {
+              targetId: moment.id,
+              value: "partly",
+              correctionText: "choose the people I build with",
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind: vi.fn(async () => ({
+          generatedAt: "2026-05-30T12:00:00.000Z",
+          headline: "Top of mind",
+          activeThemes: [],
+          activeQuestions: [],
+          relationshipSignals: [],
+          summary: {
+            inspirationCount: 1,
+            meaningNoteCount: 0,
+            relationshipEdgeCount: 0,
+          },
+        })),
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNotes: [
+        {
+          id: moment.id,
+          title: "choose the people I build with",
+          ambientSignal: "choose the people I build with",
+        },
+      ],
+    });
+  });
+
+  it("updates top-of-mind note title through the note endpoint", async () => {
+    const updatedNote = {
+      id: "00000000-0000-4000-8000-000000000012",
+      title: "choose the people I build with",
+      ambientSignal: "choose the people I build with",
+    };
+    const updateNote = vi.fn(async () => updatedNote as TopOfMindNoteSurface);
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => ({}) as any,
+        getTopOfMind: vi.fn(),
+        updateNote,
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request(`/api/top-of-mind/${updatedNote.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "choose the people I build with" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(updateNote).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        userId: user.id,
+        noteId: updatedNote.id,
+        title: "choose the people I build with",
+      }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNote: updatedNote,
+    });
+  });
+
   it("rejects invalid list query parameters", async () => {
     const app = new Hono();
     app.route(
