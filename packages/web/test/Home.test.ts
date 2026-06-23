@@ -1773,7 +1773,7 @@ describe("HomePage current home experience", () => {
     expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(3);
   });
 
-  it("keeps the drawer and filesystem list centered across desktop and phone CSS", () => {
+  it("keeps the drawer centered on desktop and full-bleed on phone CSS", () => {
     const css = readFileSync("src/styles/global.css", "utf8");
 
     expect(css).toMatch(/\.memory-drawer-stack\s*\{[\s\S]*?left: 50%;[\s\S]*?transform: translateX\(-50%\);/);
@@ -1792,7 +1792,13 @@ describe("HomePage current home experience", () => {
       /\.memory-contents-list--has-expanded li:has\(\.memory-contents-item:not\(\.memory-contents-item--expanded\)\)\s*\{[\s\S]*?display: none;/,
     );
     expect(css).toMatch(
-      /@media \(max-width: 760px\) \{[\s\S]*?\.signal-revisit-page\.memory-drawer-stack\s*\{[\s\S]*?left: 14px;[\s\S]*?width: auto;[\s\S]*?transform: none;/,
+      /@media \(max-width: 760px\) \{[\s\S]*?\.signal-revisit-page\.memory-drawer-stack\s*\{[\s\S]*?left: 0;[\s\S]*?width: 100vw;[\s\S]*?height: 100dvh;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.memory-stack-level--categories\s*\{[\s\S]*?bottom: 0;[\s\S]*?padding: 0;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.memory-category-panel\s*\{[\s\S]*?width: 100%;[\s\S]*?min-height: 100dvh;[\s\S]*?margin: 0;[\s\S]*?box-sizing: border-box;/,
     );
   });
 

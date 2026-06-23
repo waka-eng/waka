@@ -14959,6 +14959,41 @@ textarea {
       calc(118px + env(safe-area-inset-bottom));
   }
 
+  .signal-revisit-page.memory-drawer-stack {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    max-width: none;
+    height: 100dvh;
+  }
+
+  .memory-stack-level--categories {
+    bottom: 0;
+    padding: 0;
+  }
+
+  .memory-category-panel {
+    width: 100%;
+    min-height: 100dvh;
+    margin: 0;
+    padding: calc(72px + env(safe-area-inset-top)) 24px
+      calc(148px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 247, 241, 0.94)),
+      var(--bg);
+    box-shadow: none;
+  }
+
+  .memory-path-panel .memory-path-filters,
+  .memory-path-panel .memory-path-list {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+
   .memory-contents-title,
   .memory-contents-back {
     margin-inline: 16px;
