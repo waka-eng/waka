@@ -76,6 +76,7 @@ type TopOfMindWowMomentRow = {
   beliefStatement: string | null;
   reflectionQuestion: string | null;
   reflectionGuide: string | null;
+  locale: string;
   wowScore: number;
   createdAt: Date;
   updatedAt: Date;
@@ -95,8 +96,19 @@ type TopOfMindRelatedSignalRow = {
 
 type TopOfMindFeedbackSnapshot = {
   status?: TopOfMindNoteStatus;
+  value?: "true" | "partly" | "not_true" | "important" | "not_important";
   correctionText?: string;
 };
+
+const HIDDEN_TOP_OF_MIND_STATUSES = new Set<TopOfMindNoteStatus>([
+  "dismissed",
+  "stale",
+  "replaced",
+]);
+
+function isVisibleTopOfMindStatus(status: TopOfMindNoteStatus): boolean {
+  return !HIDDEN_TOP_OF_MIND_STATUSES.has(status);
+}
 
 export interface TopOfMindEvidencePreview {
   signalId: string;
@@ -117,6 +129,8 @@ export interface TopOfMindRelatedSignalReference {
 }
 
 export type TopOfMindNoteSurface = TopOfMindNote & {
+  isPinned: boolean;
+  userFeedbackValue: TopOfMindFeedbackSnapshot["value"] | null;
   evidencePreviews: TopOfMindEvidencePreview[];
   relatedSignals: TopOfMindRelatedSignalReference[];
 };
@@ -199,18 +213,18 @@ function serializeTopOfMindSurface(
   relatedRows: TopOfMindRelatedSignalRow[],
   relatedContextNodeIds: string[],
   feedbackSnapshot?: TopOfMindFeedbackSnapshot,
-  preferredLocale: SupportedLocale = "en-US",
 ): TopOfMindNoteSurface {
+  const noteLocale: SupportedLocale = moment.locale === "ko-KR" ? "ko-KR" : "en-US";
   const limitedRows = relatedRows.slice(0, MAX_WOW_MOMENT_SOURCE_LINKS);
   const note = topOfMindNoteFromWowMoment({
     moment,
     relatedSignalIds: limitedRows.map((row) => row.inspirationId),
     relatedContextNodeIds,
     status: feedbackSnapshot?.status,
-    preferredLocale,
+    preferredLocale: noteLocale,
   });
   const surfacedNote: TopOfMindNote =
-    preferredLocale === "ko-KR" &&
+    noteLocale === "ko-KR" &&
     note.status === "active" &&
     (!hasHangul(note.title) ||
       !topOfMindNoteHasHangul(note) ||
@@ -267,6 +281,8 @@ function serializeTopOfMindSurface(
 
   return {
     ...userEditedNote,
+    isPinned: feedbackSnapshot?.value === "important",
+    userFeedbackValue: feedbackSnapshot?.value ?? null,
     evidencePreviews,
     relatedSignals,
   };
@@ -334,11 +350,12 @@ async function fetchLatestTopOfMindFeedbackSnapshots(
   const snapshots = new Map<string, TopOfMindFeedbackSnapshot>();
   for (const row of rows) {
     const snapshot = snapshots.get(row.targetId) ?? {};
+    if (!snapshot.value) snapshot.value = row.value;
     const status = readAppliedTopOfMindStatus(row.metadata);
     if (!snapshot.status && status) snapshot.status = status;
     const correctionText = row.value === "partly" ? row.correctionText?.trim() : "";
     if (!snapshot.correctionText && correctionText) snapshot.correctionText = correctionText;
-    if (snapshot.status || snapshot.correctionText) snapshots.set(row.targetId, snapshot);
+    if (snapshot.value || snapshot.status || snapshot.correctionText) snapshots.set(row.targetId, snapshot);
   }
 
   return snapshots;
@@ -403,6 +420,7 @@ export async function listTopOfMindNotesForUser(
       beliefStatement: wowMoments.beliefStatement,
       reflectionQuestion: wowMoments.reflectionQuestion,
       reflectionGuide: wowMoments.reflectionGuide,
+      locale: wowMoments.locale,
       wowScore: wowMoments.wowScore,
       createdAt: wowMoments.createdAt,
       updatedAt: wowMoments.updatedAt,
@@ -426,15 +444,16 @@ export async function listTopOfMindNotesForUser(
   });
   const relatedByMomentId = groupRelatedRowsByMomentId(relatedRows);
 
-  return moments.map((moment) =>
-    serializeTopOfMindSurface(
-      moment,
-      relatedByMomentId.get(moment.id) ?? [],
-      relatedContextNodeIds.get(moment.id) ?? [],
-      feedbackSnapshots.get(moment.id),
-      input.preferredLocale,
-    ),
-  );
+  return moments
+    .map((moment) =>
+      serializeTopOfMindSurface(
+        moment,
+        relatedByMomentId.get(moment.id) ?? [],
+        relatedContextNodeIds.get(moment.id) ?? [],
+        feedbackSnapshots.get(moment.id),
+      ),
+    )
+    .filter((note) => isVisibleTopOfMindStatus(note.status));
 }
 
 export async function getTopOfMindNoteForUser(
@@ -451,6 +470,7 @@ export async function getTopOfMindNoteForUser(
       beliefStatement: wowMoments.beliefStatement,
       reflectionQuestion: wowMoments.reflectionQuestion,
       reflectionGuide: wowMoments.reflectionGuide,
+      locale: wowMoments.locale,
       wowScore: wowMoments.wowScore,
       createdAt: wowMoments.createdAt,
       updatedAt: wowMoments.updatedAt,
@@ -476,39 +496,69 @@ export async function getTopOfMindNoteForUser(
     noteIds: [moment.id],
   });
 
-  return serializeTopOfMindSurface(
+  const note = serializeTopOfMindSurface(
     moment,
     relatedRows,
     relatedContextNodeIds.get(moment.id) ?? [],
     feedbackSnapshots.get(moment.id),
-    input.preferredLocale,
   );
+  return isVisibleTopOfMindStatus(note.status) ? note : null;
 }
 
 export async function updateTopOfMindNoteForUser(
   db: WakaDb,
   input: { userId: string; noteId: string; title: string; preferredLocale?: SupportedLocale },
 ): Promise<TopOfMindNoteSurface | null> {
-  const [moment] = await db
-    .update(wowMoments)
-    .set({
-      title: input.title,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(wowMoments.userId, input.userId), eq(wowMoments.id, input.noteId)))
-    .returning({
-      id: wowMoments.id,
-      userId: wowMoments.userId,
-      title: wowMoments.title,
-      kind: wowMoments.kind,
-      why: wowMoments.why,
-      beliefStatement: wowMoments.beliefStatement,
-      reflectionQuestion: wowMoments.reflectionQuestion,
-      reflectionGuide: wowMoments.reflectionGuide,
-      wowScore: wowMoments.wowScore,
-      createdAt: wowMoments.createdAt,
-      updatedAt: wowMoments.updatedAt,
+  const now = new Date();
+  const [moment] = await db.transaction(async (tx) => {
+    const [updatedMoment] = await tx
+      .update(wowMoments)
+      .set({ updatedAt: now })
+      .where(and(eq(wowMoments.userId, input.userId), eq(wowMoments.id, input.noteId)))
+      .returning({
+        id: wowMoments.id,
+        userId: wowMoments.userId,
+        title: wowMoments.title,
+        kind: wowMoments.kind,
+        why: wowMoments.why,
+        beliefStatement: wowMoments.beliefStatement,
+        reflectionQuestion: wowMoments.reflectionQuestion,
+        reflectionGuide: wowMoments.reflectionGuide,
+        locale: wowMoments.locale,
+        wowScore: wowMoments.wowScore,
+        createdAt: wowMoments.createdAt,
+        updatedAt: wowMoments.updatedAt,
+      });
+
+    if (!updatedMoment) return [];
+
+    await tx.insert(feedback).values({
+      userId: input.userId,
+      targetType: "top_of_mind_note",
+      targetId: input.noteId,
+      value: "partly",
+      correctionText: input.title,
+      source: "user",
+      metadata: {
+        appliedFeedback: {
+          source: "user_feedback",
+          topOfMindNoteStatus: "active",
+          nodeStatus: "active",
+          weightDelta: 0,
+          confidenceDelta: 0,
+          correctionRequested: false,
+          appliedAt: now.toISOString(),
+          targetType: "top_of_mind_note",
+          targetId: input.noteId,
+          contextNodeIds: [],
+          noteConfidenceDelta: 0,
+        },
+      },
+      updatedAt: now,
     });
+
+    return [updatedMoment];
+  });
 
   if (!moment) return null;
 
@@ -527,13 +577,13 @@ export async function updateTopOfMindNoteForUser(
     }),
   ]);
 
-  return serializeTopOfMindSurface(
+  const note = serializeTopOfMindSurface(
     moment,
     relatedRows,
     relatedContextNodeIds.get(moment.id) ?? [],
     feedbackSnapshots.get(moment.id),
-    input.preferredLocale,
   );
+  return isVisibleTopOfMindStatus(note.status) ? note : null;
 }
 
 export function createTopOfMindRoutes(

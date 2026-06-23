@@ -35,6 +35,7 @@ export default function ProfilePage(): JSX.Element {
   const [deleting, setDeleting] = useState(false);
   const locale = preferredLocale;
   const normalizedPublicHandle = publicHandle.trim().replace(/^@+/, "");
+  const nicknameHasWhitespace = /\s/u.test(name);
   const publicProfileUrl =
     normalizedPublicHandle.length > 0
       ? `${typeof window === "undefined" ? "" : window.location.origin}/@${normalizedPublicHandle}`
@@ -46,6 +47,10 @@ export default function ProfilePage(): JSX.Element {
     const handle = normalizedPublicHandle || null;
     if (!nickname) {
       setError(t(locale, "profileNicknameRequired"));
+      return;
+    }
+    if (nicknameHasWhitespace) {
+      setError(t(locale, "profileNicknameNoSpacesError"));
       return;
     }
     if ((publicProfileEnabled || publicTopOfMindEnabled) && !handle) {
@@ -135,8 +140,15 @@ export default function ProfilePage(): JSX.Element {
               value={name}
               disabled={submitting || deleting}
               required
+              aria-describedby="profile-nickname-hint"
+              aria-invalid={nicknameHasWhitespace || undefined}
               onChange={(event) => setName(event.currentTarget.value)}
             />
+            <span id="profile-nickname-hint" className="field-hint">
+              {nicknameHasWhitespace
+                ? t(locale, "profileNicknameNoSpacesError")
+                : t(locale, "profileNicknameNoSpacesHint")}
+            </span>
           </label>
           <label className="field">
             <span className="field-label">{t(locale, "languageLabel")}</span>

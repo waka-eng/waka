@@ -197,6 +197,33 @@ describe("bounded ambition synthesis", () => {
     expect(result.candidates[0]?.why).not.toContain("Memory movement:");
   });
 
+  it("accepts a materially longer but bounded post-it thought", async () => {
+    const longSpecific: AmbitionSynthesisOutput = {
+      firstPersonPostItCandidate:
+        "rooms where unfinished work can stay visible long enough for braver people to gather around it, instead of disappearing into private polish before it has a chance to become real",
+      memoryState: "active",
+      environmentDirection:
+        "People and rooms where shipping in public feels like the expected rhythm.",
+      rejectedEnvironment:
+        "Rooms that turn courage into private planning or generic startup theater.",
+      evidenceRationale:
+        "Two saved signals and one correction point toward peers as the personal edge, not cities as a category.",
+      confidence: 88,
+      rejectedAlternativeInterpretation:
+        "The shallow read would call this cities, but the user's edge is wanting peers who normalize visible work.",
+    };
+
+    const result = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: candidates(),
+      synthesize: vi.fn().mockResolvedValue(longSpecific),
+    });
+
+    expect(result).toMatchObject({ synthesized: 1, failed: 0 });
+    expect(result.candidates[0]?.title).toBe(longSpecific.firstPersonPostItCandidate);
+  });
+
   it("surfaces invalid synthesis as failure and excludes the candidate", async () => {
     const generic: AmbitionSynthesisOutput = {
       firstPersonPostItCandidate: "I want startups.",

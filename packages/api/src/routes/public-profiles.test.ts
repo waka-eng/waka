@@ -31,6 +31,8 @@ const note: TopOfMindNoteSurface = {
   guidance: null,
   confidence: 82,
   status: "active",
+  isPinned: false,
+  userFeedbackValue: null,
   relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
   relatedContextNodeIds: ["00000000-0000-4000-8000-000000000201"],
   createdAt: new Date("2026-06-22T01:00:00.000Z"),

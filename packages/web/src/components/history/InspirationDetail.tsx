@@ -17,9 +17,11 @@ import {
   ApiError,
   deleteInspiration,
   fetchReflections,
+  generateGuidedReflectionQuestion,
   updateInspiration,
   type ApiAttachment,
   type ApiInspiration,
+  type ApiInspirationKind,
   type ApiReflection,
   type CreateReflectionResponse,
 } from "../../lib/api";
@@ -164,6 +166,16 @@ function previewImageUrl(attachment: ApiAttachment | null): string | null {
   return null;
 }
 
+function normalizeInspirationKind(kind: string | null | undefined): ApiInspirationKind {
+  if (kind === "link" || kind === "image" || kind === "mixed") return kind;
+  return "note";
+}
+
+function attachmentKindForQuestion(attachment: ApiAttachment): "link" | "image" | "file" {
+  if (attachment.type === "link" || attachment.type === "image") return attachment.type;
+  return "file";
+}
+
 function linkAttachments(inspiration: InspirationDetailData): Array<{ id: string; href: string; label: string }> {
   const fromAttachments = (inspiration.attachments ?? [])
     .filter((attachment) => attachment.type === "link")
@@ -234,6 +246,12 @@ export function InspirationDetail({
     | { status: "error"; reflections: ApiReflection[]; message: string }
   >({ status: "loading", reflections: [] });
   const [reflectionComposerOpen, setReflectionComposerOpen] = useState(false);
+  const [reflectionQuestionState, setReflectionQuestionState] = useState<
+    | { status: "idle"; question: string }
+    | { status: "loading"; question: string }
+    | { status: "ready"; question: string }
+    | { status: "fallback"; question: string }
+  >({ status: "idle", question: t(locale, "reflectDeeperDefaultQuestion") });
   useEffect(() => {
     // Reset the delete affordance whenever the user navigates to a
     // different inspiration so a half-confirmed delete on row A doesn't
@@ -242,7 +260,8 @@ export function InspirationDetail({
     setDetailsText(inspiration.text);
     setSaveState({ status: "idle" });
     setReflectionComposerOpen(false);
-  }, [inspiration.id, inspiration.text]);
+    setReflectionQuestionState({ status: "idle", question: t(locale, "reflectDeeperDefaultQuestion") });
+  }, [inspiration.id, inspiration.text, locale]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,6 +302,57 @@ export function InspirationDetail({
     () => buildReflectionAnalysis(reflectionState.reflections, heroTitle, locale),
     [heroTitle, locale, reflectionState.reflections],
   );
+
+  useEffect(() => {
+    if (!reflectionComposerOpen) return;
+    let cancelled = false;
+    const fallbackQuestion = t(locale, "reflectDeeperDefaultQuestion");
+    setReflectionQuestionState({ status: "loading", question: fallbackQuestion });
+    void (async () => {
+      try {
+        const response = await generateGuidedReflectionQuestion({
+          locale,
+          inspiration: {
+            text: detailsText.trim() || inspiration.text,
+            kind: normalizeInspirationKind(inspiration.kind),
+            links: sourceLinks.map((link) => link.href),
+            attachmentKinds: (inspiration.attachments ?? []).map(attachmentKindForQuestion),
+            highlights: [heroTitle, heroDescription].filter((value): value is string => Boolean(value?.trim())),
+          },
+          priorAnswers: reflectionState.reflections
+            .filter((reflection) => !reflection.skipped && reflection.answer?.trim())
+            .map((reflection) => ({
+              question: reflection.question,
+              answer: reflection.answer?.trim() ?? "",
+            })),
+        });
+        if (cancelled) return;
+        setReflectionQuestionState({
+          status: response.source === "model" ? "ready" : "fallback",
+          question: response.question.trim() || fallbackQuestion,
+        });
+      } catch {
+        if (!cancelled) {
+          setReflectionQuestionState({ status: "fallback", question: fallbackQuestion });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    detailsText,
+    heroDescription,
+    heroTitle,
+    inspiration.attachments,
+    inspiration.id,
+    inspiration.kind,
+    inspiration.text,
+    locale,
+    reflectionComposerOpen,
+    reflectionState.reflections,
+    sourceLinks,
+  ]);
 
   const handleSaveDetails = useCallback(() => {
     const nextText = detailsText.trim();
@@ -585,7 +655,12 @@ export function InspirationDetail({
           <ReflectionForm
             key={`reflection-${inspiration.id}`}
             inspirationId={inspiration.id}
-            defaultQuestion={t(locale, "reflectDeeperDefaultQuestion")}
+            defaultQuestion={reflectionQuestionState.question}
+            answerPlaceholder={
+              reflectionQuestionState.status === "loading"
+                ? t(locale, "reflectDeeperLoading")
+                : undefined
+            }
             locale={locale}
             onCancel={() => setReflectionComposerOpen(false)}
             onOptimisticAdd={handleReflectionOptimisticAdd}
