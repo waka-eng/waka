@@ -72,8 +72,6 @@ export interface AppShellProps {
   children?: ReactNode;
   /** Current UI locale for shared shell copy. */
   locale?: SupportedLocale;
-  /** Called when the shared header language selector changes. */
-  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function AppShell({
@@ -85,7 +83,6 @@ export function AppShell({
   historyDetail,
   children,
   locale,
-  onLocaleChange,
 }: AppShellProps): JSX.Element {
   // Drawer open/close lives here because no sibling needs to read it. If a
   // future sub-AC needs the state externally (e.g. to suppress hotkeys when
@@ -126,7 +123,6 @@ export function AppShell({
           onCaptureClick={onCaptureClick}
           onMetaClick={() => setHistoryOpen(true)}
           locale={locale}
-          onLocaleChange={onLocaleChange}
         />
         {children}
       </main>

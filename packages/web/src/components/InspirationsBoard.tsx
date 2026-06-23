@@ -247,8 +247,6 @@ export interface InspirationsBoardProps {
 
   /** Current UI locale for shared shell copy. */
   locale?: SupportedLocale;
-  /** Called when the shared header language selector changes. */
-  onLocaleChange?: (locale: SupportedLocale) => void;
 }
 
 export function InspirationsBoard({
@@ -267,7 +265,6 @@ export function InspirationsBoard({
   captureFirst = false,
   autoFocusCaptureRequest,
   locale,
-  onLocaleChange,
 }: InspirationsBoardProps): JSX.Element {
   // ---------------------------------------------------------------
   // Capture-cell local state
@@ -569,7 +566,6 @@ export function InspirationsBoard({
       historyContent={historyContent}
       historyDetail={historyDetail}
       locale={locale}
-      onLocaleChange={onLocaleChange}
     >
       {captureFirst ? (
         <div className="inspiration-first-capture">{captureForm}</div>
