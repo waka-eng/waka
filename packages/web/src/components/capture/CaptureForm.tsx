@@ -51,7 +51,6 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
   type ReactNode,
-  type SyntheticEvent,
 } from "react";
 
 import {
@@ -213,18 +212,10 @@ type CaptureResonanceAnswer =
   | "live_near_this"
   | "not_sure";
 
-interface HighlightedSignalText {
-  text: string;
-  startOffset: number;
-  endOffset: number;
-}
-
 interface StoredCaptureDraft {
   note?: string;
   resonance?: CaptureResonanceAnswer | null;
   resonanceNote?: string;
-  highlight?: HighlightedSignalText | null;
-  highlights?: HighlightedSignalText[];
   links?: Array<{ url: string; name?: string }>;
   storedAt?: number;
 }
@@ -346,8 +337,6 @@ function writeStoredCaptureDraft(draft: StoredCaptureDraft): void {
     (draft.note?.trim().length ?? 0) > 0 ||
     Boolean(draft.resonance) ||
     (draft.resonanceNote?.trim().length ?? 0) > 0 ||
-    Boolean(draft.highlight?.text) ||
-    (draft.highlights?.length ?? 0) > 0 ||
     (draft.links?.length ?? 0) > 0;
   try {
     if (!hasDraft) {
@@ -421,8 +410,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [postSaveReflectionTargetId, setPostSaveReflectionTargetId] = useState<string | null>(null);
     const [reflectGlow, setReflectGlow] = useState(false);
     const [pending, setPending] = useState<PendingAttachment[]>([]);
-    const [highlights, setHighlights] = useState<HighlightedSignalText[]>([]);
-    const [highlightMode, setHighlightMode] = useState(false);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [resonanceNote, setResonanceNote] = useState("");
     const [saving, setSaving] = useState(false);
@@ -443,11 +430,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       const draft = readStoredCaptureDraft();
       if (!draft) return;
       if (typeof draft.note === "string") setNote(draft.note);
-      if (Array.isArray(draft.highlights)) {
-        setHighlights(draft.highlights.filter((item) => item.text && item.endOffset > item.startOffset));
-      } else if (draft.highlight?.text) {
-        setHighlights([draft.highlight]);
-      }
       if (draft.resonance) setResonance(draft.resonance);
       if (typeof draft.resonanceNote === "string") setResonanceNote(draft.resonanceNote);
       if (Array.isArray(draft.links)) {
@@ -470,7 +452,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         .map((att) => ({ url: att.url as string, name: att.name }));
       if (draftWriteTimerRef.current) clearTimeout(draftWriteTimerRef.current);
       draftWriteTimerRef.current = setTimeout(() => {
-        writeStoredCaptureDraft({ note, resonance, resonanceNote, highlights, links });
+        writeStoredCaptureDraft({ note, resonance, resonanceNote, links });
         draftWriteTimerRef.current = null;
       }, CAPTURE_DRAFT_WRITE_DEBOUNCE_MS);
       return () => {
@@ -479,7 +461,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           draftWriteTimerRef.current = null;
         }
       };
-    }, [note, resonance, resonanceNote, highlights, pending]);
+    }, [note, resonance, resonanceNote, pending]);
 
     // Cleanup timers when the component unmounts. Without this an
     // in-flight setTimeout would fire `setState` on an unmounted instance.
@@ -538,7 +520,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
             kind,
             links: [...existingLinkUrls, ...typedLinks],
             attachmentKinds: pending.map((item) => item.kind),
-            highlights: highlights.map((item) => item.text),
             resonance,
             resonanceNote: resonanceNoteInputRef.current?.value ?? resonanceNote,
           },
@@ -551,7 +532,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         });
         return response.question.trim() || fallbackGuidedQuestion(priorAnswers.length);
       },
-      [fallbackGuidedQuestion, highlights, locale, note, pending, resonance, resonanceNote],
+      [fallbackGuidedQuestion, locale, note, pending, resonance, resonanceNote],
     );
 
     /* --------------------------------------------------------
@@ -598,43 +579,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
 
     const handleNoteChange = useCallback((next: string): void => {
       setNote(next);
-      setHighlights((current) =>
-        current.filter((item) => next.slice(item.startOffset, item.endOffset) === item.text),
-      );
     }, []);
-
-    const handleNoteSelect = useCallback((event: SyntheticEvent<HTMLTextAreaElement>): void => {
-      if (!highlightMode) return;
-      const target = event.currentTarget;
-      const start = target.selectionStart;
-      const end = target.selectionEnd;
-      const text = target.value.slice(start, end).trim();
-      if (!text || start === end) return;
-      const rawSelection = target.value.slice(start, end);
-      const leadingWhitespace = rawSelection.match(/^\s*/)?.[0].length ?? 0;
-      const trailingWhitespace = rawSelection.match(/\s*$/)?.[0].length ?? 0;
-      const selectionStart = start + leadingWhitespace;
-      const nextHighlight = {
-        text,
-        startOffset: selectionStart,
-        endOffset: end - trailingWhitespace,
-      };
-      setHighlights((current) => {
-        const overlapping = current.filter(
-          (item) =>
-            item.startOffset < nextHighlight.endOffset &&
-            item.endOffset > nextHighlight.startOffset,
-        );
-        if (overlapping.length > 0) {
-          return current.filter((item) => !overlapping.includes(item));
-        }
-        return [...current, nextHighlight].sort((a, b) => a.startOffset - b.startOffset);
-      });
-      window.setTimeout(() => {
-        target.setSelectionRange(nextHighlight.endOffset, nextHighlight.endOffset);
-        target.focus();
-      }, 0);
-    }, [highlightMode]);
 
     const handleNotePaste = useCallback((event: ClipboardEvent<HTMLTextAreaElement>): void => {
       const pasted = event.clipboardData.getData("text/plain") || event.clipboardData.getData("text");
@@ -807,26 +752,16 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         const currentResonanceNote = resonanceNoteInputRef.current?.value ?? resonanceNote;
         const captureMetadataNote = buildCaptureMetadataNote({ resonance, resonanceNote: currentResonanceNote });
         const captureSparks =
-          highlights.length > 0 || resonance || currentResonanceNote.trim().length > 0
-            ? highlights.length > 0
-              ? highlights.map((item, index) => ({
-                  text: item.text,
-                  source: "user_selected" as const,
-                  startOffset: item.startOffset,
-                  endOffset: item.endOffset,
-                  confidence: 100,
-                  isPrimary: index === 0,
-                  note: index === 0 ? captureMetadataNote : undefined,
-                }))
-              : [
-                  {
-                    text: inspirationText.slice(0, 4096),
-                    source: "user_written" as const,
-                    confidence: resonance ? 90 : 80,
-                    isPrimary: true,
-                    note: captureMetadataNote,
-                  },
-                ]
+          resonance || currentResonanceNote.trim().length > 0
+            ? [
+                {
+                  text: inspirationText.slice(0, 4096),
+                  source: "user_written" as const,
+                  confidence: resonance ? 90 : 80,
+                  isPrimary: true,
+                  note: captureMetadataNote,
+                },
+              ]
             : undefined;
         const inspiration = await createInspiration({
           text: inspirationText,
@@ -890,8 +825,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
         }
         setNote("");
-        setHighlights([]);
-        setHighlightMode(false);
         setResonance(null);
         setResonanceNote("");
         setReflectionAnswer("");
@@ -943,7 +876,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       locale,
       note,
       pending,
-      highlights,
       resonance,
       saving,
       onOptimisticAdd,
@@ -1176,13 +1108,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         view={activeView}
         visualState={{ ...visualState, focused, reflectGlow }}
         noteValue={note}
-        noteHighlights={highlights}
-        highlightMode={highlightMode}
-        onToggleHighlightMode={() => setHighlightMode((current) => !current)}
         notePlaceholder={t(locale, "capturePlaceholder")}
         onNoteChange={handleNoteChange}
         onNotePaste={handleNotePaste}
-        onNoteSelect={handleNoteSelect}
         onNoteKeyDown={handleNoteKeyDown}
         saveVisible={saveVisible}
         onSave={() => {

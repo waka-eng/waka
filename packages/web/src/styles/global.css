@@ -360,32 +360,6 @@
   text-transform: uppercase;
 }
 
-.home-signout-pill {
-  position: fixed;
-  right: 10px;
-  bottom: 10px;
-  z-index: 300;
-  min-height: 32px;
-  border: 1px solid rgba(15, 15, 14, 0.12);
-  border-radius: 999px;
-  background: rgba(255, 253, 247, 0.52);
-  color: var(--muted);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  opacity: 0.72;
-  padding: 7px 11px;
-  text-transform: uppercase;
-}
-
-.home-signout-pill:hover,
-.home-signout-pill:focus-visible {
-  color: var(--ink);
-  opacity: 1;
-  outline: none;
-}
-
 .admin-entry-pill:hover,
 .admin-entry-pill:focus-visible {
   color: var(--ink);
@@ -1954,7 +1928,6 @@
 }
 
 .memory-contents-expanded-text,
-.memory-contents-highlight-layer,
 .memory-contents-loading {
   grid-area: 1 / 1;
   margin: 0;
@@ -1972,19 +1945,6 @@
   transition: opacity 220ms ease, transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.memory-contents-highlight-layer {
-  min-width: 0;
-  pointer-events: none;
-}
-
-.memory-contents-highlight-layer--hidden {
-  opacity: 0;
-}
-
-.memory-contents-highlight-layer mark {
-  color: inherit;
-}
-
 .memory-contents-expanded-editor {
   display: block;
   width: 100%;
@@ -2000,11 +1960,6 @@
 
 .memory-contents-loading {
   color: rgba(45, 41, 37, 0.42);
-}
-
-.memory-contents-expanded-editor--with-highlights {
-  color: transparent;
-  caret-color: #2d2925;
 }
 
 .memory-contents-expanded-editor::selection {
@@ -3125,26 +3080,6 @@
   white-space: pre-wrap;
 }
 
-.memory-inline-highlight {
-  background: rgba(255, 229, 105, 0.55);
-  border-radius: 2px;
-  color: inherit;
-  padding: 0 2px;
-  position: relative;
-}
-
-.memory-inline-highlight:focus {
-  outline: 1px solid rgba(31, 29, 24, 0.36);
-  outline-offset: 2px;
-}
-
-.memory-highlight-reactions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 0;
-}
-
 .memory-signal-card--selected {
   border-color: rgba(70, 58, 34, 0.48);
   box-shadow: 0 16px 36px rgba(42, 35, 21, 0.14);
@@ -3610,7 +3545,6 @@
   font-size: 18px;
 }
 
-.signal-revisit-highlights,
 .signal-revisit-notes {
   display: grid;
   gap: 10px;
@@ -3619,7 +3553,6 @@
   list-style: none;
 }
 
-.signal-revisit-highlights li,
 .signal-revisit-notes li {
   border: 1px solid rgba(43, 40, 31, 0.1);
   background: rgba(255, 255, 255, 0.26);
@@ -7651,42 +7584,6 @@ body.dragging .drop-overlay {
   color: var(--ink);
   letter-spacing: 0;
 }
-.cap-note-highlight-layer {
-  position: absolute;
-  inset: 14px 14px auto 14px;
-  min-height: calc(100% - 28px);
-  margin: 0;
-  padding: 0;
-  pointer-events: none;
-  z-index: 2;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: var(--font-serif);
-  font-size: 17px;
-  line-height: 1.5;
-  color: var(--ink);
-  letter-spacing: 0;
-}
-.cap-note-highlight-layer mark {
-  position: relative;
-  border-radius: 4px;
-  background: rgba(255, 217, 102, 0.55);
-  color: inherit;
-  pointer-events: auto;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-.cap-note-input--has-highlight {
-  color: transparent !important;
-  caret-color: var(--ink);
-  position: relative;
-  z-index: 1;
-}
-.cap-note-input--has-highlight::selection {
-  color: transparent;
-  background: rgba(142, 183, 255, 0.48);
-}
 .cap-body textarea::placeholder {
   color: var(--muted);
   font-style: italic;
@@ -7701,12 +7598,11 @@ body.dragging .drop-overlay {
   color: var(--muted);
 }
 
-.cap-highlight-popover,
 .cap-resonance--popover {
   position: absolute;
   z-index: 4;
-  top: min(var(--highlight-top), calc(100% - 132px));
-  left: min(var(--highlight-left), calc(100% - 260px));
+  top: min(var(--popover-top, 14px), calc(100% - 132px));
+  left: min(var(--popover-left, 14px), calc(100% - 260px));
   width: min(260px, calc(100% - 28px));
   border: 1px solid rgba(31, 29, 24, 0.18);
   border-radius: 6px;
@@ -7716,65 +7612,6 @@ body.dragging .drop-overlay {
   font-family: var(--font-mono);
 }
 
-.cap-highlight-popover {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 7px 8px;
-}
-
-.cap-highlight-popover span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  color: var(--ink);
-  font-size: 10px;
-  letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cap-highlight-popover button {
-  flex: 0 0 auto;
-  border: 1px solid rgba(31, 29, 24, 0.18);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 9px;
-  line-height: 1;
-  padding: 5px 8px;
-}
-
-.cap-highlight-popover-reactions {
-  display: flex;
-  flex: 1 1 100%;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.cap-highlight-popover-reactions button {
-  font-size: 9px;
-  padding: 4px 7px;
-}
-
-.cap-highlight-popover .cap-highlight-chip {
-  max-width: 130px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cap-highlight-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 26px;
-  flex-wrap: wrap;
-}
-
-.cap-highlight-state button,
 .cap-resonance-options button,
 .cap-resonance-note input {
   border: var(--border-hairline);
@@ -7785,25 +7622,6 @@ body.dragging .drop-overlay {
     background var(--duration-fast) var(--ease-standard),
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard);
-}
-
-.cap-highlight-state {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  gap: 8px;
-  color: var(--ink);
-  font-size: 9px;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.cap-highlight-state button {
-  height: 22px;
-  border-radius: 999px;
-  padding: 0 8px;
-  font-size: 9px;
-  line-height: 1;
 }
 
 .cap-draft-state {
@@ -7970,43 +7788,6 @@ body.dragging .drop-overlay {
 .cap-file-btn svg {
   width: 13px;
   height: 13px;
-}
-
-.cap-highlight-mode {
-  flex-shrink: 0;
-  height: 28px;
-  border: 1px solid rgba(31, 29, 24, 0.18);
-  border-radius: 999px;
-  background: rgba(255, 253, 247, 0.72);
-  color: rgba(45, 41, 37, 0.7);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard),
-    color var(--duration-fast) var(--ease-standard);
-}
-
-.cap-highlight-mode:hover,
-.cap-highlight-mode:focus-visible,
-.cap-highlight-mode--active {
-  border-color: rgba(31, 29, 24, 0.42);
-  background: rgba(255, 229, 105, 0.36);
-  color: var(--ink);
-  outline: 0;
-}
-
-.cap-note-input--highlight-mode {
-  cursor: text;
 }
 
 .cap-save {
@@ -12604,7 +12385,6 @@ body.reflect-bg {
 .signal-score-row span,
 .signal-result-tags span,
 .signal-detail-section h3,
-.signal-highlight-list span,
 .signal-context-list span,
 .signal-note-list span,
 .signal-attachments span {
@@ -12707,8 +12487,7 @@ body.reflect-bg {
   line-height: 1.08;
 }
 
-.signal-result blockquote,
-.signal-highlight-list blockquote {
+.signal-result blockquote {
   margin: 0;
   border-left: 3px solid #d8b84f;
   padding-left: 12px;
@@ -12754,7 +12533,6 @@ body.reflect-bg {
   line-height: 1.6;
 }
 
-.signal-highlight-list,
 .signal-context-list,
 .signal-note-list,
 .signal-attachments {
@@ -13192,16 +12970,6 @@ body.reflect-bg {
   overflow: visible;
 }
 
-.reference-capture-modal .cap-note-highlight-layer {
-  inset: clamp(28px, 5vw, 58px) clamp(28px, 5vw, 58px) auto clamp(28px, 5vw, 58px);
-  min-height: calc(100% - clamp(104px, 8vw, 132px) - clamp(28px, 5vw, 58px));
-  width: calc(100% - clamp(28px, 5vw, 58px) * 2);
-  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: clamp(15px, 1.35vw, 20px);
-  font-weight: 480;
-  line-height: 1.3;
-}
-
 .reference-capture-modal .cap-body textarea,
 .reference-capture-modal .reflect-answer {
   min-height: 96px;
@@ -13212,11 +12980,6 @@ body.reflect-bg {
   font-size: clamp(15px, 1.35vw, 20px);
   font-weight: 480;
   line-height: 1.3;
-}
-
-.reference-capture-modal .cap-body textarea.cap-note-input--has-highlight {
-  color: transparent !important;
-  caret-color: #282522;
 }
 
 .reference-capture-modal--expanded .cap-body textarea,
@@ -14460,12 +14223,6 @@ body.reflect-bg {
     padding: 22px 18px 126px;
   }
 
-  .reference-capture-modal .cap-note-highlight-layer {
-    inset: 22px 18px auto;
-    width: calc(100% - 36px);
-    min-height: calc(100% - 170px);
-  }
-
   .reference-capture-modal .cap-bar {
     left: 18px;
     right: 18px;
@@ -14856,8 +14613,7 @@ textarea {
     line-height: 1.32;
   }
 
-  .cap-body textarea,
-  .cap-note-highlight-layer {
+  .cap-body textarea {
     font-size: 19px;
     line-height: 1.45;
   }
@@ -14927,16 +14683,6 @@ textarea {
     min-width: 44px;
     min-height: 40px;
     padding: 10px 12px;
-  }
-
-  .home-signout-pill {
-    right: max(10px, env(safe-area-inset-right));
-    bottom: max(10px, env(safe-area-inset-bottom));
-    min-width: 84px;
-    min-height: 40px;
-    padding: 10px 14px;
-    background: rgba(255, 253, 247, 0.82);
-    font-size: 9px;
   }
 
   .nc-primary-action {
@@ -15259,7 +15005,6 @@ textarea {
   }
 
   .memory-contents-expanded-text,
-  .memory-contents-highlight-layer,
   .memory-contents-loading {
     font-size: clamp(22px, 6.9vw, 30px);
     line-height: 1.34;

@@ -9,9 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createFeedback,
   createInspiration,
-  createInspirationSpark,
   createReflection,
-  deleteInspirationSpark,
   finalizeAttachment,
   fetchInspirations,
   fetchReflections,
@@ -115,27 +113,6 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       title: input.title,
       ambientSignal: input.title,
     })),
-    createInspirationSpark: vi.fn(async (_inspirationId: string, input: any) => ({
-      id: "spark-new",
-      userId: "user-1",
-      inspirationId: _inspirationId,
-      text: input.text,
-      source: input.source ?? "user_selected",
-      startOffset: input.startOffset ?? null,
-      endOffset: input.endOffset ?? null,
-      confidence: input.confidence ?? 100,
-      isPrimary: input.isPrimary ?? false,
-      note: input.note ?? null,
-      whatMovedUser: null,
-      impliedValues: [],
-      worldviewClaims: [],
-      tensions: [],
-      decisionRelevance: [],
-      emotionalCharge: [],
-      createdAt: "2026-06-01T10:00:00.000Z",
-      updatedAt: "2026-06-01T10:00:00.000Z",
-    })),
-    deleteInspirationSpark: vi.fn(async () => undefined),
     deleteInspiration: vi.fn(async () => undefined),
     recordInspirationRevisit: vi.fn(async () => ({
       revisit: {
@@ -1397,14 +1374,13 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("make the thing before explaining it");
   });
 
-  it("localizes the logout affordance in Korean", async () => {
+  it("keeps logout off the home surface", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")?.title).toBe(
-      "River 로그아웃",
-    );
+    expect(container.querySelector(".home-signout-pill")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")).toBeNull();
   });
 
   it("does not render home language buttons after onboarding owns locale selection", async () => {
@@ -1587,7 +1563,7 @@ describe("HomePage current home experience", () => {
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
-  it("renders expanded saved inspirations with one stable text layer unless highlights need an overlay", async () => {
+  it("renders expanded saved inspirations with one stable text layer even when old highlights exist", async () => {
     setApiFixtures({
       savedSignals: [
         {
@@ -1651,11 +1627,9 @@ describe("HomePage current home experience", () => {
 
     expanded = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
     expect(expanded?.querySelector(".memory-contents-loading")).toBeNull();
-    const highlightLayer = expanded?.querySelector<HTMLElement>(".memory-contents-highlight-layer");
     const highlightedEditor = expanded?.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
-    expect(highlightLayer).not.toBeNull();
-    expect(highlightLayer?.textContent).toContain("rereading old journals");
-    expect(highlightedEditor?.classList.contains("memory-contents-expanded-editor--with-highlights")).toBe(true);
+    expect(expanded?.querySelector(".memory-contents-highlight-layer")).toBeNull();
+    expect(highlightedEditor?.classList.contains("memory-contents-expanded-editor--with-highlights")).toBe(false);
     expect(highlightedEditor?.value).toBe("Synthetic memory note for rereading old journals");
   });
 
@@ -2046,7 +2020,7 @@ describe("HomePage current home experience", () => {
     expect(detail?.querySelector(".memory-detail-next")).toBeNull();
   });
 
-  it("creates opened-inspiration highlights from a textarea selection in highlight mode", async () => {
+  it("does not expose highlight controls in opened inspiration detail", async () => {
     const unhighlightedBridgeSignal = { ...sampleSavedSignals[0], highlightedSnippets: [] };
     setApiFixtures({
       savedSignals: [unhighlightedBridgeSignal, sampleSavedSignals[1]],
@@ -2062,11 +2036,7 @@ describe("HomePage current home experience", () => {
     const highlightButton = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-secondary-action")).find(
       (button) => button.textContent === "highlight",
     );
-    expect(highlightButton).not.toBeNull();
-
-    await act(async () => {
-      highlightButton?.click();
-    });
+    expect(highlightButton).toBeUndefined();
     const start = editor!.value.indexOf("bridge rhythms");
     editor!.setSelectionRange(start, start + "bridge rhythms".length);
     await act(async () => {
@@ -2075,18 +2045,7 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".signal-revisit-highlights")).toBeNull();
-    expect(createInspirationSpark).toHaveBeenCalledWith("insp-1", {
-      text: "bridge rhythms",
-      source: "user_selected",
-      confidence: 100,
-      isPrimary: false,
-    });
-    expect(detail.querySelector(".memory-inline-highlight")?.textContent).toBe("bridge rhythms");
-
-    const mark = detail.querySelector<HTMLElement>(".memory-inline-highlight");
-    await act(async () => {
-      mark?.focus();
-    });
+    expect(detail.querySelector(".memory-inline-highlight")).toBeNull();
     expect(container.querySelector(".memory-highlight-popover--saved")).toBeNull();
   });
 

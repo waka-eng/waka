@@ -30,7 +30,6 @@ import {
   type ChangeEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
 
@@ -59,17 +58,14 @@ import {
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
-  type ApiInspirationSpark,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindSignal,
   type ClusterKind,
   createFeedback,
-  createInspirationSpark,
   createReflection,
   deleteReflection,
   deleteInspiration,
-  deleteInspirationSpark,
   fetchReflections,
   fetchSavedSignalDetail,
   fetchSavedSignals,
@@ -445,54 +441,6 @@ function shortText(value: string, maxLength = 220): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-type HighlightableSnippet = Pick<ApiInspirationSpark, "id" | "text"> & { note?: string | null };
-type SavedSignalHighlight = ApiSavedSignalSearchResult["highlightedSnippets"][number];
-
-interface MemoryHighlightSelection {
-  signalId: string;
-  text: string;
-}
-
-function renderHighlightedInspirationText(
-  text: string,
-  highlights: HighlightableSnippet[],
-): ReactNode {
-  const usableHighlights = highlights
-    .filter((highlight) => highlight.text.trim().length > 0)
-    .map((highlight) => ({ ...highlight, text: highlight.text.trim() }))
-    .sort((a, b) => (b.text.length - a.text.length));
-  if (usableHighlights.length === 0) return text;
-
-  const chunks: ReactNode[] = [];
-  let cursor = 0;
-  let key = 0;
-  while (cursor < text.length) {
-    const next = usableHighlights
-      .map((highlight) => ({ highlight, index: text.indexOf(highlight.text, cursor) }))
-      .filter((candidate) => candidate.index >= 0)
-      .sort((a, b) => a.index - b.index || b.highlight.text.length - a.highlight.text.length)[0];
-
-    if (!next) {
-      chunks.push(text.slice(cursor));
-      break;
-    }
-
-    if (next.index > cursor) chunks.push(text.slice(cursor, next.index));
-    chunks.push(
-      <mark
-        className="memory-inline-highlight"
-        key={next.highlight.id || key++}
-        tabIndex={0}
-      >
-        {next.highlight.text}
-      </mark>,
-    );
-    cursor = next.index + next.highlight.text.length;
-  }
-
-  return chunks;
-}
-
 const MEANING_NOTE_LABEL_TRANSLATIONS: Record<string, string> = {
   "what kind of life would make this work worth it": "이 일을 가치 있게 만드는 삶",
   "rooms where people can be honest before they are impressive": "인상적이기 전에 솔직할 수 있는 방",
@@ -760,7 +708,6 @@ function signalAgeDays(signal: ApiSavedSignalSearchResult): number {
 function signalTextHaystack(signal: ApiSavedSignalSearchResult): string {
   return [
     signal.textPreview,
-    ...signal.highlightedSnippets.map((snippet) => snippet.text),
     ...signal.matchingSnippets,
     ...signal.relatedContextTerms,
     ...signal.relatedTopOfMindNoteTitles,
@@ -892,7 +839,6 @@ function signalRelevanceScore(signal: ApiSavedSignalSearchResult, terms: string[
     scores.agency +
     scores.identitySignal +
     scores.decisionRelevance * 0.8 +
-    signal.highlightedSnippets.length * 2 +
     signal.relatedTopOfMindNoteTitles.length * 1.4 +
     termBoost
   );
@@ -914,7 +860,6 @@ function memoryMapLabel(value: string): string {
   const label = normalizeMeaningLabel(value);
   const knownLabels: Record<string, string> = {
     "all saved, newest first": "all saved",
-    "highlighted by me": "highlights",
     "recently saved": "recently saved",
     "rooms i keep wanting": "wanted rooms",
     "people i want near me": "wanted people",
@@ -953,12 +898,10 @@ function captureDraftHasContent(): boolean {
     if (!raw) return false;
     const draft = JSON.parse(raw) as {
       note?: string;
-      highlights?: unknown[];
       links?: unknown[];
     };
     return (
       (draft.note?.trim().length ?? 0) > 0 ||
-      (draft.highlights?.length ?? 0) > 0 ||
       (draft.links?.length ?? 0) > 0
     );
   } catch {
@@ -980,7 +923,6 @@ const MEMORY_MAP_SLOTS: Array<{ x: number; y: number }> = [
 function groupingIconForSignals(signals: ApiSavedSignalSearchResult[]): MemoryGrouping["icon"] {
   if (signals.some((signal) => signalVisualTreatment(signal) === "image")) return "image";
   if (signals.some((signal) => signalVisualTreatment(signal) === "link")) return "link";
-  if (signals.some((signal) => signal.highlightedSnippets.length > 0)) return "pin";
   return "folder";
 }
 
@@ -1009,7 +951,6 @@ function sortedSignalsNewest(signals: ApiSavedSignalSearchResult[]): ApiSavedSig
 function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPathFilter[] {
   const sortedSignals = sortedSignalsNewest(signals);
   const recentlySavedSignals = sortedSignals.filter((signal) => signalAgeDays(signal) <= 2);
-  const highlightedSignals = sortedSignals.filter((signal) => signal.highlightedSnippets.length > 0);
   const themeBuckets = new Map<string, ApiSavedSignalSearchResult[]>();
 
   sortedSignals.forEach((signal) => {
@@ -1035,16 +976,6 @@ function buildMemoryPathFilters(signals: ApiSavedSignalSearchResult[]): MemoryPa
       signals: sortedSignals,
     },
   ];
-
-  if (highlightedSignals.length > 0) {
-    filters.push({
-      id: "highlights",
-      path: "/highlights",
-      label: "highlights",
-      description: "saved inspirations with highlights",
-      signals: highlightedSignals,
-    });
-  }
 
   filters.push({
     id: "recently-saved",
@@ -1142,17 +1073,6 @@ function buildProposedMemoryGroupings(
     });
   }
 
-  const highlighted = signals.filter((signal) => signal.highlightedSnippets.length > 0);
-  addGroup({
-    id: "highlighted-by-me",
-    name: "highlighted by me",
-    explanation: "These are the saves where you marked the part that hit.",
-    source: "proposed",
-    icon: "pin",
-    signals: highlighted,
-    terms: ["highlighted"],
-  });
-
   addGroup({
     id: "recently-saved",
     name: "recently saved",
@@ -1194,7 +1114,7 @@ function buildProposedMemoryGroupings(
       addGroup({
         id: `term-${term.replace(/[^a-z0-9]+/g, "-")}`,
         name: groupNameFromLanguage(term),
-        explanation: "These saves keep sharing language, highlights, or Top of Mind evidence.",
+        explanation: "These saves keep sharing language or Top of Mind evidence.",
         source: "proposed",
         icon: groupingIconForSignals(termSignals),
         signals: termSignals,
@@ -1361,7 +1281,7 @@ const HOME_COPY = {
 >;
 
 export function HomePage(): JSX.Element {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   // Local list state is the union of:
   //   1. Rows fetched once on mount from GET /inspirations (the
@@ -1456,7 +1376,6 @@ export function HomePage(): JSX.Element {
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
-  const [memoryHighlightMode, setMemoryHighlightMode] = useState(false);
   const [savedSignalReflections, setSavedSignalReflections] = useState<Record<string, ApiReflection[]>>({});
   const [expandedReflectionThreads, setExpandedReflectionThreads] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectionLoadingIds, setSavedSignalReflectionLoadingIds] = useState<Set<string>>(() => new Set());
@@ -1469,12 +1388,6 @@ export function HomePage(): JSX.Element {
   const [savedSignalReflectionError, setSavedSignalReflectionError] = useState<string | null>(null);
   const savedSignalReflectionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const savedSignalReflectionRequestSeqRef = useRef(0);
-  const [selectedInspirationText, setSelectedInspirationText] = useState<MemoryHighlightSelection | null>(null);
-  const [highlightStatus, setHighlightStatus] = useState<
-    | { status: "idle" }
-    | { status: "saving" }
-    | { status: "error"; message: string }
-  >({ status: "idle" });
   /**
    * `true` until the first `GET /inspirations` resolves for this user.
    * Drives the loading-skeleton UI in `<InspirationsBoard>` so the page
@@ -1820,188 +1733,6 @@ export function HomePage(): JSX.Element {
     },
     [],
   );
-
-  const captureMemoryHighlightSelection = useCallback(
-    (signalId: string, selected: string): void => {
-      if (!memoryHighlightMode) {
-        setSelectedInspirationText(null);
-        return;
-      }
-      const normalizedSelection = selected.trim();
-      if (normalizedSelection.length < 2) {
-        setSelectedInspirationText((current) => (current?.signalId === signalId ? null : current));
-        return;
-      }
-      setSelectedInspirationText({
-        signalId,
-        text: normalizedSelection.slice(0, 4096),
-      });
-      setHighlightStatus({ status: "idle" });
-    },
-    [memoryHighlightMode],
-  );
-
-  const handleMemoryTextSelection = useCallback(
-    (signalId: string): void => {
-      captureMemoryHighlightSelection(signalId, window.getSelection()?.toString() ?? "");
-    },
-    [captureMemoryHighlightSelection],
-  );
-
-  const handleMemoryTextareaSelection = useCallback(
-    (signalId: string, element: HTMLTextAreaElement): void => {
-      const start = element.selectionStart;
-      const end = element.selectionEnd;
-      const selected = element.value.slice(Math.min(start, end), Math.max(start, end));
-      captureMemoryHighlightSelection(signalId, selected);
-      element.setSelectionRange(end, end);
-    },
-    [captureMemoryHighlightSelection],
-  );
-
-  const addMemoryHighlight = useCallback(
-    async (signalId: string): Promise<void> => {
-      if (!selectedInspirationText || selectedInspirationText.signalId !== signalId) return;
-      const selected = selectedInspirationText;
-      const tempHighlight: SavedSignalHighlight = {
-        id: `temp-highlight-${signalId}-${Date.now()}`,
-        text: selected.text,
-        source: "user_selected",
-        confidence: 100,
-        isPrimary: false,
-      };
-      const updateLocalHighlight = (
-        updater: (current: SavedSignalHighlight[]) => SavedSignalHighlight[],
-      ): void => {
-        setSavedSignalDetail((current) =>
-          current && current.id === signalId
-            ? { ...current, highlightedSnippets: updater(current.highlightedSnippets) }
-            : current,
-        );
-        setMemoryWindowDetails((current) => {
-          const detail = current[signalId];
-          if (!detail) return current;
-          return {
-            ...current,
-            [signalId]: {
-              ...detail,
-              highlightedSnippets: updater(detail.highlightedSnippets),
-            },
-          };
-        });
-        setSavedSignals((current) =>
-          current.map((signal) =>
-            signal.id === signalId
-              ? { ...signal, highlightedSnippets: updater(signal.highlightedSnippets) }
-              : signal,
-          ),
-        );
-      };
-
-      setHighlightStatus({ status: "saving" });
-      updateLocalHighlight((current) => [tempHighlight, ...current]);
-      setSelectedInspirationText(null);
-      window.getSelection()?.removeAllRanges();
-      try {
-        const spark = await createInspirationSpark(signalId, {
-          text: selected.text,
-          source: "user_selected",
-          confidence: 100,
-          isPrimary: false,
-        });
-        updateLocalHighlight((current) =>
-          current.map((highlight) => (highlight.id === tempHighlight.id ? spark : highlight)),
-        );
-        setHighlightStatus({ status: "idle" });
-      } catch (caught) {
-        updateLocalHighlight((current) => current.filter((highlight) => highlight.id !== tempHighlight.id));
-        setHighlightStatus({
-          status: "error",
-          message: caught instanceof Error ? caught.message : "Highlight did not save",
-        });
-      }
-    },
-    [selectedInspirationText],
-  );
-
-  const removeMemoryHighlight = useCallback(
-    async (signalId: string, highlight: HighlightableSnippet): Promise<void> => {
-      const removeLocal = (): void => {
-        setSavedSignalDetail((current) =>
-          current && current.id === signalId
-            ? {
-                ...current,
-                highlightedSnippets: current.highlightedSnippets.filter((snippet) => snippet.id !== highlight.id),
-              }
-            : current,
-        );
-        setMemoryWindowDetails((current) => {
-          const detail = current[signalId];
-          if (!detail) return current;
-          return {
-            ...current,
-            [signalId]: {
-              ...detail,
-              highlightedSnippets: detail.highlightedSnippets.filter((snippet) => snippet.id !== highlight.id),
-            },
-          };
-        });
-        setSavedSignals((current) =>
-          current.map((signal) =>
-            signal.id === signalId
-              ? {
-                  ...signal,
-                  highlightedSnippets: signal.highlightedSnippets.filter((snippet) => snippet.id !== highlight.id),
-                }
-              : signal,
-          ),
-        );
-      };
-
-      removeLocal();
-      try {
-        await deleteInspirationSpark(signalId, highlight.id);
-      } catch {
-        // Removing highlight UI should feel reversible and light; a future
-        // sync can reconcile if the best-effort delete fails.
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!memoryHighlightMode || !selectedInspirationText) return;
-    const selectedText = selectedInspirationText.text.trim();
-    if (selectedText.length < 2) return;
-    const signal =
-      savedSignalDetail?.id === selectedInspirationText.signalId
-        ? savedSignalDetail
-        : savedSignals.find((item) => item.id === selectedInspirationText.signalId);
-    const matchingHighlight = signal?.highlightedSnippets.find((snippet) => {
-      const snippetText = snippet.text.trim();
-      const comparableSnippetText = snippetText.replace(/\s+/g, " ");
-      const comparableSelectedText = selectedText.replace(/\s+/g, " ");
-      return (
-        comparableSnippetText === comparableSelectedText ||
-        comparableSnippetText.includes(comparableSelectedText) ||
-        comparableSelectedText.includes(comparableSnippetText)
-      );
-    });
-    if (matchingHighlight) {
-      setSelectedInspirationText(null);
-      window.getSelection()?.removeAllRanges();
-      void removeMemoryHighlight(selectedInspirationText.signalId, matchingHighlight);
-      return;
-    }
-    void addMemoryHighlight(selectedInspirationText.signalId);
-  }, [
-    addMemoryHighlight,
-    memoryHighlightMode,
-    removeMemoryHighlight,
-    savedSignalDetail,
-    savedSignals,
-    selectedInspirationText,
-  ]);
 
   const handleSelectInspiration = useCallback(
     (id: string) => {
@@ -2842,7 +2573,7 @@ export function HomePage(): JSX.Element {
   const signalMaterialLabel = (signal: ApiSavedSignalSearchResult): string => {
     const visual = signalVisualTreatment(signal);
     const sourceLabel = signalSourceLabel(signal);
-    if (visual === "note") return signal.highlightedSnippets.length > 0 ? "highlighted scrap" : "note scrap";
+    if (visual === "note") return "note scrap";
     if (visual === "link") return sourceLabel || "link slip";
     if (visual === "image") return "image tile";
     return "layered save";
@@ -3041,7 +2772,6 @@ export function HomePage(): JSX.Element {
     const isSelected = memoryWindows.some((memoryWindow) => memoryWindow.signalId === signal.id);
     const isExpanded = false;
     const detailText = signal.textPreview;
-    const detailHighlights = signal.highlightedSnippets;
     const style = options.node
       ? {
           ["--x" as string]: `${options.node.x}px`,
@@ -3054,9 +2784,6 @@ export function HomePage(): JSX.Element {
           {signalMaterialLabel(signal)}
         </span>
         <strong>{shortText(signal.textPreview, options.compact ? 96 : 180)}</strong>
-        {signal.highlightedSnippets[0] && !isExpanded ? (
-          <blockquote>{shortText(signal.highlightedSnippets[0].text, options.compact ? 72 : 120)}</blockquote>
-        ) : null}
         {signal.attachmentSummary.slice(0, 2).map((attachment) => (
           <span
             key={attachment.id}
@@ -3101,8 +2828,7 @@ export function HomePage(): JSX.Element {
           type="button"
           className="memory-signal-card-summary"
           aria-expanded={memoryWindows.some((memoryWindow) => memoryWindow.signalId === signal.id && !memoryWindow.minimized)}
-          onClick={() => {
-            setSelectedInspirationText(null);
+        onClick={() => {
             openMemoryWindow(signal);
           }}
         >
@@ -3115,15 +2841,10 @@ export function HomePage(): JSX.Element {
               <span>saved inspiration</span>
             <p
               className="signal-revisit-raw memory-readable-signal"
-              onMouseUp={() => handleMemoryTextSelection(signal.id)}
-              onKeyUp={() => handleMemoryTextSelection(signal.id)}
             >
-              {renderHighlightedInspirationText(detailText, detailHighlights)}
+              {detailText}
             </p>
             </section>
-            {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
-              <p className="signal-revisit-state">{highlightStatus.message}</p>
-            ) : null}
             {(savedSignalDetail?.attachments.length ?? 0) > 0 || signal.attachmentSummary.length > 0 ? (
               <section>
                 <span>attachment details</span>
@@ -3235,7 +2956,6 @@ export function HomePage(): JSX.Element {
         text,
         kind: savedSignalKindForReflection(signal),
         attachmentKinds: signal.attachmentSummary.map((attachment) => attachment.type),
-        highlights: signal.highlightedSnippets.map((highlight) => highlight.text),
       },
       priorAnswers: answers
         .map((answer, index) => ({
@@ -3303,7 +3023,6 @@ export function HomePage(): JSX.Element {
     }
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
-    setSelectedInspirationText(null);
     cancelSavedSignalReflection();
   };
   const cancelSavedSignalEdit = (): void => {
@@ -3403,7 +3122,6 @@ export function HomePage(): JSX.Element {
   };
 
   const openStackSignal = (signal: ApiSavedSignalSearchResult): void => {
-    setSelectedInspirationText(null);
     setSavedSignalReflectionError(null);
     if (selectedSavedSignalId === signal.id) {
       setSelectedSavedSignalId(null);
@@ -3424,8 +3142,6 @@ export function HomePage(): JSX.Element {
     if (selectedSavedSignalId !== signal.id) {
       setSelectedSavedSignalId(signal.id);
     }
-    setMemoryHighlightMode(false);
-    setSelectedInspirationText(null);
     setSavedSignalReflectingId(signal.id);
     setSavedSignalReflectionAnswers([]);
     setSavedSignalReflectionQuestions([SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[0]]);
@@ -3461,7 +3177,6 @@ export function HomePage(): JSX.Element {
     setEntries((prev) => prev.filter((item) => item.id !== signal.id));
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
-    setSelectedInspirationText(null);
     cancelSavedSignalReflection();
     setSavedSignalDrafts((current) => {
       const next = { ...current };
@@ -3515,8 +3230,6 @@ export function HomePage(): JSX.Element {
       const detailText = detailPending ? "" : fullDetailReady ? savedSignalDetail.rawText : immediateFullText ?? signal.textPreview;
       const draftText = savedSignalDrafts[signal.id] ?? detailText;
       const hasEditedDraft = draftText.trim() !== detailText.trim();
-      const detailHighlights = fullDetailReady ? savedSignalDetail.highlightedSnippets : signal.highlightedSnippets;
-      const showHighlightLayer = !detailPending && !hasEditedDraft && detailHighlights.length > 0;
       const reflectionRows = savedSignalReflections[signal.id] ?? [];
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
@@ -3537,7 +3250,6 @@ export function HomePage(): JSX.Element {
               }
               setSelectedSavedSignalId(null);
               setSavedSignalDetail(null);
-              setSelectedInspirationText(null);
             }}
           >
             <svg
@@ -3558,31 +3270,20 @@ export function HomePage(): JSX.Element {
             {detailPending ? (
               <p className="memory-contents-loading">opening inspiration...</p>
             ) : (
-              <>
-                {showHighlightLayer ? (
-                  <div className="memory-contents-highlight-layer" aria-hidden="true">
-                    {renderHighlightedInspirationText(draftText, detailHighlights)}
-                  </div>
-                ) : null}
-                <textarea
-                  className={`memory-contents-expanded-text memory-contents-expanded-editor${
-                    showHighlightLayer ? " memory-contents-expanded-editor--with-highlights" : ""
-                  }`}
-                  value={draftText}
-                  onChange={(event) => {
-                    setSavedSignalDrafts((current) => ({
-                      ...current,
-                      [signal.id]: event.currentTarget.value,
-                    }));
-                  }}
-                  onMouseUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
-                  onKeyUp={memoryHighlightMode ? (event) => handleMemoryTextareaSelection(signal.id, event.currentTarget) : undefined}
-                  role="textbox"
-                  aria-label="edit saved inspiration"
-                  aria-multiline="true"
-                  spellCheck={true}
-                />
-              </>
+              <textarea
+                className="memory-contents-expanded-text memory-contents-expanded-editor"
+                value={draftText}
+                onChange={(event) => {
+                  setSavedSignalDrafts((current) => ({
+                    ...current,
+                    [signal.id]: event.currentTarget.value,
+                  }));
+                }}
+                role="textbox"
+                aria-label="edit saved inspiration"
+                aria-multiline="true"
+                spellCheck={true}
+              />
             )}
           </div>
           <div className="memory-contents-expanded-footer">
@@ -3601,24 +3302,6 @@ export function HomePage(): JSX.Element {
               ))}
             </span>
             <div className="memory-contents-expanded-actions" aria-label="inspiration actions">
-              <button
-                type="button"
-                className={`memory-contents-secondary-action${
-                  memoryHighlightMode ? " memory-contents-secondary-action--active" : ""
-                }`}
-                aria-pressed={memoryHighlightMode}
-                onClick={() => {
-                  window.getSelection()?.removeAllRanges();
-                  setSelectedInspirationText(null);
-                  setMemoryHighlightMode((current) => {
-                    const next = !current;
-                    if (next) cancelSavedSignalReflection();
-                    return next;
-                  });
-                }}
-              >
-                {memoryHighlightMode ? "highlighting" : "highlight"}
-              </button>
               <button
                 type="button"
                 className={`memory-contents-secondary-action${
@@ -3865,9 +3548,6 @@ export function HomePage(): JSX.Element {
                 >
                   <span className="memory-flow-kicker">{signalMaterialLabel(signal)}</span>
                   <p className="memory-flow-readable">{signal.textPreview}</p>
-                  {signal.highlightedSnippets[0] ? (
-                    <blockquote>{signal.highlightedSnippets[0].text}</blockquote>
-                  ) : null}
                   {signal.attachmentSummary.slice(0, 2).map((attachment) => (
                     <span key={attachment.id} className="memory-flow-attachment">
                       {attachment.label}
@@ -3901,7 +3581,6 @@ export function HomePage(): JSX.Element {
     const detail = memoryWindowDetails[signal.id];
     const loading = memoryWindowLoadingIds.has(signal.id);
     const detailText = detail?.rawText ?? signal.textPreview;
-    const detailHighlights = detail?.highlightedSnippets ?? signal.highlightedSnippets;
     const relatedGroupNames = memoryGroupings
       .filter((group) => group.signals.some((groupSignal) => groupSignal.id === signal.id))
       .map((group) => group.name)
@@ -3946,15 +3625,10 @@ export function HomePage(): JSX.Element {
               <span>saved inspiration</span>
               <p
                 className="signal-revisit-raw memory-readable-signal"
-                onMouseUp={() => handleMemoryTextSelection(signal.id)}
-                onKeyUp={() => handleMemoryTextSelection(signal.id)}
               >
-                {renderHighlightedInspirationText(detailText, detailHighlights)}
+                {detailText}
               </p>
             </section>
-            {highlightStatus.status === "error" && selectedInspirationText?.signalId === signal.id ? (
-              <p className="signal-revisit-state">{highlightStatus.message}</p>
-            ) : null}
             {(detail?.attachments.length ?? 0) > 0 || signal.attachmentSummary.length > 0 ? (
               <section className="memory-window-context">
                 <span>attachment details</span>
@@ -4242,7 +3916,6 @@ export function HomePage(): JSX.Element {
     setSelectedSupportingSignalFallback(evidenceSignals[0] ?? null);
     setSelectedMemoryGroupId(null);
     setSelectedMemoryPathFilterId(filterId);
-    setSelectedInspirationText(null);
     setSelectedSavedSignalId(null);
     setSavedSignalDetail(null);
     clearDrawerCloseTimer();
@@ -4708,13 +4381,6 @@ export function HomePage(): JSX.Element {
           </div>
         </div>
       ) : null}
-      {/*
-        Temporary sign-out affordance. The prototype has no auth concept,
-        so there's no in-design slot for this control yet. We render it
-        as a fixed-position pill outside the board so it doesn't pollute
-        the visual contract — a proper user-menu UI lands in a later
-        design pass.
-      */}
       {loadError ? (
         <div
           // Non-blocking diagnostic ribbon. Kept tiny + outside the board's
@@ -4743,17 +4409,6 @@ export function HomePage(): JSX.Element {
           {loadError}
         </div>
       ) : null}
-      <button
-        type="button"
-        className="home-signout-pill"
-        onClick={() => {
-          void logout();
-        }}
-        aria-label={`${t(locale, "signOut")} ${user.email}`}
-        title={`${user.name} ${t(locale, "signOutPerson")}`}
-      >
-        {t(locale, "signOut")}
-      </button>
       {showAdminEntry ? (
         <Link
           to="/admin"
