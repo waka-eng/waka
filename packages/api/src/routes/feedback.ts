@@ -208,7 +208,13 @@ export async function createFeedbackForUser(
       correctionText: input.correctionText ?? null,
     });
 
-    return serializeFeedback({ ...row, metadata, updatedAt: new Date() });
+    const updatedAt = new Date();
+    await tx
+      .update(feedback)
+      .set({ metadata, updatedAt })
+      .where(eq(feedback.id, row.id));
+
+    return serializeFeedback({ ...row, metadata, updatedAt });
   });
 }
 

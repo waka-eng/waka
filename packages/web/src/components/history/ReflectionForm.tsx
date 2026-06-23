@@ -221,6 +221,16 @@ export function ReflectionForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep the locked prompt in sync when the parent replaces a fallback/loading
+  // question with the guided question. Do not touch `answer`: the detail view
+  // intentionally keeps this form mounted across question updates so a fast
+  // typist cannot lose an in-progress draft while the generated prompt loads.
+  useEffect(() => {
+    if (typeof defaultQuestion === "string") {
+      setQuestion(defaultQuestion);
+    }
+  }, [defaultQuestion]);
+
   /**
    * Tracks whether the component is still mounted so an in-flight POST
    * that resolves after unmount doesn't call `setState` on a dead

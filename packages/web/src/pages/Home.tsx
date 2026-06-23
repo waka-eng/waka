@@ -1383,6 +1383,9 @@ export function HomePage(): JSX.Element {
   const [savedSignalReflectionDraft, setSavedSignalReflectionDraft] = useState("");
   const [savedSignalReflectionAnswers, setSavedSignalReflectionAnswers] = useState<string[]>([]);
   const [savedSignalReflectionQuestions, setSavedSignalReflectionQuestions] = useState<string[]>([]);
+  const [savedSignalReflectionQuestionLoadingSteps, setSavedSignalReflectionQuestionLoadingSteps] = useState<
+    Set<number>
+  >(() => new Set());
   const [savedSignalReflectionStepIndex, setSavedSignalReflectionStepIndex] = useState(0);
   const [savedSignalReflectionSaving, setSavedSignalReflectionSaving] = useState(false);
   const [savedSignalReflectionError, setSavedSignalReflectionError] = useState<string | null>(null);
@@ -1562,8 +1565,30 @@ export function HomePage(): JSX.Element {
         ]);
         if (topOfMindRequestIdRef.current !== requestId) return null;
         topOfMindLoadedForUserIdRef.current = requestUserId;
+        const fetchedNotes = notes.filter((note) => note.userId === requestUserId);
         setTopOfMind(next);
-        setTopOfMindNotes(notes.filter((note) => note.userId === requestUserId));
+        setTopOfMindNotes(fetchedNotes);
+        setRemovedTopOfMindNoteIds(new Set(fetchedNotes.filter((note) => note.status !== "active").map((note) => note.id)));
+        setNoteFeedback(() => {
+          const nextFeedback: Record<
+            string,
+            {
+              value: TopOfMindFeedbackValue | null;
+              status: FeedbackStatus;
+              error: string | null;
+              correctionText: string;
+            }
+          > = {};
+          for (const note of fetchedNotes) {
+            nextFeedback[note.id] = {
+              value: note.isPinned ? "important" : null,
+              status: "idle",
+              error: null,
+              correctionText: note.title || note.ambientSignal,
+            };
+          }
+          return nextFeedback;
+        });
         setTopOfMindLoading(false);
         setTopOfMindNotesLoading(false);
         setTopOfMindError(null);
@@ -2358,11 +2383,36 @@ export function HomePage(): JSX.Element {
         ...prev,
         [signal.id]: {
           value: null,
-          status: "idle",
+          status: "saving",
           error: null,
           correctionText: prev[signal.id]?.correctionText ?? signal.label,
         },
       }));
+      try {
+        await createFeedback({
+          targetType: "top_of_mind_note",
+          targetId: signal.feedbackTargetId,
+          value: "true",
+        });
+        setNoteFeedback((prev) => ({
+          ...prev,
+          [signal.id]: {
+            value: null,
+            status: "saved",
+            error: null,
+            correctionText: prev[signal.id]?.correctionText ?? signal.label,
+          },
+        }));
+      } catch {
+        setNoteFeedback((prev) => ({
+          ...prev,
+          [signal.id]: {
+            ...previousFeedback,
+            status: "error",
+            error: copy.feedbackError,
+          },
+        }));
+      }
       return;
     }
 
@@ -2909,15 +2959,22 @@ export function HomePage(): JSX.Element {
     Boolean(selectedDrawerSignal) &&
     savedSignalReflectingId === selectedDrawerSignal?.id;
   const selectedDrawerReflectionCanSave = savedSignalReflectionDraft.trim().length > 0;
+  const selectedDrawerReflectionQuestionLoading = savedSignalReflectionQuestionLoadingSteps.has(
+    savedSignalReflectionStepIndex,
+  );
   const selectedDrawerReflectionQuestion =
-    savedSignalReflectionQuestions[savedSignalReflectionStepIndex] ??
-    SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[savedSignalReflectionStepIndex] ??
-    SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
+    selectedDrawerReflectionQuestionLoading && !savedSignalReflectionQuestions[savedSignalReflectionStepIndex]
+      ? "Finding a question for this inspiration..."
+      : savedSignalReflectionQuestions[savedSignalReflectionStepIndex] ??
+        SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[savedSignalReflectionStepIndex] ??
+        SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
   const selectedDrawerReflectionProgress = `${savedSignalReflectionStepIndex + 1}/${SAVED_SIGNAL_REFLECTION_MAX_STEPS}`;
   const selectedDrawerReflectionCanGoNext =
     selectedDrawerReflectionCanSave &&
+    !selectedDrawerReflectionQuestionLoading &&
     savedSignalReflectionStepIndex < SAVED_SIGNAL_REFLECTION_MAX_STEPS - 1;
   const selectedDrawerReflectionCanFinish =
+    !selectedDrawerReflectionQuestionLoading &&
     savedSignalReflectionAnswers
       .map((answer, index) => (index === savedSignalReflectionStepIndex ? savedSignalReflectionDraft : answer))
       .filter((answer) => answer.trim().length > 0).length > 0;
@@ -2927,8 +2984,10 @@ export function HomePage(): JSX.Element {
     setSavedSignalReflectionDraft("");
     setSavedSignalReflectionAnswers([]);
     setSavedSignalReflectionQuestions([]);
+    setSavedSignalReflectionQuestionLoadingSteps(new Set());
     setSavedSignalReflectionStepIndex(0);
     setSavedSignalReflectionError(null);
+    savedSignalReflectionRequestSeqRef.current += 1;
   };
 
   const savedSignalKindForReflection = (signal: ApiSavedSignalSearchResult): ApiInspirationKind => {
@@ -2946,6 +3005,7 @@ export function HomePage(): JSX.Element {
     const fallback =
       SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[stepIndex] ??
       SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
+    setSavedSignalReflectionQuestionLoadingSteps((current) => new Set(current).add(stepIndex));
     const text =
       savedSignalDetail?.id === signal.id
         ? savedSignalDetail.rawText
@@ -2966,6 +3026,11 @@ export function HomePage(): JSX.Element {
     }).then(
       (response) => {
         if (savedSignalReflectionRequestSeqRef.current !== requestId) return;
+        setSavedSignalReflectionQuestionLoadingSteps((current) => {
+          const next = new Set(current);
+          next.delete(stepIndex);
+          return next;
+        });
         setSavedSignalReflectionQuestions((current) => {
           const next = [...current];
           next[stepIndex] = response.question.trim() || fallback;
@@ -2974,6 +3039,11 @@ export function HomePage(): JSX.Element {
       },
       () => {
         if (savedSignalReflectionRequestSeqRef.current !== requestId) return;
+        setSavedSignalReflectionQuestionLoadingSteps((current) => {
+          const next = new Set(current);
+          next.delete(stepIndex);
+          return next;
+        });
         setSavedSignalReflectionQuestions((current) => {
           const next = [...current];
           next[stepIndex] = fallback;
@@ -3144,10 +3214,12 @@ export function HomePage(): JSX.Element {
     }
     setSavedSignalReflectingId(signal.id);
     setSavedSignalReflectionAnswers([]);
-    setSavedSignalReflectionQuestions([SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[0]]);
+    setSavedSignalReflectionQuestions([]);
+    setSavedSignalReflectionQuestionLoadingSteps(new Set());
     setSavedSignalReflectionStepIndex(0);
     setSavedSignalReflectionDraft("");
     setSavedSignalReflectionError(null);
+    requestSavedSignalReflectionQuestion(signal, 0, [], []);
     window.setTimeout(() => savedSignalReflectionInputRef.current?.focus(), 0);
     recordRevisit(signal.id, "detail_opened");
   };

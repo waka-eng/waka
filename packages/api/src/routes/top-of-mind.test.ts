@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createTopOfMindRoutes,
+  getTopOfMindNoteForUser,
   listTopOfMindNotesForUser,
   type TopOfMindNoteSurface,
 } from "./top-of-mind.js";
@@ -30,6 +31,16 @@ function createMomentsSelect<T>(terminal: T) {
         })),
       })),
     },
+  };
+}
+
+function createMomentByIdSelect<T>(terminal: T) {
+  return {
+    from: vi.fn(() => ({
+      where: vi.fn(() => ({
+        limit: vi.fn(async () => terminal),
+      })),
+    })),
   };
 }
 
@@ -96,6 +107,8 @@ describe("GET /api/top-of-mind", () => {
       guidance: null,
       confidence: 82,
       status: "active",
+      isPinned: false,
+      userFeedbackValue: null,
       relatedSignalIds: ["00000000-0000-4000-8000-000000000101"],
       relatedContextNodeIds: [],
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
@@ -264,7 +277,7 @@ describe("GET /api/top-of-mind", () => {
     expect(JSON.stringify(body.topOfMindNotes)).not.toContain("admin");
   });
 
-  it("marks active English-only notes unavailable for Korean users while preserving evidence links", async () => {
+  it("keeps English persisted notes visible for Korean users because readback uses note locale", async () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000010",
       userId: user.id,
@@ -274,6 +287,7 @@ describe("GET /api/top-of-mind", () => {
       beliefStatement: "test the question where it can cost something",
       reflectionQuestion: null,
       reflectionGuide: null,
+      locale: "en-US",
       wowScore: 82,
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
       updatedAt: new Date("2026-05-30T11:00:00.000Z"),
@@ -321,9 +335,9 @@ describe("GET /api/top-of-mind", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({
       id: moment.id,
-      title: "",
-      ambientSignal: "",
-      status: "unavailable",
+      title: "test the question where it can cost something",
+      ambientSignal: "test the question where it can cost something",
+      status: "active",
       relatedSignalIds: [
         "00000000-0000-4000-8000-000000000101",
         "00000000-0000-4000-8000-000000000102",
@@ -343,6 +357,7 @@ describe("GET /api/top-of-mind", () => {
       beliefStatement: "a room where unfinished ambition is allowed",
       reflectionQuestion: null,
       reflectionGuide: null,
+      locale: "ko-KR",
       wowScore: 82,
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
       updatedAt: new Date("2026-05-30T11:00:00.000Z"),
@@ -382,6 +397,7 @@ describe("GET /api/top-of-mind", () => {
       beliefStatement: "people in rooms where 작은 실험 stays alive",
       reflectionQuestion: null,
       reflectionGuide: null,
+      locale: "ko-KR",
       wowScore: 82,
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
       updatedAt: new Date("2026-05-30T11:00:00.000Z"),
@@ -425,6 +441,7 @@ describe("GET /api/top-of-mind", () => {
       beliefStatement: "작게 공개하는 실험이 용기를 만든다",
       reflectionQuestion: null,
       reflectionGuide: null,
+      locale: "ko-KR",
       wowScore: 88,
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
       updatedAt: new Date("2026-05-30T11:00:00.000Z"),
@@ -459,7 +476,7 @@ describe("GET /api/top-of-mind", () => {
     expect(JSON.stringify(notes[0])).not.toContain("test the question where it can cost something");
   });
 
-  it("derives note status from latest applied feedback provenance", async () => {
+  it("hides stale notes from top-of-mind list readback", async () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000010",
       userId: user.id,
@@ -518,11 +535,11 @@ describe("GET /api/top-of-mind", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      topOfMindNotes: [{ id: moment.id, status: "stale" }],
+      topOfMindNotes: [],
     });
   });
 
-  it("surfaces the latest user correction as the top-of-mind note text", async () => {
+  it("surfaces the latest long user correction as the top-of-mind note text", async () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000011",
       userId: user.id,
@@ -535,6 +552,8 @@ describe("GET /api/top-of-mind", () => {
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
       updatedAt: new Date("2026-05-30T11:00:00.000Z"),
     };
+    const longCorrectionText = `${"choose the people I build with ".repeat(52)}without shrinking the thought`.trim();
+    expect(longCorrectionText.length).toBeGreaterThan(1450);
     const momentsSelect = createMomentsSelect([moment]);
     const db = {
       select: vi
@@ -553,7 +572,7 @@ describe("GET /api/top-of-mind", () => {
             {
               targetId: moment.id,
               value: "partly",
-              correctionText: "choose the people I build with",
+              correctionText: longCorrectionText,
               metadata: {},
             },
           ]),
@@ -587,8 +606,74 @@ describe("GET /api/top-of-mind", () => {
       topOfMindNotes: [
         {
           id: moment.id,
-          title: "choose the people I build with",
-          ambientSignal: "choose the people I build with",
+          title: longCorrectionText,
+          ambientSignal: longCorrectionText,
+        },
+      ],
+    });
+  });
+
+  it("reads back value-only top-of-mind feedback as pin and feedback value", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000012",
+      userId: user.id,
+      title: "Original generated note",
+      kind: "recurrence",
+      why: "The generated note is useful enough to pin.",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 74,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: moment.id,
+              value: "important",
+              correctionText: null,
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind: vi.fn(async () => ({
+          generatedAt: "2026-05-30T12:00:00.000Z",
+          headline: "Top of mind",
+          activeThemes: [],
+          activeQuestions: [],
+          relationshipSignals: [],
+          summary: {
+            inspirationCount: 1,
+            meaningNoteCount: 0,
+            relationshipEdgeCount: 0,
+          },
+        })),
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNotes: [
+        {
+          id: moment.id,
+          isPinned: true,
+          userFeedbackValue: "important",
         },
       ],
     });
@@ -650,6 +735,53 @@ describe("GET /api/top-of-mind", () => {
   });
 });
 
+it("returns null for stale top-of-mind note detail readback", async () => {
+  const moment = {
+    id: "00000000-0000-4000-8000-000000000013",
+    userId: user.id,
+    title: "This reflection was pulled down",
+    kind: "tension",
+    why: "The note no longer feels true.",
+    beliefStatement: null,
+    reflectionQuestion: null,
+    reflectionGuide: null,
+    locale: "en-US",
+    wowScore: 52,
+    createdAt: new Date("2026-05-30T10:00:00.000Z"),
+    updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+  };
+  const db = {
+    select: vi
+      .fn()
+      .mockReturnValueOnce(createMomentByIdSelect([moment]))
+      .mockReturnValueOnce(createRelatedRowsSelect([]))
+      .mockReturnValueOnce(createRelatedRowsSelect([]))
+      .mockReturnValueOnce(
+        createFeedbackRowsSelect([
+          {
+            targetId: moment.id,
+            value: "not_true",
+            correctionText: "pulled down from the wall",
+            metadata: {
+              appliedFeedback: {
+                source: "user_feedback",
+                topOfMindNoteStatus: "stale",
+              },
+            },
+          },
+        ]),
+      ),
+  };
+
+  await expect(
+    getTopOfMindNoteForUser(db as any, {
+      userId: user.id,
+      noteId: moment.id,
+      preferredLocale: "en-US",
+    }),
+  ).resolves.toBeNull();
+});
+
 describe("GET /api/top-of-mind/:noteId", () => {
   it("returns one note scoped to the signed-in tenant", async () => {
     const noteId = "00000000-0000-4000-8000-000000000010";
@@ -669,6 +801,8 @@ describe("GET /api/top-of-mind/:noteId", () => {
       guidance: null,
       confidence: 74,
       status: "active",
+      isPinned: false,
+      userFeedbackValue: null,
       relatedSignalIds: [],
       relatedContextNodeIds: [],
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
