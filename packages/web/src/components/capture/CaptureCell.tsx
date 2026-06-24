@@ -67,7 +67,6 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type ReactNode,
-  type SyntheticEvent,
   forwardRef,
   useState,
 } from "react";
@@ -118,17 +117,10 @@ export interface CaptureCellProps {
 
   /** Controlled textarea value for the capture note. */
   noteValue?: string;
-  /** Optional selected ranges to render as in-text highlights behind the textarea. */
-  noteHighlights?: Array<{ startOffset: number; endOffset: number; text: string }>;
-  /** When on, selecting text toggles highlight state. */
-  highlightMode?: boolean;
-  onToggleHighlightMode?: () => void;
   /** Fires on every textarea keystroke. */
   onNoteChange?: (value: string) => void;
   /** Fires when text is pasted into the universal composer. */
   onNotePaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
-  /** Fires when the user selects text inside the capture textarea. */
-  onNoteSelect?: (event: SyntheticEvent<HTMLTextAreaElement>) => void;
   /**
    * Optional textarea keydown — used by the prototype to (a) submit on
    * Cmd/Ctrl+Enter and (b) discard with Escape. We forward the event
@@ -258,12 +250,8 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
       view = "note",
       visualState = {},
       noteValue,
-      noteHighlights = [],
-      highlightMode = false,
-      onToggleHighlightMode,
       onNoteChange,
       onNotePaste,
-      onNoteSelect,
       onNoteKeyDown,
       notePlaceholder = "Drop what hit: a note, link, or image. Save it fast or reflect deeper.",
       processSaveLabel = "Reflect deeper",
@@ -298,35 +286,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
     ref,
   ): JSX.Element {
     const [dragActive, setDragActive] = useState(false);
-    const noteText = noteValue ?? "";
-    const visibleNoteHighlights = noteHighlights
-      .map((item, index) => ({ ...item, index }))
-      .filter(
-        (item) =>
-          noteText &&
-          item.startOffset >= 0 &&
-          item.endOffset > item.startOffset &&
-          noteText.slice(item.startOffset, item.endOffset) === item.text,
-      )
-      .sort((a, b) => a.startOffset - b.startOffset);
-    const noteHighlightLayer = visibleNoteHighlights.length > 0 ? (
-      <div className="cap-note-highlight-layer" aria-hidden="true">
-        {visibleNoteHighlights.map((item, itemIndex) => {
-          const previousEnd = visibleNoteHighlights[itemIndex - 1]?.endOffset ?? 0;
-          return (
-            <span key={`${item.startOffset}-${item.endOffset}`}>
-              <span>{noteText.slice(previousEnd, item.startOffset)}</span>
-              <mark>
-                {item.text}
-              </mark>
-              {itemIndex === visibleNoteHighlights.length - 1 ? (
-                <span>{noteText.slice(item.endOffset) || "\n"}</span>
-              ) : null}
-            </span>
-          );
-        })}
-      </div>
-    ) : null;
 
     const handleNoteChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
       onNoteChange?.(event.target.value);
@@ -411,19 +370,14 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
           transition smooth.
         */}
         <div className="cap-body" id="capBody" hidden={isReflectView}>
-          {noteHighlightLayer}
           <textarea
-            className={`cap-note-input${visibleNoteHighlights.length > 0 ? " cap-note-input--has-highlight" : ""}${
-              highlightMode ? " cap-note-input--highlight-mode" : ""
-            }`}
+            className="cap-note-input"
             id="capNote"
             placeholder={notePlaceholder}
             spellCheck={false}
             value={noteValue ?? ""}
             onChange={handleNoteChange}
             onPaste={onNotePaste}
-            onMouseUp={onNoteSelect}
-            onKeyUp={onNoteSelect}
             onKeyDown={onNoteKeyDown}
           />
           {captureMeta}
@@ -502,18 +456,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
                 hidden
                 onChange={handleFileChange}
               />
-              {noteText.trim().length > 0 ? (
-                <button
-                  type="button"
-                  className={`cap-highlight-mode${highlightMode ? " cap-highlight-mode--active" : ""}`}
-                  title={highlightMode ? "turn off highlight mode" : "highlight mode"}
-                  aria-label={highlightMode ? "turn off highlight mode" : "turn on highlight mode"}
-                  aria-pressed={highlightMode}
-                  onClick={onToggleHighlightMode}
-                >
-                  {highlightMode ? "highlighting" : "highlight"}
-                </button>
-              ) : null}
               <button
                 type="button"
                 className="cap-expand"

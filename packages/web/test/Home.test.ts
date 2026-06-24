@@ -9,9 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createFeedback,
   createInspiration,
-  createInspirationSpark,
   createReflection,
-  deleteInspirationSpark,
   finalizeAttachment,
   fetchInspirations,
   fetchReflections,
@@ -115,27 +113,6 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       title: input.title,
       ambientSignal: input.title,
     })),
-    createInspirationSpark: vi.fn(async (_inspirationId: string, input: any) => ({
-      id: "spark-new",
-      userId: "user-1",
-      inspirationId: _inspirationId,
-      text: input.text,
-      source: input.source ?? "user_selected",
-      startOffset: input.startOffset ?? null,
-      endOffset: input.endOffset ?? null,
-      confidence: input.confidence ?? 100,
-      isPrimary: input.isPrimary ?? false,
-      note: input.note ?? null,
-      whatMovedUser: null,
-      impliedValues: [],
-      worldviewClaims: [],
-      tensions: [],
-      decisionRelevance: [],
-      emotionalCharge: [],
-      createdAt: "2026-06-01T10:00:00.000Z",
-      updatedAt: "2026-06-01T10:00:00.000Z",
-    })),
-    deleteInspirationSpark: vi.fn(async () => undefined),
     deleteInspiration: vi.fn(async () => undefined),
     recordInspirationRevisit: vi.fn(async () => ({
       revisit: {
@@ -614,6 +591,57 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("The Reflect Deeper transcript should be readable in detail.");
     expect(detail.textContent).not.toContain("Q1 What texture did this save point toward?");
     expect(detail.textContent).not.toContain("Answer Mossy light and imperfect ceramic edges.");
+  });
+
+  it("requests the first saved-signal Reflect question immediately and preserves the draft while it resolves", async () => {
+    setApiFixtures();
+    const delayedQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion).mockReturnValueOnce(delayedQuestion.promise);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const reflectButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "reflect",
+    );
+    expect(reflectButton).not.toBeNull();
+
+    await act(async () => {
+      reflectButton!.click();
+    });
+
+    expect(generateGuidedReflectionQuestion).toHaveBeenCalledTimes(1);
+    expect(generateGuidedReflectionQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priorAnswers: [],
+        inspiration: expect.objectContaining({
+          text: sampleSavedSignalDetail.rawText,
+          kind: "note",
+        }),
+      }),
+    );
+    const question = container.querySelector<HTMLElement>(".nc-drawer-reflect-question");
+    expect(question?.textContent).toContain("Finding a question for this inspiration...");
+    expect(question?.textContent).not.toContain("What does this make you notice about yourself right now?");
+
+    const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
+    expect(answer).not.toBeNull();
+    await act(async () => {
+      setInputValue(answer!, "Second draft while model question resolves.");
+    });
+
+    await act(async () => {
+      delayedQuestion.resolve({
+        question: "When this bridge rhythm appears, what feels safe enough to try next?",
+        source: "model",
+      });
+      await delayedQuestion.promise;
+    });
+    await flushReactWork();
+
+    expect(answer?.value).toBe("Second draft while model question resolves.");
+    expect(question?.textContent).toContain(
+      "When this bridge rhythm appears, what feels safe enough to try next?",
+    );
   });
 
   it("keeps a saved-memory CTA reflection when the initial reflections fetch resolves late", async () => {
@@ -1397,14 +1425,13 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("make the thing before explaining it");
   });
 
-  it("localizes the logout affordance in Korean", async () => {
+  it("keeps logout off the home surface", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")?.title).toBe(
-      "River 로그아웃",
-    );
+    expect(container.querySelector(".home-signout-pill")).toBeNull();
+    expect(container.querySelector<HTMLButtonElement>("button[aria-label^='로그아웃']")).toBeNull();
   });
 
   it("does not render home language buttons after onboarding owns locale selection", async () => {
@@ -1587,7 +1614,7 @@ describe("HomePage current home experience", () => {
     expect(drawer?.textContent?.toLowerCase()).not.toContain("memory movement");
   });
 
-  it("renders expanded saved inspirations with one stable text layer unless highlights need an overlay", async () => {
+  it("renders expanded saved inspirations with one stable text layer even when old highlights exist", async () => {
     setApiFixtures({
       savedSignals: [
         {
@@ -1651,11 +1678,9 @@ describe("HomePage current home experience", () => {
 
     expanded = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
     expect(expanded?.querySelector(".memory-contents-loading")).toBeNull();
-    const highlightLayer = expanded?.querySelector<HTMLElement>(".memory-contents-highlight-layer");
     const highlightedEditor = expanded?.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
-    expect(highlightLayer).not.toBeNull();
-    expect(highlightLayer?.textContent).toContain("rereading old journals");
-    expect(highlightedEditor?.classList.contains("memory-contents-expanded-editor--with-highlights")).toBe(true);
+    expect(expanded?.querySelector(".memory-contents-highlight-layer")).toBeNull();
+    expect(highlightedEditor?.classList.contains("memory-contents-expanded-editor--with-highlights")).toBe(false);
     expect(highlightedEditor?.value).toBe("Synthetic memory note for rereading old journals");
   });
 
@@ -1799,7 +1824,7 @@ describe("HomePage current home experience", () => {
     expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(3);
   });
 
-  it("keeps the drawer and filesystem list centered across desktop and phone CSS", () => {
+  it("keeps the drawer centered on desktop and full-bleed on phone CSS", () => {
     const css = readFileSync("src/styles/global.css", "utf8");
 
     expect(css).toMatch(/\.memory-drawer-stack\s*\{[\s\S]*?left: 50%;[\s\S]*?transform: translateX\(-50%\);/);
@@ -1818,7 +1843,16 @@ describe("HomePage current home experience", () => {
       /\.memory-contents-list--has-expanded li:has\(\.memory-contents-item:not\(\.memory-contents-item--expanded\)\)\s*\{[\s\S]*?display: none;/,
     );
     expect(css).toMatch(
-      /@media \(max-width: 760px\) \{[\s\S]*?\.signal-revisit-page\.memory-drawer-stack\s*\{[\s\S]*?left: 14px;[\s\S]*?width: auto;[\s\S]*?transform: none;/,
+      /@media \(max-width: 760px\) \{[\s\S]*?\.signal-revisit-page\.memory-drawer-stack\s*\{[\s\S]*?left: 0;[\s\S]*?width: 100vw;[\s\S]*?height: 100dvh;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.memory-stack-level--categories\s*\{[\s\S]*?bottom: 0;[\s\S]*?padding: 0;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.memory-category-panel\s*\{[\s\S]*?width: 100%;[\s\S]*?min-height: 100dvh;[\s\S]*?margin: 0;[\s\S]*?box-sizing: border-box;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.memory-path-panel \.memory-path-filters\s*\{[\s\S]*?position: sticky;[\s\S]*?top: calc\(12px \+ env\(safe-area-inset-top\)\);[\s\S]*?max-height: none;[\s\S]*?overflow: visible;/,
     );
   });
 
@@ -2046,7 +2080,7 @@ describe("HomePage current home experience", () => {
     expect(detail?.querySelector(".memory-detail-next")).toBeNull();
   });
 
-  it("creates opened-inspiration highlights from a textarea selection in highlight mode", async () => {
+  it("does not expose highlight controls in opened inspiration detail", async () => {
     const unhighlightedBridgeSignal = { ...sampleSavedSignals[0], highlightedSnippets: [] };
     setApiFixtures({
       savedSignals: [unhighlightedBridgeSignal, sampleSavedSignals[1]],
@@ -2062,11 +2096,7 @@ describe("HomePage current home experience", () => {
     const highlightButton = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-secondary-action")).find(
       (button) => button.textContent === "highlight",
     );
-    expect(highlightButton).not.toBeNull();
-
-    await act(async () => {
-      highlightButton?.click();
-    });
+    expect(highlightButton).toBeUndefined();
     const start = editor!.value.indexOf("bridge rhythms");
     editor!.setSelectionRange(start, start + "bridge rhythms".length);
     await act(async () => {
@@ -2075,18 +2105,7 @@ describe("HomePage current home experience", () => {
     await flushReactWork();
 
     expect(container.querySelector(".signal-revisit-highlights")).toBeNull();
-    expect(createInspirationSpark).toHaveBeenCalledWith("insp-1", {
-      text: "bridge rhythms",
-      source: "user_selected",
-      confidence: 100,
-      isPrimary: false,
-    });
-    expect(detail.querySelector(".memory-inline-highlight")?.textContent).toBe("bridge rhythms");
-
-    const mark = detail.querySelector<HTMLElement>(".memory-inline-highlight");
-    await act(async () => {
-      mark?.focus();
-    });
+    expect(detail.querySelector(".memory-inline-highlight")).toBeNull();
     expect(container.querySelector(".memory-highlight-popover--saved")).toBeNull();
   });
 

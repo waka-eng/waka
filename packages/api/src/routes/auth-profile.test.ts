@@ -154,6 +154,27 @@ describe("PATCH /api/auth/me/profile", () => {
     });
   });
 
+  it("rejects nicknames containing whitespace without touching the database", async () => {
+    const db = makeProfileDb([]);
+    dbState.db = db;
+
+    const response = await app().request("/api/auth/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({ name: "Min a", preferredLocale: "en-US" }),
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(db.update).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Invalid profile payload",
+      details: { name: ["Nickname cannot contain spaces"] },
+    });
+  });
+
   it("persists nickname, locale, and onboarding completion", async () => {
     const completedAt = new Date("2026-06-20T10:15:30.000Z");
     const db = makeProfileDb([
