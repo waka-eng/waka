@@ -4150,7 +4150,7 @@
   position: relative;
   width: min(var(--w, 320px), 100%);
   max-width: min(560px, calc(100vw - 32px));
-  max-height: min(620px, calc(100dvh - 118px));
+  max-height: none;
   min-height: 230px;
   background: var(--bg);
   background-image:
@@ -4348,26 +4348,26 @@
 .nc-note-modal.nc-note--text-long .nc-note-body,
 .nc-note--text-long .nc-note-body--preview,
 .nc-note--text-long .nc-note-body-edit--inline {
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.18;
 }
 
 .nc-note-modal.nc-note--text-compact .nc-note-body,
 .nc-note--text-compact .nc-note-body--preview,
 .nc-note--text-compact .nc-note-body-edit--inline {
-  font-size: 19px;
+  font-size: 17px;
   line-height: 1.2;
 }
 
 .nc-note--text-tiny .nc-note-body--preview,
 .nc-note--text-tiny .nc-note-body-edit--inline {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.22;
 }
 
 .nc-note--text-micro .nc-note-body--preview,
 .nc-note--text-micro .nc-note-body-edit--inline {
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.24;
 }
 
@@ -4405,12 +4405,18 @@
 .nc-note-body-edit--inline {
   display: block;
   min-height: 0;
-  max-height: calc(min(620px, calc(100dvh - 118px)) - 128px);
+  max-height: none;
   resize: none;
   overflow: hidden;
   font-size: inherit;
   line-height: inherit;
   cursor: text;
+}
+
+.nc-note-body-edit--inline:disabled {
+  cursor: progress;
+  opacity: 0.76;
+  -webkit-text-fill-color: var(--ink);
 }
 
 .nc-note-body-edit--inline:focus {
@@ -4569,7 +4575,7 @@
 .nc-note-body {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 27px;
+  font-size: 24px;
   line-height: 1.2;
   font-weight: 450;
   letter-spacing: 0;
@@ -4582,6 +4588,12 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
+}
+
+.nc-note-edit-shell {
+  position: relative;
+  display: block;
+  width: 100%;
 }
 
 .nc-note-body--preview {
@@ -4914,6 +4926,31 @@
 }
 
 .nc-note-icon-btn .nc-note-spinner {
+  animation: nc-note-spinner 760ms linear infinite;
+}
+
+.nc-note-edit-saving {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, white 34%, transparent);
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.nc-note-edit-saving .nc-note-spinner {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
   animation: nc-note-spinner 760ms linear infinite;
 }
 
@@ -5464,7 +5501,7 @@
   }
 
   .nc-note--featured .nc-note-body {
-    font-size: 24px;
+    font-size: 22px;
   }
 
   .nc-note-overlay {

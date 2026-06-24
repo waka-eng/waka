@@ -1298,6 +1298,38 @@ describe("HomePage current home experience", () => {
     });
   });
 
+  it("shows loading while an in-place Top of Mind rewrite is saving", async () => {
+    const delayedUpdate = deferred<ApiTopOfMindNoteSurface>();
+    vi.mocked(updateTopOfMindNote).mockReturnValueOnce(delayedUpdate.promise);
+    setApiFixtures();
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
+    expect(note).not.toBeNull();
+    expect(rewrite).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(rewrite!, "make rooms where rough drafts can breathe");
+    });
+    await flushReactWork();
+    await waitForTimers(700);
+    await flushReactWork();
+
+    expect(note?.getAttribute("aria-busy")).toBe("true");
+    expect(container.querySelector(".nc-note-edit-saving")).not.toBeNull();
+    expect(rewrite?.disabled).toBe(true);
+
+    delayedUpdate.resolve({
+      ...sampleTopOfMindNote,
+      title: "make rooms where rough drafts can breathe",
+      ambientSignal: "make rooms where rough drafts can breathe",
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-note-edit-saving")).toBeNull();
+    expect(rewrite?.disabled).toBe(false);
+  });
+
   it("deletes a Top of Mind post-it without showing a weak replacement", async () => {
     setApiFixtures();
     const container = await renderHomePage();

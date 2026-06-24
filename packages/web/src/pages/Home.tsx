@@ -664,18 +664,18 @@ function thoughtCardTextareaRows(text: string): number {
   const explicitLines = trimmed ? trimmed.split(/\n/).length : 1;
   const charsPerRow =
     trimmed.length > 1200
-      ? 70
+      ? 36
       : trimmed.length > 800
-        ? 58
+        ? 32
       : trimmed.length > 420
-        ? 48
+        ? 28
       : trimmed.length > 260
-        ? 38
+        ? 24
       : trimmed.length > 150
-        ? 30
-      : 20;
+        ? 20
+      : 14;
   const rows = Math.ceil(trimmed.length / charsPerRow) + explicitLines - 1;
-  return Math.max(3, Math.min(28, rows));
+  return Math.max(3, Math.min(64, rows));
 }
 
 const NOTE_LAYOUTS: Array<{ tilt: number; w: string }> = [
@@ -4001,7 +4001,9 @@ export function HomePage(): JSX.Element {
   const renderThoughtCard = (signal: HomeThoughtCard, index: number): JSX.Element => {
     const layout = NOTE_LAYOUTS[index] ?? NOTE_LAYOUTS[0];
     const drag = drags[index] ?? { x: 0, y: 0 };
-    const pinned = noteFeedback[signal.id]?.value === "important";
+    const feedbackState = noteFeedback[signal.id];
+    const pinned = feedbackState?.value === "important";
+    const savingEdit = feedbackState?.status === "saving";
     const noteIsInteractive = homeMode !== "memoryDrawer";
     const supportingCount = signal.supportingSignals.length;
     const canOpenEvidenceDrawer = signal.supportingSignals.some((support) => signalIdForSupportingSignal(support));
@@ -4010,8 +4012,9 @@ export function HomePage(): JSX.Element {
     const textDensityClass = thoughtCardTextDensityClass(draftText);
     return (
     <article
-      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${pinned ? " nc-note--pinned" : ""}${textDensityClass}${noteIsInteractive ? "" : " nc-note--passive"}`}
+      className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${pinned ? " nc-note--pinned" : ""}${savingEdit ? " nc-note--saving" : ""}${textDensityClass}${noteIsInteractive ? "" : " nc-note--passive"}`}
       key={signal.id}
+      aria-busy={savingEdit ? "true" : undefined}
       style={{
         ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
         ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
@@ -4025,17 +4028,28 @@ export function HomePage(): JSX.Element {
     >
       <div className="nc-note-preview" aria-label="post-it preview">
         {signal.feedbackTargetId ? (
-          <textarea
-            className="nc-note-body nc-note-body-edit nc-note-body-edit--inline"
-            aria-label={copy.correctionLabel}
-            value={draftText}
-            rows={thoughtCardTextareaRows(draftText)}
-            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
-              const nextText = event.target.value;
-              updateCorrectionText(signal.id, nextText);
-              scheduleTopOfMindAutosave(signal, nextText);
-            }}
-          />
+          <div className="nc-note-edit-shell">
+            <textarea
+              className="nc-note-body nc-note-body-edit nc-note-body-edit--inline"
+              aria-label={copy.correctionLabel}
+              value={draftText}
+              rows={thoughtCardTextareaRows(draftText)}
+              disabled={savingEdit}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+                const nextText = event.target.value;
+                updateCorrectionText(signal.id, nextText);
+                scheduleTopOfMindAutosave(signal, nextText);
+              }}
+            />
+            {savingEdit ? (
+              <span className="nc-note-edit-saving" aria-label={copy.feedbackSaving} role="status">
+                <svg className="nc-note-spinner" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M20 12a8 8 0 0 0-14.1-5.2" />
+                  <path d="M5.9 6.8H3.6V4.5" />
+                </svg>
+              </span>
+            ) : null}
+          </div>
         ) : (
           <p className="nc-note-body nc-note-body--preview">{noteText}</p>
         )}
