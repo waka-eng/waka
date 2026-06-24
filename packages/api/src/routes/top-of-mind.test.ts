@@ -166,7 +166,7 @@ describe("GET /api/top-of-mind", () => {
       userId: user.id,
       title: "Rituals keep returning",
       kind: "recurrence",
-      why: "Multiple signals keep circling the same careful ritual. Ambient signal: test the question where it can cost something Matched environment: A practical setting where rituals keep returning can be tested in public conditions. Anti-environment: Analysis loops that keep the question safe, abstract, and uncostly. Evidence rationale: This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+      why: "Multiple signals keep circling the same careful ritual. Ambient signal: a question becomes real when it meets public cost Matched environment: A practical setting where rituals keep returning can be tested in public conditions. Anti-environment: Analysis loops that keep the question safe, abstract, and uncostly. Evidence rationale: This post-it is inferred from saved signals and may change as the graph gets better evidence.",
       reflectionQuestion: null,
       reflectionGuide: "Try one small version this week.",
       wowScore: 82,
@@ -233,9 +233,9 @@ describe("GET /api/top-of-mind", () => {
       expect.objectContaining({
         id: moment.id,
         userId: user.id,
-        title: "a room where unfinished ambition is allowed",
+        title: "Rituals keep returning",
         ambitionDimension: "place",
-        ambientSignal: "test the question where it can cost something",
+        ambientSignal: "a question becomes real when it meets public cost",
         matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale:
@@ -281,10 +281,10 @@ describe("GET /api/top-of-mind", () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000010",
       userId: user.id,
-      title: "test the question where it can cost something",
+      title: "a question becomes real when it meets public cost",
       kind: "outlier",
-      why: "Ambient signal: test the question where it can cost something Matched environment: A practical setting where a question can be tested in public conditions. Anti-environment: Analysis loops that keep the question safe. Evidence rationale: Two saved signals support this.",
-      beliefStatement: "test the question where it can cost something",
+      why: "Ambient signal: a question becomes real when it meets public cost Matched environment: A practical setting where a question can be tested in public conditions. Anti-environment: Analysis loops that keep the question safe. Evidence rationale: Two saved signals support this.",
+      beliefStatement: "a question becomes real when it meets public cost",
       reflectionQuestion: null,
       reflectionGuide: null,
       locale: "en-US",
@@ -335,8 +335,8 @@ describe("GET /api/top-of-mind", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({
       id: moment.id,
-      title: "test the question where it can cost something",
-      ambientSignal: "test the question where it can cost something",
+      title: "a question becomes real when it meets public cost",
+      ambientSignal: "a question becomes real when it meets public cost",
       status: "active",
       relatedSignalIds: [
         "00000000-0000-4000-8000-000000000101",
@@ -473,7 +473,7 @@ describe("GET /api/top-of-mind", () => {
       status: "active",
     });
     expect(JSON.stringify(notes[0])).not.toContain("a room where unfinished ambition is allowed");
-    expect(JSON.stringify(notes[0])).not.toContain("test the question where it can cost something");
+    expect(JSON.stringify(notes[0])).not.toContain("deterministic fallback");
   });
 
   it("hides stale notes from top-of-mind list readback", async () => {
@@ -790,7 +790,7 @@ describe("GET /api/top-of-mind/:noteId", () => {
       userId: user.id,
       title: "A provisional reflection",
       ambitionDimension: "next_experiment",
-      ambientSignal: "test the question where it can cost something",
+      ambientSignal: "a question becomes real when it meets public cost",
       matchedEnvironment: "A practical setting where a provisional reflection can be tested in public conditions.",
       antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
       evidenceRationale: "This post-it is inferred from saved signals and may change as the graph gets better evidence.",

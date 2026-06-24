@@ -57,7 +57,6 @@ export interface AmbitionSynthesisInput {
   rejectedOrCompetingInterpretations: string[];
   tokenBudget: number;
   estimatedTokens: number;
-  fallback: AmbitionSynthesisOutput;
 }
 
 export interface AmbitionSynthesisOutput {
@@ -229,22 +228,6 @@ function fallbackRejectedAlternative(candidate: TopOfMindRefreshCandidate): stri
   return `The shallow read would call this ${candidate.node.label}; the stronger read is about the surrounding conditions that make it feel alive or false.`;
 }
 
-export function deterministicAmbitionSynthesisOutput(
-  candidate: TopOfMindRefreshCandidate,
-): AmbitionSynthesisOutput {
-  return {
-    firstPersonPostItCandidate: candidate.ambientSignal,
-    memoryState: candidate.memoryPattern.state,
-    environmentDirection: candidate.matchedEnvironment,
-    rejectedEnvironment: candidate.antiEnvironment,
-    evidenceRationale: candidate.evidenceRationale,
-    confidence: candidate.wowScore,
-    rejectedAlternativeInterpretation:
-      candidate.rejectedAlternativeInterpretation ??
-      fallbackRejectedAlternative(candidate),
-  };
-}
-
 function priorFeedbackForCandidate(
   candidate: TopOfMindRefreshCandidate,
   feedback: AmbitionSynthesisFeedbackInput[],
@@ -317,7 +300,6 @@ export function createAmbitionSynthesisInput(
     rejectedOrCompetingInterpretations,
     tokenBudget,
     estimatedTokens,
-    fallback: deterministicAmbitionSynthesisOutput(candidate),
   };
 }
 

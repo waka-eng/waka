@@ -41,15 +41,6 @@ function synthesisInput(
     rejectedOrCompetingInterpretations: ["The shallow read would call this cities."],
     tokenBudget: 2400,
     estimatedTokens: 200,
-    fallback: {
-      firstPersonPostItCandidate: "a room where unfinished ambition is allowed",
-      memoryState: "active",
-      environmentDirection: "Rooms where building in public is the norm.",
-      rejectedEnvironment: "Rooms that make ambition private.",
-      evidenceRationale: "Saved signals cluster around social ambition.",
-      confidence: 70,
-      rejectedAlternativeInterpretation: "The shallow read would call this cities.",
-    },
     ...overrides,
   };
 }

@@ -213,26 +213,6 @@ function displayLabel(value: string): string {
   return `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
 }
 
-function postItThoughtForDimension(dimension: AmbitionDimension): string {
-  switch (dimension) {
-    case "place":
-      return "a room where unfinished ambition is allowed";
-    case "people":
-      return "people who make courage feel normal";
-    case "work":
-      return "make the thing before explaining it";
-    case "taste":
-      return "sharper taste than the room expects";
-    case "tension":
-    case "rejection":
-      return "not another impressive path that feels dead";
-    case "identity":
-      return "a self that gets braver in public";
-    case "next_experiment":
-      return "test the question where it can cost something";
-  }
-}
-
 function ambitionDimensionForContextType(type: ContextNodeType): AmbitionDimension {
   switch (type) {
     case "environment":
@@ -279,28 +259,28 @@ function buildInternalFrequency(
   switch (dimension) {
     case "place":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `A city, studio, or room where ${label} feels publicly reinforced.`,
         antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
         evidenceRationale: evidencePhrase,
       };
     case "people":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `People who make ${label} feel like a shared operating rhythm.`,
         antiEnvironment: "Circles where permission, polish, or social caution arrives before motion.",
         evidenceRationale: evidencePhrase,
       };
     case "work":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `A working culture where ${label} becomes visible through repeated making.`,
         antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
         evidenceRationale: evidencePhrase,
       };
     case "taste":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `Surroundings where ${label} is treated as a standard, not decoration.`,
         antiEnvironment: "Rooms that flatten taste into trend, convenience, or generic approval.",
         evidenceRationale: evidencePhrase,
@@ -308,21 +288,21 @@ function buildInternalFrequency(
     case "tension":
     case "rejection":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `A surrounding culture that lets the tension around ${label} stay visible long enough to choose from it.`,
         antiEnvironment: "Rooms that smooth over the live part so everyone can keep performing agreement.",
         evidenceRationale: evidencePhrase,
       };
     case "identity":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `An environment where ${label} is mirrored back as normal behavior.`,
         antiEnvironment: "Contexts that make the emerging version of you feel like a private exception.",
         evidenceRationale: evidencePhrase,
       };
     case "next_experiment":
       return {
-        ambientSignal: postItThoughtForDimension(dimension),
+        ambientSignal: "",
         matchedEnvironment: `A practical setting where ${label} can be tested in public conditions.`,
         antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale: evidencePhrase,

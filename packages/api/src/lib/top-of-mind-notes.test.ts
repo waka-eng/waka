@@ -66,9 +66,9 @@ describe("top-of-mind note compatibility model", () => {
     expect(note).toEqual({
       id: baseMoment.id,
       userId: baseMoment.userId,
-      title: "a room where unfinished ambition is allowed",
+      title: "A provisional reflection",
       ambitionDimension: "place",
-      ambientSignal: "a room where unfinished ambition is allowed",
+      ambientSignal: "A provisional reflection",
       matchedEnvironment: "",
       antiEnvironment: "",
       evidenceRationale: "",
@@ -93,7 +93,7 @@ describe("top-of-mind note compatibility model", () => {
     });
   });
 
-  it("turns legacy summary titles into top-of-mind reflections", () => {
+  it("does not invent fallback titles for weak legacy model output", () => {
     const note = topOfMindNoteFromWowMoment({
       moment: {
         ...baseMoment,
@@ -102,8 +102,7 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("a room where unfinished ambition is allowed");
-    expect(note.title).not.toBe("founder cities");
+    expect(note.title).toBe("founder cities");
     expect(note.title).not.toMatch(/^You keep circling\b/);
     expect(note.title).not.toMatch(/rooms where .+ can become normal/i);
     expect(note.ambitionDimension).toBe("place");
@@ -133,7 +132,7 @@ describe("top-of-mind note compatibility model", () => {
     });
   });
 
-  it("rewrites older outside-voice primary post-it text into sticky-note thought language", () => {
+  it("does not rewrite older outside-voice primary post-it text into fallback language", () => {
     const note = topOfMindNoteFromWowMoment({
       moment: {
         ...baseMoment,
@@ -148,19 +147,11 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("people who make courage feel normal");
-    expect(note.ambientSignal).toBe("people who make courage feel normal");
-    expect(note.title).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
-    expect(note.ambientSignal).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
-    expect(note.title).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
-    expect(note.ambientSignal).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
-    expect(note.title).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
-    expect(note.ambientSignal).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
-    expect(note.title.split(/\s+/).length).toBeGreaterThanOrEqual(5);
-    expect(note.title.split(/\s+/).length).toBeLessThanOrEqual(14);
+    expect(note.title).toBe("You seem to want peers who make fast, public building feel normal");
+    expect(note.ambientSignal).toBe("You seem to want peers who make fast, public building feel normal");
   });
 
-  it("rejects slogan-like legacy post-it text and replaces it with interpretable thought language", () => {
+  it("does not replace slogan-like legacy post-it text with deterministic language", () => {
     const note = topOfMindNoteFromWowMoment({
       moment: {
         ...baseMoment,
@@ -175,11 +166,8 @@ describe("top-of-mind note compatibility model", () => {
       },
     });
 
-    expect(note.title).toBe("a room where unfinished ambition is allowed");
-    expect(note.ambientSignal).toBe("a room where unfinished ambition is allowed");
-    expect(note.title).not.toMatch(
-      /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
-    );
+    expect(note.title).toBe("build in public");
+    expect(note.ambientSignal).toBe("build in public");
   });
 
   it("sanitizes legacy scaffolding out of every user-facing note field", () => {

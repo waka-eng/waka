@@ -224,8 +224,8 @@ describe("rankTopOfMindRefreshCandidates", () => {
       contextType: "open_question",
       ambitionDimension: "next_experiment",
       kind: "outlier",
-      title: "test the question where it can cost something",
-      ambientSignal: "test the question where it can cost something",
+      title: "",
+      ambientSignal: "",
       matchedEnvironment:
         "A practical setting where what kind of ambition still leaves room for life can be tested in public conditions.",
       reflectionQuestion: "what kind of ambition still leaves room for life?",
@@ -280,7 +280,7 @@ describe("rankTopOfMindRefreshCandidates", () => {
     );
   });
 
-  it("generates ambition mirror statements instead of raw labels or shallow summaries", () => {
+  it("ranks candidates without generating fallback post-it statements", () => {
     const candidates = rankTopOfMindRefreshCandidates({
       userId,
       now,
@@ -321,21 +321,15 @@ describe("rankTopOfMindRefreshCandidates", () => {
     });
 
     const titles = candidates.map((candidate) => candidate.title);
-    expect(titles).toContain("make the thing before explaining it");
-    expect(titles).toContain("not another impressive path that feels dead");
+    expect(titles).toEqual(["", ""]);
     for (const candidate of candidates) {
-      expect(candidate.title).not.toBe(candidate.node.label);
+      expect(candidate.title).toBe("");
       expect(candidate.title).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
       expect(candidate.ambientSignal).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
       expect(candidate.title).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
       expect(candidate.ambientSignal).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
       expect(candidate.title).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
       expect(candidate.ambientSignal).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
-      expect(candidate.title.split(/\s+/).length).toBeGreaterThanOrEqual(5);
-      expect(candidate.title.split(/\s+/).length).toBeLessThanOrEqual(14);
-      expect(candidate.title).toMatch(
-        /\b(people|room|work|thing|path|taste|self|question|experiment)\b/i,
-      );
       expect(candidate.title).not.toMatch(
         /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
       );
@@ -343,7 +337,7 @@ describe("rankTopOfMindRefreshCandidates", () => {
       expect(candidate.title).not.toMatch(/rooms where .+ can become normal/i);
       expect(candidate.title).not.toMatch(/work that turns .+ visible/i);
       expect(candidate.title).not.toMatch(/keep returning$/);
-      expect(candidate.ambientSignal).toBe(candidate.title);
+      expect(candidate.ambientSignal).toBe("");
       expect(candidate.matchedEnvironment).toMatch(/environment|culture|work|setting|room/i);
       expect(candidate.antiEnvironment).toMatch(/settings|circles|contexts|rooms|loops|work/i);
       expect(candidate.evidenceRationale).toMatch(/saved signal/);

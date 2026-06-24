@@ -45,19 +45,6 @@ const SYNTHESIS_INPUT = {
   rejectedOrCompetingInterpretations: [],
   tokenBudget: 2400,
   estimatedTokens: 100,
-  fallback: {
-    firstPersonPostItCandidate: "make the thing before explaining it",
-    memoryState: "active" as const,
-    environmentDirection:
-      "A working culture where humane ambition becomes visible through repeated making.",
-    rejectedEnvironment:
-      "Work contexts that reward commentary while the real object stays abstract.",
-    evidenceRationale:
-      "Two saved signals point at humane ambition as a recurring work frequency.",
-    confidence: 82,
-    rejectedAlternativeInterpretation:
-      "The shallow read would call this productivity, but the stronger read is about humane working conditions.",
-  },
 };
 
 describe("model provider abstraction", () => {
@@ -157,7 +144,7 @@ describe("model provider abstraction", () => {
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({
       contextType: "project",
-      title: "make the thing before explaining it",
+      title: "",
     });
 
     // synthesizeAmbition now delegates to the real Gemini client instead of

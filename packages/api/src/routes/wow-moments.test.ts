@@ -106,9 +106,9 @@ describe("GET /api/wow-moments top-of-mind compatibility", () => {
       topOfMindNote: {
         id: moment.id,
         userId: user.id,
-        title: "test the question where it can cost something",
+        title: "Rituals keep returning",
         ambitionDimension: "next_experiment",
-        ambientSignal: "test the question where it can cost something",
+        ambientSignal: "Rituals keep returning",
         matchedEnvironment: "",
         antiEnvironment: "",
         evidenceRationale: "",

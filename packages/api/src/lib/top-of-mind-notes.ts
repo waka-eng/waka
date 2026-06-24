@@ -121,27 +121,6 @@ function ambitionDimensionFromMoment(moment: TopOfMindNoteWowMoment): AmbitionDi
   return "identity";
 }
 
-function mirrorTitleFromLegacyLabel(_label: string, dimension: AmbitionDimension): string {
-  switch (dimension) {
-    case "place":
-      return "a room where unfinished ambition is allowed";
-    case "people":
-      return "people who make courage feel normal";
-    case "work":
-      return "make the thing before explaining it";
-    case "taste":
-      return "sharper taste than the room expects";
-    case "tension":
-    case "rejection":
-      return "not another impressive path that feels dead";
-    case "next_experiment":
-      return "test the question where it can cost something";
-    case "identity":
-    default:
-      return "a self that gets braver in public";
-  }
-}
-
 function isForcedFirstPersonTemplate(value: string): boolean {
   return /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i.test(normalizeTitleText(value));
 }
@@ -191,7 +170,7 @@ function isPostItThought(value: string): boolean {
 function primaryPostItText(value: string | null | undefined, dimension: AmbitionDimension): string | null {
   const normalized = (value ?? "").replace(/\s+/g, " ").trim();
   if (!normalized) return null;
-  if (isOutsideVoicePostIt(normalized)) return mirrorTitleFromLegacyLabel(normalized, dimension);
+  if (isOutsideVoicePostIt(normalized)) return null;
   if (isPostItThought(normalized)) return normalizeTitleText(normalized);
   return null;
 }
@@ -294,12 +273,8 @@ function titleFromLegacyMoment(
     return koreanAmbientSignal ?? "";
   }
 
-  const label = lowerFirst(
-    /^you keep circling\b/i.test(belief)
-      ? belief.replace(/^you keep circling\s+/i, "")
-      : moment.title,
-  );
-  return mirrorTitleFromLegacyLabel(label, dimension);
+  const modelTitle = normalizeTitleText(moment.title);
+  return modelTitle || lowerFirst(belief);
 }
 
 export function topOfMindNoteTypeFromWowMoment(input: {
