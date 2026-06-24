@@ -14223,6 +14223,12 @@ body.reflect-bg {
     padding: 22px 18px 126px;
   }
 
+  .reference-capture-modal .cap-note-highlight-layer {
+    inset: 22px 18px auto;
+    width: calc(100% - 36px);
+    min-height: calc(100% - 170px);
+  }
+
   .reference-capture-modal .cap-bar {
     left: 18px;
     right: 18px;
@@ -14683,6 +14689,25 @@ textarea {
     min-width: 44px;
     min-height: 40px;
     padding: 10px 12px;
+  }
+
+  .nc-primary-action {
+    width: clamp(124px, 36vw, 184px);
+    height: 64px;
+  }
+
+  .nc-primary-action > .nc-save {
+    min-height: 64px;
+  }
+
+  .nc-save {
+    padding: 7px;
+  }
+
+  .nc-save-cta {
+    min-height: 50px;
+    padding: 0 18px;
+    white-space: nowrap;
   }
 
   .nc-primary-action {
