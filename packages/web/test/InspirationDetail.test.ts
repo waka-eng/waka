@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -153,6 +154,14 @@ describe("InspirationDetail", () => {
     expect(textareas).toHaveLength(1);
     expect(textareas[0].value).toBe("A saved signal about how ambition becomes concrete when there is a visible next move.");
     expect(container.textContent).not.toContain("Inspiration details");
+  });
+
+  it("keeps mobile expanded inspiration text visually consistent with collapsed cards", () => {
+    const css = readFileSync("src/styles/global.css", "utf8");
+
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.history-item-text\s*\{[\s\S]*?font-size:\s*18px;[\s\S]*?line-height:\s*1\.32;[\s\S]*?\.detail-title,\s*\.detail-view--mockup \.detail-textarea\s*\{[\s\S]*?font-family:\s*var\(--font-serif\);[\s\S]*?font-size:\s*18px;[\s\S]*?font-style:\s*normal;[\s\S]*?font-weight:\s*400;[\s\S]*?letter-spacing:\s*0;[\s\S]*?line-height:\s*1\.32;/,
+    );
   });
 
   it("keeps standalone no-reflection analysis absent while reflections load and after empty results", async () => {

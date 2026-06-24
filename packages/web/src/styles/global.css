@@ -10666,7 +10666,6 @@ body.reflect-bg {
 
   .detail-textarea {
     min-height: 190px;
-    font-size: 18px;
   }
 }
 
@@ -14616,6 +14615,16 @@ textarea {
 
   .history-item-text {
     font-size: 18px;
+    line-height: 1.32;
+  }
+
+  .detail-title,
+  .detail-view--mockup .detail-textarea {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: 0;
     line-height: 1.32;
   }
 
