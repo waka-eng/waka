@@ -529,6 +529,70 @@ describe("GET /api/top-of-mind", () => {
     expect(notes[0]).toMatchObject({ id: pinned.id, isPinned: true });
   });
 
+  it("orders dedupe clusters by their earliest row while returning the pinned winner", async () => {
+    const duplicateHigh = {
+      id: "00000000-0000-4000-8000-000000000131",
+      userId: user.id,
+      title: "Rooms where unfinished ambition is allowed",
+      kind: "recurrence",
+      why: "Ambient signal: rooms where unfinished ambition is allowed. Matched environment: A room where unfinished ambition can be shown. Anti-environment: polished-only rooms. Evidence rationale: Saved signals point there.",
+      beliefStatement: "rooms where unfinished ambition is allowed",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "en-US",
+      wowScore: 90,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const distinctMid = {
+      ...duplicateHigh,
+      id: "00000000-0000-4000-8000-000000000132",
+      title: "Quiet repair belongs near neighbors",
+      kind: "tension",
+      why: "Ambient signal: quiet repair belongs near neighbors. Matched environment: a street-level place. Anti-environment: abstract civic talk. Evidence rationale: Different signals support it.",
+      beliefStatement: "quiet repair belongs near neighbors",
+      wowScore: 80,
+      createdAt: new Date("2026-05-29T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-29T11:00:00.000Z"),
+    };
+    const duplicatePinned = {
+      ...duplicateHigh,
+      id: "00000000-0000-4000-8000-000000000133",
+      title: "rooms where unfinished ambition is allowed.",
+      wowScore: 10,
+      createdAt: new Date("2026-05-28T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-28T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([duplicateHigh, distinctMid, duplicatePinned]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: duplicatePinned.id,
+              value: "important",
+              correctionText: null,
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 1,
+      preferredLocale: "en-US",
+    });
+
+    expect(momentsSelect.limit).toHaveBeenCalledWith(21);
+    expect(notes.map((note) => note.id)).toEqual([duplicatePinned.id]);
+    expect(notes[0]).toMatchObject({ isPinned: true });
+  });
+
   it("dedupes high source-overlap notes while preserving non-overlapping notes", async () => {
     const duplicateA = {
       id: "00000000-0000-4000-8000-000000000041",

@@ -142,12 +142,14 @@ export function dedupeTopOfMindNotes<T extends DedupeTopOfMindNoteLike>(notes: T
   }
 
   return clusters
-    .map((cluster) =>
-      cluster.reduce((strongest, note) =>
+    .map((cluster) => ({
+      orderIndex: Math.min(...cluster.map((note) => notes.indexOf(note))),
+      winner: cluster.reduce((strongest, note) =>
         compareTopOfMindNoteStrength(note, strongest) > 0 ? note : strongest,
       ),
-    )
-    .sort((a, b) => notes.indexOf(a) - notes.indexOf(b));
+    }))
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map(({ winner }) => winner);
 }
 
 export function isNearDuplicateTopOfMindText(
