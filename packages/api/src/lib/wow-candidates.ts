@@ -27,6 +27,7 @@ import {
 } from "../scoring/wow-score.js";
 import { getDb } from "./db.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { isNearDuplicateTopOfMindText } from "./top-of-mind-dedupe.js";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
@@ -187,6 +188,33 @@ async function loadTenantCandidatePool(
     .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
 }
 
+export function diversifyWowMomentCandidates(
+  rankedCandidates: WowMomentCandidate[],
+  limit: number,
+): WowMomentCandidate[] {
+  if (limit <= 0) return [];
+  const selected: WowMomentCandidate[] = [];
+  const deferred: WowMomentCandidate[] = [];
+
+  for (const candidate of rankedCandidates) {
+    const isNearDuplicate = selected.some((existing) =>
+      isNearDuplicateTopOfMindText(existing.inspiration.text, candidate.inspiration.text),
+    );
+    if (!isNearDuplicate) {
+      selected.push(candidate);
+    } else {
+      deferred.push(candidate);
+    }
+    if (selected.length >= limit) break;
+  }
+
+  if (selected.length < Math.min(limit, rankedCandidates.length)) {
+    selected.push(...deferred.slice(0, limit - selected.length));
+  }
+
+  return selected.slice(0, limit);
+}
+
 /**
  * Find tenant-scoped, already-embedded inspirations that can participate in a
  * future WOW moment alongside `triggerInspirationId`.
@@ -214,7 +242,7 @@ export async function findWowMomentCandidates(
     dbCandidatePoolLimit(limit),
   );
 
-  const candidates = candidatePool
+  const rankedCandidates = candidatePool
     .filter(({ embedding }) => embedding.embedding.length === trigger.embedding.embedding.length)
     .map(({ inspiration, embedding }) => {
       const similarityScoreToTrigger = calculateSimilarityScore(
@@ -269,8 +297,9 @@ export async function findWowMomentCandidates(
       if (scoreDelta !== 0) return scoreDelta;
 
       return b.inspiration.createdAt.getTime() - a.inspiration.createdAt.getTime();
-    })
-    .slice(0, limit);
+    });
+
+  const candidates = diversifyWowMomentCandidates(rankedCandidates, limit);
 
   return { trigger: trigger.inspiration, candidates };
 }

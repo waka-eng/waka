@@ -17,6 +17,7 @@ export default defineConfig({
     include: [
       "src/lib/ambition-synthesis.test.ts",
       "src/lib/ambition-synthesis-gemini.test.ts",
+      "src/lib/auto-wow-generation.test.ts",
       "src/lib/feedback-application.test.ts",
       "src/lib/guided-reflection-question.test.ts",
       "src/lib/model-provider.test.ts",
@@ -24,6 +25,8 @@ export default defineConfig({
       "src/lib/signal-packets.test.ts",
       "src/lib/top-of-mind-notes.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",
+      "src/lib/wow-candidates.test.ts",
+      "src/lib/wow-judge.test.ts",
       "src/lib/wow-judge-model.test.ts",
       "src/lib/admin-auth.test.ts",
       "src/routes/admin-meaning-graph.test.ts",
