@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -11,6 +11,10 @@ import {
 } from "../db/index.js";
 import { findWowMomentCandidates } from "./wow-candidates.js";
 import { getDb } from "./db.js";
+import {
+  areDuplicateTopOfMindNotes,
+  type DedupeTopOfMindNoteLike,
+} from "./top-of-mind-dedupe.js";
 import {
   DEFAULT_LOCALE,
   normalizeSupportedLocale,
@@ -2011,6 +2015,76 @@ async function loadWowMomentLinks(db: WakaDb, wowMomentId: string) {
     .orderBy(wowMomentInspirations.sortOrder);
 }
 
+async function loadRecentWowMomentsForDedupe(db: WakaDb, userId: string) {
+  return db
+    .select({
+      moment: wowMoments,
+      inspirationId: wowMomentInspirations.inspirationId,
+    })
+    .from(wowMoments)
+    .leftJoin(
+      wowMomentInspirations,
+      and(
+        eq(wowMoments.id, wowMomentInspirations.wowMomentId),
+        eq(wowMomentInspirations.userId, userId),
+      ),
+    )
+    .where(eq(wowMoments.userId, userId))
+    .orderBy(desc(wowMoments.createdAt))
+    .limit(300);
+}
+
+async function findDuplicateWowMomentForJudgment(
+  db: WakaDb,
+  input: {
+    userId: string;
+    judgment: Extract<WowMomentJudgment, { isWowMoment: true }>;
+    relatedInspirationIds: string[];
+  },
+) {
+  const rows = await loadRecentWowMomentsForDedupe(db, input.userId);
+  const linksByMomentId = new Map<string, string[]>();
+  const momentsById = new Map<string, typeof wowMoments.$inferSelect>();
+  for (const row of rows) {
+    momentsById.set(row.moment.id, row.moment);
+    if (row.inspirationId) {
+      const bucket = linksByMomentId.get(row.moment.id) ?? [];
+      bucket.push(row.inspirationId);
+      linksByMomentId.set(row.moment.id, bucket);
+    }
+  }
+
+  const prospective: DedupeTopOfMindNoteLike = {
+    id: "prospective",
+    title: input.judgment.title,
+    beliefStatement: input.judgment.beliefStatement,
+    why: input.judgment.why,
+    kind: input.judgment.kind,
+    status: "active",
+    relatedSignalIds: input.relatedInspirationIds,
+  };
+
+  for (const existing of momentsById.values()) {
+    if (
+      areDuplicateTopOfMindNotes(prospective, {
+        id: existing.id,
+        title: existing.title,
+        beliefStatement: existing.beliefStatement,
+        why: existing.why,
+        kind: existing.kind,
+        status: "active",
+        wowScore: existing.wowScore,
+        relatedSignalIds: linksByMomentId.get(existing.id) ?? [],
+        createdAt: existing.createdAt,
+      })
+    ) {
+      return existing;
+    }
+  }
+
+  return null;
+}
+
 export async function persistWowMomentForInspirationJudgment(
   params: PersistWowMomentForInspirationParams,
 ): Promise<PersistWowMomentForInspirationResult> {
@@ -2090,6 +2164,21 @@ export async function persistWowMomentForInspirationJudgment(
     relatedInspirationIds: relatedIds,
     locale,
   });
+
+  const duplicateMoment = await findDuplicateWowMomentForJudgment(db, {
+    userId: params.userId,
+    judgment: persistedJudgment,
+    relatedInspirationIds: relatedIds,
+  });
+  if (duplicateMoment) {
+    return {
+      persisted: true,
+      status: "existing",
+      judgment: persistedJudgment,
+      wowMoment: duplicateMoment,
+      inspirationLinks: await loadWowMomentLinks(db, duplicateMoment.id),
+    };
+  }
 
   return db.transaction(async (tx) => {
     const [createdMoment] = await tx

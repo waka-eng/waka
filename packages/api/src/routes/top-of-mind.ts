@@ -24,6 +24,7 @@ import {
   buildTopOfMindPreviewForUser,
   type TopOfMindPreview,
 } from "../lib/top-of-mind-preview.js";
+import { dedupeTopOfMindNotes } from "../lib/top-of-mind-dedupe.js";
 import {
   MAX_WOW_MOMENT_SOURCE_LINKS,
   normalizeWowSourceEvidence,
@@ -410,6 +411,10 @@ export async function listTopOfMindNotesForUser(
   db: WakaDb,
   input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
 ): Promise<TopOfMindNoteSurface[]> {
+  const fetchLimit = Math.min(
+    MAX_TOP_OF_MIND_LIMIT,
+    Math.max(input.limit * 3, input.limit + 20),
+  );
   const moments = await db
     .select({
       id: wowMoments.id,
@@ -428,7 +433,7 @@ export async function listTopOfMindNotesForUser(
     .from(wowMoments)
     .where(eq(wowMoments.userId, input.userId))
     .orderBy(desc(wowMoments.wowScore), desc(wowMoments.createdAt))
-    .limit(input.limit);
+    .limit(fetchLimit);
 
   const relatedRows = await fetchRelatedSignalRows(db, {
     userId: input.userId,
@@ -444,16 +449,18 @@ export async function listTopOfMindNotesForUser(
   });
   const relatedByMomentId = groupRelatedRowsByMomentId(relatedRows);
 
-  return moments
-    .map((moment) =>
-      serializeTopOfMindSurface(
-        moment,
-        relatedByMomentId.get(moment.id) ?? [],
-        relatedContextNodeIds.get(moment.id) ?? [],
-        feedbackSnapshots.get(moment.id),
-      ),
-    )
-    .filter((note) => isVisibleTopOfMindStatus(note.status));
+  return dedupeTopOfMindNotes(
+    moments
+      .map((moment) =>
+        serializeTopOfMindSurface(
+          moment,
+          relatedByMomentId.get(moment.id) ?? [],
+          relatedContextNodeIds.get(moment.id) ?? [],
+          feedbackSnapshots.get(moment.id),
+        ),
+      )
+      .filter((note) => isVisibleTopOfMindStatus(note.status)),
+  ).slice(0, input.limit);
 }
 
 export async function getTopOfMindNoteForUser(

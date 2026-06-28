@@ -227,7 +227,7 @@ describe("GET /api/top-of-mind", () => {
     const response = await app.request("/api/top-of-mind?limit=1");
 
     expect(response.status).toBe(200);
-    expect(momentsSelect.limit).toHaveBeenCalledWith(1);
+    expect(momentsSelect.limit).toHaveBeenCalledWith(21);
     const body = (await response.json()) as { topOfMindNotes: unknown[] };
     expect(body.topOfMindNotes).toEqual([
       expect.objectContaining({
@@ -474,6 +474,262 @@ describe("GET /api/top-of-mind", () => {
     });
     expect(JSON.stringify(notes[0])).not.toContain("a room where unfinished ambition is allowed");
     expect(JSON.stringify(notes[0])).not.toContain("deterministic fallback");
+  });
+
+  it("dedupes normalized duplicate notes and keeps the pinned strongest note", async () => {
+    const older = {
+      id: "00000000-0000-4000-8000-000000000031",
+      userId: user.id,
+      title: "Rooms where unfinished ambition is allowed.",
+      kind: "recurrence",
+      why: "Ambient signal: rooms where unfinished ambition is allowed. Matched environment: A room where unfinished ambition can be shown. Anti-environment: polished-only rooms. Evidence rationale: Saved signals point there.",
+      beliefStatement: "rooms where unfinished ambition is allowed",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "en-US",
+      wowScore: 91,
+      createdAt: new Date("2026-05-29T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-29T11:00:00.000Z"),
+    };
+    const pinned = {
+      ...older,
+      id: "00000000-0000-4000-8000-000000000032",
+      title: "rooms where unfinished ambition is allowed",
+      wowScore: 70,
+      createdAt: new Date("2026-05-28T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-28T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([older, pinned]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: pinned.id,
+              value: "important",
+              correctionText: null,
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "en-US",
+    });
+
+    expect(momentsSelect.limit).toHaveBeenCalledWith(25);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ id: pinned.id, isPinned: true });
+  });
+
+  it("orders dedupe clusters by their earliest row while returning the pinned winner", async () => {
+    const duplicateHigh = {
+      id: "00000000-0000-4000-8000-000000000131",
+      userId: user.id,
+      title: "Rooms where unfinished ambition is allowed",
+      kind: "recurrence",
+      why: "Ambient signal: rooms where unfinished ambition is allowed. Matched environment: A room where unfinished ambition can be shown. Anti-environment: polished-only rooms. Evidence rationale: Saved signals point there.",
+      beliefStatement: "rooms where unfinished ambition is allowed",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "en-US",
+      wowScore: 90,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const distinctMid = {
+      ...duplicateHigh,
+      id: "00000000-0000-4000-8000-000000000132",
+      title: "Quiet repair belongs near neighbors",
+      kind: "tension",
+      why: "Ambient signal: quiet repair belongs near neighbors. Matched environment: a street-level place. Anti-environment: abstract civic talk. Evidence rationale: Different signals support it.",
+      beliefStatement: "quiet repair belongs near neighbors",
+      wowScore: 80,
+      createdAt: new Date("2026-05-29T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-29T11:00:00.000Z"),
+    };
+    const duplicatePinned = {
+      ...duplicateHigh,
+      id: "00000000-0000-4000-8000-000000000133",
+      title: "rooms where unfinished ambition is allowed.",
+      wowScore: 10,
+      createdAt: new Date("2026-05-28T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-28T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([duplicateHigh, distinctMid, duplicatePinned]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: duplicatePinned.id,
+              value: "important",
+              correctionText: null,
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 1,
+      preferredLocale: "en-US",
+    });
+
+    expect(momentsSelect.limit).toHaveBeenCalledWith(21);
+    expect(notes.map((note) => note.id)).toEqual([duplicatePinned.id]);
+    expect(notes[0]).toMatchObject({ isPinned: true });
+  });
+
+  it("dedupes high source-overlap notes while preserving non-overlapping notes", async () => {
+    const duplicateA = {
+      id: "00000000-0000-4000-8000-000000000041",
+      userId: user.id,
+      title: "Public experiments keep asking for real rooms",
+      kind: "bridge",
+      why: "Ambient signal: public experiments need real rooms. Matched environment: A room where experiments can be visible. Anti-environment: private overthinking. Evidence rationale: The same source set supports it.",
+      beliefStatement: "public experiments need real rooms",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "en-US",
+      wowScore: 80,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const duplicateB = {
+      ...duplicateA,
+      id: "00000000-0000-4000-8000-000000000042",
+      title: "Real rooms keep asking for public experiments",
+      wowScore: 70,
+      createdAt: new Date("2026-05-29T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-29T11:00:00.000Z"),
+    };
+    const distinct = {
+      ...duplicateA,
+      id: "00000000-0000-4000-8000-000000000043",
+      title: "Quiet repair belongs near neighbors",
+      kind: "tension",
+      why: "Ambient signal: quiet repair belongs near neighbors. Matched environment: a street-level place. Anti-environment: abstract civic talk. Evidence rationale: Different signals support it.",
+      beliefStatement: "quiet repair belongs near neighbors",
+      createdAt: new Date("2026-05-28T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-28T11:00:00.000Z"),
+    };
+    const sourceA = "00000000-0000-4000-8000-000000000101";
+    const sourceB = "00000000-0000-4000-8000-000000000102";
+    const relatedRows = [duplicateA, duplicateB, distinct].flatMap((moment) =>
+      (moment.id === distinct.id ? ["00000000-0000-4000-8000-000000000103"] : [sourceA, sourceB]).map(
+        (inspirationId, index) => ({
+          wowMomentId: moment.id,
+          inspirationId,
+          role: "Source signal",
+          reason: "This source supports the note.",
+          sortOrder: index,
+          inspirationText: `source ${inspirationId}`,
+          inspirationKind: "note",
+          inspirationCreatedAt: new Date("2026-05-29T10:00:00.000Z"),
+          inspirationWowScore: 64,
+        }),
+      ),
+    );
+    const momentsSelect = createMomentsSelect([duplicateA, duplicateB, distinct]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect(relatedRows))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "en-US",
+    });
+
+    expect(notes.map((note) => note.id)).toEqual([duplicateA.id, distinct.id]);
+  });
+
+  it("does not dedupe cross-user rows because list queries remain tenant scoped", async () => {
+    const sameTitleForSignedInUser = {
+      id: "00000000-0000-4000-8000-000000000051",
+      userId: user.id,
+      title: "A shared-looking title",
+      kind: "recurrence",
+      why: "Ambient signal: a shared-looking title. Matched environment: user room. Anti-environment: other room. Evidence rationale: tenant scoped.",
+      beliefStatement: "a shared-looking title",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "en-US",
+      wowScore: 80,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([sameTitleForSignedInUser]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const notes = await listTopOfMindNotesForUser(db as any, {
+      userId: user.id,
+      limit: 5,
+      preferredLocale: "en-US",
+    });
+
+    expect(notes.map((note) => note.id)).toEqual([sameTitleForSignedInUser.id]);
+  });
+
+  it("keeps a deduped note accessible through direct detail readback", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000061",
+      userId: user.id,
+      title: "Rooms where unfinished ambition is allowed",
+      kind: "recurrence",
+      why: "Ambient signal: rooms where unfinished ambition is allowed. Matched environment: a room. Anti-environment: polished-only rooms. Evidence rationale: two signals.",
+      beliefStatement: "rooms where unfinished ambition is allowed",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      locale: "en-US",
+      wowScore: 50,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(createMomentByIdSelect([moment]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createFeedbackRowsSelect([])),
+    };
+
+    const note = await getTopOfMindNoteForUser(db as any, {
+      userId: user.id,
+      noteId: moment.id,
+      preferredLocale: "en-US",
+    });
+
+    expect(note).toMatchObject({
+      id: moment.id,
+      title: "rooms where unfinished ambition is allowed",
+    });
   });
 
   it("hides stale notes from top-of-mind list readback", async () => {
