@@ -142,15 +142,15 @@ async function openWowDetail(page: Page, timeoutMs: number): Promise<{ momentTit
   await detail.getByText("Where it came from").waitFor({ timeout: timeoutMs });
   await detail.getByText("Source trail").waitFor({ timeout: timeoutMs });
   const sourceCountText = ((await detail.locator(".wow-moment-source-count").first().textContent()) ?? "").trim();
-  assert(/^[23] sources?$/.test(sourceCountText), `Expected 2-3 source inspirations, saw "${sourceCountText}"`);
+  assert(/^[3-5] sources?$/.test(sourceCountText), `Expected 3-5 source inspirations, saw "${sourceCountText}"`);
 
   const sourceLabels = detail.locator(".wow-moment-detail-sources .wow-moment-related-label");
   const sourceLabelCount = await sourceLabels.count();
-  assert(sourceLabelCount >= 2 && sourceLabelCount <= 3, `Expected 2-3 source role labels, saw ${sourceLabelCount}`);
+  assert(sourceLabelCount >= 3 && sourceLabelCount <= 5, `Expected 3-5 source role labels, saw ${sourceLabelCount}`);
 
   const sourceQuotes = detail.locator(".wow-moment-detail-sources blockquote");
   const sourceQuoteCount = await sourceQuotes.count();
-  assert(sourceQuoteCount >= 2 && sourceQuoteCount <= 3, `Expected 2-3 source text blocks, saw ${sourceQuoteCount}`);
+  assert(sourceQuoteCount >= 3 && sourceQuoteCount <= 5, `Expected 3-5 source text blocks, saw ${sourceQuoteCount}`);
   assert(sourceQuoteCount === sourceLabelCount, `Expected source labels and text blocks to match, saw ${sourceLabelCount} labels and ${sourceQuoteCount} text blocks`);
   for (let i = 0; i < sourceQuoteCount; i += 1) {
     const sourceQuote = sourceQuotes.nth(i);

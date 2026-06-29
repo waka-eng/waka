@@ -33,7 +33,8 @@ import type { AmbitionDimension } from "./top-of-mind-notes.js";
 
 const DEFAULT_REFRESH_LIMIT = 5;
 const MAX_REFRESH_LIMIT = 20;
-const MAX_EVIDENCE_PER_NOTE = 3;
+const MIN_EVIDENCE_PER_NOTE = 3;
+const MAX_EVIDENCE_PER_NOTE = 5;
 const MAX_TITLE_CHARS = 120;
 const MAX_REASON_CHARS = 180;
 
@@ -385,8 +386,8 @@ export function rankTopOfMindRefreshCandidates(input: {
     })
     .filter(
       (candidate) =>
-        candidate.evidence.length > 0 &&
-        candidate.node.evidenceCount > 0 &&
+        candidate.evidence.length >= MIN_EVIDENCE_PER_NOTE &&
+        candidate.node.evidenceCount >= MIN_EVIDENCE_PER_NOTE &&
         !existing.has(candidate.idempotencyKey),
     )
     .sort(

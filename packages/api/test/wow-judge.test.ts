@@ -1140,6 +1140,8 @@ describe("GeminiWowJudgeClient", () => {
     expect(requestText).toContain("Could not safely repair prior top-of-mind judge output.");
     expect(requestText).toContain("Never include why on false");
     expect(requestText).toContain("false debugSummary <= 120 chars");
+    expect(requestText).toContain("has fewer than 3 unique allowed signals");
+    expect(requestText).not.toContain("has fewer than 2 unique allowed signals");
     expect(requestText).not.toContain("Decide whether");
     expect(requestText).not.toContain("archive");
     expect(userPrompt.fallbackFalse).toEqual({
@@ -1220,8 +1222,8 @@ describe("GeminiWowJudgeClient", () => {
     );
     expect(request.generationConfig.maxOutputTokens).toBeGreaterThan(0);
     expect(request.generationConfig.maxOutputTokens).toBe(1536);
-    expect(MAX_WOW_MOMENT_SOURCE_LINKS).toBe(3);
-    expect(requestText).toContain("2 to 3 signals total");
+    expect(MAX_WOW_MOMENT_SOURCE_LINKS).toBe(5);
+    expect(requestText).toContain("3 to 5 signals total");
     expect(requestText).toContain("trigger first");
     expect(requestText).not.toContain("10-source");
     expect(wowFalseReasonValues).toContain("invalid_judge_json");
@@ -1618,7 +1620,7 @@ describe("judgeWowMomentForInspiration", () => {
     expect(await countWowMomentLinks(testDb)).toBe(0);
   });
 
-  it("does not persist a true judgment with fewer than two unique source inspirations", async () => {
+  it("does not persist a true judgment with fewer than three unique source inspirations", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Trigger: one lonely source should not become a WOW card.",
@@ -1653,14 +1655,14 @@ describe("judgeWowMomentForInspiration", () => {
       judgment: {
         isWowMoment: false,
         reason: "not_enough_candidates",
-        debugSummary: "top-of-mind notes require at least two unique source signals.",
+        debugSummary: "top-of-mind notes require at least three unique source signals.",
       },
     });
     expect(await countWowMoments(testDb)).toBe(0);
     expect(await countWowMomentLinks(testDb)).toBe(0);
   });
 
-  it("caps persisted WOW source links at trigger plus two strongest returned related sources", async () => {
+  it("caps persisted WOW source links at trigger plus four strongest returned related sources", async () => {
     const alice = await createUserFixture(testDb.db);
     const trigger = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Trigger: community memory in libraries.",
@@ -1674,10 +1676,18 @@ describe("judgeWowMomentForInspiration", () => {
     const candidateC = await createInspirationFixture(testDb.db, alice.user.id, {
       text: "Candidate C: neighborhood archives preserve local context.",
     });
+    const candidateD = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate D: oral histories keep civic memory alive.",
+    });
+    const candidateE = await createInspirationFixture(testDb.db, alice.user.id, {
+      text: "Candidate E: museum basements hold extra memory context.",
+    });
     await createEmbedding(testDb, trigger, [1, 0]);
     await createEmbedding(testDb, candidateA, [1, 0]);
     await createEmbedding(testDb, candidateB, [1, 0]);
     await createEmbedding(testDb, candidateC, [1, 0]);
+    await createEmbedding(testDb, candidateD, [1, 0]);
+    await createEmbedding(testDb, candidateE, [1, 0]);
 
     const result = await persistWowMomentForInspirationJudgment({
       db: testDb.db,
@@ -1690,12 +1700,20 @@ describe("judgeWowMomentForInspiration", () => {
         title: "Community Memory Infrastructure",
         why: "The sources connect neighborhood, ecological, and tool memory.",
         beliefStatement: "places where shared memory feels more alive",
-        relatedInspirationIds: [candidateA.id, candidateB.id, candidateC.id],
+        relatedInspirationIds: [
+          candidateA.id,
+          candidateB.id,
+          candidateC.id,
+          candidateD.id,
+          candidateE.id,
+        ],
         sourceEvidence: [
           { inspirationId: trigger.id, role: "The trigger signal", reason: "This source anchors the community-memory pattern." },
           { inspirationId: candidateA.id, role: "The strongest mirror", reason: "This source is the first ordered related source returned by the judge." },
           { inspirationId: candidateB.id, role: "The second mirror", reason: "This source is the second ordered related source returned by the judge." },
-          { inspirationId: candidateC.id, role: "The extra mirror", reason: "This source should be dropped from persisted links by the cap." },
+          { inspirationId: candidateC.id, role: "The third mirror", reason: "This source is the third ordered related source returned by the judge." },
+          { inspirationId: candidateD.id, role: "The fourth mirror", reason: "This source is the fourth ordered related source returned by the judge." },
+          { inspirationId: candidateE.id, role: "The extra mirror", reason: "This source should be dropped from persisted links by the cap." },
         ],
       },
     });
@@ -1705,17 +1723,27 @@ describe("judgeWowMomentForInspiration", () => {
       trigger.id,
       candidateA.id,
       candidateB.id,
+      candidateC.id,
+      candidateD.id,
     ]);
     expect(result.persisted && result.judgment.sourceEvidence.map((source) => source.inspirationId)).toEqual([
       trigger.id,
       candidateA.id,
       candidateB.id,
+      candidateC.id,
+      candidateD.id,
     ]);
     expect(await countWowMoments(testDb)).toBe(1);
-    expect(await countWowMomentLinks(testDb)).toBe(3);
+    expect(await countWowMomentLinks(testDb)).toBe(5);
     const links = await listWowMomentLinks(testDb, result.persisted ? result.wowMoment.id : "");
-    expect(links.map((link) => link.inspiration_id)).toEqual([trigger.id, candidateA.id, candidateB.id]);
-    expect(links.map((link) => link.sort_order)).toEqual([0, 1, 2]);
+    expect(links.map((link) => link.inspiration_id)).toEqual([
+      trigger.id,
+      candidateA.id,
+      candidateB.id,
+      candidateC.id,
+      candidateD.id,
+    ]);
+    expect(links.map((link) => link.sort_order)).toEqual([0, 1, 2, 3, 4]);
   });
 
   it("does not persist anything for a false judgment and returns a clear no-op", async () => {

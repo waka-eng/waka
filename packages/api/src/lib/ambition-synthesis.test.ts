@@ -70,6 +70,12 @@ function candidates(): TopOfMindRefreshCandidate[] {
         sparkText: "friends who make shipping less weird",
         createdAt: new Date("2026-05-29T10:00:00.000Z"),
       }),
+      evidence({
+        meaningNodeId: "public-building-room",
+        inspirationId: "signal-3",
+        sparkText: "third public building signal",
+        createdAt: new Date("2026-05-28T10:00:00.000Z"),
+      }),
     ],
   });
 }
@@ -94,7 +100,7 @@ describe("bounded ambition synthesis", () => {
     });
 
     expect(input.synthesisKey).toContain("ambition_synthesis:v1");
-    expect(input.selectedSignals).toHaveLength(2);
+    expect(input.selectedSignals).toHaveLength(3);
     expect(input.selectedSignals[0]).toMatchObject({
       id: "signal-1",
       highlight: "building in public feels normal here",
@@ -112,7 +118,7 @@ describe("bounded ambition synthesis", () => {
     expect(input.estimatedTokens).toBeLessThanOrEqual(input.tokenBudget);
   });
 
-  it("runs the bulk weekly_refresh on every ranked candidate but keeps the 2-signal floor on narrow triggers", () => {
+  it("runs the bulk weekly_refresh on every ranked candidate but keeps the legacy evidence floor on narrow triggers", () => {
     const [candidate] = candidates();
 
     expect(
@@ -142,7 +148,7 @@ describe("bounded ambition synthesis", () => {
         trigger: "explicit_deep_dive",
       }),
     ).toBe(true);
-    // Narrow triggers still require at least two supporting signals.
+    // Narrow ambition-synthesis triggers still require their legacy multi-signal evidence floor.
     expect(
       shouldRunAmbitionSynthesis({
         candidate: thinCandidate,
