@@ -103,9 +103,9 @@ function trueJudgment(overrides: Partial<Extract<WowMomentJudgment, { isWowMomen
     isWowMoment: true,
     kind: "bridge",
     title: "Rooms where unfinished ambition is allowed",
-    why: "Two signals connect public experiments with rooms where unfinished ambition can be shown.",
+    why: "Three signals connect public experiments with rooms where unfinished ambition can be shown.",
     beliefStatement: "rooms where unfinished ambition is allowed",
-    relatedInspirationIds: [triggerId, relatedId],
+    relatedInspirationIds: [triggerId, relatedId, otherRelatedId],
     sourceEvidence: [
       {
         inspirationId: triggerId,
@@ -116,6 +116,11 @@ function trueJudgment(overrides: Partial<Extract<WowMomentJudgment, { isWowMomen
         inspirationId: relatedId,
         role: "The practice",
         reason: "Connects public experiments to real rooms.",
+      },
+      {
+        inspirationId: otherRelatedId,
+        role: "The neighbor signal",
+        reason: "Adds street-level repair as a third grounded source.",
       },
     ],
     ...overrides,
@@ -129,7 +134,7 @@ function existingMoment(overrides: Record<string, unknown> = {}) {
     title: "Rooms where unfinished ambition is allowed.",
     kind: "bridge",
     idempotencyKey: "existing-key",
-    why: "Two signals connect public experiments with rooms where unfinished ambition can be shown.",
+    why: "Three signals connect public experiments with rooms where unfinished ambition can be shown.",
     beliefStatement: "rooms where unfinished ambition is allowed",
     reflectionQuestion: null,
     reflectionGuide: null,
@@ -165,6 +170,17 @@ function buildDb(params: { duplicateRows?: unknown[]; createdMoment?: unknown })
       createdAt: new Date("2026-06-03T10:00:00.000Z"),
       updatedAt: new Date("2026-06-03T10:00:00.000Z"),
     },
+    {
+      id: "link-3",
+      userId,
+      wowMomentId: "00000000-0000-4000-8000-000000000201",
+      inspirationId: otherRelatedId,
+      role: "The neighbor signal",
+      reason: "Adds street-level repair.",
+      sortOrder: 2,
+      createdAt: new Date("2026-06-03T10:00:00.000Z"),
+      updatedAt: new Date("2026-06-03T10:00:00.000Z"),
+    },
   ];
   const tx = {
     insert: vi.fn().mockReturnValueOnce(insertChain([params.createdMoment])).mockReturnValueOnce(linkInsertChain()),
@@ -196,6 +212,7 @@ describe("persistWowMomentForInspirationJudgment duplicate guard", () => {
       duplicateRows: [
         { moment: duplicate, inspirationId: triggerId },
         { moment: duplicate, inspirationId: relatedId },
+        { moment: duplicate, inspirationId: otherRelatedId },
       ],
     });
 
@@ -220,6 +237,7 @@ describe("persistWowMomentForInspirationJudgment duplicate guard", () => {
       duplicateRows: [
         { moment: duplicate, inspirationId: triggerId },
         { moment: duplicate, inspirationId: relatedId },
+        { moment: duplicate, inspirationId: otherRelatedId },
       ],
     });
 
@@ -253,14 +271,19 @@ describe("persistWowMomentForInspirationJudgment duplicate guard", () => {
       judgment: trueJudgment({
         kind: "tension",
         title: "Quiet repair belongs near neighbors",
-        why: "Two signals connect repair with street-level neighbor care.",
+        why: "Three signals connect repair with street-level neighbor care.",
         beliefStatement: "quiet repair belongs near neighbors",
-        relatedInspirationIds: [triggerId, otherRelatedId],
+        relatedInspirationIds: [triggerId, relatedId, otherRelatedId],
         sourceEvidence: [
           {
             inspirationId: triggerId,
             role: "The atmosphere",
             reason: "Shows the room where care starts.",
+          },
+          {
+            inspirationId: relatedId,
+            role: "The practice",
+            reason: "Connects public experiments to real rooms.",
           },
           {
             inspirationId: otherRelatedId,

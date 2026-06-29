@@ -18,7 +18,7 @@ function node(
     description: "",
     weight: 100,
     confidence: 50,
-    evidenceCount: 2,
+    evidenceCount: 3,
     firstSeenAt: new Date("2026-05-01T10:00:00.000Z"),
     lastReinforcedAt: new Date("2026-05-30T10:00:00.000Z"),
     ...input,
@@ -37,6 +37,22 @@ function evidence(
     sparkText: "life around the work",
     ...input,
   };
+}
+
+function evidenceBundle(
+  meaningNodeId: string,
+  prefix: string,
+  count = 3,
+): TopOfMindRefreshEvidenceInput[] {
+  return Array.from({ length: count }, (_, index) =>
+    evidence({
+      meaningNodeId,
+      inspirationId: `${prefix}-${index + 1}`,
+      weight: 70 - index,
+      sparkText: `${prefix} supporting signal ${index + 1}`,
+      createdAt: new Date(`2026-05-${30 - index}T10:00:00.000Z`),
+    }),
+  );
 }
 
 class QueryStub<T> implements PromiseLike<T> {
@@ -80,7 +96,7 @@ function refreshDbStub(preferredLocale = "en-US") {
         description: "Signals keep returning to places where ambition feels social.",
         weight: 160,
         confidence: 72,
-        evidenceCount: 2,
+        evidenceCount: 3,
       }),
     ],
     [
@@ -89,6 +105,11 @@ function refreshDbStub(preferredLocale = "en-US") {
         meaningNodeId: "public-building-room",
         inspirationId: "signal-2",
         sparkText: "friends who make shipping less weird",
+      }),
+      evidence({
+        meaningNodeId: "public-building-room",
+        inspirationId: "signal-3",
+        sparkText: "third room signal",
       }),
     ],
     [],
@@ -142,27 +163,27 @@ describe("rankTopOfMindRefreshCandidates", () => {
           type: "theme",
           label: "generic taste in studio spaces",
           weight: 60,
-          evidenceCount: 2,
+          evidenceCount: 3,
         }),
         node({
           id: "project-node",
           type: "project",
           label: "build a quieter research room",
           weight: 180,
-          evidenceCount: 2,
+          evidenceCount: 3,
         }),
         node({
           id: "tension-node",
           type: "tension",
           label: "wanting solitude and wanting collaborators",
           weight: 160,
-          evidenceCount: 2,
+          evidenceCount: 3,
         }),
       ],
       evidence: [
-        evidence({ meaningNodeId: "theme-node", inspirationId: "signal-theme" }),
-        evidence({ meaningNodeId: "project-node", inspirationId: "signal-project" }),
-        evidence({ meaningNodeId: "tension-node", inspirationId: "signal-tension" }),
+        ...evidenceBundle("theme-node", "signal-theme"),
+        ...evidenceBundle("project-node", "signal-project"),
+        ...evidenceBundle("tension-node", "signal-tension"),
       ],
     });
 
@@ -211,6 +232,13 @@ describe("rankTopOfMindRefreshCandidates", () => {
         }),
         evidence({
           meaningNodeId: "recurring-question",
+          inspirationId: "signal-older",
+          weight: 45,
+          createdAt: new Date("2026-04-30T10:00:00.000Z"),
+          sparkText: "older supporting proof",
+        }),
+        evidence({
+          meaningNodeId: "recurring-question",
           inspirationId: "signal-strong",
           weight: 90,
           createdAt: new Date("2026-05-30T09:00:00.000Z"),
@@ -238,11 +266,12 @@ describe("rankTopOfMindRefreshCandidates", () => {
       state: "active",
       reinforcementCount: 4,
       recentReinforcementCount: 2,
-      supportingSignalIds: ["signal-strong", "signal-old"],
+      supportingSignalIds: ["signal-strong", "signal-old", "signal-older"],
     });
     expect(candidates[0]?.evidence.map((row) => row.inspirationId)).toEqual([
       "signal-strong",
       "signal-old",
+      "signal-older",
     ]);
   });
 
@@ -267,8 +296,8 @@ describe("rankTopOfMindRefreshCandidates", () => {
         }),
       ],
       evidence: [
-        evidence({ meaningNodeId: "already-noted", inspirationId: "signal-a" }),
-        evidence({ meaningNodeId: "fresh-node", inspirationId: "signal-b" }),
+        ...evidenceBundle("already-noted", "signal-a"),
+        ...evidenceBundle("fresh-node", "signal-b"),
       ],
     });
 
@@ -313,9 +342,27 @@ describe("rankTopOfMindRefreshCandidates", () => {
           weight: 80,
         }),
         evidence({
+          meaningNodeId: "founder-cities",
+          inspirationId: "signal-city-3",
+          sparkText: "third public building signal",
+          weight: 60,
+        }),
+        evidence({
           meaningNodeId: "consensus-tension",
           inspirationId: "signal-rejection-1",
           sparkText: "leaving consensus rooms",
+        }),
+        evidence({
+          meaningNodeId: "consensus-tension",
+          inspirationId: "signal-rejection-2",
+          sparkText: "not smoothing over truth",
+          weight: 60,
+        }),
+        evidence({
+          meaningNodeId: "consensus-tension",
+          inspirationId: "signal-rejection-3",
+          sparkText: "rooms that reward aliveness",
+          weight: 50,
         }),
       ],
     });
@@ -378,7 +425,7 @@ describe("rankTopOfMindRefreshCandidates", () => {
           id: "static-active",
           type: "theme",
           label: "generic productivity systems",
-          weight: 260,
+          weight: 160,
           confidence: 75,
           evidenceCount: 5,
           firstSeenAt: new Date("2026-04-01T10:00:00.000Z"),
@@ -396,11 +443,7 @@ describe("rankTopOfMindRefreshCandidates", () => {
         }),
       ],
       evidence: [
-        evidence({
-          meaningNodeId: "static-active",
-          inspirationId: "signal-static",
-          createdAt: new Date("2026-05-25T10:00:00.000Z"),
-        }),
+        ...evidenceBundle("static-active", "signal-static"),
         evidence({
           meaningNodeId: "returned-after-dormancy",
           inspirationId: "signal-return",
@@ -412,6 +455,12 @@ describe("rankTopOfMindRefreshCandidates", () => {
           inspirationId: "signal-old",
           createdAt: new Date("2026-02-01T10:00:00.000Z"),
           sparkText: "an older version of this same pull",
+        }),
+        evidence({
+          meaningNodeId: "returned-after-dormancy",
+          inspirationId: "signal-middle",
+          createdAt: new Date("2026-01-15T10:00:00.000Z"),
+          sparkText: "a third returning signal",
         }),
       ],
     });

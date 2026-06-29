@@ -312,7 +312,7 @@ export function shouldRunAmbitionSynthesis(input: {
   const candidate = input.candidate;
   // explicit_deep_dive and the bulk weekly_refresh both intentionally synthesize
   // thin (single-signal) candidates: the refresh wants real LLM text on every
-  // ranked note. Other triggers keep the 2-signal floor. Production refresh
+  // ranked note. Other triggers keep the legacy multi-signal evidence floor. Production refresh
   // surfaces synthesis failure instead of silently converting it into a
   // deterministic note.
   if (

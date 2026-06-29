@@ -7,6 +7,7 @@ const db = {} as never;
 const userId = "00000000-0000-4000-8000-000000000001";
 const inspirationId = "00000000-0000-4000-8000-000000000002";
 const relatedId = "00000000-0000-4000-8000-000000000003";
+const secondRelatedId = "00000000-0000-4000-8000-000000000004";
 
 function unchangedEmbeddingResult() {
   return {
@@ -25,12 +26,22 @@ describe("generateAutoWowMomentForInspiration", () => {
       title: "Bridge",
       why: "These ideas connect.",
       beliefStatement: "I think bridges make ideas feel more humane.",
-      relatedInspirationIds: [relatedId],
+      relatedInspirationIds: [inspirationId, relatedId, secondRelatedId],
       sourceEvidence: [
+        {
+          inspirationId,
+          role: "The trigger",
+          reason: "This source supplies the initial humane bridge signal.",
+        },
         {
           inspirationId: relatedId,
           role: "The bridge",
           reason: "This source supplies the connected idea.",
+        },
+        {
+          inspirationId: secondRelatedId,
+          role: "The echo",
+          reason: "This source grounds the second related signal in the pattern.",
         },
       ],
     };
@@ -71,12 +82,22 @@ describe("generateAutoWowMomentForInspiration", () => {
       title: "Again",
       why: "It repeats.",
       beliefStatement: "I might value the signals that keep recurring.",
-      relatedInspirationIds: [relatedId],
+      relatedInspirationIds: [inspirationId, relatedId, secondRelatedId],
       sourceEvidence: [
+        {
+          inspirationId,
+          role: "The trigger",
+          reason: "This source names the recurring signal that starts the pattern.",
+        },
         {
           inspirationId: relatedId,
           role: "The repeated signal",
           reason: "This source shows the pattern returning.",
+        },
+        {
+          inspirationId: secondRelatedId,
+          role: "The confirmation",
+          reason: "This source adds a second related signal for the recurrence.",
         },
       ],
     };

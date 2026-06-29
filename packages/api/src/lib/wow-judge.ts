@@ -44,7 +44,8 @@ const MAX_SOURCE_REASON_CHARS = 180;
 const MAX_OUTPUT_TOKENS = 3072;
 const MAX_REPAIR_OUTPUT_TOKENS = 1024;
 const MAX_BELIEF_STATEMENT_REPAIR_OUTPUT_TOKENS = 512;
-const MIN_WOW_MOMENT_SOURCE_LINKS = 2;
+export const MIN_WOW_MOMENT_SOURCE_LINKS = 3;
+export const MAX_WOW_MOMENT_SOURCE_LINKS = 5;
 const ENGLISH_POST_IT_THOUGHT_PATTERN =
   /^(?!you\b|your\b|this person\b|waka\b)(?!i need\b|i want\b|i am\b|i'm\b|i refuse\b|i am done with\b)(?!public before perfect$)(?!taste as default$)(?!test it outside$)(?!test it in public$)(?!courage normal$)(?=.*\b(people|peers|rooms?|places?|city|cities|civic|public|streets?|neighbors?|neighborhoods?|community|communities|commons|repair|maintenance|care|trust|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b)(?=.*\b(before|after|without|instead|than|where|when|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity|through|with|for|from|into|toward|between|possible|visible|repairable|starts?|feels?)\b).{3,120}$/i;
 const ENGLISH_SOFT_APHORISTIC_THOUGHT_PATTERN =
@@ -199,9 +200,9 @@ Scope rules:
    relatedInspirationIds, and sourceEvidence.inspirationId are retained legacy
    compatibility keys; fill them with signal ids from the trigger/candidates
    block only.
-3. Small-archive calibration: a true top-of-mind note must use 2 to 3 signals total,
-   with the trigger first and only the one or two tightest related sources after it.
-   If the strongest pattern has fewer than 2 total unique signals, return false.
+3. Small-archive calibration: a true top-of-mind note must use 3 to 5 signals total,
+   with the trigger first and only the two to four tightest related sources after it.
+   If the strongest pattern has fewer than 3 total unique signals, return false.
 4. Still return false for generic topical similarity, duplicate/rephrased notes,
    weak relationships, or repeated motivational overlap without a concrete new
    pattern/tension/bridge. Same-language or same-cluster Korean signals may be
@@ -211,7 +212,7 @@ Scope rules:
    prose before/after, no comments, no trailing commas. It must match one of
    these two shapes exactly:
    {"isWowMoment":false,"reason":"not_enough_candidates|generic_similarity|weak_relationship|duplicate_or_rephrasing|insufficient_surprise|unclear_pattern","debugSummary":"short developer-facing explanation"}
-   {"isWowMoment":true,"kind":"recurrence|bridge|surprise_bridge|tension|outlier","title":"...","why":"...","beliefStatement":"...","reflectionQuestion":"... optional ...","reflectionGuide":"... optional ...","relatedInspirationIds":["trigger id first","1-2 strongest related ids"],"sourceEvidence":[{"inspirationId":"...","role":"The atmosphere","reason":"..."}]}
+   {"isWowMoment":true,"kind":"recurrence|bridge|surprise_bridge|tension|outlier","title":"...","why":"...","beliefStatement":"...","reflectionQuestion":"... optional ...","reflectionGuide":"... optional ...","relatedInspirationIds":["trigger id first","2-4 strongest related ids"],"sourceEvidence":[{"inspirationId":"...","role":"The atmosphere","reason":"..."}]}
    Do not use invalid_judge_json; it is reserved for server-side parser failures.
 
 Allowed kind values:
@@ -245,7 +246,7 @@ or "I am done with" unless they sound natural and non-template-like.
 Natural Korean equivalents may stay softer, such as "...일지도 모릅니다",
 "...듯합니다", "...수 있습니다".
 Do not put signal ids or partial ids in why or beliefStatement; ids belong only in
-relatedInspirationIds and sourceEvidence.inspirationId. For true outputs, choose the tight 2 to 3 signals total pattern: trigger first, then at most two strongest/most necessary related candidate ids in returned order. Do not synthesize broad multi-source patterns archive summaries. For each related signal in true outputs, include sourceEvidence with a product-facing role label and concise why-it-matters reason grounded in that source. Good role labels: "The atmosphere", "The philosophy", "The practice", "The tension", "The repeated signal"; not primary/supporting/contrast/related, scores, IDs, dates, or classifier jargon. Do not repeat phrases. Prefer false over over-claiming.
+relatedInspirationIds and sourceEvidence.inspirationId. For true outputs, choose the tight 3 to 5 signals total pattern: trigger first, then two to four strongest/most necessary related candidate ids in returned order. Do not synthesize broad multi-source patterns archive summaries. For each related signal in true outputs, include sourceEvidence with a product-facing role label and concise why-it-matters reason grounded in that source. Good role labels: "The atmosphere", "The philosophy", "The practice", "The tension", "The repeated signal"; not primary/supporting/contrast/related, scores, IDs, dates, or classifier jargon. Do not repeat phrases. Prefer false over over-claiming.
 For false judgments, choose the most specific reason and keep debugSummary compact
 (<= 120 characters). False judgments must not include why. Do not include secrets
 or quote long user text.
@@ -360,9 +361,9 @@ function buildWowJudgeOutputContract() {
       enums: { kind: [...wowKindEnumValues] },
       sourceIdRules: {
         allowedIdsOnly: true,
-        totalCount: "2 to 3",
+        totalCount: "3 to 5",
         triggerIdMustBeFirst: true,
-        relatedCandidatesAfterTrigger: "at most 2",
+        relatedCandidatesAfterTrigger: "2 to 4",
         sourceEvidenceMustIncludeEveryRelatedInspirationId: true,
         sourceEvidenceOrderMustMatchRelatedInspirationIds: true,
       },
@@ -389,6 +390,8 @@ function buildWowJudgeOutputContract() {
 function buildWowJudgeValidExamples(allowedIds: string[]) {
   const triggerId = allowedIds[0] ?? "00000000-0000-4000-8000-000000000001";
   const candidateId = allowedIds[1] ?? "00000000-0000-4000-8000-000000000002";
+  const otherCandidateId =
+    allowedIds[2] ?? "00000000-0000-4000-8000-000000000003";
   return {
     false: {
       isWowMoment: false,
@@ -399,12 +402,12 @@ function buildWowJudgeValidExamples(allowedIds: string[]) {
       isWowMoment: true,
       kind: "bridge",
       title: "Rooms that make building feel possible",
-      why: "Two signals point to environments where unfinished ambition feels easier to show.",
+      why: "Three signals point to environments where unfinished ambition feels easier to show.",
       beliefStatement: "rooms where unfinished ambition is allowed",
       reflectionQuestion: "What kind of room makes this feel easier to test?",
       reflectionGuide:
         "Start here\nNotice what feels easier in these rooms.\n\nWhat this might be touching\nThere may be a pattern around safety, taste, and making work visible.\n\nQuestions to sit with\nWhere does building feel less lonely?",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -416,6 +419,11 @@ function buildWowJudgeValidExamples(allowedIds: string[]) {
           role: "The repeated signal",
           reason:
             "Echoes the desire for making work around people who make courage normal.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "The test outside",
+          reason: "Adds the need to test taste outside private drafts.",
         },
       ],
     },
@@ -438,7 +446,7 @@ function buildUserPrompt(input: WowJudgeInput): string {
   const locale = normalizeSupportedLocale(input.locale);
   const payload = {
     contractVersion: WOW_JUDGE_CONTRACT_VERSION,
-    task: "Judge whether the trigger signal plus the provided candidate signals form one grounded top-of-mind note. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least two unique allowed ids, or unsafe to claim.",
+    task: "Judge whether the trigger signal plus the provided candidate signals form one grounded top-of-mind note. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, or unsafe to claim.",
     locale: buildLocaleContract(locale),
     allowedIds,
     input: buildWowJudgeInputPayload(input),
@@ -517,13 +525,13 @@ export function buildWowJudgmentRequest(
               relatedInspirationIds: {
                 type: "ARRAY",
                 items: { type: "STRING" },
-                minItems: 2,
+                minItems: MIN_WOW_MOMENT_SOURCE_LINKS,
                 maxItems: MAX_WOW_MOMENT_SOURCE_LINKS,
-                description: "2 to 3 allowed ids total, with trigger first.",
+                description: "3 to 5 allowed ids total, with trigger first.",
               },
               sourceEvidence: {
                 type: "ARRAY",
-                minItems: 2,
+                minItems: MIN_WOW_MOMENT_SOURCE_LINKS,
                 maxItems: MAX_WOW_MOMENT_SOURCE_LINKS,
                 items: {
                   type: "OBJECT",
@@ -600,7 +608,7 @@ export function buildWowRepairJudgmentRequest(
     systemInstruction: {
       parts: [
         {
-          text: `Repair malformed top-of-mind judge output into schema-valid JSON only. Use the same ${WOW_JUDGE_CONTRACT_VERSION} output contract carried in the user payload. Do not create a new judgment; preserve the prior output's semantic true/false decision only when it can be safely repaired using the provided original trigger/candidates and allowedIds. If the prior output is ambiguous, truncated beyond repair, repetitive, false/unsafe, has fewer than 2 unique allowed signals, uses ids outside allowedIds, or cannot be safely repaired, return fallbackFalse exactly. Never use invalid_judge_json; it is reserved for server-side parser failures. Never include why on false. Return exactly one compact JSON object and nothing else.`,
+          text: `Repair malformed top-of-mind judge output into schema-valid JSON only. Use the same ${WOW_JUDGE_CONTRACT_VERSION} output contract carried in the user payload. Do not create a new judgment; preserve the prior output's semantic true/false decision only when it can be safely repaired using the provided original trigger/candidates and allowedIds. If the prior output is ambiguous, truncated beyond repair, repetitive, false/unsafe, has fewer than 3 unique allowed signals, uses ids outside allowedIds, or cannot support every true-output field from originalInput, return fallbackFalse exactly. Never include why on false. Keep false debugSummary <= 120 chars.`,
         },
       ],
     },
@@ -612,7 +620,7 @@ export function buildWowRepairJudgmentRequest(
             text: JSON.stringify({
               contractVersion: WOW_JUDGE_CONTRACT_VERSION,
               repairTask:
-                "Repair structure only. Do not create a new judgment. Return JSON only. Use fallbackFalse exactly when unsafe. For true output, preserve/repair only fields already grounded in originalInput, select 2 to 3 total relatedInspirationIds only from allowedIds with trigger first and at most two strongest related ids, and include sourceEvidence for every relatedInspirationIds value in order. If sourceEvidence is missing or incomplete, repair it from originalInput; if you cannot, use fallbackFalse.",
+                "Repair structure only. Do not create a new judgment. Return JSON only. Use fallbackFalse exactly when unsafe. For true output, preserve/repair only fields already grounded in originalInput, select 3 to 5 total relatedInspirationIds only from allowedIds with trigger first and two to four strongest related ids, and include sourceEvidence for every relatedInspirationIds value in order. If sourceEvidence is missing or incomplete, repair it from originalInput; if you cannot, use fallbackFalse.",
               locale: basePrompt.locale,
               allowedIds,
               outputContract:
@@ -811,9 +819,10 @@ export function normalizeWowSourceEvidence(
   });
 }
 
-const sourceEvidenceSchema = z.array(
-  z
-    .object({
+const sourceEvidenceSchema = z
+  .array(
+    z
+      .object({
       inspirationId: z.string().uuid(),
       role: z
         .string()
@@ -836,8 +845,10 @@ const sourceEvidenceSchema = z.array(
           "sourceEvidence reason must be product-facing",
         ),
     })
-    .strict(),
-);
+      .strict(),
+  )
+  .min(MIN_WOW_MOMENT_SOURCE_LINKS)
+  .max(MAX_WOW_MOMENT_SOURCE_LINKS);
 
 const trueJudgmentSchema = z
   .object({
@@ -876,7 +887,10 @@ const trueJudgmentSchema = z
       .transform(sanitizeReflectionGuideText)
       .pipe(z.string().min(1).max(MAX_REFLECTION_GUIDE_CHARS))
       .optional(),
-    relatedInspirationIds: z.array(z.string().uuid()).min(1),
+    relatedInspirationIds: z
+      .array(z.string().uuid())
+      .min(MIN_WOW_MOMENT_SOURCE_LINKS)
+      .max(MAX_WOW_MOMENT_SOURCE_LINKS),
     sourceEvidence: sourceEvidenceSchema,
   })
   .strict()
@@ -1768,8 +1782,6 @@ export interface PersistWowMomentForInspirationParams {
   locale?: SupportedLocale;
 }
 
-export const MAX_WOW_MOMENT_SOURCE_LINKS = 3;
-
 async function loadPromptReflectionTextByInspiration(
   db: WakaDb,
   userId: string,
@@ -1934,7 +1946,7 @@ function tooFewSourceLinksFalseJudgment(): Extract<
 > {
   return defaultFalseJudgment(
     "not_enough_candidates",
-    "top-of-mind notes require at least two unique source signals.",
+    "top-of-mind notes require at least three unique source signals.",
   );
 }
 

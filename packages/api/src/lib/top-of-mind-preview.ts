@@ -13,7 +13,7 @@ import { normalizeContextNodeType } from "./context-node-types.js";
 const MAX_PREVIEW_LENGTH = 180;
 const TOP_NODE_LIMIT = 6;
 const TOP_EDGE_LIMIT = 3;
-const SUPPORTING_INSPIRATION_LIMIT = 2;
+const SUPPORTING_INSPIRATION_LIMIT = 5;
 
 export interface TopOfMindNodeInput {
   id: string;
