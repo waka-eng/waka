@@ -106,6 +106,7 @@ describe("wow judge concrete contract", () => {
     expect(payload.validExamples.true.relatedInspirationIds).toEqual([
       triggerId,
       candidateId,
+      otherCandidateId,
     ]);
   });
 
@@ -161,10 +162,13 @@ describe("wow judge concrete contract", () => {
     ).toThrow(GeminiWowJudgeValidationError);
   });
 
-  it("repair prompts reuse the same contract and fallback false object", () => {
+  it("repair prompts reuse the same contract, min-source floor, and fallback false object", () => {
     const request = buildWowRepairJudgmentRequest("not json", sampleInput);
+    const requestText = JSON.stringify(request);
     const payload = JSON.parse(request.contents[0]?.parts[0]?.text ?? "{}");
 
+    expect(requestText).toContain("has fewer than 3 unique allowed signals");
+    expect(requestText).not.toContain("has fewer than 2 unique allowed signals");
     expect(payload.contractVersion).toBe("wow_judge_v1");
     expect(payload.allowedIds).toEqual([
       triggerId,
@@ -205,7 +209,7 @@ describe("wow judge concrete contract", () => {
           title: "Rooms that make building feel possible",
           why: "Two signals point to environments where unfinished ambition feels easier to show.",
           beliefStatement: "rooms where unfinished ambition is allowed",
-          relatedInspirationIds: [triggerId, candidateId],
+          relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
           sourceEvidence: [
             {
               inspirationId: triggerId,
@@ -219,6 +223,11 @@ describe("wow judge concrete contract", () => {
               reason:
                 "Echoes the desire for building near people who make courage normal.",
             },
+            {
+              inspirationId: otherCandidateId,
+              role: "The outside test",
+              reason: "Adds taste getting sharper outside private drafts.",
+            },
           ],
         }),
       ),
@@ -226,7 +235,7 @@ describe("wow judge concrete contract", () => {
     expect(trueJudgment).toMatchObject({
       isWowMoment: true,
       kind: "bridge",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
     });
   });
 
@@ -245,7 +254,7 @@ describe("wow judge concrete contract", () => {
             title: "Quiet Growth",
             why: "Two signals connect release with deliberate future-building.",
             beliefStatement,
-            relatedInspirationIds: [triggerId, candidateId],
+            relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
             sourceEvidence: [
               {
                 inspirationId: triggerId,
@@ -256,6 +265,11 @@ describe("wow judge concrete contract", () => {
                 inspirationId: candidateId,
                 role: "The daily practice",
                 reason: "Grounds future-building in daily choices.",
+              },
+              {
+                inspirationId: otherCandidateId,
+                role: "The outside test",
+                reason: "Adds taste getting sharper outside private drafts.",
               },
             ],
           }),
@@ -310,6 +324,7 @@ describe("wow judge concrete contract", () => {
           ...sampleInput.candidates[0]!,
           text: "무언가를 억지로 붙잡지 않을 때 새로운 만남과 가능성이 자연스럽게 들어온다.",
         },
+        sampleInput.candidates[1]!,
       ],
     };
     const truncatedKoreanTruePrefix = `{"isWowMoment":true,"kind":"bridge","title":"비움과 채움의 자연스러운 리듬","why":"두 신호는 붙잡기보다 흐름을 신뢰할 때 새로운 가능성이 들어오는 감각을 함께 보여줍니다.","beliefStatement":"비움과 채움이 자연스럽게 이어질 수 있습니다","reflectionQuestion":"지금 무엇을 조금 덜 붙잡아도 괜찮을까요?","reflectionGuide":"여기서 시작해 보세요\\n이 신호들이 말하는 흐름의 감각을 천천히 살펴보세요.`;
@@ -347,6 +362,7 @@ describe("wow judge concrete contract", () => {
           ...sampleInput.candidates[0]!,
           text: "무언가를 억지로 붙잡지 않을 때 새로운 만남과 가능성이 자연스럽게 들어온다.",
         },
+        sampleInput.candidates[1]!,
       ],
     };
     const groundedKoreanTruePrefix = JSON.stringify({
@@ -355,7 +371,7 @@ describe("wow judge concrete contract", () => {
       title: "비움과 채움의 자연스러운 리듬",
       why: "두 신호는 붙잡기보다 흐름을 신뢰할 때 새로운 가능성이 들어오는 감각을 함께 보여줍니다.",
       beliefStatement: "비움과 채움이 자연스럽게 이어질 수 있습니다",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -366,6 +382,11 @@ describe("wow judge concrete contract", () => {
           inspirationId: candidateId,
           role: "덜 붙잡는 가능성",
           reason: "억지로 붙잡지 않을 때 새로운 만남이 들어온다는 신호를 보탭니다.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "다른 시험의 감각",
+          reason: "사적인 초안 밖에서 감각을 시험하는 신호를 보탭니다.",
         },
       ],
     }).replace(/}$/, ',"reflectionGuide":"여기서 시작해 보세요\\n이 흐름의 감각을 천천히 살펴보세요.');
@@ -387,7 +408,7 @@ describe("wow judge concrete contract", () => {
       kind: "bridge",
       title: "비움과 채움의 자연스러운 리듬",
       beliefStatement: "비움과 채움이 자연스럽게 이어질 수 있습니다",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -398,6 +419,11 @@ describe("wow judge concrete contract", () => {
           inspirationId: candidateId,
           role: "덜 붙잡는 가능성",
           reason: "억지로 붙잡지 않을 때 새로운 만남이 들어온다는 신호를 보탭니다.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "다른 시험의 감각",
+          reason: "사적인 초안 밖에서 감각을 시험하는 신호를 보탭니다.",
         },
       ],
     });
@@ -432,6 +458,7 @@ describe("wow judge concrete contract", () => {
           ...sampleInput.candidates[0]!,
           text: "붙잡지 않을 때 새로운 인연과 가능성이 들어올 공간이 생긴다.",
         },
+        sampleInput.candidates[1]!,
       ],
     };
     const hardBeliefPayload = JSON.stringify({
@@ -440,7 +467,7 @@ describe("wow judge concrete contract", () => {
       title: "관계가 자연스럽게 이어지는 흐름",
       why: "두 신호는 억지로 붙잡기보다 관계와 가능성이 들어올 공간을 남기는 감각을 함께 보여줍니다.",
       beliefStatement: "당신은 반드시 관계를 자연스럽게 이어가는 사람입니다",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -451,6 +478,11 @@ describe("wow judge concrete contract", () => {
           inspirationId: candidateId,
           role: "붙잡지 않는 공간",
           reason: "덜 붙잡을 때 새로운 가능성이 들어온다는 흐름을 보탭니다.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "다른 시험의 감각",
+          reason: "사적인 초안 밖에서 감각을 시험하는 신호를 보탭니다.",
         },
       ],
     });
@@ -477,7 +509,7 @@ describe("wow judge concrete contract", () => {
       title: "관계가 자연스럽게 이어지는 흐름",
       why: "두 신호는 억지로 붙잡기보다 관계와 가능성이 들어올 공간을 남기는 감각을 함께 보여줍니다.",
       beliefStatement: "관계가 자연스럽게 이어질 수 있습니다",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -488,6 +520,11 @@ describe("wow judge concrete contract", () => {
           inspirationId: candidateId,
           role: "붙잡지 않는 공간",
           reason: "덜 붙잡을 때 새로운 가능성이 들어온다는 흐름을 보탭니다.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "다른 시험의 감각",
+          reason: "사적인 초안 밖에서 감각을 시험하는 신호를 보탭니다.",
         },
       ],
     });
@@ -501,7 +538,7 @@ describe("wow judge concrete contract", () => {
       title: "관계가 자연스럽게 이어지는 흐름",
       why: "두 신호는 관계와 가능성이 들어올 공간을 남기는 감각을 함께 보여줍니다.",
       beliefStatement: "당신은 반드시 관계를 자연스럽게 이어가는 사람입니다",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -512,6 +549,11 @@ describe("wow judge concrete contract", () => {
           inspirationId: candidateId,
           role: "붙잡지 않는 공간",
           reason: "덜 붙잡을 때 새로운 가능성이 들어온다는 흐름을 보탭니다.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "다른 시험의 감각",
+          reason: "사적인 초안 밖에서 감각을 시험하는 신호를 보탭니다.",
         },
       ],
     });
@@ -549,7 +591,7 @@ describe("wow judge concrete contract", () => {
       title: "Civic repair through visible care",
       why: "The signals connect civic maintenance with neighbors making repair feel possible.",
       beliefStatement: "I need civic repair to become visible neighbor care",
-      relatedInspirationIds: [triggerId, candidateId],
+      relatedInspirationIds: [triggerId, candidateId, otherCandidateId],
       sourceEvidence: [
         {
           inspirationId: triggerId,
@@ -560,6 +602,11 @@ describe("wow judge concrete contract", () => {
           inspirationId: candidateId,
           role: "The visible practice",
           reason: "Connects public maintenance with neighbors seeing possibility.",
+        },
+        {
+          inspirationId: otherCandidateId,
+          role: "The outside test",
+          reason: "Adds taste getting sharper outside private drafts.",
         },
       ],
     });
