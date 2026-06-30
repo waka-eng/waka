@@ -8,8 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "qa:wow-detail": "vitest run test/WowMomentsSection.test.ts -t \"documents the local WOW-detail QA path\""
+    "test": "vitest run"
   },
   "dependencies": {
     "d3-force": "^3.0.0",
