@@ -510,7 +510,7 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
     const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
-    expect(drawerObject?.textContent).toContain(`${count} saved`);
+    expect(drawerObject?.textContent).toMatch(new RegExp(`${count} saved|영감 ${count}개 저장됨`));
     await act(async () => {
       drawerObject?.click();
     });
@@ -544,6 +544,123 @@ describe("HomePage current home experience", () => {
     expect(detail).not.toBeNull();
     return detail!;
   }
+
+  it("shows saved-inspiration reflection prompts and feedback affordances in expanded detail", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.textContent).toContain("reflect on this inspiration");
+    expect(detail.textContent).toContain("What did this mean then?");
+    expect(detail.textContent).toContain("What does it mean now?");
+    expect(detail.textContent).toContain("Is this still me?");
+    expect(detail.textContent).toContain("still alive");
+    expect(detail.textContent).toContain("changed shape");
+    expect(detail.textContent).toContain("not anymore");
+  });
+
+  it("persists saved-inspiration feedback through the existing signal feedback endpoint", async () => {
+    setApiFixtures();
+    vi.mocked(createFeedback).mockResolvedValueOnce({
+      id: "feedback-signal-1",
+      userId: "user-1",
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "partly",
+      emotionLabel: null,
+      correctionText: null,
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-14T16:40:00.000Z",
+      updatedAt: "2026-05-14T16:40:00.000Z",
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const changedShape = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("changed shape"),
+    );
+    expect(changedShape).not.toBeNull();
+
+    await act(async () => {
+      changedShape?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "partly",
+    });
+    expect(changedShape?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("shows persisted saved-inspiration feedback and Korean reflection copy", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        resonanceFeedback: [
+          {
+            id: "feedback-existing-1",
+            value: "not_true",
+            emotionLabel: null,
+            correctionText: null,
+            createdAt: "2026-05-14T16:39:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const notAnymore = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("더는 아님"),
+    );
+
+    expect(detail.textContent).toContain("이 영감 돌아보기");
+    expect(detail.textContent).toContain("그때 이 영감은 어떤 의미였나요?");
+    expect(detail.textContent).toContain("지금은 어떻게 다가오나요?");
+    expect(detail.textContent).toContain("아직 나다운가요?");
+    expect(notAnymore).not.toBeNull();
+    expect(notAnymore?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps saved-inspiration feedback failures visible without changing the persisted choice", async () => {
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        resonanceFeedback: [
+          {
+            id: "feedback-existing",
+            value: "true",
+            emotionLabel: null,
+            correctionText: null,
+            createdAt: "2026-05-14T12:00:00.000Z",
+          },
+        ],
+      },
+    });
+    vi.mocked(createFeedback).mockRejectedValueOnce(new Error("network down"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const notAnymore = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("not anymore"),
+    );
+
+    await act(async () => {
+      notAnymore?.click();
+    });
+    await flushReactWork();
+
+    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("still alive"),
+    );
+    expect(stillAlive?.getAttribute("aria-pressed")).toBe("true");
+    expect(detail.textContent).toContain("could not save inspiration feedback");
+  });
 
   it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
     setApiFixtures();
@@ -2049,12 +2166,8 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("highlighted by me");
     expect(detail.textContent).not.toContain("nearby piles");
-    expect(detail.textContent).not.toContain("what did this mean then?");
-    expect(detail.textContent).not.toContain("what does it mean now?");
-    expect(detail.textContent).not.toContain("is this still me?");
-    expect(detail.textContent).not.toContain("still alive");
-    expect(detail.textContent).not.toContain("changed shape");
-    expect(detail.textContent).not.toContain("not anymore");
+    expect(detail.textContent).toContain("reflect on this inspiration");
+    expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).not.toContain("View next inspiration");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
