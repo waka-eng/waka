@@ -12874,55 +12874,6 @@ body.reflect-bg {
   min-height: calc(100dvh - clamp(96px, 12vh, 150px));
 }
 
-/* Capture modal chrome: minimize + close sit together at the top-right of the
-   sheet. The wrapper matches the sheet width and right-aligns the controls. */
-.reference-capture-controls {
-  align-self: center;
-  width: min(1880px, calc(100vw - clamp(28px, 7vw, 140px)));
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  position: relative;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.reference-capture-controls > button {
-  pointer-events: auto;
-}
-
-.reference-capture-min {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #59534d;
-  cursor: pointer;
-  transform: translateY(28px);
-  box-shadow:
-    0 12px 30px rgba(26, 23, 20, 0.1),
-    inset 0 0 0 1px rgba(40, 37, 34, 0.06);
-  transition: background 200ms ease, transform 200ms ease;
-  animation: captureClosePop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) 60ms both;
-}
-
-.reference-capture-min:hover,
-.reference-capture-min:focus-visible {
-  background: #fff;
-  outline: 0;
-  transform: translateY(26px);
-}
-
-.reference-capture-min svg {
-  width: 16px;
-  height: 16px;
-}
-
 .reference-capture-close {
   position: relative;
   top: auto;
