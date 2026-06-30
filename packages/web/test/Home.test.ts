@@ -995,6 +995,88 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
+  it("does not render preview graph labels as post-its when no generated top-of-mind notes exist", async () => {
+    setApiFixtures({
+      topOfMind: {
+        ...sampleTopOfMind,
+        headline: "Top of mind: RAW_GRAPH_LABEL_preview_headline",
+        activeThemes: [
+          {
+            nodeId: "theme-unsafe-preview",
+            label: "RAW_GRAPH_LABEL_frequency_scaffold",
+            type: "theme",
+            reason: "Supporting signals and Memory movement should stay out of the wall.",
+            evidenceCount: 4,
+            lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+            supportingInspirations: [
+              {
+                id: "insp-preview-support",
+                preview: "deterministic preview support should not be a post-it",
+                reason: "frequency scaffold",
+                createdAt: "2026-05-11T12:00:00.000Z",
+              },
+            ],
+          },
+        ],
+        activeQuestions: [
+          {
+            nodeId: "question-unsafe-preview",
+            label: "Top of mind: template question scaffold",
+            type: "question",
+            reason: "Raw graph labels are preview-only compatibility data.",
+            evidenceCount: 3,
+            lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+            supportingInspirations: [],
+          },
+        ],
+      },
+      topOfMindNotes: [],
+    });
+
+    const container = await renderHomePage();
+
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("capture inspiration");
+    expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_frequency_scaffold");
+    expect(container.textContent).not.toContain("Top of mind: template question scaffold");
+    expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_preview_headline");
+    expect(container.textContent).not.toContain("Supporting signals");
+    expect(container.textContent).not.toContain("Memory movement");
+    expect(container.textContent).not.toContain("frequency scaffold");
+  });
+
+  it("keeps ko-KR users on the safe empty state instead of English preview scaffolds", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({
+      topOfMind: {
+        ...sampleTopOfMind,
+        headline: "Top of mind: English fallback scaffold",
+        activeThemes: [
+          {
+            nodeId: "theme-english-preview",
+            label: "English-only deterministic scaffold card",
+            type: "theme",
+            reason: "Supporting signals from preview graph data.",
+            evidenceCount: 2,
+            lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+            supportingInspirations: [],
+          },
+        ],
+        activeQuestions: [],
+      },
+      topOfMindNotes: [],
+    });
+
+    const container = await renderHomePage();
+
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.");
+    expect(container.textContent).not.toContain("English-only deterministic scaffold card");
+    expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
+    expect(container.textContent).not.toContain("Supporting signals");
+  });
+
   it("treats post-its as intentional inline editing surfaces without opening a modal", async () => {
     const fullTitle =
       "make the thing before explaining it because the room keeps rewarding comments before anyone can touch the real object";
@@ -1409,11 +1491,13 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector("#capNote")).toBeNull();
   });
 
-  it("falls back to graph preview notes while top-of-mind note persistence is empty", async () => {
+  it("keeps graph preview notes out of the wall while top-of-mind note persistence is empty", async () => {
     setApiFixtures({ topOfMindNotes: [] });
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).not.toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
   });

@@ -60,7 +60,6 @@ import {
   type ApiSavedSignalSearchResult,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
-  type ApiTopOfMindSignal,
   type ClusterKind,
   createFeedback,
   createReflection,
@@ -550,28 +549,6 @@ interface MemoryWindowState {
   y: number;
   z: number;
   minimized: boolean;
-}
-
-function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
-  return {
-    id: signal.nodeId,
-    label: signal.label,
-    type: signal.type,
-    reason: signal.reason,
-    supportingSignals: signal.supportingInspirations.map((support) => ({
-      id: support.id,
-      preview: support.preview,
-      reason: support.reason,
-      createdAt: support.createdAt,
-    })),
-    contextNodes: [
-      {
-        id: signal.nodeId,
-        label: signal.label,
-        type: signal.type,
-      },
-    ],
-  };
 }
 
 function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
@@ -1297,7 +1274,7 @@ export function HomePage(): JSX.Element {
   // seed's `data_isolation` evaluation rule calls for.
   const [entries, setEntries] = useState<InspirationListEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [topOfMind, setTopOfMind] = useState<ApiTopOfMind | null>(null);
+  const [, setTopOfMind] = useState<ApiTopOfMind | null>(null);
   const [topOfMindLoading, setTopOfMindLoading] = useState(true);
   const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
   const [topOfMindNotes, setTopOfMindNotes] = useState<ApiTopOfMindNoteSurface[]>([]);
@@ -2191,14 +2168,7 @@ export function HomePage(): JSX.Element {
     />
   ) : undefined;
 
-  const fallbackThoughtCards = [
-    ...(topOfMind?.activeQuestions ?? []),
-    ...(topOfMind?.activeThemes ?? []),
-  ].slice(0, TOP_OF_MIND_NOTE_LIMIT).map(signalToThoughtCard);
-  const usesTopOfMindNoteSurface = topOfMindNotes.length > 0 || removedTopOfMindNoteIds.size > 0;
-  const thoughtCards = usesTopOfMindNoteSurface
-    ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
-    : fallbackThoughtCards;
+  const thoughtCards = topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard);
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();

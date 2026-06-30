@@ -160,6 +160,74 @@ describe("GET /api/top-of-mind", () => {
     });
   });
 
+  it("does not synthesize renderable notes from preview graph signals when note storage is empty", async () => {
+    const topOfMind = {
+      generatedAt: "2026-05-24T12:00:00.000Z",
+      headline: "Top of mind: RAW_GRAPH_LABEL_preview_headline",
+      activeThemes: [
+        {
+          nodeId: "node-theme-raw",
+          label: "RAW_GRAPH_LABEL_frequency_scaffold",
+          type: "theme",
+          reason: "Supporting signals and Memory movement are compatibility preview metadata.",
+          evidenceCount: 4,
+          lastReinforcedAt: "2026-05-24T10:00:00.000Z",
+          supportingInspirations: [
+            {
+              id: "00000000-0000-4000-8000-000000000201",
+              preview: "Source-label scaffold should not become a note.",
+              reason: "frequency scaffold",
+              createdAt: "2026-05-23T10:00:00.000Z",
+            },
+          ],
+        },
+      ],
+      activeQuestions: [
+        {
+          nodeId: "node-question-raw",
+          label: "Top of mind: template question scaffold",
+          type: "question",
+          reason: "Raw graph labels are preview-only compatibility data.",
+          evidenceCount: 3,
+          lastReinforcedAt: "2026-05-24T10:00:00.000Z",
+          supportingInspirations: [],
+        },
+      ],
+      relationshipSignals: [],
+      summary: {
+        inspirationCount: 12,
+        meaningNoteCount: 0,
+        relationshipEdgeCount: 3,
+      },
+    };
+    const getTopOfMind = vi.fn(async () => topOfMind);
+    const listNotes = vi.fn(async () => []);
+    const db = {};
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind,
+        listNotes,
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=7");
+
+    expect(response.status).toBe(200);
+    expect(listNotes).toHaveBeenCalledWith(db, {
+      userId: user.id,
+      limit: 7,
+      preferredLocale: "en-US",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMind,
+      topOfMindNotes: [],
+    });
+  });
+
   it("serializes active note evidence previews without exposing admin graph internals", async () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000010",
