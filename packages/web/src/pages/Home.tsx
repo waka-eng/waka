@@ -1164,6 +1164,7 @@ const HOME_COPY = {
     captureAria: "영감 기록하기",
     captureCta: "영감 기록",
     captureHint: () => "",
+    bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1209,6 +1210,7 @@ const HOME_COPY = {
     captureAria: "capture inspiration",
     captureCta: "capture inspiration",
     captureHint: () => "",
+    bottomHint: "Capture inspirations to generate your top of mind stickies.",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1252,6 +1254,7 @@ const HOME_COPY = {
     captureAria: string;
     captureCta: string;
     captureHint: (count: number) => string;
+    bottomHint: string;
     captureDialog: string;
     close: string;
   }
@@ -4396,7 +4399,7 @@ export function HomePage(): JSX.Element {
           </button>
         ) : null}
           {homeMode !== "memoryDrawer" ? (
-            <p className="nc-bottom-hint">Capture inspirations to generate your top of mind stickies.</p>
+            <p className="nc-bottom-hint">{copy.bottomHint}</p>
           ) : null}
         </div>
 

@@ -1072,8 +1072,10 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain("관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.");
+    expect(container.textContent).toContain("영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.");
     expect(container.textContent).not.toContain("English-only deterministic scaffold card");
     expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
+    expect(container.textContent).not.toContain("Capture inspirations to generate your top of mind stickies.");
     expect(container.textContent).not.toContain("Supporting signals");
   });
 
