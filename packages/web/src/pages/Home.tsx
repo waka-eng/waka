@@ -552,6 +552,82 @@ interface MemoryWindowState {
   minimized: boolean;
 }
 
+interface MemoryPreviewPlacement {
+  top: string;
+  left: string;
+  translateX: string;
+  restTranslateY: string;
+  originX: string;
+  originY: string;
+  side: "above" | "below";
+}
+
+interface MemoryPreviewRect {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
+interface MemoryPreviewViewport {
+  width: number;
+  height: number;
+}
+
+const MEMORY_PREVIEW_MARGIN = 12;
+const MEMORY_PREVIEW_GAP = 12;
+const MEMORY_PREVIEW_FALLBACK_SIZE = { width: 320, height: 190 };
+
+const clampMemoryPreviewValue = (value: number, min: number, max: number): number => {
+  if (max < min) return min;
+  return Math.min(max, Math.max(min, value));
+};
+
+export function getMemoryPreviewPlacement(
+  anchorRect: MemoryPreviewRect,
+  viewport: MemoryPreviewViewport,
+  previewSize: Partial<Pick<MemoryPreviewRect, "width" | "height">> = MEMORY_PREVIEW_FALLBACK_SIZE,
+  margin = MEMORY_PREVIEW_MARGIN,
+): MemoryPreviewPlacement {
+  const previewWidth = Math.max(1, Math.min(previewSize.width ?? MEMORY_PREVIEW_FALLBACK_SIZE.width, viewport.width - margin * 2));
+  const previewHeight = Math.max(1, previewSize.height ?? MEMORY_PREVIEW_FALLBACK_SIZE.height);
+  const anchorCenterX = anchorRect.left + anchorRect.width / 2;
+  const clampedViewportLeft = clampMemoryPreviewValue(
+    anchorCenterX - previewWidth / 2,
+    margin,
+    viewport.width - previewWidth - margin,
+  );
+  const enoughRoomBelow = anchorRect.bottom + MEMORY_PREVIEW_GAP + previewHeight <= viewport.height - margin;
+  const enoughRoomAbove = anchorRect.top - MEMORY_PREVIEW_GAP - previewHeight >= margin;
+  const side = !enoughRoomBelow && enoughRoomAbove ? "above" : "below";
+  const preferredViewportTop =
+    side === "above"
+      ? anchorRect.top - MEMORY_PREVIEW_GAP - previewHeight
+      : anchorRect.bottom + MEMORY_PREVIEW_GAP;
+  const clampedViewportTop = clampMemoryPreviewValue(
+    preferredViewportTop,
+    margin,
+    viewport.height - previewHeight - margin,
+  );
+  const originOffset = clampMemoryPreviewValue(
+    anchorCenterX - clampedViewportLeft,
+    margin,
+    previewWidth - margin,
+  );
+
+  return {
+    top: `${Math.round(clampedViewportTop - anchorRect.top)}px`,
+    left: `${Math.round(clampedViewportLeft - anchorRect.left + previewWidth / 2)}px`,
+    translateX: "-50%",
+    restTranslateY: side === "above" ? "-6px" : "6px",
+    originX: `${Math.round(originOffset)}px`,
+    originY: side === "above" ? "bottom" : "top",
+    side,
+  };
+}
+
 function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
   return {
     id: signal.nodeId,
@@ -1316,6 +1392,7 @@ export function HomePage(): JSX.Element {
   const [renamedMemoryGroups, setRenamedMemoryGroups] = useState<Record<string, string>>({});
   const [dismissedMemoryGroupIds] = useState<Set<string>>(() => new Set());
   const [memoryGroupDrags, setMemoryGroupDrags] = useState<Record<string, { x: number; y: number }>>({});
+  const [memoryPreviewPlacements, setMemoryPreviewPlacements] = useState<Record<string, MemoryPreviewPlacement>>({});
   const [seenMemoryGroupIds, setSeenMemoryGroupIds] = useState<Set<string>>(() => new Set());
   const [draggingMemoryGroupId, setDraggingMemoryGroupId] = useState<string | null>(null);
   const [memoryWindows, setMemoryWindows] = useState<MemoryWindowState[]>([]);
@@ -2728,6 +2805,30 @@ export function HomePage(): JSX.Element {
       .slice(0, 2);
   };
 
+  const placeMemoryPreview = (groupId: string, anchor: HTMLElement): void => {
+    if (typeof window === "undefined") return;
+    const preview = anchor.querySelector<HTMLElement>(".memory-map-preview");
+    const previewRect = preview?.getBoundingClientRect();
+    const placement = getMemoryPreviewPlacement(
+      anchor.getBoundingClientRect(),
+      { width: window.innerWidth, height: window.innerHeight },
+      {
+        width: previewRect?.width || MEMORY_PREVIEW_FALLBACK_SIZE.width,
+        height: previewRect?.height || MEMORY_PREVIEW_FALLBACK_SIZE.height,
+      },
+    );
+    setMemoryPreviewPlacements((current) => ({ ...current, [groupId]: placement }));
+  };
+
+  const clearMemoryPreviewPlacement = (groupId: string): void => {
+    setMemoryPreviewPlacements((current) => {
+      if (!current[groupId]) return current;
+      const next = { ...current };
+      delete next[groupId];
+      return next;
+    });
+  };
+
   const renderMemoryGroupObject = (group: MemoryGrouping): JSX.Element => {
     const selected = selectedMemoryGroup?.id === group.id;
     const seen = seenMemoryGroupIds.has(group.id);
@@ -2735,6 +2836,7 @@ export function HomePage(): JSX.Element {
     const slot = MEMORY_MAP_SLOTS[Math.max(0, groupIndex) % MEMORY_MAP_SLOTS.length];
     const weight = Math.min(1.12, Math.max(0.84, 0.88 + group.signals.length * 0.035));
     const opacity = Math.min(0.82, Math.max(0.44, 0.48 + group.signals.length * 0.055));
+    const previewPlacement = memoryPreviewPlacements[group.id];
     const markSeen = () => {
       setSeenMemoryGroupIds((current) => {
         if (current.has(group.id)) return current;
@@ -2764,11 +2866,30 @@ export function HomePage(): JSX.Element {
           ["--memory-map-opacity" as string]: `${opacity}`,
           ["--skill-tag-dynamic-scale" as string]: `${weight}`,
           ["--skill-tag-dynamic-opacity" as string]: `${opacity}`,
-          ["--popup-top" as string]: "98%",
-          ["--popup-left" as string]: "0%",
-          ["--popup-translate-y" as string]: "0%",
-          ["--popup-translate-x" as string]: "0%",
-          ["--popup-origin-y" as string]: "top",
+          ...(previewPlacement
+            ? {
+                ["--popup-top" as string]: previewPlacement.top,
+                ["--popup-left" as string]: previewPlacement.left,
+                ["--popup-translate-x" as string]: previewPlacement.translateX,
+                ["--popup-rest-y" as string]: previewPlacement.restTranslateY,
+                ["--popup-origin-x" as string]: previewPlacement.originX,
+                ["--popup-origin-y" as string]: previewPlacement.originY,
+              }
+            : {}),
+        }}
+        data-preview-side={previewPlacement?.side ?? "below"}
+        onPointerEnter={(event) => {
+          markSeen();
+          placeMemoryPreview(group.id, event.currentTarget);
+        }}
+        onPointerLeave={() => clearMemoryPreviewPlacement(group.id)}
+        onFocus={(event) => {
+          markSeen();
+          placeMemoryPreview(group.id, event.currentTarget);
+        }}
+        onBlur={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          clearMemoryPreviewPlacement(group.id);
         }}
       >
         <button
