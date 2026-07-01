@@ -1220,6 +1220,10 @@ const HOME_COPY = {
       { label: "달라진 모양", value: "partly" },
       { label: "더는 아님", value: "not_true" },
     ],
+    savedSignalCorrectionLabel: "무엇이 달라졌나요?",
+    savedSignalCorrectionPlaceholder: "선택 사항 — 지금은 어떻게 달라졌나요?",
+    savedSignalCorrectionSave: "저장",
+    savedSignalCorrectionSkip: "건너뛰기",
     savedSignalFeedbackSaved: "저장됨",
     savedSignalFeedbackSaving: "저장 중...",
     savedSignalFeedbackError: "영감 피드백을 저장하지 못했습니다",
@@ -1282,6 +1286,10 @@ const HOME_COPY = {
       { label: "changed shape", value: "partly" },
       { label: "not anymore", value: "not_true" },
     ],
+    savedSignalCorrectionLabel: "what changed?",
+    savedSignalCorrectionPlaceholder: "optional — how does it feel different now?",
+    savedSignalCorrectionSave: "save",
+    savedSignalCorrectionSkip: "skip",
     savedSignalFeedbackSaved: "saved",
     savedSignalFeedbackSaving: "saving...",
     savedSignalFeedbackError: "could not save inspiration feedback",
@@ -1330,6 +1338,10 @@ const HOME_COPY = {
     feedbackSaving: string;
     feedbackError: string;
     savedSignalFeedbackActions: Array<{ label: string; value: SavedSignalFeedbackValue }>;
+    savedSignalCorrectionLabel: string;
+    savedSignalCorrectionPlaceholder: string;
+    savedSignalCorrectionSave: string;
+    savedSignalCorrectionSkip: string;
     savedSignalFeedbackSaved: string;
     savedSignalFeedbackSaving: string;
     savedSignalFeedbackError: string;
@@ -1460,6 +1472,11 @@ export function HomePage(): JSX.Element {
       }
     >
   >({});
+  const [pendingSavedSignalCorrection, setPendingSavedSignalCorrection] = useState<{
+    signalId: string;
+    value: Extract<SavedSignalFeedbackValue, "partly" | "not_true">;
+    text: string;
+  } | null>(null);
   const [savedSignalReflections, setSavedSignalReflections] = useState<Record<string, ApiReflection[]>>({});
   const [expandedReflectionThreads, setExpandedReflectionThreads] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectionLoadingIds, setSavedSignalReflectionLoadingIds] = useState<Set<string>>(() => new Set());
@@ -1514,6 +1531,12 @@ export function HomePage(): JSX.Element {
     clearTimeout(drawerCloseTimerRef.current);
     drawerCloseTimerRef.current = null;
   };
+
+  useEffect(() => {
+    setPendingSavedSignalCorrection((current) =>
+      current && current.signalId !== selectedSavedSignalId ? null : current,
+    );
+  }, [selectedSavedSignalId]);
 
   useEffect(() => {
     if (!user) return;
@@ -3377,6 +3400,7 @@ export function HomePage(): JSX.Element {
   const submitSavedSignalFeedback = async (
     signal: ApiSavedSignalSearchResult,
     value: SavedSignalFeedbackValue,
+    correctionText?: string,
   ): Promise<void> => {
     const persistedFeedbackValue =
       savedSignalDetail?.id === signal.id
@@ -3395,12 +3419,17 @@ export function HomePage(): JSX.Element {
       ...current,
       [signal.id]: { value, status: "saving", error: null },
     }));
+    setPendingSavedSignalCorrection((current) =>
+      current?.signalId === signal.id ? null : current,
+    );
 
     try {
+      const trimmedCorrection = correctionText?.trim();
       const feedback = await createFeedback({
         targetType: "signal",
         targetId: signal.id,
         value,
+        ...(trimmedCorrection ? { correctionText: trimmedCorrection } : {}),
       });
       setSavedSignalFeedback((current) => ({
         ...current,
@@ -3465,6 +3494,10 @@ export function HomePage(): JSX.Element {
       const selectedFeedbackValue = detailFeedback?.value ?? persistedFeedbackValue;
       const detailFeedbackStatus = detailFeedback?.status ?? "idle";
       const detailFeedbackError = detailFeedback?.error ?? null;
+      const pendingCorrection = pendingSavedSignalCorrection?.signalId === signal.id
+        ? pendingSavedSignalCorrection
+        : null;
+      const isFeedbackSaving = detailFeedbackStatus === "saving";
       return (
         <article
           className="memory-contents-item memory-contents-item--expanded"
@@ -3521,7 +3554,7 @@ export function HomePage(): JSX.Element {
             <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
               {copy.savedSignalFeedbackActions.map((action) => {
                 const isSelected = selectedFeedbackValue === action.value;
-                const isSaving = detailFeedbackStatus === "saving" && isSelected;
+                const isSaving = isFeedbackSaving && isSelected;
                 return (
                   <button
                     key={action.value}
@@ -3529,9 +3562,17 @@ export function HomePage(): JSX.Element {
                     className={`memory-contents-feedback-action${isSelected ? " memory-contents-feedback-action--selected" : ""}`}
                     aria-label={`saved inspiration feedback: ${action.label}`}
                     aria-pressed={isSelected}
-                    disabled={detailFeedbackStatus === "saving"}
+                    disabled={isFeedbackSaving}
                     onClick={() => {
-                      void submitSavedSignalFeedback(signal, action.value);
+                      if (action.value === "true") {
+                        void submitSavedSignalFeedback(signal, action.value);
+                        return;
+                      }
+                      setPendingSavedSignalCorrection({
+                        signalId: signal.id,
+                        value: action.value,
+                        text: "",
+                      });
                     }}
                   >
                     {action.label}
@@ -3540,6 +3581,53 @@ export function HomePage(): JSX.Element {
                 );
               })}
             </div>
+            {pendingCorrection ? (
+              <div className="memory-contents-feedback-correction">
+                <label>
+                  <span>{copy.savedSignalCorrectionLabel}</span>
+                  <textarea
+                    aria-label={copy.savedSignalCorrectionLabel}
+                    placeholder={copy.savedSignalCorrectionPlaceholder}
+                    value={pendingCorrection.text}
+                    disabled={isFeedbackSaving}
+                    onChange={(event) => {
+                      const nextText = event.currentTarget.value;
+                      setPendingSavedSignalCorrection((current) =>
+                        current?.signalId === signal.id
+                          ? { ...current, text: nextText }
+                          : current,
+                      );
+                    }}
+                  />
+                </label>
+                <div className="memory-contents-feedback-correction-actions">
+                  <button
+                    type="button"
+                    className="memory-contents-secondary-action"
+                    disabled={isFeedbackSaving}
+                    onClick={() => {
+                      void submitSavedSignalFeedback(
+                        signal,
+                        pendingCorrection.value,
+                        pendingCorrection.text,
+                      );
+                    }}
+                  >
+                    {copy.savedSignalCorrectionSave}
+                  </button>
+                  <button
+                    type="button"
+                    className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
+                    disabled={isFeedbackSaving}
+                    onClick={() => {
+                      void submitSavedSignalFeedback(signal, pendingCorrection.value);
+                    }}
+                  >
+                    {copy.savedSignalCorrectionSkip}
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {detailFeedbackStatus === "saved" ? (
               <p className="memory-contents-feedback-status">{copy.savedSignalFeedbackSaved}</p>
             ) : null}
