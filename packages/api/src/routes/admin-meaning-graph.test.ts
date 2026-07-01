@@ -402,13 +402,19 @@ describe("GET /api/admin/meaning-graph", () => {
       evidenceCount: 2,
       relatedTopOfMindNotes: [],
       feedback: [],
-      memory: expect.objectContaining({
-        state: "active",
-        reinforcementCount: 2,
-        recentReinforcementCount: 1,
-        supportingSignalIds: ["insp-1"],
-      }),
       qualityIndicators: [],
+    });
+    expect(body.graph.nodes[0]!.memory).toEqual({
+      state: "active",
+      firstSeenAt: "2026-05-24T12:00:00.000Z",
+      lastSeenAt: "2026-05-24T12:00:00.000Z",
+      reinforcementCount: 2,
+      recentReinforcementCount: 0,
+      currentWeight: 140,
+      confidence: 88,
+      decay: 0,
+      supportingSignalIds: ["insp-1"],
+      movementScore: 171,
     });
     expect(body.graph.nodes[1]).toMatchObject({
       id: "node-2",
@@ -417,9 +423,9 @@ describe("GET /api/admin/meaning-graph", () => {
       relatedTopOfMindNotes: [
         expect.objectContaining({
           id: "note-1",
-          title: "a room where unfinished ambition is allowed",
+          title: "You seem pulled toward rooms where honest builders make in public",
           whyNow: expect.stringContaining("current memory pattern"),
-          changedRecently: expect.stringContaining("recent supporting signal"),
+          changedRecently: "No supporting signal has reinforced this pattern recently; decay is 0.",
           rejectedAlternativeInterpretation: null,
           feedback: [
             expect.objectContaining({

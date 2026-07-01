@@ -2,23 +2,6 @@
 
 Safe local/dev-only harnesses for inspecting the populated WOW reflection detail without production auth bypass.
 
-## Component fixture smoke
-
-```sh
-pnpm --filter @waka/web qa:wow-detail
-```
-
-What it exercises:
-
-1. Renders a populated WOW grid from in-test fixture data.
-2. Opens a selected in-grid WOW reflection detail.
-3. Selects a resonance response.
-4. Verifies the local future-memory ending appears.
-5. Verifies the Add Signal callout appears.
-6. Verifies removed clutter (`Show me examples`) is absent.
-
-This component-level path does not create accounts, bypass production auth, call network APIs, or print secrets.
-
 ## Signed-in seeded browser QA
 
 ```sh

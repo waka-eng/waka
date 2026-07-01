@@ -570,7 +570,7 @@ describe("memory preview placement", () => {
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
     const drawerObject = container.querySelector<HTMLButtonElement>(".nc-drawer-object");
-    expect(drawerObject?.textContent).toContain(`${count} saved`);
+    expect(drawerObject?.textContent).toMatch(new RegExp(`${count} saved|영감 ${count}개 저장됨`));
     await act(async () => {
       drawerObject?.click();
     });
@@ -604,6 +604,123 @@ describe("HomePage current home experience", () => {
     expect(detail).not.toBeNull();
     return detail!;
   }
+
+  it("shows saved-inspiration reflection prompts and feedback affordances in expanded detail", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.textContent).toContain("reflect on this inspiration");
+    expect(detail.textContent).toContain("What did this mean then?");
+    expect(detail.textContent).toContain("What does it mean now?");
+    expect(detail.textContent).toContain("Is this still me?");
+    expect(detail.textContent).toContain("still alive");
+    expect(detail.textContent).toContain("changed shape");
+    expect(detail.textContent).toContain("not anymore");
+  });
+
+  it("persists saved-inspiration feedback through the existing signal feedback endpoint", async () => {
+    setApiFixtures();
+    vi.mocked(createFeedback).mockResolvedValueOnce({
+      id: "feedback-signal-1",
+      userId: "user-1",
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "partly",
+      emotionLabel: null,
+      correctionText: null,
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-14T16:40:00.000Z",
+      updatedAt: "2026-05-14T16:40:00.000Z",
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const changedShape = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("changed shape"),
+    );
+    expect(changedShape).not.toBeNull();
+
+    await act(async () => {
+      changedShape?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "partly",
+    });
+    expect(changedShape?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("shows persisted saved-inspiration feedback and Korean reflection copy", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        resonanceFeedback: [
+          {
+            id: "feedback-existing-1",
+            value: "not_true",
+            emotionLabel: null,
+            correctionText: null,
+            createdAt: "2026-05-14T16:39:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const notAnymore = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("더는 아님"),
+    );
+
+    expect(detail.textContent).toContain("이 영감 돌아보기");
+    expect(detail.textContent).toContain("그때 이 영감은 어떤 의미였나요?");
+    expect(detail.textContent).toContain("지금은 어떻게 다가오나요?");
+    expect(detail.textContent).toContain("아직 나다운가요?");
+    expect(notAnymore).not.toBeNull();
+    expect(notAnymore?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("keeps saved-inspiration feedback failures visible without changing the persisted choice", async () => {
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        resonanceFeedback: [
+          {
+            id: "feedback-existing",
+            value: "true",
+            emotionLabel: null,
+            correctionText: null,
+            createdAt: "2026-05-14T12:00:00.000Z",
+          },
+        ],
+      },
+    });
+    vi.mocked(createFeedback).mockRejectedValueOnce(new Error("network down"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const notAnymore = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("not anymore"),
+    );
+
+    await act(async () => {
+      notAnymore?.click();
+    });
+    await flushReactWork();
+
+    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("still alive"),
+    );
+    expect(stillAlive?.getAttribute("aria-pressed")).toBe("true");
+    expect(detail.textContent).toContain("could not save inspiration feedback");
+  });
 
   it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
     setApiFixtures();
@@ -1055,6 +1172,90 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Dev-only inspect WOW fields");
   });
 
+  it("does not render preview graph labels as post-its when no generated top-of-mind notes exist", async () => {
+    setApiFixtures({
+      topOfMind: {
+        ...sampleTopOfMind,
+        headline: "Top of mind: RAW_GRAPH_LABEL_preview_headline",
+        activeThemes: [
+          {
+            nodeId: "theme-unsafe-preview",
+            label: "RAW_GRAPH_LABEL_frequency_scaffold",
+            type: "theme",
+            reason: "Supporting signals and Memory movement should stay out of the wall.",
+            evidenceCount: 4,
+            lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+            supportingInspirations: [
+              {
+                id: "insp-preview-support",
+                preview: "deterministic preview support should not be a post-it",
+                reason: "frequency scaffold",
+                createdAt: "2026-05-11T12:00:00.000Z",
+              },
+            ],
+          },
+        ],
+        activeQuestions: [
+          {
+            nodeId: "question-unsafe-preview",
+            label: "Top of mind: template question scaffold",
+            type: "question",
+            reason: "Raw graph labels are preview-only compatibility data.",
+            evidenceCount: 3,
+            lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+            supportingInspirations: [],
+          },
+        ],
+      },
+      topOfMindNotes: [],
+    });
+
+    const container = await renderHomePage();
+
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain("capture inspiration");
+    expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_frequency_scaffold");
+    expect(container.textContent).not.toContain("Top of mind: template question scaffold");
+    expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_preview_headline");
+    expect(container.textContent).not.toContain("Supporting signals");
+    expect(container.textContent).not.toContain("Memory movement");
+    expect(container.textContent).not.toContain("frequency scaffold");
+  });
+
+  it("keeps ko-KR users on the safe empty state instead of English preview scaffolds", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({
+      topOfMind: {
+        ...sampleTopOfMind,
+        headline: "Top of mind: English fallback scaffold",
+        activeThemes: [
+          {
+            nodeId: "theme-english-preview",
+            label: "English-only deterministic scaffold card",
+            type: "theme",
+            reason: "Supporting signals from preview graph data.",
+            evidenceCount: 2,
+            lastReinforcedAt: "2026-05-12T12:00:00.000Z",
+            supportingInspirations: [],
+          },
+        ],
+        activeQuestions: [],
+      },
+      topOfMindNotes: [],
+    });
+
+    const container = await renderHomePage();
+
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.");
+    expect(container.textContent).toContain("영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.");
+    expect(container.textContent).not.toContain("English-only deterministic scaffold card");
+    expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
+    expect(container.textContent).not.toContain("Capture inspirations to generate your top of mind stickies.");
+    expect(container.textContent).not.toContain("Supporting signals");
+  });
+
   it("treats post-its as intentional inline editing surfaces without opening a modal", async () => {
     const fullTitle =
       "make the thing before explaining it because the room keeps rewarding comments before anyone can touch the real object";
@@ -1469,11 +1670,13 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector("#capNote")).toBeNull();
   });
 
-  it("falls back to graph preview notes while top-of-mind note persistence is empty", async () => {
+  it("keeps graph preview notes out of the wall while top-of-mind note persistence is empty", async () => {
     setApiFixtures({ topOfMindNotes: [] });
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("rooms where people can be honest before they are impressive");
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).not.toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
   });
@@ -2109,12 +2312,8 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("highlighted by me");
     expect(detail.textContent).not.toContain("nearby piles");
-    expect(detail.textContent).not.toContain("what did this mean then?");
-    expect(detail.textContent).not.toContain("what does it mean now?");
-    expect(detail.textContent).not.toContain("is this still me?");
-    expect(detail.textContent).not.toContain("still alive");
-    expect(detail.textContent).not.toContain("changed shape");
-    expect(detail.textContent).not.toContain("not anymore");
+    expect(detail.textContent).toContain("reflect on this inspiration");
+    expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).not.toContain("View next inspiration");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
     expect(detail.textContent).not.toContain("related context");
