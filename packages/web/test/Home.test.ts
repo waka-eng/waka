@@ -605,22 +605,22 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
-  it("shows saved-inspiration reflection prompts and feedback affordances in expanded detail", async () => {
+  it("shows saved-inspiration feedback affordances directly after expanded detail", async () => {
     setApiFixtures();
 
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
 
-    expect(detail.textContent).toContain("reflect on this inspiration");
-    expect(detail.textContent).toContain("What did this mean then?");
-    expect(detail.textContent).toContain("What does it mean now?");
-    expect(detail.textContent).toContain("Is this still me?");
+    expect(detail.textContent).not.toContain("reflect on this inspiration");
+    expect(detail.textContent).not.toContain("What did this mean then?");
+    expect(detail.textContent).not.toContain("What does it mean now?");
+    expect(detail.textContent).not.toContain("Is this still me?");
     expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).toContain("changed shape");
     expect(detail.textContent).toContain("not anymore");
   });
 
-  it("persists saved-inspiration feedback through the existing signal feedback endpoint", async () => {
+  it("asks for an optional saved-inspiration correction before submitting changed shape", async () => {
     setApiFixtures();
     vi.mocked(createFeedback).mockResolvedValueOnce({
       id: "feedback-signal-1",
@@ -629,7 +629,7 @@ describe("HomePage current home experience", () => {
       targetId: "insp-1",
       value: "partly",
       emotionLabel: null,
-      correctionText: null,
+      correctionText: "more about daily walks now",
       source: "user",
       metadata: {},
       createdAt: "2026-05-14T16:40:00.000Z",
@@ -648,15 +648,111 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
+    expect(createFeedback).not.toHaveBeenCalled();
+    expect(detail.textContent).toContain("what changed?");
+    const correction = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="what changed?"]');
+    expect(correction?.placeholder).toBe("optional — how does it feel different now?");
+    expect(correction).not.toBeNull();
+    await act(async () => {
+      setInputValue(correction!, "  more about daily walks now  ");
+    });
+    const save = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "save",
+    );
+    expect(save).not.toBeNull();
+    await act(async () => {
+      save?.click();
+    });
+    await flushReactWork();
+
     expect(createFeedback).toHaveBeenCalledWith({
       targetType: "signal",
       targetId: "insp-1",
       value: "partly",
+      correctionText: "more about daily walks now",
     });
     expect(changedShape?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("shows persisted saved-inspiration feedback and Korean reflection copy", async () => {
+  it("skips blank saved-inspiration correction text and lets still alive submit immediately", async () => {
+    setApiFixtures();
+    vi.mocked(createFeedback).mockResolvedValueOnce({
+      id: "feedback-signal-blank",
+      userId: "user-1",
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "not_true",
+      emotionLabel: null,
+      correctionText: null,
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-14T16:40:00.000Z",
+      updatedAt: "2026-05-14T16:40:00.000Z",
+    });
+    vi.mocked(createFeedback).mockResolvedValueOnce({
+      id: "feedback-signal-true",
+      userId: "user-1",
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "true",
+      emotionLabel: null,
+      correctionText: null,
+      source: "user",
+      metadata: {},
+      createdAt: "2026-05-14T16:41:00.000Z",
+      updatedAt: "2026-05-14T16:41:00.000Z",
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const notAnymore = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.includes("not anymore"),
+    );
+    await act(async () => {
+      notAnymore?.click();
+    });
+    await flushReactWork();
+    const correction = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="what changed?"]');
+    expect(correction).not.toBeNull();
+    await act(async () => {
+      setInputValue(correction!, "   ");
+    });
+    const skip = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "skip",
+    );
+    await act(async () => {
+      skip?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenNthCalledWith(1, {
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "not_true",
+    });
+
+    await act(async () => {
+      notAnymore?.click();
+    });
+    await flushReactWork();
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="what changed?"]')).not.toBeNull();
+    const stillAlive = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("still alive"),
+    );
+    await act(async () => {
+      stillAlive?.click();
+    });
+    await flushReactWork();
+
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="what changed?"]')).toBeNull();
+    expect(createFeedback).toHaveBeenNthCalledWith(2, {
+      targetType: "signal",
+      targetId: "insp-1",
+      value: "true",
+    });
+  });
+
+  it("shows persisted saved-inspiration feedback with Korean button copy", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures({
       savedSignalDetail: {
@@ -679,12 +775,22 @@ describe("HomePage current home experience", () => {
       (button) => button.textContent?.includes("더는 아님"),
     );
 
-    expect(detail.textContent).toContain("이 영감 돌아보기");
-    expect(detail.textContent).toContain("그때 이 영감은 어떤 의미였나요?");
-    expect(detail.textContent).toContain("지금은 어떻게 다가오나요?");
-    expect(detail.textContent).toContain("아직 나다운가요?");
+    expect(detail.textContent).not.toContain("이 영감 돌아보기");
+    expect(detail.textContent).not.toContain("그때 이 영감은 어떤 의미였나요?");
+    expect(detail.textContent).not.toContain("지금은 어떻게 다가오나요?");
+    expect(detail.textContent).not.toContain("아직 나다운가요?");
     expect(notAnymore).not.toBeNull();
     expect(notAnymore?.getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () => {
+      notAnymore?.click();
+    });
+    await flushReactWork();
+    const correction = detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="무엇이 달라졌나요?"]');
+    expect(detail.textContent).toContain("무엇이 달라졌나요?");
+    expect(correction?.placeholder).toBe("선택 사항 — 지금은 어떻게 달라졌나요?");
+    expect(detail.textContent).toContain("저장");
+    expect(detail.textContent).toContain("건너뛰기");
   });
 
   it("keeps saved-inspiration feedback failures visible without changing the persisted choice", async () => {
@@ -712,6 +818,13 @@ describe("HomePage current home experience", () => {
 
     await act(async () => {
       notAnymore?.click();
+    });
+    await flushReactWork();
+    const skip = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => button.textContent?.trim() === "skip",
+    );
+    await act(async () => {
+      skip?.click();
     });
     await flushReactWork();
 
@@ -2312,7 +2425,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("highlighted by me");
     expect(detail.textContent).not.toContain("nearby piles");
-    expect(detail.textContent).toContain("reflect on this inspiration");
+    expect(detail.textContent).not.toContain("reflect on this inspiration");
     expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).not.toContain("View next inspiration");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");

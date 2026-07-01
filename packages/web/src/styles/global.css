@@ -2044,6 +2044,39 @@
   font-size: 11px;
 }
 
+.memory-contents-feedback-correction {
+  display: grid;
+  max-width: 520px;
+  gap: 8px;
+}
+
+.memory-contents-feedback-correction label {
+  display: grid;
+  gap: 6px;
+  color: rgba(45, 41, 37, 0.58);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 620;
+  text-transform: lowercase;
+}
+
+.memory-contents-feedback-correction textarea {
+  min-height: 72px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid rgba(45, 41, 37, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  color: rgba(31, 29, 24, 0.86);
+  font: 500 13px/1.45 var(--font-sans);
+}
+
+.memory-contents-feedback-correction-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .memory-contents-feedback-status--error {
   color: rgba(117, 39, 25, 0.86);
 }
