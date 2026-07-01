@@ -60,7 +60,6 @@ import {
   type ApiSavedSignalSearchResult,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
-  type ApiTopOfMindSignal,
   type ClusterKind,
   createFeedback,
   createReflection,
@@ -550,28 +549,6 @@ interface MemoryWindowState {
   y: number;
   z: number;
   minimized: boolean;
-}
-
-function signalToThoughtCard(signal: ApiTopOfMindSignal): HomeThoughtCard {
-  return {
-    id: signal.nodeId,
-    label: signal.label,
-    type: signal.type,
-    reason: signal.reason,
-    supportingSignals: signal.supportingInspirations.map((support) => ({
-      id: support.id,
-      preview: support.preview,
-      reason: support.reason,
-      createdAt: support.createdAt,
-    })),
-    contextNodes: [
-      {
-        id: signal.nodeId,
-        label: signal.label,
-        type: signal.type,
-      },
-    ],
-  };
 }
 
 function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
@@ -1187,6 +1164,7 @@ const HOME_COPY = {
     captureAria: "영감 기록하기",
     captureCta: "영감 기록",
     captureHint: () => "",
+    bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1232,6 +1210,7 @@ const HOME_COPY = {
     captureAria: "capture inspiration",
     captureCta: "capture inspiration",
     captureHint: () => "",
+    bottomHint: "Capture inspirations to generate your top of mind stickies.",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1275,6 +1254,7 @@ const HOME_COPY = {
     captureAria: string;
     captureCta: string;
     captureHint: (count: number) => string;
+    bottomHint: string;
     captureDialog: string;
     close: string;
   }
@@ -1297,7 +1277,7 @@ export function HomePage(): JSX.Element {
   // seed's `data_isolation` evaluation rule calls for.
   const [entries, setEntries] = useState<InspirationListEntry[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [topOfMind, setTopOfMind] = useState<ApiTopOfMind | null>(null);
+  const [, setTopOfMind] = useState<ApiTopOfMind | null>(null);
   const [topOfMindLoading, setTopOfMindLoading] = useState(true);
   const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
   const [topOfMindNotes, setTopOfMindNotes] = useState<ApiTopOfMindNoteSurface[]>([]);
@@ -2191,14 +2171,7 @@ export function HomePage(): JSX.Element {
     />
   ) : undefined;
 
-  const fallbackThoughtCards = [
-    ...(topOfMind?.activeQuestions ?? []),
-    ...(topOfMind?.activeThemes ?? []),
-  ].slice(0, TOP_OF_MIND_NOTE_LIMIT).map(signalToThoughtCard);
-  const usesTopOfMindNoteSurface = topOfMindNotes.length > 0 || removedTopOfMindNoteIds.size > 0;
-  const thoughtCards = usesTopOfMindNoteSurface
-    ? topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard)
-    : fallbackThoughtCards;
+  const thoughtCards = topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard);
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
   const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
   const displayHandle = displayName.toLowerCase();
@@ -4426,7 +4399,7 @@ export function HomePage(): JSX.Element {
           </button>
         ) : null}
           {homeMode !== "memoryDrawer" ? (
-            <p className="nc-bottom-hint">Capture inspirations to generate your top of mind stickies.</p>
+            <p className="nc-bottom-hint">{copy.bottomHint}</p>
           ) : null}
         </div>
 
