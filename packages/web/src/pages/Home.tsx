@@ -1215,12 +1215,6 @@ const HOME_COPY = {
     feedbackSaved: "저장됨",
     feedbackSaving: "저장 중...",
     feedbackError: "포스트잇을 바꾸지 못했습니다",
-    savedSignalReflectionLabel: "이 영감 돌아보기",
-    savedSignalReflectionPrompts: [
-      "그때 이 영감은 어떤 의미였나요?",
-      "지금은 어떻게 다가오나요?",
-      "아직 나다운가요?",
-    ],
     savedSignalFeedbackActions: [
       { label: "아직 살아 있음", value: "true" },
       { label: "달라진 모양", value: "partly" },
@@ -1283,12 +1277,6 @@ const HOME_COPY = {
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
-    savedSignalReflectionLabel: "reflect on this inspiration",
-    savedSignalReflectionPrompts: [
-      "What did this mean then?",
-      "What does it mean now?",
-      "Is this still me?",
-    ],
     savedSignalFeedbackActions: [
       { label: "still alive", value: "true" },
       { label: "changed shape", value: "partly" },
@@ -1341,8 +1329,6 @@ const HOME_COPY = {
     feedbackSaved: string;
     feedbackSaving: string;
     feedbackError: string;
-    savedSignalReflectionLabel: string;
-    savedSignalReflectionPrompts: [string, string, string];
     savedSignalFeedbackActions: Array<{ label: string; value: SavedSignalFeedbackValue }>;
     savedSignalFeedbackSaved: string;
     savedSignalFeedbackSaving: string;
@@ -3531,13 +3517,7 @@ export function HomePage(): JSX.Element {
               />
             )}
           </div>
-          <section className="memory-contents-reflection-prompts" aria-label={copy.savedSignalReflectionLabel}>
-            <p className="memory-contents-reflection-prompts-label">{copy.savedSignalReflectionLabel}</p>
-            <ul>
-              {copy.savedSignalReflectionPrompts.map((prompt) => (
-                <li key={prompt}>{prompt}</li>
-              ))}
-            </ul>
+          <section className="memory-contents-reflection-prompts">
             <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
               {copy.savedSignalFeedbackActions.map((action) => {
                 const isSelected = selectedFeedbackValue === action.value;

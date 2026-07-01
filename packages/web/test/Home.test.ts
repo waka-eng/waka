@@ -605,16 +605,16 @@ describe("HomePage current home experience", () => {
     return detail!;
   }
 
-  it("shows saved-inspiration reflection prompts and feedback affordances in expanded detail", async () => {
+  it("shows saved-inspiration feedback affordances directly after expanded detail", async () => {
     setApiFixtures();
 
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
 
-    expect(detail.textContent).toContain("reflect on this inspiration");
-    expect(detail.textContent).toContain("What did this mean then?");
-    expect(detail.textContent).toContain("What does it mean now?");
-    expect(detail.textContent).toContain("Is this still me?");
+    expect(detail.textContent).not.toContain("reflect on this inspiration");
+    expect(detail.textContent).not.toContain("What did this mean then?");
+    expect(detail.textContent).not.toContain("What does it mean now?");
+    expect(detail.textContent).not.toContain("Is this still me?");
     expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).toContain("changed shape");
     expect(detail.textContent).toContain("not anymore");
@@ -656,7 +656,7 @@ describe("HomePage current home experience", () => {
     expect(changedShape?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("shows persisted saved-inspiration feedback and Korean reflection copy", async () => {
+  it("shows persisted saved-inspiration feedback with Korean button copy", async () => {
     mockAuthState.value.user.preferredLocale = "ko-KR";
     setApiFixtures({
       savedSignalDetail: {
@@ -679,10 +679,10 @@ describe("HomePage current home experience", () => {
       (button) => button.textContent?.includes("더는 아님"),
     );
 
-    expect(detail.textContent).toContain("이 영감 돌아보기");
-    expect(detail.textContent).toContain("그때 이 영감은 어떤 의미였나요?");
-    expect(detail.textContent).toContain("지금은 어떻게 다가오나요?");
-    expect(detail.textContent).toContain("아직 나다운가요?");
+    expect(detail.textContent).not.toContain("이 영감 돌아보기");
+    expect(detail.textContent).not.toContain("그때 이 영감은 어떤 의미였나요?");
+    expect(detail.textContent).not.toContain("지금은 어떻게 다가오나요?");
+    expect(detail.textContent).not.toContain("아직 나다운가요?");
     expect(notAnymore).not.toBeNull();
     expect(notAnymore?.getAttribute("aria-pressed")).toBe("true");
   });
@@ -2312,7 +2312,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("highlighted by me");
     expect(detail.textContent).not.toContain("nearby piles");
-    expect(detail.textContent).toContain("reflect on this inspiration");
+    expect(detail.textContent).not.toContain("reflect on this inspiration");
     expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).not.toContain("View next inspiration");
     expect(detail.textContent?.toLowerCase()).not.toContain("memory movement");
