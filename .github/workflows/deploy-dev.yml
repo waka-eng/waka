@@ -108,6 +108,9 @@ jobs:
             aws cloudfront wait distribution-deployed --id "$distribution_id"
           done
 
+      - name: Clear stale SST development lock
+        run: pnpm sst unlock --stage "$SST_STAGE"
+
       - name: Deploy SST development stage
         run: pnpm sst deploy --stage "$SST_STAGE"
 

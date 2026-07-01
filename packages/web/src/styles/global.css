@@ -1966,6 +1966,88 @@
   background: rgba(140, 180, 255, 0.36);
 }
 
+.memory-contents-reflection-prompts {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0 4px;
+  border-top: 1px solid rgba(45, 41, 37, 0.1);
+}
+
+.memory-contents-reflection-prompts-label,
+.memory-contents-feedback-status {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.48);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+.memory-contents-reflection-prompts ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-contents-reflection-prompts li {
+  color: rgba(45, 41, 37, 0.74);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.memory-contents-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.memory-contents-feedback-action {
+  appearance: none;
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid rgba(45, 41, 37, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  color: rgba(45, 41, 37, 0.64);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.memory-contents-feedback-action:hover,
+.memory-contents-feedback-action:focus-visible,
+.memory-contents-feedback-action--selected {
+  border-color: rgba(31, 29, 24, 0.3);
+  background: rgba(255, 229, 105, 0.32);
+  color: rgba(31, 29, 24, 0.9);
+  outline: 0;
+}
+
+.memory-contents-feedback-action:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.memory-contents-feedback-action span {
+  color: rgba(45, 41, 37, 0.42);
+  font-size: 11px;
+}
+
+.memory-contents-feedback-status--error {
+  color: rgba(117, 39, 25, 0.86);
+}
+
 .memory-contents-expanded-footer {
   display: flex;
   align-items: center;
@@ -12874,55 +12956,6 @@ body.reflect-bg {
   min-height: calc(100dvh - clamp(96px, 12vh, 150px));
 }
 
-/* Capture modal chrome: minimize + close sit together at the top-right of the
-   sheet. The wrapper matches the sheet width and right-aligns the controls. */
-.reference-capture-controls {
-  align-self: center;
-  width: min(1880px, calc(100vw - clamp(28px, 7vw, 140px)));
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  position: relative;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.reference-capture-controls > button {
-  pointer-events: auto;
-}
-
-.reference-capture-min {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #59534d;
-  cursor: pointer;
-  transform: translateY(28px);
-  box-shadow:
-    0 12px 30px rgba(26, 23, 20, 0.1),
-    inset 0 0 0 1px rgba(40, 37, 34, 0.06);
-  transition: background 200ms ease, transform 200ms ease;
-  animation: captureClosePop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) 60ms both;
-}
-
-.reference-capture-min:hover,
-.reference-capture-min:focus-visible {
-  background: #fff;
-  outline: 0;
-  transform: translateY(26px);
-}
-
-.reference-capture-min svg {
-  width: 16px;
-  height: 16px;
-}
-
 .reference-capture-close {
   position: relative;
   top: auto;
@@ -13463,8 +13496,8 @@ body.reflect-bg {
 
 .memory-map-preview {
   position: absolute;
-  top: calc(100% + 12px);
-  left: 50%;
+  top: var(--popup-top, calc(100% + 12px));
+  left: var(--popup-left, 50%);
   z-index: 40;
   width: min(320px, calc(100vw - 56px));
   display: grid;
@@ -13476,8 +13509,8 @@ body.reflect-bg {
   box-shadow: 0 30px 80px rgba(22, 20, 16, 0.22);
   opacity: 0;
   pointer-events: none;
-  transform-origin: top center;
-  transform: translateX(-50%) scale(calc(1 / var(--memory-map-scale, 1))) translateY(6px);
+  transform-origin: var(--popup-origin-x, center) var(--popup-origin-y, top);
+  transform: translateX(var(--popup-translate-x, -50%)) scale(calc(1 / var(--memory-map-scale, 1))) translateY(var(--popup-rest-y, 6px));
   transition:
     opacity 180ms ease,
     transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -14066,7 +14099,7 @@ body.reflect-bg {
 .memory-map-node:hover .memory-map-preview,
 .memory-map-node:focus-within .memory-map-preview {
   opacity: 1;
-  transform: translateX(-50%) scale(calc(1 / var(--memory-map-scale, 1))) translateY(0);
+  transform: translateX(var(--popup-translate-x, -50%)) scale(calc(1 / var(--memory-map-scale, 1))) translateY(0);
 }
 
 .memory-map-preview .memory-map-preview-blurb {

@@ -203,6 +203,75 @@ describe("bounded ambition synthesis", () => {
     expect(result.candidates[0]?.why).not.toContain("Memory movement:");
   });
 
+  it("rejects duplicate synthesized post-it titles in one run without fallback copy", async () => {
+    const duplicateCandidates = [
+      ...candidates(),
+      ...candidates().map((candidate) => ({
+        ...candidate,
+        node: {
+          ...candidate.node,
+          id: "adjacent-public-building-room",
+          label: "rooms where public building becomes ordinary",
+        },
+        idempotencyKey: `${candidate.idempotencyKey}:adjacent`,
+      })),
+    ];
+    const synthesize = vi
+      .fn()
+      .mockResolvedValueOnce({
+        firstPersonPostItCandidate: "People-who make courage feel normal!",
+        memoryState: "active",
+        environmentDirection:
+          "People and rooms where shipping in public feels like the expected rhythm.",
+        rejectedEnvironment:
+          "Rooms that turn courage into private planning or generic startup theater.",
+        evidenceRationale:
+          "Two saved signals point toward peers as the personal edge, not cities as a category.",
+        confidence: 88,
+        rejectedAlternativeInterpretation:
+          "The shallow read would call this cities, but the user's edge is wanting peers who normalize visible work.",
+      } satisfies AmbitionSynthesisOutput)
+      .mockResolvedValueOnce({
+        firstPersonPostItCandidate: "people who make courage feel normal",
+        memoryState: "active",
+        environmentDirection:
+          "A nearby room still wants peers who make public work feel normal.",
+        rejectedEnvironment:
+          "Generic startup rooms flatten that courage into private planning.",
+        evidenceRationale:
+          "The adjacent signals repeat the peer-shaped edge rather than a new ambition.",
+        confidence: 81,
+        rejectedAlternativeInterpretation:
+          "The shallow read would call this another city preference, but the deeper read repeats the same peer need.",
+      } satisfies AmbitionSynthesisOutput);
+
+    const result = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: duplicateCandidates,
+      maxSyntheses: 2,
+      synthesize,
+    });
+
+    expect(result).toMatchObject({
+      attempted: 2,
+      synthesized: 1,
+      failed: 1,
+      fellBack: 0,
+      skipped: 0,
+    });
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]?.title).toBe("People-who make courage feel normal!");
+    expect(result.candidates.map((candidate) => candidate.title)).not.toContain(
+      "people who make courage feel normal",
+    );
+    expect(result.failures[0]).toMatchObject({
+      contextNodeId: "adjacent-public-building-room",
+      reason: "invalid_output",
+      code: "synthesis_invalid_output",
+    });
+  });
+
   it("accepts a materially longer but bounded post-it thought", async () => {
     const longSpecific: AmbitionSynthesisOutput = {
       firstPersonPostItCandidate:

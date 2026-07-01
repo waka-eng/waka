@@ -80,6 +80,13 @@ async function ensureSeededDemoAccount(config: ReturnType<typeof resolveSignedIn
         name: "WAKA WOW Detail QA",
         createUser: true,
       });
+      await tx`
+        update users
+        set onboarding_completed_at = coalesce(onboarding_completed_at, now()),
+            updated_at = now()
+        where id = ${user.id}
+      `;
+
       const inspirationRows = await tx<Array<{ count: string | number }>>`
         select count(*) as count
         from signals
@@ -132,93 +139,53 @@ async function signIn(page: Page, config: ReturnType<typeof resolveSignedInWowDe
 }
 
 async function openWowDetail(page: Page, timeoutMs: number): Promise<{ momentTitle: string; sourceCountText: string }> {
-  const card = page.getByRole("button", { name: /Open mirror moment report/i }).first();
-  await card.waitFor({ state: "visible", timeout: timeoutMs });
-  const label = (await card.getAttribute("aria-label")) ?? "";
-  await card.click();
-  const detail = page.locator(".wow-moment-detail-panel--in-grid");
+  await page.getByRole("region", { name: /Five Top of Mind post-its/i }).waitFor({ state: "visible", timeout: timeoutMs });
+
+  const sourceButton = page.getByRole("button", { name: /inspirations led here/i }).first();
+  await sourceButton.waitFor({ state: "visible", timeout: timeoutMs });
+  const sourceCountText = ((await sourceButton.textContent()) ?? "").trim();
+  assert(/^[3-5] inspirations led here$/.test(sourceCountText), `Expected 3-5 source inspirations, saw "${sourceCountText}"`);
+
+  const note = sourceButton.locator("xpath=ancestor::article[1]");
+  const momentTitle = ((await note.locator(".nc-note-body").first().textContent()) ?? "").trim() || "unknown top-of-mind note";
+
+  await sourceButton.click();
+  const detail = page.locator(".memory-drawer-stack");
   await detail.waitFor({ state: "visible", timeout: timeoutMs });
-  await detail.getByText("Reflection mode").waitFor({ timeout: timeoutMs });
-  await detail.getByText("Where it came from").waitFor({ timeout: timeoutMs });
-  await detail.getByText("Source trail").waitFor({ timeout: timeoutMs });
-  const sourceCountText = ((await detail.locator(".wow-moment-source-count").first().textContent()) ?? "").trim();
-  assert(/^[3-5] sources?$/.test(sourceCountText), `Expected 3-5 source inspirations, saw "${sourceCountText}"`);
+  await detail.getByRole("button", { name: /top of mind\s+[3-5]/i }).waitFor({ state: "visible", timeout: timeoutMs });
 
-  const sourceLabels = detail.locator(".wow-moment-detail-sources .wow-moment-related-label");
-  const sourceLabelCount = await sourceLabels.count();
-  assert(sourceLabelCount >= 3 && sourceLabelCount <= 5, `Expected 3-5 source role labels, saw ${sourceLabelCount}`);
-
-  const sourceQuotes = detail.locator(".wow-moment-detail-sources blockquote");
-  const sourceQuoteCount = await sourceQuotes.count();
-  assert(sourceQuoteCount >= 3 && sourceQuoteCount <= 5, `Expected 3-5 source text blocks, saw ${sourceQuoteCount}`);
-  assert(sourceQuoteCount === sourceLabelCount, `Expected source labels and text blocks to match, saw ${sourceLabelCount} labels and ${sourceQuoteCount} text blocks`);
-  for (let i = 0; i < sourceQuoteCount; i += 1) {
-    const sourceQuote = sourceQuotes.nth(i);
-    assert(await sourceQuote.isVisible(), `Expected source text block ${i + 1} to be visible`);
-    const sourceText = ((await sourceQuote.textContent()) ?? "").trim();
+  const sourceItems = detail.locator(".memory-contents-item");
+  const sourceItemCount = await sourceItems.count();
+  assert(sourceItemCount >= 3 && sourceItemCount <= 5, `Expected 3-5 source items, saw ${sourceItemCount}`);
+  for (let i = 0; i < sourceItemCount; i += 1) {
+    const sourceItem = sourceItems.nth(i);
+    assert(await sourceItem.isVisible(), `Expected source item ${i + 1} to be visible`);
+    const sourceText = ((await sourceItem.textContent()) ?? "").trim();
     assert(sourceText.length > 40, `Expected full source text ${i + 1} to be visible in detail evidence`);
     assert(!sourceText.endsWith("…"), `Expected source text ${i + 1} not to end with an ellipsis`);
   }
-  return {
-    momentTitle: label.replace(/^Open mirror moment report:\s*/i, "") || "unknown WOW moment",
-    sourceCountText,
-  };
+
+  return { momentTitle, sourceCountText };
 }
 
-async function verifyResonance(page: Page, timeoutMs: number): Promise<QaCheck[]> {
-  const detail = page.locator(".wow-moment-detail-panel--in-grid");
+async function verifyEvidenceDrawer(page: Page, timeoutMs: number): Promise<QaCheck[]> {
+  const detail = page.locator(".memory-drawer-stack");
   const checks: QaCheck[] = [];
 
-  await detail.getByRole("button", { name: /That’s me|Partly|Not quite/i }).first().click();
-  await detail.getByText("Does this feel true enough to remember?").waitFor({ timeout: timeoutMs });
-
-  const textLabels = [
-    "Does this feel true enough to remember?",
-    "Future memory preview",
-    "WAKA might remember:",
-    "Add more signal for this pattern",
-    "Add another inspiration",
-  ];
+  const textLabels = ["top of mind", "all saved", "recently saved"];
   for (const label of textLabels) {
     const visible = await detail.getByText(label).first().isVisible().catch(() => false);
     assert(visible, `Expected visible text "${label}"`);
     checks.push({ name: label, passed: true });
   }
 
-  const actionLabels = ["Looks right", "Edit wording", "Not for me"];
-  for (const label of actionLabels) {
-    const visible = await detail.getByRole("button", { name: label }).isVisible().catch(() => false);
-    assert(visible, `Expected visible action "${label}"`);
-    checks.push({ name: `action: ${label}`, passed: true });
-  }
+  const backHomeVisible = await page.getByRole("button", { name: /back home/i }).first().isVisible().catch(() => false);
+  assert(backHomeVisible, "Expected visible action \"back home\"");
+  checks.push({ name: "action: back home", passed: true });
 
-  await detail.getByRole("button", { name: "Edit wording" }).click();
-  const textarea = detail.getByRole("textbox", { name: "Edit future memory wording" });
-  await textarea.waitFor({ state: "visible", timeout: timeoutMs });
-  assert(await textarea.isEditable(), "Expected future memory wording textarea to be editable");
-  checks.push({ name: "editable textarea: Edit future memory wording", passed: true });
-
-  await detail.getByRole("button", { name: "Cancel edit" }).click();
-  await detail.getByRole("button", { name: "Edit wording" }).waitFor({ state: "visible", timeout: timeoutMs });
-  assert(!(await textarea.isVisible().catch(() => false)), "Expected textarea to be hidden after Cancel edit");
-  checks.push({ name: "Cancel edit hides wording textarea", passed: true });
-
-  await detail.getByRole("button", { name: "Looks right" }).click();
-  const confirmationLabels = [
-    "Marked locally for now",
-    "This is only a local preview. Future WAKA memory is coming soon.",
-    "Nothing has been saved yet.",
-  ];
-  for (const label of confirmationLabels) {
-    const visible = await detail.getByText(label).first().isVisible().catch(() => false);
-    assert(visible, `Expected local-only confirmation text "${label}"`);
-    checks.push({ name: label, passed: true });
-  }
-
-  await detail.getByRole("button", { name: "Back to grid" }).click();
+  await page.getByRole("button", { name: /back home/i }).first().click();
   await detail.waitFor({ state: "hidden", timeout: timeoutMs });
-  assert(!new URL(page.url()).searchParams.has("wow"), "Expected Back to grid to remove wow query param");
-  checks.push({ name: "Back to grid removes wow query param", passed: true });
+  checks.push({ name: "back home closes source drawer", passed: true });
 
   return checks;
 }
@@ -279,8 +246,8 @@ async function run(): Promise<void> {
     const detail = await openWowDetail(page, config.timeoutMs);
     ok(`opened populated WOW detail: ${detail.momentTitle} (${detail.sourceCountText})`);
 
-    const checks = await verifyResonance(page, config.timeoutMs);
-    ok(`verified reflection/resonance ending checks: ${checks.map((check) => check.name).join(", ")}`);
+    const checks = await verifyEvidenceDrawer(page, config.timeoutMs);
+    ok(`verified top-of-mind evidence drawer checks: ${checks.map((check) => check.name).join(", ")}`);
 
     const evidenceDir = await writeEvidence({
       config,

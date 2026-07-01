@@ -1,23 +1,6 @@
 # Local WOW detail QA path
 
-Safe local/dev-only harnesses for inspecting the populated WOW reflection detail without production auth bypass.
-
-## Component fixture smoke
-
-```sh
-pnpm --filter @waka/web qa:wow-detail
-```
-
-What it exercises:
-
-1. Renders a populated WOW grid from in-test fixture data.
-2. Opens a selected in-grid WOW reflection detail.
-3. Selects a resonance response.
-4. Verifies the local future-memory ending appears.
-5. Verifies the Add Signal callout appears.
-6. Verifies removed clutter (`Show me examples`) is absent.
-
-This component-level path does not create accounts, bypass production auth, call network APIs, or print secrets.
+Safe local/dev-only harnesses for inspecting the populated signed-in top-of-mind/WOW evidence path without production auth bypass.
 
 ## Signed-in seeded browser QA
 
@@ -51,9 +34,9 @@ Safety/contract:
 
 Browser assertions:
 
-1. Login succeeds as the QA user.
-2. A populated WOW card opens in the actual UI.
-3. Reflection mode/detail surface is visible.
-4. Source trail/full source text is visible, with 2-3 source inspirations for the seeded detail.
-5. Resonance leads to the future-memory ending. The harness accepts both the current local-preview copy (`Save this as a future memory?` / `Mark locally`) and the requested product copy (`Remember this about me?` / `Remember this`) while this remains a tooling slice.
-6. `Edit first`, `Not for me`, and the Add Signal action remain reachable.
+1. Login succeeds as the QA user, including generated local users with onboarding already complete.
+2. A populated top-of-mind/WOW note is visible in the actual UI.
+3. The note's "inspirations led here" affordance opens the signed-in evidence drawer.
+4. The scoped top-of-mind source trail is visible, with 3-5 full source inspirations for the seeded note.
+5. The drawer exposes the top-of-mind/all-saved/recent filters and the back-home exit path.
+6. Back home closes the source drawer cleanly.
