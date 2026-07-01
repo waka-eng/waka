@@ -164,6 +164,12 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+function normalizeSynthesizedTitleKey(value: string): string {
+  return normalizeWhitespace(value)
+    .toLocaleLowerCase("en-US")
+    .replace(/[\p{P}\p{S}\s]+/gu, "");
+}
+
 function truncateText(value: string, maxChars = MAX_FIELD_CHARS): string {
   const normalized = normalizeWhitespace(value);
   if (normalized.length <= maxChars) return normalized;
@@ -453,6 +459,7 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
   let failed = 0;
   let skipped = 0;
   const failures: AmbitionSynthesisFailure[] = [];
+  const acceptedTitleKeys = new Set<string>();
 
   function recordFailure(
     candidate: TopOfMindRefreshCandidate,
@@ -511,6 +518,13 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
     }
 
     if (output && isLocaleSafeAmbitionSynthesisOutput(output, synthesisInput.preferredLocale)) {
+      const titleKey = normalizeSynthesizedTitleKey(output.firstPersonPostItCandidate);
+      if (titleKey.length === 0 || acceptedTitleKeys.has(titleKey)) {
+        recordFailure(candidate, "invalid_output");
+        continue;
+      }
+
+      acceptedTitleKeys.add(titleKey);
       synthesized += 1;
       nextCandidates.push(applyAmbitionSynthesisOutput(candidate, output));
       continue;

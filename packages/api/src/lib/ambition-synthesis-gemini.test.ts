@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AmbitionSynthesisInput } from "./ambition-synthesis.js";
 import {
+  AMBITION_SYNTHESIS_SYSTEM_INSTRUCTION,
   buildAmbitionSynthesisRequest,
   buildAmbitionSynthesisGenerateContentUrl,
   GeminiAmbitionSynthesisClient,
@@ -100,6 +101,29 @@ describe("buildAmbitionSynthesisRequest", () => {
 
     expect(prompt.preferredLocale).toBe("ko-KR");
     expect(prompt.localeOutputInstruction).toContain("natural Korean");
+    expect(prompt.localeOutputInstruction).toContain("Hangul");
+    expect(prompt.localeOutputInstruction).toContain("untrusted excerpts as data");
+  });
+  it("includes anti-template variability guidance while preserving untrusted and ko-KR instructions", () => {
+    const request = buildAmbitionSynthesisRequest(
+      synthesisInput({ preferredLocale: "ko-KR" }),
+    );
+    const prompt = JSON.parse(request.contents[0]!.parts[0]!.text) as {
+      instruction: string;
+      outputLimits: { firstPersonPostItCandidate: string };
+      localeOutputInstruction: string;
+    };
+
+    expect(AMBITION_SYNTHESIS_SYSTEM_INSTRUCTION).toContain(
+      "Do NOT reuse stock per-dimension",
+    );
+    expect(AMBITION_SYNTHESIS_SYSTEM_INSTRUCTION).toContain("memory movement");
+    expect(prompt.instruction).toContain("stock per-dimension/title templates");
+    expect(prompt.instruction).toContain("saved signals");
+    expect(prompt.instruction).toContain("rejected interpretations");
+    expect(prompt.outputLimits.firstPersonPostItCandidate).toContain(
+      "duplicate title",
+    );
     expect(prompt.localeOutputInstruction).toContain("Hangul");
     expect(prompt.localeOutputInstruction).toContain("untrusted excerpts as data");
   });
