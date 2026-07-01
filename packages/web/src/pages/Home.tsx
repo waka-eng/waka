@@ -117,7 +117,6 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
 type InspirationStatus = "saving" | "saved" | "error";
 type HomeMode = "topOfMind" | "memoryDrawer";
 type MemoryBrowseOrder = "newest" | "relevance";
-type MemoryFolderView = "grid" | "vertical" | "horizontal";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "important" | "partly" | "not_true"
@@ -1290,8 +1289,6 @@ export function HomePage(): JSX.Element {
   // The cleaned-up contents view always reads newest-first; the explicit
   // sort toggle was removed in favor of a calmer, text-forward layout.
   const memoryBrowseOrder: MemoryBrowseOrder = "newest";
-  const [memoryFolderView, setMemoryFolderView] = useState<MemoryFolderView>("grid");
-  const [memoryFlowIndex, setMemoryFlowIndex] = useState(0);
   const [userMemoryGroups, setUserMemoryGroups] = useState<UserMemoryGrouping[]>([]);
   const [renamedMemoryGroups, setRenamedMemoryGroups] = useState<Record<string, string>>({});
   const [dismissedMemoryGroupIds] = useState<Set<string>>(() => new Set());
@@ -1299,7 +1296,6 @@ export function HomePage(): JSX.Element {
   const [seenMemoryGroupIds, setSeenMemoryGroupIds] = useState<Set<string>>(() => new Set());
   const [draggingMemoryGroupId, setDraggingMemoryGroupId] = useState<string | null>(null);
   const [memoryWindows, setMemoryWindows] = useState<MemoryWindowState[]>([]);
-  const [draggingMemoryWindowId, setDraggingMemoryWindowId] = useState<string | null>(null);
   const [memoryWindowDetails, setMemoryWindowDetails] = useState<Record<string, ApiSavedSignalDetail | null>>({});
   const [memoryWindowLoadingIds, setMemoryWindowLoadingIds] = useState<Set<string>>(() => new Set());
   const [memoryWindowZ, setMemoryWindowZ] = useState(10);
@@ -1401,10 +1397,8 @@ export function HomePage(): JSX.Element {
   const topOfMindEditTimersRef = useRef<Record<string, number>>({});
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const memoryGroupDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
-  const memoryWindowDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
   const memoryGroupDragMovedRef = useRef(false);
-  const memoryWindowDragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
 
   const clearDrawerCloseTimer = () => {
@@ -2673,34 +2667,6 @@ export function HomePage(): JSX.Element {
     });
   };
 
-  const closeMemoryWindow = (signalId: string): void => {
-    setMemoryWindows((current) => current.filter((memoryWindow) => memoryWindow.signalId !== signalId));
-    if (selectedSavedSignalId === signalId) setSelectedSavedSignalId(null);
-  };
-
-  const toggleMinimizeMemoryWindow = (signalId: string): void => {
-    setMemoryWindows((current) =>
-      current.map((memoryWindow) =>
-        memoryWindow.signalId === signalId
-          ? { ...memoryWindow, minimized: !memoryWindow.minimized, z: memoryWindowZ + 1 }
-          : memoryWindow,
-      ),
-    );
-    setMemoryWindowZ((current) => current + 1);
-  };
-
-  const relationshipHintsForOpenWindow = (signalId: string): MemoryConstellationRelationship[] => {
-    const openIds = new Set(memoryWindows.map((memoryWindow) => memoryWindow.signalId));
-    if (openIds.size < 2) return [];
-    return constellationRelationships
-      .filter((relationship) =>
-        [relationship.sourceId, relationship.targetId].includes(signalId) &&
-        openIds.has(relationship.sourceId) &&
-        openIds.has(relationship.targetId),
-      )
-      .slice(0, 2);
-  };
-
   const renderMemoryGroupObject = (group: MemoryGrouping): JSX.Element => {
     const selected = selectedMemoryGroup?.id === group.id;
     const seen = seenMemoryGroupIds.has(group.id);
@@ -2770,7 +2736,6 @@ export function HomePage(): JSX.Element {
             setSelectedMemoryGroupId(group.id);
             setSelectedSavedSignalId(null);
             setSavedSignalDetail(null);
-            setMemoryFlowIndex(0);
           }}
         >
           <strong>{memoryMapLabel(group.name)}</strong>
@@ -3522,226 +3487,12 @@ export function HomePage(): JSX.Element {
     );
   };
 
-  const renderMemoryFlow = (): JSX.Element => {
-    const flowSignals = selectedMemoryGroupSignals;
-    const activeIndex = Math.min(memoryFlowIndex, Math.max(flowSignals.length - 1, 0));
-    const activeSignal = flowSignals[activeIndex];
-    const axis = memoryFolderView === "horizontal" ? "horizontal" : "vertical";
-
-    if (!activeSignal) {
-      return <p className="memory-relationship-empty">Nothing in this pile yet.</p>;
-    }
-
-    return (
-      <section
-        className={`memory-flow-workspace memory-flow-workspace--${axis}`}
-        aria-label={`${axis} inspiration flow`}
-      >
-        <header className="memory-flow-toolbar">
-          <div>
-            <span>{axis} flow</span>
-            <strong>
-              {activeIndex + 1} / {flowSignals.length}
-            </strong>
-          </div>
-          <div className="memory-flow-controls">
-            <button
-              type="button"
-              disabled={activeIndex === 0}
-              onClick={() => setMemoryFlowIndex((index) => Math.max(0, index - 1))}
-            >
-              previous
-            </button>
-            <button
-              type="button"
-              disabled={activeIndex >= flowSignals.length - 1}
-              onClick={() =>
-                setMemoryFlowIndex((index) => Math.min(flowSignals.length - 1, index + 1))
-              }
-            >
-              next
-            </button>
-          </div>
-        </header>
-        <div className="memory-flow-stage">
-          <div
-            className="memory-flow-track"
-            style={{
-              transform:
-                axis === "horizontal"
-                  ? `translateX(-${activeIndex * 100}%)`
-                  : `translateY(-${activeIndex * 100}%)`,
-            }}
-          >
-            {flowSignals.map((signal, index) => {
-              const visual = signalVisualTreatment(signal);
-              const whyIncluded =
-                selectedMemoryGroup?.source === "all"
-                  ? "newest saved inspiration in the drawer"
-                  : selectedMemoryGroup?.terms.find((term) => signalTextHaystack(signal).includes(term)) ||
-                    signal.relatedTopOfMindNoteTitles[0] ||
-                    signal.relatedContextTerms[0] ||
-                    selectedMemoryGroup?.explanation ||
-                    "this pile is still forming";
-              return (
-                <article
-                  key={signal.id}
-                  className={`memory-flow-card memory-flow-card--${visual}${
-                    index === activeIndex ? " memory-flow-card--active" : ""
-                  }`}
-                  aria-hidden={index === activeIndex ? undefined : true}
-                >
-                  <span className="memory-flow-kicker">{signalMaterialLabel(signal)}</span>
-                  <p className="memory-flow-readable">{signal.textPreview}</p>
-                  {signal.attachmentSummary.slice(0, 2).map((attachment) => (
-                    <span key={attachment.id} className="memory-flow-attachment">
-                      {attachment.label}
-                    </span>
-                  ))}
-                  <footer>
-                    <div>
-                      <span>{selectedMemoryGroup?.name ?? "current pile"}</span>
-                      <p>{shortText(whyIncluded, 112)}</p>
-                    </div>
-                    <button type="button" onClick={() => openMemoryWindow(signal)}>
-                      open on desk
-                    </button>
-                  </footer>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-    );
-  };
-
-  const renderMemoryWindow = ({
-    memoryWindow,
-    signal,
-  }: {
-    memoryWindow: MemoryWindowState;
-    signal: ApiSavedSignalSearchResult;
-  }): JSX.Element => {
-    const detail = memoryWindowDetails[signal.id];
-    const loading = memoryWindowLoadingIds.has(signal.id);
-    const detailText = detail?.rawText ?? signal.textPreview;
-    const relatedGroupNames = memoryGroupings
-      .filter((group) => group.signals.some((groupSignal) => groupSignal.id === signal.id))
-      .map((group) => group.name)
-      .slice(0, 3);
-    const relationshipHints = relationshipHintsForOpenWindow(signal.id);
-    return (
-      <article
-        key={signal.id}
-        className={`memory-window${memoryWindow.minimized ? " memory-window--minimized" : ""}${
-          draggingMemoryWindowId === signal.id ? " memory-window--dragging" : ""
-        }`}
-        style={{
-          ["--x" as string]: `${memoryWindow.x}px`,
-          ["--y" as string]: `${memoryWindow.y}px`,
-          zIndex: memoryWindow.z,
-        }}
-        onPointerDown={onMemoryWindowPointerDown(memoryWindow)}
-        onMouseDown={onMemoryWindowMouseDown(memoryWindow)}
-        aria-label={`open inspiration: ${shortText(signal.textPreview, 64)}`}
-      >
-        <header className="memory-window-bar">
-          <div
-            className="memory-window-title"
-            aria-hidden="true"
-          >
-            <span>{signalMaterialLabel(signal)}</span>
-            <strong>{shortText(signal.textPreview, 54)}</strong>
-          </div>
-          <div className="memory-window-actions">
-            <button type="button" onClick={() => toggleMinimizeMemoryWindow(signal.id)}>
-              {memoryWindow.minimized ? "open" : "minimize"}
-            </button>
-            <button type="button" onClick={() => closeMemoryWindow(signal.id)}>
-              close
-            </button>
-          </div>
-        </header>
-        {memoryWindow.minimized ? null : (
-          <div className="memory-window-body signal-revisit-detail signal-revisit-detail--open">
-            {loading ? <p className="signal-revisit-state">Opening the inspiration...</p> : null}
-            <section className="memory-window-primary">
-              <span>saved inspiration</span>
-              <p
-                className="signal-revisit-raw memory-readable-signal"
-              >
-                {detailText}
-              </p>
-            </section>
-            {(detail?.attachments.length ?? 0) > 0 || signal.attachmentSummary.length > 0 ? (
-              <section className="memory-window-context">
-                <span>attachment details</span>
-                <ul className="signal-revisit-notes">
-                  {(detail?.attachments.length
-                    ? detail.attachments.map((attachment) => ({
-                        id: attachment.id,
-                        label: `${attachment.label}${
-                          attachment.contentType || attachment.size
-                            ? ` · ${[attachment.contentType, attachment.size ? `${Math.ceil(attachment.size / 1024)} KB` : null]
-                                .filter(Boolean)
-                                .join(" · ")}`
-                            : ""
-                        }`,
-                      }))
-                    : signal.attachmentSummary
-                  ).map((attachment) => (
-                    <li key={attachment.id}>
-                      <strong>{attachment.label}</strong>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-            <section className="memory-window-context">
-              <span>nearby piles</span>
-              <p>
-                {relatedGroupNames.length > 0
-                  ? relatedGroupNames.join(", ")
-                  : "No clear pile has claimed this yet."}
-              </p>
-            </section>
-            {signal.relatedTopOfMindNoteTitles.length > 0 ? (
-              <section className="memory-window-context">
-                <span>why it may belong here</span>
-                <p>{signal.relatedTopOfMindNoteTitles.slice(0, 2).join(", ")}</p>
-              </section>
-            ) : null}
-            {relationshipHints.length > 0 ? (
-              <section className="memory-window-hints" aria-label="relationship hints">
-                <span>between open inspirations</span>
-                {relationshipHints.map((relationship) => {
-                  const otherId = relationship.sourceId === signal.id ? relationship.targetId : relationship.sourceId;
-                  const otherSignal = inPlaceSignals.find((candidate) => candidate.id === otherId);
-                  return (
-                    <p key={relationship.id}>
-                      <strong>{relationship.label}</strong>
-                      {otherSignal ? ` with "${shortText(otherSignal.textPreview, 58)}"` : null}
-                    </p>
-                  );
-                })}
-              </section>
-            ) : null}
-          </div>
-        )}
-      </article>
-    );
-  };
-
   // Retired by the anchored stack drawer; keep the old comparison helpers
   // inert until the remaining memory-window state can be removed in one cleanup.
-  void setMemoryFolderView;
   void visibleMemoryWindows;
   void renderMemorySignalCard;
   void renderMemoryGroupObject;
   void createUserMemoryGroup;
-  void renderMemoryFlow;
-  void renderMemoryWindow;
 
   useEffect(() => {
     if (draggingIndex === null) return undefined;
@@ -3809,55 +3560,6 @@ export function HomePage(): JSX.Element {
     };
   }, [draggingMemoryGroupId]);
 
-  useEffect(() => {
-    if (draggingMemoryWindowId === null) return undefined;
-
-    const moveWindow = (clientX: number, clientY: number) => {
-      const start = memoryWindowDragStartRef.current;
-      if (!start) return;
-      const dx = clientX - start.x;
-      const dy = clientY - start.y;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) memoryWindowDragMovedRef.current = true;
-      setMemoryWindows((current) =>
-        current.map((memoryWindow) =>
-          memoryWindow.signalId === start.id
-            ? {
-                ...memoryWindow,
-                x: start.baseX + dx,
-                y: start.baseY + dy,
-              }
-            : memoryWindow,
-        ),
-      );
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      moveWindow(event.clientX, event.clientY);
-    };
-
-    const handleMouseMove = (event: MouseEvent) => {
-      moveWindow(event.clientX, event.clientY);
-    };
-
-    const handlePointerUp = () => {
-      memoryWindowDragStartRef.current = null;
-      setDraggingMemoryWindowId(null);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handlePointerUp);
-    };
-  }, [draggingMemoryWindowId]);
-
   const onNotePointerDown = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("button, a, input, textarea")) return;
@@ -3872,41 +3574,6 @@ export function HomePage(): JSX.Element {
     dragMovedRef.current = false;
     setDraggingIndex(index);
   };
-
-  const startMemoryWindowDrag = (
-    memoryWindow: MemoryWindowState,
-    event: ReactPointerEvent<HTMLElement> | ReactMouseEvent<HTMLElement>,
-  ) => {
-      const target = event.target as HTMLElement;
-      if (target.closest("button, a, input, textarea, mark")) return;
-      if (draggingMemoryWindowId === memoryWindow.signalId) return;
-      const nextZ = memoryWindowZ + 1;
-      setMemoryWindowZ(nextZ);
-      setMemoryWindows((current) =>
-        current.map((item) =>
-          item.signalId === memoryWindow.signalId ? { ...item, z: nextZ } : item,
-        ),
-      );
-      memoryWindowDragStartRef.current = {
-        id: memoryWindow.signalId,
-        x: event.clientX,
-        y: event.clientY,
-        baseX: memoryWindow.x,
-        baseY: memoryWindow.y,
-      };
-      memoryWindowDragMovedRef.current = false;
-      setDraggingMemoryWindowId(memoryWindow.signalId);
-    };
-
-  const onMemoryWindowPointerDown =
-    (memoryWindow: MemoryWindowState) => (event: ReactPointerEvent<HTMLElement>) => {
-      startMemoryWindowDrag(memoryWindow, event);
-    };
-
-  const onMemoryWindowMouseDown =
-    (memoryWindow: MemoryWindowState) => (event: ReactMouseEvent<HTMLElement>) => {
-      startMemoryWindowDrag(memoryWindow, event);
-    };
 
   const signalIdForSupportingSignal = (support: SupportingThoughtSignal): string | null => {
     const id = support.id?.trim();
