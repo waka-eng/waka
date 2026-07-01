@@ -121,6 +121,7 @@ type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
   "important" | "partly" | "not_true"
 >;
+type SavedSignalFeedbackValue = Extract<ApiFeedbackValue, "true" | "partly" | "not_true">;
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
 type SupportingThoughtSignal = HomeThoughtCard["supportingSignals"][number];
@@ -1138,6 +1139,20 @@ const HOME_COPY = {
     feedbackSaved: "저장됨",
     feedbackSaving: "저장 중...",
     feedbackError: "포스트잇을 바꾸지 못했습니다",
+    savedSignalReflectionLabel: "이 영감 돌아보기",
+    savedSignalReflectionPrompts: [
+      "그때 이 영감은 어떤 의미였나요?",
+      "지금은 어떻게 다가오나요?",
+      "아직 나다운가요?",
+    ],
+    savedSignalFeedbackActions: [
+      { label: "아직 살아 있음", value: "true" },
+      { label: "달라진 모양", value: "partly" },
+      { label: "더는 아님", value: "not_true" },
+    ],
+    savedSignalFeedbackSaved: "저장됨",
+    savedSignalFeedbackSaving: "저장 중...",
+    savedSignalFeedbackError: "영감 피드백을 저장하지 못했습니다",
     loadingThoughts: "생각을 모으는 중...",
     emptyThoughts: "관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
@@ -1192,6 +1207,20 @@ const HOME_COPY = {
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
+    savedSignalReflectionLabel: "reflect on this inspiration",
+    savedSignalReflectionPrompts: [
+      "What did this mean then?",
+      "What does it mean now?",
+      "Is this still me?",
+    ],
+    savedSignalFeedbackActions: [
+      { label: "still alive", value: "true" },
+      { label: "changed shape", value: "partly" },
+      { label: "not anymore", value: "not_true" },
+    ],
+    savedSignalFeedbackSaved: "saved",
+    savedSignalFeedbackSaving: "saving...",
+    savedSignalFeedbackError: "could not save inspiration feedback",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "When 2–3 related inspirations gather, provisional notes will appear here.",
     captureTitle: "Catch the first inspiration",
@@ -1236,6 +1265,12 @@ const HOME_COPY = {
     feedbackSaved: string;
     feedbackSaving: string;
     feedbackError: string;
+    savedSignalReflectionLabel: string;
+    savedSignalReflectionPrompts: [string, string, string];
+    savedSignalFeedbackActions: Array<{ label: string; value: SavedSignalFeedbackValue }>;
+    savedSignalFeedbackSaved: string;
+    savedSignalFeedbackSaving: string;
+    savedSignalFeedbackError: string;
     loadingThoughts: string;
     emptyThoughts: string;
     captureTitle: string;
@@ -1352,6 +1387,16 @@ export function HomePage(): JSX.Element {
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
+  const [savedSignalFeedback, setSavedSignalFeedback] = useState<
+    Record<
+      string,
+      {
+        value: SavedSignalFeedbackValue | null;
+        status: FeedbackStatus;
+        error: string | null;
+      }
+    >
+  >({});
   const [savedSignalReflections, setSavedSignalReflections] = useState<Record<string, ApiReflection[]>>({});
   const [expandedReflectionThreads, setExpandedReflectionThreads] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectionLoadingIds, setSavedSignalReflectionLoadingIds] = useState<Set<string>>(() => new Set());
@@ -3222,6 +3267,66 @@ export function HomePage(): JSX.Element {
     });
   };
 
+  const submitSavedSignalFeedback = async (
+    signal: ApiSavedSignalSearchResult,
+    value: SavedSignalFeedbackValue,
+  ): Promise<void> => {
+    const persistedFeedbackValue =
+      savedSignalDetail?.id === signal.id
+        ? [...savedSignalDetail.resonanceFeedback]
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+            .reverse()
+            .find((feedback) => feedback.value === "true" || feedback.value === "partly" || feedback.value === "not_true")
+            ?.value ?? null
+        : null;
+    const previousFeedback = savedSignalFeedback[signal.id] ?? {
+      value: persistedFeedbackValue,
+      status: "idle" as FeedbackStatus,
+      error: null,
+    };
+    setSavedSignalFeedback((current) => ({
+      ...current,
+      [signal.id]: { value, status: "saving", error: null },
+    }));
+
+    try {
+      const feedback = await createFeedback({
+        targetType: "signal",
+        targetId: signal.id,
+        value,
+      });
+      setSavedSignalFeedback((current) => ({
+        ...current,
+        [signal.id]: { value, status: "saved", error: null },
+      }));
+      setSavedSignalDetail((current) => {
+        if (!current || current.id !== signal.id) return current;
+        return {
+          ...current,
+          resonanceFeedback: [
+            ...current.resonanceFeedback,
+            {
+              id: feedback.id,
+              value,
+              emotionLabel: feedback.emotionLabel,
+              correctionText: feedback.correctionText,
+              createdAt: feedback.createdAt,
+            },
+          ],
+        };
+      });
+    } catch {
+      setSavedSignalFeedback((current) => ({
+        ...current,
+        [signal.id]: {
+          ...previousFeedback,
+          status: "error",
+          error: copy.savedSignalFeedbackError,
+        },
+      }));
+    }
+  };
+
   const renderMemoryStackSignalCard = (signal: ApiSavedSignalSearchResult): JSX.Element => {
     const linkAttachment = signal.attachmentSummary.find((attachment) => attachment.type === "link" && attachment.url);
     const sourceLabel = signalSourceLabel(signal);
@@ -3244,6 +3349,15 @@ export function HomePage(): JSX.Element {
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
       const reflectionsExpanded = expandedReflectionThreads.has(signal.id);
+      const persistedFeedbackValue = fullDetailReady
+        ? [...savedSignalDetail.resonanceFeedback]
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+            .at(-1)?.value ?? null
+        : null;
+      const detailFeedback = savedSignalFeedback[signal.id];
+      const selectedFeedbackValue = detailFeedback?.value ?? persistedFeedbackValue;
+      const detailFeedbackStatus = detailFeedback?.status ?? "idle";
+      const detailFeedbackError = detailFeedback?.error ?? null;
       return (
         <article
           className="memory-contents-item memory-contents-item--expanded"
@@ -3296,6 +3410,44 @@ export function HomePage(): JSX.Element {
               />
             )}
           </div>
+          <section className="memory-contents-reflection-prompts" aria-label={copy.savedSignalReflectionLabel}>
+            <p className="memory-contents-reflection-prompts-label">{copy.savedSignalReflectionLabel}</p>
+            <ul>
+              {copy.savedSignalReflectionPrompts.map((prompt) => (
+                <li key={prompt}>{prompt}</li>
+              ))}
+            </ul>
+            <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
+              {copy.savedSignalFeedbackActions.map((action) => {
+                const isSelected = selectedFeedbackValue === action.value;
+                const isSaving = detailFeedbackStatus === "saving" && isSelected;
+                return (
+                  <button
+                    key={action.value}
+                    type="button"
+                    className={`memory-contents-feedback-action${isSelected ? " memory-contents-feedback-action--selected" : ""}`}
+                    aria-label={`saved inspiration feedback: ${action.label}`}
+                    aria-pressed={isSelected}
+                    disabled={detailFeedbackStatus === "saving"}
+                    onClick={() => {
+                      void submitSavedSignalFeedback(signal, action.value);
+                    }}
+                  >
+                    {action.label}
+                    {isSaving ? <span>{copy.savedSignalFeedbackSaving}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+            {detailFeedbackStatus === "saved" ? (
+              <p className="memory-contents-feedback-status">{copy.savedSignalFeedbackSaved}</p>
+            ) : null}
+            {detailFeedbackStatus === "error" && detailFeedbackError ? (
+              <p className="memory-contents-feedback-status memory-contents-feedback-status--error">
+                {detailFeedbackError}
+              </p>
+            ) : null}
+          </section>
           <div className="memory-contents-expanded-footer">
             <span className="memory-contents-item-meta">
               {metaItems.map((item, index) => (
