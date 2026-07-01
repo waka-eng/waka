@@ -33,7 +33,7 @@ import type {
   ApiTopOfMind,
   ApiTopOfMindNoteSurface,
 } from "../src/lib/api";
-import { HomePage } from "../src/pages/Home";
+import { HomePage, getMemoryPreviewPlacement } from "../src/pages/Home";
 
 const mockAuthState = vi.hoisted(() => ({
   value: {
@@ -506,6 +506,66 @@ function persistedReflection(overrides: Partial<ApiReflection> = {}): ApiReflect
     ...overrides,
   };
 }
+
+describe("memory preview placement", () => {
+  const anchor = {
+    top: 240,
+    right: 240,
+    bottom: 280,
+    left: 160,
+    width: 80,
+    height: 40,
+  };
+  const preview = { width: 320, height: 190 };
+
+  it("clamps the hover card inside the left viewport edge", () => {
+    const placement = getMemoryPreviewPlacement(
+      { ...anchor, left: 8, right: 88 },
+      { width: 960, height: 720 },
+      preview,
+    );
+
+    const left = Number.parseInt(placement.left, 10) - preview.width / 2 + 8;
+    expect(left).toBeGreaterThanOrEqual(12);
+    expect(placement.side).toBe("below");
+  });
+
+  it("clamps the hover card inside the right viewport edge", () => {
+    const placement = getMemoryPreviewPlacement(
+      { ...anchor, left: 900, right: 980 },
+      { width: 960, height: 720 },
+      preview,
+    );
+
+    const viewportLeft = 900 + Number.parseInt(placement.left, 10) - preview.width / 2;
+    expect(viewportLeft + preview.width).toBeLessThanOrEqual(948);
+    expect(placement.originX).not.toBe("160px");
+  });
+
+  it("flips above when the anchor is near the bottom edge", () => {
+    const placement = getMemoryPreviewPlacement(
+      { ...anchor, top: 650, bottom: 690 },
+      { width: 960, height: 720 },
+      preview,
+    );
+
+    expect(placement.side).toBe("above");
+    expect(placement.originY).toBe("bottom");
+    expect(Number.parseInt(placement.top, 10)).toBeLessThan(0);
+  });
+
+  it("keeps the hover card below when flipping would cross the top edge", () => {
+    const placement = getMemoryPreviewPlacement(
+      { ...anchor, top: 8, bottom: 48 },
+      { width: 960, height: 720 },
+      preview,
+    );
+
+    expect(placement.side).toBe("below");
+    expect(Number.parseInt(placement.top, 10)).toBeGreaterThan(0);
+  });
+});
+
 
 describe("HomePage current home experience", () => {
   async function clickSavesTab(container: HTMLElement, count = 2): Promise<void> {
