@@ -103,7 +103,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
   const hostname =
     typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
   const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true" || isLocalhost;
+  return env.VITE_SHOW_INTERNAL_STATUS === "true" || (env.DEV === true && isLocalhost);
 }
 
 /**
@@ -920,7 +920,7 @@ function memoryMapLabel(value: string): string {
     "things i am done with": "done with",
     "taste with a pulse": "taste pulse",
     "questions still open": "open questions",
-    "inspirations touching": "loose signals",
+    "inspirations touching": "loose inspirations",
   };
   const shortLabel = knownLabels[label] ?? label;
   const words = shortLabel
@@ -1228,9 +1228,9 @@ const HOME_COPY = {
     savedSignalFeedbackSaving: "저장 중...",
     savedSignalFeedbackError: "영감 피드백을 저장하지 못했습니다",
     loadingThoughts: "생각을 모으는 중...",
-    emptyThoughts: "관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.",
+    emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
-    captureBody: "정리하지 않아도 됩니다. 어설프고 덜 완성된 것도 사라지기 전에 저장하세요.",
+    captureBody: "정리하지 않아도 됩니다. 사라지기 전에 저장하면 WAKA가 그 영감을 해석하고 다른 것들과 연결합니다.",
     captureInlineKicker: "영감 기록",
     footnote: (name: string) => (
       <>
@@ -1248,11 +1248,11 @@ const HOME_COPY = {
     searchLabel: "검색",
     searchPlaceholder: "저장된 영감 검색",
     loadingSaves: "저장된 영감을 불러오는 중...",
-    emptySaves: "아직 저장된 영감이 없습니다.",
+    emptySaves: "아직 저장된 영감이 없습니다. 영감을 하나 기록하면 WAKA가 해석하고 연결할 재료가 생깁니다.",
     captureAria: "영감 기록하기",
     captureCta: "영감 기록",
     captureHint: () => "",
-    bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
+    bottomHint: "영감을 기록하면 WAKA가 해석하고 연결해, 고칠 수 있는 임시 포스트잇으로 띄웁니다.",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1294,9 +1294,9 @@ const HOME_COPY = {
     savedSignalFeedbackSaving: "saving...",
     savedSignalFeedbackError: "could not save inspiration feedback",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "When 2–3 related inspirations gather, provisional notes will appear here.",
+    emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
     captureTitle: "Catch the first inspiration",
-    captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing before it disappears.",
+    captureBody: "No tagging, journaling, or organizing. Save the messy, half-formed thing and WAKA will interpret how it connects.",
     captureInlineKicker: "inspiration capture",
     footnote: () => <></>,
     footnoteCredit: "",
@@ -1306,11 +1306,11 @@ const HOME_COPY = {
     searchLabel: "search",
     searchPlaceholder: "search saved inspirations",
     loadingSaves: "loading saved inspirations...",
-    emptySaves: "no inspirations saved yet.",
+    emptySaves: "no inspirations saved yet. Capture one and WAKA will have something to interpret and connect.",
     captureAria: "capture inspiration",
     captureCta: "capture inspiration",
     captureHint: () => "",
-    bottomHint: "Capture inspirations to generate your top of mind stickies.",
+    bottomHint: "Capture an inspiration; WAKA interprets and connects it into provisional post-its you can correct.",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -3092,6 +3092,19 @@ export function HomePage(): JSX.Element {
       .map((answer, index) => (index === savedSignalReflectionStepIndex ? savedSignalReflectionDraft : answer))
       .filter((answer) => answer.trim().length > 0).length > 0;
 
+  const showDrawerSearch =
+    homeMode === "memoryDrawer" &&
+    !selectedDrawerHasEdit &&
+    !deletedSavedSignalUndo &&
+    !selectedDrawerIsReflecting;
+  const showDrawerEditActions =
+    homeMode === "memoryDrawer" && selectedDrawerHasEdit && !deletedSavedSignalUndo;
+  const showDrawerUndo = homeMode === "memoryDrawer" && Boolean(deletedSavedSignalUndo);
+  const showTopOfMindUndo = homeMode !== "memoryDrawer" && Boolean(deletedTopOfMindUndo);
+  const showTopOfMindCapture = homeMode !== "memoryDrawer" && !deletedTopOfMindUndo;
+  const showPrimarySaveButton =
+    showTopOfMindCapture || showTopOfMindUndo || showDrawerEditActions || showDrawerUndo;
+
   const cancelSavedSignalReflection = (): void => {
     setSavedSignalReflectingId(null);
     setSavedSignalReflectionDraft("");
@@ -4008,7 +4021,7 @@ export function HomePage(): JSX.Element {
       onPointerDown={noteIsInteractive ? onNotePointerDown(index) : undefined}
     >
       <div className="nc-note-preview" aria-label="post-it preview">
-        {signal.feedbackTargetId ? (
+        {noteIsInteractive && signal.feedbackTargetId ? (
           <div className="nc-note-edit-shell">
             <textarea
               className="nc-note-body nc-note-body-edit nc-note-body-edit--inline"
@@ -4036,11 +4049,11 @@ export function HomePage(): JSX.Element {
         )}
       </div>
       <div className="nc-note-footer-row">
-        {supportingCount > 0 ? (
+        {noteIsInteractive && supportingCount > 0 ? (
           <button
             type="button"
             className="nc-note-inspiration-slide"
-            disabled={!canOpenEvidenceDrawer || homeMode === "memoryDrawer"}
+            disabled={!canOpenEvidenceDrawer}
             onClick={(event) => {
               event.stopPropagation();
               openTopOfMindEvidenceDrawer(signal);
@@ -4049,7 +4062,7 @@ export function HomePage(): JSX.Element {
             {supportingCount} inspiration{supportingCount === 1 ? "" : "s"} led here
           </button>
         ) : <span />}
-        {renderPostItActions(signal)}
+        {noteIsInteractive ? renderPostItActions(signal) : null}
       </div>
     </article>
   );
@@ -4165,198 +4178,141 @@ export function HomePage(): JSX.Element {
       >
         <div
           className={`nc-primary-action${
-            homeMode === "memoryDrawer" &&
-            !deletedSavedSignalUndo &&
-            !selectedDrawerHasEdit &&
-            !selectedDrawerIsReflecting
-              ? " nc-primary-action--search"
-              : ""
-          }${
-            homeMode === "memoryDrawer" && selectedDrawerHasEdit && !deletedSavedSignalUndo
-              ? " nc-primary-action--save"
-              : ""
-          }${
-            selectedDrawerIsReflecting && !deletedSavedSignalUndo && !selectedDrawerHasEdit
-              ? " nc-primary-action--reflect"
-              : ""
-          }${
-            (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
-            (deletedSavedSignalUndo && homeMode === "memoryDrawer")
-              ? " nc-primary-action--undo"
-              : ""
+            showDrawerSearch ? " nc-primary-action--search" : ""
+          }${showDrawerEditActions ? " nc-primary-action--save" : ""}${
+            selectedDrawerIsReflecting ? " nc-primary-action--reflect" : ""
+          }${showTopOfMindUndo || showDrawerUndo ? " nc-primary-action--undo" : ""
           }`}
         >
-          <button
-            type="button"
-            className={`nc-save${captureSaved ? " nc-save--saved" : ""}${
-              (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
-              (deletedSavedSignalUndo && homeMode === "memoryDrawer")
-                ? " nc-save--undo"
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? " nc-save--save"
-                : ""
-            }`}
-            onClick={
-              deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? undoDeletedSavedSignal
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? () => void saveEditedSavedSignal()
-                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                  ? undoDeletedTopOfMindNote
-                  : openCapture
-            }
-            aria-label={
-              deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? "inspiration was deleted, undo"
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? "save edited inspiration"
-                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                ? "sticky note was deleted, undo"
-                : copy.captureAria
-            }
-            tabIndex={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? -1 : undefined}
-            aria-hidden={
-              homeMode === "memoryDrawer" &&
-              !deletedSavedSignalUndo &&
-              !selectedDrawerHasEdit
-                ? "true"
-                : undefined
-            }
-            disabled={homeMode === "memoryDrawer" && selectedDrawerHasEdit && savedSignalEditSaving}
-          >
-            <span className="nc-save-cta">
-              {deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? "inspiration was deleted · undo"
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? savedSignalEditSaving
-                    ? "saving..."
-                    : "save"
-                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                ? "sticky note was deleted · undo"
-                : captureSaved
-                  ? t(locale, "saved")
-                  : copy.captureCta}
-              {homeMode !== "memoryDrawer" && !deletedTopOfMindUndo && !captureSaved && captureHasDraft ? (
-                <span className="nc-save-draft">(draft)</span>
+          {showPrimarySaveButton ? (
+            <button
+              type="button"
+              className={`nc-save${captureSaved ? " nc-save--saved" : ""}${
+                showTopOfMindUndo || showDrawerUndo
+                  ? " nc-save--undo"
+                  : showDrawerEditActions
+                    ? " nc-save--save"
+                    : ""
+              }`}
+              onClick={
+                showDrawerUndo
+                  ? undoDeletedSavedSignal
+                  : showDrawerEditActions
+                    ? () => void saveEditedSavedSignal()
+                  : showTopOfMindUndo
+                    ? undoDeletedTopOfMindNote
+                    : openCapture
+              }
+              aria-label={
+                showDrawerUndo
+                  ? "inspiration was deleted, undo"
+                  : showDrawerEditActions
+                    ? "save edited inspiration"
+                    : showTopOfMindUndo
+                      ? "sticky note was deleted, undo"
+                      : copy.captureAria
+              }
+              disabled={showDrawerEditActions && savedSignalEditSaving}
+            >
+              <span className="nc-save-cta">
+                {showDrawerUndo
+                  ? "inspiration was deleted · undo"
+                  : showDrawerEditActions
+                    ? savedSignalEditSaving
+                      ? "saving..."
+                      : "save"
+                    : showTopOfMindUndo
+                      ? "sticky note was deleted · undo"
+                      : captureSaved
+                        ? t(locale, "saved")
+                        : copy.captureCta}
+                {showTopOfMindCapture && !captureSaved && captureHasDraft ? (
+                  <span className="nc-save-draft">(draft)</span>
+                ) : null}
+              </span>
+            </button>
+          ) : null}
+          {showDrawerEditActions ? (
+            <button
+              type="button"
+              className="nc-edit-cancel"
+              onClick={cancelSavedSignalEdit}
+              aria-label="cancel edit"
+            >
+              cancel edit
+            </button>
+          ) : null}
+          {showDrawerSearch ? (
+            <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
+              <span className="sr-only">{copy.searchLabel}</span>
+              <input
+                type="search"
+                value={inspirationFilters.search}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setInspirationFilters({ search: event.target.value });
+                  setSelectedMemoryGroupId(null);
+                  setSelectedSavedSignalId(null);
+                  setSavedSignalDetail(null);
+                  cancelSavedSignalReflection();
+                }}
+                placeholder={copy.searchPlaceholder}
+              />
+            </label>
+          ) : null}
+          {selectedDrawerIsReflecting ? (
+            <form
+              className="nc-drawer-reflect"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveSavedSignalReflection();
+              }}
+            >
+              <div className="nc-drawer-reflect-question">
+                <span>{selectedDrawerReflectionProgress}</span>
+                <p>{selectedDrawerReflectionQuestion}</p>
+              </div>
+              <textarea
+                ref={savedSignalReflectionInputRef}
+                value={savedSignalReflectionDraft}
+                onChange={(event) => {
+                  setSavedSignalReflectionDraft(event.target.value);
+                  event.currentTarget.style.height = "auto";
+                  event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
+                }}
+                placeholder="answer here"
+                disabled={savedSignalReflectionSaving}
+                rows={1}
+              />
+              <div className="nc-drawer-reflect-actions">
+                <button
+                  type="button"
+                  onClick={goToPreviousSavedSignalReflection}
+                  disabled={savedSignalReflectionSaving || savedSignalReflectionStepIndex === 0}
+                >
+                  previous
+                </button>
+                <button
+                  type="button"
+                  onClick={goToNextSavedSignalReflection}
+                  disabled={!selectedDrawerReflectionCanGoNext || savedSignalReflectionSaving}
+                >
+                  next
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedDrawerReflectionCanFinish || savedSignalReflectionSaving}
+                >
+                  {savedSignalReflectionSaving ? "saving..." : "save"}
+                </button>
+                <button type="button" onClick={cancelSavedSignalReflection}>
+                  cancel
+                </button>
+              </div>
+              {savedSignalReflectionError ? (
+                <span className="nc-drawer-reflect-error">{savedSignalReflectionError}</span>
               ) : null}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="nc-edit-cancel"
-            onClick={cancelSavedSignalEdit}
-            aria-label="cancel edit"
-            tabIndex={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : -1}
-            aria-hidden={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : "true"}
-          >
-            cancel edit
-          </button>
-          <label
-            className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}
-            aria-hidden={homeMode === "memoryDrawer" ? undefined : "true"}
-          >
-            <span className="sr-only">{copy.searchLabel}</span>
-            <input
-              type="search"
-              value={inspirationFilters.search}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setInspirationFilters({ search: event.target.value });
-                setSelectedMemoryGroupId(null);
-                setSelectedSavedSignalId(null);
-                setSavedSignalDetail(null);
-                cancelSavedSignalReflection();
-              }}
-              placeholder={copy.searchPlaceholder}
-              disabled={
-                homeMode !== "memoryDrawer" ||
-                selectedDrawerHasEdit ||
-                Boolean(deletedSavedSignalUndo) ||
-                selectedDrawerIsReflecting
-              }
-              tabIndex={
-                homeMode === "memoryDrawer" &&
-                !selectedDrawerHasEdit &&
-                !deletedSavedSignalUndo &&
-                !selectedDrawerIsReflecting
-                  ? undefined
-                  : -1
-              }
-            />
-          </label>
-          <form
-            className="nc-drawer-reflect"
-            aria-hidden={selectedDrawerIsReflecting ? undefined : "true"}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveSavedSignalReflection();
-            }}
-          >
-            <div className="nc-drawer-reflect-question">
-              <span>{selectedDrawerReflectionProgress}</span>
-              <p>{selectedDrawerReflectionQuestion}</p>
-            </div>
-            <textarea
-              ref={savedSignalReflectionInputRef}
-              value={savedSignalReflectionDraft}
-              onChange={(event) => {
-                setSavedSignalReflectionDraft(event.target.value);
-                event.currentTarget.style.height = "auto";
-                event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
-              }}
-              placeholder="answer here"
-              disabled={!selectedDrawerIsReflecting || savedSignalReflectionSaving}
-              tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              rows={1}
-            />
-            <div className="nc-drawer-reflect-actions">
-              <button
-                type="button"
-                onClick={goToPreviousSavedSignalReflection}
-                disabled={
-                  !selectedDrawerIsReflecting ||
-                  savedSignalReflectionSaving ||
-                  savedSignalReflectionStepIndex === 0
-                }
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                previous
-              </button>
-              <button
-                type="button"
-                onClick={goToNextSavedSignalReflection}
-                disabled={
-                  !selectedDrawerIsReflecting ||
-                  !selectedDrawerReflectionCanGoNext ||
-                  savedSignalReflectionSaving
-                }
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                next
-              </button>
-              <button
-                type="submit"
-                disabled={
-                  !selectedDrawerIsReflecting ||
-                  !selectedDrawerReflectionCanFinish ||
-                  savedSignalReflectionSaving
-                }
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                {savedSignalReflectionSaving ? "saving..." : "save"}
-              </button>
-              <button
-                type="button"
-                onClick={cancelSavedSignalReflection}
-                disabled={!selectedDrawerIsReflecting}
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                cancel
-              </button>
-            </div>
-            {savedSignalReflectionError ? (
-              <span className="nc-drawer-reflect-error">{savedSignalReflectionError}</span>
-            ) : null}
-          </form>
+            </form>
+          ) : null}
         </div>
         {!selectedDrawerIsReflecting ? (
           <button
