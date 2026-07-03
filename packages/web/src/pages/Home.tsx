@@ -440,38 +440,6 @@ function shortText(value: string, maxLength = 220): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function inspirationFacingCopy(value: string): string {
-  return value
-    .replace(/^waka\.signal_packet(?::v|\.)\d+\s*/i, "")
-    .replace(/\bwaka\.signal_packet(?::v|\.)\d+\b/gi, "")
-    .replace(/\bsignals\b/g, "inspirations")
-    .replace(/\bSignals\b/g, "Inspirations")
-    .replace(/\bsignal\b/g, "inspiration")
-    .replace(/\bSignal\b/g, "Inspiration")
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function packetInterpretationCopy(value: string): string {
-  const lines = value
-    .split("\n")
-    .map((line) => line.trim());
-  const hasDebugSections = lines.some((line) => /^(WHAT_HIT|WHY_IT_MATTERS|REFLECTIONS|CONTEXT_EXCERPT)\b/i.test(line));
-  const userFacingLines = lines.filter((line) => {
-    if (!line) return false;
-    if (/^waka\.signal_packet(?::v|\.)\d+\b/i.test(line)) return false;
-    if (/^(WHAT_HIT|WHY_IT_MATTERS|REFLECTIONS|CONTEXT_EXCERPT)\b/i.test(line)) return false;
-    if (/^primary:\s.*\((user_written|generated|manual),\s*confidence=\d+\)/i.test(line)) return false;
-    if (/^cluster=/i.test(line)) return false;
-    if (/^none$/i.test(line)) return false;
-    if (hasDebugSections && !/^READ:/i.test(line)) return false;
-    return true;
-  });
-
-  return inspirationFacingCopy(userFacingLines.join("\n"));
-}
-
 const MEANING_NOTE_LABEL_TRANSLATIONS: Record<string, string> = {
   "what kind of life would make this work worth it": "이 일을 가치 있게 만드는 삶",
   "rooms where people can be honest before they are impressive": "인상적이기 전에 솔직할 수 있는 방",
@@ -1259,6 +1227,10 @@ const HOME_COPY = {
     savedSignalFeedbackSaved: "저장됨",
     savedSignalFeedbackSaving: "저장 중...",
     savedSignalFeedbackError: "영감 피드백을 저장하지 못했습니다",
+    savedSignalActionsLabel: "영감 작업",
+    savedSignalReflect: "조금 더 생각하기",
+    savedSignalReflecting: "생각하는 중…",
+    savedSignalDelete: "삭제",
     loadingThoughts: "생각을 모으는 중...",
     emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
@@ -1325,6 +1297,10 @@ const HOME_COPY = {
     savedSignalFeedbackSaved: "saved",
     savedSignalFeedbackSaving: "saving...",
     savedSignalFeedbackError: "could not save inspiration feedback",
+    savedSignalActionsLabel: "inspiration actions",
+    savedSignalReflect: "reflect",
+    savedSignalReflecting: "reflecting",
+    savedSignalDelete: "delete",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
     captureTitle: "Catch the first inspiration",
@@ -1377,6 +1353,10 @@ const HOME_COPY = {
     savedSignalFeedbackSaved: string;
     savedSignalFeedbackSaving: string;
     savedSignalFeedbackError: string;
+    savedSignalActionsLabel: string;
+    savedSignalReflect: string;
+    savedSignalReflecting: string;
+    savedSignalDelete: string;
     loadingThoughts: string;
     emptyThoughts: string;
     captureTitle: string;
@@ -3546,16 +3526,6 @@ export function HomePage(): JSX.Element {
         ? pendingSavedSignalCorrection
         : null;
       const isFeedbackSaving = detailFeedbackStatus === "saving";
-      const packet = fullDetailReady ? savedSignalDetail.signalPacket : null;
-      const packetText = packet ? packetInterpretationCopy(packet.text) : "";
-      const packetSpark = packet?.primarySpark ? inspirationFacingCopy(packet.primarySpark) : "";
-      const packetArtifact = packet?.artifactExcerpt ? inspirationFacingCopy(packet.artifactExcerpt) : "";
-      const hasPacketDisplay = Boolean(packetText || packetSpark || packetArtifact);
-      const highlightedSnippets = fullDetailReady ? savedSignalDetail.highlightedSnippets.slice(0, 3) : [];
-      const relatedContextNodes = fullDetailReady ? savedSignalDetail.relatedContextNodes.slice(0, 3) : [];
-      const relatedTopOfMindNotes = fullDetailReady ? savedSignalDetail.relatedTopOfMindNotes.slice(0, 2) : [];
-      const hasEvidenceContext =
-        highlightedSnippets.length > 0 || relatedContextNodes.length > 0 || relatedTopOfMindNotes.length > 0;
       return (
         <article
           className="memory-contents-item memory-contents-item--expanded"
@@ -3608,67 +3578,6 @@ export function HomePage(): JSX.Element {
               />
             )}
           </div>
-          <section className="memory-contents-evidence" aria-label="inspiration evidence">
-            <div className="memory-contents-evidence-block">
-              <p className="memory-contents-evidence-label">WAKA interpretation</p>
-              {!fullDetailReady ? (
-                <p className="memory-contents-evidence-empty">Gathering WAKA’s read of this inspiration...</p>
-              ) : packet && hasPacketDisplay ? (
-                <div className="memory-contents-packet">
-                  {packetText ? <p>{packetText}</p> : null}
-                  {packetSpark ? <p><strong>Primary spark:</strong> {packetSpark}</p> : null}
-                  {packetArtifact ? <p><strong>Original echo:</strong> {shortText(packetArtifact, 180)}</p> : null}
-                </div>
-              ) : (
-                <p className="memory-contents-evidence-empty">
-                  WAKA is still gathering enough context to interpret this inspiration.
-                </p>
-              )}
-            </div>
-            <div className="memory-contents-evidence-block">
-              <p className="memory-contents-evidence-label">Evidence and context</p>
-              {!fullDetailReady ? (
-                <p className="memory-contents-evidence-empty">
-                  Checking whether this inspiration has context evidence yet...
-                </p>
-              ) : hasEvidenceContext ? (
-                <div className="memory-contents-evidence-groups">
-                  {highlightedSnippets.length > 0 ? (
-                    <div className="memory-contents-highlighted-parts" aria-label="what stood out">
-                      {highlightedSnippets.map((snippet) => (
-                        <span key={snippet.id}>{inspirationFacingCopy(snippet.text)}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  {relatedContextNodes.length > 0 ? (
-                    <ul className="memory-contents-context-list" aria-label="related context">
-                      {relatedContextNodes.map((node) => (
-                        <li key={node.id}>
-                          <strong>{inspirationFacingCopy(node.label)}</strong>
-                          {node.description ? <span>{inspirationFacingCopy(node.description)}</span> : null}
-                          {node.evidenceReason ? <small>{inspirationFacingCopy(node.evidenceReason)}</small> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {relatedTopOfMindNotes.length > 0 ? (
-                    <ul className="memory-contents-context-list" aria-label="top-of-mind influence">
-                      {relatedTopOfMindNotes.map((note) => (
-                        <li key={note.id}>
-                          <strong>Helped shape “{inspirationFacingCopy(note.title)}”</strong>
-                          {note.body ? <span>{inspirationFacingCopy(note.body)}</span> : null}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="memory-contents-evidence-empty">
-                  Context evidence is still being gathered for this inspiration.
-                </p>
-              )}
-            </div>
-          </section>
           <section className="memory-contents-reflection-prompts">
             <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
               {copy.savedSignalFeedbackActions.map((action) => {
@@ -3771,7 +3680,7 @@ export function HomePage(): JSX.Element {
                 </span>
               ))}
             </span>
-            <div className="memory-contents-expanded-actions" aria-label="inspiration actions">
+            <div className="memory-contents-expanded-actions" aria-label={copy.savedSignalActionsLabel}>
               <button
                 type="button"
                 className={`memory-contents-secondary-action${
@@ -3779,14 +3688,14 @@ export function HomePage(): JSX.Element {
                 }`}
                 onClick={() => reflectDeeperOnSavedSignal(signal)}
               >
-                {isReflecting ? "reflecting" : "reflect"}
+                {isReflecting ? copy.savedSignalReflecting : copy.savedSignalReflect}
               </button>
               <button
                 type="button"
                 className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
                 onClick={() => deleteSavedSignalFromDrawer(signal)}
               >
-                delete
+                {copy.savedSignalDelete}
               </button>
             </div>
           </div>

@@ -622,7 +622,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("not anymore");
   });
 
-  it("opens a saved inspiration with original content plus WAKA interpretation and evidence", async () => {
+  it("opens a saved inspiration with original content without interpretation or evidence sections", async () => {
     setApiFixtures();
 
     const container = await renderHomePage();
@@ -638,19 +638,24 @@ describe("HomePage current home experience", () => {
     expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
       "Architecture essay about bridge rhythms in city walks",
     );
-    expect(detail.textContent).toContain("WAKA interpretation");
-    expect(detail.textContent).toContain(
+    expect(detail.textContent).not.toContain("WAKA interpretation");
+    expect(detail.textContent).not.toContain(
       "READ: This inspiration suggests work that turns movement, place, and public rhythm into visible form.",
     );
-    expect(detail.textContent).toContain("Primary spark: bridge rhythms in city walks");
-    expect(detail.textContent).toContain("Evidence and context");
-    expect(detail.textContent).toContain("places that make movement visible");
-    expect(detail.textContent).toContain("Helped shape “make the thing before explaining it”");
+    expect(detail.textContent).not.toContain("Primary spark: bridge rhythms in city walks");
+    expect(detail.textContent).not.toContain("Evidence and context");
+    expect(detail.textContent).not.toContain("places that make movement visible");
+    expect(detail.textContent).not.toContain("The user keeps saving signals about environments with readable rhythm.");
+    expect(detail.textContent).not.toContain("Supported by architecture and walking signals.");
+    expect(detail.textContent).not.toContain("Helped shape “make the thing before explaining it”");
+    expect(detail.textContent).not.toContain(
+      "The signal keeps pointing toward environments where movement becomes a public artifact.",
+    );
     expect(detail.textContent).not.toContain("waka.signal_packet:v1");
     expect(detail.textContent).not.toContain("This signal suggests");
   });
 
-  it("does not leak dot-format signal packet debug copy in saved inspiration detail", async () => {
+  it("does not show dot-format signal packet debug copy in saved inspiration detail", async () => {
     setApiFixtures({
       savedSignalDetail: {
         ...sampleSavedSignalDetail,
@@ -680,8 +685,8 @@ describe("HomePage current home experience", () => {
     expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
       "Architecture essay about bridge rhythms in city walks",
     );
-    expect(detail.textContent).toContain("WAKA interpretation");
-    expect(detail.textContent).toContain("Primary spark: Architecture essay about bridge rhythms in city walks");
+    expect(detail.textContent).not.toContain("WAKA interpretation");
+    expect(detail.textContent).not.toContain("Primary spark: Architecture essay about bridge rhythms in city walks");
     expect(detail.textContent).not.toContain("waka.signal_packet.v1");
     expect(detail.textContent).not.toContain("WHAT_HIT");
     expect(detail.textContent).not.toContain("user_written");
@@ -690,7 +695,7 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).not.toContain("CONTEXT_EXCERPT");
   });
 
-  it("uses honest not-ready copy when saved inspiration detail has no packet or evidence yet", async () => {
+  it("does not show not-ready interpretation or evidence copy when saved inspiration detail has no packet or evidence yet", async () => {
     setApiFixtures({
       savedSignalDetail: {
         ...sampleSavedSignalDetail,
@@ -707,8 +712,8 @@ describe("HomePage current home experience", () => {
     expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
       "Architecture essay about bridge rhythms in city walks",
     );
-    expect(detail.textContent).toContain("WAKA is still gathering enough context to interpret this inspiration.");
-    expect(detail.textContent).toContain("Context evidence is still being gathered for this inspiration.");
+    expect(detail.textContent).not.toContain("WAKA is still gathering enough context to interpret this inspiration.");
+    expect(detail.textContent).not.toContain("Context evidence is still being gathered for this inspiration.");
     expect(detail.textContent).not.toContain("READ:");
     expect(detail.textContent).not.toContain("Helped shape");
   });
@@ -938,6 +943,21 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("reflect");
     expect(detail.textContent).not.toContain("No deeper reflection yet.");
     expect(detail.querySelector('[aria-label="Reflect Deeper analysis"]')).toBeNull();
+  });
+
+  it("localizes saved-inspiration expanded drawer actions in Korean", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const actions = detail.querySelector<HTMLElement>(".memory-contents-expanded-actions");
+
+    expect(actions?.getAttribute("aria-label")).toBe("영감 작업");
+    expect(actions?.textContent).toContain("조금 더 생각하기");
+    expect(actions?.textContent).toContain("삭제");
+    expect(actions?.textContent).not.toContain("reflect");
+    expect(actions?.textContent).not.toContain("delete");
   });
 
   it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
