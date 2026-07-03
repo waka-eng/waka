@@ -1,4 +1,4 @@
-const HANDLE_PATTERN = /^[A-Za-z0-9_]{3,24}$/;
+const HANDLE_PATTERN = /^[A-Za-z0-9_-]{3,24}$/;
 
 const RESERVED_HANDLES = new Set([
   "admin",
@@ -27,7 +27,7 @@ export function normalizePublicHandle(input: string): string {
 export function validatePublicHandle(input: string): string | null {
   const handle = normalizePublicHandle(input);
   if (!HANDLE_PATTERN.test(handle)) {
-    return "Handle must be 3-24 letters, numbers, or underscores";
+    return "Handle must be 3-24 letters, numbers, hyphens, or underscores with no spaces";
   }
   if (RESERVED_HANDLES.has(handle)) {
     return "That handle is reserved";

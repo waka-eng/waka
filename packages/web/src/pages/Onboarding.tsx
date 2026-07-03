@@ -34,8 +34,8 @@ export default function OnboardingPage(): JSX.Element {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const nickname = name.trim();
-    if (!nickname) {
+    const displayName = name.trim();
+    if (!displayName) {
       setError(t(locale, "profileNicknameRequired"));
       return;
     }
@@ -43,7 +43,7 @@ export default function OnboardingPage(): JSX.Element {
     setError(null);
     try {
       await updateProfile({
-        name: nickname,
+        name: displayName,
         preferredLocale,
         completeOnboarding: true,
       });
@@ -72,7 +72,7 @@ export default function OnboardingPage(): JSX.Element {
               className="field-input"
               type="text"
               name="name"
-              autoComplete="nickname"
+              autoComplete="name"
               value={name}
               disabled={submitting}
               required
