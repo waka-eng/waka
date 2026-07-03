@@ -620,6 +620,91 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("not anymore");
   });
 
+  it("opens a saved inspiration with original content plus WAKA interpretation and evidence", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail.textContent).toContain("WAKA interpretation");
+    expect(detail.textContent).toContain(
+      "READ: This inspiration suggests work that turns movement, place, and public rhythm into visible form.",
+    );
+    expect(detail.textContent).toContain("Primary spark: bridge rhythms in city walks");
+    expect(detail.textContent).toContain("Evidence and context");
+    expect(detail.textContent).toContain("places that make movement visible");
+    expect(detail.textContent).toContain("Helped shape “make the thing before explaining it”");
+    expect(detail.textContent).not.toContain("waka.signal_packet:v1");
+    expect(detail.textContent).not.toContain("This signal suggests");
+  });
+
+  it("does not leak dot-format signal packet debug copy in saved inspiration detail", async () => {
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        signalPacket: {
+          id: "packet-debug",
+          text: [
+            "waka.signal_packet.v1",
+            "WHAT_HIT",
+            "primary: Architecture essay about bridge rhythms in city walks (user_written, confidence=100)",
+            "WHY_IT_MATTERS",
+            "cluster=unclassified",
+            "REFLECTIONS",
+            "none",
+            "CONTEXT_EXCERPT",
+            "Architecture essay about bridge rhythms in city walks",
+          ].join("\n"),
+          primarySpark: "Architecture essay about bridge rhythms in city walks",
+          artifactExcerpt: "Architecture essay about bridge rhythms in city walks",
+          updatedAt: "2026-05-10T12:05:00.000Z",
+        },
+      },
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail.textContent).toContain("WAKA interpretation");
+    expect(detail.textContent).toContain("Primary spark: Architecture essay about bridge rhythms in city walks");
+    expect(detail.textContent).not.toContain("waka.signal_packet.v1");
+    expect(detail.textContent).not.toContain("WHAT_HIT");
+    expect(detail.textContent).not.toContain("user_written");
+    expect(detail.textContent).not.toContain("cluster=unclassified");
+    expect(detail.textContent).not.toContain("REFLECTIONS");
+    expect(detail.textContent).not.toContain("CONTEXT_EXCERPT");
+  });
+
+  it("uses honest not-ready copy when saved inspiration detail has no packet or evidence yet", async () => {
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        signalPacket: null,
+        highlightedSnippets: [],
+        relatedContextNodes: [],
+        relatedTopOfMindNotes: [],
+      },
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail.textContent).toContain("WAKA is still gathering enough context to interpret this inspiration.");
+    expect(detail.textContent).toContain("Context evidence is still being gathered for this inspiration.");
+    expect(detail.textContent).not.toContain("READ:");
+    expect(detail.textContent).not.toContain("Helped shape");
+  });
+
   it("asks for an optional saved-inspiration correction before submitting changed shape", async () => {
     setApiFixtures();
     vi.mocked(createFeedback).mockResolvedValueOnce({
