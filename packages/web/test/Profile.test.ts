@@ -120,6 +120,8 @@ describe("ProfilePage account actions", () => {
 
     expect(container.querySelector<HTMLInputElement>("input[name='publicHandle']")).toBeTruthy();
     expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0]?.getAttribute("aria-describedby")).toBe("profile-public-profile-description");
+    expect(checkboxes[1]?.getAttribute("aria-describedby")).toBe("profile-public-top-of-mind-description");
     await act(async () => {
       checkboxes[0]!.click();
     });
@@ -137,5 +139,17 @@ describe("ProfilePage account actions", () => {
         publicTopOfMindEnabled: true,
       }),
     );
+  });
+
+  it("describes the destructive delete confirmation input and action", async () => {
+    const container = await renderProfilePage();
+    const deleteInput = Array.from(container.querySelectorAll<HTMLInputElement>("input[type='text']")).at(-1);
+    const deleteButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("Delete account"),
+    );
+
+    expect(deleteInput?.getAttribute("aria-describedby")).toBe("profile-delete-description");
+    expect(deleteButton?.getAttribute("aria-describedby")).toBe("profile-delete-description");
+    expect(container.querySelector("#profile-delete-description")?.textContent).toContain("Type DELETE");
   });
 });

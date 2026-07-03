@@ -208,6 +208,14 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector<HTMLTextAreaElement>("#capNote")?.placeholder).toBe(
       "What caught your attention?",
     );
+    const attachButton = container?.querySelector<HTMLButtonElement>(".cap-file-btn");
+    const reflectArea = container?.querySelector<HTMLElement>("#reflectArea");
+    expect(attachButton?.tagName).toBe("BUTTON");
+    expect(attachButton?.getAttribute("aria-label")).toBe("attach an image");
+    expect(attachButton?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(reflectArea?.hidden).toBe(true);
+    expect(reflectArea?.getAttribute("aria-hidden")).toBe("true");
+    expect(reflectArea?.hasAttribute("inert")).toBe(true);
     expect(container?.querySelector("#capResonance")).toBeNull();
     expect(container?.querySelector("#capDraftState")).toBeNull();
     expect(container?.querySelector<HTMLButtonElement>("#capSave")?.textContent).toContain("Save it now");
@@ -332,6 +340,9 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(container?.querySelector(".cap-save-mirror")).toBeNull();
     expect(container?.querySelector("#capConfirm")?.textContent).toContain("Inspiration saved.");
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
+    expect(container?.querySelector<HTMLElement>("#reflectArea")?.hidden).toBe(false);
+    expect(container?.querySelector("#reflectArea")?.hasAttribute("inert")).toBe(false);
+    expect(container?.querySelector<HTMLElement>("#capBody")?.hidden).toBe(true);
     expect(container?.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
     expect(container?.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Done");
     expect(container?.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Reflect deeper");

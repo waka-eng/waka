@@ -178,6 +178,57 @@ describe("auth boundary", () => {
     expect(container.textContent).not.toContain("PROTECTED HOME DATA");
   });
 
+  it("supports expected keyboard navigation for login and signup tabs", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+
+    const container = await renderAuthRoutes({ initialPath: "/login" });
+    const loginTab = container.querySelector<HTMLButtonElement>("#login-tab-login");
+    const signupTab = container.querySelector<HTMLButtonElement>("#login-tab-signup");
+
+    expect(container.querySelector("#login-tabpanel")?.getAttribute("aria-labelledby")).toBe("login-tab-login");
+    expect(loginTab?.getAttribute("aria-selected")).toBe("true");
+    expect(loginTab?.tabIndex).toBe(0);
+    expect(signupTab?.tabIndex).toBe(-1);
+
+    await act(async () => {
+      loginTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.querySelector("#login-tabpanel")?.getAttribute("aria-labelledby")).toBe("login-tab-signup");
+    expect(container.querySelector<HTMLButtonElement>("#login-tab-signup")?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector<HTMLButtonElement>("#login-tab-signup")?.tabIndex).toBe(0);
+    expect(document.activeElement).toBe(container.querySelector("#login-tab-signup"));
+    expect(container.textContent).toContain("Create account");
+
+    await act(async () => {
+      signupTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.querySelector("#login-tabpanel")?.getAttribute("aria-labelledby")).toBe("login-tab-login");
+    expect(container.querySelector<HTMLButtonElement>("#login-tab-login")?.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(container.querySelector("#login-tab-login"));
+
+    await act(async () => {
+      loginTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.querySelector("#login-tabpanel")?.getAttribute("aria-labelledby")).toBe("login-tab-signup");
+    expect(container.querySelector<HTMLButtonElement>("#login-tab-signup")?.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(container.querySelector("#login-tab-signup"));
+
+    await act(async () => {
+      signupTab?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.querySelector("#login-tabpanel")?.getAttribute("aria-labelledby")).toBe("login-tab-login");
+    expect(container.querySelector<HTMLButtonElement>("#login-tab-login")?.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(container.querySelector("#login-tab-login"));
+  });
+
   it("clears a cached user and routes home visitors to login when /auth/me returns no user", async () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedUser));
     vi.mocked(fetchCurrentUser).mockResolvedValue(null);
