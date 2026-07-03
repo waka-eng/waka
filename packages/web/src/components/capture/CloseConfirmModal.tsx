@@ -133,10 +133,11 @@ export function CloseConfirmModal({
     <div
       className={`close-confirm${open ? " visible" : ""}`}
       id="closeConfirm"
-      role="dialog"
-      aria-modal="true"
+      role={open ? "dialog" : undefined}
+      aria-modal={open ? "true" : undefined}
       aria-hidden={!open}
       aria-label={t(locale, "closeConfirmAria")}
+      {...(!open ? { inert: "" } : {})}
       onClick={handleBackdropClick}
     >
       <div className="cc-box">

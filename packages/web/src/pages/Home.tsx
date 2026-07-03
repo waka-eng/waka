@@ -4192,6 +4192,8 @@ export function HomePage(): JSX.Element {
           className="nc-profile-link nc-lang--top"
           aria-label={t(locale, "profileTitle")}
           title={t(locale, "profileTitle")}
+          aria-hidden={homeMode === "memoryDrawer" ? true : undefined}
+          {...(homeMode === "memoryDrawer" ? { inert: "" } : {})}
         >
           {t(locale, "profileLink")}
         </Link>
@@ -4199,6 +4201,8 @@ export function HomePage(): JSX.Element {
       <main
         className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}
         data-locale={locale}
+        aria-hidden={homeMode === "memoryDrawer" ? true : undefined}
+        {...(homeMode === "memoryDrawer" ? { inert: "" } : {})}
       >
         <section className="nc-titlecard">
           <h1 className="nc-title">
@@ -4234,6 +4238,8 @@ export function HomePage(): JSX.Element {
 	          }`}
 	          data-locale={locale}
 	          aria-label={copy.savesTitle}
+	          role="dialog"
+	          aria-modal="false"
 	        >
           <span className="memory-stack-glass" aria-hidden="true" />
           {selectedMemoryGroup ? (
@@ -4375,10 +4381,12 @@ export function HomePage(): JSX.Element {
             >
               <div className="nc-drawer-reflect-question">
                 <span>{selectedDrawerReflectionProgress}</span>
-                <p>{selectedDrawerReflectionQuestion}</p>
+                <p id="saved-signal-reflection-question">{selectedDrawerReflectionQuestion}</p>
               </div>
               <textarea
                 ref={savedSignalReflectionInputRef}
+                aria-label="answer reflection prompt"
+                aria-describedby="saved-signal-reflection-question"
                 value={savedSignalReflectionDraft}
                 onChange={(event) => {
                   setSavedSignalReflectionDraft(event.target.value);

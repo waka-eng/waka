@@ -626,6 +626,12 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
     const detail = await openBridgeDetail(container);
 
+    expect(container.querySelector(".nc-canvas")?.getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelector(".nc-canvas")?.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector(".nc-profile-link")?.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector(".memory-drawer-stack")?.getAttribute("role")).toBe("dialog");
+    expect(container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]')).not.toBeNull();
+
     expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
     expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
       "Architecture essay about bridge rhythms in city walks",
@@ -1000,6 +1006,8 @@ describe("HomePage current home experience", () => {
 
     const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
     expect(answer).not.toBeNull();
+    expect(answer?.getAttribute("aria-label")).toBe("answer reflection prompt");
+    expect(answer?.getAttribute("aria-describedby")).toBe("saved-signal-reflection-question");
     await act(async () => {
       setInputValue(answer!, "Second draft while model question resolves.");
     });

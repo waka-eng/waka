@@ -207,6 +207,7 @@ export default function ProfilePage(): JSX.Element {
                 type="checkbox"
                 checked={publicProfileEnabled}
                 disabled={submitting || deleting}
+                aria-describedby="profile-public-profile-description"
                 onChange={(event) => {
                   const checked = event.currentTarget.checked;
                   setPublicProfileEnabled(checked);
@@ -214,15 +215,22 @@ export default function ProfilePage(): JSX.Element {
                 }}
               />
               <span>{t(locale, "profilePublicEnabled")}</span>
+              <span id="profile-public-profile-description" className="sr-only">
+                {t(locale, "profilePublicPrivacyHint")}
+              </span>
             </label>
             <label className="profile-toggle-row">
               <input
                 type="checkbox"
                 checked={publicTopOfMindEnabled}
                 disabled={submitting || deleting || !publicProfileEnabled}
+                aria-describedby="profile-public-top-of-mind-description"
                 onChange={(event) => setPublicTopOfMindEnabled(event.currentTarget.checked)}
               />
               <span>{t(locale, "profilePublicTopOfMindEnabled")}</span>
+              <span id="profile-public-top-of-mind-description" className="sr-only">
+                {t(locale, "profilePublicHint")}
+              </span>
             </label>
             {publicProfileUrl ? (
               <a className="profile-public-link" href={`/@${normalizedPublicHandle}`}>
@@ -248,6 +256,7 @@ export default function ProfilePage(): JSX.Element {
               type="text"
               value={deleteText}
               disabled={deleting}
+              aria-describedby="profile-delete-description"
               onChange={(event) => setDeleteText(event.currentTarget.value)}
             />
           </label>
@@ -256,9 +265,13 @@ export default function ProfilePage(): JSX.Element {
             type="button"
             disabled={deleteText !== DELETE_CONFIRMATION || deleting}
             onClick={handleDelete}
+            aria-describedby="profile-delete-description"
           >
             {deleting ? t(locale, "profileDeleting") : t(locale, "profileDelete")}
           </button>
+          <span id="profile-delete-description" className="sr-only">
+            {t(locale, "profileDeleteHint")}
+          </span>
         </section>
         <p className="login-footer">
           <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>

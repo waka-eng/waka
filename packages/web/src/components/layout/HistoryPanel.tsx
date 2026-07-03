@@ -85,10 +85,11 @@ export function HistoryPanel({
     <div
       className={`history-overlay${open ? " visible" : ""}`}
       id="historyOverlay"
-      role="dialog"
-      aria-modal="true"
+      role={open ? "dialog" : undefined}
+      aria-modal={open ? "true" : undefined}
       aria-hidden={!open}
       aria-label={panelTitle}
+      {...(!open ? { inert: "" } : {})}
       onClick={handleBackdropClick}
     >
       <div className="history-panel">
