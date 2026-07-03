@@ -397,6 +397,8 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
+  mockAuthState.value.user.email = "river@example.com";
+  mockAuthState.value.user.name = "River";
   mockAuthState.value.user.preferredLocale = "en-US";
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
@@ -1314,6 +1316,26 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Waka caught what almost slipped away.");
     expect(container.textContent).not.toContain("They caught what almost slipped away.");
     expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
+  });
+
+  it("renders a spaced display name fully in the hero copy", async () => {
+    mockAuthState.value.user.name = " River Song ";
+    setApiFixtures();
+
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("river song's top of mind");
+    expect(container.textContent).not.toContain("river's top of mind");
+  });
+
+  it("falls back to the email local part when the display name is blank", async () => {
+    mockAuthState.value.user.email = "cloudwalker@example.com";
+    mockAuthState.value.user.name = "   ";
+    setApiFixtures();
+
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("cloudwalker's top of mind");
   });
 
   it("names the primary product spaces without surfacing internal graph UI", async () => {
