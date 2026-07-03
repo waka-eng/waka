@@ -391,6 +391,44 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 
+  it("requires a Korean post-save reflection answer before enabling Reflect deeper", async () => {
+    vi.mocked(createInspiration).mockResolvedValue(inspiration({ id: "insp-post-save-ko" }));
+    await renderCaptureForm({ locale: "ko-KR" });
+    await act(async () => {
+      setText("나중에 더 이해하고 싶은 장면");
+    });
+
+    await clickQuickSave();
+
+    const reflectNext = container?.querySelector<HTMLButtonElement>("#reflectNext");
+    const reflectAnswer = container?.querySelector<HTMLTextAreaElement>("#reflectAns");
+    expect(reflectNext?.textContent).toContain("조금 더 생각하기");
+    expect(reflectNext?.disabled).toBe(true);
+    expect(reflectAnswer?.placeholder).toBe("정리되지 않아도 괜찮아요. 짧은 개인 메모면 충분합니다.");
+
+    await act(async () => {
+      setReflectText("   ");
+    });
+    expect(reflectNext?.disabled).toBe(true);
+    expect(createReflection).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setReflectText("내일 다시 살펴보기.");
+    });
+    expect(reflectNext?.disabled).toBe(false);
+
+    await act(async () => {
+      reflectNext?.click();
+    });
+    await flushReactWork();
+
+    expect(createReflection).toHaveBeenCalledWith("insp-post-save-ko", {
+      question: "왜 지금 마음에 걸렸나요?",
+      answer: "내일 다시 살펴보기.",
+      skipped: false,
+    });
+  });
+
   it("ignores selected passages when saving a plain note", async () => {
     await renderCaptureForm();
     await act(async () => {

@@ -945,6 +945,21 @@ describe("HomePage current home experience", () => {
     expect(detail.querySelector('[aria-label="Reflect Deeper analysis"]')).toBeNull();
   });
 
+  it("localizes saved-inspiration expanded drawer actions in Korean", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const actions = detail.querySelector<HTMLElement>(".memory-contents-expanded-actions");
+
+    expect(actions?.getAttribute("aria-label")).toBe("영감 작업");
+    expect(actions?.textContent).toContain("조금 더 생각하기");
+    expect(actions?.textContent).toContain("삭제");
+    expect(actions?.textContent).not.toContain("reflect");
+    expect(actions?.textContent).not.toContain("delete");
+  });
+
   it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([
