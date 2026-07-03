@@ -74,7 +74,7 @@ const signupSchema = z.object({
   name: z
     .string()
     .trim()
-    .max(120, "Name is too long")
+    .max(120, "Display name is too long")
     .optional(),
   preferredLocale: supportedLocaleSchema.optional(),
 });
@@ -119,17 +119,15 @@ const preferencesSchema = z
 
 export type PreferencesInput = z.infer<typeof preferencesSchema>;
 
-const NICKNAME_NO_SPACES_MESSAGE = "Nickname cannot contain spaces";
-const nicknameSchema = z
+const displayNameSchema = z
   .string()
   .trim()
-  .min(1, "Nickname is required")
-  .max(120, "Nickname is too long")
-  .refine((value) => !/\s/u.test(value), NICKNAME_NO_SPACES_MESSAGE);
+  .min(1, "Display name is required")
+  .max(120, "Display name is too long");
 
 const profileSchema = z
   .object({
-    name: nicknameSchema,
+    name: displayNameSchema,
     preferredLocale: supportedLocaleSchema,
     completeOnboarding: z.boolean().optional(),
     publicHandle: z.string().trim().max(24, "Handle is too long").nullable().optional(),

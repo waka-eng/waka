@@ -115,6 +115,21 @@ describe("GET /api/public/profiles/:handle", () => {
     });
   });
 
+  it("normalizes hyphenated public handles before lookup", async () => {
+    const hyphenatedProfile = { ...profile, publicHandle: "river-room" };
+    const getProfileByHandle = vi.fn(async () => hyphenatedProfile);
+    const response = await appFor({
+      getProfileByHandle,
+      listNotes: vi.fn(async () => []),
+    }).request("/api/public/profiles/@River-Room");
+
+    expect(response.status).toBe(200);
+    expect(getProfileByHandle).toHaveBeenCalledWith(expect.anything(), "river-room");
+    await expect(response.json()).resolves.toMatchObject({
+      profile: { handle: "river-room" },
+    });
+  });
+
   it("returns 404 when the public profile is disabled or missing", async () => {
     const response = await appFor({
       getProfileByHandle: vi.fn(async () => null),
