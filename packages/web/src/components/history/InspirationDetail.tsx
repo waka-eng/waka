@@ -613,7 +613,7 @@ export function InspirationDetail({
           <div className="detail-hero-copy">
             <div className="detail-meta detail-meta--hero">
               {featuredAttachment?.enrichment?.link?.hostname ? `${featuredAttachment.enrichment.link.hostname} · ` : ""}
-              {t(locale, "saved")} {inspiration.timestamp}
+              {t(locale, "savedStatus")} {inspiration.timestamp}
             </div>
             {heroDescription ? (
               <p className="detail-hero-description">{heroDescription}</p>
@@ -698,7 +698,7 @@ export function InspirationDetail({
             </button>
             {saveState.status === "saved" ? (
               <span role="status" aria-live="polite" className="detail-inline-status">
-                {t(locale, "saved")}.
+                {t(locale, "savedStatus")}.
               </span>
             ) : null}
             {saveState.status === "error" ? (

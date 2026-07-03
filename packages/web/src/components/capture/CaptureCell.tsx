@@ -495,18 +495,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             <div className="cap-bar-right">
               <button
                 type="button"
-                className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}${processSaveInProgress ? " cap-save--reflecting" : ""}`}
-                id="capReflectiveSave"
-                onClick={onReflectiveSave}
-                title={processSaveTitle}
-                aria-label={reflectiveSaveLabel}
-                aria-pressed={processSaveInProgress}
-                disabled={!saveVisible}
-              >
-                {reflectiveSaveLabel}
-              </button>
-              <button
-                type="button"
                 className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
                 id="capSave"
                 onClick={onSave}
@@ -516,6 +504,20 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
               >
                 {quickSaveLabel}
               </button>
+              {onReflectiveSave ? (
+                <button
+                  type="button"
+                  className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}${processSaveInProgress ? " cap-save--reflecting" : ""}`}
+                  id="capReflectiveSave"
+                  onClick={onReflectiveSave}
+                  title={processSaveTitle}
+                  aria-label={reflectiveSaveLabel}
+                  aria-pressed={processSaveInProgress}
+                  disabled={!saveVisible}
+                >
+                  {reflectiveSaveLabel}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
