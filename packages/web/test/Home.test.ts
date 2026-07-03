@@ -1326,7 +1326,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.textContent).toContain("capture inspiration");
     expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_frequency_scaffold");
     expect(container.textContent).not.toContain("Top of mind: template question scaffold");
@@ -1361,8 +1363,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.");
-    expect(container.textContent).toContain("영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.");
+    expect(container.textContent).toContain(
+      "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+    );
     expect(container.textContent).not.toContain("English-only deterministic scaffold card");
     expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
     expect(container.textContent).not.toContain("Capture inspirations to generate your top of mind stickies.");
@@ -1720,7 +1723,9 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
@@ -1777,7 +1782,9 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-page")).toBeNull();
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
@@ -1788,7 +1795,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.textContent).not.toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
