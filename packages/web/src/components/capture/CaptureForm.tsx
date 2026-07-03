@@ -1069,6 +1069,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       total: reflectStepCount,
     });
     const reflectProgressPercent = Math.round(((reflectionStepIndex + 1) / reflectStepCount) * 100);
+    const postSaveReflectionAnswerEmpty = Boolean(postSaveReflectionTargetId) && reflectionAnswer.trim().length === 0;
 
     /* --------------------------------------------------------
      * Render
@@ -1138,8 +1139,14 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         reflectValue={reflectionAnswer}
         onReflectChange={setReflectionAnswer}
         onReflectKeyDown={handleReflectAnswerKeyDown}
-        reflectPlaceholder={guidedReflectionQuestionLoading ? "loading" : ""}
-        reflectNextDisabled={guidedReflectionQuestionLoading}
+        reflectPlaceholder={
+          guidedReflectionQuestionLoading
+            ? "loading"
+            : postSaveReflectionTargetId
+              ? t(locale, "reflectionPlaceholder")
+              : ""
+        }
+        reflectNextDisabled={guidedReflectionQuestionLoading || postSaveReflectionAnswerEmpty}
         onReflectLater={() => {
           if (postSaveReflectionTargetId) {
             setActiveView("note");

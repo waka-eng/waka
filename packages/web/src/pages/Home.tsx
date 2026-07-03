@@ -1227,6 +1227,10 @@ const HOME_COPY = {
     savedSignalFeedbackSaved: "저장됨",
     savedSignalFeedbackSaving: "저장 중...",
     savedSignalFeedbackError: "영감 피드백을 저장하지 못했습니다",
+    savedSignalActionsLabel: "영감 작업",
+    savedSignalReflect: "조금 더 생각하기",
+    savedSignalReflecting: "생각하는 중…",
+    savedSignalDelete: "삭제",
     loadingThoughts: "생각을 모으는 중...",
     emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
@@ -1293,6 +1297,10 @@ const HOME_COPY = {
     savedSignalFeedbackSaved: "saved",
     savedSignalFeedbackSaving: "saving...",
     savedSignalFeedbackError: "could not save inspiration feedback",
+    savedSignalActionsLabel: "inspiration actions",
+    savedSignalReflect: "reflect",
+    savedSignalReflecting: "reflecting",
+    savedSignalDelete: "delete",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
     captureTitle: "Catch the first inspiration",
@@ -1345,6 +1353,10 @@ const HOME_COPY = {
     savedSignalFeedbackSaved: string;
     savedSignalFeedbackSaving: string;
     savedSignalFeedbackError: string;
+    savedSignalActionsLabel: string;
+    savedSignalReflect: string;
+    savedSignalReflecting: string;
+    savedSignalDelete: string;
     loadingThoughts: string;
     emptyThoughts: string;
     captureTitle: string;
@@ -3668,7 +3680,7 @@ export function HomePage(): JSX.Element {
                 </span>
               ))}
             </span>
-            <div className="memory-contents-expanded-actions" aria-label="inspiration actions">
+            <div className="memory-contents-expanded-actions" aria-label={copy.savedSignalActionsLabel}>
               <button
                 type="button"
                 className={`memory-contents-secondary-action${
@@ -3676,14 +3688,14 @@ export function HomePage(): JSX.Element {
                 }`}
                 onClick={() => reflectDeeperOnSavedSignal(signal)}
               >
-                {isReflecting ? "reflecting" : "reflect"}
+                {isReflecting ? copy.savedSignalReflecting : copy.savedSignalReflect}
               </button>
               <button
                 type="button"
                 className="memory-contents-secondary-action memory-contents-secondary-action--quiet"
                 onClick={() => deleteSavedSignalFromDrawer(signal)}
               >
-                delete
+                {copy.savedSignalDelete}
               </button>
             </div>
           </div>
