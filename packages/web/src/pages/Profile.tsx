@@ -13,6 +13,7 @@ import {
 import type { SupportedLocale } from "../lib/locales";
 
 const DELETE_CONFIRMATION = "DELETE";
+const PUBLIC_HANDLE_PATTERN = /^[a-z0-9_-]{3,24}$/;
 
 export default function ProfilePage(): JSX.Element {
   const { user, logout, updateProfile, deleteAccount } = useAuth();
@@ -34,8 +35,12 @@ export default function ProfilePage(): JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const locale = preferredLocale;
-  const normalizedPublicHandle = publicHandle.trim().replace(/^@+/, "");
-  const nicknameHasWhitespace = /\s/u.test(name);
+  const normalizedPublicHandle = publicHandle.trim().replace(/^@+/, "").toLowerCase();
+  const trimmedDisplayName = name.trim();
+  const handleError =
+    normalizedPublicHandle.length > 0 && !PUBLIC_HANDLE_PATTERN.test(normalizedPublicHandle)
+      ? t(locale, "profilePublicHandleInvalid")
+      : null;
   const publicProfileUrl =
     normalizedPublicHandle.length > 0
       ? `${typeof window === "undefined" ? "" : window.location.origin}/@${normalizedPublicHandle}`
@@ -43,18 +48,17 @@ export default function ProfilePage(): JSX.Element {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const nickname = name.trim();
     const handle = normalizedPublicHandle || null;
-    if (!nickname) {
+    if (!trimmedDisplayName) {
       setError(t(locale, "profileNicknameRequired"));
-      return;
-    }
-    if (nicknameHasWhitespace) {
-      setError(t(locale, "profileNicknameNoSpacesError"));
       return;
     }
     if ((publicProfileEnabled || publicTopOfMindEnabled) && !handle) {
       setError(t(locale, "profilePublicHandleRequired"));
+      return;
+    }
+    if (handleError) {
+      setError(handleError);
       return;
     }
     setSubmitting(true);
@@ -62,7 +66,7 @@ export default function ProfilePage(): JSX.Element {
     setError(null);
     try {
       await updateProfile({
-        name: nickname,
+        name: trimmedDisplayName,
         preferredLocale,
         completeOnboarding: true,
         publicHandle: handle,
@@ -136,18 +140,16 @@ export default function ProfilePage(): JSX.Element {
               className="field-input"
               type="text"
               name="name"
-              autoComplete="nickname"
+              autoComplete="name"
               value={name}
               disabled={submitting || deleting}
               required
               aria-describedby="profile-nickname-hint"
-              aria-invalid={nicknameHasWhitespace || undefined}
+              aria-invalid={!trimmedDisplayName || undefined}
               onChange={(event) => setName(event.currentTarget.value)}
             />
             <span id="profile-nickname-hint" className="field-hint">
-              {nicknameHasWhitespace
-                ? t(locale, "profileNicknameNoSpacesError")
-                : t(locale, "profileNicknameNoSpacesHint")}
+              {t(locale, "profileNicknameNoSpacesHint")}
             </span>
           </label>
           <label className="field">
@@ -187,15 +189,25 @@ export default function ProfilePage(): JSX.Element {
                   autoComplete="off"
                   value={publicHandle}
                   disabled={submitting || deleting}
+                  aria-describedby="profile-public-handle-hint"
+                  aria-invalid={handleError ? true : undefined}
                   onChange={(event) => setPublicHandle(event.currentTarget.value)}
                 />
               </div>
+              <span
+                id="profile-public-handle-hint"
+                className={handleError ? "field-error" : "field-hint"}
+              >
+                {handleError ?? t(locale, "profilePublicHandleHint")}
+              </span>
             </label>
+            <p className="login-subtitle">{t(locale, "profilePublicPrivacyHint")}</p>
             <label className="profile-toggle-row">
               <input
                 type="checkbox"
                 checked={publicProfileEnabled}
                 disabled={submitting || deleting}
+                aria-describedby="profile-public-profile-description"
                 onChange={(event) => {
                   const checked = event.currentTarget.checked;
                   setPublicProfileEnabled(checked);
@@ -203,15 +215,22 @@ export default function ProfilePage(): JSX.Element {
                 }}
               />
               <span>{t(locale, "profilePublicEnabled")}</span>
+              <span id="profile-public-profile-description" className="sr-only">
+                {t(locale, "profilePublicPrivacyHint")}
+              </span>
             </label>
             <label className="profile-toggle-row">
               <input
                 type="checkbox"
                 checked={publicTopOfMindEnabled}
                 disabled={submitting || deleting || !publicProfileEnabled}
+                aria-describedby="profile-public-top-of-mind-description"
                 onChange={(event) => setPublicTopOfMindEnabled(event.currentTarget.checked)}
               />
               <span>{t(locale, "profilePublicTopOfMindEnabled")}</span>
+              <span id="profile-public-top-of-mind-description" className="sr-only">
+                {t(locale, "profilePublicHint")}
+              </span>
             </label>
             {publicProfileUrl ? (
               <a className="profile-public-link" href={`/@${normalizedPublicHandle}`}>
@@ -237,6 +256,7 @@ export default function ProfilePage(): JSX.Element {
               type="text"
               value={deleteText}
               disabled={deleting}
+              aria-describedby="profile-delete-description"
               onChange={(event) => setDeleteText(event.currentTarget.value)}
             />
           </label>
@@ -245,9 +265,13 @@ export default function ProfilePage(): JSX.Element {
             type="button"
             disabled={deleteText !== DELETE_CONFIRMATION || deleting}
             onClick={handleDelete}
+            aria-describedby="profile-delete-description"
           >
             {deleting ? t(locale, "profileDeleting") : t(locale, "profileDelete")}
           </button>
+          <span id="profile-delete-description" className="sr-only">
+            {t(locale, "profileDeleteHint")}
+          </span>
         </section>
         <p className="login-footer">
           <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>

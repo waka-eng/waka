@@ -35,7 +35,7 @@
    * -------------------------------------------------------------------*/
   --bg: #f4f2ee;
   --ink: #0f0f0e;
-  --muted: #8a867e;
+  --muted: #6f6b63;
   --line: #e4e1d9;
   --cell: #fbfaf7;
   --accent: #0f0f0e;
@@ -1033,7 +1033,7 @@
 }
 
 .reference-capture-modal .cap-body textarea::placeholder {
-  color: #7f8d87;
+  color: #65746e;
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-style: normal;
 }
@@ -1964,6 +1964,88 @@
 
 .memory-contents-expanded-editor::selection {
   background: rgba(140, 180, 255, 0.36);
+}
+
+.memory-contents-evidence {
+  display: grid;
+  gap: 14px;
+  padding: 16px 0 4px;
+  border-top: 1px solid rgba(45, 41, 37, 0.1);
+}
+
+.memory-contents-evidence-block,
+.memory-contents-evidence-groups,
+.memory-contents-packet,
+.memory-contents-context-list {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-contents-evidence-label {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.5);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 680;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+.memory-contents-packet p,
+.memory-contents-evidence-empty,
+.memory-contents-context-list li {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.76);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.memory-contents-packet strong,
+.memory-contents-context-list strong {
+  color: rgba(45, 41, 37, 0.88);
+  font-weight: 650;
+}
+
+.memory-contents-evidence-empty {
+  color: rgba(45, 41, 37, 0.68);
+}
+
+.memory-contents-highlighted-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.memory-contents-highlighted-parts span {
+  border: 1px solid rgba(45, 41, 37, 0.12);
+  background: rgba(255, 255, 255, 0.48);
+  color: rgba(45, 41, 37, 0.72);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 5px 7px;
+}
+
+.memory-contents-context-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-contents-context-list li {
+  border-left: 2px solid rgba(45, 41, 37, 0.12);
+  padding-left: 10px;
+}
+
+.memory-contents-context-list span,
+.memory-contents-context-list small {
+  display: block;
+}
+
+.memory-contents-context-list small {
+  color: rgba(45, 41, 37, 0.52);
+  font-size: 12px;
 }
 
 .memory-contents-reflection-prompts {
@@ -3269,7 +3351,7 @@
 .memory-relationship-correction span,
 .memory-relationship-feedback-status,
 .memory-relationship-empty {
-  color: rgba(70, 58, 42, 0.58);
+  color: rgba(70, 58, 42, 0.72);
   font-size: 11px;
   letter-spacing: 0.08em;
   line-height: 1.2;
@@ -4200,7 +4282,7 @@
 
 .nc-drawer-title,
 .nc-drawer-object small {
-  color: rgba(51, 45, 32, 0.58);
+  color: rgba(51, 45, 32, 0.72);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
   letter-spacing: 0.15em;
@@ -13914,7 +13996,7 @@ body.reflect-bg {
 }
 
 .nc-drawer-search input::placeholder {
-  color: rgba(45, 41, 37, 0.34);
+  color: rgba(45, 41, 37, 0.66);
 }
 
 .nc-drawer-reflect {
@@ -13942,7 +14024,7 @@ body.reflect-bg {
 }
 
 .nc-drawer-reflect-question span {
-  color: rgba(45, 41, 37, 0.38);
+  color: rgba(45, 41, 37, 0.72);
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 640;
@@ -13980,7 +14062,7 @@ body.reflect-bg {
 }
 
 .nc-drawer-reflect textarea::placeholder {
-  color: rgba(45, 41, 37, 0.34);
+  color: rgba(45, 41, 37, 0.66);
 }
 
 .nc-drawer-reflect-actions {

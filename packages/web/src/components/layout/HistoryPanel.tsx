@@ -24,10 +24,10 @@
  *                      match the prototype exactly).
  *   - `onClose`      → fires when the user clicks the × or the dimmed
  *                      backdrop, so the parent owns open/closed state.
- *   - `children`     → optional list/detail content. The empty-state copy
- *                      from the prototype is rendered when nothing is
- *                      provided, preserving visual parity for callers that
- *                      haven't wired data yet.
+ *   - `children`     → optional list content. The empty-state copy from the
+ *                      prototype is rendered when nothing is provided,
+ *                      preserving visual parity for callers that haven't
+ *                      wired data yet.
  *
  * Keeping the panel on every render (instead of conditionally mounting it)
  * matches the prototype, where the overlay lives in the DOM permanently and
@@ -53,11 +53,9 @@ export interface HistoryPanelProps {
    */
   children?: ReactNode;
   /**
-   * Optional pre-rendered detail view. When provided, replaces the
-   * default `.detail-view` shell so the parent can mount
-   * `<InspirationDetail>` (or another sibling) without losing the
-   * slide-over CSS contract. The detail view is responsible for adding
-   * its own `.visible` class when it wants to be shown.
+   * Optional pre-rendered detail view. When provided, replaces the list so the
+   * parent can mount `<InspirationDetail>` (or another sibling) without
+   * exposing inactive detail controls before a selection exists.
    */
   detail?: ReactNode;
 }
@@ -87,10 +85,11 @@ export function HistoryPanel({
     <div
       className={`history-overlay${open ? " visible" : ""}`}
       id="historyOverlay"
-      role="dialog"
-      aria-modal="true"
+      role={open ? "dialog" : undefined}
+      aria-modal={open ? "true" : undefined}
       aria-hidden={!open}
       aria-label={panelTitle}
+      {...(!open ? { inert: "" } : {})}
       onClick={handleBackdropClick}
     >
       <div className="history-panel">
@@ -116,23 +115,11 @@ export function HistoryPanel({
           </div>
         )}
         {/*
-          Detail-view shell. The parent can supply a fully-rendered
-          detail (typically `<InspirationDetail>`) via the `detail` prop;
-          when omitted we fall back to the inert wrapper so the
-          slide-over CSS still has a stable target before any selection
-          is made. While detail is mounted, suppress the saved-inspirations
-          list so the drawer shows only the edit/detail surface.
+          Detail view. Mount it only when the parent supplies an active
+          detail so the inactive back button and empty detail shell never
+          leak into the accessibility tree or body text.
         */}
-        {detail ?? (
-          <div className="detail-view" id="detailView">
-            <div className="detail-head">
-              <button type="button" className="detail-back" id="detailBack">
-                ← {t(locale, "detailBack")}
-              </button>
-            </div>
-            <div className="detail-body" id="detailBody" />
-          </div>
-        )}
+        {detail ?? null}
       </div>
     </div>
   );

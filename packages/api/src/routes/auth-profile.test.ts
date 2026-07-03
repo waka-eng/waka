@@ -148,40 +148,48 @@ describe("PATCH /api/auth/me/profile", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "Invalid profile payload",
       details: {
-        name: ["Nickname is required"],
+        name: ["Display name is required"],
         preferredLocale: expect.any(Array),
       },
     });
   });
 
-  it("rejects nicknames containing whitespace without touching the database", async () => {
-    const db = makeProfileDb([]);
+  it("persists display names containing spaces", async () => {
+    const db = makeProfileDb([
+      {
+        ...authState.user,
+        name: "Mina Park",
+        preferredLocale: "en-US",
+      },
+    ]);
     dbState.db = db;
 
     const response = await app().request("/api/auth/me/profile", {
       method: "PATCH",
-      body: JSON.stringify({ name: "Min a", preferredLocale: "en-US" }),
+      body: JSON.stringify({ name: " Mina Park ", preferredLocale: "en-US" }),
       headers: {
         Authorization: "Bearer test-token",
         "Content-Type": "application/json",
       },
     });
 
-    expect(response.status).toBe(400);
-    expect(db.update).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Mina Park" }),
+    );
     await expect(response.json()).resolves.toMatchObject({
-      error: "Invalid profile payload",
-      details: { name: ["Nickname cannot contain spaces"] },
+      user: { name: "Mina Park" },
     });
   });
 
-  it("persists nickname, locale, and onboarding completion", async () => {
+  it("persists display name, locale, and onboarding completion", async () => {
     const completedAt = new Date("2026-06-20T10:15:30.000Z");
     const db = makeProfileDb([
       {
         id: authState.user.id,
         email: authState.user.email,
-        name: "Mina",
+        name: "Mina Lee",
         avatarUrl: null,
         preferredLocale: "ko-KR",
         onboardingCompletedAt: completedAt,
@@ -192,7 +200,7 @@ describe("PATCH /api/auth/me/profile", () => {
     const response = await app().request("/api/auth/me/profile", {
       method: "PATCH",
       body: JSON.stringify({
-        name: " Mina ",
+        name: " Mina Lee ",
         preferredLocale: "ko-KR",
         completeOnboarding: true,
       }),
@@ -206,7 +214,7 @@ describe("PATCH /api/auth/me/profile", () => {
     expect(db.update).toHaveBeenCalledTimes(1);
     expect(db.set).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "Mina",
+        name: "Mina Lee",
         preferredLocale: "ko-KR",
         onboardingCompletedAt: expect.any(Date),
         updatedAt: expect.any(Date),
@@ -217,7 +225,7 @@ describe("PATCH /api/auth/me/profile", () => {
       user: {
         id: authState.user.id,
         email: authState.user.email,
-        name: "Mina",
+        name: "Mina Lee",
         preferredLocale: "ko-KR",
         onboardingCompletedAt: completedAt.toISOString(),
       },
@@ -258,13 +266,13 @@ describe("PATCH /api/auth/me/profile", () => {
     });
   });
 
-  it("persists public handle settings for the signed-in user", async () => {
+  it("normalizes and persists hyphenated public handle settings for the signed-in user", async () => {
     const db = makeProfileDb([
       {
         ...authState.user,
         name: "Mina",
         preferredLocale: "en-US",
-        publicHandle: "q00",
+        publicHandle: "mixed-case_handle",
         publicProfileEnabled: true,
         publicTopOfMindEnabled: true,
       },
@@ -276,7 +284,7 @@ describe("PATCH /api/auth/me/profile", () => {
       body: JSON.stringify({
         name: "Mina",
         preferredLocale: "en-US",
-        publicHandle: "@Q00",
+        publicHandle: "@Mixed-Case_Handle",
         publicProfileEnabled: true,
         publicTopOfMindEnabled: true,
       }),
@@ -289,14 +297,14 @@ describe("PATCH /api/auth/me/profile", () => {
     expect(response.status).toBe(200);
     expect(db.set).toHaveBeenCalledWith(
       expect.objectContaining({
-        publicHandle: "q00",
+        publicHandle: "mixed-case_handle",
         publicProfileEnabled: true,
         publicTopOfMindEnabled: true,
       }),
     );
     await expect(response.json()).resolves.toMatchObject({
       user: {
-        publicHandle: "q00",
+        publicHandle: "mixed-case_handle",
         publicProfileEnabled: true,
         publicTopOfMindEnabled: true,
       },
@@ -321,6 +329,70 @@ describe("PATCH /api/auth/me/profile", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       details: { publicHandle: ["Choose a public handle first"] },
+    });
+  });
+
+  it("rejects public handles containing spaces", async () => {
+    const db = makeProfileDb([]);
+    dbState.db = db;
+
+    const response = await app().request("/api/auth/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Mina Park",
+        preferredLocale: "en-US",
+        publicHandle: "bad handle",
+      }),
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(db.update).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Invalid public handle",
+      details: {
+        publicHandle: [
+          "Handle must be 3-24 letters, numbers, hyphens, or underscores with no spaces",
+        ],
+      },
+    });
+  });
+
+  it("returns a field conflict when the normalized public handle is already taken", async () => {
+    const duplicateError = Object.assign(new Error("duplicate public handle"), {
+      code: "23505",
+    });
+    const returning = vi.fn(async () => {
+      throw duplicateError;
+    });
+    const where = vi.fn(() => ({ returning }));
+    const set = vi.fn(() => ({ where }));
+    const update = vi.fn(() => ({ set }));
+    dbState.db = { update };
+
+    const response = await app().request("/api/auth/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: "Mina Park",
+        preferredLocale: "en-US",
+        publicHandle: "@Taken-Handle",
+      }),
+      headers: {
+        Authorization: "Bearer test-token",
+        "Content-Type": "application/json",
+      },
+    });
+
+    expect(response.status).toBe(409);
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ publicHandle: "taken-handle" }),
+    );
+    await expect(response.json()).resolves.toMatchObject({
+      error: "That public handle is already taken",
+      details: { publicHandle: ["That public handle is already taken"] },
     });
   });
 });

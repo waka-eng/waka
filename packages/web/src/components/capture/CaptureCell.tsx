@@ -68,6 +68,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   forwardRef,
+  useRef,
   useState,
 } from "react";
 
@@ -332,6 +333,7 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
 
     const isReflectView = view === "reflect";
     const reflectiveSaveLabel = processSaveInProgress ? processSaveInProgressLabel : processSaveLabel;
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     return (
       <div
@@ -390,6 +392,9 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
         <div
           className={`reflect-area${isReflectView ? " visible" : ""}`}
           id="reflectArea"
+          hidden={!isReflectView}
+          aria-hidden={!isReflectView}
+          {...(!isReflectView ? { inert: "" } : {})}
         >
           <div className="reflect-question" id="reflectQ">
             {reflectQuestion}
@@ -437,7 +442,13 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
         {!isReflectView ? (
           <div className="cap-bar" id="capBar">
             <div className="cap-bar-left">
-              <label className="cap-file-btn" htmlFor="capFile" title="attach an image">
+              <button
+                type="button"
+                className="cap-file-btn"
+                title="attach an image"
+                aria-label="attach an image"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -445,11 +456,14 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
                   strokeWidth={1.7}
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
                 >
                   <path d="M21.4 11.6 12.2 20.8a6 6 0 0 1-8.5-8.5l9.8-9.8a4 4 0 0 1 5.7 5.7l-9.8 9.8a2 2 0 1 1-2.8-2.8l9.2-9.2" />
                 </svg>
-              </label>
+              </button>
               <input
+                ref={fileInputRef}
                 id="capFile"
                 type="file"
                 accept="image/*"
@@ -495,18 +509,6 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
             <div className="cap-bar-right">
               <button
                 type="button"
-                className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}${processSaveInProgress ? " cap-save--reflecting" : ""}`}
-                id="capReflectiveSave"
-                onClick={onReflectiveSave}
-                title={processSaveTitle}
-                aria-label={reflectiveSaveLabel}
-                aria-pressed={processSaveInProgress}
-                disabled={!saveVisible}
-              >
-                {reflectiveSaveLabel}
-              </button>
-              <button
-                type="button"
                 className={`cap-save cap-save--quick${saveVisible ? " visible" : ""}`}
                 id="capSave"
                 onClick={onSave}
@@ -516,6 +518,20 @@ export const CaptureCell = forwardRef<HTMLDivElement, CaptureCellProps>(
               >
                 {quickSaveLabel}
               </button>
+              {onReflectiveSave ? (
+                <button
+                  type="button"
+                  className={`cap-save cap-save--reflect${saveVisible ? " visible" : ""}${processSaveInProgress ? " cap-save--reflecting" : ""}`}
+                  id="capReflectiveSave"
+                  onClick={onReflectiveSave}
+                  title={processSaveTitle}
+                  aria-label={reflectiveSaveLabel}
+                  aria-pressed={processSaveInProgress}
+                  disabled={!saveVisible}
+                >
+                  {reflectiveSaveLabel}
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}

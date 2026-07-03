@@ -397,6 +397,8 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
+  mockAuthState.value.user.email = "river@example.com";
+  mockAuthState.value.user.name = "River";
   mockAuthState.value.user.preferredLocale = "en-US";
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
@@ -618,6 +620,97 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("still alive");
     expect(detail.textContent).toContain("changed shape");
     expect(detail.textContent).toContain("not anymore");
+  });
+
+  it("opens a saved inspiration with original content plus WAKA interpretation and evidence", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(container.querySelector(".nc-canvas")?.getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelector(".nc-canvas")?.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector(".nc-profile-link")?.hasAttribute("inert")).toBe(true);
+    expect(container.querySelector(".memory-drawer-stack")?.getAttribute("role")).toBe("dialog");
+    expect(container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]')).not.toBeNull();
+
+    expect(fetchSavedSignalDetail).toHaveBeenCalledWith("insp-1");
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail.textContent).toContain("WAKA interpretation");
+    expect(detail.textContent).toContain(
+      "READ: This inspiration suggests work that turns movement, place, and public rhythm into visible form.",
+    );
+    expect(detail.textContent).toContain("Primary spark: bridge rhythms in city walks");
+    expect(detail.textContent).toContain("Evidence and context");
+    expect(detail.textContent).toContain("places that make movement visible");
+    expect(detail.textContent).toContain("Helped shape “make the thing before explaining it”");
+    expect(detail.textContent).not.toContain("waka.signal_packet:v1");
+    expect(detail.textContent).not.toContain("This signal suggests");
+  });
+
+  it("does not leak dot-format signal packet debug copy in saved inspiration detail", async () => {
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        signalPacket: {
+          id: "packet-debug",
+          text: [
+            "waka.signal_packet.v1",
+            "WHAT_HIT",
+            "primary: Architecture essay about bridge rhythms in city walks (user_written, confidence=100)",
+            "WHY_IT_MATTERS",
+            "cluster=unclassified",
+            "REFLECTIONS",
+            "none",
+            "CONTEXT_EXCERPT",
+            "Architecture essay about bridge rhythms in city walks",
+          ].join("\n"),
+          primarySpark: "Architecture essay about bridge rhythms in city walks",
+          artifactExcerpt: "Architecture essay about bridge rhythms in city walks",
+          updatedAt: "2026-05-10T12:05:00.000Z",
+        },
+      },
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail.textContent).toContain("WAKA interpretation");
+    expect(detail.textContent).toContain("Primary spark: Architecture essay about bridge rhythms in city walks");
+    expect(detail.textContent).not.toContain("waka.signal_packet.v1");
+    expect(detail.textContent).not.toContain("WHAT_HIT");
+    expect(detail.textContent).not.toContain("user_written");
+    expect(detail.textContent).not.toContain("cluster=unclassified");
+    expect(detail.textContent).not.toContain("REFLECTIONS");
+    expect(detail.textContent).not.toContain("CONTEXT_EXCERPT");
+  });
+
+  it("uses honest not-ready copy when saved inspiration detail has no packet or evidence yet", async () => {
+    setApiFixtures({
+      savedSignalDetail: {
+        ...sampleSavedSignalDetail,
+        signalPacket: null,
+        highlightedSnippets: [],
+        relatedContextNodes: [],
+        relatedTopOfMindNotes: [],
+      },
+    });
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+
+    expect(detail.querySelector<HTMLTextAreaElement>('textarea[aria-label="edit saved inspiration"]')?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+    expect(detail.textContent).toContain("WAKA is still gathering enough context to interpret this inspiration.");
+    expect(detail.textContent).toContain("Context evidence is still being gathered for this inspiration.");
+    expect(detail.textContent).not.toContain("READ:");
+    expect(detail.textContent).not.toContain("Helped shape");
   });
 
   it("asks for an optional saved-inspiration correction before submitting changed shape", async () => {
@@ -915,6 +1008,8 @@ describe("HomePage current home experience", () => {
 
     const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
     expect(answer).not.toBeNull();
+    expect(answer?.getAttribute("aria-label")).toBe("answer reflection prompt");
+    expect(answer?.getAttribute("aria-describedby")).toBe("saved-signal-reflection-question");
     await act(async () => {
       setInputValue(answer!, "Second draft while model question resolves.");
     });
@@ -1223,6 +1318,26 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("five provisional post-its. not final. changed by new saves.");
   });
 
+  it("renders a spaced display name fully in the hero copy", async () => {
+    mockAuthState.value.user.name = " River Song ";
+    setApiFixtures();
+
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("river song's top of mind");
+    expect(container.textContent).not.toContain("river's top of mind");
+  });
+
+  it("falls back to the email local part when the display name is blank", async () => {
+    mockAuthState.value.user.email = "cloudwalker@example.com";
+    mockAuthState.value.user.name = "   ";
+    setApiFixtures();
+
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("cloudwalker's top of mind");
+  });
+
   it("names the primary product spaces without surfacing internal graph UI", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -1326,7 +1441,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.textContent).toContain("capture inspiration");
     expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_frequency_scaffold");
     expect(container.textContent).not.toContain("Top of mind: template question scaffold");
@@ -1361,8 +1478,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.");
-    expect(container.textContent).toContain("영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.");
+    expect(container.textContent).toContain(
+      "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+    );
     expect(container.textContent).not.toContain("English-only deterministic scaffold card");
     expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
     expect(container.textContent).not.toContain("Capture inspirations to generate your top of mind stickies.");
@@ -1720,7 +1838,9 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
     expect(createFeedback).toHaveBeenCalledWith({
@@ -1777,7 +1897,9 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-page")).toBeNull();
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
     expect(container.querySelector("#capNote")).toBeNull();
@@ -1788,7 +1910,9 @@ describe("HomePage current home experience", () => {
     const container = await renderHomePage();
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
-    expect(container.textContent).toContain("When 2–3 related inspirations gather, provisional notes will appear here.");
+    expect(container.textContent).toContain(
+      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    );
     expect(container.textContent).not.toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("What WAKA noticed");
@@ -2620,24 +2744,20 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("advances and saves Reflect Deeper from the capture modal with all three answers", async () => {
+  it("offers Reflect Deeper only after the capture modal has saved", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
-      persistedInspiration({ id: "insp-guided-save", text: "A windowed studio signal", wowScore: 8 }),
+      persistedInspiration({ id: "insp-post-save", text: "A windowed studio signal", wowScore: 8 }),
     );
     vi.mocked(createReflection).mockResolvedValue({
       reflection: persistedReflection({
-        id: "reflection-guided-save",
-        inspirationId: "insp-guided-save",
-        question: "Reflect deeper guided reflection",
-        answer: "saved guided answer",
+        id: "reflection-post-save",
+        inspirationId: "insp-post-save",
+        question: "Why did this matter right now?",
+        answer: "The soft north light.",
       }),
-      inspiration: { id: "insp-guided-save", wowScore: 9 },
+      inspiration: { id: "insp-post-save", wowScore: 9 },
     });
-    vi.mocked(generateGuidedReflectionQuestion)
-      .mockResolvedValueOnce({ question: "What caught you first?", source: "model" })
-      .mockResolvedValueOnce({ question: "What does it ask you to protect?", source: "model" })
-      .mockResolvedValueOnce({ question: "What is the smallest next move?", source: "model" });
     const container = await renderHomePage();
 
     await openCaptureModal(container);
@@ -2645,18 +2765,21 @@ describe("HomePage current home experience", () => {
       setInputValue(container.querySelector<HTMLTextAreaElement>("#capNote")!, "A windowed studio signal");
     });
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
     });
     await flushReactWork();
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("What caught you first?");
-    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
-    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "A windowed studio signal",
+      kind: "note",
+    });
+    expect(container.querySelector("#capConfirm")?.textContent).toContain("Inspiration saved.");
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
     expect(container.querySelector("#capBar")).toBeNull();
     expect(container.querySelector("#capSave")).toBeNull();
     expect(container.querySelector("#capReflectiveSave")).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
+    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Done");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Reflect deeper");
+    expect(createReflection).not.toHaveBeenCalled();
 
     await act(async () => {
       setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "The soft north light.");
@@ -2665,61 +2788,15 @@ describe("HomePage current home experience", () => {
       container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
     });
     await flushReactWork();
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("What does it ask you to protect?");
-    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 2 of 3");
-    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("2");
-    expect(container.querySelector("#capBar")).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
 
-    await act(async () => {
-      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Protected quiet mornings.");
+    expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
+      question: "Why did this matter right now?",
+      answer: "The soft north light.",
+      skipped: false,
     });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("What is the smallest next move?");
-    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 3 of 3");
-    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
-    expect(container.querySelector("#capBar")).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
-
-    await act(async () => {
-      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Block tomorrow morning.");
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
-    });
-    await flushReactWork();
-
-    expect(createInspiration).toHaveBeenCalledWith({
-      text: "A windowed studio signal",
-      kind: "note",
-      reflections: [
-        {
-          question: "What caught you first?",
-          answer: "The soft north light.",
-          skipped: false,
-        },
-        {
-          question: "What does it ask you to protect?",
-          answer: "Protected quiet mornings.",
-          skipped: false,
-        },
-        {
-          question: "What is the smallest next move?",
-          answer: "Block tomorrow morning.",
-          skipped: false,
-        },
-      ],
-    });
-    expect(createReflection).not.toHaveBeenCalled();
   });
 
-  it("closes the surface and flashes the capture button after a quick save", async () => {
+  it("confirms a quick save before closing from the optional reflection step", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -2735,8 +2812,15 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    // No in-cell mirror; the surface begins closing immediately on a full save.
+    // No in-cell mirror; save is confirmed before the optional reflection step.
     expect(container.querySelector(".cap-save-mirror")).toBeNull();
+    expect(container.querySelector("#capConfirm")?.textContent).toContain("Inspiration saved.");
+    expect(container.querySelector(".reference-capture-modal--closing")).toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#reflectLater")?.click();
+    });
+    await flushReactWork();
     expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
 
     await waitForTimers(380);
@@ -2746,7 +2830,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
     const savedButton = container.querySelector(".nc-save--saved");
     expect(savedButton).not.toBeNull();
-    expect(savedButton?.textContent).toContain("saved");
+    expect(savedButton?.textContent).toContain("Inspiration saved.");
   });
 
   it("shows a newly persisted quick save in the inspiration drawer list", async () => {

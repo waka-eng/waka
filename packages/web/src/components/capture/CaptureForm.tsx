@@ -830,7 +830,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         setReflectionAnswer("");
         setReflectionStepIndex(0);
         setGuidedReflectionAnswers([]);
-        setActiveView("note");
+        setActiveView(savedReflectionCount > 0 ? "note" : "reflect");
         setPostSaveReflectionTargetId(savedReflectionCount > 0 ? null : inspiration.id);
         setReflectGlow(savedReflectionCount > 0);
         if (reflectGlowTimerRef.current) clearTimeout(reflectGlowTimerRef.current);
@@ -849,12 +849,13 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         if (failed.length > 0) {
           // Partial save: keep the surface open so the user sees the warning.
           flashConfirm(formatMessage(locale, "partialAttachmentFailure", { count: failed.length }), 2800);
-        } else {
-          // Full success: hand off to the parent, which closes the capture
-          // surface and flashes an ephemeral "saved" confirmation on the
-          // capture button (no in-cell post-save mirror).
-          setPostSaveReflectionTargetId(null);
+        } else if (savedReflectionCount > 0) {
+          // Full success after a guided reflection save: hand off to the parent.
           onSaved?.();
+        } else {
+          // Full success: keep the surface open long enough to make durability
+          // unmistakable, then let Reflect deeper be an optional next step.
+          flashConfirm(t(locale, "inspirationSavedConfirmation"), 1800);
         }
       } catch (err) {
         const error =
@@ -885,35 +886,6 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
       onDismissAfterSave,
       onSaved,
     ]);
-
-    const handleStartReflectiveSave = useCallback((): void => {
-      if (saving) return;
-      if (note.trim().length === 0 && pending.length === 0) return;
-      const firstFallback = fallbackGuidedQuestion(0);
-      setPostSaveReflectionTargetId(null);
-      setGuidedReflectionAnswers([]);
-      setGuidedReflectionQuestions([]);
-      setReflectionStepIndex(0);
-      setReflectionAnswer("");
-      setActiveView("reflect");
-      setReflectGlow(false);
-      onToggleFocus?.(true);
-      const requestId = guidedReflectionRequestSeqRef.current + 1;
-      guidedReflectionRequestSeqRef.current = requestId;
-      void requestGuidedQuestion([], []).then(
-        (question) => {
-          if (guidedReflectionRequestSeqRef.current !== requestId) return;
-          setGuidedReflectionQuestions([question]);
-        },
-        () => {
-          if (guidedReflectionRequestSeqRef.current !== requestId) return;
-          setGuidedReflectionQuestions([firstFallback]);
-        },
-      );
-      queueMicrotask(() => {
-        document.querySelector<HTMLTextAreaElement>("#reflectAns")?.focus();
-      });
-    }, [fallbackGuidedQuestion, note, pending, requestGuidedQuestion, saving, onToggleFocus]);
 
     const buildGuidedReflectionPayload = useCallback((answers: string[]): GuidedReflectionPayload => {
       return answers
@@ -1116,7 +1088,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         onSave={() => {
           void triggerSave();
         }}
-        onReflectiveSave={handleStartReflectiveSave}
+        onReflectiveSave={undefined}
         processSaveLabel={t(locale, "processThisInspiration")}
         processSaveInProgress={guidedReflectionInProgress}
         processSaveInProgressLabel={t(locale, "reflectDeeperInProgress")}
@@ -1126,8 +1098,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         focusModeLabel={t(locale, "focusMode")}
         enterFocusModeLabel={t(locale, "enterFocusMode")}
         exitFocusModeLabel={t(locale, "exitFocusMode")}
-        doneLabel={t(locale, "done")}
-        continueLabel={reflectionStepIndex === reflectStepCount - 1 && !postSaveReflectionTargetId ? t(locale, "guidedReflectionSave") : t(locale, "continue")}
+        doneLabel={postSaveReflectionTargetId ? t(locale, "postSaveDone") : t(locale, "done")}
+        continueLabel={postSaveReflectionTargetId ? t(locale, "postSaveReflectCta") : reflectionStepIndex === reflectStepCount - 1 ? t(locale, "guidedReflectionSave") : t(locale, "continue")}
         focused={focused}
         onToggleFocus={onToggleFocus}
         onFileSelect={addFile}
@@ -1172,6 +1144,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           if (postSaveReflectionTargetId) {
             setActiveView("note");
             setPostSaveReflectionTargetId(null);
+            onSaved?.();
           } else {
             handleGuidedReflectionBack();
           }

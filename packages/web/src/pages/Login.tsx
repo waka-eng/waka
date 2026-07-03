@@ -18,8 +18,8 @@
  * URL and gets bounced here). When absent we default to "/".
  */
 
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Location } from "react-router-dom";
 
@@ -582,6 +582,8 @@ type Mode = "login" | "signup";
  */
 export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
+  const loginTabRef = useRef<HTMLButtonElement>(null);
+  const signupTabRef = useRef<HTMLButtonElement>(null);
   const locale = readStoredLocale();
   const location = useLocation();
   const navigate = useNavigate();
@@ -625,6 +627,40 @@ export default function LoginPage(): JSX.Element {
   const headline = t(locale, mode === "login" ? "loginWelcome" : "loginBegin");
   const subtitle = t(locale, mode === "login" ? "loginSubtitle" : "signupSubtitle");
 
+  const activateLoginTab = (): void => {
+    setMode("login");
+    loginTabRef.current?.focus();
+  };
+
+  const activateSignupTab = (): void => {
+    setMode("signup");
+    signupTabRef.current?.focus();
+  };
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (event.key === "Home") {
+      activateLoginTab();
+    } else if (event.key === "End") {
+      activateSignupTab();
+    } else if (event.key === "ArrowLeft") {
+      if (event.currentTarget.id === "login-tab-login") {
+        activateSignupTab();
+      } else {
+        activateLoginTab();
+      }
+    } else if (event.currentTarget.id === "login-tab-signup") {
+      activateLoginTab();
+    } else {
+      activateSignupTab();
+    }
+  };
+
   return (
     <main className="login-shell">
       <section className="login-card" aria-labelledby="login-title">
@@ -657,28 +693,34 @@ export default function LoginPage(): JSX.Element {
           aria-label={t(locale, "loginTabAria")}
         >
           <button
+            ref={loginTabRef}
             type="button"
             role="tab"
             id="login-tab-login"
             aria-selected={mode === "login"}
             aria-controls="login-tabpanel"
+            tabIndex={mode === "login" ? 0 : -1}
             className={
               "login-tab" + (mode === "login" ? " login-tab--active" : "")
             }
             onClick={() => setMode("login")}
+            onKeyDown={handleTabKeyDown}
           >
             {t(locale, "loginTab")}
           </button>
           <button
+            ref={signupTabRef}
             type="button"
             role="tab"
             id="login-tab-signup"
             aria-selected={mode === "signup"}
             aria-controls="login-tabpanel"
+            tabIndex={mode === "signup" ? 0 : -1}
             className={
               "login-tab" + (mode === "signup" ? " login-tab--active" : "")
             }
             onClick={() => setMode("signup")}
+            onKeyDown={handleTabKeyDown}
           >
             {t(locale, "signupTab")}
           </button>

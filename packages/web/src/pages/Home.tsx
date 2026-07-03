@@ -103,7 +103,7 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
   const hostname =
     typeof window === "undefined" ? "" : window.location.hostname.toLowerCase();
   const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  return env.DEV === true || env.VITE_SHOW_INTERNAL_STATUS === "true" || isLocalhost;
+  return env.VITE_SHOW_INTERNAL_STATUS === "true" || (env.DEV === true && isLocalhost);
 }
 
 /**
@@ -438,6 +438,38 @@ function shortText(value: string, maxLength = 220): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function inspirationFacingCopy(value: string): string {
+  return value
+    .replace(/^waka\.signal_packet(?::v|\.)\d+\s*/i, "")
+    .replace(/\bwaka\.signal_packet(?::v|\.)\d+\b/gi, "")
+    .replace(/\bsignals\b/g, "inspirations")
+    .replace(/\bSignals\b/g, "Inspirations")
+    .replace(/\bsignal\b/g, "inspiration")
+    .replace(/\bSignal\b/g, "Inspiration")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function packetInterpretationCopy(value: string): string {
+  const lines = value
+    .split("\n")
+    .map((line) => line.trim());
+  const hasDebugSections = lines.some((line) => /^(WHAT_HIT|WHY_IT_MATTERS|REFLECTIONS|CONTEXT_EXCERPT)\b/i.test(line));
+  const userFacingLines = lines.filter((line) => {
+    if (!line) return false;
+    if (/^waka\.signal_packet(?::v|\.)\d+\b/i.test(line)) return false;
+    if (/^(WHAT_HIT|WHY_IT_MATTERS|REFLECTIONS|CONTEXT_EXCERPT)\b/i.test(line)) return false;
+    if (/^primary:\s.*\((user_written|generated|manual),\s*confidence=\d+\)/i.test(line)) return false;
+    if (/^cluster=/i.test(line)) return false;
+    if (/^none$/i.test(line)) return false;
+    if (hasDebugSections && !/^READ:/i.test(line)) return false;
+    return true;
+  });
+
+  return inspirationFacingCopy(userFacingLines.join("\n"));
 }
 
 const MEANING_NOTE_LABEL_TRANSLATIONS: Record<string, string> = {
@@ -920,7 +952,7 @@ function memoryMapLabel(value: string): string {
     "things i am done with": "done with",
     "taste with a pulse": "taste pulse",
     "questions still open": "open questions",
-    "inspirations touching": "loose signals",
+    "inspirations touching": "loose inspirations",
   };
   const shortLabel = knownLabels[label] ?? label;
   const words = shortLabel
@@ -1228,9 +1260,9 @@ const HOME_COPY = {
     savedSignalFeedbackSaving: "저장 중...",
     savedSignalFeedbackError: "영감 피드백을 저장하지 못했습니다",
     loadingThoughts: "생각을 모으는 중...",
-    emptyThoughts: "관련된 영감이 2~3개 이상 쌓이면 임시 노트가 여기에 나타납니다.",
+    emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     captureTitle: "첫 영감 붙잡기",
-    captureBody: "정리하지 않아도 됩니다. 어설프고 덜 완성된 것도 사라지기 전에 저장하세요.",
+    captureBody: "정리하지 않아도 됩니다. 사라지기 전에 저장하면 WAKA가 그 영감을 해석하고 다른 것들과 연결합니다.",
     captureInlineKicker: "영감 기록",
     footnote: (name: string) => (
       <>
@@ -1248,11 +1280,11 @@ const HOME_COPY = {
     searchLabel: "검색",
     searchPlaceholder: "저장된 영감 검색",
     loadingSaves: "저장된 영감을 불러오는 중...",
-    emptySaves: "아직 저장된 영감이 없습니다.",
+    emptySaves: "아직 저장된 영감이 없습니다. 영감을 하나 기록하면 WAKA가 해석하고 연결할 재료가 생깁니다.",
     captureAria: "영감 기록하기",
     captureCta: "영감 기록",
     captureHint: () => "",
-    bottomHint: "영감을 기록하면 탑오브마인드 포스트잇이 만들어집니다.",
+    bottomHint: "영감을 기록하면 WAKA가 해석하고 연결해, 고칠 수 있는 임시 포스트잇으로 띄웁니다.",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1294,9 +1326,9 @@ const HOME_COPY = {
     savedSignalFeedbackSaving: "saving...",
     savedSignalFeedbackError: "could not save inspiration feedback",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "When 2–3 related inspirations gather, provisional notes will appear here.",
+    emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
     captureTitle: "Catch the first inspiration",
-    captureBody: "No tagging, journaling, or organizing. Save the messy, embarrassing, half-formed thing before it disappears.",
+    captureBody: "No tagging, journaling, or organizing. Save the messy, half-formed thing and WAKA will interpret how it connects.",
     captureInlineKicker: "inspiration capture",
     footnote: () => <></>,
     footnoteCredit: "",
@@ -1306,11 +1338,11 @@ const HOME_COPY = {
     searchLabel: "search",
     searchPlaceholder: "search saved inspirations",
     loadingSaves: "loading saved inspirations...",
-    emptySaves: "no inspirations saved yet.",
+    emptySaves: "no inspirations saved yet. Capture one and WAKA will have something to interpret and connect.",
     captureAria: "capture inspiration",
     captureCta: "capture inspiration",
     captureHint: () => "",
-    bottomHint: "Capture inspirations to generate your top of mind stickies.",
+    bottomHint: "Capture an inspiration; WAKA interprets and connects it into provisional post-its you can correct.",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1965,6 +1997,9 @@ export function HomePage(): JSX.Element {
   const filteredEntries = useMemo(() => {
     return filterAndSortInspirationEntries(entries, deferredInspirationFilters);
   }, [deferredInspirationFilters, entries]);
+  const savedEntryCount = useMemo(() => {
+    return entries.filter((entry) => entry.status === "saved").length;
+  }, [entries]);
 
   const savedSignalQuery = deferredSearch.trim().toLowerCase();
   const localSignalRows = filteredEntries.map((entry) => ({
@@ -2298,7 +2333,7 @@ export function HomePage(): JSX.Element {
 
   const thoughtCards = topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard);
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
-  const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
+  const displayName = user.name?.trim() || user.email.split("@")[0] || "yunji";
   const displayHandle = displayName.toLowerCase();
   const copy = HOME_COPY[locale];
 
@@ -3092,6 +3127,19 @@ export function HomePage(): JSX.Element {
       .map((answer, index) => (index === savedSignalReflectionStepIndex ? savedSignalReflectionDraft : answer))
       .filter((answer) => answer.trim().length > 0).length > 0;
 
+  const showDrawerSearch =
+    homeMode === "memoryDrawer" &&
+    !selectedDrawerHasEdit &&
+    !deletedSavedSignalUndo &&
+    !selectedDrawerIsReflecting;
+  const showDrawerEditActions =
+    homeMode === "memoryDrawer" && selectedDrawerHasEdit && !deletedSavedSignalUndo;
+  const showDrawerUndo = homeMode === "memoryDrawer" && Boolean(deletedSavedSignalUndo);
+  const showTopOfMindUndo = homeMode !== "memoryDrawer" && Boolean(deletedTopOfMindUndo);
+  const showTopOfMindCapture = homeMode !== "memoryDrawer" && !deletedTopOfMindUndo;
+  const showPrimarySaveButton =
+    showTopOfMindCapture || showTopOfMindUndo || showDrawerEditActions || showDrawerUndo;
+
   const cancelSavedSignalReflection = (): void => {
     setSavedSignalReflectingId(null);
     setSavedSignalReflectionDraft("");
@@ -3498,6 +3546,16 @@ export function HomePage(): JSX.Element {
         ? pendingSavedSignalCorrection
         : null;
       const isFeedbackSaving = detailFeedbackStatus === "saving";
+      const packet = fullDetailReady ? savedSignalDetail.signalPacket : null;
+      const packetText = packet ? packetInterpretationCopy(packet.text) : "";
+      const packetSpark = packet?.primarySpark ? inspirationFacingCopy(packet.primarySpark) : "";
+      const packetArtifact = packet?.artifactExcerpt ? inspirationFacingCopy(packet.artifactExcerpt) : "";
+      const hasPacketDisplay = Boolean(packetText || packetSpark || packetArtifact);
+      const highlightedSnippets = fullDetailReady ? savedSignalDetail.highlightedSnippets.slice(0, 3) : [];
+      const relatedContextNodes = fullDetailReady ? savedSignalDetail.relatedContextNodes.slice(0, 3) : [];
+      const relatedTopOfMindNotes = fullDetailReady ? savedSignalDetail.relatedTopOfMindNotes.slice(0, 2) : [];
+      const hasEvidenceContext =
+        highlightedSnippets.length > 0 || relatedContextNodes.length > 0 || relatedTopOfMindNotes.length > 0;
       return (
         <article
           className="memory-contents-item memory-contents-item--expanded"
@@ -3550,6 +3608,67 @@ export function HomePage(): JSX.Element {
               />
             )}
           </div>
+          <section className="memory-contents-evidence" aria-label="inspiration evidence">
+            <div className="memory-contents-evidence-block">
+              <p className="memory-contents-evidence-label">WAKA interpretation</p>
+              {!fullDetailReady ? (
+                <p className="memory-contents-evidence-empty">Gathering WAKA’s read of this inspiration...</p>
+              ) : packet && hasPacketDisplay ? (
+                <div className="memory-contents-packet">
+                  {packetText ? <p>{packetText}</p> : null}
+                  {packetSpark ? <p><strong>Primary spark:</strong> {packetSpark}</p> : null}
+                  {packetArtifact ? <p><strong>Original echo:</strong> {shortText(packetArtifact, 180)}</p> : null}
+                </div>
+              ) : (
+                <p className="memory-contents-evidence-empty">
+                  WAKA is still gathering enough context to interpret this inspiration.
+                </p>
+              )}
+            </div>
+            <div className="memory-contents-evidence-block">
+              <p className="memory-contents-evidence-label">Evidence and context</p>
+              {!fullDetailReady ? (
+                <p className="memory-contents-evidence-empty">
+                  Checking whether this inspiration has context evidence yet...
+                </p>
+              ) : hasEvidenceContext ? (
+                <div className="memory-contents-evidence-groups">
+                  {highlightedSnippets.length > 0 ? (
+                    <div className="memory-contents-highlighted-parts" aria-label="what stood out">
+                      {highlightedSnippets.map((snippet) => (
+                        <span key={snippet.id}>{inspirationFacingCopy(snippet.text)}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {relatedContextNodes.length > 0 ? (
+                    <ul className="memory-contents-context-list" aria-label="related context">
+                      {relatedContextNodes.map((node) => (
+                        <li key={node.id}>
+                          <strong>{inspirationFacingCopy(node.label)}</strong>
+                          {node.description ? <span>{inspirationFacingCopy(node.description)}</span> : null}
+                          {node.evidenceReason ? <small>{inspirationFacingCopy(node.evidenceReason)}</small> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {relatedTopOfMindNotes.length > 0 ? (
+                    <ul className="memory-contents-context-list" aria-label="top-of-mind influence">
+                      {relatedTopOfMindNotes.map((note) => (
+                        <li key={note.id}>
+                          <strong>Helped shape “{inspirationFacingCopy(note.title)}”</strong>
+                          {note.body ? <span>{inspirationFacingCopy(note.body)}</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="memory-contents-evidence-empty">
+                  Context evidence is still being gathered for this inspiration.
+                </p>
+              )}
+            </div>
+          </section>
           <section className="memory-contents-reflection-prompts">
             <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
               {copy.savedSignalFeedbackActions.map((action) => {
@@ -4008,7 +4127,7 @@ export function HomePage(): JSX.Element {
       onPointerDown={noteIsInteractive ? onNotePointerDown(index) : undefined}
     >
       <div className="nc-note-preview" aria-label="post-it preview">
-        {signal.feedbackTargetId ? (
+        {noteIsInteractive && signal.feedbackTargetId ? (
           <div className="nc-note-edit-shell">
             <textarea
               className="nc-note-body nc-note-body-edit nc-note-body-edit--inline"
@@ -4036,11 +4155,11 @@ export function HomePage(): JSX.Element {
         )}
       </div>
       <div className="nc-note-footer-row">
-        {supportingCount > 0 ? (
+        {noteIsInteractive && supportingCount > 0 ? (
           <button
             type="button"
             className="nc-note-inspiration-slide"
-            disabled={!canOpenEvidenceDrawer || homeMode === "memoryDrawer"}
+            disabled={!canOpenEvidenceDrawer}
             onClick={(event) => {
               event.stopPropagation();
               openTopOfMindEvidenceDrawer(signal);
@@ -4049,7 +4168,7 @@ export function HomePage(): JSX.Element {
             {supportingCount} inspiration{supportingCount === 1 ? "" : "s"} led here
           </button>
         ) : <span />}
-        {renderPostItActions(signal)}
+        {noteIsInteractive ? renderPostItActions(signal) : null}
       </div>
     </article>
   );
@@ -4073,6 +4192,8 @@ export function HomePage(): JSX.Element {
           className="nc-profile-link nc-lang--top"
           aria-label={t(locale, "profileTitle")}
           title={t(locale, "profileTitle")}
+          aria-hidden={homeMode === "memoryDrawer" ? true : undefined}
+          {...(homeMode === "memoryDrawer" ? { inert: "" } : {})}
         >
           {t(locale, "profileLink")}
         </Link>
@@ -4080,6 +4201,8 @@ export function HomePage(): JSX.Element {
       <main
         className={`nc-canvas nc-canvas--top-of-mind${homeMode === "memoryDrawer" ? " nc-canvas--drawer-open" : ""}`}
         data-locale={locale}
+        aria-hidden={homeMode === "memoryDrawer" ? true : undefined}
+        {...(homeMode === "memoryDrawer" ? { inert: "" } : {})}
       >
         <section className="nc-titlecard">
           <h1 className="nc-title">
@@ -4115,6 +4238,8 @@ export function HomePage(): JSX.Element {
 	          }`}
 	          data-locale={locale}
 	          aria-label={copy.savesTitle}
+	          role="dialog"
+	          aria-modal="false"
 	        >
           <span className="memory-stack-glass" aria-hidden="true" />
           {selectedMemoryGroup ? (
@@ -4165,198 +4290,143 @@ export function HomePage(): JSX.Element {
       >
         <div
           className={`nc-primary-action${
-            homeMode === "memoryDrawer" &&
-            !deletedSavedSignalUndo &&
-            !selectedDrawerHasEdit &&
-            !selectedDrawerIsReflecting
-              ? " nc-primary-action--search"
-              : ""
-          }${
-            homeMode === "memoryDrawer" && selectedDrawerHasEdit && !deletedSavedSignalUndo
-              ? " nc-primary-action--save"
-              : ""
-          }${
-            selectedDrawerIsReflecting && !deletedSavedSignalUndo && !selectedDrawerHasEdit
-              ? " nc-primary-action--reflect"
-              : ""
-          }${
-            (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
-            (deletedSavedSignalUndo && homeMode === "memoryDrawer")
-              ? " nc-primary-action--undo"
-              : ""
+            showDrawerSearch ? " nc-primary-action--search" : ""
+          }${showDrawerEditActions ? " nc-primary-action--save" : ""}${
+            selectedDrawerIsReflecting ? " nc-primary-action--reflect" : ""
+          }${showTopOfMindUndo || showDrawerUndo ? " nc-primary-action--undo" : ""
           }`}
         >
-          <button
-            type="button"
-            className={`nc-save${captureSaved ? " nc-save--saved" : ""}${
-              (deletedTopOfMindUndo && homeMode !== "memoryDrawer") ||
-              (deletedSavedSignalUndo && homeMode === "memoryDrawer")
-                ? " nc-save--undo"
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? " nc-save--save"
-                : ""
-            }`}
-            onClick={
-              deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? undoDeletedSavedSignal
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? () => void saveEditedSavedSignal()
-                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                  ? undoDeletedTopOfMindNote
-                  : openCapture
-            }
-            aria-label={
-              deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? "inspiration was deleted, undo"
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? "save edited inspiration"
-                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                ? "sticky note was deleted, undo"
-                : copy.captureAria
-            }
-            tabIndex={homeMode === "memoryDrawer" && !deletedSavedSignalUndo && !selectedDrawerHasEdit ? -1 : undefined}
-            aria-hidden={
-              homeMode === "memoryDrawer" &&
-              !deletedSavedSignalUndo &&
-              !selectedDrawerHasEdit
-                ? "true"
-                : undefined
-            }
-            disabled={homeMode === "memoryDrawer" && selectedDrawerHasEdit && savedSignalEditSaving}
-          >
-            <span className="nc-save-cta">
-              {deletedSavedSignalUndo && homeMode === "memoryDrawer"
-                ? "inspiration was deleted · undo"
-                : homeMode === "memoryDrawer" && selectedDrawerHasEdit
-                  ? savedSignalEditSaving
-                    ? "saving..."
-                    : "save"
-                : deletedTopOfMindUndo && homeMode !== "memoryDrawer"
-                ? "sticky note was deleted · undo"
-                : captureSaved
-                  ? t(locale, "saved")
-                  : copy.captureCta}
-              {homeMode !== "memoryDrawer" && !deletedTopOfMindUndo && !captureSaved && captureHasDraft ? (
-                <span className="nc-save-draft">(draft)</span>
+          {showPrimarySaveButton ? (
+            <button
+              type="button"
+              className={`nc-save${captureSaved ? " nc-save--saved" : ""}${
+                showTopOfMindUndo || showDrawerUndo
+                  ? " nc-save--undo"
+                  : showDrawerEditActions
+                    ? " nc-save--save"
+                    : ""
+              }`}
+              onClick={
+                showDrawerUndo
+                  ? undoDeletedSavedSignal
+                  : showDrawerEditActions
+                    ? () => void saveEditedSavedSignal()
+                  : showTopOfMindUndo
+                    ? undoDeletedTopOfMindNote
+                    : openCapture
+              }
+              aria-label={
+                showDrawerUndo
+                  ? "inspiration was deleted, undo"
+                  : showDrawerEditActions
+                    ? "save edited inspiration"
+                    : showTopOfMindUndo
+                      ? "sticky note was deleted, undo"
+                      : copy.captureAria
+              }
+              disabled={showDrawerEditActions && savedSignalEditSaving}
+            >
+              <span className="nc-save-cta">
+                {showDrawerUndo
+                  ? "inspiration was deleted · undo"
+                  : showDrawerEditActions
+                    ? savedSignalEditSaving
+                      ? "saving..."
+                      : "save"
+                    : showTopOfMindUndo
+                      ? "sticky note was deleted · undo"
+                      : captureSaved
+                        ? t(locale, "saved")
+                        : copy.captureCta}
+                {showTopOfMindCapture && !captureSaved && captureHasDraft ? (
+                  <span className="nc-save-draft">(draft)</span>
+                ) : null}
+              </span>
+            </button>
+          ) : null}
+          {showDrawerEditActions ? (
+            <button
+              type="button"
+              className="nc-edit-cancel"
+              onClick={cancelSavedSignalEdit}
+              aria-label="cancel edit"
+            >
+              cancel edit
+            </button>
+          ) : null}
+          {showDrawerSearch ? (
+            <label className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}>
+              <span className="sr-only">{copy.searchLabel}</span>
+              <input
+                type="search"
+                value={inspirationFilters.search}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  setInspirationFilters({ search: event.target.value });
+                  setSelectedMemoryGroupId(null);
+                  setSelectedSavedSignalId(null);
+                  setSavedSignalDetail(null);
+                  cancelSavedSignalReflection();
+                }}
+                placeholder={copy.searchPlaceholder}
+              />
+            </label>
+          ) : null}
+          {selectedDrawerIsReflecting ? (
+            <form
+              className="nc-drawer-reflect"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void saveSavedSignalReflection();
+              }}
+            >
+              <div className="nc-drawer-reflect-question">
+                <span>{selectedDrawerReflectionProgress}</span>
+                <p id="saved-signal-reflection-question">{selectedDrawerReflectionQuestion}</p>
+              </div>
+              <textarea
+                ref={savedSignalReflectionInputRef}
+                aria-label="answer reflection prompt"
+                aria-describedby="saved-signal-reflection-question"
+                value={savedSignalReflectionDraft}
+                onChange={(event) => {
+                  setSavedSignalReflectionDraft(event.target.value);
+                  event.currentTarget.style.height = "auto";
+                  event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
+                }}
+                placeholder="answer here"
+                disabled={savedSignalReflectionSaving}
+                rows={1}
+              />
+              <div className="nc-drawer-reflect-actions">
+                <button
+                  type="button"
+                  onClick={goToPreviousSavedSignalReflection}
+                  disabled={savedSignalReflectionSaving || savedSignalReflectionStepIndex === 0}
+                >
+                  previous
+                </button>
+                <button
+                  type="button"
+                  onClick={goToNextSavedSignalReflection}
+                  disabled={!selectedDrawerReflectionCanGoNext || savedSignalReflectionSaving}
+                >
+                  next
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedDrawerReflectionCanFinish || savedSignalReflectionSaving}
+                >
+                  {savedSignalReflectionSaving ? "saving..." : "save"}
+                </button>
+                <button type="button" onClick={cancelSavedSignalReflection}>
+                  cancel
+                </button>
+              </div>
+              {savedSignalReflectionError ? (
+                <span className="nc-drawer-reflect-error">{savedSignalReflectionError}</span>
               ) : null}
-            </span>
-          </button>
-          <button
-            type="button"
-            className="nc-edit-cancel"
-            onClick={cancelSavedSignalEdit}
-            aria-label="cancel edit"
-            tabIndex={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : -1}
-            aria-hidden={homeMode === "memoryDrawer" && selectedDrawerHasEdit ? undefined : "true"}
-          >
-            cancel edit
-          </button>
-          <label
-            className={`nc-drawer-search${drawerClosing ? " nc-drawer-search--closing" : ""}`}
-            aria-hidden={homeMode === "memoryDrawer" ? undefined : "true"}
-          >
-            <span className="sr-only">{copy.searchLabel}</span>
-            <input
-              type="search"
-              value={inspirationFilters.search}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                setInspirationFilters({ search: event.target.value });
-                setSelectedMemoryGroupId(null);
-                setSelectedSavedSignalId(null);
-                setSavedSignalDetail(null);
-                cancelSavedSignalReflection();
-              }}
-              placeholder={copy.searchPlaceholder}
-              disabled={
-                homeMode !== "memoryDrawer" ||
-                selectedDrawerHasEdit ||
-                Boolean(deletedSavedSignalUndo) ||
-                selectedDrawerIsReflecting
-              }
-              tabIndex={
-                homeMode === "memoryDrawer" &&
-                !selectedDrawerHasEdit &&
-                !deletedSavedSignalUndo &&
-                !selectedDrawerIsReflecting
-                  ? undefined
-                  : -1
-              }
-            />
-          </label>
-          <form
-            className="nc-drawer-reflect"
-            aria-hidden={selectedDrawerIsReflecting ? undefined : "true"}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveSavedSignalReflection();
-            }}
-          >
-            <div className="nc-drawer-reflect-question">
-              <span>{selectedDrawerReflectionProgress}</span>
-              <p>{selectedDrawerReflectionQuestion}</p>
-            </div>
-            <textarea
-              ref={savedSignalReflectionInputRef}
-              value={savedSignalReflectionDraft}
-              onChange={(event) => {
-                setSavedSignalReflectionDraft(event.target.value);
-                event.currentTarget.style.height = "auto";
-                event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
-              }}
-              placeholder="answer here"
-              disabled={!selectedDrawerIsReflecting || savedSignalReflectionSaving}
-              tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              rows={1}
-            />
-            <div className="nc-drawer-reflect-actions">
-              <button
-                type="button"
-                onClick={goToPreviousSavedSignalReflection}
-                disabled={
-                  !selectedDrawerIsReflecting ||
-                  savedSignalReflectionSaving ||
-                  savedSignalReflectionStepIndex === 0
-                }
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                previous
-              </button>
-              <button
-                type="button"
-                onClick={goToNextSavedSignalReflection}
-                disabled={
-                  !selectedDrawerIsReflecting ||
-                  !selectedDrawerReflectionCanGoNext ||
-                  savedSignalReflectionSaving
-                }
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                next
-              </button>
-              <button
-                type="submit"
-                disabled={
-                  !selectedDrawerIsReflecting ||
-                  !selectedDrawerReflectionCanFinish ||
-                  savedSignalReflectionSaving
-                }
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                {savedSignalReflectionSaving ? "saving..." : "save"}
-              </button>
-              <button
-                type="button"
-                onClick={cancelSavedSignalReflection}
-                disabled={!selectedDrawerIsReflecting}
-                tabIndex={selectedDrawerIsReflecting ? undefined : -1}
-              >
-                cancel
-              </button>
-            </div>
-            {savedSignalReflectionError ? (
-              <span className="nc-drawer-reflect-error">{savedSignalReflectionError}</span>
-            ) : null}
-          </form>
+            </form>
+          ) : null}
         </div>
         {!selectedDrawerIsReflecting ? (
           <button
@@ -4403,7 +4473,7 @@ export function HomePage(): JSX.Element {
               </span>
             )}
             <span className="sr-only">{homeMode === "memoryDrawer" ? "back home" : copy.drawerObjectTitle}</span>
-            <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
+            <small className="nc-drawer-count">{formatSavedCount(locale, savedEntryCount)}</small>
           </button>
         ) : null}
           {homeMode !== "memoryDrawer" ? (
