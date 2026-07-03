@@ -1965,6 +1965,9 @@ export function HomePage(): JSX.Element {
   const filteredEntries = useMemo(() => {
     return filterAndSortInspirationEntries(entries, deferredInspirationFilters);
   }, [deferredInspirationFilters, entries]);
+  const savedEntryCount = useMemo(() => {
+    return entries.filter((entry) => entry.status === "saved").length;
+  }, [entries]);
 
   const savedSignalQuery = deferredSearch.trim().toLowerCase();
   const localSignalRows = filteredEntries.map((entry) => ({
@@ -4359,7 +4362,7 @@ export function HomePage(): JSX.Element {
               </span>
             )}
             <span className="sr-only">{homeMode === "memoryDrawer" ? "back home" : copy.drawerObjectTitle}</span>
-            <small className="sr-only">{formatSavedCount(locale, entries.length)}</small>
+            <small className="nc-drawer-count">{formatSavedCount(locale, savedEntryCount)}</small>
           </button>
         ) : null}
           {homeMode !== "memoryDrawer" ? (

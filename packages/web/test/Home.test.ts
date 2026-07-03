@@ -2629,24 +2629,20 @@ describe("HomePage current home experience", () => {
     });
   });
 
-  it("advances and saves Reflect Deeper from the capture modal with all three answers", async () => {
+  it("offers Reflect Deeper only after the capture modal has saved", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
-      persistedInspiration({ id: "insp-guided-save", text: "A windowed studio signal", wowScore: 8 }),
+      persistedInspiration({ id: "insp-post-save", text: "A windowed studio signal", wowScore: 8 }),
     );
     vi.mocked(createReflection).mockResolvedValue({
       reflection: persistedReflection({
-        id: "reflection-guided-save",
-        inspirationId: "insp-guided-save",
-        question: "Reflect deeper guided reflection",
-        answer: "saved guided answer",
+        id: "reflection-post-save",
+        inspirationId: "insp-post-save",
+        question: "Why did this matter right now?",
+        answer: "The soft north light.",
       }),
-      inspiration: { id: "insp-guided-save", wowScore: 9 },
+      inspiration: { id: "insp-post-save", wowScore: 9 },
     });
-    vi.mocked(generateGuidedReflectionQuestion)
-      .mockResolvedValueOnce({ question: "What caught you first?", source: "model" })
-      .mockResolvedValueOnce({ question: "What does it ask you to protect?", source: "model" })
-      .mockResolvedValueOnce({ question: "What is the smallest next move?", source: "model" });
     const container = await renderHomePage();
 
     await openCaptureModal(container);
@@ -2654,18 +2650,21 @@ describe("HomePage current home experience", () => {
       setInputValue(container.querySelector<HTMLTextAreaElement>("#capNote")!, "A windowed studio signal");
     });
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("#capReflectiveSave")?.click();
+      container.querySelector<HTMLButtonElement>("#capSave")?.click();
     });
     await flushReactWork();
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("What caught you first?");
-    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 1 of 3");
-    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("1");
+    expect(createInspiration).toHaveBeenCalledWith({
+      text: "A windowed studio signal",
+      kind: "note",
+    });
+    expect(container.querySelector("#capConfirm")?.textContent).toContain("Inspiration saved.");
+    expect(container.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
     expect(container.querySelector("#capBar")).toBeNull();
     expect(container.querySelector("#capSave")).toBeNull();
     expect(container.querySelector("#capReflectiveSave")).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
+    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Done");
+    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Reflect deeper");
+    expect(createReflection).not.toHaveBeenCalled();
 
     await act(async () => {
       setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "The soft north light.");
@@ -2674,61 +2673,15 @@ describe("HomePage current home experience", () => {
       container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
     });
     await flushReactWork();
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("What does it ask you to protect?");
-    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 2 of 3");
-    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("2");
-    expect(container.querySelector("#capBar")).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Continue");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).not.toContain("Save");
 
-    await act(async () => {
-      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Protected quiet mornings.");
+    expect(createReflection).toHaveBeenCalledWith("insp-post-save", {
+      question: "Why did this matter right now?",
+      answer: "The soft north light.",
+      skipped: false,
     });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
-    });
-    await flushReactWork();
-    expect(container.querySelector("#reflectQ")?.textContent).toContain("What is the smallest next move?");
-    expect(container.querySelector("#reflectQ")?.textContent).not.toContain("Step 3 of 3");
-    expect(container.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("3");
-    expect(container.querySelector("#capBar")).toBeNull();
-    expect(container.querySelector<HTMLButtonElement>("#reflectLater")?.textContent).toContain("Back");
-    expect(container.querySelector<HTMLButtonElement>("#reflectNext")?.textContent).toContain("Save reflection");
-
-    await act(async () => {
-      setInputValue(container.querySelector<HTMLTextAreaElement>("#reflectAns")!, "Block tomorrow morning.");
-    });
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>("#reflectNext")?.click();
-    });
-    await flushReactWork();
-
-    expect(createInspiration).toHaveBeenCalledWith({
-      text: "A windowed studio signal",
-      kind: "note",
-      reflections: [
-        {
-          question: "What caught you first?",
-          answer: "The soft north light.",
-          skipped: false,
-        },
-        {
-          question: "What does it ask you to protect?",
-          answer: "Protected quiet mornings.",
-          skipped: false,
-        },
-        {
-          question: "What is the smallest next move?",
-          answer: "Block tomorrow morning.",
-          skipped: false,
-        },
-      ],
-    });
-    expect(createReflection).not.toHaveBeenCalled();
   });
 
-  it("closes the surface and flashes the capture button after a quick save", async () => {
+  it("confirms a quick save before closing from the optional reflection step", async () => {
     setApiFixtures();
     vi.mocked(createInspiration).mockResolvedValue(
       persistedInspiration({ id: "insp-quick-save", text: "Fast save without reflective friction", wowScore: 8 }),
@@ -2744,8 +2697,15 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
-    // No in-cell mirror; the surface begins closing immediately on a full save.
+    // No in-cell mirror; save is confirmed before the optional reflection step.
     expect(container.querySelector(".cap-save-mirror")).toBeNull();
+    expect(container.querySelector("#capConfirm")?.textContent).toContain("Inspiration saved.");
+    expect(container.querySelector(".reference-capture-modal--closing")).toBeNull();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("#reflectLater")?.click();
+    });
+    await flushReactWork();
     expect(container.querySelector(".reference-capture-modal--closing")).not.toBeNull();
 
     await waitForTimers(380);
@@ -2755,7 +2715,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".reference-capture-modal")).toBeNull();
     const savedButton = container.querySelector(".nc-save--saved");
     expect(savedButton).not.toBeNull();
-    expect(savedButton?.textContent).toContain("saved");
+    expect(savedButton?.textContent).toContain("Inspiration saved.");
   });
 
   it("shows a newly persisted quick save in the inspiration drawer list", async () => {
