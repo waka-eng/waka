@@ -2333,7 +2333,7 @@ export function HomePage(): JSX.Element {
 
   const thoughtCards = topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard);
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
-  const displayName = (user.name || user.email.split("@")[0] || "yunji").split(" ")[0];
+  const displayName = user.name?.trim() || user.email.split("@")[0] || "yunji";
   const displayHandle = displayName.toLowerCase();
   const copy = HOME_COPY[locale];
 
