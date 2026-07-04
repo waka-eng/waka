@@ -4233,6 +4233,59 @@
   justify-self: center;
 }
 
+.nc-first-run-guide {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(620px, 100%);
+  display: grid;
+  gap: 18px;
+  color: #49443b;
+  text-align: center;
+}
+
+.nc-first-run-guide .nc-loading {
+  max-width: 560px;
+  justify-self: center;
+  color: rgba(70, 64, 54, 0.74);
+  line-height: 1.5;
+}
+
+.nc-first-run-card {
+  justify-self: center;
+  width: min(520px, 100%);
+  border: 1px solid rgba(55, 43, 26, 0.14);
+  border-radius: 6px 6px 10px 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 44%),
+    #f4e2a8;
+  box-shadow:
+    0 22px 46px -36px rgba(42, 32, 16, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  padding: clamp(20px, 4vw, 30px);
+  text-align: left;
+  transform: rotate(-0.6deg);
+}
+
+.nc-first-run-card h2 {
+  margin: 0 0 16px;
+  color: #332d20;
+  font-family: "Fraunces", "Times New Roman", serif;
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 430;
+  line-height: 1;
+}
+
+.nc-first-run-card ol {
+  margin: 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 10px;
+  color: rgba(51, 45, 32, 0.78);
+  font-family: "Inter Tight", sans-serif;
+  font-size: clamp(14px, 2.4vw, 16px);
+  line-height: 1.45;
+}
+
 .nc-drawer-object {
   position: absolute;
   right: clamp(26px, 7vw, 96px);

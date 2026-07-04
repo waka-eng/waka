@@ -1283,9 +1283,15 @@ const HOME_COPY = {
     reflectionSave: "저장",
     reflectionCancel: "취소",
     loadingThoughts: "생각을 모으는 중...",
-    emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+    emptyThoughts: "첫 영감을 기록하세요. 저장하고 돌아볼수록 WAKA가 반복되는 패턴을 연결하고, 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+    firstRunTitle: "처음에는 이렇게 시작하세요",
+    firstRunSteps: [
+      "지금 마음에 걸리는 영감 하나를 저장하세요.",
+      "왜 끌렸는지 몇 단어만 덧붙이세요.",
+      "영감과 돌아보기가 쌓이면 WAKA가 반복되는 패턴을 임시 포스트잇으로 보여줍니다.",
+    ],
     captureTitle: "첫 영감 붙잡기",
-    captureBody: "정리하지 않아도 됩니다. 사라지기 전에 저장하면 WAKA가 그 영감을 해석하고 다른 것들과 연결합니다.",
+    captureBody: "정리하지 않아도 됩니다. 사라지기 전에 저장하고, 왜 끌렸는지만 조금 덧붙이면 됩니다.",
     captureInlineKicker: "영감 기록",
     footnote: (name: string) => (
       <>
@@ -1303,11 +1309,11 @@ const HOME_COPY = {
     searchLabel: "검색",
     searchPlaceholder: "저장된 영감 검색",
     loadingSaves: "저장된 영감을 불러오는 중...",
-    emptySaves: "아직 저장된 영감이 없습니다. 영감을 하나 기록하면 WAKA가 해석하고 연결할 재료가 생깁니다.",
+    emptySaves: "아직 저장된 영감이 없습니다. 영감을 하나 기록하면 WAKA가 패턴을 연결할 재료가 생깁니다.",
     captureAria: "영감 기록하기",
     captureCta: "영감 기록",
     captureHint: () => "",
-    bottomHint: "영감을 기록하면 WAKA가 해석하고 연결해, 고칠 수 있는 임시 포스트잇으로 띄웁니다.",
+    bottomHint: "영감을 기록하고 돌아보면 WAKA가 반복되는 패턴을 임시 포스트잇으로 띄웁니다.",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1404,9 +1410,15 @@ const HOME_COPY = {
     reflectionSave: "save",
     reflectionCancel: "cancel",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    emptyThoughts: "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
+    firstRunTitle: "Start with one small loop",
+    firstRunSteps: [
+      "Save the first inspiration that is tugging at you.",
+      "Add a few words about what pulled you toward it.",
+      "As you save and reflect, WAKA starts noticing patterns as provisional post-its.",
+    ],
     captureTitle: "Catch the first inspiration",
-    captureBody: "No tagging, journaling, or organizing. Save the messy, half-formed thing and WAKA will interpret how it connects.",
+    captureBody: "No tagging, journaling, or organizing. Save the messy, half-formed thing and add a few words about what pulled you toward it.",
     captureInlineKicker: "inspiration capture",
     footnote: () => <></>,
     footnoteCredit: "",
@@ -1416,11 +1428,11 @@ const HOME_COPY = {
     searchLabel: "search",
     searchPlaceholder: "search saved inspirations",
     loadingSaves: "loading saved inspirations...",
-    emptySaves: "no inspirations saved yet. Capture one and WAKA will have something to interpret and connect.",
+    emptySaves: "no inspirations saved yet. Capture one and WAKA will have something to connect into patterns.",
     captureAria: "capture inspiration",
     captureCta: "capture inspiration",
     captureHint: () => "",
-    bottomHint: "Capture an inspiration; WAKA interprets and connects it into provisional post-its you can correct.",
+    bottomHint: "Capture and reflect; WAKA turns recurring patterns into provisional post-its you can correct.",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1512,6 +1524,8 @@ const HOME_COPY = {
     reflectionCancel: string;
     loadingThoughts: string;
     emptyThoughts: string;
+    firstRunTitle: string;
+    firstRunSteps: [string, string, string];
     captureTitle: string;
     captureBody: string;
     captureInlineKicker: string;
@@ -4298,7 +4312,17 @@ export function HomePage(): JSX.Element {
           ) : meaningfulThoughtCards.length > 0 ? (
             meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
           ) : (
-            <p className="nc-loading">{copy.emptyThoughts}</p>
+            <div className="nc-first-run-guide" aria-label={copy.firstRunTitle}>
+              <p className="nc-loading">{copy.emptyThoughts}</p>
+              <div className="nc-first-run-card">
+                <h2>{copy.firstRunTitle}</h2>
+                <ol>
+                  {copy.firstRunSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
           )}
         </section>
       </main>
