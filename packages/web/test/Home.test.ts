@@ -986,6 +986,30 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).toContain("Architecture essay about bridge rhythms");
   });
 
+  it("clears the undo status after a saved-inspiration delete succeeds", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).toContain("inspiration deleted. You can undo it.");
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("inspiration was deleted · undo");
+
+    await waitForTimers(4300);
+    await flushReactWork();
+
+    expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
+    expect(container.textContent).not.toContain("inspiration deleted. You can undo it.");
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent ?? "").not.toContain("inspiration was deleted · undo");
+  });
+
   it("shows a restored status when undoing a saved-inspiration delete", async () => {
     setApiFixtures();
 
