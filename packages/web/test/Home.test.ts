@@ -10,6 +10,7 @@ import {
   createFeedback,
   createInspiration,
   createReflection,
+  deleteInspiration,
   finalizeAttachment,
   fetchInspirations,
   fetchReflections,
@@ -931,6 +932,123 @@ describe("HomePage current home experience", () => {
     );
     expect(stillAlive?.getAttribute("aria-pressed")).toBe("true");
     expect(detail.textContent).toContain("could not save inspiration feedback");
+  });
+
+  it("shows an inline saved-inspiration edit failure and keeps the original text primary", async () => {
+    setApiFixtures();
+    vi.mocked(updateInspiration).mockRejectedValueOnce(new Error("patch failed"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const editor = detail.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
+    expect(editor).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(editor!, "Architecture essay about bridge rhythms in city walks revised");
+    });
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+
+    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
+      text: "Architecture essay about bridge rhythms in city walks revised",
+    });
+    expect(detail.textContent).toContain("could not save inspiration edit");
+    expect(detail.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor")?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+  });
+
+  it("shows delete failure status and restores the saved inspiration to the drawer", async () => {
+    setApiFixtures();
+    vi.mocked(deleteInspiration).mockRejectedValueOnce(new Error("delete failed"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).toContain("inspiration deleted. You can undo it.");
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("inspiration was deleted · undo");
+
+    await waitForTimers(4300);
+    await flushReactWork();
+
+    expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
+    expect(container.textContent).toContain("could not delete inspiration. It is back in the drawer.");
+    expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+  });
+
+  it("shows a restored status when undoing a saved-inspiration delete", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+
+    expect(deleteInspiration).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("inspiration restored");
+    expect(container.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor")?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+  });
+
+  it("shows visible saved-inspiration reflection question and save failures", async () => {
+    setApiFixtures();
+    vi.mocked(generateGuidedReflectionQuestion).mockRejectedValueOnce(new Error("question failed"));
+    vi.mocked(createReflection).mockRejectedValueOnce(new Error("save failed"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const reflectButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "reflect",
+    );
+    await act(async () => {
+      reflectButton?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-drawer-reflect-question")?.textContent).toContain(
+      "What does this make you notice about yourself right now?",
+    );
+    expect(container.textContent).toContain("Could not find a new question, so this fallback is here.");
+
+    const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
+    await act(async () => {
+      setInputValue(answer!, "It still points toward public rhythm.");
+    });
+    await flushReactWork();
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLFormElement>(".nc-drawer-reflect")?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    await flushReactWork();
+
+    expect(createReflection).toHaveBeenCalledWith("insp-1", {
+      question: "What does this make you notice about yourself right now?",
+      answer: "It still points toward public rhythm.",
+    });
+    expect(container.textContent).toContain("could not save reflection");
   });
 
   it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
