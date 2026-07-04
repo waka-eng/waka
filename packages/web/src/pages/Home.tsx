@@ -123,6 +123,7 @@ type TopOfMindFeedbackValue = Extract<
 >;
 type SavedSignalFeedbackValue = Extract<ApiFeedbackValue, "true" | "partly" | "not_true">;
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
+type DrawerActionStatus = { tone: "status" | "error"; message: string } | null;
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
 type SupportingThoughtSignal = HomeThoughtCard["supportingSignals"][number];
 
@@ -1196,7 +1197,7 @@ const HOME_COPY = {
     room: "내 방",
     titleLineOne: (name: string) => (
       <>
-        <span className="nc-title-name">{name}'s</span> top of mind
+        <span className="nc-title-name">{name}</span>의 탑오브마인드
       </>
     ),
     titleLineTwo: "",
@@ -1206,9 +1207,14 @@ const HOME_COPY = {
     noteShifted: ["반복됨", "형성 중", "다시 돌아옴", "긴장", "확인 필요"],
     evidenceLabel: "시작된 곳",
     reactionGroup: "포스트잇 조정",
+    notePreviewAria: "포스트잇 미리보기",
     correctionLabel: "포스트잇 수정",
     correctionPlaceholder: "벽에 남길 문장으로 다듬기",
-    pinCta: "PIN",
+    pinCta: "고정",
+    unpinCta: "고정 해제",
+    pinTitle: "고정",
+    unpinTitle: "고정 해제",
+    deleteTitle: "삭제",
     rewriteCta: "저장",
     removeCta: "삭제",
     feedbackPinned: "고정됨",
@@ -1231,10 +1237,71 @@ const HOME_COPY = {
     savedSignalReflect: "조금 더 생각하기",
     savedSignalReflecting: "생각하는 중…",
     savedSignalDelete: "삭제",
+    savedSignalCollapseLabel: "영감 접기",
+    savedSignalEditLabel: "저장된 영감 수정",
+    savedSignalFeedbackLabel: "영감 피드백",
+    savedSignalFeedbackActionLabel: (label: string) => `영감 피드백: ${label}`,
+    savedSignalReflectionConversationLabel: "영감 돌아보기 대화",
+    savedSignalOpening: "영감을 여는 중...",
+    savedSignalReflectionCount: (count: number) => `이 영감에서 나온 돌아보기 ${count}개`,
+    savedSignalReflectionToggleShow: "보기",
+    savedSignalReflectionToggleHide: "숨기기",
+    savedSignalReflectionDelete: "삭제",
+    savedSignalReflectionLoading: "돌아보기를 불러오는 중...",
+    savedSignalReflectionEmpty: "돌아보기가 여기에 나타납니다.",
+    savedSignalListLabel: "저장된 영감 목록",
+    savedSignalPathsLabel: "저장된 영감 경로",
+    savedSignalNoSearchMatches: (query: string, path: string) => `${path}에서 “${query}”와 맞는 저장된 영감이 없습니다.`,
+    savedSignalNoPathMatches: (path: string) => `${path}에는 아직 저장된 영감이 없습니다.`,
+    savedSignalShowAllSaved: "/all-saved 보기",
+    allSavedPathLabel: "모든 영감",
+    recentlySavedPathLabel: "최근 저장",
+    allSavedPathDescription: "저장된 모든 영감, 최신순",
+    recentlySavedPathDescription: "최근 2일 안에 저장됨",
+    topOfMindEvidencePathLabel: "탑오브마인드",
+    topOfMindEvidenceDescription: (label: string) => `“${label}”로 이어진 영감`,
+    topOfMindEvidenceCount: (count: number) => `영감 ${count}개가 여기로 이어짐`,
+    groupingContentsLabel: "묶음 내용",
+    backToMap: "← 지도로 돌아가기",
+    nameCollectionLabel: "이 묶음 이름 짓기",
+    bottomActionsLabel: "하단 작업",
+    drawerUndoAria: "영감이 삭제됨, 되돌리기",
+    drawerUndoCta: "영감이 삭제됨 · 되돌리기",
+    drawerSaveEditedAria: "수정한 영감 저장",
+    drawerSaveEditedCta: "저장",
+    drawerEditSaving: "영감 저장 중...",
+    drawerEditSaved: "영감이 저장되었습니다",
+    drawerEditError: "영감 수정을 저장하지 못했습니다",
+    drawerDeletePending: "영감이 삭제되었습니다. 되돌릴 수 있습니다.",
+    drawerDeleteError: "영감을 삭제하지 못했습니다. 다시 서랍에 넣었습니다.",
+    drawerUndoRestored: "영감을 다시 넣었습니다",
+    drawerUndoError: "영감을 되돌리지 못했습니다",
+    topOfMindUndoAria: "포스트잇이 삭제됨, 되돌리기",
+    topOfMindUndoCta: "포스트잇이 삭제됨 · 되돌리기",
+    savingShort: "저장 중...",
+    cancelEditAria: "수정 취소",
+    cancelEditCta: "수정 취소",
+    drawerBackHome: "방으로 돌아가기",
+    draftLabel: "임시 글",
+    reflectionQuestionLoading: "이 영감을 위한 질문을 찾는 중...",
+    reflectionAnswerLabel: "돌아보기 답변",
+    reflectionAnswerPlaceholder: "여기에 답하기",
+    reflectionPrevious: "이전",
+    reflectionNext: "다음",
+    reflectionSave: "저장",
+    reflectionCancel: "취소",
+    reflectionQuestionError: "새 질문을 찾지 못해 기본 질문을 보여드립니다.",
+    reflectionSaveError: "돌아보기를 저장하지 못했습니다",
     loadingThoughts: "생각을 모으는 중...",
-    emptyThoughts: "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+    emptyThoughts: "첫 영감을 기록하세요. 저장하고 돌아볼수록 WAKA가 반복되는 패턴을 연결하고, 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+    firstRunTitle: "처음에는 이렇게 시작하세요",
+    firstRunSteps: [
+      "지금 마음에 걸리는 영감 하나를 저장하세요.",
+      "왜 끌렸는지 몇 단어만 덧붙이세요.",
+      "영감과 돌아보기가 쌓이면 WAKA가 반복되는 패턴을 임시 포스트잇으로 보여줍니다.",
+    ],
     captureTitle: "첫 영감 붙잡기",
-    captureBody: "정리하지 않아도 됩니다. 사라지기 전에 저장하면 WAKA가 그 영감을 해석하고 다른 것들과 연결합니다.",
+    captureBody: "정리하지 않아도 됩니다. 사라지기 전에 저장하고, 왜 끌렸는지만 조금 덧붙이면 됩니다.",
     captureInlineKicker: "영감 기록",
     footnote: (name: string) => (
       <>
@@ -1252,11 +1319,11 @@ const HOME_COPY = {
     searchLabel: "검색",
     searchPlaceholder: "저장된 영감 검색",
     loadingSaves: "저장된 영감을 불러오는 중...",
-    emptySaves: "아직 저장된 영감이 없습니다. 영감을 하나 기록하면 WAKA가 해석하고 연결할 재료가 생깁니다.",
+    emptySaves: "아직 저장된 영감이 없습니다. 영감을 하나 기록하면 WAKA가 패턴을 연결할 재료가 생깁니다.",
     captureAria: "영감 기록하기",
     captureCta: "영감 기록",
     captureHint: () => "",
-    bottomHint: "영감을 기록하면 WAKA가 해석하고 연결해, 고칠 수 있는 임시 포스트잇으로 띄웁니다.",
+    bottomHint: "영감을 기록하고 돌아보면 WAKA가 반복되는 패턴을 임시 포스트잇으로 띄웁니다.",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1276,9 +1343,14 @@ const HOME_COPY = {
     noteShifted: ["keeps returning", "newly forming", "came back", "tension", "needs testing"],
     evidenceLabel: "where it began",
     reactionGroup: "post-it controls",
+    notePreviewAria: "post-it preview",
     correctionLabel: "edit post-it",
     correctionPlaceholder: "write the version you would keep on the wall",
     pinCta: "PIN",
+    unpinCta: "unpin post-it",
+    pinTitle: "Pin",
+    unpinTitle: "Unpin",
+    deleteTitle: "Delete",
     rewriteCta: "save",
     removeCta: "delete",
     feedbackPinned: "pinned",
@@ -1301,10 +1373,71 @@ const HOME_COPY = {
     savedSignalReflect: "reflect",
     savedSignalReflecting: "reflecting",
     savedSignalDelete: "delete",
+    savedSignalCollapseLabel: "collapse inspiration",
+    savedSignalEditLabel: "edit saved inspiration",
+    savedSignalFeedbackLabel: "saved inspiration feedback",
+    savedSignalFeedbackActionLabel: (label: string) => `saved inspiration feedback: ${label}`,
+    savedSignalReflectionConversationLabel: "reflection conversation",
+    savedSignalOpening: "opening inspiration...",
+    savedSignalReflectionCount: (count: number) => `${count} reflection${count === 1 ? "" : "s"} from this inspiration`,
+    savedSignalReflectionToggleShow: "show",
+    savedSignalReflectionToggleHide: "hide",
+    savedSignalReflectionDelete: "delete",
+    savedSignalReflectionLoading: "loading reflections...",
+    savedSignalReflectionEmpty: "Your reflection will appear here.",
+    savedSignalListLabel: "saved inspiration list",
+    savedSignalPathsLabel: "saved inspiration paths",
+    savedSignalNoSearchMatches: (query: string, path: string) => `No saved inspirations match “${query}” in ${path}.`,
+    savedSignalNoPathMatches: (path: string) => `No saved inspirations in ${path} yet.`,
+    savedSignalShowAllSaved: "show /all-saved",
+    allSavedPathLabel: "all saved",
+    recentlySavedPathLabel: "recently saved",
+    allSavedPathDescription: "all saved inspirations, newest first",
+    recentlySavedPathDescription: "saved in the last 2 days",
+    topOfMindEvidencePathLabel: "top of mind",
+    topOfMindEvidenceDescription: (label: string) => `inspirations that led to "${label}"`,
+    topOfMindEvidenceCount: (count: number) => `${count} inspiration${count === 1 ? "" : "s"} led here`,
+    groupingContentsLabel: "grouping contents",
+    backToMap: "← back to map",
+    nameCollectionLabel: "name this collection",
+    bottomActionsLabel: "bottom actions",
+    drawerUndoAria: "inspiration was deleted, undo",
+    drawerUndoCta: "inspiration was deleted · undo",
+    drawerSaveEditedAria: "save edited inspiration",
+    drawerSaveEditedCta: "save",
+    drawerEditSaving: "saving inspiration...",
+    drawerEditSaved: "inspiration saved",
+    drawerEditError: "could not save inspiration edit",
+    drawerDeletePending: "inspiration deleted. You can undo it.",
+    drawerDeleteError: "could not delete inspiration. It is back in the drawer.",
+    drawerUndoRestored: "inspiration restored",
+    drawerUndoError: "could not undo inspiration deletion",
+    topOfMindUndoAria: "sticky note was deleted, undo",
+    topOfMindUndoCta: "sticky note was deleted · undo",
+    savingShort: "saving...",
+    cancelEditAria: "cancel edit",
+    cancelEditCta: "cancel edit",
+    drawerBackHome: "back home",
+    draftLabel: "draft",
+    reflectionQuestionLoading: "Finding a question for this inspiration...",
+    reflectionAnswerLabel: "answer reflection prompt",
+    reflectionAnswerPlaceholder: "answer here",
+    reflectionPrevious: "previous",
+    reflectionNext: "next",
+    reflectionSave: "save",
+    reflectionCancel: "cancel",
+    reflectionQuestionError: "Could not find a new question, so this fallback is here.",
+    reflectionSaveError: "could not save reflection",
     loadingThoughts: "gathering what is top of mind...",
-    emptyThoughts: "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+    emptyThoughts: "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
+    firstRunTitle: "Start with one small loop",
+    firstRunSteps: [
+      "Save the first inspiration that is tugging at you.",
+      "Add a few words about what pulled you toward it.",
+      "As you save and reflect, WAKA starts noticing patterns as provisional post-its.",
+    ],
     captureTitle: "Catch the first inspiration",
-    captureBody: "No tagging, journaling, or organizing. Save the messy, half-formed thing and WAKA will interpret how it connects.",
+    captureBody: "No tagging, journaling, or organizing. Save the messy, half-formed thing and add a few words about what pulled you toward it.",
     captureInlineKicker: "inspiration capture",
     footnote: () => <></>,
     footnoteCredit: "",
@@ -1314,11 +1447,11 @@ const HOME_COPY = {
     searchLabel: "search",
     searchPlaceholder: "search saved inspirations",
     loadingSaves: "loading saved inspirations...",
-    emptySaves: "no inspirations saved yet. Capture one and WAKA will have something to interpret and connect.",
+    emptySaves: "no inspirations saved yet. Capture one and WAKA will have something to connect into patterns.",
     captureAria: "capture inspiration",
     captureCta: "capture inspiration",
     captureHint: () => "",
-    bottomHint: "Capture an inspiration; WAKA interprets and connects it into provisional post-its you can correct.",
+    bottomHint: "Capture and reflect; WAKA turns recurring patterns into provisional post-its you can correct.",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1336,9 +1469,14 @@ const HOME_COPY = {
     noteShifted: string[];
     evidenceLabel: string;
     reactionGroup: string;
+    notePreviewAria: string;
     correctionLabel: string;
     correctionPlaceholder: string;
     pinCta: string;
+    unpinCta: string;
+    pinTitle: string;
+    unpinTitle: string;
+    deleteTitle: string;
     rewriteCta: string;
     removeCta: string;
     feedbackPinned: string;
@@ -1357,8 +1495,65 @@ const HOME_COPY = {
     savedSignalReflect: string;
     savedSignalReflecting: string;
     savedSignalDelete: string;
+    savedSignalCollapseLabel: string;
+    savedSignalEditLabel: string;
+    savedSignalFeedbackLabel: string;
+    savedSignalFeedbackActionLabel: (label: string) => string;
+    savedSignalReflectionConversationLabel: string;
+    savedSignalOpening: string;
+    savedSignalReflectionCount: (count: number) => string;
+    savedSignalReflectionToggleShow: string;
+    savedSignalReflectionToggleHide: string;
+    savedSignalReflectionDelete: string;
+    savedSignalReflectionLoading: string;
+    savedSignalReflectionEmpty: string;
+    savedSignalListLabel: string;
+    savedSignalPathsLabel: string;
+    savedSignalNoSearchMatches: (query: string, path: string) => string;
+    savedSignalNoPathMatches: (path: string) => string;
+    savedSignalShowAllSaved: string;
+    allSavedPathLabel: string;
+    recentlySavedPathLabel: string;
+    allSavedPathDescription: string;
+    recentlySavedPathDescription: string;
+    topOfMindEvidencePathLabel: string;
+    topOfMindEvidenceDescription: (label: string) => string;
+    topOfMindEvidenceCount: (count: number) => string;
+    groupingContentsLabel: string;
+    backToMap: string;
+    nameCollectionLabel: string;
+    bottomActionsLabel: string;
+    drawerUndoAria: string;
+    drawerUndoCta: string;
+    drawerSaveEditedAria: string;
+    drawerSaveEditedCta: string;
+    drawerEditSaving: string;
+    drawerEditSaved: string;
+    drawerEditError: string;
+    drawerDeletePending: string;
+    drawerDeleteError: string;
+    drawerUndoRestored: string;
+    drawerUndoError: string;
+    topOfMindUndoAria: string;
+    topOfMindUndoCta: string;
+    savingShort: string;
+    cancelEditAria: string;
+    cancelEditCta: string;
+    drawerBackHome: string;
+    draftLabel: string;
+    reflectionQuestionLoading: string;
+    reflectionAnswerLabel: string;
+    reflectionAnswerPlaceholder: string;
+    reflectionPrevious: string;
+    reflectionNext: string;
+    reflectionSave: string;
+    reflectionCancel: string;
+    reflectionQuestionError: string;
+    reflectionSaveError: string;
     loadingThoughts: string;
     emptyThoughts: string;
+    firstRunTitle: string;
+    firstRunSteps: [string, string, string];
     captureTitle: string;
     captureBody: string;
     captureInlineKicker: string;
@@ -1402,6 +1597,7 @@ export function HomePage(): JSX.Element {
   const [topOfMindError, setTopOfMindError] = useState<string | null>(null);
   const [topOfMindNotes, setTopOfMindNotes] = useState<ApiTopOfMindNoteSurface[]>([]);
   const [topOfMindNotesLoading, setTopOfMindNotesLoading] = useState(true);
+  const [homeStateOwnerId, setHomeStateOwnerId] = useState<string | null>(user?.id ?? null);
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
@@ -1474,6 +1670,7 @@ export function HomePage(): JSX.Element {
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
+  const [drawerActionStatus, setDrawerActionStatus] = useState<DrawerActionStatus>(null);
   const [savedSignalFeedback, setSavedSignalFeedback] = useState<
     Record<
       string,
@@ -1501,6 +1698,7 @@ export function HomePage(): JSX.Element {
   >(() => new Set());
   const [savedSignalReflectionStepIndex, setSavedSignalReflectionStepIndex] = useState(0);
   const [savedSignalReflectionSaving, setSavedSignalReflectionSaving] = useState(false);
+  const [savedSignalReflectionQuestionError, setSavedSignalReflectionQuestionError] = useState<string | null>(null);
   const [savedSignalReflectionError, setSavedSignalReflectionError] = useState<string | null>(null);
   const savedSignalReflectionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const savedSignalReflectionRequestSeqRef = useRef(0);
@@ -1529,20 +1727,132 @@ export function HomePage(): JSX.Element {
    * before the next fetch resolves.
    */
   const loadedForUserIdRef = useRef<string | null>(null);
+  const activeHomeUserIdRef = useRef<string | null>(user?.id ?? null);
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
   const topOfMindEditTimersRef = useRef<Record<string, number>>({});
+  const classificationRefreshTimersRef = useRef<number[]>([]);
   const dragStartRef = useRef<{ index: number; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const memoryGroupDragStartRef = useRef<{ id: string; x: number; y: number; baseX: number; baseY: number } | null>(null);
   const dragMovedRef = useRef(false);
   const memoryGroupDragMovedRef = useRef(false);
   const captureSaveFlashTimerRef = useRef<number | null>(null);
 
+  // Keep stale async continuations fenced to the identity from the
+  // currently-rendering tree. The passive reset effect below may run after a
+  // commit/paint, so the ref cannot wait for that effect to observe auth
+  // changes.
+  activeHomeUserIdRef.current = user?.id ?? null;
+
   const clearDrawerCloseTimer = () => {
     if (drawerCloseTimerRef.current === null) return;
     clearTimeout(drawerCloseTimerRef.current);
     drawerCloseTimerRef.current = null;
   };
+
+  const clearSessionTimers = useCallback(() => {
+    if (captureSaveFlashTimerRef.current !== null) {
+      window.clearTimeout(captureSaveFlashTimerRef.current);
+      captureSaveFlashTimerRef.current = null;
+    }
+    if (captureSavedTimerRef.current) {
+      clearTimeout(captureSavedTimerRef.current);
+      captureSavedTimerRef.current = null;
+    }
+    if (deletedTopOfMindUndoTimerRef.current !== null) {
+      window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
+      deletedTopOfMindUndoTimerRef.current = null;
+    }
+    if (deletedSavedSignalUndoTimerRef.current !== null) {
+      window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
+      deletedSavedSignalUndoTimerRef.current = null;
+    }
+    Object.values(topOfMindEditTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
+    topOfMindEditTimersRef.current = {};
+    classificationRefreshTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    classificationRefreshTimersRef.current = [];
+    clearDrawerCloseTimer();
+  }, []);
+
+  const resetUserScopedHomeState = useCallback((nextUserId: string | null) => {
+    loadedForUserIdRef.current = null;
+    topOfMindLoadedForUserIdRef.current = null;
+    topOfMindRequestIdRef.current += 1;
+    savedSignalReflectionRequestSeqRef.current += 1;
+    clearSessionTimers();
+    setEntries([]);
+    setLoadError(null);
+    setTopOfMind(null);
+    setTopOfMindLoading(nextUserId !== null);
+    setTopOfMindError(null);
+    setTopOfMindNotes([]);
+    setTopOfMindNotesLoading(nextUserId !== null);
+    setInspirationFilters(DEFAULT_INSPIRATION_FILTERS);
+    setSelectedMemoryGroupId(null);
+    setSelectedMemoryPathFilterId("all-saved");
+    setUserMemoryGroups([]);
+    setRenamedMemoryGroups({});
+    setMemoryGroupDrags({});
+    setMemoryPreviewPlacements({});
+    setSeenMemoryGroupIds(new Set());
+    setDraggingMemoryGroupId(null);
+    setMemoryWindows([]);
+    setMemoryWindowDetails({});
+    setMemoryWindowLoadingIds(new Set());
+    setMemoryWindowZ(10);
+    setCaptureFocused(false);
+    setCaptureSaveFlash(false);
+    setHistoryOpen(false);
+    setHomeMode("topOfMind");
+    setDrawerClosing(false);
+    setCaptureOpen(false);
+    setCaptureClosing(false);
+    setCaptureSaved(false);
+    setNoteFeedback({});
+    setRemovedTopOfMindNoteIds(new Set());
+    setDeletedTopOfMindUndo(null);
+    setDeletedSavedSignalUndo(null);
+    setDrags({});
+    setDraggingIndex(null);
+    setSavedSignals([]);
+    setSavedSignalsLoading(false);
+    setSavedSignalsError(null);
+    setSelectedSavedSignalId(null);
+    setSelectedSupportingSignalFallback(null);
+    setActiveTopOfMindEvidenceFilter(null);
+    setSavedSignalDetail(null);
+    setSavedSignalDetailLoading(false);
+    setSavedSignalDrafts({});
+    setSavedSignalEditSaving(false);
+    setDrawerActionStatus(null);
+    setSavedSignalFeedback({});
+    setPendingSavedSignalCorrection(null);
+    setSavedSignalReflections({});
+    setExpandedReflectionThreads(new Set());
+    setSavedSignalReflectionLoadingIds(new Set());
+    setSavedSignalReflectingId(null);
+    setSavedSignalReflectionDraft("");
+    setSavedSignalReflectionAnswers([]);
+    setSavedSignalReflectionQuestions([]);
+    setSavedSignalReflectionQuestionLoadingSteps(new Set());
+    setSavedSignalReflectionStepIndex(0);
+    setSavedSignalReflectionSaving(false);
+    setSavedSignalReflectionQuestionError(null);
+    setSavedSignalReflectionError(null);
+    setInitialLoading(nextUserId !== null);
+    setSelectedId(null);
+    dragStartRef.current = null;
+    memoryGroupDragStartRef.current = null;
+    dragMovedRef.current = false;
+    memoryGroupDragMovedRef.current = false;
+    setHomeStateOwnerId(nextUserId);
+  }, [clearSessionTimers]);
+
+  useEffect(() => {
+    const nextUserId = user?.id ?? null;
+    if (homeStateOwnerId === nextUserId) return;
+    resetUserScopedHomeState(nextUserId);
+  }, [homeStateOwnerId, resetUserScopedHomeState, user?.id]);
 
   useEffect(() => {
     setPendingSavedSignalCorrection((current) =>
@@ -1559,20 +1869,9 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     return () => {
-      if (captureSaveFlashTimerRef.current !== null) {
-        window.clearTimeout(captureSaveFlashTimerRef.current);
-      }
-      if (deletedTopOfMindUndoTimerRef.current !== null) {
-        window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
-      }
-      if (deletedSavedSignalUndoTimerRef.current !== null) {
-        window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
-      }
-      Object.values(topOfMindEditTimersRef.current).forEach((timerId) => window.clearTimeout(timerId));
-      topOfMindEditTimersRef.current = {};
-      clearDrawerCloseTimer();
+      clearSessionTimers();
     };
-  }, []);
+  }, [clearSessionTimers]);
 
   useEffect(() => {
     if (!user) {
@@ -1611,7 +1910,7 @@ export function HomePage(): JSX.Element {
     void (async () => {
       try {
         const rows = await fetchInspirations();
-        if (cancelled) return;
+        if (cancelled || activeHomeUserIdRef.current !== user.id) return;
         // Defence in depth: even though the API enforces tenant scope, we
         // still drop any row whose `userId` does not match the
         // currently-authenticated user. A regression on the server side
@@ -1642,7 +1941,7 @@ export function HomePage(): JSX.Element {
         loadedForUserIdRef.current = user.id;
         setInitialLoading(false);
       } catch (err) {
-        if (cancelled) return;
+        if (cancelled || activeHomeUserIdRef.current !== user.id) return;
         const message =
           err instanceof Error ? err.message : "Failed to load saved inspirations";
         setLoadError(message);
@@ -1680,7 +1979,7 @@ export function HomePage(): JSX.Element {
           fetchTopOfMind(),
           fetchTopOfMindNotes({ limit: TOP_OF_MIND_NOTE_LIMIT }),
         ]);
-        if (topOfMindRequestIdRef.current !== requestId) return null;
+        if (topOfMindRequestIdRef.current !== requestId || activeHomeUserIdRef.current !== requestUserId) return null;
         topOfMindLoadedForUserIdRef.current = requestUserId;
         const fetchedNotes = notes.filter((note) => note.userId === requestUserId);
         setTopOfMind(next);
@@ -1711,7 +2010,7 @@ export function HomePage(): JSX.Element {
         setTopOfMindError(null);
         return next;
       } catch (err) {
-        if (topOfMindRequestIdRef.current !== requestId) return null;
+        if (topOfMindRequestIdRef.current !== requestId || activeHomeUserIdRef.current !== requestUserId) return null;
         if (options?.surfaceErrors ?? true) {
           const message =
             err instanceof Error ? err.message : "Failed to load 생각";
@@ -1749,6 +2048,7 @@ export function HomePage(): JSX.Element {
 
   const handlePersisted = useCallback(
     (tempId: string, result: PersistedResult) => {
+      if (activeHomeUserIdRef.current !== result.inspiration.userId) return;
       const reflectionScorePatch = [...(result.reflections ?? [])]
         .reverse()
         .find((item) => item.inspiration)?.inspiration ?? result.reflection?.inspiration;
@@ -1781,6 +2081,7 @@ export function HomePage(): JSX.Element {
       );
 
       const targetId = result.inspiration.id;
+      const targetUserId = result.inspiration.userId;
       void refreshTopOfMind({ showLoading: false, surfaceErrors: true });
 
       // The classifier worker (or the dev-mode inline fallback) writes
@@ -1793,12 +2094,13 @@ export function HomePage(): JSX.Element {
       const delays = [1500, 2500, 3500, 5000];
       let classifiedRefreshRequested = false;
       for (const delay of delays) {
-        window.setTimeout(() => {
+        const timerId = window.setTimeout(() => {
           void (async () => {
             try {
+              if (activeHomeUserIdRef.current !== targetUserId) return;
               const rows = await fetchInspirations();
               const target = rows.find((r) => r.id === targetId);
-              if (!target) return;
+              if (!target || target.userId !== targetUserId || activeHomeUserIdRef.current !== targetUserId) return;
               // Patch server-calculated fields on the matching row; preserve
               // other local fields (status, attachments, errorMessage)
               // we already committed via `applyPersisted`. The setter is
@@ -1834,6 +2136,7 @@ export function HomePage(): JSX.Element {
             }
           })();
         }, delay);
+        classificationRefreshTimersRef.current.push(timerId);
       }
     },
     [
@@ -1860,10 +2163,11 @@ export function HomePage(): JSX.Element {
 
   const recordRevisit = useCallback(
     (id: string, eventType: "detail_opened" | "detail_returned") => {
+      const requestUserId = activeHomeUserIdRef.current;
       void (async () => {
         try {
           const result = await recordInspirationRevisit(id, eventType);
-          if (result.inspiration) {
+          if (result.inspiration && requestUserId !== null && activeHomeUserIdRef.current === requestUserId) {
             setEntries((prev) =>
               prev.map((entry) => applyInspirationScorePatch(entry, result.inspiration!)),
             );
@@ -1914,6 +2218,13 @@ export function HomePage(): JSX.Element {
     );
   }, []);
 
+  const isHomeStateRenderSafe = user !== null && homeStateOwnerId === user.id;
+  const renderEntries = isHomeStateRenderSafe ? entries : [];
+  const renderTopOfMindNotes = isHomeStateRenderSafe ? topOfMindNotes : [];
+  const renderSavedSignals = isHomeStateRenderSafe ? savedSignals : [];
+  const renderUserMemoryGroups = isHomeStateRenderSafe ? userMemoryGroups : [];
+  const renderTopOfMindNotesLoading = isHomeStateRenderSafe ? topOfMindNotesLoading : user !== null;
+
   /**
    * Pull the currently-selected entry out of the local list so we can
    * hand its body / links / attachments to the detail view. Falls back
@@ -1923,14 +2234,14 @@ export function HomePage(): JSX.Element {
    */
   const selectedEntry = useMemo(() => {
     if (!selectedId) return null;
-    return entries.find((e) => e.id === selectedId) ?? null;
-  }, [entries, selectedId]);
+    return renderEntries.find((e) => e.id === selectedId) ?? null;
+  }, [renderEntries, selectedId]);
 
   const nextEntryInHistory = useMemo(() => {
     if (!selectedId) return null;
-    const index = entries.findIndex((entry) => entry.id === selectedId);
-    return index >= 0 ? (entries[index + 1] ?? null) : null;
-  }, [entries, selectedId]);
+    const index = renderEntries.findIndex((entry) => entry.id === selectedId);
+    return index >= 0 ? (renderEntries[index + 1] ?? null) : null;
+  }, [renderEntries, selectedId]);
 
   const handleNextInspiration = useCallback(() => {
     if (!nextEntryInHistory) return;
@@ -1961,12 +2272,12 @@ export function HomePage(): JSX.Element {
    * board's reversal lands them in the right order.
    */
   const cardItems = useMemo<InspirationCardData[]>(() => {
-    return [...entries].reverse().map(entryToCardData);
-  }, [entries]);
+    return [...renderEntries].reverse().map(entryToCardData);
+  }, [renderEntries]);
 
   const savedInspirationTextById = useMemo(() => {
-    return new Map(entries.map((entry) => [entry.id, displayTextForEntry(entry)] as const));
-  }, [entries]);
+    return new Map(renderEntries.map((entry) => [entry.id, displayTextForEntry(entry)] as const));
+  }, [renderEntries]);
 
   const deferredSearch = useDeferredValue(inspirationFilters.search);
   const deferredInspirationFilters = useMemo(
@@ -1975,11 +2286,11 @@ export function HomePage(): JSX.Element {
   );
 
   const filteredEntries = useMemo(() => {
-    return filterAndSortInspirationEntries(entries, deferredInspirationFilters);
-  }, [deferredInspirationFilters, entries]);
+    return filterAndSortInspirationEntries(renderEntries, deferredInspirationFilters);
+  }, [deferredInspirationFilters, renderEntries]);
   const savedEntryCount = useMemo(() => {
-    return entries.filter((entry) => entry.status === "saved").length;
-  }, [entries]);
+    return renderEntries.filter((entry) => entry.status === "saved").length;
+  }, [renderEntries]);
 
   const savedSignalQuery = deferredSearch.trim().toLowerCase();
   const localSignalRows = filteredEntries.map((entry) => ({
@@ -2009,10 +2320,10 @@ export function HomePage(): JSX.Element {
     })),
     relevanceReasons: entry.errorMessage ? [entry.errorMessage] : [],
   } satisfies ApiSavedSignalSearchResult));
-  const savedSignalRows = savedSignals.length > 0
+  const savedSignalRows = renderSavedSignals.length > 0
     ? [
-        ...localSignalRows.filter((entry) => !savedSignals.some((signal) => signal.id === entry.id)),
-        ...savedSignals.map((signal) => {
+        ...localSignalRows.filter((entry) => !renderSavedSignals.some((signal) => signal.id === entry.id)),
+        ...renderSavedSignals.map((signal) => {
           const local = localSignalRows.find((entry) => entry.id === signal.id);
           if (!local) return signal;
           return {
@@ -2030,12 +2341,12 @@ export function HomePage(): JSX.Element {
     () =>
       buildProposedMemoryGroupings(
         inPlaceSignals,
-        topOfMindNotes,
-        userMemoryGroups,
+        renderTopOfMindNotes,
+        renderUserMemoryGroups,
         renamedMemoryGroups,
         dismissedMemoryGroupIds,
       ),
-    [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, topOfMindNotes, userMemoryGroups],
+    [dismissedMemoryGroupIds, inPlaceSignals, renamedMemoryGroups, renderTopOfMindNotes, renderUserMemoryGroups],
   );
   const memoryPathFilters = useMemo(() => {
     const baseFilters = buildMemoryPathFilters(allSavedSignals);
@@ -2057,7 +2368,7 @@ export function HomePage(): JSX.Element {
   const selectedMemoryGroupSignals = selectedMemoryGroup
     ? sortSignalsForGrouping(selectedMemoryGroup.signals, selectedMemoryGroup.terms, memoryBrowseOrder)
     : [];
-  const constellationRelationships = buildMemoryConstellationRelationships(inPlaceSignals, topOfMindNotes);
+  const constellationRelationships = buildMemoryConstellationRelationships(inPlaceSignals, renderTopOfMindNotes);
   const selectedMemoryRelationship = constellationRelationships[0] ?? null;
 
   const visibleMemoryWindows = useMemo(
@@ -2117,6 +2428,7 @@ export function HomePage(): JSX.Element {
 
   useEffect(() => {
     if (!user || homeMode !== "memoryDrawer") return;
+    const requestUserId = user.id;
     let cancelled = false;
     setSavedSignalsLoading(true);
     setSavedSignalsError(null);
@@ -2128,8 +2440,8 @@ export function HomePage(): JSX.Element {
             q: inspirationFilters.search.trim() || undefined,
             limit: 24,
           });
-          if (cancelled) return;
-          const ownRows = rows.filter((row) => row.userId === user.id);
+          if (cancelled || activeHomeUserIdRef.current !== requestUserId) return;
+          const ownRows = rows.filter((row) => row.userId === requestUserId);
           setSavedSignals(ownRows);
           setSelectedSavedSignalId((current) =>
             current && (ownRows.some((row) => row.id === current) || selectedSupportingSignalFallback?.id === current)
@@ -2137,10 +2449,10 @@ export function HomePage(): JSX.Element {
               : null,
           );
         } catch (caught) {
-          if (cancelled) return;
+          if (cancelled || activeHomeUserIdRef.current !== requestUserId) return;
           setSavedSignalsError(caught instanceof Error ? caught.message : "Failed to load saved inspirations");
         } finally {
-          if (!cancelled) setSavedSignalsLoading(false);
+          if (!cancelled && activeHomeUserIdRef.current === requestUserId) setSavedSignalsLoading(false);
         }
       })();
     }, 120);
@@ -2152,18 +2464,19 @@ export function HomePage(): JSX.Element {
   }, [homeMode, inspirationFilters.search, selectedSupportingSignalFallback?.id, user]);
 
   useEffect(() => {
-    if (homeMode !== "memoryDrawer") return;
+    if (!user || homeMode !== "memoryDrawer") return;
     if (!selectedSavedSignalId) {
       setSavedSignalDetail(null);
       return;
     }
 
+    const requestUserId = user.id;
     let cancelled = false;
     setSavedSignalDetailLoading(true);
     void (async () => {
       try {
         const detail = await fetchSavedSignalDetail(selectedSavedSignalId);
-        if (cancelled) return;
+        if (cancelled || detail.userId !== requestUserId || activeHomeUserIdRef.current !== requestUserId) return;
         setSavedSignalDetail(detail);
         setSavedSignalDrafts((current) => {
           const existingDraft = current[detail.id];
@@ -2175,20 +2488,20 @@ export function HomePage(): JSX.Element {
           };
         });
       } catch {
-        if (cancelled) return;
+        if (cancelled || activeHomeUserIdRef.current !== requestUserId) return;
         setSavedSignalDetail(null);
       } finally {
-        if (!cancelled) setSavedSignalDetailLoading(false);
+        if (!cancelled && activeHomeUserIdRef.current === requestUserId) setSavedSignalDetailLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [homeMode, savedInspirationTextById, selectedSavedSignalId]);
+  }, [homeMode, savedInspirationTextById, selectedSavedSignalId, user]);
 
   useEffect(() => {
-    if (homeMode !== "memoryDrawer" || !selectedSavedSignalId) {
+    if (!user || homeMode !== "memoryDrawer" || !selectedSavedSignalId) {
       setSavedSignalReflectingId(null);
       setSavedSignalReflectionDraft("");
       setSavedSignalReflectionError(null);
@@ -2196,25 +2509,27 @@ export function HomePage(): JSX.Element {
     }
     if (savedSignalReflections[selectedSavedSignalId]) return;
 
+    const requestUserId = user.id;
+    const requestSignalId = selectedSavedSignalId;
     let cancelled = false;
-    setSavedSignalReflectionLoadingIds((current) => new Set(current).add(selectedSavedSignalId));
+    setSavedSignalReflectionLoadingIds((current) => new Set(current).add(requestSignalId));
     void (async () => {
       try {
-        const reflections = await fetchReflections(selectedSavedSignalId);
-        if (cancelled) return;
+        const reflections = await fetchReflections(requestSignalId);
+        if (cancelled || activeHomeUserIdRef.current !== requestUserId) return;
         setSavedSignalReflections((current) => ({
           ...current,
-          [selectedSavedSignalId]: reflections,
+          [requestSignalId]: reflections,
         }));
       } catch (error) {
-        if (!cancelled) {
+        if (!cancelled && activeHomeUserIdRef.current === requestUserId) {
           console.error("[home] failed to load saved inspiration reflections:", error);
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && activeHomeUserIdRef.current === requestUserId) {
           setSavedSignalReflectionLoadingIds((current) => {
             const next = new Set(current);
-            next.delete(selectedSavedSignalId);
+            next.delete(requestSignalId);
             return next;
           });
         }
@@ -2224,7 +2539,7 @@ export function HomePage(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [homeMode, savedSignalReflections, selectedSavedSignalId]);
+  }, [homeMode, savedSignalReflections, selectedSavedSignalId, user]);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -2252,6 +2567,77 @@ export function HomePage(): JSX.Element {
     },
     [handlePersisted],
   );
+
+  useEffect(() => {
+    if (initialLoading || topOfMindLoading || renderTopOfMindNotesLoading) return;
+    setHomeMode((current) => (current === "memoryDrawer" ? current : "topOfMind"));
+  }, [initialLoading, renderTopOfMindNotesLoading, topOfMindLoading]);
+
+  useEffect(() => {
+    if (draggingIndex === null) return undefined;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMovedRef.current = true;
+      setDrags((prev) => ({
+        ...prev,
+        [start.index]: {
+          x: start.baseX + dx,
+          y: start.baseY + dy,
+        },
+      }));
+    };
+
+    const handlePointerUp = () => {
+      dragStartRef.current = null;
+      setDraggingIndex(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggingIndex]);
+
+  useEffect(() => {
+    if (draggingMemoryGroupId === null) return undefined;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = memoryGroupDragStartRef.current;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) memoryGroupDragMovedRef.current = true;
+      setMemoryGroupDrags((current) => ({
+        ...current,
+        [start.id]: {
+          x: start.baseX + dx,
+          y: start.baseY + dy,
+        },
+      }));
+    };
+
+    const handlePointerUp = () => {
+      memoryGroupDragStartRef.current = null;
+      setDraggingMemoryGroupId(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, [draggingMemoryGroupId]);
 
   // The guard guarantees `user` is non-null at this point. The defensive
   // check below converts a guard regression from "blank screen + console
@@ -2311,16 +2697,11 @@ export function HomePage(): JSX.Element {
     />
   ) : undefined;
 
-  const thoughtCards = topOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard);
+  const thoughtCards = renderTopOfMindNotes.slice(0, TOP_OF_MIND_NOTE_LIMIT).map(noteToThoughtCard);
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
   const displayName = user.name?.trim() || user.email.split("@")[0] || "yunji";
   const displayHandle = displayName.toLowerCase();
   const copy = HOME_COPY[locale];
-
-  useEffect(() => {
-    if (initialLoading || topOfMindLoading || topOfMindNotesLoading) return;
-    setHomeMode((current) => (current === "memoryDrawer" ? current : "topOfMind"));
-  }, [initialLoading, topOfMindLoading, topOfMindNotesLoading]);
 
   const chooseHomeMode = (mode: HomeMode) => {
     clearDrawerCloseTimer();
@@ -2403,7 +2784,8 @@ export function HomePage(): JSX.Element {
     signal: HomeThoughtCard,
     nextTitle: string,
   ) => {
-    if (!signal.feedbackTargetId) return;
+    if (!user || !signal.feedbackTargetId) return;
+    const requestUserId = user.id;
     const trimmedTitle = nextTitle.trim();
     if (!trimmedTitle) return;
 
@@ -2439,6 +2821,7 @@ export function HomePage(): JSX.Element {
 
     try {
       const updatedNote = await updateTopOfMindNote(signal.feedbackTargetId, { title: trimmedTitle });
+      if (activeHomeUserIdRef.current !== requestUserId || updatedNote.userId !== requestUserId) return;
       setTopOfMindNotes((prev) =>
         prev.map((note) => (note.id === updatedNote.id ? updatedNote : note)),
       );
@@ -2452,6 +2835,7 @@ export function HomePage(): JSX.Element {
         },
       }));
     } catch {
+      if (activeHomeUserIdRef.current !== requestUserId) return;
       setTopOfMindNotes(previousNotes);
       setNoteFeedback((prev) => ({
         ...prev,
@@ -2482,7 +2866,8 @@ export function HomePage(): JSX.Element {
   };
 
   const pinTopOfMindNote = async (signal: HomeThoughtCard) => {
-    if (!signal.feedbackTargetId) return;
+    if (!user || !signal.feedbackTargetId) return;
+    const requestUserId = user.id;
     const currentlyPinned = noteFeedback[signal.id]?.value === "important";
     const previousFeedback = noteFeedback[signal.id] ?? {
       value: null,
@@ -2507,6 +2892,7 @@ export function HomePage(): JSX.Element {
           targetId: signal.feedbackTargetId,
           value: "true",
         });
+        if (activeHomeUserIdRef.current !== requestUserId) return;
         setNoteFeedback((prev) => ({
           ...prev,
           [signal.id]: {
@@ -2517,6 +2903,7 @@ export function HomePage(): JSX.Element {
           },
         }));
       } catch {
+        if (activeHomeUserIdRef.current !== requestUserId) return;
         setNoteFeedback((prev) => ({
           ...prev,
           [signal.id]: {
@@ -2545,6 +2932,7 @@ export function HomePage(): JSX.Element {
         targetId: signal.feedbackTargetId,
         value: "important",
       });
+      if (activeHomeUserIdRef.current !== requestUserId) return;
       setNoteFeedback((prev) => ({
         ...prev,
         [signal.id]: {
@@ -2555,6 +2943,7 @@ export function HomePage(): JSX.Element {
         },
       }));
     } catch {
+      if (activeHomeUserIdRef.current !== requestUserId) return;
       setNoteFeedback((prev) => ({
         ...prev,
         [signal.id]: {
@@ -2607,7 +2996,8 @@ export function HomePage(): JSX.Element {
   };
 
   const pullDownTopOfMindNote = async (signal: HomeThoughtCard) => {
-    if (!signal.feedbackTargetId) return;
+    if (!user || !signal.feedbackTargetId) return;
+    const requestUserId = user.id;
 
     const previousNotes = topOfMindNotes;
     const deletedNote = topOfMindNotes.find((note) => note.id === signal.feedbackTargetId);
@@ -2644,6 +3034,7 @@ export function HomePage(): JSX.Element {
         value: "not_true",
         correctionText: "pulled down from the wall",
       });
+      if (activeHomeUserIdRef.current !== requestUserId) return;
       setNoteFeedback((prev) => ({
         ...prev,
         [signal.id]: {
@@ -2654,6 +3045,7 @@ export function HomePage(): JSX.Element {
         },
       }));
     } catch {
+      if (activeHomeUserIdRef.current !== requestUserId) return;
       if (deletedTopOfMindUndoTimerRef.current !== null) {
         window.clearTimeout(deletedTopOfMindUndoTimerRef.current);
         deletedTopOfMindUndoTimerRef.current = null;
@@ -2684,8 +3076,8 @@ export function HomePage(): JSX.Element {
             type="button"
             className={`nc-note-icon-btn nc-note-icon-btn--pin${pinned ? " nc-note-icon-btn--pinned" : ""}`}
             disabled={saving}
-            aria-label={pinned ? "unpin post-it" : copy.pinCta}
-            title={pinned ? "Unpin" : "Pin"}
+            aria-label={pinned ? copy.unpinCta : copy.pinCta}
+            title={pinned ? copy.unpinTitle : copy.pinTitle}
             onClick={(event) => {
               event.stopPropagation();
               void pinTopOfMindNote(signal);
@@ -2709,7 +3101,7 @@ export function HomePage(): JSX.Element {
             className="nc-note-icon-btn nc-note-icon-btn--delete"
             disabled={saving}
             aria-label={copy.removeCta}
-            title="Delete"
+            title={copy.deleteTitle}
             onClick={(event) => {
               event.stopPropagation();
               void pullDownTopOfMindNote(signal);
@@ -2766,15 +3158,19 @@ export function HomePage(): JSX.Element {
 
   const loadMemoryWindowDetail = (signalId: string): void => {
     if (memoryWindowDetails[signalId] !== undefined || memoryWindowLoadingIds.has(signalId)) return;
+    const requestUserId = activeHomeUserIdRef.current;
     setMemoryWindowLoadingIds((current) => new Set([...current, signalId]));
     void fetchSavedSignalDetail(signalId)
       .then((detail) => {
+        if (requestUserId === null || activeHomeUserIdRef.current !== requestUserId || detail.userId !== requestUserId) return;
         setMemoryWindowDetails((current) => ({ ...current, [signalId]: detail }));
       })
       .catch(() => {
+        if (requestUserId === null || activeHomeUserIdRef.current !== requestUserId) return;
         setMemoryWindowDetails((current) => ({ ...current, [signalId]: null }));
       })
       .finally(() => {
+        if (requestUserId === null || activeHomeUserIdRef.current !== requestUserId) return;
         setMemoryWindowLoadingIds((current) => {
           const next = new Set(current);
           next.delete(signalId);
@@ -3092,11 +3488,21 @@ export function HomePage(): JSX.Element {
   );
   const selectedDrawerReflectionQuestion =
     selectedDrawerReflectionQuestionLoading && !savedSignalReflectionQuestions[savedSignalReflectionStepIndex]
-      ? "Finding a question for this inspiration..."
+      ? copy.reflectionQuestionLoading
       : savedSignalReflectionQuestions[savedSignalReflectionStepIndex] ??
         SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[savedSignalReflectionStepIndex] ??
         SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
   const selectedDrawerReflectionProgress = `${savedSignalReflectionStepIndex + 1}/${SAVED_SIGNAL_REFLECTION_MAX_STEPS}`;
+  const localizedMemoryPathLabel = (filter: MemoryPathFilter): string => {
+    if (filter.id === "all-saved") return copy.allSavedPathLabel;
+    if (filter.id === "recently-saved") return copy.recentlySavedPathLabel;
+    return filter.label;
+  };
+  const localizedMemoryPathDescription = (filter: MemoryPathFilter): string => {
+    if (filter.id === "all-saved") return copy.allSavedPathDescription;
+    if (filter.id === "recently-saved") return copy.recentlySavedPathDescription;
+    return filter.description;
+  };
   const selectedDrawerReflectionCanGoNext =
     selectedDrawerReflectionCanSave &&
     !selectedDrawerReflectionQuestionLoading &&
@@ -3127,6 +3533,7 @@ export function HomePage(): JSX.Element {
     setSavedSignalReflectionQuestions([]);
     setSavedSignalReflectionQuestionLoadingSteps(new Set());
     setSavedSignalReflectionStepIndex(0);
+    setSavedSignalReflectionQuestionError(null);
     setSavedSignalReflectionError(null);
     savedSignalReflectionRequestSeqRef.current += 1;
   };
@@ -3147,6 +3554,7 @@ export function HomePage(): JSX.Element {
       SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[stepIndex] ??
       SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
     setSavedSignalReflectionQuestionLoadingSteps((current) => new Set(current).add(stepIndex));
+    setSavedSignalReflectionQuestionError(null);
     const text =
       savedSignalDetail?.id === signal.id
         ? savedSignalDetail.rawText
@@ -3190,6 +3598,7 @@ export function HomePage(): JSX.Element {
           next[stepIndex] = fallback;
           return next;
         });
+        setSavedSignalReflectionQuestionError(copy.reflectionQuestionError);
       },
     );
   };
@@ -3248,6 +3657,7 @@ export function HomePage(): JSX.Element {
     if (!selectedDrawerSignal || !selectedDrawerHasEdit || savedSignalEditSaving) return;
     const nextText = selectedDrawerDraftText.trim();
     setSavedSignalEditSaving(true);
+    setDrawerActionStatus({ tone: "status", message: copy.drawerEditSaving });
     try {
       const updated = await updateInspiration(selectedDrawerSignal.id, { text: nextText });
       const nextSignal = {
@@ -3278,8 +3688,15 @@ export function HomePage(): JSX.Element {
         delete next[updated.id];
         return next;
       });
+      setDrawerActionStatus({ tone: "status", message: copy.drawerEditSaved });
     } catch (error) {
       console.error("[home] failed to update saved inspiration:", error);
+      setSavedSignalDrafts((current) => {
+        const next = { ...current };
+        delete next[selectedDrawerSignal.id];
+        return next;
+      });
+      setDrawerActionStatus({ tone: "error", message: copy.drawerEditError });
     } finally {
       setSavedSignalEditSaving(false);
     }
@@ -3302,6 +3719,7 @@ export function HomePage(): JSX.Element {
     if (payload.length === 0) return;
     setSavedSignalReflectionSaving(true);
     setSavedSignalReflectionError(null);
+    setDrawerActionStatus(null);
     try {
       const results = await Promise.all(
         payload.map((item) =>
@@ -3324,9 +3742,8 @@ export function HomePage(): JSX.Element {
       }
       cancelSavedSignalReflection();
     } catch (error) {
-      setSavedSignalReflectionError(
-        error instanceof Error ? error.message : "Could not save that reflection.",
-      );
+      console.error("[home] failed to save reflection:", error);
+      setSavedSignalReflectionError(copy.reflectionSaveError);
     } finally {
       setSavedSignalReflectionSaving(false);
     }
@@ -3341,6 +3758,7 @@ export function HomePage(): JSX.Element {
       return;
     }
     setSelectedSavedSignalId(signal.id);
+    setDrawerActionStatus(null);
     setSavedSignalDrafts((current) => {
       if (current[signal.id] !== undefined) return current;
       const immediateText = savedInspirationTextById.get(signal.id);
@@ -3354,6 +3772,7 @@ export function HomePage(): JSX.Element {
       setSelectedSavedSignalId(signal.id);
     }
     setSavedSignalReflectingId(signal.id);
+    setDrawerActionStatus(null);
     setSavedSignalReflectionAnswers([]);
     setSavedSignalReflectionQuestions([]);
     setSavedSignalReflectionQuestionLoadingSteps(new Set());
@@ -3365,26 +3784,43 @@ export function HomePage(): JSX.Element {
     recordRevisit(signal.id, "detail_opened");
   };
 
+  const canRestoreDeletedSavedSignal = (signal: ApiSavedSignalSearchResult, requestUserId: string): boolean =>
+    signal.userId === requestUserId && activeHomeUserIdRef.current === requestUserId;
+
   const undoDeletedSavedSignal = () => {
     if (!deletedSavedSignalUndo) return;
-    if (deletedSavedSignalUndoTimerRef.current !== null) {
-      window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
-      deletedSavedSignalUndoTimerRef.current = null;
+    try {
+      if (deletedSavedSignalUndoTimerRef.current !== null) {
+        window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
+        deletedSavedSignalUndoTimerRef.current = null;
+      }
+      const { signal, detail } = deletedSavedSignalUndo;
+      const requestUserId = signal.userId;
+      if (!canRestoreDeletedSavedSignal(signal, requestUserId)) {
+        setDeletedSavedSignalUndo(null);
+        return;
+      }
+      setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
+      setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+      if (detail) setSavedSignalDetail(detail);
+      setSelectedSavedSignalId(signal.id);
+      setDeletedSavedSignalUndo(null);
+      setDrawerActionStatus({ tone: "status", message: copy.drawerUndoRestored });
+    } catch (error) {
+      console.error("[home] failed to undo saved inspiration delete:", error);
+      setDrawerActionStatus({ tone: "error", message: copy.drawerUndoError });
     }
-    const { signal, detail } = deletedSavedSignalUndo;
-    setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
-    setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
-    if (detail) setSavedSignalDetail(detail);
-    setSelectedSavedSignalId(signal.id);
-    setDeletedSavedSignalUndo(null);
   };
 
   const deleteSavedSignalFromDrawer = (signal: ApiSavedSignalSearchResult): void => {
+    const requestUserId = activeHomeUserIdRef.current;
+    if (!requestUserId || signal.userId !== requestUserId) return;
     if (deletedSavedSignalUndoTimerRef.current !== null) {
       window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
       deletedSavedSignalUndoTimerRef.current = null;
     }
     const detail = savedSignalDetail?.id === signal.id ? savedSignalDetail : null;
+    setDrawerActionStatus({ tone: "status", message: copy.drawerDeletePending });
     setDeletedSavedSignalUndo({ signal, detail });
     setSavedSignals((prev) => prev.filter((item) => item.id !== signal.id));
     setEntries((prev) => prev.filter((item) => item.id !== signal.id));
@@ -3397,12 +3833,19 @@ export function HomePage(): JSX.Element {
       return next;
     });
     deletedSavedSignalUndoTimerRef.current = window.setTimeout(() => {
-      void deleteInspiration(signal.id).catch((error) => {
-        console.error("[home] failed to delete saved inspiration:", error);
-        setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
-        setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
-      });
-      setDeletedSavedSignalUndo(null);
+      void deleteInspiration(signal.id).then(
+        () => {
+          if (activeHomeUserIdRef.current === requestUserId) setDrawerActionStatus(null);
+        },
+        (error) => {
+          console.error("[home] failed to delete saved inspiration:", error);
+          if (!canRestoreDeletedSavedSignal(signal, requestUserId)) return;
+          setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
+          setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+          setDrawerActionStatus({ tone: "error", message: copy.drawerDeleteError });
+        },
+      );
+      if (activeHomeUserIdRef.current === requestUserId) setDeletedSavedSignalUndo(null);
       deletedSavedSignalUndoTimerRef.current = null;
     }, 4200);
   };
@@ -3534,7 +3977,7 @@ export function HomePage(): JSX.Element {
           <button
             type="button"
             className="memory-contents-collapse"
-            aria-label="collapse inspiration"
+            aria-label={copy.savedSignalCollapseLabel}
             onClick={() => {
               if (hasEditedDraft) {
                 discardSavedSignalEditAndCollapse();
@@ -3560,26 +4003,36 @@ export function HomePage(): JSX.Element {
             className="memory-contents-expanded-copy memory-contents-expanded-copy--ready"
           >
             {detailPending ? (
-              <p className="memory-contents-loading">opening inspiration...</p>
+              <p className="memory-contents-loading">{copy.savedSignalOpening}</p>
             ) : (
               <textarea
                 className="memory-contents-expanded-text memory-contents-expanded-editor"
                 value={draftText}
                 onChange={(event) => {
+                  setDrawerActionStatus(null);
                   setSavedSignalDrafts((current) => ({
                     ...current,
                     [signal.id]: event.currentTarget.value,
                   }));
                 }}
                 role="textbox"
-                aria-label="edit saved inspiration"
+                aria-label={copy.savedSignalEditLabel}
                 aria-multiline="true"
                 spellCheck={true}
               />
             )}
           </div>
+          {drawerActionStatus ? (
+            <p
+              className={`memory-contents-feedback-status${
+                drawerActionStatus.tone === "error" ? " memory-contents-feedback-status--error" : ""
+              }`}
+            >
+              {drawerActionStatus.message}
+            </p>
+          ) : null}
           <section className="memory-contents-reflection-prompts">
-            <div className="memory-contents-feedback-actions" aria-label="saved inspiration feedback">
+            <div className="memory-contents-feedback-actions" aria-label={copy.savedSignalFeedbackLabel}>
               {copy.savedSignalFeedbackActions.map((action) => {
                 const isSelected = selectedFeedbackValue === action.value;
                 const isSaving = isFeedbackSaving && isSelected;
@@ -3588,7 +4041,7 @@ export function HomePage(): JSX.Element {
                     key={action.value}
                     type="button"
                     className={`memory-contents-feedback-action${isSelected ? " memory-contents-feedback-action--selected" : ""}`}
-                    aria-label={`saved inspiration feedback: ${action.label}`}
+                    aria-label={copy.savedSignalFeedbackActionLabel(action.label)}
                     aria-pressed={isSelected}
                     disabled={isFeedbackSaving}
                     onClick={() => {
@@ -3700,7 +4153,7 @@ export function HomePage(): JSX.Element {
             </div>
           </div>
           {reflectionRows.length > 0 || reflectionsLoading || isReflecting ? (
-            <section className="memory-contents-reflections" aria-label="reflection conversation">
+            <section className="memory-contents-reflections" aria-label={copy.savedSignalReflectionConversationLabel}>
               {reflectionRows.length > 0 ? (
                 <>
                   <button
@@ -3717,9 +4170,9 @@ export function HomePage(): JSX.Element {
                     }}
                   >
                     <span>
-                      {reflectionRows.length} reflection{reflectionRows.length === 1 ? "" : "s"} from this inspiration
+                      {copy.savedSignalReflectionCount(reflectionRows.length)}
                     </span>
-                    <small>{reflectionsExpanded ? "hide" : "show"}</small>
+                    <small>{reflectionsExpanded ? copy.savedSignalReflectionToggleHide : copy.savedSignalReflectionToggleShow}</small>
                   </button>
                   {reflectionsExpanded ? (
                     <div className="memory-contents-reflection-thread">
@@ -3735,7 +4188,7 @@ export function HomePage(): JSX.Element {
                               type="button"
                               onClick={() => deleteSavedSignalReflection(signal.id, reflection)}
                             >
-                              delete
+                              {copy.savedSignalReflectionDelete}
                             </button>
                           </footer>
                         </article>
@@ -3744,9 +4197,9 @@ export function HomePage(): JSX.Element {
                   ) : null}
                 </>
               ) : reflectionsLoading ? (
-                <p className="memory-contents-reflection-empty">loading reflections...</p>
+                <p className="memory-contents-reflection-empty">{copy.savedSignalReflectionLoading}</p>
               ) : isReflecting ? (
-                <p className="memory-contents-reflection-empty">Your reflection will appear here.</p>
+                <p className="memory-contents-reflection-empty">{copy.savedSignalReflectionEmpty}</p>
               ) : null}
             </section>
           ) : null}
@@ -3775,12 +4228,21 @@ export function HomePage(): JSX.Element {
         ? copy.loadingSaves
         : copy.emptySaves
       : savedSignalQuery
-        ? `No saved inspirations match “${inspirationFilters.search.trim()}” in ${activePath}.`
-        : `No saved inspirations in ${activePath} yet.`;
+        ? copy.savedSignalNoSearchMatches(inspirationFilters.search.trim(), activePath)
+        : copy.savedSignalNoPathMatches(activePath);
 
 	    return (
-	      <div className="memory-category-panel memory-path-panel" aria-label="saved inspiration list">
+	      <div className="memory-category-panel memory-path-panel" aria-label={copy.savedSignalListLabel}>
         {renderMemoryPathFilters()}
+        {drawerActionStatus ? (
+          <p
+            className={`memory-contents-feedback-status${
+              drawerActionStatus.tone === "error" ? " memory-contents-feedback-status--error" : ""
+            }`}
+          >
+            {drawerActionStatus.message}
+          </p>
+        ) : null}
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
@@ -3798,7 +4260,7 @@ export function HomePage(): JSX.Element {
                   if (savedSignalQuery) setInspirationFilters({ search: "" });
                 }}
               >
-                show /all-saved
+                {copy.savedSignalShowAllSaved}
               </button>
             ) : null}
           </p>
@@ -3827,7 +4289,7 @@ export function HomePage(): JSX.Element {
       ...primaryFilters,
     ];
     return (
-	      <nav className="memory-path-filters" aria-label="saved inspiration paths">
+	      <nav className="memory-path-filters" aria-label={copy.savedSignalPathsLabel}>
 	        {visibleFilters.map((filter) => {
           const count = applySearchToSignals(filter.signals, savedSignalQuery).length;
           return (
@@ -3845,9 +4307,9 @@ export function HomePage(): JSX.Element {
                 setSelectedSavedSignalId(null);
                 setSavedSignalDetail(null);
               }}
-              title={`${filter.description} (${count})`}
+              title={`${localizedMemoryPathDescription(filter)} (${count})`}
             >
-	              <span>{filter.label}</span>
+	              <span>{localizedMemoryPathLabel(filter)}</span>
 	              <small>{count}</small>
 	            </button>
           );
@@ -3862,72 +4324,6 @@ export function HomePage(): JSX.Element {
   void renderMemorySignalCard;
   void renderMemoryGroupObject;
   void createUserMemoryGroup;
-
-  useEffect(() => {
-    if (draggingIndex === null) return undefined;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const start = dragStartRef.current;
-      if (!start) return;
-      const dx = event.clientX - start.x;
-      const dy = event.clientY - start.y;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMovedRef.current = true;
-      setDrags((prev) => ({
-        ...prev,
-        [start.index]: {
-          x: start.baseX + dx,
-          y: start.baseY + dy,
-        },
-      }));
-    };
-
-    const handlePointerUp = () => {
-      dragStartRef.current = null;
-      setDraggingIndex(null);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [draggingIndex]);
-
-  useEffect(() => {
-    if (draggingMemoryGroupId === null) return undefined;
-
-    const handlePointerMove = (event: PointerEvent) => {
-      const start = memoryGroupDragStartRef.current;
-      if (!start) return;
-      const dx = event.clientX - start.x;
-      const dy = event.clientY - start.y;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) memoryGroupDragMovedRef.current = true;
-      setMemoryGroupDrags((current) => ({
-        ...current,
-        [start.id]: {
-          x: start.baseX + dx,
-          y: start.baseY + dy,
-        },
-      }));
-    };
-
-    const handlePointerUp = () => {
-      memoryGroupDragStartRef.current = null;
-      setDraggingMemoryGroupId(null);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [draggingMemoryGroupId]);
 
   const onNotePointerDown = (index: number) => (event: ReactPointerEvent<HTMLElement>) => {
     const target = event.target as HTMLElement;
@@ -3990,8 +4386,8 @@ export function HomePage(): JSX.Element {
     setActiveTopOfMindEvidenceFilter({
       id: filterId,
       path: "/top-of-mind",
-      label: "top of mind",
-      description: `inspirations that led to "${shortText(thoughtCardDisplayLabel(signal, locale), 64)}"`,
+      label: copy.topOfMindEvidencePathLabel,
+      description: copy.topOfMindEvidenceDescription(shortText(thoughtCardDisplayLabel(signal, locale), 64)),
       signals: evidenceSignals,
     });
     setSelectedSupportingSignalFallback(evidenceSignals[0] ?? null);
@@ -4035,7 +4431,7 @@ export function HomePage(): JSX.Element {
       }}
       onPointerDown={noteIsInteractive ? onNotePointerDown(index) : undefined}
     >
-      <div className="nc-note-preview" aria-label="post-it preview">
+      <div className="nc-note-preview" aria-label={copy.notePreviewAria}>
         {noteIsInteractive && signal.feedbackTargetId ? (
           <div className="nc-note-edit-shell">
             <textarea
@@ -4074,7 +4470,7 @@ export function HomePage(): JSX.Element {
               openTopOfMindEvidenceDrawer(signal);
             }}
           >
-            {supportingCount} inspiration{supportingCount === 1 ? "" : "s"} led here
+            {copy.topOfMindEvidenceCount(supportingCount)}
           </button>
         ) : <span />}
         {noteIsInteractive ? renderPostItActions(signal) : null}
@@ -4135,7 +4531,17 @@ export function HomePage(): JSX.Element {
           ) : meaningfulThoughtCards.length > 0 ? (
             meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
           ) : (
-            <p className="nc-loading">{copy.emptyThoughts}</p>
+            <div className="nc-first-run-guide" aria-label={copy.firstRunTitle}>
+              <p className="nc-loading">{copy.emptyThoughts}</p>
+              <div className="nc-first-run-card">
+                <h2>{copy.firstRunTitle}</h2>
+                <ol>
+                  {copy.firstRunSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
           )}
         </section>
       </main>
@@ -4152,7 +4558,7 @@ export function HomePage(): JSX.Element {
 	        >
           <span className="memory-stack-glass" aria-hidden="true" />
           {selectedMemoryGroup ? (
-            <div className="memory-contents-flow" aria-label="grouping contents">
+            <div className="memory-contents-flow" aria-label={copy.groupingContentsLabel}>
               <button
                 type="button"
                 className="memory-contents-back"
@@ -4162,11 +4568,11 @@ export function HomePage(): JSX.Element {
                   setSavedSignalDetail(null);
                 }}
               >
-                ← back to map
+                {copy.backToMap}
               </button>
               {selectedMemoryGroup.source === "user" ? (
                 <label className="memory-contents-rename">
-                  <span className="sr-only">name this collection</span>
+                  <span className="sr-only">{copy.nameCollectionLabel}</span>
                   <input
                     value={selectedMemoryGroup.name}
                     onChange={(event) => renameMemoryGroup(selectedMemoryGroup.id, event.target.value)}
@@ -4195,7 +4601,7 @@ export function HomePage(): JSX.Element {
       <div
         className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`}
         data-locale={locale}
-        aria-label="bottom actions"
+        aria-label={copy.bottomActionsLabel}
       >
         <div
           className={`nc-primary-action${
@@ -4226,29 +4632,29 @@ export function HomePage(): JSX.Element {
               }
               aria-label={
                 showDrawerUndo
-                  ? "inspiration was deleted, undo"
+                  ? copy.drawerUndoAria
                   : showDrawerEditActions
-                    ? "save edited inspiration"
+                    ? copy.drawerSaveEditedAria
                     : showTopOfMindUndo
-                      ? "sticky note was deleted, undo"
+                      ? copy.topOfMindUndoAria
                       : copy.captureAria
               }
               disabled={showDrawerEditActions && savedSignalEditSaving}
             >
               <span className="nc-save-cta">
                 {showDrawerUndo
-                  ? "inspiration was deleted · undo"
+                  ? copy.drawerUndoCta
                   : showDrawerEditActions
                     ? savedSignalEditSaving
-                      ? "saving..."
-                      : "save"
+                      ? copy.savingShort
+                      : copy.drawerSaveEditedCta
                     : showTopOfMindUndo
-                      ? "sticky note was deleted · undo"
+                      ? copy.topOfMindUndoCta
                       : captureSaved
                         ? t(locale, "saved")
                         : copy.captureCta}
                 {showTopOfMindCapture && !captureSaved && captureHasDraft ? (
-                  <span className="nc-save-draft">(draft)</span>
+                  <span className="nc-save-draft">({copy.draftLabel})</span>
                 ) : null}
               </span>
             </button>
@@ -4258,9 +4664,9 @@ export function HomePage(): JSX.Element {
               type="button"
               className="nc-edit-cancel"
               onClick={cancelSavedSignalEdit}
-              aria-label="cancel edit"
+              aria-label={copy.cancelEditAria}
             >
-              cancel edit
+              {copy.cancelEditCta}
             </button>
           ) : null}
           {showDrawerSearch ? (
@@ -4291,10 +4697,13 @@ export function HomePage(): JSX.Element {
               <div className="nc-drawer-reflect-question">
                 <span>{selectedDrawerReflectionProgress}</span>
                 <p id="saved-signal-reflection-question">{selectedDrawerReflectionQuestion}</p>
+                {savedSignalReflectionQuestionError ? (
+                  <small className="nc-drawer-reflect-status">{savedSignalReflectionQuestionError}</small>
+                ) : null}
               </div>
               <textarea
                 ref={savedSignalReflectionInputRef}
-                aria-label="answer reflection prompt"
+                aria-label={copy.reflectionAnswerLabel}
                 aria-describedby="saved-signal-reflection-question"
                 value={savedSignalReflectionDraft}
                 onChange={(event) => {
@@ -4302,7 +4711,7 @@ export function HomePage(): JSX.Element {
                   event.currentTarget.style.height = "auto";
                   event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
                 }}
-                placeholder="answer here"
+                placeholder={copy.reflectionAnswerPlaceholder}
                 disabled={savedSignalReflectionSaving}
                 rows={1}
               />
@@ -4312,23 +4721,23 @@ export function HomePage(): JSX.Element {
                   onClick={goToPreviousSavedSignalReflection}
                   disabled={savedSignalReflectionSaving || savedSignalReflectionStepIndex === 0}
                 >
-                  previous
+                  {copy.reflectionPrevious}
                 </button>
                 <button
                   type="button"
                   onClick={goToNextSavedSignalReflection}
                   disabled={!selectedDrawerReflectionCanGoNext || savedSignalReflectionSaving}
                 >
-                  next
+                  {copy.reflectionNext}
                 </button>
                 <button
                   type="submit"
                   disabled={!selectedDrawerReflectionCanFinish || savedSignalReflectionSaving}
                 >
-                  {savedSignalReflectionSaving ? "saving..." : "save"}
+                  {savedSignalReflectionSaving ? copy.savingShort : copy.reflectionSave}
                 </button>
                 <button type="button" onClick={cancelSavedSignalReflection}>
-                  cancel
+                  {copy.reflectionCancel}
                 </button>
               </div>
               {savedSignalReflectionError ? (
@@ -4348,7 +4757,7 @@ export function HomePage(): JSX.Element {
                 chooseHomeMode("memoryDrawer");
               }
             }}
-            aria-label={homeMode === "memoryDrawer" ? "back home" : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
+            aria-label={homeMode === "memoryDrawer" ? copy.drawerBackHome : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
           >
             {homeMode === "memoryDrawer" ? (
               <span className="nc-drawer-icon" aria-hidden="true">
@@ -4381,7 +4790,7 @@ export function HomePage(): JSX.Element {
                 </svg>
               </span>
             )}
-            <span className="sr-only">{homeMode === "memoryDrawer" ? "back home" : copy.drawerObjectTitle}</span>
+            <span className="sr-only">{homeMode === "memoryDrawer" ? copy.drawerBackHome : copy.drawerObjectTitle}</span>
             <small className="nc-drawer-count">{formatSavedCount(locale, savedEntryCount)}</small>
           </button>
         ) : null}

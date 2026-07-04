@@ -2,6 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,7 @@ import {
   createFeedback,
   createInspiration,
   createReflection,
+  deleteInspiration,
   finalizeAttachment,
   fetchInspirations,
   fetchReflections,
@@ -35,28 +37,32 @@ import type {
 } from "../src/lib/api";
 import { HomePage, getMemoryPreviewPlacement } from "../src/pages/Home";
 
-const mockAuthState = vi.hoisted(() => ({
-  value: {
-    user: {
-      id: "user-1",
-      email: "river@example.com",
-      name: "River",
-      preferredLocale: "en-US" as "en-US" | "ko-KR",
+const mockAuthState = vi.hoisted(() => {
+  const defaultUser = {
+    id: "user-1",
+    email: "river@example.com",
+    name: "River",
+    preferredLocale: "en-US" as "en-US" | "ko-KR",
+  };
+  return {
+    defaultUser,
+    value: {
+      user: { ...defaultUser } as any,
+      isLoading: false,
+      isAuthenticated: true,
+      login: vi.fn(),
+      signup: vi.fn(),
+      logout: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => null),
+      updatePreferredLocale: vi.fn(async () => ({
+        id: "user-1",
+        email: "river@example.com",
+        name: "River",
+        preferredLocale: "en-US" as "en-US" | "ko-KR",
+      })),
     },
-    isLoading: false,
-    isAuthenticated: true,
-    login: vi.fn(),
-    signup: vi.fn(),
-    logout: vi.fn(async () => undefined),
-    refresh: vi.fn(async () => null),
-    updatePreferredLocale: vi.fn(async () => ({
-      id: "user-1",
-      email: "river@example.com",
-      name: "River",
-      preferredLocale: "en-US" as "en-US" | "ko-KR",
-    })),
-  },
-}));
+  };
+});
 
 vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => mockAuthState.value,
@@ -397,9 +403,8 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
-  mockAuthState.value.user.email = "river@example.com";
-  mockAuthState.value.user.name = "River";
-  mockAuthState.value.user.preferredLocale = "en-US";
+  mockAuthState.value.user = { ...mockAuthState.defaultUser };
+  mockAuthState.value.isAuthenticated = true;
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
   }
@@ -421,6 +426,25 @@ async function renderHomePage(): Promise<HTMLDivElement> {
   await flushReactWork();
 
   return container;
+}
+
+async function rerenderHomePage(): Promise<void> {
+  expect(mountedRoot).not.toBeNull();
+  await act(async () => {
+    mountedRoot?.render(createElement(MemoryRouter, null, createElement(HomePage)));
+  });
+  await flushReactWork();
+  await flushReactWork();
+}
+
+function rerenderHomePageSynchronously(assertBeforePassiveEffects?: () => void): void {
+  expect(mountedRoot).not.toBeNull();
+  act(() => {
+    flushSync(() => {
+      mountedRoot?.render(createElement(MemoryRouter, null, createElement(HomePage)));
+    });
+    assertBeforePassiveEffects?.();
+  });
 }
 
 async function flushReactWork(): Promise<void> {
@@ -606,6 +630,127 @@ describe("HomePage current home experience", () => {
     expect(detail).not.toBeNull();
     return detail!;
   }
+
+  it("keeps hook order stable when auth flips from user to null", async () => {
+    setApiFixtures();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const container = await renderHomePage();
+    expect(container.textContent).toContain("make the thing before explaining it");
+
+    mockAuthState.value.user = null;
+    mockAuthState.value.isAuthenticated = false;
+    await rerenderHomePage();
+
+    expect(container.textContent).toContain("Home rendered without an authenticated user");
+    expect(errorSpy.mock.calls.flat().join("\n")).not.toMatch(/Rendered fewer hooks|Rendered more hooks|change in the order of Hooks/i);
+    errorSpy.mockRestore();
+  });
+
+  it("clears previous user Home content immediately when the auth user changes", async () => {
+    setApiFixtures();
+    const nextInspirations = deferred<ApiInspiration[]>();
+    const nextTopOfMind = deferred<ApiTopOfMind>();
+    const nextTopOfMindNotes = deferred<ApiTopOfMindNoteSurface[]>();
+
+    const container = await renderHomePage();
+    expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+
+    vi.mocked(fetchInspirations).mockReturnValueOnce(nextInspirations.promise);
+    vi.mocked(fetchTopOfMind).mockReturnValueOnce(nextTopOfMind.promise);
+    vi.mocked(fetchTopOfMindNotes).mockReturnValueOnce(nextTopOfMindNotes.promise);
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "lake@example.com",
+      name: "Lake",
+      preferredLocale: "en-US",
+    };
+
+    await rerenderHomePage();
+
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+
+    nextInspirations.resolve([
+      persistedInspiration({
+        id: "insp-user-2",
+        userId: "user-2",
+        text: "Lake account inspiration about kiln shelves",
+      }),
+    ]);
+    nextTopOfMind.resolve({
+      ...sampleTopOfMind,
+      headline: "kiln shelves are the new calendar",
+    });
+    nextTopOfMindNotes.resolve([
+      {
+        ...sampleTopOfMindNote,
+        id: "note-user-2",
+        userId: "user-2",
+        title: "kiln shelves are the new calendar",
+        ambientSignal: "kiln shelves are the new calendar",
+      },
+    ]);
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+    expect(container.textContent).toContain("Lake account inspiration about kiln shelves");
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+  });
+
+  it("ignores stale User A async responses after switching to User B", async () => {
+    const userAFetch = deferred<ApiInspiration[]>();
+    const userATopOfMind = deferred<ApiTopOfMind>();
+    const userANotes = deferred<ApiTopOfMindNoteSurface[]>();
+    vi.mocked(fetchInspirations).mockReturnValueOnce(userAFetch.promise);
+    vi.mocked(fetchTopOfMind).mockReturnValueOnce(userATopOfMind.promise);
+    vi.mocked(fetchTopOfMindNotes).mockReturnValueOnce(userANotes.promise);
+
+    const container = await renderHomePage();
+    expect(fetchInspirations).toHaveBeenCalledTimes(1);
+
+    vi.mocked(fetchInspirations).mockResolvedValueOnce([
+      persistedInspiration({
+        id: "insp-user-2",
+        userId: "user-2",
+        text: "Lake account inspiration about kiln shelves",
+      }),
+    ]);
+    vi.mocked(fetchTopOfMind).mockResolvedValueOnce({
+      ...sampleTopOfMind,
+      headline: "kiln shelves are the new calendar",
+    });
+    vi.mocked(fetchTopOfMindNotes).mockResolvedValueOnce([
+      {
+        ...sampleTopOfMindNote,
+        id: "note-user-2",
+        userId: "user-2",
+        title: "kiln shelves are the new calendar",
+        ambientSignal: "kiln shelves are the new calendar",
+      },
+    ]);
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "lake@example.com",
+      name: "Lake",
+      preferredLocale: "en-US",
+    };
+    await rerenderHomePage();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+
+    userAFetch.resolve(sampleInspirations);
+    userATopOfMind.resolve(sampleTopOfMind);
+    userANotes.resolve([sampleTopOfMindNote]);
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+  });
 
   it("shows saved-inspiration feedback affordances directly after expanded detail", async () => {
     setApiFixtures();
@@ -933,6 +1078,207 @@ describe("HomePage current home experience", () => {
     expect(detail.textContent).toContain("could not save inspiration feedback");
   });
 
+  it("shows an inline saved-inspiration edit failure and keeps the original text primary", async () => {
+    setApiFixtures();
+    vi.mocked(updateInspiration).mockRejectedValueOnce(new Error("patch failed"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const editor = detail.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
+    expect(editor).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(editor!, "Architecture essay about bridge rhythms in city walks revised");
+    });
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+
+    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
+      text: "Architecture essay about bridge rhythms in city walks revised",
+    });
+    expect(detail.textContent).toContain("could not save inspiration edit");
+    expect(detail.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor")?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+  });
+
+  it("shows delete failure status and restores the saved inspiration to the drawer", async () => {
+    setApiFixtures();
+    vi.mocked(deleteInspiration).mockRejectedValueOnce(new Error("delete failed"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).toContain("inspiration deleted. You can undo it.");
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("inspiration was deleted · undo");
+
+    await waitForTimers(4300);
+    await flushReactWork();
+
+    expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
+    expect(container.textContent).toContain("could not delete inspiration. It is back in the drawer.");
+    expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+  });
+
+  it("does not restore a failed saved-inspiration delete after the auth user changes", async () => {
+    setApiFixtures();
+    const deleteRequest = deferred<void>();
+    vi.mocked(deleteInspiration).mockReturnValueOnce(deleteRequest.promise);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).toContain("inspiration deleted. You can undo it.");
+
+    await waitForTimers(4300);
+    await flushReactWork();
+    expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
+
+    setApiFixtures({
+      inspirations: [],
+      topOfMind: {
+        ...sampleTopOfMind,
+        headline: "kiln shelves are the new calendar",
+      },
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          id: "note-user-2",
+          userId: "user-2",
+          title: "kiln shelves are the new calendar",
+          ambientSignal: "kiln shelves are the new calendar",
+        },
+      ],
+      savedSignals: [],
+    });
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "lake@example.com",
+      name: "Lake",
+      preferredLocale: "en-US",
+    };
+    await rerenderHomePage();
+
+    deleteRequest.reject(new Error("delete failed"));
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+    expect(container.textContent).not.toContain("could not delete inspiration. It is back in the drawer.");
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+
+    await clickSavesTab(container, 0);
+    await waitForTimers(130);
+    await flushReactWork();
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+  });
+
+  it("clears the undo status after a saved-inspiration delete succeeds", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).toContain("inspiration deleted. You can undo it.");
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("inspiration was deleted · undo");
+
+    await waitForTimers(4300);
+    await flushReactWork();
+
+    expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
+    expect(container.textContent).not.toContain("inspiration deleted. You can undo it.");
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent ?? "").not.toContain("inspiration was deleted · undo");
+  });
+
+  it("shows a restored status when undoing a saved-inspiration delete", async () => {
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+
+    expect(deleteInspiration).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("inspiration restored");
+    expect(container.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor")?.value).toBe(
+      "Architecture essay about bridge rhythms in city walks",
+    );
+  });
+
+  it("shows visible saved-inspiration reflection question and save failures", async () => {
+    setApiFixtures();
+    vi.mocked(generateGuidedReflectionQuestion).mockRejectedValueOnce(new Error("question failed"));
+    vi.mocked(createReflection).mockRejectedValueOnce(new Error("save failed"));
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const reflectButton = Array.from(detail.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent === "reflect",
+    );
+    await act(async () => {
+      reflectButton?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector(".nc-drawer-reflect-question")?.textContent).toContain(
+      "What does this make you notice about yourself right now?",
+    );
+    expect(container.textContent).toContain("Could not find a new question, so this fallback is here.");
+
+    const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
+    await act(async () => {
+      setInputValue(answer!, "It still points toward public rhythm.");
+    });
+    await flushReactWork();
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLFormElement>(".nc-drawer-reflect")?.dispatchEvent(
+        new Event("submit", { bubbles: true, cancelable: true }),
+      );
+    });
+    await flushReactWork();
+
+    expect(createReflection).toHaveBeenCalledWith("insp-1", {
+      question: "What does this make you notice about yourself right now?",
+      answer: "It still points toward public rhythm.",
+    });
+    expect(container.textContent).toContain("could not save reflection");
+  });
+
   it("keeps the Reflect Deeper analysis section hidden until a reflection exists", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([]);
@@ -958,6 +1304,184 @@ describe("HomePage current home experience", () => {
     expect(actions?.textContent).toContain("삭제");
     expect(actions?.textContent).not.toContain("reflect");
     expect(actions?.textContent).not.toContain("delete");
+  });
+
+  it("localizes active Home drawer and top-of-mind controls in Korean", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    const delayedQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion).mockReturnValueOnce(delayedQuestion.promise);
+    vi.mocked(updateInspiration).mockResolvedValueOnce({
+      ...sampleInspirations[0],
+      text: "Architecture essay about bridge rhythms in city walks revised",
+      updatedAt: "2026-05-14T16:45:00.000Z",
+    });
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    expect(container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit")?.getAttribute("aria-label")).toBe(
+      "포스트잇 수정",
+    );
+    const pin = note?.querySelector<HTMLButtonElement>(".nc-note-icon-btn--pin");
+    const noteDelete = note?.querySelector<HTMLButtonElement>(".nc-note-icon-btn--delete");
+    expect(note?.querySelector(".nc-note-preview")?.getAttribute("aria-label")).toBe("포스트잇 미리보기");
+    expect(pin?.getAttribute("aria-label")).toBe("고정");
+    expect(pin?.getAttribute("title")).toBe("고정");
+    expect(noteDelete?.getAttribute("aria-label")).toBe("삭제");
+    expect(noteDelete?.getAttribute("title")).toBe("삭제");
+    const evidence = note?.querySelector<HTMLButtonElement>(".nc-note-inspiration-slide");
+    expect(evidence?.textContent).toContain("영감 1개가 여기로 이어짐");
+
+    await act(async () => {
+      evidence?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector<HTMLElement>(".memory-path-panel")?.getAttribute("aria-label")).toBe(
+      "저장된 영감 목록",
+    );
+    expect(container.querySelector<HTMLElement>(".memory-path-filters")?.getAttribute("aria-label")).toBe(
+      "저장된 영감 경로",
+    );
+    expect(container.querySelector(".memory-path-filter--active")?.textContent).toContain("탑오브마인드");
+    expect(container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]')?.placeholder).toBe(
+      "저장된 영감 검색",
+    );
+    expect(container.querySelector<HTMLElement>(".nc-bottom-bar")?.getAttribute("aria-label")).toBe("하단 작업");
+    expect(container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.getAttribute("aria-label")).toBe(
+      "방으로 돌아가기",
+    );
+
+    const drawerSave = container.querySelector<HTMLButtonElement>(".memory-contents-item");
+    await act(async () => {
+      drawerSave?.click();
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    expect(detail).not.toBeNull();
+    expect(detail?.querySelector<HTMLButtonElement>(".memory-contents-collapse")?.getAttribute("aria-label")).toBe(
+      "영감 접기",
+    );
+    const editor = detail!.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
+    expect(editor?.getAttribute("aria-label")).toBe("저장된 영감 수정");
+    expect(detail?.querySelector<HTMLElement>(".memory-contents-feedback-actions")?.getAttribute("aria-label")).toBe(
+      "영감 피드백",
+    );
+    expect(
+      detail?.querySelector<HTMLButtonElement>(".memory-contents-feedback-action")?.getAttribute("aria-label"),
+    ).toBe("영감 피드백: 아직 살아 있음");
+
+    await act(async () => {
+      setInputValue(editor!, "Architecture essay about bridge rhythms in city walks cancelled");
+    });
+    await flushReactWork();
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.getAttribute("aria-label")).toBe(
+      "수정한 영감 저장",
+    );
+    expect(container.querySelector<HTMLButtonElement>(".nc-edit-cancel")?.textContent).toBe("수정 취소");
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-edit-cancel")?.click();
+    });
+    await flushReactWork();
+    expect(updateInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setInputValue(editor!, "Architecture essay about bridge rhythms in city walks revised");
+    });
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
+      text: "Architecture essay about bridge rhythms in city walks revised",
+    });
+
+    const reflect = Array.from(detail!.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("조금 더 생각하기"),
+    );
+    await act(async () => {
+      reflect?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-drawer-reflect-question")?.textContent).toContain(
+      "이 영감을 위한 질문을 찾는 중...",
+    );
+    const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
+    expect(answer?.getAttribute("aria-label")).toBe("돌아보기 답변");
+    expect(answer?.placeholder).toBe("여기에 답하기");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("이전");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("다음");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("저장");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("취소");
+    await act(async () => {
+      delayedQuestion.resolve({ question: "이 영감이 지금 묻는 것은 무엇인가요?", source: "model" });
+      await delayedQuestion.promise;
+    });
+    await flushReactWork();
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-drawer-reflect-actions button"))
+        .find((button) => button.textContent?.trim() === "취소")
+        ?.click();
+    });
+    await flushReactWork();
+
+    const deleteSaved = Array.from(detail!.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "삭제",
+    );
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.getAttribute("aria-label")).toBe(
+      "영감이 삭제됨, 되돌리기",
+    );
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("영감이 삭제됨 · 되돌리기");
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.click();
+    });
+    await flushReactWork();
+    await waitForTimers(380);
+    await flushReactWork();
+    const visibleNoteDelete = container.querySelector<HTMLButtonElement>(".nc-note-icon-btn--delete");
+    expect(visibleNoteDelete).not.toBeNull();
+    await act(async () => {
+      visibleNoteDelete?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.getAttribute("aria-label")).toBe(
+      "포스트잇이 삭제됨, 되돌리기",
+    );
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("포스트잇이 삭제됨 · 되돌리기");
+
+    const scopedControlCopy = [
+      ...Array.from(container.querySelectorAll<HTMLElement>(".nc-note-preview")),
+      ...Array.from(container.querySelectorAll<HTMLElement>(".nc-note-actions button, .nc-note-inspiration-slide")),
+      ...Array.from(
+        container.querySelectorAll<HTMLElement>(
+          ".memory-path-filter, .memory-contents-collapse, .memory-contents-feedback-action, .memory-contents-expanded-actions button, .nc-bottom-bar button, .nc-drawer-reflect-actions button",
+        ),
+      ),
+      ...Array.from(container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("textarea, input")),
+    ]
+      .flatMap((element) => [
+        element.textContent ?? "",
+        element.getAttribute("aria-label") ?? "",
+        element.getAttribute("title") ?? "",
+        element.getAttribute("placeholder") ?? "",
+      ])
+      .join(" ");
+    expect(scopedControlCopy).not.toMatch(
+      /saved inspiration feedback|edit saved inspiration|collapse inspiration|reflection conversation|answer reflection prompt|answer here|cancel edit|bottom actions|back home|unpin post-it|\b(Pin|Delete|reflect|previous|next|cancel)\b|inspiration was deleted|sticky note was deleted|inspirations? led here/i,
+    );
   });
 
   it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
@@ -1462,7 +1986,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.textContent).toContain("capture inspiration");
     expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_frequency_scaffold");
@@ -1471,6 +1995,25 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Supporting signals");
     expect(container.textContent).not.toContain("Memory movement");
     expect(container.textContent).not.toContain("frequency scaffold");
+  });
+
+  it("shows first-run expectation guidance instead of an empty wall", async () => {
+    setApiFixtures({ topOfMindNotes: [], savedSignals: [], inspirations: [] });
+
+    const container = await renderHomePage();
+    const guide = container.querySelector<HTMLElement>(".nc-first-run-guide");
+
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(guide).not.toBeNull();
+    expect(guide?.getAttribute("aria-label")).toBe("Start with one small loop");
+    expect(guide?.textContent).toContain("Save the first inspiration that is tugging at you.");
+    expect(guide?.textContent).toContain("Add a few words about what pulled you toward it.");
+    expect(guide?.textContent).toContain(
+      "As you save and reflect, WAKA starts noticing patterns as provisional post-its.",
+    );
+    expect(guide?.textContent).not.toContain("signal");
+    expect(guide?.textContent).not.toContain("graph");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
   });
 
   it("keeps ko-KR users on the safe empty state instead of English preview scaffolds", async () => {
@@ -1499,12 +2042,31 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+      "첫 영감을 기록하세요. 저장하고 돌아볼수록 WAKA가 반복되는 패턴을 연결하고, 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     );
     expect(container.textContent).not.toContain("English-only deterministic scaffold card");
     expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
     expect(container.textContent).not.toContain("Capture inspirations to generate your top of mind stickies.");
     expect(container.textContent).not.toContain("Supporting signals");
+  });
+
+  it("localizes first-run expectation guidance for ko-KR users", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({ topOfMindNotes: [], savedSignals: [], inspirations: [] });
+
+    const container = await renderHomePage();
+    const guide = container.querySelector<HTMLElement>(".nc-first-run-guide");
+
+    expect(guide).not.toBeNull();
+    expect(guide?.getAttribute("aria-label")).toBe("처음에는 이렇게 시작하세요");
+    expect(guide?.textContent).toContain("지금 마음에 걸리는 영감 하나를 저장하세요.");
+    expect(guide?.textContent).toContain("왜 끌렸는지 몇 단어만 덧붙이세요.");
+    expect(guide?.textContent).toContain(
+      "영감과 돌아보기가 쌓이면 WAKA가 반복되는 패턴을 임시 포스트잇으로 보여줍니다.",
+    );
+    expect(guide?.textContent).not.toContain("signal");
+    expect(guide?.textContent).not.toContain("graph");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("영감 기록");
   });
 
   it("treats post-its as intentional inline editing surfaces without opening a modal", async () => {
@@ -1859,7 +2421,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
@@ -1918,7 +2480,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
@@ -1931,7 +2493,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.textContent).not.toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
@@ -1957,6 +2519,110 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Other user save should never render");
   });
 
+  it("does not render prior-user inspirations or post-its on the synchronous auth-switch frame", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("make the thing before explaining it");
+    expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+
+    const deferredInspirations = deferred<ApiInspiration[]>();
+    const deferredTopOfMind = deferred<ApiTopOfMind>();
+    const deferredTopOfMindNotes = deferred<ApiTopOfMindNoteSurface[]>();
+    vi.mocked(fetchInspirations).mockReturnValue(deferredInspirations.promise);
+    vi.mocked(fetchTopOfMind).mockReturnValue(deferredTopOfMind.promise);
+    vi.mocked(fetchTopOfMindNotes).mockReturnValue(deferredTopOfMindNotes.promise);
+    vi.mocked(fetchSavedSignals).mockResolvedValue([]);
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "sky@example.com",
+      name: "Sky",
+      preferredLocale: "en-US",
+    };
+
+    rerenderHomePageSynchronously(() => {
+      expect(container.textContent).toContain("sky's top of mind");
+      expect(container.textContent).not.toContain("river's top of mind");
+      expect(container.textContent).not.toContain("make the thing before explaining it");
+      expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+      expect(container.textContent).not.toContain("Synthetic memory note");
+    });
+
+    await flushReactWork();
+  });
+
+  it("does not commit a stale Top of Mind edit after the active user changes", async () => {
+    const delayedUpdate = deferred<ApiTopOfMindNoteSurface>();
+    vi.mocked(updateTopOfMindNote).mockReturnValueOnce(delayedUpdate.promise);
+    setApiFixtures();
+    const container = await renderHomePage();
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
+    expect(rewrite).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(rewrite!, "prior user's private rewrite");
+    });
+    await flushReactWork();
+    await waitForTimers(700);
+    await flushReactWork();
+    expect(container.textContent).toContain("prior user's private rewrite");
+
+    setApiFixtures({ inspirations: [], topOfMindNotes: [], savedSignals: [] });
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "sky@example.com",
+      name: "Sky",
+      preferredLocale: "en-US",
+    };
+    rerenderHomePageSynchronously();
+
+    delayedUpdate.resolve({
+      ...sampleTopOfMindNote,
+      title: "prior user's private rewrite",
+      ambientSignal: "prior user's private rewrite",
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("sky's top of mind");
+    expect(container.textContent).not.toContain("prior user's private rewrite");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+  });
+
+  it("does not restore prior-user Top of Mind notes when pull-down fails after auth switch", async () => {
+    const delayedFeedback = deferred<Awaited<ReturnType<typeof createFeedback>>>();
+    vi.mocked(createFeedback).mockReturnValueOnce(delayedFeedback.promise);
+    setApiFixtures();
+    const container = await renderHomePage();
+    const deleteButton = container.querySelector<HTMLButtonElement>(".nc-note-icon-btn--delete");
+    expect(deleteButton).not.toBeNull();
+
+    await act(async () => {
+      deleteButton?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+
+    setApiFixtures({ inspirations: [], topOfMindNotes: [], savedSignals: [] });
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "sky@example.com",
+      name: "Sky",
+      preferredLocale: "en-US",
+    };
+    rerenderHomePageSynchronously();
+
+    await act(async () => {
+      delayedFeedback.reject(new Error("offline"));
+      await delayedFeedback.promise.catch(() => undefined);
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("sky's top of mind");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+    expect(container.textContent).not.toContain("could not change post-it");
+  });
+
   it("keeps the capture form closed and legacy Home switcher absent on first paint", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -1971,7 +2637,7 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("river's top of mind");
+    expect(container.textContent).toContain("river의 탑오브마인드");
     expect(container.textContent).not.toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).not.toContain("쓴 것이 아니라");
     expect(container.textContent).toContain("make the thing before explaining it");
