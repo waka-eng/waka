@@ -2,6 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { act, createElement } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -36,28 +37,32 @@ import type {
 } from "../src/lib/api";
 import { HomePage, getMemoryPreviewPlacement } from "../src/pages/Home";
 
-const mockAuthState = vi.hoisted(() => ({
-  value: {
-    user: {
-      id: "user-1",
-      email: "river@example.com",
-      name: "River",
-      preferredLocale: "en-US" as "en-US" | "ko-KR",
+const mockAuthState = vi.hoisted(() => {
+  const defaultUser = {
+    id: "user-1",
+    email: "river@example.com",
+    name: "River",
+    preferredLocale: "en-US" as "en-US" | "ko-KR",
+  };
+  return {
+    defaultUser,
+    value: {
+      user: { ...defaultUser } as any,
+      isLoading: false,
+      isAuthenticated: true,
+      login: vi.fn(),
+      signup: vi.fn(),
+      logout: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => null),
+      updatePreferredLocale: vi.fn(async () => ({
+        id: "user-1",
+        email: "river@example.com",
+        name: "River",
+        preferredLocale: "en-US" as "en-US" | "ko-KR",
+      })),
     },
-    isLoading: false,
-    isAuthenticated: true,
-    login: vi.fn(),
-    signup: vi.fn(),
-    logout: vi.fn(async () => undefined),
-    refresh: vi.fn(async () => null),
-    updatePreferredLocale: vi.fn(async () => ({
-      id: "user-1",
-      email: "river@example.com",
-      name: "River",
-      preferredLocale: "en-US" as "en-US" | "ko-KR",
-    })),
-  },
-}));
+  };
+});
 
 vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => mockAuthState.value,
@@ -398,9 +403,8 @@ afterEach(() => {
   mountedRoot = null;
   mountedContainer?.remove();
   mountedContainer = null;
-  mockAuthState.value.user.email = "river@example.com";
-  mockAuthState.value.user.name = "River";
-  mockAuthState.value.user.preferredLocale = "en-US";
+  mockAuthState.value.user = { ...mockAuthState.defaultUser };
+  mockAuthState.value.isAuthenticated = true;
   if (typeof window.localStorage.clear === "function") {
     window.localStorage.clear();
   }
@@ -422,6 +426,25 @@ async function renderHomePage(): Promise<HTMLDivElement> {
   await flushReactWork();
 
   return container;
+}
+
+async function rerenderHomePage(): Promise<void> {
+  expect(mountedRoot).not.toBeNull();
+  await act(async () => {
+    mountedRoot?.render(createElement(MemoryRouter, null, createElement(HomePage)));
+  });
+  await flushReactWork();
+  await flushReactWork();
+}
+
+function rerenderHomePageSynchronously(assertBeforePassiveEffects?: () => void): void {
+  expect(mountedRoot).not.toBeNull();
+  act(() => {
+    flushSync(() => {
+      mountedRoot?.render(createElement(MemoryRouter, null, createElement(HomePage)));
+    });
+    assertBeforePassiveEffects?.();
+  });
 }
 
 async function flushReactWork(): Promise<void> {
@@ -607,6 +630,127 @@ describe("HomePage current home experience", () => {
     expect(detail).not.toBeNull();
     return detail!;
   }
+
+  it("keeps hook order stable when auth flips from user to null", async () => {
+    setApiFixtures();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const container = await renderHomePage();
+    expect(container.textContent).toContain("make the thing before explaining it");
+
+    mockAuthState.value.user = null;
+    mockAuthState.value.isAuthenticated = false;
+    await rerenderHomePage();
+
+    expect(container.textContent).toContain("Home rendered without an authenticated user");
+    expect(errorSpy.mock.calls.flat().join("\n")).not.toMatch(/Rendered fewer hooks|Rendered more hooks|change in the order of Hooks/i);
+    errorSpy.mockRestore();
+  });
+
+  it("clears previous user Home content immediately when the auth user changes", async () => {
+    setApiFixtures();
+    const nextInspirations = deferred<ApiInspiration[]>();
+    const nextTopOfMind = deferred<ApiTopOfMind>();
+    const nextTopOfMindNotes = deferred<ApiTopOfMindNoteSurface[]>();
+
+    const container = await renderHomePage();
+    expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+
+    vi.mocked(fetchInspirations).mockReturnValueOnce(nextInspirations.promise);
+    vi.mocked(fetchTopOfMind).mockReturnValueOnce(nextTopOfMind.promise);
+    vi.mocked(fetchTopOfMindNotes).mockReturnValueOnce(nextTopOfMindNotes.promise);
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "lake@example.com",
+      name: "Lake",
+      preferredLocale: "en-US",
+    };
+
+    await rerenderHomePage();
+
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+
+    nextInspirations.resolve([
+      persistedInspiration({
+        id: "insp-user-2",
+        userId: "user-2",
+        text: "Lake account inspiration about kiln shelves",
+      }),
+    ]);
+    nextTopOfMind.resolve({
+      ...sampleTopOfMind,
+      headline: "kiln shelves are the new calendar",
+    });
+    nextTopOfMindNotes.resolve([
+      {
+        ...sampleTopOfMindNote,
+        id: "note-user-2",
+        userId: "user-2",
+        title: "kiln shelves are the new calendar",
+        ambientSignal: "kiln shelves are the new calendar",
+      },
+    ]);
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+    expect(container.textContent).toContain("Lake account inspiration about kiln shelves");
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+  });
+
+  it("ignores stale User A async responses after switching to User B", async () => {
+    const userAFetch = deferred<ApiInspiration[]>();
+    const userATopOfMind = deferred<ApiTopOfMind>();
+    const userANotes = deferred<ApiTopOfMindNoteSurface[]>();
+    vi.mocked(fetchInspirations).mockReturnValueOnce(userAFetch.promise);
+    vi.mocked(fetchTopOfMind).mockReturnValueOnce(userATopOfMind.promise);
+    vi.mocked(fetchTopOfMindNotes).mockReturnValueOnce(userANotes.promise);
+
+    const container = await renderHomePage();
+    expect(fetchInspirations).toHaveBeenCalledTimes(1);
+
+    vi.mocked(fetchInspirations).mockResolvedValueOnce([
+      persistedInspiration({
+        id: "insp-user-2",
+        userId: "user-2",
+        text: "Lake account inspiration about kiln shelves",
+      }),
+    ]);
+    vi.mocked(fetchTopOfMind).mockResolvedValueOnce({
+      ...sampleTopOfMind,
+      headline: "kiln shelves are the new calendar",
+    });
+    vi.mocked(fetchTopOfMindNotes).mockResolvedValueOnce([
+      {
+        ...sampleTopOfMindNote,
+        id: "note-user-2",
+        userId: "user-2",
+        title: "kiln shelves are the new calendar",
+        ambientSignal: "kiln shelves are the new calendar",
+      },
+    ]);
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "lake@example.com",
+      name: "Lake",
+      preferredLocale: "en-US",
+    };
+    await rerenderHomePage();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+
+    userAFetch.resolve(sampleInspirations);
+    userATopOfMind.resolve(sampleTopOfMind);
+    userANotes.resolve([sampleTopOfMindNote]);
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+  });
 
   it("shows saved-inspiration feedback affordances directly after expanded detail", async () => {
     setApiFixtures();
@@ -984,6 +1128,66 @@ describe("HomePage current home experience", () => {
     expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
     expect(container.textContent).toContain("could not delete inspiration. It is back in the drawer.");
     expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+  });
+
+  it("does not restore a failed saved-inspiration delete after the auth user changes", async () => {
+    setApiFixtures();
+    const deleteRequest = deferred<void>();
+    vi.mocked(deleteInspiration).mockReturnValueOnce(deleteRequest.promise);
+
+    const container = await renderHomePage();
+    const detail = await openBridgeDetail(container);
+    const deleteSaved = Array.from(detail.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "delete",
+    );
+
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).toContain("inspiration deleted. You can undo it.");
+
+    await waitForTimers(4300);
+    await flushReactWork();
+    expect(deleteInspiration).toHaveBeenCalledWith("insp-1");
+
+    setApiFixtures({
+      inspirations: [],
+      topOfMind: {
+        ...sampleTopOfMind,
+        headline: "kiln shelves are the new calendar",
+      },
+      topOfMindNotes: [
+        {
+          ...sampleTopOfMindNote,
+          id: "note-user-2",
+          userId: "user-2",
+          title: "kiln shelves are the new calendar",
+          ambientSignal: "kiln shelves are the new calendar",
+        },
+      ],
+      savedSignals: [],
+    });
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "lake@example.com",
+      name: "Lake",
+      preferredLocale: "en-US",
+    };
+    await rerenderHomePage();
+
+    deleteRequest.reject(new Error("delete failed"));
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("kiln shelves are the new calendar");
+    expect(container.textContent).not.toContain("could not delete inspiration. It is back in the drawer.");
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+
+    await clickSavesTab(container, 0);
+    await waitForTimers(130);
+    await flushReactWork();
+    expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
   });
 
   it("clears the undo status after a saved-inspiration delete succeeds", async () => {
@@ -2313,6 +2517,110 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("2 saved");
     expect(container.textContent).not.toContain("Other user save should never render");
+  });
+
+  it("does not render prior-user inspirations or post-its on the synchronous auth-switch frame", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+
+    expect(container.textContent).toContain("make the thing before explaining it");
+    expect(container.textContent).toContain("Architecture essay about bridge rhythms");
+
+    const deferredInspirations = deferred<ApiInspiration[]>();
+    const deferredTopOfMind = deferred<ApiTopOfMind>();
+    const deferredTopOfMindNotes = deferred<ApiTopOfMindNoteSurface[]>();
+    vi.mocked(fetchInspirations).mockReturnValue(deferredInspirations.promise);
+    vi.mocked(fetchTopOfMind).mockReturnValue(deferredTopOfMind.promise);
+    vi.mocked(fetchTopOfMindNotes).mockReturnValue(deferredTopOfMindNotes.promise);
+    vi.mocked(fetchSavedSignals).mockResolvedValue([]);
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "sky@example.com",
+      name: "Sky",
+      preferredLocale: "en-US",
+    };
+
+    rerenderHomePageSynchronously(() => {
+      expect(container.textContent).toContain("sky's top of mind");
+      expect(container.textContent).not.toContain("river's top of mind");
+      expect(container.textContent).not.toContain("make the thing before explaining it");
+      expect(container.textContent).not.toContain("Architecture essay about bridge rhythms");
+      expect(container.textContent).not.toContain("Synthetic memory note");
+    });
+
+    await flushReactWork();
+  });
+
+  it("does not commit a stale Top of Mind edit after the active user changes", async () => {
+    const delayedUpdate = deferred<ApiTopOfMindNoteSurface>();
+    vi.mocked(updateTopOfMindNote).mockReturnValueOnce(delayedUpdate.promise);
+    setApiFixtures();
+    const container = await renderHomePage();
+    const rewrite = container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit");
+    expect(rewrite).not.toBeNull();
+
+    await act(async () => {
+      setInputValue(rewrite!, "prior user's private rewrite");
+    });
+    await flushReactWork();
+    await waitForTimers(700);
+    await flushReactWork();
+    expect(container.textContent).toContain("prior user's private rewrite");
+
+    setApiFixtures({ inspirations: [], topOfMindNotes: [], savedSignals: [] });
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "sky@example.com",
+      name: "Sky",
+      preferredLocale: "en-US",
+    };
+    rerenderHomePageSynchronously();
+
+    delayedUpdate.resolve({
+      ...sampleTopOfMindNote,
+      title: "prior user's private rewrite",
+      ambientSignal: "prior user's private rewrite",
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    expect(container.textContent).toContain("sky's top of mind");
+    expect(container.textContent).not.toContain("prior user's private rewrite");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+  });
+
+  it("does not restore prior-user Top of Mind notes when pull-down fails after auth switch", async () => {
+    const delayedFeedback = deferred<Awaited<ReturnType<typeof createFeedback>>>();
+    vi.mocked(createFeedback).mockReturnValueOnce(delayedFeedback.promise);
+    setApiFixtures();
+    const container = await renderHomePage();
+    const deleteButton = container.querySelector<HTMLButtonElement>(".nc-note-icon-btn--delete");
+    expect(deleteButton).not.toBeNull();
+
+    await act(async () => {
+      deleteButton?.click();
+    });
+    await flushReactWork();
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+
+    setApiFixtures({ inspirations: [], topOfMindNotes: [], savedSignals: [] });
+    mockAuthState.value.user = {
+      id: "user-2",
+      email: "sky@example.com",
+      name: "Sky",
+      preferredLocale: "en-US",
+    };
+    rerenderHomePageSynchronously();
+
+    await act(async () => {
+      delayedFeedback.reject(new Error("offline"));
+      await delayedFeedback.promise.catch(() => undefined);
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("sky's top of mind");
+    expect(container.textContent).not.toContain("make the thing before explaining it");
+    expect(container.textContent).not.toContain("could not change post-it");
   });
 
   it("keeps the capture form closed and legacy Home switcher absent on first paint", async () => {
