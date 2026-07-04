@@ -960,6 +960,184 @@ describe("HomePage current home experience", () => {
     expect(actions?.textContent).not.toContain("delete");
   });
 
+  it("localizes active Home drawer and top-of-mind controls in Korean", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    const delayedQuestion = deferred<Awaited<ReturnType<typeof generateGuidedReflectionQuestion>>>();
+    vi.mocked(generateGuidedReflectionQuestion).mockReturnValueOnce(delayedQuestion.promise);
+    vi.mocked(updateInspiration).mockResolvedValueOnce({
+      ...sampleInspirations[0],
+      text: "Architecture essay about bridge rhythms in city walks revised",
+      updatedAt: "2026-05-14T16:45:00.000Z",
+    });
+    setApiFixtures();
+
+    const container = await renderHomePage();
+    const note = container.querySelector<HTMLElement>(".nc-note");
+    expect(note).not.toBeNull();
+    expect(container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit")?.getAttribute("aria-label")).toBe(
+      "포스트잇 수정",
+    );
+    const pin = note?.querySelector<HTMLButtonElement>(".nc-note-icon-btn--pin");
+    const noteDelete = note?.querySelector<HTMLButtonElement>(".nc-note-icon-btn--delete");
+    expect(note?.querySelector(".nc-note-preview")?.getAttribute("aria-label")).toBe("포스트잇 미리보기");
+    expect(pin?.getAttribute("aria-label")).toBe("고정");
+    expect(pin?.getAttribute("title")).toBe("고정");
+    expect(noteDelete?.getAttribute("aria-label")).toBe("삭제");
+    expect(noteDelete?.getAttribute("title")).toBe("삭제");
+    const evidence = note?.querySelector<HTMLButtonElement>(".nc-note-inspiration-slide");
+    expect(evidence?.textContent).toContain("영감 1개가 여기로 이어짐");
+
+    await act(async () => {
+      evidence?.click();
+    });
+    await flushReactWork();
+
+    expect(container.querySelector<HTMLElement>(".memory-path-panel")?.getAttribute("aria-label")).toBe(
+      "저장된 영감 목록",
+    );
+    expect(container.querySelector<HTMLElement>(".memory-path-filters")?.getAttribute("aria-label")).toBe(
+      "저장된 영감 경로",
+    );
+    expect(container.querySelector(".memory-path-filter--active")?.textContent).toContain("탑오브마인드");
+    expect(container.querySelector<HTMLInputElement>('.nc-drawer-search input[type="search"]')?.placeholder).toBe(
+      "저장된 영감 검색",
+    );
+    expect(container.querySelector<HTMLElement>(".nc-bottom-bar")?.getAttribute("aria-label")).toBe("하단 작업");
+    expect(container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.getAttribute("aria-label")).toBe(
+      "방으로 돌아가기",
+    );
+
+    const drawerSave = container.querySelector<HTMLButtonElement>(".memory-contents-item");
+    await act(async () => {
+      drawerSave?.click();
+    });
+    await flushReactWork();
+    await flushReactWork();
+
+    const detail = container.querySelector<HTMLElement>(".memory-contents-item--expanded");
+    expect(detail).not.toBeNull();
+    expect(detail?.querySelector<HTMLButtonElement>(".memory-contents-collapse")?.getAttribute("aria-label")).toBe(
+      "영감 접기",
+    );
+    const editor = detail!.querySelector<HTMLTextAreaElement>(".memory-contents-expanded-editor");
+    expect(editor?.getAttribute("aria-label")).toBe("저장된 영감 수정");
+    expect(detail?.querySelector<HTMLElement>(".memory-contents-feedback-actions")?.getAttribute("aria-label")).toBe(
+      "영감 피드백",
+    );
+    expect(
+      detail?.querySelector<HTMLButtonElement>(".memory-contents-feedback-action")?.getAttribute("aria-label"),
+    ).toBe("영감 피드백: 아직 살아 있음");
+
+    await act(async () => {
+      setInputValue(editor!, "Architecture essay about bridge rhythms in city walks cancelled");
+    });
+    await flushReactWork();
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.getAttribute("aria-label")).toBe(
+      "수정한 영감 저장",
+    );
+    expect(container.querySelector<HTMLButtonElement>(".nc-edit-cancel")?.textContent).toBe("수정 취소");
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-edit-cancel")?.click();
+    });
+    await flushReactWork();
+    expect(updateInspiration).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setInputValue(editor!, "Architecture essay about bridge rhythms in city walks revised");
+    });
+    await flushReactWork();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+    expect(updateInspiration).toHaveBeenCalledWith("insp-1", {
+      text: "Architecture essay about bridge rhythms in city walks revised",
+    });
+
+    const reflect = Array.from(detail!.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+      button.textContent?.includes("조금 더 생각하기"),
+    );
+    await act(async () => {
+      reflect?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector(".nc-drawer-reflect-question")?.textContent).toContain(
+      "이 영감을 위한 질문을 찾는 중...",
+    );
+    const answer = container.querySelector<HTMLTextAreaElement>(".nc-drawer-reflect textarea");
+    expect(answer?.getAttribute("aria-label")).toBe("돌아보기 답변");
+    expect(answer?.placeholder).toBe("여기에 답하기");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("이전");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("다음");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("저장");
+    expect(container.querySelector(".nc-drawer-reflect-actions")?.textContent).toContain("취소");
+    await act(async () => {
+      delayedQuestion.resolve({ question: "이 영감이 지금 묻는 것은 무엇인가요?", source: "model" });
+      await delayedQuestion.promise;
+    });
+    await flushReactWork();
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".nc-drawer-reflect-actions button"))
+        .find((button) => button.textContent?.trim() === "취소")
+        ?.click();
+    });
+    await flushReactWork();
+
+    const deleteSaved = Array.from(detail!.querySelectorAll<HTMLButtonElement>(".memory-contents-expanded-actions button")).find(
+      (button) => button.textContent?.trim() === "삭제",
+    );
+    await act(async () => {
+      deleteSaved?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.getAttribute("aria-label")).toBe(
+      "영감이 삭제됨, 되돌리기",
+    );
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("영감이 삭제됨 · 되돌리기");
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-save")?.click();
+    });
+    await flushReactWork();
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>(".nc-drawer-object")?.click();
+    });
+    await flushReactWork();
+    await waitForTimers(380);
+    await flushReactWork();
+    const visibleNoteDelete = container.querySelector<HTMLButtonElement>(".nc-note-icon-btn--delete");
+    expect(visibleNoteDelete).not.toBeNull();
+    await act(async () => {
+      visibleNoteDelete?.click();
+    });
+    await flushReactWork();
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.getAttribute("aria-label")).toBe(
+      "포스트잇이 삭제됨, 되돌리기",
+    );
+    expect(container.querySelector<HTMLButtonElement>(".nc-save")?.textContent).toContain("포스트잇이 삭제됨 · 되돌리기");
+
+    const scopedControlCopy = [
+      ...Array.from(container.querySelectorAll<HTMLElement>(".nc-note-preview")),
+      ...Array.from(container.querySelectorAll<HTMLElement>(".nc-note-actions button, .nc-note-inspiration-slide")),
+      ...Array.from(
+        container.querySelectorAll<HTMLElement>(
+          ".memory-path-filter, .memory-contents-collapse, .memory-contents-feedback-action, .memory-contents-expanded-actions button, .nc-bottom-bar button, .nc-drawer-reflect-actions button",
+        ),
+      ),
+      ...Array.from(container.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("textarea, input")),
+    ]
+      .flatMap((element) => [
+        element.textContent ?? "",
+        element.getAttribute("aria-label") ?? "",
+        element.getAttribute("title") ?? "",
+        element.getAttribute("placeholder") ?? "",
+      ])
+      .join(" ");
+    expect(scopedControlCopy).not.toMatch(
+      /saved inspiration feedback|edit saved inspiration|collapse inspiration|reflection conversation|answer reflection prompt|answer here|cancel edit|bottom actions|back home|unpin post-it|\b(Pin|Delete|reflect|previous|next|cancel)\b|inspiration was deleted|sticky note was deleted|inspirations? led here/i,
+    );
+  });
+
   it("renders persisted Reflect Deeper transcript in saved inspiration detail after fetch", async () => {
     setApiFixtures();
     vi.mocked(fetchReflections).mockResolvedValue([
@@ -1971,7 +2149,7 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
     const container = await renderHomePage();
 
-    expect(container.textContent).toContain("river's top of mind");
+    expect(container.textContent).toContain("river의 탑오브마인드");
     expect(container.textContent).not.toContain("떠오른 생각은 자주 사라집니다.");
     expect(container.textContent).not.toContain("쓴 것이 아니라");
     expect(container.textContent).toContain("make the thing before explaining it");
