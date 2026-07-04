@@ -1640,7 +1640,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.textContent).toContain("capture inspiration");
     expect(container.textContent).not.toContain("RAW_GRAPH_LABEL_frequency_scaffold");
@@ -1649,6 +1649,25 @@ describe("HomePage current home experience", () => {
     expect(container.textContent).not.toContain("Supporting signals");
     expect(container.textContent).not.toContain("Memory movement");
     expect(container.textContent).not.toContain("frequency scaffold");
+  });
+
+  it("shows first-run expectation guidance instead of an empty wall", async () => {
+    setApiFixtures({ topOfMindNotes: [], savedSignals: [], inspirations: [] });
+
+    const container = await renderHomePage();
+    const guide = container.querySelector<HTMLElement>(".nc-first-run-guide");
+
+    expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
+    expect(guide).not.toBeNull();
+    expect(guide?.getAttribute("aria-label")).toBe("Start with one small loop");
+    expect(guide?.textContent).toContain("Save the first inspiration that is tugging at you.");
+    expect(guide?.textContent).toContain("Add a few words about what pulled you toward it.");
+    expect(guide?.textContent).toContain(
+      "As you save and reflect, WAKA starts noticing patterns as provisional post-its.",
+    );
+    expect(guide?.textContent).not.toContain("signal");
+    expect(guide?.textContent).not.toContain("graph");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
   });
 
   it("keeps ko-KR users on the safe empty state instead of English preview scaffolds", async () => {
@@ -1677,12 +1696,31 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "첫 영감을 기록하면 WAKA가 해석하고 연결합니다. 관련된 영감이 모이면 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
+      "첫 영감을 기록하세요. 저장하고 돌아볼수록 WAKA가 반복되는 패턴을 연결하고, 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     );
     expect(container.textContent).not.toContain("English-only deterministic scaffold card");
     expect(container.textContent).not.toContain("Top of mind: English fallback scaffold");
     expect(container.textContent).not.toContain("Capture inspirations to generate your top of mind stickies.");
     expect(container.textContent).not.toContain("Supporting signals");
+  });
+
+  it("localizes first-run expectation guidance for ko-KR users", async () => {
+    mockAuthState.value.user.preferredLocale = "ko-KR";
+    setApiFixtures({ topOfMindNotes: [], savedSignals: [], inspirations: [] });
+
+    const container = await renderHomePage();
+    const guide = container.querySelector<HTMLElement>(".nc-first-run-guide");
+
+    expect(guide).not.toBeNull();
+    expect(guide?.getAttribute("aria-label")).toBe("처음에는 이렇게 시작하세요");
+    expect(guide?.textContent).toContain("지금 마음에 걸리는 영감 하나를 저장하세요.");
+    expect(guide?.textContent).toContain("왜 끌렸는지 몇 단어만 덧붙이세요.");
+    expect(guide?.textContent).toContain(
+      "영감과 돌아보기가 쌓이면 WAKA가 반복되는 패턴을 임시 포스트잇으로 보여줍니다.",
+    );
+    expect(guide?.textContent).not.toContain("signal");
+    expect(guide?.textContent).not.toContain("graph");
+    expect(container.querySelector(".nc-save")?.textContent).toContain("영감 기록");
   });
 
   it("treats post-its as intentional inline editing surfaces without opening a modal", async () => {
@@ -2037,7 +2075,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-note-modal")).toBeNull();
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.textContent).not.toContain("ambition signal");
     expect(container.textContent).not.toContain("Waiting for a stronger signal to earn this spot.");
@@ -2096,7 +2134,7 @@ describe("HomePage current home experience", () => {
     expect(container.querySelector(".nc-topbar")).toBeNull();
     expect(container.querySelector(".nc-mode")).toBeNull();
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.querySelector(".nc-drawer-object")?.textContent).toContain("0 saved");
     expect(container.querySelector(".nc-save")?.textContent).toContain("capture inspiration");
@@ -2109,7 +2147,7 @@ describe("HomePage current home experience", () => {
 
     expect(container.querySelectorAll(".nc-note")).toHaveLength(0);
     expect(container.textContent).toContain(
-      "Capture an inspiration and WAKA will interpret and connect it. Once related inspirations gather, provisional post-its you can correct will appear here.",
+      "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     );
     expect(container.textContent).not.toContain("rooms where people can be honest before they are impressive");
     expect(container.textContent).not.toContain("ambition signal");
