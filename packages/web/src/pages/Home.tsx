@@ -123,6 +123,7 @@ type TopOfMindFeedbackValue = Extract<
 >;
 type SavedSignalFeedbackValue = Extract<ApiFeedbackValue, "true" | "partly" | "not_true">;
 type FeedbackStatus = "idle" | "saving" | "saved" | "error";
+type DrawerActionStatus = { tone: "status" | "error"; message: string } | null;
 type MemoryConstellationVisual = "note" | "link" | "image" | "mixed";
 type SupportingThoughtSignal = HomeThoughtCard["supportingSignals"][number];
 
@@ -1268,6 +1269,13 @@ const HOME_COPY = {
     drawerUndoCta: "영감이 삭제됨 · 되돌리기",
     drawerSaveEditedAria: "수정한 영감 저장",
     drawerSaveEditedCta: "저장",
+    drawerEditSaving: "영감 저장 중...",
+    drawerEditSaved: "영감이 저장되었습니다",
+    drawerEditError: "영감 수정을 저장하지 못했습니다",
+    drawerDeletePending: "영감이 삭제되었습니다. 되돌릴 수 있습니다.",
+    drawerDeleteError: "영감을 삭제하지 못했습니다. 다시 서랍에 넣었습니다.",
+    drawerUndoRestored: "영감을 다시 넣었습니다",
+    drawerUndoError: "영감을 되돌리지 못했습니다",
     topOfMindUndoAria: "포스트잇이 삭제됨, 되돌리기",
     topOfMindUndoCta: "포스트잇이 삭제됨 · 되돌리기",
     savingShort: "저장 중...",
@@ -1282,6 +1290,8 @@ const HOME_COPY = {
     reflectionNext: "다음",
     reflectionSave: "저장",
     reflectionCancel: "취소",
+    reflectionQuestionError: "새 질문을 찾지 못해 기본 질문을 보여드립니다.",
+    reflectionSaveError: "돌아보기를 저장하지 못했습니다",
     loadingThoughts: "생각을 모으는 중...",
     emptyThoughts: "첫 영감을 기록하세요. 저장하고 돌아볼수록 WAKA가 반복되는 패턴을 연결하고, 고치기 쉬운 임시 포스트잇이 여기에 나타납니다.",
     firstRunTitle: "처음에는 이렇게 시작하세요",
@@ -1395,6 +1405,13 @@ const HOME_COPY = {
     drawerUndoCta: "inspiration was deleted · undo",
     drawerSaveEditedAria: "save edited inspiration",
     drawerSaveEditedCta: "save",
+    drawerEditSaving: "saving inspiration...",
+    drawerEditSaved: "inspiration saved",
+    drawerEditError: "could not save inspiration edit",
+    drawerDeletePending: "inspiration deleted. You can undo it.",
+    drawerDeleteError: "could not delete inspiration. It is back in the drawer.",
+    drawerUndoRestored: "inspiration restored",
+    drawerUndoError: "could not undo inspiration deletion",
     topOfMindUndoAria: "sticky note was deleted, undo",
     topOfMindUndoCta: "sticky note was deleted · undo",
     savingShort: "saving...",
@@ -1409,6 +1426,8 @@ const HOME_COPY = {
     reflectionNext: "next",
     reflectionSave: "save",
     reflectionCancel: "cancel",
+    reflectionQuestionError: "Could not find a new question, so this fallback is here.",
+    reflectionSaveError: "could not save reflection",
     loadingThoughts: "gathering what is top of mind...",
     emptyThoughts: "Capture an inspiration. As you save and reflect, WAKA connects recurring patterns, and provisional post-its you can correct will appear here.",
     firstRunTitle: "Start with one small loop",
@@ -1508,6 +1527,13 @@ const HOME_COPY = {
     drawerUndoCta: string;
     drawerSaveEditedAria: string;
     drawerSaveEditedCta: string;
+    drawerEditSaving: string;
+    drawerEditSaved: string;
+    drawerEditError: string;
+    drawerDeletePending: string;
+    drawerDeleteError: string;
+    drawerUndoRestored: string;
+    drawerUndoError: string;
     topOfMindUndoAria: string;
     topOfMindUndoCta: string;
     savingShort: string;
@@ -1522,6 +1548,8 @@ const HOME_COPY = {
     reflectionNext: string;
     reflectionSave: string;
     reflectionCancel: string;
+    reflectionQuestionError: string;
+    reflectionSaveError: string;
     loadingThoughts: string;
     emptyThoughts: string;
     firstRunTitle: string;
@@ -1641,6 +1669,7 @@ export function HomePage(): JSX.Element {
   const [savedSignalDetailLoading, setSavedSignalDetailLoading] = useState(false);
   const [savedSignalDrafts, setSavedSignalDrafts] = useState<Record<string, string>>({});
   const [savedSignalEditSaving, setSavedSignalEditSaving] = useState(false);
+  const [drawerActionStatus, setDrawerActionStatus] = useState<DrawerActionStatus>(null);
   const [savedSignalFeedback, setSavedSignalFeedback] = useState<
     Record<
       string,
@@ -1668,6 +1697,7 @@ export function HomePage(): JSX.Element {
   >(() => new Set());
   const [savedSignalReflectionStepIndex, setSavedSignalReflectionStepIndex] = useState(0);
   const [savedSignalReflectionSaving, setSavedSignalReflectionSaving] = useState(false);
+  const [savedSignalReflectionQuestionError, setSavedSignalReflectionQuestionError] = useState<string | null>(null);
   const [savedSignalReflectionError, setSavedSignalReflectionError] = useState<string | null>(null);
   const savedSignalReflectionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const savedSignalReflectionRequestSeqRef = useRef(0);
@@ -3304,6 +3334,7 @@ export function HomePage(): JSX.Element {
     setSavedSignalReflectionQuestions([]);
     setSavedSignalReflectionQuestionLoadingSteps(new Set());
     setSavedSignalReflectionStepIndex(0);
+    setSavedSignalReflectionQuestionError(null);
     setSavedSignalReflectionError(null);
     savedSignalReflectionRequestSeqRef.current += 1;
   };
@@ -3324,6 +3355,7 @@ export function HomePage(): JSX.Element {
       SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[stepIndex] ??
       SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS[SAVED_SIGNAL_REFLECTION_FALLBACK_QUESTIONS.length - 1];
     setSavedSignalReflectionQuestionLoadingSteps((current) => new Set(current).add(stepIndex));
+    setSavedSignalReflectionQuestionError(null);
     const text =
       savedSignalDetail?.id === signal.id
         ? savedSignalDetail.rawText
@@ -3367,6 +3399,7 @@ export function HomePage(): JSX.Element {
           next[stepIndex] = fallback;
           return next;
         });
+        setSavedSignalReflectionQuestionError(copy.reflectionQuestionError);
       },
     );
   };
@@ -3425,6 +3458,7 @@ export function HomePage(): JSX.Element {
     if (!selectedDrawerSignal || !selectedDrawerHasEdit || savedSignalEditSaving) return;
     const nextText = selectedDrawerDraftText.trim();
     setSavedSignalEditSaving(true);
+    setDrawerActionStatus({ tone: "status", message: copy.drawerEditSaving });
     try {
       const updated = await updateInspiration(selectedDrawerSignal.id, { text: nextText });
       const nextSignal = {
@@ -3455,8 +3489,15 @@ export function HomePage(): JSX.Element {
         delete next[updated.id];
         return next;
       });
+      setDrawerActionStatus({ tone: "status", message: copy.drawerEditSaved });
     } catch (error) {
       console.error("[home] failed to update saved inspiration:", error);
+      setSavedSignalDrafts((current) => {
+        const next = { ...current };
+        delete next[selectedDrawerSignal.id];
+        return next;
+      });
+      setDrawerActionStatus({ tone: "error", message: copy.drawerEditError });
     } finally {
       setSavedSignalEditSaving(false);
     }
@@ -3479,6 +3520,7 @@ export function HomePage(): JSX.Element {
     if (payload.length === 0) return;
     setSavedSignalReflectionSaving(true);
     setSavedSignalReflectionError(null);
+    setDrawerActionStatus(null);
     try {
       const results = await Promise.all(
         payload.map((item) =>
@@ -3501,9 +3543,8 @@ export function HomePage(): JSX.Element {
       }
       cancelSavedSignalReflection();
     } catch (error) {
-      setSavedSignalReflectionError(
-        error instanceof Error ? error.message : "Could not save that reflection.",
-      );
+      console.error("[home] failed to save reflection:", error);
+      setSavedSignalReflectionError(copy.reflectionSaveError);
     } finally {
       setSavedSignalReflectionSaving(false);
     }
@@ -3518,6 +3559,7 @@ export function HomePage(): JSX.Element {
       return;
     }
     setSelectedSavedSignalId(signal.id);
+    setDrawerActionStatus(null);
     setSavedSignalDrafts((current) => {
       if (current[signal.id] !== undefined) return current;
       const immediateText = savedInspirationTextById.get(signal.id);
@@ -3531,6 +3573,7 @@ export function HomePage(): JSX.Element {
       setSelectedSavedSignalId(signal.id);
     }
     setSavedSignalReflectingId(signal.id);
+    setDrawerActionStatus(null);
     setSavedSignalReflectionAnswers([]);
     setSavedSignalReflectionQuestions([]);
     setSavedSignalReflectionQuestionLoadingSteps(new Set());
@@ -3544,16 +3587,22 @@ export function HomePage(): JSX.Element {
 
   const undoDeletedSavedSignal = () => {
     if (!deletedSavedSignalUndo) return;
-    if (deletedSavedSignalUndoTimerRef.current !== null) {
-      window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
-      deletedSavedSignalUndoTimerRef.current = null;
+    try {
+      if (deletedSavedSignalUndoTimerRef.current !== null) {
+        window.clearTimeout(deletedSavedSignalUndoTimerRef.current);
+        deletedSavedSignalUndoTimerRef.current = null;
+      }
+      const { signal, detail } = deletedSavedSignalUndo;
+      setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
+      setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+      if (detail) setSavedSignalDetail(detail);
+      setSelectedSavedSignalId(signal.id);
+      setDeletedSavedSignalUndo(null);
+      setDrawerActionStatus({ tone: "status", message: copy.drawerUndoRestored });
+    } catch (error) {
+      console.error("[home] failed to undo saved inspiration delete:", error);
+      setDrawerActionStatus({ tone: "error", message: copy.drawerUndoError });
     }
-    const { signal, detail } = deletedSavedSignalUndo;
-    setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
-    setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
-    if (detail) setSavedSignalDetail(detail);
-    setSelectedSavedSignalId(signal.id);
-    setDeletedSavedSignalUndo(null);
   };
 
   const deleteSavedSignalFromDrawer = (signal: ApiSavedSignalSearchResult): void => {
@@ -3562,6 +3611,7 @@ export function HomePage(): JSX.Element {
       deletedSavedSignalUndoTimerRef.current = null;
     }
     const detail = savedSignalDetail?.id === signal.id ? savedSignalDetail : null;
+    setDrawerActionStatus({ tone: "status", message: copy.drawerDeletePending });
     setDeletedSavedSignalUndo({ signal, detail });
     setSavedSignals((prev) => prev.filter((item) => item.id !== signal.id));
     setEntries((prev) => prev.filter((item) => item.id !== signal.id));
@@ -3578,6 +3628,7 @@ export function HomePage(): JSX.Element {
         console.error("[home] failed to delete saved inspiration:", error);
         setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
         setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+        setDrawerActionStatus({ tone: "error", message: copy.drawerDeleteError });
       });
       setDeletedSavedSignalUndo(null);
       deletedSavedSignalUndoTimerRef.current = null;
@@ -3743,6 +3794,7 @@ export function HomePage(): JSX.Element {
                 className="memory-contents-expanded-text memory-contents-expanded-editor"
                 value={draftText}
                 onChange={(event) => {
+                  setDrawerActionStatus(null);
                   setSavedSignalDrafts((current) => ({
                     ...current,
                     [signal.id]: event.currentTarget.value,
@@ -3755,6 +3807,15 @@ export function HomePage(): JSX.Element {
               />
             )}
           </div>
+          {drawerActionStatus ? (
+            <p
+              className={`memory-contents-feedback-status${
+                drawerActionStatus.tone === "error" ? " memory-contents-feedback-status--error" : ""
+              }`}
+            >
+              {drawerActionStatus.message}
+            </p>
+          ) : null}
           <section className="memory-contents-reflection-prompts">
             <div className="memory-contents-feedback-actions" aria-label={copy.savedSignalFeedbackLabel}>
               {copy.savedSignalFeedbackActions.map((action) => {
@@ -3958,6 +4019,15 @@ export function HomePage(): JSX.Element {
 	    return (
 	      <div className="memory-category-panel memory-path-panel" aria-label={copy.savedSignalListLabel}>
         {renderMemoryPathFilters()}
+        {drawerActionStatus ? (
+          <p
+            className={`memory-contents-feedback-status${
+              drawerActionStatus.tone === "error" ? " memory-contents-feedback-status--error" : ""
+            }`}
+          >
+            {drawerActionStatus.message}
+          </p>
+        ) : null}
 	        {savedSignalsError ? <p className="memory-relationship-empty">{savedSignalsError}</p> : null}
         {savedSignalsLoading && allSavedSignals.length === 0 ? (
           <p className="memory-relationship-empty">{copy.loadingSaves}</p>
@@ -4478,6 +4548,9 @@ export function HomePage(): JSX.Element {
               <div className="nc-drawer-reflect-question">
                 <span>{selectedDrawerReflectionProgress}</span>
                 <p id="saved-signal-reflection-question">{selectedDrawerReflectionQuestion}</p>
+                {savedSignalReflectionQuestionError ? (
+                  <small className="nc-drawer-reflect-status">{savedSignalReflectionQuestionError}</small>
+                ) : null}
               </div>
               <textarea
                 ref={savedSignalReflectionInputRef}
