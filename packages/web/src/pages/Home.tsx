@@ -3624,12 +3624,17 @@ export function HomePage(): JSX.Element {
       return next;
     });
     deletedSavedSignalUndoTimerRef.current = window.setTimeout(() => {
-      void deleteInspiration(signal.id).catch((error) => {
-        console.error("[home] failed to delete saved inspiration:", error);
-        setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
-        setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
-        setDrawerActionStatus({ tone: "error", message: copy.drawerDeleteError });
-      });
+      void deleteInspiration(signal.id).then(
+        () => {
+          setDrawerActionStatus(null);
+        },
+        (error) => {
+          console.error("[home] failed to delete saved inspiration:", error);
+          setSavedSignals((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signal, ...prev]));
+          setEntries((prev) => (prev.some((item) => item.id === signal.id) ? prev : [signalToListEntry(signal), ...prev]));
+          setDrawerActionStatus({ tone: "error", message: copy.drawerDeleteError });
+        },
+      );
       setDeletedSavedSignalUndo(null);
       deletedSavedSignalUndoTimerRef.current = null;
     }, 4200);
