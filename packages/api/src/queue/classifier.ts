@@ -64,6 +64,7 @@ import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "../lib/model-provider.js";
+import { spreadCaptureActivation } from "../lib/signal-activation.js";
 
 // ---------------------------------------------------------------------------
 // Legacy Lambda/SQS-shaped event types (minimal subset)
@@ -106,6 +107,7 @@ interface ClassificationJob {
 
 export interface ClassificationJobDependencies {
   generateAutoWowMoment?: typeof generateAutoWowMomentForInspiration;
+  spreadActivation?: typeof spreadCaptureActivation;
   modelProvider?: ModelProvider;
   userId?: string;
   backgroundJobId?: string;
@@ -208,7 +210,7 @@ export async function runClassificationJob(
       inspirationId,
       cluster: row.cluster,
     });
-    await attemptAutoWowGeneration(row, deps);
+    await runPostClassificationHooks(row, deps);
     return;
   }
 
@@ -221,7 +223,7 @@ export async function runClassificationJob(
       finishReason: result.finishReason,
       blockReason: result.blockReason,
     });
-    await attemptAutoWowGeneration(row, deps);
+    await runPostClassificationHooks(row, deps);
     return;
   }
 
@@ -247,7 +249,7 @@ export async function runClassificationJob(
     console.log("[classifier] update skipped, row already classified", {
       inspirationId: row.id,
     });
-    await attemptAutoWowGeneration(row, deps);
+    await runPostClassificationHooks(row, deps);
     return;
   }
 
@@ -258,7 +260,60 @@ export async function runClassificationJob(
     finishReason: result.finishReason,
   });
 
+  await runPostClassificationHooks(row, deps);
+}
+
+/**
+ * Best-effort tail of every classification pass: try the immediate pairwise
+ * judgment (auto WOW), then spread activation to the capture's semantic
+ * neighbors — the accumulation half of the spark engine. Both are fire-and-
+ * forget: failures never affect classification retry semantics.
+ */
+async function runPostClassificationHooks(
+  row: Inspiration,
+  deps: ClassificationJobDependencies,
+): Promise<void> {
   await attemptAutoWowGeneration(row, deps);
+  await attemptActivationSpread(row, deps);
+}
+
+/**
+ * Spreading activation: the new capture warms related old signals; when an
+ * accumulated cluster of individually weak signals crosses its threshold,
+ * the warmest of them is re-judged through the same generation seam. This
+ * is how "signals that matter little alone" get their second look.
+ */
+async function attemptActivationSpread(
+  row: Inspiration,
+  deps: ClassificationJobDependencies,
+): Promise<void> {
+  const spreadActivation = deps.spreadActivation ?? spreadCaptureActivation;
+  const generateAutoWowMoment =
+    deps.generateAutoWowMoment ?? generateAutoWowMomentForInspiration;
+
+  try {
+    const result = await spreadActivation(getDb(), {
+      userId: row.userId,
+      inspirationId: row.id,
+      generateForInspiration: (inspirationId) =>
+        generateAutoWowMoment({ db: getDb(), userId: row.userId, inspirationId }),
+    });
+    if (result?.fired) {
+      console.log("[classifier] convergence fired from accumulated activation", {
+        triggerInspirationId: row.id,
+        rejudgedInspirationId: result.rejudgedInspirationId,
+        potential: result.evaluation.potential,
+        threshold: result.evaluation.threshold,
+        contributors: result.evaluation.contributorCount,
+      });
+    }
+  } catch (err) {
+    console.warn("[classifier] activation spread threw", {
+      inspirationId: row.id,
+      userId: row.userId,
+      errorName: err instanceof Error ? err.name : typeof err,
+    });
+  }
 }
 
 async function attemptAutoWowGeneration(

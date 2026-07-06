@@ -3,13 +3,20 @@
 > **Status**: Phase 1 (Exporter + Vault interface) implemented. Phase 1 now
 > exports the signal, top-of-mind note, and context graph document shapes.
 > Phases 2–4 are design-only.
+>
+> **Format note (2026-07)**: on disk the vault is now an Open Knowledge
+> Format (OKF v0.1) bundle — markdown files with YAML frontmatter (`.md`),
+> plus `index.md`/`log.md` at the bundle root. The YAML examples below
+> show the logical fields; `text`/`why`/`description` live in the markdown
+> body on disk. See [`okf-vault-protocol.md`](./okf-vault-protocol.md) for
+> the exact serialization and the sync protocol built on it.
 
 WAKA currently stores both the *meaning* a user captured (inspiration text, sparks,
 reflections, WOW judgments) and the *machine signals* derived from it (scores,
 embeddings, revisit events, jobs) in one Postgres database. This document defines
 the target split:
 
-> **Vault (YAML files) = source of truth for meaning. **
+> **Vault (OKF markdown files) = source of truth for meaning. **
 >
 > **Index (DB) = a rebuildable projection on top of it.**
 
@@ -74,25 +81,27 @@ documents, and no human or agent can read or refine an inspiration as a file.
 ```
 vault/
   {userId}/
+    index.md                    # OKF reserved: what this bundle contains
+    log.md                      # OKF reserved: the temporal stream, newest day first
     signals/
       2026/06/
-        {signalId}.yaml
+        {signalId}.md
     top-of-mind/
       2026/06/
-        {topOfMindNoteId}.yaml
+        {topOfMindNoteId}.md
     context/
-      nodes/{type}--{slug}--{contextNodeId}.yaml
-      edges/{sourceSlug}--{kind}--{targetSlug}--{contextEdgeId}.yaml
+      nodes/{type}--{slug}--{contextNodeId}.md
+      edges/{sourceSlug}--{kind}--{targetSlug}--{contextEdgeId}.md
     manifest.yaml               # later phase: vault + schema versions, last reindex
 ```
 
 IDs are the existing UUIDs; the `YYYY/MM` partition comes from the row's
 `created_at` in UTC, so listing a month is a single prefix scan.
 
-### Signal document (`waka/signal@v1`)
+### Signal document (`waka/signal@v2`)
 
 ```yaml
-schema: waka/signal@v1
+schema: waka/signal@v2
 id: 0c8c52cf-…
 rev: 1
 created_at: 2026-06-10T02:31:00.000Z
@@ -129,10 +138,10 @@ attachments:
 # no embeddings. Those live only in the DB index.
 ```
 
-### Top-of-mind note document (`waka/top-of-mind-note@v1`)
+### Top-of-mind note document (`waka/top-of-mind-note@v2`)
 
 ```yaml
-schema: waka/top-of-mind-note@v1
+schema: waka/top-of-mind-note@v2
 id: 7d20c1b4-…
 rev: 1
 created_at: 2026-06-10T02:33:11.000Z
@@ -181,17 +190,17 @@ three vault directories map to the three layers of the ambition mirror:
 `signals/` is *what I noticed*, `top-of-mind/` is *what connected*,
 `context/nodes/` is *who I am becoming*.
 
-#### Node (`waka/context-node@v1`)
+#### Node (`waka/context-node@v2`)
 
 One file per concept at
-`context/nodes/{type}--{slug}--{contextNodeId}.yaml`. The filename carries a
+`context/nodes/{type}--{slug}--{contextNodeId}.md`. The filename carries a
 human-readable slug plus the UUID, so listing the directory reads as the user's
 lexicon while remaining collision-proof after slug normalization
-(`value--curiosity-driven-building--8f3a2c1d-....yaml`). A rename writes the
+(`value--curiosity-driven-building--8f3a2c1d-....md`). A rename writes the
 new path, deletes the old, and the index follows the `id`.
 
 ```yaml
-schema: waka/context-node@v1
+schema: waka/context-node@v2
 id: 8f3a2c1d-…              # DB id — survives renames
 rev: 4
 type: value                  # theme | value | person | environment | aesthetic
@@ -214,10 +223,10 @@ shows immediately *why it exists*, which is the same contestable-judgment
 philosophy applied to the graph. Evidence is append-mostly, so rev conflicts
 are rare.
 
-#### Edge (`waka/context-edge@v1`)
+#### Edge (`waka/context-edge@v2`)
 
 One file per relationship at
-`context/edges/{sourceSlug}--{kind}--{targetSlug}--{contextEdgeId}.yaml`.
+`context/edges/{sourceSlug}--{kind}--{targetSlug}--{contextEdgeId}.md`.
 A single `edges.yaml`
 would be rewritten on every reinforcement (hash churn), become the one
 write-contention bottleneck, and break "one document = one unit of meaning" —
@@ -228,7 +237,7 @@ collision-proof and the shortened slugs keep each filesystem path component
 below common filename length limits.
 
 ```yaml
-schema: waka/context-edge@v1
+schema: waka/context-edge@v2
 id: 2b7e9d40-…
 rev: 2
 kind: challenges             # supports | challenges | points_to | asks_for | reactivates
@@ -292,7 +301,7 @@ interface VaultStore {
 
 Writes are always **file first, index second**:
 
-1. Serialize to YAML → `VaultStore.put()` (S3 PUT is atomic).
+1. Serialize to OKF markdown → `VaultStore.put()` (S3 PUT is atomic).
 2. Upsert the `documents` row (optimistic lock on `rev`; the DB owns concurrency).
 3. If step 2 fails the file is newer than the index — a background reconciler
    compares `contentHash` and self-heals. Because the file is canonical the
@@ -313,7 +322,7 @@ when a thought is captured, and when a connection is recognized.
 ```
 ① Capture
    user saves a signal
-   → vault/{user}/signals/2026/06/{id}.yaml        (file: the memory itself)
+   → vault/{user}/signals/2026/06/{id}.md        (file: the memory itself)
    → documents index upsert                         (DB: its queryable shadow)
    → background_jobs enqueue
 
@@ -331,7 +340,7 @@ when a thought is captured, and when a connection is recognized.
    → { isTopOfMindNote, kind, why, related[] }
 
 ⑤ Birth — the first time a file is written in this flow
-   → vault/{user}/top-of-mind/2026/06/{noteId}.yaml (the full judgment as a document)
+   → vault/{user}/top-of-mind/2026/06/{noteId}.md (the full judgment as a document)
    → documents index row                            (for lists and ranking)
 ```
 
