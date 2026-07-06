@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 
 import type {
   ContextEdge,
@@ -10,6 +9,7 @@ import type {
   TopOfMindNoteSignal,
 } from "../db/index.js";
 import { exportUserVault, type VaultExportSource } from "./exporter.js";
+import { parseOkfMarkdown } from "./serialize.js";
 import {
   contentHash,
   type VaultPutResult,
@@ -219,17 +219,21 @@ describe("exportUserVault", () => {
     });
 
     expect(summary.signals.map((d) => d.path)).toEqual([
-      `${USER_ID}/signals/2026/06/${SIGNAL_A}.yaml`,
-      `${USER_ID}/signals/2026/06/${SIGNAL_B}.yaml`,
+      `${USER_ID}/signals/2026/06/${SIGNAL_A}.md`,
+      `${USER_ID}/signals/2026/06/${SIGNAL_B}.md`,
     ]);
     expect(summary.topOfMindNotes.map((d) => d.path)).toEqual([
-      `${USER_ID}/top-of-mind/2026/06/${NOTE_A}.yaml`,
+      `${USER_ID}/top-of-mind/2026/06/${NOTE_A}.md`,
     ]);
     expect(summary.contextNodes.map((d) => d.path)).toEqual([
-      `${USER_ID}/context/nodes/value--curiosity-driven-building--${CONTEXT_NODE_A}.yaml`,
+      `${USER_ID}/context/nodes/value--curiosity-driven-building--${CONTEXT_NODE_A}.md`,
     ]);
     expect(summary.contextEdges.map((d) => d.path)).toEqual([
-      `${USER_ID}/context/edges/value--curiosity-driven-buildin--${CONTEXT_NODE_A}--supports--project--waka-launch--${CONTEXT_NODE_B}--${CONTEXT_EDGE_A}.yaml`,
+      `${USER_ID}/context/edges/value--curiosity-driven-buildin--${CONTEXT_NODE_A}--supports--project--waka-launch--${CONTEXT_NODE_B}--${CONTEXT_EDGE_A}.md`,
+    ]);
+    expect(summary.bundle.map((d) => d.path)).toEqual([
+      `${USER_ID}/index.md`,
+      `${USER_ID}/log.md`,
     ]);
 
     for (const doc of [
@@ -237,17 +241,47 @@ describe("exportUserVault", () => {
       ...summary.topOfMindNotes,
       ...summary.contextNodes,
       ...summary.contextEdges,
+      ...summary.bundle,
     ]) {
       const stored = vault.files.get(doc.path);
       expect(stored).toBeDefined();
       expect(contentHash(stored!)).toBe(doc.contentHash);
     }
 
-    const note = parse(vault.files.get(summary.topOfMindNotes[0]!.path)!);
+    const note = parseOkfMarkdown(
+      vault.files.get(summary.topOfMindNotes[0]!.path)!,
+    ).frontmatter as Record<string, any>;
+    expect(note.type).toBe("top-of-mind-note");
     expect(note.related[0].id).toBe(SIGNAL_A);
 
-    const node = parse(vault.files.get(summary.contextNodes[0]!.path)!);
+    const node = parseOkfMarkdown(
+      vault.files.get(summary.contextNodes[0]!.path)!,
+    ).frontmatter as Record<string, any>;
+    expect(node.type).toBe("context-node");
     expect(node.evidence[0].signal).toBe(SIGNAL_A);
+  });
+
+  it("writes OKF reserved bundle files: an index and a temporal log", async () => {
+    const vault = new MemoryVault();
+    await exportUserVault({ source: makeSource(), vault, userId: USER_ID });
+
+    const index = vault.files.get(`${USER_ID}/index.md`)!;
+    // OKF §6: index files contain no frontmatter, only sections + entries.
+    expect(index.startsWith("---")).toBe(false);
+    expect(index).toContain("[signals/](signals/)");
+    expect(index).toContain("[top-of-mind/](top-of-mind/)");
+    expect(index).toContain("[context/nodes/](context/nodes/)");
+    expect(index).toContain("[log.md](log.md)");
+
+    const log = vault.files.get(`${USER_ID}/log.md`)!;
+    expect(log).toContain("# Directory Update Log");
+    expect(log).toContain("## 2026-06-10");
+    expect(log).toContain(`- **Capture**: [first](signals/2026/06/${SIGNAL_A}.md)`);
+    expect(log).toContain(`- **Spark**: [A bridge](top-of-mind/2026/06/${NOTE_A}.md)`);
+    expect(log).toContain(
+      `- **Emergence**: [value: Curiosity Driven Building](context/nodes/value--curiosity-driven-building--${CONTEXT_NODE_A}.md)`,
+    );
+    expect(log).toContain("- **Relation**: [Curiosity Driven Building supports WAKA Launch]");
   });
 
   it("is idempotent: re-export writes byte-identical documents", async () => {
@@ -269,6 +303,9 @@ describe("exportUserVault", () => {
     );
     expect(a.contextEdges.map((d) => d.contentHash)).toEqual(
       b.contextEdges.map((d) => d.contentHash),
+    );
+    expect(a.bundle.map((d) => d.contentHash)).toEqual(
+      b.bundle.map((d) => d.contentHash),
     );
   });
 });

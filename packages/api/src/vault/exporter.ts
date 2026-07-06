@@ -2,9 +2,17 @@
  * Vault exporter — Phase 1 of the Vault & Index migration.
  *
  * Reads existing content rows (read-only — the exporter never writes to the
- * database) and materializes them as YAML documents in a VaultStore. Safe to
- * run repeatedly: output is deterministic, so re-exporting unchanged rows
- * rewrites byte-identical files.
+ * database) and materializes them as OKF markdown documents in a VaultStore.
+ * Safe to run repeatedly: output is deterministic, so re-exporting unchanged
+ * rows rewrites byte-identical files.
+ *
+ * Besides the concept documents the exporter writes the two OKF reserved
+ * files at the bundle root:
+ *   - index.md — progressive-disclosure listing of the bundle's layers
+ *   - log.md   — the temporal stream (captures, sparks, emergences,
+ *     relations) grouped by ISO date, newest first. This is the vault's
+ *     inner-time-consciousness view: one file that reads as "how I changed
+ *     over time".
  *
  * The DB access is hidden behind VaultExportSource so the exporter itself is
  * pure and unit-testable; createDrizzleVaultExportSource adapts the real
@@ -36,7 +44,7 @@ import {
   contextNodeVaultPath,
   signalVaultPath,
   topOfMindNoteVaultPath,
-  toYaml,
+  toOkfMarkdown,
   type ContextEdgeExport,
   type ContextNodeExport,
   type SignalExport,
@@ -63,6 +71,109 @@ export interface VaultExportSummary {
   topOfMindNotes: ExportedDocument[];
   contextNodes: ExportedDocument[];
   contextEdges: ExportedDocument[];
+  /** OKF reserved bundle files: index.md and log.md at the user root. */
+  bundle: ExportedDocument[];
+}
+
+// ---------------------------------------------------------------------------
+// Bundle files (OKF reserved: index.md §6, log.md §7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Make a text safe for a markdown link label: collapse whitespace, strip
+ * link-breaking characters, and truncate. Deterministic by construction.
+ */
+function linkLabel(text: string, maxLength = 60): string {
+  const collapsed = text.replace(/[\[\]()]/g, "").replace(/\s+/g, " ").trim();
+  if (collapsed.length <= maxLength) return collapsed || "untitled";
+  return `${collapsed.slice(0, maxLength).trimEnd()}…`;
+}
+
+/** Per OKF §6 index files contain no frontmatter — sections + entries only. */
+function buildBundleIndexMarkdown(): string {
+  return [
+    "# WAKA Vault",
+    "",
+    "One person's captured meaning as an Open Knowledge Format bundle.",
+    "",
+    "- [signals/](signals/) - Episodic memory: captured signals, partitioned by YYYY/MM (UTC).",
+    "- [top-of-mind/](top-of-mind/) - Sparks: judged connections between signals, partitioned by YYYY/MM (UTC).",
+    "- [context/nodes/](context/nodes/) - Long-term memory: durable claims about who the user is becoming.",
+    "- [context/edges/](context/edges/) - Long-term memory: relationships between context claims.",
+    "- [log.md](log.md) - The temporal stream: captures, sparks, emergences, and relations, newest day first.",
+    "",
+  ].join("\n");
+}
+
+interface LogEvent {
+  at: Date;
+  entry: string;
+}
+
+/**
+ * Build the OKF §7 update log for one user's bundle. Entries are grouped by
+ * ISO date (newest first); within a day they run in the order they happened.
+ * Links are relative to the bundle root, where log.md lives.
+ */
+function buildBundleLogMarkdown(input: {
+  userId: string;
+  signals: SignalExport[];
+  topOfMindNotes: TopOfMindNoteExport[];
+  contextNodes: ContextNodeExport[];
+  contextEdges: ContextEdgeExport[];
+}): string {
+  const relative = (path: string) => path.slice(input.userId.length + 1);
+  const events: LogEvent[] = [];
+
+  for (const { signal } of input.signals) {
+    const path = relative(signalVaultPath(input.userId, signal.id, signal.createdAt));
+    events.push({
+      at: signal.createdAt,
+      entry: `- **Capture**: [${linkLabel(signal.text)}](${path})`,
+    });
+  }
+  for (const { note } of input.topOfMindNotes) {
+    const path = relative(topOfMindNoteVaultPath(input.userId, note.id, note.createdAt));
+    events.push({
+      at: note.createdAt,
+      entry: `- **Spark**: [${linkLabel(note.title)}](${path})`,
+    });
+  }
+  for (const { node } of input.contextNodes) {
+    const path = relative(contextNodeVaultPath(node));
+    events.push({
+      at: node.firstSeenAt,
+      entry: `- **Emergence**: [${node.type}: ${linkLabel(node.label)}](${path})`,
+    });
+  }
+  for (const item of input.contextEdges) {
+    const path = relative(contextEdgeVaultPath(item));
+    const label = `${linkLabel(item.sourceNode.label, 40)} ${item.edge.kind} ${linkLabel(item.targetNode.label, 40)}`;
+    events.push({
+      at: item.edge.createdAt,
+      entry: `- **Relation**: [${label}](${path})`,
+    });
+  }
+
+  const byDay = new Map<string, LogEvent[]>();
+  for (const event of events) {
+    const day = event.at.toISOString().slice(0, 10);
+    const bucket = byDay.get(day);
+    if (bucket) bucket.push(event);
+    else byDay.set(day, [event]);
+  }
+
+  const lines = ["# Directory Update Log"];
+  for (const day of [...byDay.keys()].sort().reverse()) {
+    lines.push("", `## ${day}`, "");
+    const dayEvents = byDay.get(day)!;
+    dayEvents.sort(
+      (a, b) => a.at.getTime() - b.at.getTime() || a.entry.localeCompare(b.entry),
+    );
+    for (const event of dayEvents) lines.push(event.entry);
+  }
+  lines.push("");
+  return lines.join("\n");
 }
 
 /**
@@ -77,37 +188,59 @@ export async function exportUserVault(options: {
 }): Promise<VaultExportSummary> {
   const { source, vault, userId } = options;
 
+  const signalItems = await source.listSignals(userId);
   const signalDocs: ExportedDocument[] = [];
-  for (const item of await source.listSignals(userId)) {
+  for (const item of signalItems) {
     const path = signalVaultPath(
       userId,
       item.signal.id,
       item.signal.createdAt,
     );
-    const { contentHash } = await vault.put(path, toYaml(buildSignalDoc(item)));
+    const { contentHash } = await vault.put(path, toOkfMarkdown(buildSignalDoc(item)));
     signalDocs.push({ path, contentHash });
   }
 
+  const noteItems = await source.listTopOfMindNotes(userId);
   const topOfMindNoteDocs: ExportedDocument[] = [];
-  for (const item of await source.listTopOfMindNotes(userId)) {
+  for (const item of noteItems) {
     const path = topOfMindNoteVaultPath(userId, item.note.id, item.note.createdAt);
-    const { contentHash } = await vault.put(path, toYaml(buildTopOfMindNoteDoc(item)));
+    const { contentHash } = await vault.put(path, toOkfMarkdown(buildTopOfMindNoteDoc(item)));
     topOfMindNoteDocs.push({ path, contentHash });
   }
 
+  const nodeItems = await source.listContextNodes(userId);
   const contextNodeDocs: ExportedDocument[] = [];
-  for (const item of await source.listContextNodes(userId)) {
+  for (const item of nodeItems) {
     const path = contextNodeVaultPath(item.node);
-    const { contentHash } = await vault.put(path, toYaml(buildContextNodeDoc(item)));
+    const { contentHash } = await vault.put(path, toOkfMarkdown(buildContextNodeDoc(item)));
     contextNodeDocs.push({ path, contentHash });
   }
 
+  const edgeItems = await source.listContextEdges(userId);
   const contextEdgeDocs: ExportedDocument[] = [];
-  for (const item of await source.listContextEdges(userId)) {
+  for (const item of edgeItems) {
     const path = contextEdgeVaultPath(item);
-    const { contentHash } = await vault.put(path, toYaml(buildContextEdgeDoc(item)));
+    const { contentHash } = await vault.put(path, toOkfMarkdown(buildContextEdgeDoc(item)));
     contextEdgeDocs.push({ path, contentHash });
   }
+
+  const bundleDocs: ExportedDocument[] = [];
+  const indexPath = `${userId}/index.md`;
+  const indexResult = await vault.put(indexPath, buildBundleIndexMarkdown());
+  bundleDocs.push({ path: indexPath, contentHash: indexResult.contentHash });
+
+  const logPath = `${userId}/log.md`;
+  const logResult = await vault.put(
+    logPath,
+    buildBundleLogMarkdown({
+      userId,
+      signals: signalItems,
+      topOfMindNotes: noteItems,
+      contextNodes: nodeItems,
+      contextEdges: edgeItems,
+    }),
+  );
+  bundleDocs.push({ path: logPath, contentHash: logResult.contentHash });
 
   return {
     userId,
@@ -115,6 +248,7 @@ export async function exportUserVault(options: {
     topOfMindNotes: topOfMindNoteDocs,
     contextNodes: contextNodeDocs,
     contextEdges: contextEdgeDocs,
+    bundle: bundleDocs,
   };
 }
 

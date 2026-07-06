@@ -2,7 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { count, eq } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
-import { parse as parseYaml } from "yaml";
 
 import {
   documents,
@@ -10,6 +9,7 @@ import {
 } from "../src/db/index.js";
 import type { AuthEnv } from "../src/lib/middleware.js";
 import { createInspirationsRoutes } from "../src/routes/inspirations.js";
+import { parseOkfMarkdown } from "../src/vault/serialize.js";
 import {
   contentHash,
   type VaultPutResult,
@@ -151,16 +151,18 @@ describe("inspirations route vault materialization", () => {
     expect(vault.writes).toHaveLength(2);
     expect(vault.writes[0]!.path).toBe(vault.writes[1]!.path);
 
-    const draftDoc = parseYaml(vault.writes[0]!.content);
-    const finalDoc = parseYaml(vault.writes[1]!.content);
-    expect(draftDoc).toMatchObject({
-      schema: "waka/signal@v1",
+    const draftDoc = parseOkfMarkdown(vault.writes[0]!.content);
+    const finalDoc = parseOkfMarkdown(vault.writes[1]!.content);
+    expect(draftDoc.frontmatter).toMatchObject({
+      type: "signal",
+      schema: "waka/signal@v2",
       id: res.body.inspiration.id,
-      text: "capture a recurring build instinct",
       sparks: [{ text: "recurring build instinct" }],
     });
-    expect(draftDoc.signal_packet).toBeUndefined();
-    expect(finalDoc.signal_packet.packet_text).toContain(
+    expect(draftDoc.body).toBe("capture a recurring build instinct");
+    expect(draftDoc.frontmatter.signal_packet).toBeUndefined();
+    const finalPacket = finalDoc.frontmatter.signal_packet as { packet_text: string };
+    expect(finalPacket.packet_text).toContain(
       "capture a recurring build instinct",
     );
 
@@ -258,11 +260,11 @@ describe("inspirations route vault materialization", () => {
 
     const latest = vault.writes[vault.writes.length - 1]!;
     expect(updatedIndex?.contentHash).toBe(latest.contentHash);
-    const doc = parseYaml(latest.content);
-    expect(doc).toMatchObject({
-      schema: "waka/signal@v1",
+    const doc = parseOkfMarkdown(latest.content);
+    expect(doc.frontmatter).toMatchObject({
+      type: "signal",
+      schema: "waka/signal@v2",
       id: signalId,
-      text: "Edited ambition signal",
       reflections: [
         {
           question: "What is this pointing at?",
@@ -270,7 +272,8 @@ describe("inspirations route vault materialization", () => {
         },
       ],
     });
-    expect(doc.sparks).toEqual(
+    expect(doc.body).toBe("Edited ambition signal");
+    expect(doc.frontmatter.sparks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           text: "manual spark added after save",

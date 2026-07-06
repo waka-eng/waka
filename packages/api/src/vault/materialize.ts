@@ -23,7 +23,7 @@ import type { getDb } from "../lib/db.js";
 import {
   buildSignalDoc,
   signalVaultPath,
-  toYaml,
+  toOkfMarkdown,
   type SignalExport,
 } from "./serialize.js";
 import type { VaultStore } from "./vault.js";
@@ -107,7 +107,7 @@ export async function writeSignalDraftToVault(input: {
     input.signal.id,
     input.signal.createdAt,
   );
-  const content = toYaml(
+  const content = toOkfMarkdown(
     buildSignalDoc({
       signal: input.signal,
       sparks: input.sparks,
@@ -165,9 +165,14 @@ export async function materializeSignalDocument(input: {
     attachments: attachmentRows,
   };
   const path = signalVaultPath(signal.userId, signal.id, signal.createdAt);
+  const [previous] = await input.db
+    .select({ path: documents.path })
+    .from(documents)
+    .where(eq(documents.id, signal.id))
+    .limit(1);
   const { contentHash } = await input.vault.put(
     path,
-    toYaml(buildSignalDoc(exportInput)),
+    toOkfMarkdown(buildSignalDoc(exportInput)),
   );
   await upsertDocumentIndex(input.db, {
     id: signal.id,
@@ -182,6 +187,12 @@ export async function materializeSignalDocument(input: {
     wowScore: signal.wowScore,
     createdAt: signal.createdAt,
   });
+
+  // Canonical-path moves (e.g. the .yaml → .md format cutover) would
+  // otherwise leave the old file stranded in the vault.
+  if (previous && previous.path !== path) {
+    await input.vault.delete(previous.path);
+  }
 
   return { id: signal.id, path, contentHash, docType: "signal" };
 }
