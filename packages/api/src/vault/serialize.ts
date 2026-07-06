@@ -1,12 +1,17 @@
 /**
- * Vault document serialization — DB rows in, YAML documents out.
+ * Vault document serialization — DB rows in, OKF markdown documents out.
+ *
+ * Every document is an Open Knowledge Format (OKF v0.1) concept file:
+ * a YAML frontmatter block (with the OKF-required `type` field) followed
+ * by a markdown body that holds the document's human core — the signal
+ * text, the note's "why" narrative, the node's description. See
+ * docs/okf-vault-protocol.md for the full mapping.
  *
  * Document schemas:
- *   - waka/signal@v1              : captured signal text + sparks + packet +
- *                                   reflections + attachment references
- *   - waka/top-of-mind-note@v1    : a judged top-of-mind note with evidence
- *   - waka/context-node@v1        : a durable graph claim and its evidence
- *   - waka/context-edge@v1        : a durable graph relationship
+ *   - waka/signal@v2              : captured signal; body = the signal text
+ *   - waka/top-of-mind-note@v2    : a judged note; body = the why narrative
+ *   - waka/context-node@v2        : a durable graph claim; body = description
+ *   - waka/context-edge@v2        : a durable graph relationship; empty body
  *
  * Design rules (docs/vault-architecture.md):
  *   - Machine-derived values NEVER enter files: no scores, no cluster, no
@@ -18,7 +23,7 @@
  *     meaningful drift detector.
  */
 
-import { stringify } from "yaml";
+import { parse, stringify } from "yaml";
 
 import type {
   Attachment,
@@ -33,10 +38,19 @@ import type {
   TopOfMindNoteSignal,
 } from "../db/index.js";
 
-export const SIGNAL_SCHEMA = "waka/signal@v1";
-export const TOP_OF_MIND_NOTE_SCHEMA = "waka/top-of-mind-note@v1";
-export const CONTEXT_NODE_SCHEMA = "waka/context-node@v1";
-export const CONTEXT_EDGE_SCHEMA = "waka/context-edge@v1";
+export const SIGNAL_SCHEMA = "waka/signal@v2";
+export const TOP_OF_MIND_NOTE_SCHEMA = "waka/top-of-mind-note@v2";
+export const CONTEXT_NODE_SCHEMA = "waka/context-node@v2";
+export const CONTEXT_EDGE_SCHEMA = "waka/context-edge@v2";
+
+/**
+ * OKF `type` values — the one field OKF v0.1 requires of every concept
+ * document. `schema` stays alongside as the versioned waka shape id.
+ */
+export const SIGNAL_TYPE = "signal";
+export const TOP_OF_MIND_NOTE_TYPE = "top-of-mind-note";
+export const CONTEXT_NODE_TYPE = "context-node";
+export const CONTEXT_EDGE_TYPE = "context-edge";
 
 // Compatibility exports for code that has not completed the vocabulary cutover.
 export const INSPIRATION_SCHEMA = SIGNAL_SCHEMA;
@@ -52,22 +66,22 @@ function monthPartition(createdAt: Date): string {
   return `${year}/${month}`;
 }
 
-/** `{userId}/signals/YYYY/MM/{id}.yaml` (UTC month of created_at). */
+/** `{userId}/signals/YYYY/MM/{id}.md` (UTC month of created_at). */
 export function signalVaultPath(
   userId: string,
   id: string,
   createdAt: Date,
 ): string {
-  return `${userId}/signals/${monthPartition(createdAt)}/${id}.yaml`;
+  return `${userId}/signals/${monthPartition(createdAt)}/${id}.md`;
 }
 
-/** `{userId}/top-of-mind/YYYY/MM/{id}.yaml` (UTC month of created_at). */
+/** `{userId}/top-of-mind/YYYY/MM/{id}.md` (UTC month of created_at). */
 export function topOfMindNoteVaultPath(
   userId: string,
   id: string,
   createdAt: Date,
 ): string {
-  return `${userId}/top-of-mind/${monthPartition(createdAt)}/${id}.yaml`;
+  return `${userId}/top-of-mind/${monthPartition(createdAt)}/${id}.md`;
 }
 
 export function inspirationVaultPath(
@@ -109,7 +123,7 @@ function contextEdgeNodeSlug(node: Pick<ContextNode, "type" | "label" | "id">): 
 }
 
 export function contextNodeVaultPath(node: Pick<ContextNode, "userId" | "type" | "label" | "id">): string {
-  return `${node.userId}/context/nodes/${contextNodeSlug(node)}.yaml`;
+  return `${node.userId}/context/nodes/${contextNodeSlug(node)}.md`;
 }
 
 export function contextEdgeVaultPath(input: {
@@ -119,7 +133,7 @@ export function contextEdgeVaultPath(input: {
 }): string {
   const sourceSlug = contextEdgeNodeSlug(input.sourceNode);
   const targetSlug = contextEdgeNodeSlug(input.targetNode);
-  return `${input.edge.userId}/context/edges/${sourceSlug}--${slugify(input.edge.kind)}--${targetSlug}--${input.edge.id}.yaml`;
+  return `${input.edge.userId}/context/edges/${sourceSlug}--${slugify(input.edge.kind)}--${targetSlug}--${input.edge.id}.md`;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +141,15 @@ export function contextEdgeVaultPath(input: {
 // ---------------------------------------------------------------------------
 
 type Doc = Record<string, unknown>;
+
+/**
+ * One OKF concept document: YAML frontmatter (always carries `type` and
+ * `schema`) plus a markdown body holding the document's human core.
+ */
+export interface VaultDocument {
+  frontmatter: Doc;
+  body: string;
+}
 
 /**
  * Drop keys whose value is null, undefined, an empty string, or an empty
@@ -154,14 +177,14 @@ export interface SignalExport {
 
 export type InspirationExport = SignalExport;
 
-export function buildSignalDoc(input: SignalExport): Doc {
+export function buildSignalDoc(input: SignalExport): VaultDocument {
   const { signal, sparks, packet, reflections, attachments } = input;
-  return prune({
+  const frontmatter = prune({
+    type: SIGNAL_TYPE,
     schema: SIGNAL_SCHEMA,
     id: signal.id,
     rev: 1,
     created_at: signal.createdAt.toISOString(),
-    text: signal.text,
     kind: signal.kind,
     category: signal.category,
     sparks: sparks.map((spark) =>
@@ -206,9 +229,10 @@ export function buildSignalDoc(input: SignalExport): Doc {
       }),
     ),
   });
+  return { frontmatter, body: signal.text };
 }
 
-export function buildInspirationDoc(input: InspirationExport): Doc {
+export function buildInspirationDoc(input: InspirationExport): VaultDocument {
   return buildSignalDoc(input);
 }
 
@@ -219,17 +243,17 @@ export interface TopOfMindNoteExport {
 
 export type WowMomentExport = TopOfMindNoteExport;
 
-export function buildTopOfMindNoteDoc(input: TopOfMindNoteExport): Doc {
+export function buildTopOfMindNoteDoc(input: TopOfMindNoteExport): VaultDocument {
   const { note, links } = input;
   const ordered = [...links].sort((a, b) => a.sortOrder - b.sortOrder);
-  return prune({
+  const frontmatter = prune({
+    type: TOP_OF_MIND_NOTE_TYPE,
     schema: TOP_OF_MIND_NOTE_SCHEMA,
     id: note.id,
     rev: 1,
     created_at: note.createdAt.toISOString(),
     title: note.title,
     kind: note.kind,
-    why: note.why,
     belief_statement: note.beliefStatement,
     reflection_question: note.reflectionQuestion,
     reflection_guide: note.reflectionGuide,
@@ -245,9 +269,10 @@ export function buildTopOfMindNoteDoc(input: TopOfMindNoteExport): Doc {
       idempotency_key: note.idempotencyKey,
     }),
   });
+  return { frontmatter, body: note.why ?? "" };
 }
 
-export function buildWowMomentDoc(input: WowMomentExport): Doc {
+export function buildWowMomentDoc(input: WowMomentExport): VaultDocument {
   return buildTopOfMindNoteDoc(input);
 }
 
@@ -256,15 +281,17 @@ export interface ContextNodeExport {
   evidence: ContextEvidence[];
 }
 
-export function buildContextNodeDoc(input: ContextNodeExport): Doc {
+export function buildContextNodeDoc(input: ContextNodeExport): VaultDocument {
   const { node, evidence } = input;
-  return prune({
+  // `type` is the OKF document type; the node's own taxonomy (value, theme,
+  // person, …) moves to `node_type` to avoid colliding with it.
+  const frontmatter = prune({
+    type: CONTEXT_NODE_TYPE,
     schema: CONTEXT_NODE_SCHEMA,
     id: node.id,
     rev: 1,
-    type: node.type,
+    node_type: node.type,
     label: node.label,
-    description: node.description,
     status: node.status,
     first_seen_at: node.firstSeenAt.toISOString(),
     evidence: evidence.map((row) =>
@@ -274,6 +301,7 @@ export function buildContextNodeDoc(input: ContextNodeExport): Doc {
       }),
     ),
   });
+  return { frontmatter, body: node.description ?? "" };
 }
 
 export interface ContextEdgeExport {
@@ -282,11 +310,12 @@ export interface ContextEdgeExport {
   targetNode: ContextNode;
 }
 
-export function buildContextEdgeDoc(input: ContextEdgeExport): Doc {
+export function buildContextEdgeDoc(input: ContextEdgeExport): VaultDocument {
   const { edge, sourceNode, targetNode } = input;
   const sourceSlug = contextEdgeNodeSlug(sourceNode);
   const targetSlug = contextEdgeNodeSlug(targetNode);
-  return prune({
+  const frontmatter = prune({
+    type: CONTEXT_EDGE_TYPE,
     schema: CONTEXT_EDGE_SCHEMA,
     id: edge.id,
     rev: 1,
@@ -302,13 +331,74 @@ export function buildContextEdgeDoc(input: ContextEdgeExport): Doc {
     },
     evidence_signals: edge.evidenceInspirationIds,
   });
+  return { frontmatter, body: "" };
 }
 
 /**
- * Serialize a document to YAML. `lineWidth: 0` disables wrapping so long
- * signal text never gets reflowed (reflow would make hashes depend on
- * the serializer's wrap heuristics rather than on content).
+ * Serialize a document to OKF markdown: a `---`-fenced YAML frontmatter
+ * block, one blank separator line, then the body with exactly one trailing
+ * newline (the canonical form — parseOkfMarkdown reverses it).
+ *
+ * `lineWidth: 0` disables YAML wrapping so long strings never get reflowed
+ * (reflow would make hashes depend on the serializer's wrap heuristics
+ * rather than on content).
  */
-export function toYaml(doc: Doc): string {
-  return stringify(doc, { lineWidth: 0 });
+export function toOkfMarkdown(doc: VaultDocument): string {
+  const yaml = stringify(doc.frontmatter, { lineWidth: 0 });
+  const header = `---\n${yaml}---\n`;
+  if (doc.body.length === 0) return header;
+  const body = doc.body.endsWith("\n") ? doc.body : `${doc.body}\n`;
+  return `${header}\n${body}`;
+}
+
+/**
+ * Parse an OKF markdown document back into frontmatter + body. This is the
+ * consuming half of the protocol: reindexing and inbound sync (foreign
+ * files dropped into a synced vault) both come through here.
+ *
+ * The scan for the closing fence looks for a `---` line at column 0, which
+ * cannot occur inside the frontmatter because YAML block scalars are always
+ * indented.
+ */
+export function parseOkfMarkdown(content: string): VaultDocument {
+  if (!content.startsWith("---\n")) {
+    throw new Error("Not an OKF document: missing opening frontmatter fence");
+  }
+  const close = content.indexOf("\n---\n", 3);
+  if (close === -1) {
+    throw new Error("Not an OKF document: missing closing frontmatter fence");
+  }
+  const frontmatter = parse(content.slice(4, close + 1)) as Doc;
+  let body = content.slice(close + 5);
+  if (body.startsWith("\n")) body = body.slice(1);
+  if (body.endsWith("\n")) body = body.slice(0, -1);
+  return { frontmatter, body };
+}
+
+/**
+ * YAML twin of a vault document — the same VaultDocument as one plain YAML
+ * document, with the markdown body under a trailing `body` key.
+ *
+ * The OKF markdown file is the canonical representation; this is a lossless
+ * *view* for YAML-first tools and for `.yaml` files arriving through inbound
+ * sync. OKF conformance is untouched because the spec only constrains `.md`
+ * files. toVaultYaml/fromVaultYaml and toOkfMarkdown/parseOkfMarkdown are
+ * interchangeable round trips over the same VaultDocument.
+ */
+export function toVaultYaml(doc: VaultDocument): string {
+  const merged: Doc = { ...doc.frontmatter };
+  if (doc.body.length > 0) merged.body = doc.body;
+  return stringify(merged, { lineWidth: 0 });
+}
+
+export function fromVaultYaml(content: string): VaultDocument {
+  const parsed = parse(content);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Not a vault YAML document: top level must be a mapping");
+  }
+  const { body, ...frontmatter } = parsed as Doc;
+  return {
+    frontmatter,
+    body: typeof body === "string" ? body : "",
+  };
 }

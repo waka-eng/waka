@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
 
 import type {
   Attachment,
@@ -25,9 +24,12 @@ import {
   contextEdgeVaultPath,
   contextNodeSlug,
   contextNodeVaultPath,
+  fromVaultYaml,
+  parseOkfMarkdown,
   signalVaultPath,
   topOfMindNoteVaultPath,
-  toYaml,
+  toOkfMarkdown,
+  toVaultYaml,
 } from "./serialize.js";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -222,10 +224,10 @@ function makeContextEdge(overrides: Partial<ContextEdge> = {}): ContextEdge {
 describe("vault paths", () => {
   it("partitions by UTC month of created_at", () => {
     expect(signalVaultPath(USER_ID, SIGNAL_ID, CREATED_AT)).toBe(
-      `${USER_ID}/signals/2026/06/${SIGNAL_ID}.yaml`,
+      `${USER_ID}/signals/2026/06/${SIGNAL_ID}.md`,
     );
     expect(topOfMindNoteVaultPath(USER_ID, NOTE_ID, CREATED_AT)).toBe(
-      `${USER_ID}/top-of-mind/2026/06/${NOTE_ID}.yaml`,
+      `${USER_ID}/top-of-mind/2026/06/${NOTE_ID}.md`,
     );
   });
 
@@ -244,7 +246,7 @@ describe("vault paths", () => {
       label: "WAKA Launch",
     });
     expect(contextNodeVaultPath(node)).toBe(
-      `${USER_ID}/context/nodes/${contextNodeSlug(node)}.yaml`,
+      `${USER_ID}/context/nodes/${contextNodeSlug(node)}.md`,
     );
     expect(
       contextEdgeVaultPath({
@@ -253,13 +255,13 @@ describe("vault paths", () => {
         targetNode,
       }),
     ).toBe(
-      `${USER_ID}/context/edges/value--curiosity-driven-buildin--${CONTEXT_NODE_ID}--supports--project--waka-launch--${CONTEXT_NODE_B_ID}--${CONTEXT_EDGE_ID}.yaml`,
+      `${USER_ID}/context/edges/value--curiosity-driven-buildin--${CONTEXT_NODE_ID}--supports--project--waka-launch--${CONTEXT_NODE_B_ID}--${CONTEXT_EDGE_ID}.md`,
     );
   });
 });
 
 describe("buildSignalDoc", () => {
-  it("captures meaning fields and round-trips through YAML", () => {
+  it("captures meaning fields and round-trips through OKF markdown", () => {
     const doc = buildSignalDoc({
       signal: makeSignal(),
       sparks: [makeSpark()],
@@ -267,13 +269,15 @@ describe("buildSignalDoc", () => {
       reflections: [makeReflection()],
       attachments: [makeAttachment()],
     });
-    const parsed = parse(toYaml(doc));
+    const okf = parseOkfMarkdown(toOkfMarkdown(doc));
+    const parsed = okf.frontmatter as Record<string, any>;
 
+    expect(parsed.type).toBe("signal");
     expect(parsed.schema).toBe(SIGNAL_SCHEMA);
     expect(parsed.id).toBe(SIGNAL_ID);
     expect(parsed.rev).toBe(1);
     expect(parsed.created_at).toBe("2026-06-10T02:31:00.000Z");
-    expect(parsed.text).toBe("We should be building a protocol, not a platform.");
+    expect(okf.body).toBe("We should be building a protocol, not a platform.");
     expect(parsed.sparks).toHaveLength(1);
     expect(parsed.sparks[0]).toMatchObject({
       text: "building a protocol",
@@ -298,7 +302,7 @@ describe("buildSignalDoc", () => {
   });
 
   it("never includes machine-derived signals", () => {
-    const yaml = toYaml(
+    const markdown = toOkfMarkdown(
       buildSignalDoc({
         signal: makeSignal(),
         sparks: [],
@@ -307,29 +311,29 @@ describe("buildSignalDoc", () => {
         attachments: [],
       }),
     );
-    expect(yaml).not.toMatch(/score/i);
-    expect(yaml).not.toMatch(/cluster/i);
-    expect(yaml).not.toMatch(/classified/i);
-    expect(yaml).not.toMatch(/fingerprint/i);
-    expect(yaml).not.toMatch(/token_estimate/i);
+    expect(markdown).not.toMatch(/score/i);
+    expect(markdown).not.toMatch(/cluster/i);
+    expect(markdown).not.toMatch(/classified/i);
+    expect(markdown).not.toMatch(/fingerprint/i);
+    expect(markdown).not.toMatch(/token_estimate/i);
   });
 
   it("prunes nulls and empty collections", () => {
-    const doc = buildSignalDoc({
+    const { frontmatter } = buildSignalDoc({
       signal: makeSignal({ kind: null, category: null }),
       sparks: [makeSpark({ note: null, worldviewClaims: [], isPrimary: false })],
       packet: null,
       reflections: [makeReflection({ answer: null, skipped: true })],
       attachments: [],
     });
-    expect(doc).not.toHaveProperty("kind");
-    expect(doc).not.toHaveProperty("category");
-    expect(doc).not.toHaveProperty("attachments");
-    const spark = (doc.sparks as Record<string, unknown>[])[0];
+    expect(frontmatter).not.toHaveProperty("kind");
+    expect(frontmatter).not.toHaveProperty("category");
+    expect(frontmatter).not.toHaveProperty("attachments");
+    const spark = (frontmatter.sparks as Record<string, unknown>[])[0];
     expect(spark).not.toHaveProperty("note");
     expect(spark).not.toHaveProperty("worldview_claims");
     expect(spark).not.toHaveProperty("is_primary");
-    const reflection = (doc.reflections as Record<string, unknown>[])[0];
+    const reflection = (frontmatter.reflections as Record<string, unknown>[])[0];
     expect(reflection).toEqual({
       question: "Why did this matter right now?",
       skipped: true,
@@ -344,9 +348,47 @@ describe("buildSignalDoc", () => {
       reflections: [makeReflection()],
       attachments: [makeAttachment()],
     };
-    expect(toYaml(buildSignalDoc(input))).toBe(
-      toYaml(buildSignalDoc(input)),
+    expect(toOkfMarkdown(buildSignalDoc(input))).toBe(
+      toOkfMarkdown(buildSignalDoc(input)),
     );
+  });
+
+  it("round-trips frontmatter and body byte-for-byte", () => {
+    const doc = buildSignalDoc({
+      signal: makeSignal(),
+      sparks: [makeSpark()],
+      packet: makePacket(),
+      reflections: [makeReflection()],
+      attachments: [makeAttachment()],
+    });
+    const reparsed = parseOkfMarkdown(toOkfMarkdown(doc));
+    expect(reparsed.body).toBe(doc.body);
+    expect(toOkfMarkdown(reparsed)).toBe(toOkfMarkdown(doc));
+  });
+
+  it("converts losslessly between the OKF markdown and YAML twin forms", () => {
+    const doc = buildSignalDoc({
+      signal: makeSignal(),
+      sparks: [makeSpark()],
+      packet: makePacket(),
+      reflections: [makeReflection()],
+      attachments: [makeAttachment()],
+    });
+
+    const fromYaml = fromVaultYaml(toVaultYaml(doc));
+    expect(fromYaml.body).toBe(doc.body);
+    expect(fromYaml.frontmatter).toEqual(doc.frontmatter);
+    // The two representations meet in the same canonical markdown bytes.
+    expect(toOkfMarkdown(fromYaml)).toBe(toOkfMarkdown(doc));
+
+    // An empty body (e.g. context edges) omits the `body` key entirely.
+    const edge = buildContextEdgeDoc({
+      edge: makeContextEdge(),
+      sourceNode: makeContextNode(),
+      targetNode: makeContextNode({ id: CONTEXT_NODE_B_ID, type: "project", label: "WAKA Launch" }),
+    });
+    expect(toVaultYaml(edge)).not.toContain("body:");
+    expect(fromVaultYaml(toVaultYaml(edge)).body).toBe("");
   });
 });
 
@@ -363,10 +405,13 @@ describe("buildTopOfMindNoteDoc", () => {
       note: makeTopOfMindNote(),
       links: [related, makeLink()],
     });
-    const parsed = parse(toYaml(doc));
+    const okf = parseOkfMarkdown(toOkfMarkdown(doc));
+    const parsed = okf.frontmatter as Record<string, any>;
 
+    expect(parsed.type).toBe("top-of-mind-note");
     expect(parsed.schema).toBe(TOP_OF_MIND_NOTE_SCHEMA);
     expect(parsed.kind).toBe("surprise_bridge");
+    expect(okf.body).toBe("Why this is a WOW moment.");
     expect(parsed.related.map((r: { role: string }) => r.role)).toEqual([
       "trigger",
       "related",
@@ -378,8 +423,10 @@ describe("buildTopOfMindNoteDoc", () => {
   });
 
   it("excludes the persisted wow score", () => {
-    const yaml = toYaml(buildTopOfMindNoteDoc({ note: makeTopOfMindNote(), links: [] }));
-    expect(yaml).not.toMatch(/score/i);
+    const markdown = toOkfMarkdown(
+      buildTopOfMindNoteDoc({ note: makeTopOfMindNote(), links: [] }),
+    );
+    expect(markdown).not.toMatch(/score/i);
   });
 });
 
@@ -389,19 +436,22 @@ describe("buildContextNodeDoc", () => {
       node: makeContextNode(),
       evidence: [makeContextEvidence()],
     });
-    const parsed = parse(toYaml(doc));
+    const okf = parseOkfMarkdown(toOkfMarkdown(doc));
+    const parsed = okf.frontmatter as Record<string, any>;
 
+    expect(parsed.type).toBe("context-node");
     expect(parsed.schema).toBe(CONTEXT_NODE_SCHEMA);
     expect(parsed.id).toBe(CONTEXT_NODE_ID);
-    expect(parsed.type).toBe("value");
+    expect(parsed.node_type).toBe("value");
+    expect(okf.body).toBe("Building things to find out, not just to ship.");
     expect(parsed.evidence[0]).toEqual({
       signal: SIGNAL_ID,
       reason: "The signal prefers protocol-shaped ownership.",
     });
-    const yaml = toYaml(doc);
-    expect(yaml).not.toMatch(/confidence/i);
-    expect(yaml).not.toMatch(/weight/i);
-    expect(yaml).not.toMatch(/evidence_count/i);
+    const markdown = toOkfMarkdown(doc);
+    expect(markdown).not.toMatch(/confidence/i);
+    expect(markdown).not.toMatch(/weight/i);
+    expect(markdown).not.toMatch(/evidence_count/i);
   });
 });
 
@@ -418,10 +468,13 @@ describe("buildContextEdgeDoc", () => {
       sourceNode,
       targetNode,
     });
-    const parsed = parse(toYaml(doc));
+    const okf = parseOkfMarkdown(toOkfMarkdown(doc));
+    const parsed = okf.frontmatter as Record<string, any>;
 
+    expect(parsed.type).toBe("context-edge");
     expect(parsed.schema).toBe(CONTEXT_EDGE_SCHEMA);
     expect(parsed.id).toBe(CONTEXT_EDGE_ID);
+    expect(okf.body).toBe("");
     expect(parsed.source).toEqual({
       id: CONTEXT_NODE_ID,
       node: `value--curiosity-driven-buildin--${CONTEXT_NODE_ID}`,
