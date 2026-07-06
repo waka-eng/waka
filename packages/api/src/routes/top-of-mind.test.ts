@@ -863,6 +863,143 @@ describe("GET /api/top-of-mind", () => {
     });
   });
 
+  it("hides value-only not-true feedback from top-of-mind list readback", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000014",
+      userId: user.id,
+      title: "This post-it was pulled down",
+      kind: "tension",
+      why: "The note no longer feels true.",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 52,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: moment.id,
+              value: "not_true",
+              correctionText: "pulled down from the wall",
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind: vi.fn(async () => ({
+          generatedAt: "2026-05-30T12:00:00.000Z",
+          headline: "Top of mind",
+          activeThemes: [],
+          activeQuestions: [],
+          relationshipSignals: [],
+          summary: {
+            inspirationCount: 1,
+            meaningNoteCount: 0,
+            relationshipEdgeCount: 0,
+          },
+        })),
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNotes: [],
+    });
+  });
+
+  it("uses the latest feedback value as the persisted top-of-mind visibility status", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000015",
+      userId: user.id,
+      title: "This post-it was restored",
+      kind: "bridge",
+      why: "The latest feedback says the note is alive again.",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 71,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: moment.id,
+              value: "true",
+              correctionText: null,
+              metadata: {},
+            },
+            {
+              targetId: moment.id,
+              value: "not_true",
+              correctionText: "pulled down from the wall",
+              metadata: {
+                appliedFeedback: {
+                  source: "user_feedback",
+                  topOfMindNoteStatus: "stale",
+                },
+              },
+            },
+          ]),
+        ),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind: vi.fn(async () => ({
+          generatedAt: "2026-05-30T12:00:00.000Z",
+          headline: "Top of mind",
+          activeThemes: [],
+          activeQuestions: [],
+          relationshipSignals: [],
+          summary: {
+            inspirationCount: 1,
+            meaningNoteCount: 0,
+            relationshipEdgeCount: 0,
+          },
+        })),
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNotes: [
+        {
+          id: moment.id,
+          status: "active",
+          userFeedbackValue: "true",
+        },
+      ],
+    });
+  });
+
   it("surfaces the latest long user correction as the top-of-mind note text", async () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000011",

@@ -12,7 +12,10 @@ import {
   wowMoments,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { readAppliedTopOfMindStatus } from "../lib/feedback-application.js";
+import {
+  planFeedbackApplication,
+  readAppliedTopOfMindStatus,
+} from "../lib/feedback-application.js";
 import type { SupportedLocale } from "../lib/locales.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import {
@@ -109,6 +112,13 @@ const HIDDEN_TOP_OF_MIND_STATUSES = new Set<TopOfMindNoteStatus>([
 
 function isVisibleTopOfMindStatus(status: TopOfMindNoteStatus): boolean {
   return !HIDDEN_TOP_OF_MIND_STATUSES.has(status);
+}
+
+function topOfMindStatusFromFeedbackValue(
+  value: TopOfMindFeedbackSnapshot["value"],
+): TopOfMindNoteStatus | null {
+  if (!value) return null;
+  return planFeedbackApplication({ value }).topOfMindNoteStatus;
 }
 
 export interface TopOfMindEvidencePreview {
@@ -352,7 +362,9 @@ async function fetchLatestTopOfMindFeedbackSnapshots(
   for (const row of rows) {
     const snapshot = snapshots.get(row.targetId) ?? {};
     if (!snapshot.value) snapshot.value = row.value;
-    const status = readAppliedTopOfMindStatus(row.metadata);
+    const status =
+      readAppliedTopOfMindStatus(row.metadata) ??
+      topOfMindStatusFromFeedbackValue(row.value);
     if (!snapshot.status && status) snapshot.status = status;
     const correctionText = row.value === "partly" ? row.correctionText?.trim() : "";
     if (!snapshot.correctionText && correctionText) snapshot.correctionText = correctionText;
