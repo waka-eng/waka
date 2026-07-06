@@ -37,6 +37,7 @@ export default defineConfig({
       "src/routes/top-of-mind.test.ts",
       "src/routes/wow-moments.test.ts",
       "src/vault/*.test.ts",
+      "src/scoring/activation.test.ts",
     ],
     exclude: [
       "**/node_modules/**",

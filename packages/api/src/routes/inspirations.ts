@@ -59,6 +59,7 @@ import {
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
 import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
+import { pulseSignalActivation } from "../lib/signal-activation.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
 import { withSignalLayer } from "../lib/signals.js";
@@ -276,6 +277,7 @@ async function recordRevisitEvent(input: {
   inspirationId: string;
   eventType: InspirationRevisitEventType;
   persistSingleScore: typeof persistSingleLocalInspirationScoreById;
+  enqueueClassificationJob: typeof enqueueClassification;
 }) {
   const [parent] = await input.db
     .select({ id: inspirations.id, createdAt: inspirations.createdAt })
@@ -311,6 +313,24 @@ async function recordRevisitEvent(input: {
     });
   } catch (err) {
     console.warn("[inspirations] failed to refresh score after revisit event:", {
+      inspirationId: input.inspirationId,
+      eventType: input.eventType,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Attention pulse: returning to a signal charges it; enough accumulated
+  // warmth re-enqueues the existing classification job so the judge looks
+  // again with today's archive. Best-effort, like the score refresh above.
+  try {
+    await pulseSignalActivation(input.db, {
+      userId: input.userId,
+      inspirationId: input.inspirationId,
+      event: input.eventType,
+      enqueueClassificationJob: input.enqueueClassificationJob,
+    });
+  } catch (err) {
+    console.warn("[inspirations] failed to pulse activation after revisit event:", {
       inspirationId: input.inspirationId,
       eventType: input.eventType,
       error: err instanceof Error ? err.message : String(err),
@@ -926,6 +946,7 @@ routes.post("/:id/revisits", async (c) => {
     inspirationId: idCheck.data,
     eventType: parsed.data.eventType,
     persistSingleScore,
+    enqueueClassificationJob,
   });
 
   if (!result) {
@@ -1139,6 +1160,7 @@ routes.patch("/:id", async (c) => {
       inspirationId: updated.id,
       eventType: "inspiration_updated",
       persistSingleScore,
+      enqueueClassificationJob,
     });
   } catch (err) {
     console.warn("[inspirations] failed to record update revisit event:", {
@@ -1305,6 +1327,7 @@ routes.post("/:id/reflections", async (c) => {
       inspirationId: parent.id,
       eventType: "reflection_created",
       persistSingleScore,
+      enqueueClassificationJob,
     });
   } catch (err) {
     console.warn("[inspirations] failed to record reflection revisit event:", {
