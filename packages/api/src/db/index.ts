@@ -25,3 +25,4 @@ export * from "./schema-background-jobs";
 export * from "./schema-revisits";
 export * from "./schema-feedback";
 export * from "./schema-documents";
+export * from "./schema-activations";
