@@ -11,10 +11,7 @@ import {
 } from "../db/index.js";
 import { findWowMomentCandidates } from "./wow-candidates.js";
 import { getDb } from "./db.js";
-import {
-  areDuplicateTopOfMindNotes,
-  type DedupeTopOfMindNoteLike,
-} from "./top-of-mind-dedupe.js";
+
 import {
   DEFAULT_LOCALE,
   normalizeSupportedLocale,
@@ -28,6 +25,12 @@ import {
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { persistTopOfMindRevision } from "./top-of-mind-persistence.js";
+import {
+  canonicalTopOfMindValue,
+  evidenceFingerprint,
+  semanticFamilyKey,
+} from "./top-of-mind-value.js";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
 const MAX_INSPIRATION_CHARS = 4000;
@@ -671,7 +674,8 @@ export function buildKoreanBeliefStatementRepairRequest(
                 "Return only a JSON object with a soft Hangul beliefStatement. Rewrite only beliefStatement. Do not change or infer ids/sourceEvidence/other fields; the server will preserve those from rawPriorOutput and fail closed if the repaired beliefStatement is unsafe.",
               locale: basePrompt.locale,
               allowedIds,
-              originalInput: basePrompt.input ?? buildWowJudgeInputPayload(input),
+              originalInput:
+                basePrompt.input ?? buildWowJudgeInputPayload(input),
               rawPriorOutput: trimRepairInput(rawText),
             }),
           },
@@ -823,28 +827,28 @@ const sourceEvidenceSchema = z
   .array(
     z
       .object({
-      inspirationId: z.string().uuid(),
-      role: z
-        .string()
-        .transform((value) =>
-          sanitizeSourceEvidenceText(value, MAX_SOURCE_ROLE_CHARS),
-        )
-        .pipe(z.string().min(1).max(MAX_SOURCE_ROLE_CHARS))
-        .refine(
-          (value) => !isUnsafeSourceRoleLabel(value),
-          "sourceEvidence role must be product-facing",
-        ),
-      reason: z
-        .string()
-        .transform((value) =>
-          sanitizeSourceEvidenceText(value, MAX_SOURCE_REASON_CHARS),
-        )
-        .pipe(z.string().min(1).max(MAX_SOURCE_REASON_CHARS))
-        .refine(
-          (value) => !isUnsafeSourceReason(value),
-          "sourceEvidence reason must be product-facing",
-        ),
-    })
+        inspirationId: z.string().uuid(),
+        role: z
+          .string()
+          .transform((value) =>
+            sanitizeSourceEvidenceText(value, MAX_SOURCE_ROLE_CHARS),
+          )
+          .pipe(z.string().min(1).max(MAX_SOURCE_ROLE_CHARS))
+          .refine(
+            (value) => !isUnsafeSourceRoleLabel(value),
+            "sourceEvidence role must be product-facing",
+          ),
+        reason: z
+          .string()
+          .transform((value) =>
+            sanitizeSourceEvidenceText(value, MAX_SOURCE_REASON_CHARS),
+          )
+          .pipe(z.string().min(1).max(MAX_SOURCE_REASON_CHARS))
+          .refine(
+            (value) => !isUnsafeSourceReason(value),
+            "sourceEvidence reason must be product-facing",
+          ),
+      })
       .strict(),
   )
   .min(MIN_WOW_MOMENT_SOURCE_LINKS)
@@ -1414,7 +1418,10 @@ function getKoreanBeliefStatementRepairSource(
   if (payload.isWowMoment !== true) return null;
 
   const parsedTrue = trueJudgmentSchema.safeParse(payload);
-  if (parsedTrue.success || !isOnlyBeliefStatementPhrasingIssue(parsedTrue.error))
+  if (
+    parsedTrue.success ||
+    !isOnlyBeliefStatementPhrasingIssue(parsedTrue.error)
+  )
     return null;
 
   const relatedInspirationIds = payload.relatedInspirationIds;
@@ -1436,9 +1443,7 @@ function getKoreanBeliefStatementRepairSource(
   return payload;
 }
 
-function parseKoreanBeliefStatementRepair(
-  body: unknown,
-): string | null {
+function parseKoreanBeliefStatementRepair(body: unknown): string | null {
   const envelope = generateContentResponseSchema.safeParse(body);
   if (!envelope.success) return null;
   if (envelope.data.promptFeedback?.blockReason) return null;
@@ -1446,7 +1451,8 @@ function parseKoreanBeliefStatementRepair(
   if (typeof text !== "string" || text.trim().length === 0) return null;
   const parsed = parseJsonFromGeminiText(text);
   if (typeof parsed !== "object" || parsed === null) return null;
-  const beliefStatement = (parsed as { beliefStatement?: unknown }).beliefStatement;
+  const beliefStatement = (parsed as { beliefStatement?: unknown })
+    .beliefStatement;
   if (typeof beliefStatement !== "string") return null;
   const sanitized = sanitizeBeliefStatementText(beliefStatement);
   if (!/[가-힣]/.test(sanitized)) return null;
@@ -1843,14 +1849,11 @@ async function toPromptInput(
 ): Promise<WowJudgeInput | null> {
   if (!result.trigger) return null;
 
-  const reflectionTextByInspiration = await loadPromptReflectionTextByInspiration(
-    db,
-    userId,
-    [
+  const reflectionTextByInspiration =
+    await loadPromptReflectionTextByInspiration(db, userId, [
       result.trigger.id,
       ...result.candidates.map((candidate) => candidate.inspiration.id),
-    ],
-  );
+    ]);
 
   return {
     locale,
@@ -2006,95 +2009,12 @@ function buildWowMomentIdempotencyKey(params: {
   ].join(":");
 }
 
-async function findExistingWowMomentByIdempotencyKey(
-  db: WakaDb,
-  idempotencyKey: string,
-) {
-  const rows = await db
-    .select()
-    .from(wowMoments)
-    .where(eq(wowMoments.idempotencyKey, idempotencyKey))
-    .limit(1);
-
-  return rows[0] ?? null;
-}
-
 async function loadWowMomentLinks(db: WakaDb, wowMomentId: string) {
   return db
     .select()
     .from(wowMomentInspirations)
     .where(eq(wowMomentInspirations.wowMomentId, wowMomentId))
     .orderBy(wowMomentInspirations.sortOrder);
-}
-
-async function loadRecentWowMomentsForDedupe(db: WakaDb, userId: string) {
-  return db
-    .select({
-      moment: wowMoments,
-      inspirationId: wowMomentInspirations.inspirationId,
-    })
-    .from(wowMoments)
-    .leftJoin(
-      wowMomentInspirations,
-      and(
-        eq(wowMoments.id, wowMomentInspirations.wowMomentId),
-        eq(wowMomentInspirations.userId, userId),
-      ),
-    )
-    .where(eq(wowMoments.userId, userId))
-    .orderBy(desc(wowMoments.createdAt))
-    .limit(300);
-}
-
-async function findDuplicateWowMomentForJudgment(
-  db: WakaDb,
-  input: {
-    userId: string;
-    judgment: Extract<WowMomentJudgment, { isWowMoment: true }>;
-    relatedInspirationIds: string[];
-  },
-) {
-  const rows = await loadRecentWowMomentsForDedupe(db, input.userId);
-  const linksByMomentId = new Map<string, string[]>();
-  const momentsById = new Map<string, typeof wowMoments.$inferSelect>();
-  for (const row of rows) {
-    momentsById.set(row.moment.id, row.moment);
-    if (row.inspirationId) {
-      const bucket = linksByMomentId.get(row.moment.id) ?? [];
-      bucket.push(row.inspirationId);
-      linksByMomentId.set(row.moment.id, bucket);
-    }
-  }
-
-  const prospective: DedupeTopOfMindNoteLike = {
-    id: "prospective",
-    title: input.judgment.title,
-    beliefStatement: input.judgment.beliefStatement,
-    why: input.judgment.why,
-    kind: input.judgment.kind,
-    status: "active",
-    relatedSignalIds: input.relatedInspirationIds,
-  };
-
-  for (const existing of momentsById.values()) {
-    if (
-      areDuplicateTopOfMindNotes(prospective, {
-        id: existing.id,
-        title: existing.title,
-        beliefStatement: existing.beliefStatement,
-        why: existing.why,
-        kind: existing.kind,
-        status: "active",
-        wowScore: existing.wowScore,
-        relatedSignalIds: linksByMomentId.get(existing.id) ?? [],
-        createdAt: existing.createdAt,
-      })
-    ) {
-      return existing;
-    }
-  }
-
-  return null;
 }
 
 export async function persistWowMomentForInspirationJudgment(
@@ -2176,54 +2096,65 @@ export async function persistWowMomentForInspirationJudgment(
     relatedInspirationIds: relatedIds,
     locale,
   });
+  const relatedIdSet = new Set(relatedIds);
+  const stableFamilyIds = [input.trigger, ...input.candidates]
+    .filter((source) => relatedIdSet.has(source.id))
+    .sort(
+      (a, b) =>
+        a.createdAt.getTime() - b.createdAt.getTime() ||
+        a.id.localeCompare(b.id),
+    )
+    .slice(0, 2)
+    .map((source) => source.id);
+  const semanticKey = semanticFamilyKey(
+    "wow_judgment",
+    stableFamilyIds.join("\n"),
+  );
 
-  const duplicateMoment = await findDuplicateWowMomentForJudgment(db, {
-    userId: params.userId,
-    judgment: persistedJudgment,
-    relatedInspirationIds: relatedIds,
+  const fingerprint = evidenceFingerprint(relatedIds);
+  const canonicalValue = canonicalTopOfMindValue({
+    evidenceCount: relatedIds.length,
+    confidence: 75,
+    relevance: 75,
+    novelty:
+      judgment.kind === "outlier" || judgment.kind === "surprise_bridge"
+        ? 90
+        : 65,
   });
-  if (duplicateMoment) {
-    return {
-      persisted: true,
-      status: "existing",
-      judgment: persistedJudgment,
-      wowMoment: duplicateMoment,
-      inspirationLinks: await loadWowMomentLinks(db, duplicateMoment.id),
-    };
-  }
-
-  return db.transaction(async (tx) => {
-    const [createdMoment] = await tx
-      .insert(wowMoments)
-      .values({
-        userId: params.userId,
-        title: judgment.title,
-        kind: judgment.kind,
-        idempotencyKey,
-        why: judgment.why,
-        beliefStatement:
-          typeof judgment.beliefStatement === "string"
-            ? sanitizeBeliefStatementText(judgment.beliefStatement)
+  const persisted = await persistTopOfMindRevision({
+    db,
+    userId: params.userId,
+    semanticKey,
+    evidenceFingerprint: fingerprint,
+    value: canonicalValue,
+    createRevision: async (tx) => {
+      const [createdMoment] = await tx
+        .insert(wowMoments)
+        .values({
+          userId: params.userId,
+          title: judgment.title,
+          kind: judgment.kind,
+          idempotencyKey,
+          why: judgment.why,
+          beliefStatement:
+            typeof judgment.beliefStatement === "string"
+              ? sanitizeBeliefStatementText(judgment.beliefStatement)
+              : null,
+          reflectionQuestion: judgment.reflectionQuestion ?? null,
+          reflectionGuide: judgment.reflectionGuide
+            ? sanitizeReflectionGuideText(judgment.reflectionGuide)
             : null,
-        reflectionQuestion: judgment.reflectionQuestion ?? null,
-        reflectionGuide: judgment.reflectionGuide
-          ? sanitizeReflectionGuideText(judgment.reflectionGuide)
-          : null,
-        locale,
-      } as typeof wowMoments.$inferInsert)
-      .onConflictDoNothing({ target: wowMoments.idempotencyKey })
-      .returning();
+          locale,
+          wowScore: canonicalValue,
+          semanticKey,
+          evidenceFingerprint: fingerprint,
+        } as typeof wowMoments.$inferInsert)
+        .onConflictDoNothing({ target: wowMoments.idempotencyKey })
+        .returning();
 
-    const wowMoment =
-      createdMoment ??
-      (await findExistingWowMomentByIdempotencyKey(tx, idempotencyKey));
-    if (!wowMoment) {
-      throw new Error(
-        "Failed to persist or reselect top-of-mind note judgment.",
-      );
-    }
-
-    if (createdMoment) {
+      if (!createdMoment) {
+        throw new Error("Top-of-mind revision insert conflicted unexpectedly.");
+      }
       await tx
         .insert(wowMomentInspirations)
         .values(
@@ -2231,7 +2162,7 @@ export async function persistWowMomentForInspirationJudgment(
             const sourceEvidence = sourceEvidenceById.get(inspirationId)!;
             return {
               userId: params.userId,
-              wowMomentId: wowMoment.id,
+              wowMomentId: createdMoment.id,
               inspirationId,
               role: sourceEvidence.role,
               reason: sourceEvidence.reason,
@@ -2245,16 +2176,19 @@ export async function persistWowMomentForInspirationJudgment(
             wowMomentInspirations.inspirationId,
           ],
         });
-    }
-
-    return {
-      persisted: true,
-      status: createdMoment ? "created" : "existing",
-      judgment: persistedJudgment,
-      wowMoment,
-      inspirationLinks: await loadWowMomentLinks(tx, wowMoment.id),
-    };
+      return createdMoment;
+    },
   });
+  return {
+    persisted: true,
+    status:
+      persisted.action === "create" || persisted.action === "replace"
+        ? "created"
+        : "existing",
+    judgment: persistedJudgment,
+    wowMoment: persisted.note,
+    inspirationLinks: await loadWowMomentLinks(db, persisted.note.id),
+  };
 }
 
 export async function judgeWowMomentForInspiration(

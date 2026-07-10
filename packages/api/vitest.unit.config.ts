@@ -24,6 +24,7 @@ export default defineConfig({
       "src/lib/inspiration-embeddings.test.ts",
       "src/lib/signal-packets.test.ts",
       "src/lib/top-of-mind-notes.test.ts",
+      "src/lib/top-of-mind-value.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",
       "src/lib/wow-candidates.test.ts",
       "src/lib/wow-judge.test.ts",
