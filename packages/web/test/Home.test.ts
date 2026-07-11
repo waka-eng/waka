@@ -1318,6 +1318,9 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
 
     const container = await renderHomePage();
+    expect(container.querySelector(".nc-stage--top-of-mind-wall")?.getAttribute("aria-label")).toBe(
+      "탑오브마인드 포스트잇 5개",
+    );
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
     expect(container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit")?.getAttribute("aria-label")).toBe(
