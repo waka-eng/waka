@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const queueMocks = vi.hoisted(() => ({
   enqueueMeaningGraphRebuild: vi.fn(),
@@ -80,8 +80,14 @@ function makeJob(overrides: Record<string, any> = {}) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-01T12:00:00.000Z"));
   vi.clearAllMocks();
   process.env.WAKA_ADMIN_EMAILS = user.email;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("admin authorization", () => {

@@ -41,6 +41,7 @@ export async function persistTopOfMindRevision(
           eq(wowMoments.userId, input.userId),
           eq(wowMoments.semanticKey, input.semanticKey),
           eq(wowMoments.evidenceFingerprint, input.evidenceFingerprint),
+          eq(wowMoments.lifecycleStatus, "active"),
         ),
       )
       .orderBy(desc(wowMoments.createdAt))
@@ -76,29 +77,8 @@ export async function persistTopOfMindRevision(
       isPinned = latestPinFeedback?.value === "important";
     }
 
-    if (generationMatch) {
-      if (generationMatch.lifecycleStatus === "active") {
-        return { action: "keep_existing", note: generationMatch };
-      }
-      if (existing) return { action: "keep_existing", note: existing };
-      const [reactivated] = await tx
-        .update(wowMoments)
-        .set({
-          lifecycleStatus: "active",
-          replacedAt: null,
-          replacedById: null,
-        })
-        .where(
-          and(
-            eq(wowMoments.userId, input.userId),
-            eq(wowMoments.id, generationMatch.id),
-          ),
-        )
-        .returning();
-      if (!reactivated)
-        throw new Error("Failed to reactivate matching top-of-mind revision.");
-      return { action: "keep_existing", note: reactivated };
-    }
+    if (generationMatch)
+      return { action: "keep_existing", note: generationMatch };
 
     const action = evaluateTopOfMindCandidate({
       candidateValue: input.value,

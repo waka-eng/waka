@@ -4,6 +4,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { feedback, users, wowMoments } from "../db/index.js";
 import { getDb } from "./db.js";
 import { persistTopOfMindRevision } from "./top-of-mind-persistence.js";
+import {
+  getTopOfMindNoteForUser,
+  updateTopOfMindNoteForUser,
+} from "../routes/top-of-mind.js";
 
 const db = getDb();
 const userId = "40000000-0000-4000-8000-000000000027";
@@ -104,6 +108,43 @@ describe.sequential("top-of-mind persistence", () => {
       lifecycleStatus: "replaced",
       replacedById: replaced.note.id,
     });
+
+    await expect(
+      persist({
+        semanticKey: "same idea",
+        fingerprint: "a",
+        value: 100,
+        suffix: "archived-retry",
+      }),
+    ).rejects.toThrow();
+    const activeAfterArchivedRetry = await db
+      .select()
+      .from(wowMoments)
+      .where(eq(wowMoments.userId, userId));
+    expect(
+      activeAfterArchivedRetry.filter(
+        (row) => row.lifecycleStatus === "active",
+      ),
+    ).toHaveLength(1);
+    expect(
+      activeAfterArchivedRetry.find(
+        (row) => row.lifecycleStatus === "active",
+      )?.id,
+    ).toBe(replaced.note.id);
+
+    await expect(
+      getTopOfMindNoteForUser(db, {
+        userId,
+        noteId: created.note.id,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      updateTopOfMindNoteForUser(db, {
+        userId,
+        noteId: created.note.id,
+        title: "must not edit archived revisions",
+      }),
+    ).resolves.toBeNull();
   });
 
   it("never replaces a pinned active note", async () => {

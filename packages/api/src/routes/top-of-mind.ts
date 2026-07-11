@@ -560,7 +560,11 @@ export async function getTopOfMindNoteForUser(
     })
     .from(wowMoments)
     .where(
-      and(eq(wowMoments.userId, input.userId), eq(wowMoments.id, input.noteId)),
+      and(
+        eq(wowMoments.userId, input.userId),
+        eq(wowMoments.id, input.noteId),
+        eq(wowMoments.lifecycleStatus, "active"),
+      ),
     )
     .limit(1);
 
@@ -606,6 +610,7 @@ export async function updateTopOfMindNoteForUser(
         and(
           eq(wowMoments.userId, input.userId),
           eq(wowMoments.id, input.noteId),
+          eq(wowMoments.lifecycleStatus, "active"),
         ),
       )
       .returning({

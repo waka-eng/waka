@@ -33,9 +33,12 @@ WITH "legacy_identity" AS (
 )
 UPDATE "top_of_mind_notes" AS "note"
 SET "semantic_key" = "legacy_identity"."semantic_key",
-	"evidence_fingerprint" = "legacy_identity"."evidence_fingerprint"
+	"evidence_fingerprint" = CASE
+		WHEN "legacy_identity"."identity_rank" = 1 THEN "legacy_identity"."evidence_fingerprint"
+		ELSE md5("legacy_identity"."evidence_fingerprint" || E'\nlegacy-duplicate:' || "note"."id"::text)
+	END
 FROM "legacy_identity"
-WHERE "note"."id" = "legacy_identity"."id" AND "legacy_identity"."identity_rank" = 1;--> statement-breakpoint
+WHERE "note"."id" = "legacy_identity"."id";--> statement-breakpoint
 WITH "active_family" AS (
 	SELECT
 		"id",
