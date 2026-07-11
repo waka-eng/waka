@@ -33,6 +33,67 @@ import {
 } from "./top-of-mind-value.js";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
+
+async function resolveWowJudgmentSemanticFamily(
+  db: WakaDb,
+  userId: string,
+  evidenceIds: readonly string[],
+  fallbackKey: string,
+): Promise<string> {
+  const rows = await db
+    .select({
+      momentId: wowMoments.id,
+      semanticKey: wowMoments.semanticKey,
+      inspirationId: wowMomentInspirations.inspirationId,
+      createdAt: wowMoments.createdAt,
+    })
+    .from(wowMoments)
+    .innerJoin(
+      wowMomentInspirations,
+      and(
+        eq(wowMomentInspirations.userId, wowMoments.userId),
+        eq(wowMomentInspirations.wowMomentId, wowMoments.id),
+      ),
+    )
+    .where(
+      and(
+        eq(wowMoments.userId, userId),
+        inArray(wowMomentInspirations.inspirationId, evidenceIds),
+      ),
+    );
+
+  const candidateIds = new Set(evidenceIds);
+  const families = new Map<
+    string,
+    { semanticKey: string; evidenceIds: Set<string>; createdAt: Date }
+  >();
+  for (const row of rows) {
+    if (!row.semanticKey?.startsWith("wow_judgment:")) continue;
+    const family = families.get(row.semanticKey) ?? {
+      semanticKey: row.semanticKey,
+      evidenceIds: new Set<string>(),
+      createdAt: row.createdAt,
+    };
+    family.evidenceIds.add(row.inspirationId);
+    if (row.createdAt > family.createdAt) family.createdAt = row.createdAt;
+    families.set(row.semanticKey, family);
+  }
+
+  const compatible = [...families.values()]
+    .map((family) => {
+      const overlap = [...candidateIds].filter((id) => family.evidenceIds.has(id)).length;
+      const candidateContained = overlap === candidateIds.size;
+      return { ...family, overlap, compatible: candidateContained };
+    })
+    .filter((family) => family.compatible && family.overlap >= 2)
+    .sort(
+      (a, b) =>
+        b.overlap - a.overlap ||
+        b.createdAt.getTime() - a.createdAt.getTime() ||
+        a.semanticKey.localeCompare(b.semanticKey),
+    );
+  return compatible[0]?.semanticKey ?? fallbackKey;
+}
 const MAX_INSPIRATION_CHARS = 4000;
 const MAX_TITLE_CHARS = 120;
 const MAX_REFLECTION_QUESTION_CHARS = 240;
@@ -2096,22 +2157,17 @@ export async function persistWowMomentForInspirationJudgment(
     relatedInspirationIds: relatedIds,
     locale,
   });
-  const relatedIdSet = new Set(relatedIds);
-  const stableFamilyIds = [input.trigger, ...input.candidates]
-    .filter((source) => relatedIdSet.has(source.id))
-    .sort(
-      (a, b) =>
-        a.createdAt.getTime() - b.createdAt.getTime() ||
-        a.id.localeCompare(b.id),
-    )
-    .slice(0, 2)
-    .map((source) => source.id);
-  const semanticKey = semanticFamilyKey(
-    "wow_judgment",
-    stableFamilyIds.join("\n"),
-  );
-
   const canonicalEvidenceIds = [...new Set(relatedIds)].sort();
+  const fallbackSemanticKey = semanticFamilyKey(
+    "wow_judgment",
+    canonicalEvidenceIds.join("\n"),
+  );
+  const semanticKey = await resolveWowJudgmentSemanticFamily(
+    db,
+    params.userId,
+    canonicalEvidenceIds,
+    fallbackSemanticKey,
+  );
   const fingerprint = evidenceFingerprint(canonicalEvidenceIds);
   const canonicalValue = canonicalTopOfMindValue({
     evidenceCount: relatedIds.length,

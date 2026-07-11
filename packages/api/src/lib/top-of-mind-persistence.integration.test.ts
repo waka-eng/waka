@@ -1,6 +1,9 @@
+import { drizzle } from "drizzle-orm/postgres-js";
 import { eq } from "drizzle-orm";
+import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import * as schema from "../db/index.js";
 import {
   feedback,
   inspirations,
@@ -9,13 +12,23 @@ import {
   wowMoments,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import { persistTopOfMindRevision } from "./top-of-mind-persistence.js";
+import {
+  lockTopOfMindFamily,
+  persistTopOfMindRevision,
+} from "./top-of-mind-persistence.js";
 import {
   getTopOfMindNoteForUser,
   updateTopOfMindNoteForUser,
 } from "../routes/top-of-mind.js";
+import { createFeedbackForUser } from "../routes/feedback.js";
 
 const db = getDb();
+const connectionUrl = process.env.DB_CONNECTION_URL!;
+const replacementSql = postgres(connectionUrl, { max: 1, prepare: false });
+const deletionSql = postgres(connectionUrl, { max: 1, prepare: false });
+const replacementDb = drizzle(replacementSql, { schema });
+const deletionDb = drizzle(deletionSql, { schema });
+const observer = postgres(connectionUrl, { max: 1, prepare: false });
 const userId = "40000000-0000-4000-8000-000000000027";
 const otherUserId = "40000000-0000-4000-8000-000000000028";
 const evidenceIds = [
@@ -25,6 +38,22 @@ const evidenceIds = [
   "40000000-0000-4000-8000-000000000034",
 ] as const;
 
+async function waitForAdvisoryWaiters(expected: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const rows = await observer<{ count: number }[]>`
+      select count(*)::int as count
+      from pg_stat_activity
+      where datname = current_database()
+        and wait_event = 'advisory'
+    `;
+    if (Number(rows[0]?.count ?? 0) >= expected) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting for ${expected} advisory-lock waiter(s)`);
+}
+
 async function persist(input: {
   semanticKey: string;
   fingerprint: string;
@@ -32,9 +61,10 @@ async function persist(input: {
   suffix: string;
   evidenceIds?: string[];
   kind?: "recurrence" | "bridge" | "surprise_bridge" | "tension" | "outlier";
+  database?: typeof db;
 }) {
   return persistTopOfMindRevision({
-    db,
+    db: input.database ?? db,
     userId,
     semanticKey: input.semanticKey,
     evidenceFingerprint: input.fingerprint,
@@ -73,6 +103,8 @@ async function persist(input: {
 
 describe.sequential("top-of-mind persistence", () => {
   beforeAll(async () => {
+    await db.delete(users).where(eq(users.id, userId));
+    await db.delete(users).where(eq(users.id, otherUserId));
     await db.insert(users).values([
       { id: userId, email: "top-mind-persistence@test.local" },
       { id: otherUserId, email: "top-mind-persistence-other@test.local" },
@@ -89,6 +121,7 @@ describe.sequential("top-of-mind persistence", () => {
   afterAll(async () => {
     await db.delete(users).where(eq(users.id, userId));
     await db.delete(users).where(eq(users.id, otherUserId));
+    await Promise.all([replacementSql.end(), deletionSql.end(), observer.end()]);
   });
 
   it("serializes exact retries and atomically replaces only a five-point improvement", async () => {
@@ -311,6 +344,68 @@ describe.sequential("top-of-mind persistence", () => {
     expect(
       links.filter((link) => familyRows.some((row) => row.id === link.wowMomentId)),
     ).toHaveLength(7);
+  });
+
+  it("serializes deletion with replacement and applies it to the active family revision", async () => {
+    const semanticKey = "delete-race-family";
+    const created = await persist({
+      semanticKey,
+      fingerprint: "delete-race-baseline",
+      evidenceIds: [...evidenceIds.slice(0, 3)],
+      value: 50,
+      suffix: "delete-race-baseline",
+    });
+
+    let releaseLock!: () => void;
+    const holdLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    let lockAcquired!: () => void;
+    const acquired = new Promise<void>((resolve) => {
+      lockAcquired = resolve;
+    });
+    const blocker = db.transaction(async (tx) => {
+      await lockTopOfMindFamily(tx, userId, semanticKey);
+      lockAcquired();
+      await holdLock;
+    });
+    await acquired;
+
+    const replacementPromise = persist({
+      semanticKey,
+      fingerprint: "delete-race-expanded",
+      evidenceIds: [...evidenceIds],
+      value: 100,
+      suffix: "delete-race-replacement",
+      database: replacementDb,
+    });
+    await waitForAdvisoryWaiters(1);
+    const deletionPromise = createFeedbackForUser(deletionDb, {
+      userId,
+      targetType: "top_of_mind_note",
+      targetId: created.note.id,
+      value: "not_true",
+    });
+    await waitForAdvisoryWaiters(2);
+    releaseLock();
+
+    const [, replacement, deletion] = await Promise.all([
+      blocker,
+      replacementPromise,
+      deletionPromise,
+    ]);
+    expect(replacement.action).toBe("replace");
+    expect(deletion?.targetId).toBe(replacement.note.id);
+
+    const regenerated = await persist({
+      semanticKey,
+      fingerprint: "delete-race-contracted",
+      evidenceIds: [...evidenceIds.slice(1)],
+      value: 100,
+      suffix: "delete-race-regeneration",
+    });
+    expect(regenerated.action).toBe("keep_existing");
+    expect(regenerated.note.id).toBe(replacement.note.id);
   });
 
   it("rolls back archival when revision creation conflicts", async () => {

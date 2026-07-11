@@ -22,6 +22,16 @@ export interface PersistTopOfMindRevisionResult {
   note: typeof wowMoments.$inferSelect;
 }
 
+export async function lockTopOfMindFamily(
+  tx: WakaDb,
+  userId: string,
+  semanticKey: string,
+): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`${userId}:${semanticKey}`}))`,
+  );
+}
+
 /**
  * Serializes evaluation per user/idea and owns retry, pin and replacement policy.
  * The advisory lock plus transaction make archive+insert one atomic operation.
@@ -30,9 +40,7 @@ export async function persistTopOfMindRevision(
   input: PersistTopOfMindRevisionInput,
 ): Promise<PersistTopOfMindRevisionResult> {
   return input.db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext(${`${input.userId}:${input.semanticKey}`}))`,
-    );
+    await lockTopOfMindFamily(tx, input.userId, input.semanticKey);
 
     const [generationMatch] = await tx
       .select()
