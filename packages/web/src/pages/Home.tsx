@@ -133,7 +133,6 @@ const TOP_OF_MIND_AUTOSAVE_MS = 650;
 
 const PRODUCT_SPACES = {
   capture: "Capture",
-  topOfMind: "Five Top of Mind post-its",
   memoryDrawer: "Inspiration Drawer",
   internalDebug: "Internal Debug",
 } as const;
@@ -1193,6 +1192,7 @@ function buildProposedMemoryGroupings(
 const HOME_COPY = {
   "ko-KR": {
     thoughtTab: "탑오브마인드",
+    topOfMindRegionLabel: "탑오브마인드 포스트잇 5개",
     savesTab: "영감 서랍",
     room: "내 방",
     titleLineOne: (name: string) => (
@@ -1329,6 +1329,7 @@ const HOME_COPY = {
   },
   "en-US": {
     thoughtTab: "top of mind",
+    topOfMindRegionLabel: "Five Top of Mind post-its",
     savesTab: "inspiration drawer",
     room: "my room",
     titleLineOne: (name: string) => (
@@ -1459,6 +1460,7 @@ const HOME_COPY = {
   SupportedLocale,
   {
     thoughtTab: string;
+    topOfMindRegionLabel: string;
     savesTab: string;
     room: string;
     titleLineOne: (name: string) => JSX.Element;
@@ -2890,7 +2892,7 @@ export function HomePage(): JSX.Element {
         await createFeedback({
           targetType: "top_of_mind_note",
           targetId: signal.feedbackTargetId,
-          value: "true",
+          value: "not_important",
         });
         if (activeHomeUserIdRef.current !== requestUserId) return;
         setNoteFeedback((prev) => ({
@@ -4523,7 +4525,7 @@ export function HomePage(): JSX.Element {
           {copy.tagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
         </section>
 
-        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={PRODUCT_SPACES.topOfMind}>
+        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMindRegionLabel}>
           {topOfMindLoading ? (
             <p className="nc-loading">{copy.loadingThoughts}</p>
           ) : topOfMindError ? (

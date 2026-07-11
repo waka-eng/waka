@@ -1318,6 +1318,9 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
 
     const container = await renderHomePage();
+    expect(container.querySelector(".nc-stage--top-of-mind-wall")?.getAttribute("aria-label")).toBe(
+      "탑오브마인드 포스트잇 5개",
+    );
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
     expect(container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit")?.getAttribute("aria-label")).toBe(
@@ -2173,6 +2176,28 @@ describe("HomePage current home experience", () => {
     expect(drawer?.textContent).toContain("top of mind");
     expect(drawer?.textContent).toContain("Architecture essay about bridge rhythms in city walks");
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
+  });
+
+  it("persists the pin-specific value when unpinning a top-of-mind note", async () => {
+    setApiFixtures({
+      topOfMindNotes: [{ ...sampleTopOfMindNote, isPinned: true }],
+    });
+
+    const container = await renderHomePage();
+    const unpin = container.querySelector<HTMLButtonElement>('button[aria-label="unpin post-it"]');
+    expect(unpin).not.toBeNull();
+
+    await act(async () => {
+      unpin?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "not_important",
+    });
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="pin"]')).not.toBeNull();
   });
 
   it("expands the opened post-it around a non-first evidence inspiration", async () => {
