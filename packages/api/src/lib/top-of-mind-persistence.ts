@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { feedback, wowMomentInspirations, wowMoments } from "../db/index.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { acquireTopOfMindFamilyLock } from "./top-of-mind-family-lock.js";
 import {
   evaluateTopOfMindCandidate,
   type TopOfMindPersistenceAction,
@@ -27,9 +28,7 @@ export async function lockTopOfMindFamily(
   userId: string,
   semanticKey: string,
 ): Promise<void> {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtext(${`${userId}:${semanticKey}`}))`,
-  );
+  await acquireTopOfMindFamilyLock(tx, { userId, semanticKey });
 }
 
 /**

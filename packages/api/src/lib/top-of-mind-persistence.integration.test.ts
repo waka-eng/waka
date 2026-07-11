@@ -16,6 +16,7 @@ import {
   lockTopOfMindFamily,
   persistTopOfMindRevision,
 } from "./top-of-mind-persistence.js";
+import { resolveWowJudgmentSemanticFamily } from "./wow-judge.js";
 import {
   getTopOfMindNoteForUser,
   updateTopOfMindNoteForUser,
@@ -344,6 +345,43 @@ describe.sequential("top-of-mind persistence", () => {
     expect(
       links.filter((link) => familyRows.some((row) => row.id === link.wowMomentId)),
     ).toHaveLength(7);
+  });
+
+  it("bounds production semantic-family resolution while preserving contractions and new-evidence evolution", async () => {
+    const semanticKey = "wow_judgment:bounded-family";
+    const baselineEvidence = [...evidenceIds.slice(0, 3)];
+    await persist({
+      semanticKey,
+      fingerprint: "bounded-family-baseline",
+      evidenceIds: baselineEvidence,
+      value: 70,
+      suffix: "bounded-family-baseline",
+    });
+
+    await expect(
+      resolveWowJudgmentSemanticFamily(
+        db,
+        userId,
+        [baselineEvidence[2]!, baselineEvidence[0]!],
+        "wow_judgment:contraction-fallback",
+      ),
+    ).resolves.toBe(semanticKey);
+    await expect(
+      resolveWowJudgmentSemanticFamily(
+        db,
+        userId,
+        [...baselineEvidence].reverse(),
+        "wow_judgment:reorder-fallback",
+      ),
+    ).resolves.toBe(semanticKey);
+    await expect(
+      resolveWowJudgmentSemanticFamily(
+        db,
+        userId,
+        [...baselineEvidence, evidenceIds[3]],
+        "wow_judgment:evolved-family",
+      ),
+    ).resolves.toBe("wow_judgment:evolved-family");
   });
 
   it("serializes deletion with replacement and applies it to the active family revision", async () => {

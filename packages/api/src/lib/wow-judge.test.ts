@@ -42,11 +42,17 @@ function chainWithOrderByResult<T>(terminal: T) {
   };
 }
 
-function chainWithJoinedRows<T>(terminal: T) {
+function chainWithGroupedLimit<T>(terminal: T) {
   return {
     from: vi.fn(() => ({
       innerJoin: vi.fn(() => ({
-        where: vi.fn(async () => terminal),
+        where: vi.fn(() => ({
+          groupBy: vi.fn(() => ({
+            having: vi.fn(() => ({
+              orderBy: vi.fn(() => ({ limit: vi.fn(async () => terminal) })),
+            })),
+          })),
+        })),
       })),
     })),
   };
@@ -242,7 +248,7 @@ function buildDb(params: {
           ]),
         )
         .mockReturnValueOnce(chainWithOrderByResult([]))
-        .mockReturnValueOnce(chainWithJoinedRows(params.familyRows ?? []))
+        .mockReturnValueOnce(chainWithGroupedLimit(params.familyRows ?? []))
         .mockReturnValueOnce(chainWithOrderByResult(links)),
       transaction: vi.fn(async (callback) => callback(tx)),
     },
@@ -257,14 +263,7 @@ describe("persistWowMomentForInspirationJudgment provenance identity", () => {
       kind: "tension",
       semanticKey,
     });
-    const familyRows = [triggerId, relatedId, otherRelatedId, "older-extra-signal"].map(
-      (inspirationId) => ({
-        momentId: created.id,
-        semanticKey,
-        inspirationId,
-        createdAt: created.createdAt,
-      }),
-    );
+    const familyRows = [{ semanticKey }];
     const { db } = buildDb({ duplicateRows: [], createdMoment: created, familyRows });
 
     const result = await persistWowMomentForInspirationJudgment({
@@ -285,13 +284,11 @@ describe("persistWowMomentForInspirationJudgment provenance identity", () => {
   it("evolves the production semantic family when the evidence gains a new signal", async () => {
     const semanticKey = "wow_judgment:prior-family";
     const created = existingMoment({ semanticKey });
-    const familyRows = [triggerId, relatedId].map((inspirationId) => ({
-      momentId: created.id,
-      semanticKey,
-      inspirationId,
-      createdAt: created.createdAt,
-    }));
-    const { db } = buildDb({ duplicateRows: [], createdMoment: created, familyRows });
+    const { db } = buildDb({
+      duplicateRows: [],
+      createdMoment: created,
+      familyRows: [],
+    });
 
     const result = await persistWowMomentForInspirationJudgment({
       db: db as any,

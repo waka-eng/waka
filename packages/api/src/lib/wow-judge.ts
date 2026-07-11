@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -34,65 +34,40 @@ import {
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
 
-async function resolveWowJudgmentSemanticFamily(
+export async function resolveWowJudgmentSemanticFamily(
   db: WakaDb,
   userId: string,
   evidenceIds: readonly string[],
   fallbackKey: string,
 ): Promise<string> {
-  const rows = await db
-    .select({
-      momentId: wowMoments.id,
-      semanticKey: wowMoments.semanticKey,
-      inspirationId: wowMomentInspirations.inspirationId,
-      createdAt: wowMoments.createdAt,
-    })
+  const canonicalEvidenceIds = [...new Set(evidenceIds)].sort();
+  if (canonicalEvidenceIds.length === 0) return fallbackKey;
+
+  const [family] = await db
+    .select({ semanticKey: wowMoments.semanticKey })
     .from(wowMoments)
     .innerJoin(
       wowMomentInspirations,
       and(
-        eq(wowMomentInspirations.userId, wowMoments.userId),
+        eq(wowMomentInspirations.userId, userId),
         eq(wowMomentInspirations.wowMomentId, wowMoments.id),
+        inArray(wowMomentInspirations.inspirationId, canonicalEvidenceIds),
       ),
     )
     .where(
       and(
         eq(wowMoments.userId, userId),
-        inArray(wowMomentInspirations.inspirationId, evidenceIds),
+        like(wowMoments.semanticKey, "wow_judgment:%"),
       ),
-    );
+    )
+    .groupBy(wowMoments.id, wowMoments.semanticKey, wowMoments.createdAt)
+    .having(
+      sql`count(distinct ${wowMomentInspirations.inspirationId}) = ${canonicalEvidenceIds.length}`,
+    )
+    .orderBy(desc(wowMoments.createdAt))
+    .limit(1);
 
-  const candidateIds = new Set(evidenceIds);
-  const families = new Map<
-    string,
-    { semanticKey: string; evidenceIds: Set<string>; createdAt: Date }
-  >();
-  for (const row of rows) {
-    if (!row.semanticKey?.startsWith("wow_judgment:")) continue;
-    const family = families.get(row.semanticKey) ?? {
-      semanticKey: row.semanticKey,
-      evidenceIds: new Set<string>(),
-      createdAt: row.createdAt,
-    };
-    family.evidenceIds.add(row.inspirationId);
-    if (row.createdAt > family.createdAt) family.createdAt = row.createdAt;
-    families.set(row.semanticKey, family);
-  }
-
-  const compatible = [...families.values()]
-    .map((family) => {
-      const overlap = [...candidateIds].filter((id) => family.evidenceIds.has(id)).length;
-      const candidateContained = overlap === candidateIds.size;
-      return { ...family, overlap, compatible: candidateContained };
-    })
-    .filter((family) => family.compatible && family.overlap >= 2)
-    .sort(
-      (a, b) =>
-        b.overlap - a.overlap ||
-        b.createdAt.getTime() - a.createdAt.getTime() ||
-        a.semanticKey.localeCompare(b.semanticKey),
-    );
-  return compatible[0]?.semanticKey ?? fallbackKey;
+  return family?.semanticKey ?? fallbackKey;
 }
 const MAX_INSPIRATION_CHARS = 4000;
 const MAX_TITLE_CHARS = 120;
