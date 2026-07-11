@@ -13695,6 +13695,12 @@ body.reflect-bg {
   transform: translateX(-50%);
 }
 
+.nc-bottom-bar--wall {
+  left: auto;
+  right: clamp(24px, 4vw, 56px);
+  transform: none;
+}
+
 .nc-bottom-hint {
   position: absolute;
   top: calc(100% + 16px);
@@ -14412,6 +14418,12 @@ body.reflect-bg {
 }
 
 @media (max-width: 760px) {
+  .nc-bottom-bar--wall {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+
   .nc-primary-action {
     width: min(178px, calc(100vw - 96px));
   }
