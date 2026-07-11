@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import { feedback, wowMoments } from "../db/index.js";
+import { feedback, wowMomentInspirations, wowMoments } from "../db/index.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import {
   evaluateTopOfMindCandidate,
@@ -12,6 +12,7 @@ export interface PersistTopOfMindRevisionInput {
   userId: string;
   semanticKey: string;
   evidenceFingerprint: string;
+  evidenceIds: readonly string[];
   value: number;
   createRevision: (tx: WakaDb) => Promise<typeof wowMoments.$inferSelect>;
 }
@@ -60,25 +61,62 @@ export async function persistTopOfMindRevision(
       .limit(1);
 
     let isPinned = false;
+    let isSuppressedWithoutNewEvidence = false;
     if (existing) {
-      const [latestPinFeedback] = await tx
-        .select({ value: feedback.value })
-        .from(feedback)
-        .where(
-          and(
-            eq(feedback.userId, input.userId),
-            eq(feedback.targetType, "top_of_mind_note"),
-            eq(feedback.targetId, existing.id),
-            inArray(feedback.value, ["important", "not_important"]),
-          ),
-        )
-        .orderBy(desc(feedback.createdAt), desc(feedback.id))
-        .limit(1);
+      const [[latestPinFeedback], [latestDispositionFeedback], baselineEvidence] =
+        await Promise.all([
+          tx
+            .select({ value: feedback.value })
+            .from(feedback)
+            .where(
+              and(
+                eq(feedback.userId, input.userId),
+                eq(feedback.targetType, "top_of_mind_note"),
+                eq(feedback.targetId, existing.id),
+                inArray(feedback.value, ["important", "not_important"]),
+              ),
+            )
+            .orderBy(desc(feedback.createdAt), desc(feedback.id))
+            .limit(1),
+          tx
+            .select({ value: feedback.value })
+            .from(feedback)
+            .where(
+              and(
+                eq(feedback.userId, input.userId),
+                eq(feedback.targetType, "top_of_mind_note"),
+                eq(feedback.targetId, existing.id),
+              ),
+            )
+            .orderBy(desc(feedback.createdAt), desc(feedback.id))
+            .limit(1),
+          tx
+            .select({ inspirationId: wowMomentInspirations.inspirationId })
+            .from(wowMomentInspirations)
+            .where(
+              and(
+                eq(wowMomentInspirations.userId, input.userId),
+                eq(wowMomentInspirations.wowMomentId, existing.id),
+              ),
+            ),
+        ]);
       isPinned = latestPinFeedback?.value === "important";
+      const baselineEvidenceIds = new Set(
+        baselineEvidence.map((row) => row.inspirationId),
+      );
+      const hasNewEvidence = [...new Set(input.evidenceIds)].some(
+        (evidenceId) => !baselineEvidenceIds.has(evidenceId),
+      );
+      isSuppressedWithoutNewEvidence =
+        latestDispositionFeedback?.value === "not_true" && !hasNewEvidence;
     }
 
     if (generationMatch)
       return { action: "keep_existing", note: generationMatch };
+    if (existing && isPinned)
+      return { action: "blocked_by_pin", note: existing };
+    if (existing && isSuppressedWithoutNewEvidence)
+      return { action: "keep_existing", note: existing };
 
     const action = evaluateTopOfMindCandidate({
       candidateValue: input.value,

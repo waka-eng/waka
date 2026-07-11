@@ -2111,7 +2111,8 @@ export async function persistWowMomentForInspirationJudgment(
     stableFamilyIds.join("\n"),
   );
 
-  const fingerprint = evidenceFingerprint(relatedIds);
+  const canonicalEvidenceIds = [...new Set(relatedIds)].sort();
+  const fingerprint = evidenceFingerprint(canonicalEvidenceIds);
   const canonicalValue = canonicalTopOfMindValue({
     evidenceCount: relatedIds.length,
     confidence: 75,
@@ -2126,6 +2127,7 @@ export async function persistWowMomentForInspirationJudgment(
     userId: params.userId,
     semanticKey,
     evidenceFingerprint: fingerprint,
+    evidenceIds: canonicalEvidenceIds,
     value: canonicalValue,
     createRevision: async (tx) => {
       const [createdMoment] = await tx

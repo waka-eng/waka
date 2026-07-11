@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { feedback, users, wowMoments } from "../db/index.js";
+import {
+  feedback,
+  inspirations,
+  users,
+  wowMomentInspirations,
+  wowMoments,
+} from "../db/index.js";
 import { getDb } from "./db.js";
 import { persistTopOfMindRevision } from "./top-of-mind-persistence.js";
 import {
@@ -12,18 +18,27 @@ import {
 const db = getDb();
 const userId = "40000000-0000-4000-8000-000000000027";
 const otherUserId = "40000000-0000-4000-8000-000000000028";
+const evidenceIds = [
+  "40000000-0000-4000-8000-000000000031",
+  "40000000-0000-4000-8000-000000000032",
+  "40000000-0000-4000-8000-000000000033",
+  "40000000-0000-4000-8000-000000000034",
+] as const;
 
 async function persist(input: {
   semanticKey: string;
   fingerprint: string;
   value: number;
   suffix: string;
+  evidenceIds?: string[];
+  kind?: "recurrence" | "bridge" | "surprise_bridge" | "tension" | "outlier";
 }) {
   return persistTopOfMindRevision({
     db,
     userId,
     semanticKey: input.semanticKey,
     evidenceFingerprint: input.fingerprint,
+    evidenceIds: input.evidenceIds ?? [],
     value: input.value,
     createRevision: async (tx) => {
       const [note] = await tx
@@ -31,7 +46,7 @@ async function persist(input: {
         .values({
           userId,
           title: `note ${input.suffix}`,
-          kind: "recurrence",
+          kind: input.kind ?? "recurrence",
           idempotencyKey: `persistence-test:${input.suffix}`,
           why: "integration test",
           wowScore: input.value,
@@ -39,6 +54,18 @@ async function persist(input: {
           evidenceFingerprint: input.fingerprint,
         })
         .returning();
+      if (input.evidenceIds?.length) {
+        await tx.insert(wowMomentInspirations).values(
+          input.evidenceIds.map((inspirationId, sortOrder) => ({
+            userId,
+            wowMomentId: note!.id,
+            inspirationId,
+            role: "Evidence signal",
+            reason: "integration test evidence",
+            sortOrder,
+          })),
+        );
+      }
       return note!;
     },
   });
@@ -50,6 +77,13 @@ describe.sequential("top-of-mind persistence", () => {
       { id: userId, email: "top-mind-persistence@test.local" },
       { id: otherUserId, email: "top-mind-persistence-other@test.local" },
     ]);
+    await db.insert(inspirations).values(
+      evidenceIds.map((id, index) => ({
+        id,
+        userId,
+        text: `persistence evidence ${index + 1}`,
+      })),
+    );
   });
 
   afterAll(async () => {
@@ -196,6 +230,87 @@ describe.sequential("top-of-mind persistence", () => {
       suffix: "p4",
     });
     expect(unpinnedReplacement.action).toBe("replace");
+  });
+
+  it("keeps a deleted semantic family suppressed until its evidence grows", async () => {
+    const created = await persist({
+      semanticKey: "deleted semantic idea",
+      fingerprint: "baseline-fingerprint",
+      evidenceIds: [...evidenceIds.slice(0, 3)],
+      value: 70,
+      suffix: "deleted-baseline",
+    });
+    await db.insert(feedback).values({
+      userId,
+      targetType: "top_of_mind_note",
+      targetId: created.note.id,
+      value: "not_true",
+    });
+
+    const unchangedFamilyAttempts = await Promise.all([
+      persist({
+        semanticKey: "deleted semantic idea",
+        fingerprint: "reordered-fingerprint",
+        evidenceIds: [evidenceIds[2], evidenceIds[0], evidenceIds[1]],
+        value: 100,
+        suffix: "different-copy-trigger-and-id",
+        kind: "surprise_bridge",
+      }),
+      persist({
+        semanticKey: "deleted semantic idea",
+        fingerprint: "subset-fingerprint",
+        evidenceIds: [evidenceIds[1], evidenceIds[0]],
+        value: 100,
+        suffix: "different-model-kind",
+        kind: "tension",
+      }),
+    ]);
+
+    expect(unchangedFamilyAttempts.map((result) => result.action)).toEqual([
+      "keep_existing",
+      "keep_existing",
+    ]);
+    expect(
+      unchangedFamilyAttempts.every((result) => result.note.id === created.note.id),
+    ).toBe(true);
+
+    const evolvedAttempts = await Promise.all([
+      persist({
+        semanticKey: "deleted semantic idea",
+        fingerprint: "evolved-fingerprint",
+        evidenceIds: [...evidenceIds],
+        value: 75,
+        suffix: "evolved-a",
+      }),
+      persist({
+        semanticKey: "deleted semantic idea",
+        fingerprint: "evolved-fingerprint",
+        evidenceIds: [...evidenceIds].reverse(),
+        value: 75,
+        suffix: "evolved-b",
+        kind: "bridge",
+      }),
+    ]);
+    expect(evolvedAttempts.map((result) => result.action).sort()).toEqual([
+      "keep_existing",
+      "replace",
+    ]);
+
+    const familyRows = await db
+      .select()
+      .from(wowMoments)
+      .where(eq(wowMoments.semanticKey, "deleted semantic idea"));
+    expect(familyRows).toHaveLength(2);
+    expect(familyRows.filter((row) => row.lifecycleStatus === "active")).toHaveLength(
+      1,
+    );
+    const links = await db
+      .select()
+      .from(wowMomentInspirations)
+      .where(eq(wowMomentInspirations.userId, userId));
+    expect(
+      links.filter((link) => familyRows.some((row) => row.id === link.wowMomentId)),
+    ).toHaveLength(7);
   });
 
   it("rolls back archival when revision creation conflicts", async () => {

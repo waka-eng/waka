@@ -605,14 +605,16 @@ export async function refreshTopOfMindNotesFromContextGraph(
   const notes: RefreshTopOfMindNotesResult["notes"] = [];
   for (const candidate of candidates) {
     const semanticKey = semanticFamilyKey("context_node", candidate.node.id);
-    const fingerprint = evidenceFingerprint(
-      candidate.evidence.map((row) => row.inspirationId),
-    );
+    const candidateEvidenceIds = [
+      ...new Set(candidate.evidence.map((row) => row.inspirationId)),
+    ].sort();
+    const fingerprint = evidenceFingerprint(candidateEvidenceIds);
     const persisted = await persistTopOfMindRevision({
       db,
       userId: input.userId,
       semanticKey,
       evidenceFingerprint: fingerprint,
+      evidenceIds: candidateEvidenceIds,
       value: candidate.wowScore,
       createRevision: async (tx) => {
         const [createdMoment] = await tx
