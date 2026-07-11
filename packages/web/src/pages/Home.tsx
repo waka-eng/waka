@@ -2890,7 +2890,7 @@ export function HomePage(): JSX.Element {
         await createFeedback({
           targetType: "top_of_mind_note",
           targetId: signal.feedbackTargetId,
-          value: "true",
+          value: "not_important",
         });
         if (activeHomeUserIdRef.current !== requestUserId) return;
         setNoteFeedback((prev) => ({

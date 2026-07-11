@@ -2175,6 +2175,28 @@ describe("HomePage current home experience", () => {
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
+  it("persists the pin-specific value when unpinning a top-of-mind note", async () => {
+    setApiFixtures({
+      topOfMindNotes: [{ ...sampleTopOfMindNote, isPinned: true }],
+    });
+
+    const container = await renderHomePage();
+    const unpin = container.querySelector<HTMLButtonElement>('button[aria-label="unpin post-it"]');
+    expect(unpin).not.toBeNull();
+
+    await act(async () => {
+      unpin?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "not_important",
+    });
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="pin"]')).not.toBeNull();
+  });
+
   it("expands the opened post-it around a non-first evidence inspiration", async () => {
     setApiFixtures({
       topOfMindNotes: [
