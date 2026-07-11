@@ -2729,7 +2729,7 @@ describe("HomePage current home experience", () => {
     expect(mobileDrawerRules).toContain("min-width: 0");
   });
 
-  it("keeps wall actions out of the lower-center post-it lane on desktop", async () => {
+  it("keeps desktop wall actions offset and mobile actions in document flow", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const css = readFileSync("src/styles/global.css", "utf8");
@@ -2739,7 +2739,10 @@ describe("HomePage current home experience", () => {
       /\.nc-bottom-bar--wall\s*\{[\s\S]*?left:\s*auto;[\s\S]*?right:\s*clamp\(24px, 4vw, 56px\);[\s\S]*?transform:\s*none;/,
     );
     expect(css).toMatch(
-      /@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar--wall\s*\{[\s\S]*?left:\s*50%;[\s\S]*?right:\s*auto;[\s\S]*?transform:\s*translateX\(-50%\);/,
+      /@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar--wall\s*\{[\s\S]*?position:\s*static;[\s\S]*?left:\s*auto;[\s\S]*?right:\s*auto;[\s\S]*?bottom:\s*auto;[\s\S]*?justify-content:\s*center;[\s\S]*?transform:\s*none;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar:not\(\.nc-bottom-bar--drawer\)\s*\{[\s\S]*?transform:\s*none;/,
     );
   });
 
