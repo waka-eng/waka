@@ -18,18 +18,24 @@ import {
   type AmbitionSynthesisFeedbackInput,
   type AmbitionSynthesisTrigger,
 } from "./ambition-synthesis.js";
-import { normalizeContextNodeType, type ContextNodeType } from "./context-node-types.js";
+import {
+  normalizeContextNodeType,
+  type ContextNodeType,
+} from "./context-node-types.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "./model-provider.js";
-import {
-  deriveMemoryPattern,
-  type MemoryPattern,
-} from "./memory-movement.js";
+import { deriveMemoryPattern, type MemoryPattern } from "./memory-movement.js";
 import type { AmbitionDimension } from "./top-of-mind-notes.js";
+import { persistTopOfMindRevision } from "./top-of-mind-persistence.js";
+import {
+  canonicalTopOfMindValue,
+  evidenceFingerprint,
+  semanticFamilyKey,
+} from "./top-of-mind-value.js";
 
 const DEFAULT_REFRESH_LIMIT = 5;
 const MAX_REFRESH_LIMIT = 20;
@@ -203,7 +209,9 @@ function reflectionGuideForContextType(type: ContextNodeType): string | null {
   ].join("\n");
 }
 
-function evidencePreview(evidence: TopOfMindRefreshEvidenceInput | undefined): string {
+function evidencePreview(
+  evidence: TopOfMindRefreshEvidenceInput | undefined,
+): string {
   if (!evidence) return "";
   return truncateText(evidence.sparkText || evidence.inspirationText, 96);
 }
@@ -214,7 +222,9 @@ function displayLabel(value: string): string {
   return `${label.charAt(0).toLowerCase()}${label.slice(1)}`;
 }
 
-function ambitionDimensionForContextType(type: ContextNodeType): AmbitionDimension {
+function ambitionDimensionForContextType(
+  type: ContextNodeType,
+): AmbitionDimension {
   switch (type) {
     case "environment":
       return "place";
@@ -243,7 +253,10 @@ function buildInternalFrequency(
   evidence: TopOfMindRefreshEvidenceInput[],
 ): Pick<
   TopOfMindRefreshCandidate,
-  "ambientSignal" | "matchedEnvironment" | "antiEnvironment" | "evidenceRationale"
+  | "ambientSignal"
+  | "matchedEnvironment"
+  | "antiEnvironment"
+  | "evidenceRationale"
 > {
   const label = displayLabel(node.label);
   const dimension = ambitionDimensionForContextType(type);
@@ -262,28 +275,32 @@ function buildInternalFrequency(
       return {
         ambientSignal: "",
         matchedEnvironment: `A city, studio, or room where ${label} feels publicly reinforced.`,
-        antiEnvironment: "Settings that make ambition feel private, apologetic, or over-explained.",
+        antiEnvironment:
+          "Settings that make ambition feel private, apologetic, or over-explained.",
         evidenceRationale: evidencePhrase,
       };
     case "people":
       return {
         ambientSignal: "",
         matchedEnvironment: `People who make ${label} feel like a shared operating rhythm.`,
-        antiEnvironment: "Circles where permission, polish, or social caution arrives before motion.",
+        antiEnvironment:
+          "Circles where permission, polish, or social caution arrives before motion.",
         evidenceRationale: evidencePhrase,
       };
     case "work":
       return {
         ambientSignal: "",
         matchedEnvironment: `A working culture where ${label} becomes visible through repeated making.`,
-        antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
+        antiEnvironment:
+          "Work contexts that reward commentary while the real object stays abstract.",
         evidenceRationale: evidencePhrase,
       };
     case "taste":
       return {
         ambientSignal: "",
         matchedEnvironment: `Surroundings where ${label} is treated as a standard, not decoration.`,
-        antiEnvironment: "Rooms that flatten taste into trend, convenience, or generic approval.",
+        antiEnvironment:
+          "Rooms that flatten taste into trend, convenience, or generic approval.",
         evidenceRationale: evidencePhrase,
       };
     case "tension":
@@ -291,28 +308,35 @@ function buildInternalFrequency(
       return {
         ambientSignal: "",
         matchedEnvironment: `A surrounding culture that lets the tension around ${label} stay visible long enough to choose from it.`,
-        antiEnvironment: "Rooms that smooth over the live part so everyone can keep performing agreement.",
+        antiEnvironment:
+          "Rooms that smooth over the live part so everyone can keep performing agreement.",
         evidenceRationale: evidencePhrase,
       };
     case "identity":
       return {
         ambientSignal: "",
         matchedEnvironment: `An environment where ${label} is mirrored back as normal behavior.`,
-        antiEnvironment: "Contexts that make the emerging version of you feel like a private exception.",
+        antiEnvironment:
+          "Contexts that make the emerging version of you feel like a private exception.",
         evidenceRationale: evidencePhrase,
       };
     case "next_experiment":
       return {
         ambientSignal: "",
         matchedEnvironment: `A practical setting where ${label} can be tested in public conditions.`,
-        antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
+        antiEnvironment:
+          "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale: evidencePhrase,
       };
   }
 }
 
-function buildIdempotencyKey(userId: string, nodeId: string): string {
-  return `top_of_mind_context_node:v1:${userId}:${nodeId}`;
+function buildIdempotencyKey(
+  userId: string,
+  nodeId: string,
+  fingerprint: string,
+): string {
+  return `top_of_mind_context_node:v2:${userId}:${nodeId}:${fingerprint}`;
 }
 
 function groupEvidenceByNodeId(
@@ -348,7 +372,6 @@ export function rankTopOfMindRefreshCandidates(input: {
   return input.nodes
     .map((node) => {
       const contextType = normalizeContextNodeType(node.type);
-      const idempotencyKey = buildIdempotencyKey(input.userId, node.id);
       const evidence = (evidenceByNodeId.get(node.id) ?? [])
         .slice()
         .sort(
@@ -357,6 +380,11 @@ export function rankTopOfMindRefreshCandidates(input: {
             b.createdAt.getTime() - a.createdAt.getTime(),
         )
         .slice(0, MAX_EVIDENCE_PER_NOTE);
+      const idempotencyKey = buildIdempotencyKey(
+        input.userId,
+        node.id,
+        evidenceFingerprint(evidence.map((row) => row.inspirationId)),
+      );
       const memoryPattern = deriveMemoryPattern({ node, evidence, now });
       const ambitionDimension = ambitionDimensionForContextType(contextType);
       const frequency = buildInternalFrequency(node, contextType, evidence);
@@ -374,14 +402,20 @@ export function rankTopOfMindRefreshCandidates(input: {
         ambitionDimension,
         kind: noteKindForContextType(contextType),
         reflectionQuestion:
-          preferredLocale === "ko-KR" ? null : reflectionQuestionForContextType(node, contextType),
+          preferredLocale === "ko-KR"
+            ? null
+            : reflectionQuestionForContextType(node, contextType),
         reflectionGuide:
-          preferredLocale === "ko-KR" ? null : reflectionGuideForContextType(contextType),
-        wowScore: clampInt(
-          35 + node.evidenceCount * 8 + node.weight * 0.08 + node.confidence * 0.25,
-          1,
-          100,
-        ),
+          preferredLocale === "ko-KR"
+            ? null
+            : reflectionGuideForContextType(contextType),
+        wowScore: canonicalTopOfMindValue({
+          evidenceCount: evidence.length,
+          confidence: node.confidence,
+          relevance: node.weight,
+          novelty:
+            contextType === "hypothesis" || contextType === "tension" ? 80 : 60,
+        }),
       };
     })
     .filter(
@@ -397,26 +431,6 @@ export function rankTopOfMindRefreshCandidates(input: {
         b.node.weight - a.node.weight,
     )
     .slice(0, limit);
-}
-
-async function loadExistingContextNoteKeys(
-  db: WakaDb,
-  input: { userId: string; nodeIds: string[] },
-): Promise<Set<string>> {
-  if (input.nodeIds.length === 0) return new Set();
-  const candidateKeys = input.nodeIds.map((nodeId) =>
-    buildIdempotencyKey(input.userId, nodeId),
-  );
-  const rows = await db
-    .select({ idempotencyKey: wowMoments.idempotencyKey })
-    .from(wowMoments)
-    .where(
-      and(
-        eq(wowMoments.userId, input.userId),
-        inArray(wowMoments.idempotencyKey, candidateKeys),
-      ),
-    );
-  return new Set(rows.map((row) => row.idempotencyKey));
 }
 
 async function loadPreferredLocale(
@@ -442,7 +456,8 @@ export async function refreshTopOfMindNotesFromContextGraph(
     synthesisTrigger?: AmbitionSynthesisTrigger;
   },
 ): Promise<RefreshTopOfMindNotesResult> {
-  const preferredLocale = input.preferredLocale ?? (await loadPreferredLocale(db, input.userId));
+  const preferredLocale =
+    input.preferredLocale ?? (await loadPreferredLocale(db, input.userId));
   const nodes = await db
     .select({
       id: meaningNodes.id,
@@ -456,59 +471,63 @@ export async function refreshTopOfMindNotesFromContextGraph(
       lastReinforcedAt: meaningNodes.lastReinforcedAt,
     })
     .from(meaningNodes)
-    .where(and(eq(meaningNodes.userId, input.userId), eq(meaningNodes.status, "active")))
+    .where(
+      and(
+        eq(meaningNodes.userId, input.userId),
+        eq(meaningNodes.status, "active"),
+      ),
+    )
     .orderBy(desc(meaningNodes.evidenceCount), desc(meaningNodes.weight))
     .limit(80);
 
   const nodeIds = nodes.map((node) => node.id);
-  const [evidence, existingIdempotencyKeys] = await Promise.all([
-    nodeIds.length === 0
-      ? []
-      : db
-          .select({
-            meaningNodeId: meaningEvidence.meaningNodeId,
-            inspirationId: meaningEvidence.inspirationId,
-            reason: meaningEvidence.reason,
-            weight: meaningEvidence.weight,
-            createdAt: meaningEvidence.createdAt,
-            inspirationText: inspirations.text,
-            sparkText: meaningPackets.sparkText,
-            sparkNote: inspirationSparks.note,
-          })
-          .from(meaningEvidence)
-          .innerJoin(
-            inspirations,
-            and(
-              eq(inspirations.id, meaningEvidence.inspirationId),
-              eq(inspirations.userId, meaningEvidence.userId),
-            ),
-          )
-          .innerJoin(
-            meaningPackets,
-            and(
-              eq(meaningPackets.id, meaningEvidence.packetId),
-              eq(meaningPackets.userId, meaningEvidence.userId),
-            ),
-          )
-          .leftJoin(
-            inspirationSparks,
-            and(
-              eq(inspirationSparks.id, meaningPackets.primarySparkId),
-              eq(inspirationSparks.userId, meaningEvidence.userId),
-            ),
-          )
-          .where(
-            and(
-              eq(meaningEvidence.userId, input.userId),
-              inArray(meaningEvidence.meaningNodeId, nodeIds),
-            ),
-          )
-          .orderBy(desc(meaningEvidence.weight), desc(meaningEvidence.createdAt))
-          .limit(240),
-    loadExistingContextNoteKeys(db, { userId: input.userId, nodeIds }),
-  ]);
+  const evidence = await (nodeIds.length === 0
+    ? []
+    : db
+        .select({
+          meaningNodeId: meaningEvidence.meaningNodeId,
+          inspirationId: meaningEvidence.inspirationId,
+          reason: meaningEvidence.reason,
+          weight: meaningEvidence.weight,
+          createdAt: meaningEvidence.createdAt,
+          inspirationText: inspirations.text,
+          sparkText: meaningPackets.sparkText,
+          sparkNote: inspirationSparks.note,
+        })
+        .from(meaningEvidence)
+        .innerJoin(
+          inspirations,
+          and(
+            eq(inspirations.id, meaningEvidence.inspirationId),
+            eq(inspirations.userId, meaningEvidence.userId),
+          ),
+        )
+        .innerJoin(
+          meaningPackets,
+          and(
+            eq(meaningPackets.id, meaningEvidence.packetId),
+            eq(meaningPackets.userId, meaningEvidence.userId),
+          ),
+        )
+        .leftJoin(
+          inspirationSparks,
+          and(
+            eq(inspirationSparks.id, meaningPackets.primarySparkId),
+            eq(inspirationSparks.userId, meaningEvidence.userId),
+          ),
+        )
+        .where(
+          and(
+            eq(meaningEvidence.userId, input.userId),
+            inArray(meaningEvidence.meaningNodeId, nodeIds),
+          ),
+        )
+        .orderBy(desc(meaningEvidence.weight), desc(meaningEvidence.createdAt))
+        .limit(240));
+  const existingIdempotencyKeys = new Set<string>();
 
-  const modelProvider = input.modelProvider ?? (await getDefaultModelProvider());
+  const modelProvider =
+    input.modelProvider ?? (await getDefaultModelProvider());
   const rankedCandidates = await modelProvider.generateTopOfMindNotes({
     userId: input.userId,
     preferredLocale,
@@ -518,7 +537,9 @@ export async function refreshTopOfMindNotesFromContextGraph(
     limit: input.limit,
     now: input.now,
   });
-  const candidateNodeIds = rankedCandidates.map((candidate) => candidate.node.id);
+  const candidateNodeIds = rankedCandidates.map(
+    (candidate) => candidate.node.id,
+  );
   const candidateSignalIds = [
     ...new Set(
       rankedCandidates.flatMap((candidate) =>
@@ -583,45 +604,53 @@ export async function refreshTopOfMindNotesFromContextGraph(
 
   const notes: RefreshTopOfMindNotesResult["notes"] = [];
   for (const candidate of candidates) {
-    const result = await db.transaction(async (tx) => {
-      const [createdMoment] = await tx
-        .insert(wowMoments)
-        .values({
-          userId: input.userId,
-          title: candidate.title,
-          kind: candidate.kind,
-          idempotencyKey: candidate.idempotencyKey,
-          why: candidate.why,
-          beliefStatement: candidate.title,
-          reflectionQuestion: candidate.reflectionQuestion,
-          reflectionGuide: candidate.reflectionGuide,
-          locale: candidate.preferredLocale,
-          wowScore: candidate.wowScore,
-        } as typeof wowMoments.$inferInsert)
-        .onConflictDoNothing({ target: wowMoments.idempotencyKey })
-        .returning({ id: wowMoments.id });
-
-      const moment =
-        createdMoment ??
-        (
-          await tx
-            .select({ id: wowMoments.id })
-            .from(wowMoments)
-            .where(eq(wowMoments.idempotencyKey, candidate.idempotencyKey))
-            .limit(1)
-        )[0];
-      if (!moment) return null;
-
-      if (createdMoment) {
+    const semanticKey = semanticFamilyKey("context_node", candidate.node.id);
+    const candidateEvidenceIds = [
+      ...new Set(candidate.evidence.map((row) => row.inspirationId)),
+    ].sort();
+    const fingerprint = evidenceFingerprint(candidateEvidenceIds);
+    const persisted = await persistTopOfMindRevision({
+      db,
+      userId: input.userId,
+      semanticKey,
+      evidenceFingerprint: fingerprint,
+      evidenceIds: candidateEvidenceIds,
+      value: candidate.wowScore,
+      createRevision: async (tx) => {
+        const [createdMoment] = await tx
+          .insert(wowMoments)
+          .values({
+            userId: input.userId,
+            title: candidate.title,
+            kind: candidate.kind,
+            idempotencyKey: candidate.idempotencyKey,
+            why: candidate.why,
+            beliefStatement: candidate.title,
+            reflectionQuestion: candidate.reflectionQuestion,
+            reflectionGuide: candidate.reflectionGuide,
+            locale: candidate.preferredLocale,
+            wowScore: candidate.wowScore,
+            semanticKey,
+            evidenceFingerprint: fingerprint,
+          } as typeof wowMoments.$inferInsert)
+          .onConflictDoNothing({ target: wowMoments.idempotencyKey })
+          .returning();
+        if (!createdMoment)
+          throw new Error(
+            "Top-of-mind revision insert conflicted unexpectedly.",
+          );
         await tx
           .insert(wowMomentInspirations)
           .values(
             candidate.evidence.map((row, index) => ({
               userId: input.userId,
-              wowMomentId: moment.id,
+              wowMomentId: createdMoment.id,
               inspirationId: row.inspirationId,
               role: "Evidence signal",
-              reason: truncateText(row.reason || "This signal supports the note.", MAX_REASON_CHARS),
+              reason: truncateText(
+                row.reason || "This signal supports the note.",
+                MAX_REASON_CHARS,
+              ),
               sortOrder: index,
             })),
           )
@@ -631,16 +660,17 @@ export async function refreshTopOfMindNotesFromContextGraph(
               wowMomentInspirations.inspirationId,
             ],
           });
-      }
-
-      return {
-        id: moment.id,
-        contextNodeId: candidate.node.id,
-        status: createdMoment ? ("created" as const) : ("existing" as const),
-      };
+        return createdMoment;
+      },
     });
-
-    if (result) notes.push(result);
+    notes.push({
+      id: persisted.note.id,
+      contextNodeId: candidate.node.id,
+      status:
+        persisted.action === "create" || persisted.action === "replace"
+          ? "created"
+          : "existing",
+    });
   }
 
   return {

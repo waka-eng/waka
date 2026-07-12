@@ -128,7 +128,9 @@ function makeAttachment(overrides: Partial<Attachment> = {}): Attachment {
   } as Attachment;
 }
 
-function makeTopOfMindNote(overrides: Partial<TopOfMindNote> = {}): TopOfMindNote {
+function makeTopOfMindNote(
+  overrides: Partial<TopOfMindNote> = {},
+): TopOfMindNote {
   return {
     id: NOTE_ID,
     userId: USER_ID,
@@ -141,6 +143,11 @@ function makeTopOfMindNote(overrides: Partial<TopOfMindNote> = {}): TopOfMindNot
     reflectionGuide: null,
     locale: "en-US",
     wowScore: 88,
+    semanticKey: null,
+    evidenceFingerprint: null,
+    lifecycleStatus: "active",
+    replacedAt: null,
+    replacedById: null,
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
     ...overrides,
@@ -287,7 +294,8 @@ describe("buildSignalDoc", () => {
     });
     expect(parsed.signal_packet).toMatchObject({
       spark_text: "building a protocol",
-      packet_text: "A signal about preferring open systems over owned platforms.",
+      packet_text:
+        "A signal about preferring open systems over owned platforms.",
       source_metadata: { persistedAs: "signal_packets" },
     });
     expect(parsed.reflections[0]).toEqual({
@@ -321,7 +329,9 @@ describe("buildSignalDoc", () => {
   it("prunes nulls and empty collections", () => {
     const { frontmatter } = buildSignalDoc({
       signal: makeSignal({ kind: null, category: null }),
-      sparks: [makeSpark({ note: null, worldviewClaims: [], isPrimary: false })],
+      sparks: [
+        makeSpark({ note: null, worldviewClaims: [], isPrimary: false }),
+      ],
       packet: null,
       reflections: [makeReflection({ answer: null, skipped: true })],
       attachments: [],
@@ -333,7 +343,9 @@ describe("buildSignalDoc", () => {
     expect(spark).not.toHaveProperty("note");
     expect(spark).not.toHaveProperty("worldview_claims");
     expect(spark).not.toHaveProperty("is_primary");
-    const reflection = (frontmatter.reflections as Record<string, unknown>[])[0];
+    const reflection = (
+      frontmatter.reflections as Record<string, unknown>[]
+    )[0];
     expect(reflection).toEqual({
       question: "Why did this matter right now?",
       skipped: true,
@@ -385,7 +397,11 @@ describe("buildSignalDoc", () => {
     const edge = buildContextEdgeDoc({
       edge: makeContextEdge(),
       sourceNode: makeContextNode(),
-      targetNode: makeContextNode({ id: CONTEXT_NODE_B_ID, type: "project", label: "WAKA Launch" }),
+      targetNode: makeContextNode({
+        id: CONTEXT_NODE_B_ID,
+        type: "project",
+        label: "WAKA Launch",
+      }),
     });
     expect(toVaultYaml(edge)).not.toContain("body:");
     expect(fromVaultYaml(toVaultYaml(edge)).body).toBe("");

@@ -22,12 +22,23 @@ function authMiddleware() {
 
 function createMomentsSelect<T>(terminal: T) {
   const limit = vi.fn(async () => terminal);
+  const orderBy = vi.fn(() => ({
+    limit,
+    then<TResult1 = T, TResult2 = never>(
+      onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?:
+        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+        | null,
+    ): PromiseLike<TResult1 | TResult2> {
+      return Promise.resolve(terminal).then(onfulfilled, onrejected);
+    },
+  }));
   return {
     limit,
     builder: {
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          orderBy: vi.fn(() => ({ limit })),
+          orderBy,
         })),
       })),
     },
@@ -94,12 +105,17 @@ describe("GET /api/top-of-mind", () => {
     const note: TopOfMindNoteSurface = {
       id: "00000000-0000-4000-8000-000000000010",
       userId: user.id,
-      title: "I need workrooms where making the thing is the default temperature.",
+      title:
+        "I need workrooms where making the thing is the default temperature.",
       ambitionDimension: "work",
-      ambientSignal: "I need workrooms where making the thing is the default temperature.",
-      matchedEnvironment: "A working culture where rituals become visible through repeated making.",
-      antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
-      evidenceRationale: "Three saved signals are clustering around this frequency.",
+      ambientSignal:
+        "I need workrooms where making the thing is the default temperature.",
+      matchedEnvironment:
+        "A working culture where rituals become visible through repeated making.",
+      antiEnvironment:
+        "Work contexts that reward commentary while the real object stays abstract.",
+      evidenceRationale:
+        "Three saved signals are clustering around this frequency.",
       rejectedAlternativeInterpretation: null,
       type: "pattern",
       body: "Multiple signals keep circling the same careful ritual.",
@@ -150,9 +166,11 @@ describe("GET /api/top-of-mind", () => {
       topOfMindNotes: [
         {
           id: "00000000-0000-4000-8000-000000000010",
-          title: "I need workrooms where making the thing is the default temperature.",
+          title:
+            "I need workrooms where making the thing is the default temperature.",
           ambitionDimension: "work",
-          ambientSignal: "I need workrooms where making the thing is the default temperature.",
+          ambientSignal:
+            "I need workrooms where making the thing is the default temperature.",
           status: "active",
           source: "wow_moment_compatibility",
         },
@@ -169,7 +187,8 @@ describe("GET /api/top-of-mind", () => {
           nodeId: "node-theme-raw",
           label: "RAW_GRAPH_LABEL_frequency_scaffold",
           type: "theme",
-          reason: "Supporting signals and Memory movement are compatibility preview metadata.",
+          reason:
+            "Supporting signals and Memory movement are compatibility preview metadata.",
           evidenceCount: 4,
           lastReinforcedAt: "2026-05-24T10:00:00.000Z",
           supportingInspirations: [
@@ -248,7 +267,8 @@ describe("GET /api/top-of-mind", () => {
         role: "Source signal",
         reason: "This signal shows the recurring ritual.",
         sortOrder: 0,
-        inspirationText: "Signal text with enough detail to explain the post-it.",
+        inspirationText:
+          "Signal text with enough detail to explain the post-it.",
         inspirationKind: "note",
         inspirationCreatedAt: new Date("2026-05-29T10:00:00.000Z"),
         inspirationWowScore: 64,
@@ -304,8 +324,10 @@ describe("GET /api/top-of-mind", () => {
         title: "Rituals keep returning",
         ambitionDimension: "place",
         ambientSignal: "a question becomes real when it meets public cost",
-        matchedEnvironment: "A practical setting where rituals keep returning can be tested in public conditions.",
-        antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
+        matchedEnvironment:
+          "A practical setting where rituals keep returning can be tested in public conditions.",
+        antiEnvironment:
+          "Analysis loops that keep the question safe, abstract, and uncostly.",
         evidenceRationale:
           "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
         type: "action",
@@ -319,7 +341,8 @@ describe("GET /api/top-of-mind", () => {
             signalId: "00000000-0000-4000-8000-000000000101",
             role: "Source signal",
             reason: "This signal shows the recurring ritual.",
-            textPreview: "Signal text with enough detail to explain the post-it.",
+            textPreview:
+              "Signal text with enough detail to explain the post-it.",
             kind: "note",
             createdAt: "2026-05-29T10:00:00.000Z",
             resonanceScore: 64,
@@ -540,7 +563,9 @@ describe("GET /api/top-of-mind", () => {
       evidenceRationale: "저장된 신호들이 공개 실험의 리듬을 함께 가리킵니다.",
       status: "active",
     });
-    expect(JSON.stringify(notes[0])).not.toContain("a room where unfinished ambition is allowed");
+    expect(JSON.stringify(notes[0])).not.toContain(
+      "a room where unfinished ambition is allowed",
+    );
     expect(JSON.stringify(notes[0])).not.toContain("deterministic fallback");
   });
 
@@ -631,7 +656,11 @@ describe("GET /api/top-of-mind", () => {
       createdAt: new Date("2026-05-28T10:00:00.000Z"),
       updatedAt: new Date("2026-05-28T11:00:00.000Z"),
     };
-    const momentsSelect = createMomentsSelect([duplicateHigh, distinctMid, duplicatePinned]);
+    const momentsSelect = createMomentsSelect([
+      duplicateHigh,
+      distinctMid,
+      duplicatePinned,
+    ]);
     const db = {
       select: vi
         .fn()
@@ -697,21 +726,26 @@ describe("GET /api/top-of-mind", () => {
     const sourceA = "00000000-0000-4000-8000-000000000101";
     const sourceB = "00000000-0000-4000-8000-000000000102";
     const relatedRows = [duplicateA, duplicateB, distinct].flatMap((moment) =>
-      (moment.id === distinct.id ? ["00000000-0000-4000-8000-000000000103"] : [sourceA, sourceB]).map(
-        (inspirationId, index) => ({
-          wowMomentId: moment.id,
-          inspirationId,
-          role: "Source signal",
-          reason: "This source supports the note.",
-          sortOrder: index,
-          inspirationText: `source ${inspirationId}`,
-          inspirationKind: "note",
-          inspirationCreatedAt: new Date("2026-05-29T10:00:00.000Z"),
-          inspirationWowScore: 64,
-        }),
-      ),
+      (moment.id === distinct.id
+        ? ["00000000-0000-4000-8000-000000000103"]
+        : [sourceA, sourceB]
+      ).map((inspirationId, index) => ({
+        wowMomentId: moment.id,
+        inspirationId,
+        role: "Source signal",
+        reason: "This source supports the note.",
+        sortOrder: index,
+        inspirationText: `source ${inspirationId}`,
+        inspirationKind: "note",
+        inspirationCreatedAt: new Date("2026-05-29T10:00:00.000Z"),
+        inspirationWowScore: 64,
+      })),
     );
-    const momentsSelect = createMomentsSelect([duplicateA, duplicateB, distinct]);
+    const momentsSelect = createMomentsSelect([
+      duplicateA,
+      duplicateB,
+      distinct,
+    ]);
     const db = {
       select: vi
         .fn()
@@ -1013,7 +1047,8 @@ describe("GET /api/top-of-mind", () => {
       createdAt: new Date("2026-05-30T10:00:00.000Z"),
       updatedAt: new Date("2026-05-30T11:00:00.000Z"),
     };
-    const longCorrectionText = `${"choose the people I build with ".repeat(52)}without shrinking the thought`.trim();
+    const longCorrectionText =
+      `${"choose the people I build with ".repeat(52)}without shrinking the thought`.trim();
     expect(longCorrectionText.length).toBeGreaterThan(1450);
     const momentsSelect = createMomentsSelect([moment]);
     const db = {
@@ -1252,9 +1287,12 @@ describe("GET /api/top-of-mind/:noteId", () => {
       title: "A provisional reflection",
       ambitionDimension: "next_experiment",
       ambientSignal: "a question becomes real when it meets public cost",
-      matchedEnvironment: "A practical setting where a provisional reflection can be tested in public conditions.",
-      antiEnvironment: "Analysis loops that keep the question safe, abstract, and uncostly.",
-      evidenceRationale: "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
+      matchedEnvironment:
+        "A practical setting where a provisional reflection can be tested in public conditions.",
+      antiEnvironment:
+        "Analysis loops that keep the question safe, abstract, and uncostly.",
+      evidenceRationale:
+        "This post-it is inferred from saved signals and may change as the graph gets better evidence.",
       rejectedAlternativeInterpretation: null,
       type: "hypothesis",
       body: "This might matter.",

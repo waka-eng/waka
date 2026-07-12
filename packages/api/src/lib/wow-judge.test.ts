@@ -42,11 +42,29 @@ function chainWithOrderByResult<T>(terminal: T) {
   };
 }
 
-function insertChain<T>(returningRows: T) {
+function chainWithGroupedLimit<T>(terminal: T) {
   return {
-    values: vi.fn(() => ({
+    from: vi.fn(() => ({
+      innerJoin: vi.fn(() => ({
+        where: vi.fn(() => ({
+          groupBy: vi.fn(() => ({
+            having: vi.fn(() => ({
+              orderBy: vi.fn(() => ({ limit: vi.fn(async () => terminal) })),
+            })),
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
+function insertChain<T extends Record<string, unknown>[]>(returningRows: T) {
+  return {
+    values: vi.fn((value: Record<string, unknown>) => ({
       onConflictDoNothing: vi.fn(() => ({
-        returning: vi.fn(async () => returningRows),
+        returning: vi.fn(async () =>
+          returningRows.map((row) => ({ ...row, ...value })),
+        ),
       })),
     })),
   };
@@ -98,7 +116,9 @@ const embedding = {
   updatedAt: new Date("2026-06-02T12:00:00.000Z"),
 };
 
-function trueJudgment(overrides: Partial<Extract<WowMomentJudgment, { isWowMoment: true }>> = {}): Extract<WowMomentJudgment, { isWowMoment: true }> {
+function trueJudgment(
+  overrides: Partial<Extract<WowMomentJudgment, { isWowMoment: true }>> = {},
+): Extract<WowMomentJudgment, { isWowMoment: true }> {
   return {
     isWowMoment: true,
     kind: "bridge",
@@ -140,13 +160,22 @@ function existingMoment(overrides: Record<string, unknown> = {}) {
     reflectionGuide: null,
     locale: "en-US",
     wowScore: 80,
+    semanticKey: "wow_judgment:trigger",
+    evidenceFingerprint: "evidence-fingerprint",
+    lifecycleStatus: "active",
+    replacedAt: null,
+    replacedById: null,
     createdAt: new Date("2026-06-03T10:00:00.000Z"),
     updatedAt: new Date("2026-06-03T11:00:00.000Z"),
     ...overrides,
   };
 }
 
-function buildDb(params: { duplicateRows?: unknown[]; createdMoment?: unknown }) {
+function buildDb(params: {
+  duplicateRows?: unknown[];
+  createdMoment?: unknown;
+  familyRows?: unknown[];
+}) {
   const links = [
     {
       id: "link-1",
@@ -183,8 +212,19 @@ function buildDb(params: { duplicateRows?: unknown[]; createdMoment?: unknown })
     },
   ];
   const tx = {
-    insert: vi.fn().mockReturnValueOnce(insertChain([params.createdMoment])).mockReturnValueOnce(linkInsertChain()),
-    select: vi.fn(() => chainWithOrderByResult(links)),
+    execute: vi.fn(async () => undefined),
+    insert: vi
+      .fn()
+      .mockReturnValueOnce(
+        insertChain([params.createdMoment as Record<string, unknown>]),
+      )
+      .mockReturnValueOnce(linkInsertChain()),
+    select: vi
+      .fn()
+      .mockReturnValueOnce(chainWithLimit([]))
+      .mockReturnValueOnce(chainWithLimit([]))
+      .mockReturnValueOnce(chainWithOrderByResult([]))
+      .mockReturnValueOnce(chainWithOrderByResult(links)),
   };
   return {
     tx,
@@ -192,29 +232,80 @@ function buildDb(params: { duplicateRows?: unknown[]; createdMoment?: unknown })
       select: vi
         .fn()
         .mockReturnValueOnce(chainWithLimit([{ id: triggerId }]))
-        .mockReturnValueOnce(chainWithLimit([{ inspiration: trigger, embedding }]))
-        .mockReturnValueOnce(chainWithLimit([
-          { inspiration: related, embedding: { ...embedding, embedding: [0.9, 0.1] } },
-          { inspiration: otherRelated, embedding: { ...embedding, embedding: [0.1, 0.9] } },
-        ]))
+        .mockReturnValueOnce(
+          chainWithLimit([{ inspiration: trigger, embedding }]),
+        )
+        .mockReturnValueOnce(
+          chainWithLimit([
+            {
+              inspiration: related,
+              embedding: { ...embedding, embedding: [0.9, 0.1] },
+            },
+            {
+              inspiration: otherRelated,
+              embedding: { ...embedding, embedding: [0.1, 0.9] },
+            },
+          ]),
+        )
         .mockReturnValueOnce(chainWithOrderByResult([]))
-        .mockReturnValueOnce(chainWithLimit(params.duplicateRows ?? []))
+        .mockReturnValueOnce(chainWithGroupedLimit(params.familyRows ?? []))
         .mockReturnValueOnce(chainWithOrderByResult(links)),
       transaction: vi.fn(async (callback) => callback(tx)),
     },
   };
 }
 
-describe("persistWowMomentForInspirationJudgment duplicate guard", () => {
-  it("returns an existing same-user note for a normalized duplicate without inserting", async () => {
-    const duplicate = existingMoment();
-    const { db } = buildDb({
-      duplicateRows: [
-        { moment: duplicate, inspirationId: triggerId },
-        { moment: duplicate, inspirationId: relatedId },
-        { moment: duplicate, inspirationId: otherRelatedId },
-      ],
+describe("persistWowMomentForInspirationJudgment provenance identity", () => {
+  it("keeps the production semantic family for contracted evidence despite trigger, kind, and copy changes", async () => {
+    const semanticKey = "wow_judgment:durable-family";
+    const created = existingMoment({
+      title: "Completely different copy",
+      kind: "tension",
+      semanticKey,
     });
+    const familyRows = [{ semanticKey }];
+    const { db } = buildDb({ duplicateRows: [], createdMoment: created, familyRows });
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: db as any,
+      userId,
+      triggerInspirationId: otherRelatedId,
+      judgment: trueJudgment({
+        kind: "tension",
+        title: "New model copy after contraction",
+        relatedInspirationIds: [otherRelatedId, relatedId, triggerId],
+      }),
+      locale: "en-US",
+    });
+
+    expect(result.persisted && result.wowMoment.semanticKey).toBe(semanticKey);
+  });
+
+  it("evolves the production semantic family when the evidence gains a new signal", async () => {
+    const semanticKey = "wow_judgment:prior-family";
+    const created = existingMoment({ semanticKey });
+    const { db } = buildDb({
+      duplicateRows: [],
+      createdMoment: created,
+      familyRows: [],
+    });
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: db as any,
+      userId,
+      triggerInspirationId: triggerId,
+      judgment: trueJudgment({
+        relatedInspirationIds: [triggerId, relatedId, otherRelatedId],
+      }),
+      locale: "en-US",
+    });
+
+    expect(result.persisted && result.wowMoment.semanticKey).not.toBe(semanticKey);
+  });
+
+  it("does not use normalized generated prose as a duplicate identity", async () => {
+    const created = existingMoment();
+    const { db } = buildDb({ duplicateRows: [], createdMoment: created });
 
     const result = await persistWowMomentForInspirationJudgment({
       db: db as any,
@@ -224,21 +315,22 @@ describe("persistWowMomentForInspirationJudgment duplicate guard", () => {
       locale: "en-US",
     });
 
-    expect(result).toMatchObject({ persisted: true, status: "existing", wowMoment: { id: duplicate.id } });
-    expect(db.transaction).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      persisted: true,
+      status: "created",
+      wowMoment: { id: created.id },
+    });
+    expect(db.transaction).toHaveBeenCalledTimes(1);
   });
 
-  it("uses source overlap plus moderate text similarity as a duplicate signal", async () => {
-    const duplicate = existingMoment({
+  it("does not use model-copy similarity as a duplicate identity", async () => {
+    const created = existingMoment({
       title: "Real rooms keep asking for public experiments",
       beliefStatement: "public experiments need real rooms",
     });
     const { db } = buildDb({
-      duplicateRows: [
-        { moment: duplicate, inspirationId: triggerId },
-        { moment: duplicate, inspirationId: relatedId },
-        { moment: duplicate, inspirationId: otherRelatedId },
-      ],
+      duplicateRows: [],
+      createdMoment: created,
     });
 
     const result = await persistWowMomentForInspirationJudgment({
@@ -253,7 +345,7 @@ describe("persistWowMomentForInspirationJudgment duplicate guard", () => {
     });
 
     expect(result.persisted).toBe(true);
-    expect(result.persisted ? result.status : undefined).toBe("existing");
+    expect(result.persisted ? result.status : undefined).toBe("created");
   });
 
   it("creates when no same-user duplicate is returned by the tenant-scoped lookup", async () => {

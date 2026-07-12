@@ -18,6 +18,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { applyFeedbackToGraph } from "../lib/feedback-application.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { lockTopOfMindFamily } from "../lib/top-of-mind-persistence.js";
 
 const DEFAULT_FEEDBACK_LIMIT = 50;
 const MAX_FEEDBACK_LIMIT = 100;
@@ -179,7 +180,40 @@ export async function createFeedbackForUser(
 ): Promise<FeedbackRecord | null> {
   return db.transaction(async (tx) => {
     const txDb = tx as unknown as WakaDb;
-    const targetExists = await targetBelongsToUser(txDb, input);
+    let targetId = input.targetId;
+    if (input.targetType === "top_of_mind_note") {
+      const [target] = await tx
+        .select({ semanticKey: wowMoments.semanticKey })
+        .from(wowMoments)
+        .where(
+          and(
+            eq(wowMoments.userId, input.userId),
+            eq(wowMoments.id, input.targetId),
+          ),
+        )
+        .limit(1);
+      if (!target) return null;
+      if (target.semanticKey) {
+        await lockTopOfMindFamily(txDb, input.userId, target.semanticKey);
+        const [activeRevision] = await tx
+          .select({ id: wowMoments.id })
+          .from(wowMoments)
+          .where(
+            and(
+              eq(wowMoments.userId, input.userId),
+              eq(wowMoments.semanticKey, target.semanticKey),
+              eq(wowMoments.lifecycleStatus, "active"),
+            ),
+          )
+          .orderBy(desc(wowMoments.createdAt))
+          .limit(1);
+        targetId = activeRevision?.id ?? input.targetId;
+      }
+    }
+    const targetExists = await targetBelongsToUser(txDb, {
+      ...input,
+      targetId,
+    });
     if (!targetExists) return null;
 
     const now = new Date();
@@ -188,7 +222,7 @@ export async function createFeedbackForUser(
       .values({
         userId: input.userId,
         targetType: input.targetType,
-        targetId: input.targetId,
+        targetId,
         value: input.value,
         emotionLabel: input.emotionLabel ?? null,
         correctionText: input.correctionText ?? null,
@@ -203,7 +237,7 @@ export async function createFeedbackForUser(
       feedbackId: row.id,
       userId: input.userId,
       targetType: input.targetType,
-      targetId: input.targetId,
+      targetId,
       value: input.value,
       correctionText: input.correctionText ?? null,
     });

@@ -10,11 +10,7 @@ import type {
 } from "../db/index.js";
 import { exportUserVault, type VaultExportSource } from "./exporter.js";
 import { parseOkfMarkdown } from "./serialize.js";
-import {
-  contentHash,
-  type VaultPutResult,
-  type VaultStore,
-} from "./vault.js";
+import { contentHash, type VaultPutResult, type VaultStore } from "./vault.js";
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const CREATED_AT = new Date("2026-06-10T02:31:00.000Z");
@@ -78,12 +74,20 @@ function makeTopOfMindNote(id: string): TopOfMindNote {
     reflectionGuide: null,
     locale: "en-US",
     wowScore: 0,
+    semanticKey: null,
+    evidenceFingerprint: null,
+    lifecycleStatus: "active",
+    replacedAt: null,
+    replacedById: null,
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
   };
 }
 
-function makeLink(momentId: string, inspirationId: string): TopOfMindNoteSignal {
+function makeLink(
+  momentId: string,
+  inspirationId: string,
+): TopOfMindNoteSignal {
   return {
     id: "77777777-7777-4777-8777-777777777777",
     userId: USER_ID,
@@ -96,11 +100,7 @@ function makeLink(momentId: string, inspirationId: string): TopOfMindNoteSignal 
   };
 }
 
-function makeContextNode(
-  id: string,
-  type: string,
-  label: string,
-): ContextNode {
+function makeContextNode(id: string, type: string, label: string): ContextNode {
   return {
     id,
     userId: USER_ID,
@@ -178,7 +178,10 @@ function makeSource(): VaultExportSource {
     },
     async listTopOfMindNotes() {
       return [
-        { note: makeTopOfMindNote(NOTE_A), links: [makeLink(NOTE_A, SIGNAL_A)] },
+        {
+          note: makeTopOfMindNote(NOTE_A),
+          links: [makeLink(NOTE_A, SIGNAL_A)],
+        },
       ];
     },
     async listContextNodes() {
@@ -276,12 +279,18 @@ describe("exportUserVault", () => {
     const log = vault.files.get(`${USER_ID}/log.md`)!;
     expect(log).toContain("# Directory Update Log");
     expect(log).toContain("## 2026-06-10");
-    expect(log).toContain(`- **Capture**: [first](signals/2026/06/${SIGNAL_A}.md)`);
-    expect(log).toContain(`- **Spark**: [A bridge](top-of-mind/2026/06/${NOTE_A}.md)`);
+    expect(log).toContain(
+      `- **Capture**: [first](signals/2026/06/${SIGNAL_A}.md)`,
+    );
+    expect(log).toContain(
+      `- **Spark**: [A bridge](top-of-mind/2026/06/${NOTE_A}.md)`,
+    );
     expect(log).toContain(
       `- **Emergence**: [value: Curiosity Driven Building](context/nodes/value--curiosity-driven-building--${CONTEXT_NODE_A}.md)`,
     );
-    expect(log).toContain("- **Relation**: [Curiosity Driven Building supports WAKA Launch]");
+    expect(log).toContain(
+      "- **Relation**: [Curiosity Driven Building supports WAKA Launch]",
+    );
   });
 
   it("is idempotent: re-export writes byte-identical documents", async () => {

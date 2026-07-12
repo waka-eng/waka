@@ -1318,6 +1318,9 @@ describe("HomePage current home experience", () => {
     setApiFixtures();
 
     const container = await renderHomePage();
+    expect(container.querySelector(".nc-stage--top-of-mind-wall")?.getAttribute("aria-label")).toBe(
+      "탑오브마인드 포스트잇 5개",
+    );
     const note = container.querySelector<HTMLElement>(".nc-note");
     expect(note).not.toBeNull();
     expect(container.querySelector<HTMLTextAreaElement>(".nc-note-body-edit")?.getAttribute("aria-label")).toBe(
@@ -2175,6 +2178,28 @@ describe("HomePage current home experience", () => {
     expect(recordInspirationRevisit).toHaveBeenCalledWith("insp-1", "detail_opened");
   });
 
+  it("persists the pin-specific value when unpinning a top-of-mind note", async () => {
+    setApiFixtures({
+      topOfMindNotes: [{ ...sampleTopOfMindNote, isPinned: true }],
+    });
+
+    const container = await renderHomePage();
+    const unpin = container.querySelector<HTMLButtonElement>('button[aria-label="unpin post-it"]');
+    expect(unpin).not.toBeNull();
+
+    await act(async () => {
+      unpin?.click();
+    });
+    await flushReactWork();
+
+    expect(createFeedback).toHaveBeenCalledWith({
+      targetType: "top_of_mind_note",
+      targetId: "note-1",
+      value: "not_important",
+    });
+    expect(container.querySelector<HTMLButtonElement>('button[aria-label="pin"]')).not.toBeNull();
+  });
+
   it("expands the opened post-it around a non-first evidence inspiration", async () => {
     setApiFixtures({
       topOfMindNotes: [
@@ -2702,6 +2727,23 @@ describe("HomePage current home experience", () => {
     expect(mobileDrawerRules).toContain("display: inline-flex");
     expect(mobileDrawerRules).toContain("transform: translateX(-50%)");
     expect(mobileDrawerRules).toContain("min-width: 0");
+  });
+
+  it("keeps desktop wall actions offset and mobile actions in document flow", async () => {
+    setApiFixtures();
+    const container = await renderHomePage();
+    const css = readFileSync("src/styles/global.css", "utf8");
+
+    expect(container.querySelector(".nc-bottom-bar--wall")).not.toBeNull();
+    expect(css).toMatch(
+      /\.nc-bottom-bar--wall\s*\{[\s\S]*?left:\s*auto;[\s\S]*?right:\s*clamp\(24px, 4vw, 56px\);[\s\S]*?transform:\s*none;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar--wall\s*\{[\s\S]*?position:\s*static;[\s\S]*?left:\s*auto;[\s\S]*?right:\s*auto;[\s\S]*?bottom:\s*auto;[\s\S]*?justify-content:\s*center;[\s\S]*?transform:\s*none;/,
+    );
+    expect(css).toMatch(
+      /@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar:not\(\.nc-bottom-bar--drawer\)\s*\{[\s\S]*?transform:\s*none;/,
+    );
   });
 
   it("opens filesystem-filtered drawer entries and inspiration detail in place", async () => {

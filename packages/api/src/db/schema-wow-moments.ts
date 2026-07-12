@@ -7,8 +7,9 @@
  * script, or future worker.
  */
 
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
+  check,
   foreignKey,
   index,
   integer,
@@ -54,6 +55,11 @@ export const topOfMindNotes = pgTable(
     reflectionGuide: text("reflection_guide"),
     locale: text("locale").notNull().default("en-US"),
     wowScore: integer("wow_score").notNull().default(0),
+    semanticKey: text("semantic_key"),
+    evidenceFingerprint: text("evidence_fingerprint"),
+    lifecycleStatus: text("lifecycle_status").notNull().default("active"),
+    replacedAt: timestamp("replaced_at", { withTimezone: true }),
+    replacedById: uuid("replaced_by_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -62,9 +68,9 @@ export const topOfMindNotes = pgTable(
       .defaultNow(),
   },
   (table) => ({
-    idempotencyKeyIdx: uniqueIndex("top_of_mind_notes_idempotency_key_unique_idx").on(
-      table.idempotencyKey,
-    ),
+    idempotencyKeyIdx: uniqueIndex(
+      "top_of_mind_notes_idempotency_key_unique_idx",
+    ).on(table.idempotencyKey),
     userCreatedIdx: index("top_of_mind_notes_user_created_idx").on(
       table.userId,
       table.createdAt.desc(),
@@ -76,6 +82,37 @@ export const topOfMindNotes = pgTable(
     userScoreIdx: index("top_of_mind_notes_user_score_idx").on(
       table.userId,
       table.wowScore.desc(),
+    ),
+    generationIdentityIdx: uniqueIndex(
+      "top_of_mind_notes_generation_identity_unique_idx",
+    )
+      .on(table.userId, table.semanticKey, table.evidenceFingerprint)
+      .where(
+        sql`${table.semanticKey} is not null and ${table.evidenceFingerprint} is not null`,
+      ),
+    activeSemanticIdx: uniqueIndex(
+      "top_of_mind_notes_active_semantic_unique_idx",
+    )
+      .on(table.userId, table.semanticKey)
+      .where(
+        sql`${table.lifecycleStatus} = 'active' and ${table.semanticKey} is not null`,
+      ),
+    replacedByFk: foreignKey({
+      name: "top_of_mind_notes_replaced_by_fk",
+      columns: [table.userId, table.replacedById],
+      foreignColumns: [table.userId, table.id],
+    }),
+    valueRangeCheck: check(
+      "top_of_mind_notes_wow_score_range_check",
+      sql`${table.wowScore} between 0 and 100`,
+    ),
+    lifecycleCheck: check(
+      "top_of_mind_notes_lifecycle_check",
+      sql`(${table.lifecycleStatus} = 'active' and ${table.replacedAt} is null and ${table.replacedById} is null) or (${table.lifecycleStatus} = 'replaced' and ${table.replacedAt} is not null and (${table.replacedById} is null or ${table.replacedById} <> ${table.id}))`,
+    ),
+    identityPairCheck: check(
+      "top_of_mind_notes_identity_pair_check",
+      sql`(${table.semanticKey} is null) = (${table.evidenceFingerprint} is null)`,
     ),
   }),
 );

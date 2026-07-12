@@ -12,7 +12,8 @@ const userId = "00000000-0000-4000-8000-000000000001";
 const now = new Date("2026-05-30T12:00:00.000Z");
 
 function node(
-  input: Partial<TopOfMindRefreshNodeInput> & Pick<TopOfMindRefreshNodeInput, "id" | "type" | "label">,
+  input: Partial<TopOfMindRefreshNodeInput> &
+    Pick<TopOfMindRefreshNodeInput, "id" | "type" | "label">,
 ): TopOfMindRefreshNodeInput {
   return {
     description: "",
@@ -33,7 +34,8 @@ function evidence(
     reason: "This signal supports the provisional note.",
     weight: 70,
     createdAt: new Date("2026-05-30T10:00:00.000Z"),
-    inspirationText: "A source signal about work that makes the surrounding life better.",
+    inspirationText:
+      "A source signal about work that makes the surrounding life better.",
     sparkText: "life around the work",
     ...input,
   };
@@ -93,14 +95,18 @@ function refreshDbStub(preferredLocale = "en-US") {
         id: "public-building-room",
         type: "environment",
         label: "cities where public building is normal",
-        description: "Signals keep returning to places where ambition feels social.",
+        description:
+          "Signals keep returning to places where ambition feels social.",
         weight: 160,
         confidence: 72,
         evidenceCount: 3,
       }),
     ],
     [
-      evidence({ meaningNodeId: "public-building-room", inspirationId: "signal-1" }),
+      evidence({
+        meaningNodeId: "public-building-room",
+        inspirationId: "signal-1",
+      }),
       evidence({
         meaningNodeId: "public-building-room",
         inspirationId: "signal-2",
@@ -121,33 +127,55 @@ function refreshDbStub(preferredLocale = "en-US") {
     insertedEvidenceLinks,
     db: {
       select: vi.fn(() => new QueryStub(selectResults[selectIndex++] ?? [])),
-      transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
-        const tx = {
-          insert: vi.fn(() => ({
-            values(value: unknown) {
-              const target = Array.isArray(value) ? insertedEvidenceLinks : insertedWowMoments;
-              target.push(value);
-              return {
-                onConflictDoNothing() {
-                  return {
-                    returning() {
-                      return new QueryStub([{ id: "moment-1" }]);
-                    },
-                    then<TResult1 = unknown, TResult2 = never>(
-                      onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
-                      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-                    ): PromiseLike<TResult1 | TResult2> {
-                      return Promise.resolve(undefined).then(onfulfilled, onrejected);
-                    },
-                  };
-                },
-              };
-            },
-          })),
-          select: vi.fn(() => new QueryStub([{ id: "existing-moment" }])),
-        };
-        return callback(tx);
-      }),
+      transaction: vi.fn(
+        async (callback: (tx: unknown) => Promise<unknown>) => {
+          const tx = {
+            execute: vi.fn(async () => undefined),
+            insert: vi.fn(() => ({
+              values(value: unknown) {
+                const target = Array.isArray(value)
+                  ? insertedEvidenceLinks
+                  : insertedWowMoments;
+                target.push(value);
+                return {
+                  onConflictDoNothing() {
+                    return {
+                      returning() {
+                        return new QueryStub([
+                          {
+                            ...(value as Record<string, unknown>),
+                            id: "moment-1",
+                            lifecycleStatus: "active",
+                          },
+                        ]);
+                      },
+                      then<TResult1 = unknown, TResult2 = never>(
+                        onfulfilled?:
+                          | ((
+                              value: unknown,
+                            ) => TResult1 | PromiseLike<TResult1>)
+                          | null,
+                        onrejected?:
+                          | ((
+                              reason: unknown,
+                            ) => TResult2 | PromiseLike<TResult2>)
+                          | null,
+                      ): PromiseLike<TResult1 | TResult2> {
+                        return Promise.resolve(undefined).then(
+                          onfulfilled,
+                          onrejected,
+                        );
+                      },
+                    };
+                  },
+                };
+              },
+            })),
+            select: vi.fn(() => new QueryStub([])),
+          };
+          return callback(tx);
+        },
+      ),
     },
   };
 }
@@ -202,7 +230,8 @@ describe("rankTopOfMindRefreshCandidates", () => {
       contextType: "tension",
       ambitionDimension: "rejection",
       kind: "tension",
-      reflectionQuestion: "What correction would make this feel truer right now?",
+      reflectionQuestion:
+        "What correction would make this feel truer right now?",
     });
   });
 
@@ -257,7 +286,7 @@ describe("rankTopOfMindRefreshCandidates", () => {
       matchedEnvironment:
         "A practical setting where what kind of ambition still leaves room for life can be tested in public conditions.",
       reflectionQuestion: "what kind of ambition still leaves room for life?",
-      wowScore: 100,
+      wowScore: 76,
     });
     expect(candidates[0]?.why).toBe("");
     expect(candidates[0]?.why).not.toContain("This may matter for ambition");
@@ -276,36 +305,47 @@ describe("rankTopOfMindRefreshCandidates", () => {
   });
 
   it("does not duplicate an existing active note for the same graph claim", () => {
-    const existingKey = `${"top_of_mind_context_node:v1"}:${userId}:already-noted`;
+    const nodes = [
+      node({
+        id: "already-noted",
+        type: "value",
+        label: "honest rooms",
+        evidenceCount: 5,
+      }),
+      node({
+        id: "fresh-node",
+        type: "value",
+        label: "less performative ambition",
+        evidenceCount: 3,
+      }),
+    ];
+    const evidence = [
+      ...evidenceBundle("already-noted", "signal-a"),
+      ...evidenceBundle("fresh-node", "signal-b"),
+    ];
+    const existingKey = rankTopOfMindRefreshCandidates({
+      userId,
+      now,
+      nodes,
+      evidence,
+    }).find(
+      (candidate) => candidate.node.id === "already-noted",
+    )!.idempotencyKey;
     const candidates = rankTopOfMindRefreshCandidates({
       userId,
       now,
       existingIdempotencyKeys: new Set([existingKey]),
-      nodes: [
-        node({
-          id: "already-noted",
-          type: "value",
-          label: "honest rooms",
-          evidenceCount: 5,
-        }),
-        node({
-          id: "fresh-node",
-          type: "value",
-          label: "less performative ambition",
-          evidenceCount: 3,
-        }),
-      ],
-      evidence: [
-        ...evidenceBundle("already-noted", "signal-a"),
-        ...evidenceBundle("fresh-node", "signal-b"),
-      ],
+      nodes,
+      evidence,
     });
 
     expect(candidates.map((candidate) => candidate.node.id)).toEqual([
       "fresh-node",
     ]);
-    expect(candidates[0]?.idempotencyKey).toBe(
-      `top_of_mind_context_node:v1:${userId}:fresh-node`,
+    expect(candidates[0]?.idempotencyKey).toEqual(
+      expect.stringContaining(
+        `top_of_mind_context_node:v2:${userId}:fresh-node:`,
+      ),
     );
   });
 
@@ -318,14 +358,16 @@ describe("rankTopOfMindRefreshCandidates", () => {
           id: "founder-cities",
           type: "theme",
           label: "founder cities",
-          description: "Saved signals point toward public building environments.",
+          description:
+            "Saved signals point toward public building environments.",
           evidenceCount: 3,
         }),
         node({
           id: "consensus-tension",
           type: "tension",
           label: "consensus over aliveness",
-          description: "The user reacts against rooms that reward smoothing over truth.",
+          description:
+            "The user reacts against rooms that reward smoothing over truth.",
           evidenceCount: 3,
         }),
       ],
@@ -372,11 +414,21 @@ describe("rankTopOfMindRefreshCandidates", () => {
     for (const candidate of candidates) {
       expect(candidate.title).toBe("");
       expect(candidate.title).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
-      expect(candidate.ambientSignal).not.toMatch(/^(You|Your|This person|WAKA)\b/i);
-      expect(candidate.title).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
-      expect(candidate.ambientSignal).not.toMatch(/^(I need|I want|I am|I'm|I refuse|I am done with)\b/i);
-      expect(candidate.title).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
-      expect(candidate.ambientSignal).not.toMatch(/\b(I think|maybe|might|probably|seems)\b/i);
+      expect(candidate.ambientSignal).not.toMatch(
+        /^(You|Your|This person|WAKA)\b/i,
+      );
+      expect(candidate.title).not.toMatch(
+        /^(I need|I want|I am|I'm|I refuse|I am done with)\b/i,
+      );
+      expect(candidate.ambientSignal).not.toMatch(
+        /^(I need|I want|I am|I'm|I refuse|I am done with)\b/i,
+      );
+      expect(candidate.title).not.toMatch(
+        /\b(I think|maybe|might|probably|seems)\b/i,
+      );
+      expect(candidate.ambientSignal).not.toMatch(
+        /\b(I think|maybe|might|probably|seems)\b/i,
+      );
       expect(candidate.title).not.toMatch(
         /^(public before perfect|taste as default|test it outside|test it in public|courage normal)$/i,
       );
@@ -385,8 +437,12 @@ describe("rankTopOfMindRefreshCandidates", () => {
       expect(candidate.title).not.toMatch(/work that turns .+ visible/i);
       expect(candidate.title).not.toMatch(/keep returning$/);
       expect(candidate.ambientSignal).toBe("");
-      expect(candidate.matchedEnvironment).toMatch(/environment|culture|work|setting|room/i);
-      expect(candidate.antiEnvironment).toMatch(/settings|circles|contexts|rooms|loops|work/i);
+      expect(candidate.matchedEnvironment).toMatch(
+        /environment|culture|work|setting|room/i,
+      );
+      expect(candidate.antiEnvironment).toMatch(
+        /settings|circles|contexts|rooms|loops|work/i,
+      );
       expect(candidate.evidenceRationale).toMatch(/saved signal/);
       expect(candidate.why).toBe("");
       expect(candidate.why).not.toContain("This may matter for ambition");
@@ -528,7 +584,11 @@ describe("refreshTopOfMindNotesFromContextGraph", () => {
 
     expect(result.generated).toBe(1);
     expect(result.notes).toEqual([
-      { id: "moment-1", contextNodeId: "public-building-room", status: "created" },
+      {
+        id: "moment-1",
+        contextNodeId: "public-building-room",
+        status: "created",
+      },
     ]);
     expect(result.synthesis).toMatchObject({
       attempted: 1,
@@ -546,8 +606,9 @@ describe("refreshTopOfMindNotesFromContextGraph", () => {
 
   it("propagates ko-KR into generation, synthesis, and persisted active notes", async () => {
     const { db, insertedWowMoments } = refreshDbStub("ko-KR");
-    const generateTopOfMindNotes = vi.fn(async (input: TopOfMindNoteGenerationInput) =>
-      rankTopOfMindRefreshCandidates(input),
+    const generateTopOfMindNotes = vi.fn(
+      async (input: TopOfMindNoteGenerationInput) =>
+        rankTopOfMindRefreshCandidates(input),
     );
     const synthesizeAmbition = vi.fn().mockResolvedValue({
       firstPersonPostItCandidate: "용기가 평범해지는 사람들 곁에서 일을 만들기",
