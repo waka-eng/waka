@@ -13695,6 +13695,12 @@ body.reflect-bg {
   transform: translateX(-50%);
 }
 
+.nc-bottom-bar--wall {
+  left: auto;
+  right: clamp(24px, 4vw, 56px);
+  transform: none;
+}
+
 .nc-bottom-hint {
   position: absolute;
   top: calc(100% + 16px);
@@ -14412,6 +14418,26 @@ body.reflect-bg {
 }
 
 @media (max-width: 760px) {
+  .nc-bottom-bar--wall {
+    position: static;
+    display: flex;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    align-self: center;
+    justify-content: center;
+    width: max-content;
+    max-width: calc(100% - 32px);
+    margin: 0 auto calc(48px + env(safe-area-inset-bottom));
+    transform: none;
+  }
+
+  .nc-bottom-bar--wall .nc-bottom-hint {
+    position: static;
+    margin-top: 16px;
+    transform: none;
+  }
+
   .nc-primary-action {
     width: min(178px, calc(100vw - 96px));
   }
@@ -15490,7 +15516,7 @@ textarea {
 @media (max-width: 760px) {
   .nc-bottom-bar:not(.nc-bottom-bar--drawer) {
     gap: 14px;
-    transform: translateX(calc(-50% - 28px));
+    transform: none;
   }
 
   .nc-bottom-bar:not(.nc-bottom-bar--drawer) .nc-primary-action {

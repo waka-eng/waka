@@ -4601,7 +4601,9 @@ export function HomePage(): JSX.Element {
       ) : null}
 
       <div
-        className={`nc-bottom-bar${homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : ""}`}
+        className={`nc-bottom-bar${
+          homeMode === "memoryDrawer" ? " nc-bottom-bar--drawer" : " nc-bottom-bar--wall"
+        }`}
         data-locale={locale}
         aria-label={copy.bottomActionsLabel}
       >

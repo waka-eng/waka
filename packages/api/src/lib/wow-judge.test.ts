@@ -42,6 +42,22 @@ function chainWithOrderByResult<T>(terminal: T) {
   };
 }
 
+function chainWithGroupedLimit<T>(terminal: T) {
+  return {
+    from: vi.fn(() => ({
+      innerJoin: vi.fn(() => ({
+        where: vi.fn(() => ({
+          groupBy: vi.fn(() => ({
+            having: vi.fn(() => ({
+              orderBy: vi.fn(() => ({ limit: vi.fn(async () => terminal) })),
+            })),
+          })),
+        })),
+      })),
+    })),
+  };
+}
+
 function insertChain<T extends Record<string, unknown>[]>(returningRows: T) {
   return {
     values: vi.fn((value: Record<string, unknown>) => ({
@@ -158,6 +174,7 @@ function existingMoment(overrides: Record<string, unknown> = {}) {
 function buildDb(params: {
   duplicateRows?: unknown[];
   createdMoment?: unknown;
+  familyRows?: unknown[];
 }) {
   const links = [
     {
@@ -231,7 +248,7 @@ function buildDb(params: {
           ]),
         )
         .mockReturnValueOnce(chainWithOrderByResult([]))
-        .mockReturnValueOnce(chainWithLimit(params.duplicateRows ?? []))
+        .mockReturnValueOnce(chainWithGroupedLimit(params.familyRows ?? []))
         .mockReturnValueOnce(chainWithOrderByResult(links)),
       transaction: vi.fn(async (callback) => callback(tx)),
     },
@@ -239,6 +256,53 @@ function buildDb(params: {
 }
 
 describe("persistWowMomentForInspirationJudgment provenance identity", () => {
+  it("keeps the production semantic family for contracted evidence despite trigger, kind, and copy changes", async () => {
+    const semanticKey = "wow_judgment:durable-family";
+    const created = existingMoment({
+      title: "Completely different copy",
+      kind: "tension",
+      semanticKey,
+    });
+    const familyRows = [{ semanticKey }];
+    const { db } = buildDb({ duplicateRows: [], createdMoment: created, familyRows });
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: db as any,
+      userId,
+      triggerInspirationId: otherRelatedId,
+      judgment: trueJudgment({
+        kind: "tension",
+        title: "New model copy after contraction",
+        relatedInspirationIds: [otherRelatedId, relatedId, triggerId],
+      }),
+      locale: "en-US",
+    });
+
+    expect(result.persisted && result.wowMoment.semanticKey).toBe(semanticKey);
+  });
+
+  it("evolves the production semantic family when the evidence gains a new signal", async () => {
+    const semanticKey = "wow_judgment:prior-family";
+    const created = existingMoment({ semanticKey });
+    const { db } = buildDb({
+      duplicateRows: [],
+      createdMoment: created,
+      familyRows: [],
+    });
+
+    const result = await persistWowMomentForInspirationJudgment({
+      db: db as any,
+      userId,
+      triggerInspirationId: triggerId,
+      judgment: trueJudgment({
+        relatedInspirationIds: [triggerId, relatedId, otherRelatedId],
+      }),
+      locale: "en-US",
+    });
+
+    expect(result.persisted && result.wowMoment.semanticKey).not.toBe(semanticKey);
+  });
+
   it("does not use normalized generated prose as a duplicate identity", async () => {
     const created = existingMoment();
     const { db } = buildDb({ duplicateRows: [], createdMoment: created });

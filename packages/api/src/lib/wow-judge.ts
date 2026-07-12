@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import {
@@ -33,6 +33,42 @@ import {
 } from "./top-of-mind-value.js";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
+
+export async function resolveWowJudgmentSemanticFamily(
+  db: WakaDb,
+  userId: string,
+  evidenceIds: readonly string[],
+  fallbackKey: string,
+): Promise<string> {
+  const canonicalEvidenceIds = [...new Set(evidenceIds)].sort();
+  if (canonicalEvidenceIds.length === 0) return fallbackKey;
+
+  const [family] = await db
+    .select({ semanticKey: wowMoments.semanticKey })
+    .from(wowMoments)
+    .innerJoin(
+      wowMomentInspirations,
+      and(
+        eq(wowMomentInspirations.userId, userId),
+        eq(wowMomentInspirations.wowMomentId, wowMoments.id),
+        inArray(wowMomentInspirations.inspirationId, canonicalEvidenceIds),
+      ),
+    )
+    .where(
+      and(
+        eq(wowMoments.userId, userId),
+        like(wowMoments.semanticKey, "wow_judgment:%"),
+      ),
+    )
+    .groupBy(wowMoments.id, wowMoments.semanticKey, wowMoments.createdAt)
+    .having(
+      sql`count(distinct ${wowMomentInspirations.inspirationId}) = ${canonicalEvidenceIds.length}`,
+    )
+    .orderBy(desc(wowMoments.createdAt))
+    .limit(1);
+
+  return family?.semanticKey ?? fallbackKey;
+}
 const MAX_INSPIRATION_CHARS = 4000;
 const MAX_TITLE_CHARS = 120;
 const MAX_REFLECTION_QUESTION_CHARS = 240;
@@ -2096,22 +2132,18 @@ export async function persistWowMomentForInspirationJudgment(
     relatedInspirationIds: relatedIds,
     locale,
   });
-  const relatedIdSet = new Set(relatedIds);
-  const stableFamilyIds = [input.trigger, ...input.candidates]
-    .filter((source) => relatedIdSet.has(source.id))
-    .sort(
-      (a, b) =>
-        a.createdAt.getTime() - b.createdAt.getTime() ||
-        a.id.localeCompare(b.id),
-    )
-    .slice(0, 2)
-    .map((source) => source.id);
-  const semanticKey = semanticFamilyKey(
+  const canonicalEvidenceIds = [...new Set(relatedIds)].sort();
+  const fallbackSemanticKey = semanticFamilyKey(
     "wow_judgment",
-    stableFamilyIds.join("\n"),
+    canonicalEvidenceIds.join("\n"),
   );
-
-  const fingerprint = evidenceFingerprint(relatedIds);
+  const semanticKey = await resolveWowJudgmentSemanticFamily(
+    db,
+    params.userId,
+    canonicalEvidenceIds,
+    fallbackSemanticKey,
+  );
+  const fingerprint = evidenceFingerprint(canonicalEvidenceIds);
   const canonicalValue = canonicalTopOfMindValue({
     evidenceCount: relatedIds.length,
     confidence: 75,
@@ -2126,6 +2158,7 @@ export async function persistWowMomentForInspirationJudgment(
     userId: params.userId,
     semanticKey,
     evidenceFingerprint: fingerprint,
+    evidenceIds: canonicalEvidenceIds,
     value: canonicalValue,
     createRevision: async (tx) => {
       const [createdMoment] = await tx
