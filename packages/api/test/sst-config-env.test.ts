@@ -25,3 +25,18 @@ describe("SST API admin route environment flags", () => {
     );
   });
 });
+
+describe("SST background job recovery schedule", () => {
+  it("runs the production BackgroundJobDrain backstop every 12 hours", () => {
+    const backgroundJobDrain = sstConfig.match(
+      /new sst\.aws\.Cron\("BackgroundJobDrain", \{(?<body>[\s\S]*?)\n    \}\);/,
+    );
+
+    expect(backgroundJobDrain?.groups?.body).toEqual(
+      expect.stringContaining('schedule: "rate(12 hours)"'),
+    );
+    expect(backgroundJobDrain?.groups?.body).toEqual(
+      expect.stringContaining('enabled: $app.stage === "production"'),
+    );
+  });
+});
