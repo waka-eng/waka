@@ -15,6 +15,7 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: [
+      "test/sst-config-env.test.ts",
       "src/lib/ambition-synthesis.test.ts",
       "src/lib/ambition-synthesis-gemini.test.ts",
       "src/lib/auto-wow-generation.test.ts",
