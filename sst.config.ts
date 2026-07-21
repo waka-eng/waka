@@ -278,7 +278,7 @@ export default $config({
     });
 
     new sst.aws.Cron("BackgroundJobDrain", {
-      schedule: "rate(1 minute)",
+      schedule: "rate(12 hours)",
       enabled: $app.stage === "production",
       function: {
         handler: "packages/api/src/background-worker.handler",
