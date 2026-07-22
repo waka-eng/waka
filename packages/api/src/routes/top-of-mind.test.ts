@@ -957,6 +957,82 @@ describe("GET /api/top-of-mind", () => {
     });
   });
 
+  it("lets the latest feedback value override contradictory applied metadata", async () => {
+    const moment = {
+      id: "00000000-0000-4000-8000-000000000016",
+      userId: user.id,
+      title: "This historical post-it was pulled down",
+      kind: "tension",
+      why: "The latest durable value says the note is no longer true.",
+      reflectionQuestion: null,
+      reflectionGuide: null,
+      wowScore: 52,
+      createdAt: new Date("2026-05-30T10:00:00.000Z"),
+      updatedAt: new Date("2026-05-30T11:00:00.000Z"),
+    };
+    const momentsSelect = createMomentsSelect([moment]);
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(momentsSelect.builder)
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(createRelatedRowsSelect([]))
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: moment.id,
+              value: "not_true",
+              correctionText: "pulled down from the wall",
+              metadata: {
+                appliedFeedback: {
+                  source: "user_feedback",
+                  topOfMindNoteStatus: "active",
+                },
+              },
+            },
+            {
+              targetId: moment.id,
+              value: "true",
+              correctionText: null,
+              metadata: {
+                appliedFeedback: {
+                  source: "user_feedback",
+                  topOfMindNoteStatus: "active",
+                },
+              },
+            },
+          ]),
+        ),
+    };
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => db as any,
+        getTopOfMind: vi.fn(async () => ({
+          generatedAt: "2026-05-30T12:00:00.000Z",
+          headline: "Top of mind",
+          activeThemes: [],
+          activeQuestions: [],
+          relationshipSignals: [],
+          summary: {
+            inspirationCount: 1,
+            meaningNoteCount: 0,
+            relationshipEdgeCount: 0,
+          },
+        })),
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request("/api/top-of-mind?limit=1");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      topOfMindNotes: [],
+    });
+  });
+
   it("uses the latest feedback value as the persisted top-of-mind visibility status", async () => {
     const moment = {
       id: "00000000-0000-4000-8000-000000000015",
@@ -1231,7 +1307,7 @@ describe("GET /api/top-of-mind", () => {
   });
 });
 
-it("returns null for stale top-of-mind note detail readback", async () => {
+it("returns null from detail when not-true overrides contradictory applied metadata", async () => {
   const moment = {
     id: "00000000-0000-4000-8000-000000000013",
     userId: user.id,
@@ -1261,7 +1337,7 @@ it("returns null for stale top-of-mind note detail readback", async () => {
             metadata: {
               appliedFeedback: {
                 source: "user_feedback",
-                topOfMindNoteStatus: "stale",
+                topOfMindNoteStatus: "active",
               },
             },
           },
