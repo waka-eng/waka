@@ -392,8 +392,8 @@ async function fetchLatestTopOfMindFeedbackSnapshots(
       snapshot.isPinned = row.value === "important";
     }
     const status =
-      readAppliedTopOfMindStatus(row.metadata) ??
-      topOfMindStatusFromFeedbackValue(row.value);
+      topOfMindStatusFromFeedbackValue(row.value) ??
+      readAppliedTopOfMindStatus(row.metadata);
     if (!snapshot.status && status) snapshot.status = status;
     const correctionText =
       row.value === "partly" ? row.correctionText?.trim() : "";
