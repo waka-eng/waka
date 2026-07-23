@@ -27,7 +27,7 @@ import { ApiError, apiPath } from "../lib/api";
 import type { LoginFieldErrors, SignupFieldErrors } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { formatMessage, normalizeSupportedLocale, readStoredLocale, supportedLocales, t, writeStoredLocale } from "../lib/locales";
-import type { SupportedLocale } from "../lib/locales";
+import type { MessageKey, SupportedLocale } from "../lib/locales";
 
 // ---------------------------------------------------------------------------
 // Shared constants
@@ -79,12 +79,11 @@ const OAUTH_ERROR_KEYS = {
   invalid_id_token: "oauthInvalidToken",
   account_conflict: "oauthAccountConflict",
   upsert_failed: "oauthUpsertFailed",
-} as const;
+} as const satisfies Record<string, MessageKey>;
 
-function describeOAuthError(code: string | null): string | null {
+function oauthErrorMessageKey(code: string | null): MessageKey | null {
   if (!code) return null;
-  const locale = readStoredLocale();
-  return t(locale, OAUTH_ERROR_KEYS[code as keyof typeof OAUTH_ERROR_KEYS] ?? "oauthFallback");
+  return OAUTH_ERROR_KEYS[code as keyof typeof OAUTH_ERROR_KEYS] ?? "oauthFallback";
 }
 
 /**
@@ -121,16 +120,34 @@ const EMPTY_SIGNUP: SignupValues = {
   preferredLocale: readStoredLocale(),
 };
 
-export function SignupForm(): JSX.Element {
+interface SignupFormProps {
+  locale?: SupportedLocale;
+  onLocaleChange?: (locale: SupportedLocale) => void;
+}
+
+export function SignupForm({
+  locale: shellLocale = readStoredLocale(),
+  onLocaleChange,
+}: SignupFormProps = {}): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const { signup } = useAuth();
 
-  const [values, setValues] = useState<SignupValues>(EMPTY_SIGNUP);
+  const [values, setValues] = useState<SignupValues>(() => ({
+    ...EMPTY_SIGNUP,
+    preferredLocale: shellLocale,
+  }));
   const locale = values.preferredLocale;
   const [fieldErrors, setFieldErrors] = useState<SignupFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setValues((prev) => {
+      if (prev.preferredLocale === shellLocale) return prev;
+      return { ...prev, preferredLocale: shellLocale };
+    });
+  }, [shellLocale]);
 
   function handleChange<K extends keyof SignupValues>(
     key: K,
@@ -292,7 +309,11 @@ export function SignupForm(): JSX.Element {
           onChange={(e) => {
             const next = normalizeSupportedLocale(e.target.value);
             handleChange("preferredLocale", next);
-            writeStoredLocale(next);
+            if (onLocaleChange) {
+              onLocaleChange(next);
+            } else {
+              writeStoredLocale(next);
+            }
           }}
         >
           {supportedLocales.map((option) => (
@@ -488,11 +509,11 @@ export function LoginForm(): JSX.Element {
  */
 function GoogleSignInButton({
   disabled = false,
+  locale = readStoredLocale(),
 }: {
   disabled?: boolean;
+  locale?: SupportedLocale;
 }): JSX.Element {
-  const locale = readStoredLocale();
-
   function handleClick(): void {
     if (disabled) return;
     // assign() (vs href= or replace()) keeps the /login entry in browser
@@ -552,9 +573,7 @@ function GoogleSignInButton({
  * pair of horizontal rules with centered "or" text — keeps the eye moving
  * between the two equally-valid paths instead of biasing toward one.
  */
-function OrDivider(): JSX.Element {
-  const locale = readStoredLocale();
-
+function OrDivider({ locale = readStoredLocale() }: { locale?: SupportedLocale } = {}): JSX.Element {
   return (
     <div className="login-divider" role="separator" aria-orientation="horizontal">
       <span className="login-divider__line" aria-hidden="true" />
@@ -584,9 +603,14 @@ export default function LoginPage(): JSX.Element {
   const [mode, setMode] = useState<Mode>("login");
   const loginTabRef = useRef<HTMLButtonElement>(null);
   const signupTabRef = useRef<HTMLButtonElement>(null);
-  const locale = readStoredLocale();
+  const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const location = useLocation();
   const navigate = useNavigate();
+
+  const handleLocaleChange = (next: SupportedLocale): void => {
+    setLocale(next);
+    writeStoredLocale(next);
+  };
 
   /**
    * Surface the OAuth error code (if any) the API redirected us back with
@@ -601,11 +625,13 @@ export default function LoginPage(): JSX.Element {
   // naturally on the next navigation (form sign-in, retried Google flow,
   // or anchor click). No setter is needed because there is no in-page
   // dismiss affordance — re-trying is the dismiss action.
-  const [oauthError] = useState<string | null>(() => {
+  const [oauthErrorCode] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    return describeOAuthError(params.get("error"));
+    return params.get("error");
   });
+  const oauthErrorKey = oauthErrorMessageKey(oauthErrorCode);
+  const oauthError = oauthErrorKey ? t(locale, oauthErrorKey) : null;
 
   useEffect(() => {
     // Only clean up if we actually picked up an error param. Avoids a
@@ -683,9 +709,9 @@ export default function LoginPage(): JSX.Element {
           </div>
         ) : null}
 
-        <GoogleSignInButton />
+        <GoogleSignInButton locale={locale} />
 
-        <OrDivider />
+        <OrDivider locale={locale} />
 
         <div
           className="login-tabs"
@@ -733,7 +759,11 @@ export default function LoginPage(): JSX.Element {
             mode === "login" ? "login-tab-login" : "login-tab-signup"
           }
         >
-          {mode === "login" ? <LoginForm /> : <SignupForm />}
+          {mode === "login" ? (
+            <LoginForm />
+          ) : (
+            <SignupForm locale={locale} onLocaleChange={handleLocaleChange} />
+          )}
         </div>
 
         <p className="login-footer">
