@@ -4763,8 +4763,11 @@ export function HomePage(): JSX.Element {
             }}
             aria-label={homeMode === "memoryDrawer" ? copy.drawerBackHome : `${copy.drawerObjectBody}: ${copy.savesTitle}`}
           >
-            {homeMode === "memoryDrawer" ? (
-              <span className="nc-drawer-icon" aria-hidden="true">
+            {/* One .nc-drawer-icon instance across both modes so the white
+                circle is the same element sliding across the pill rather than
+                two elements swapping places. Only the glyph inside crossfades. */}
+            <span className="nc-drawer-icon" aria-hidden="true">
+              {homeMode === "memoryDrawer" ? (
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -4773,13 +4776,10 @@ export function HomePage(): JSX.Element {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
-                  <path d="m3 10.5 9-7 9 7" />
-                  <path d="M5 9.5V20h14V9.5" />
-                  <path d="M9.5 20v-6h5v6" />
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
                 </svg>
-              </span>
-            ) : (
-              <span className="nc-drawer-icon" aria-hidden="true">
+              ) : (
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -4792,10 +4792,12 @@ export function HomePage(): JSX.Element {
                   <path d="M10 22h4" />
                   <path d="M8.5 14.5c-1.6-1.2-2.5-3-2.5-5A6 6 0 0 1 18 9.5c0 2-.9 3.8-2.5 5-.8.6-1.2 1.4-1.2 2.5H9.7c0-1.1-.4-1.9-1.2-2.5Z" />
                 </svg>
-              </span>
-            )}
+              )}
+            </span>
             <span className="sr-only">{homeMode === "memoryDrawer" ? copy.drawerBackHome : copy.drawerObjectTitle}</span>
-            <small className="nc-drawer-count">{formatSavedCount(locale, savedEntryCount)}</small>
+            <small className="nc-drawer-count">
+              {homeMode === "memoryDrawer" ? copy.close : formatSavedCount(locale, savedEntryCount)}
+            </small>
           </button>
         ) : null}
           {homeMode !== "memoryDrawer" ? (

@@ -13695,10 +13695,72 @@ body.reflect-bg {
   transform: translateX(-50%);
 }
 
+/* Wall mode keeps the bottom bar centered (inheriting .nc-bottom-bar's
+   left:50% + translateX(-50%)) so the capture/saves pair centers as a group.
+   Each button keeps its own gray surround. */
 .nc-bottom-bar--wall {
-  left: auto;
-  right: clamp(24px, 4vw, 56px);
-  transform: none;
+  gap: 12px;
+}
+
+/* Saves button lays the icon and its label out in a row inside its own gray
+   pill. The 54px circle it used to be could not contain both, so the count
+   overflowed below the gray.
+
+   The white circle is absolutely positioned so that entering the drawer it
+   SLIDES the length of the pill (left -> right) and rotates, rather than the
+   row order flipping underneath it. The pill's asymmetric padding is what
+   reserves the label's space, and it animates on the same curve so the gray
+   reflows in step with the circle. */
+.nc-bottom-bar .nc-drawer-object {
+  position: relative;
+  width: auto;
+  height: 54px;
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  /* left: 6px inset + 42px circle + 9px gutter */
+  padding: 6px 18px 6px 57px;
+  transition:
+    padding 460ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.nc-bottom-bar .nc-drawer-icon {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  transition:
+    left 460ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.nc-bottom-bar .nc-drawer-count {
+  line-height: 1;
+  white-space: nowrap;
+  animation: drawerLabelFade 300ms ease both;
+}
+
+/* Drawer mode: circle lands at the right inset, label sits left of it. */
+.nc-bottom-bar .nc-drawer-object--close {
+  padding: 6px 57px 6px 18px;
+}
+
+.nc-bottom-bar .nc-drawer-object--close .nc-drawer-icon {
+  /* 100% is the pill's padding box: full width - 42px circle - 6px inset */
+  left: calc(100% - 48px);
+  transform: rotate(360deg);
+}
+
+@keyframes drawerLabelFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .nc-bottom-hint {
@@ -14203,9 +14265,8 @@ body.reflect-bg {
     box-shadow 220ms ease;
 }
 
-.nc-drawer-object--close {
-  animation: drawerIconTurn 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
+/* The turn now lives on .nc-drawer-icon as it slides across the pill, so the
+   whole button no longer spins in place. */
 
 .nc-drawer-object:hover,
 .nc-drawer-object:focus-visible {
@@ -15424,8 +15485,9 @@ textarea {
     text-overflow: ellipsis;
   }
 
+  /* Pill sizes to its "close" label; a fixed 54px would clip it. */
   .nc-bottom-bar--drawer .nc-drawer-object {
-    width: 54px;
+    width: auto;
   }
 
   .nc-bottom-hint {

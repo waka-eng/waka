@@ -2729,14 +2729,22 @@ describe("HomePage current home experience", () => {
     expect(mobileDrawerRules).toContain("min-width: 0");
   });
 
-  it("keeps desktop wall actions offset and mobile actions in document flow", async () => {
+  it("keeps desktop wall actions centered and mobile actions in document flow", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const css = readFileSync("src/styles/global.css", "utf8");
 
     expect(container.querySelector(".nc-bottom-bar--wall")).not.toBeNull();
+
+    // Wall mode inherits .nc-bottom-bar's centering rather than anchoring to
+    // the right edge: right-anchoring pushed .nc-bottom-hint (centred on the
+    // bar) off the viewport.
+    const wallRule = css.match(/\n\.nc-bottom-bar--wall\s*\{[\s\S]*?\n\}/)?.[0] ?? "";
+    expect(wallRule).not.toBe("");
+    expect(wallRule).not.toContain("right: clamp(24px, 4vw, 56px)");
+    expect(wallRule).not.toContain("left: auto");
     expect(css).toMatch(
-      /\.nc-bottom-bar--wall\s*\{[\s\S]*?left:\s*auto;[\s\S]*?right:\s*clamp\(24px, 4vw, 56px\);[\s\S]*?transform:\s*none;/,
+      /\.nc-bottom-bar\s*\{[\s\S]*?left:\s*50%;[\s\S]*?transform:\s*translateX\(-50%\);/,
     );
     expect(css).toMatch(
       /@media \(max-width: 760px\) \{[\s\S]*?\.nc-bottom-bar--wall\s*\{[\s\S]*?position:\s*static;[\s\S]*?left:\s*auto;[\s\S]*?right:\s*auto;[\s\S]*?bottom:\s*auto;[\s\S]*?justify-content:\s*center;[\s\S]*?transform:\s*none;/,
