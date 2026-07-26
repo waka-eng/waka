@@ -33,6 +33,8 @@ export default defineConfig({
       "src/routes/auth-google.test.ts",
       "src/routes/auth-profile.test.ts",
       "src/routes/feedback.test.ts",
+      "src/routes/group-rooms.test.ts",
+      "src/routes/groups.test.ts",
       "src/routes/public-profiles.test.ts",
       "src/routes/top-of-mind.test.ts",
       "src/routes/wow-moments.test.ts",

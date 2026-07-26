@@ -130,6 +130,9 @@ const createInspirationSchema = z.object({
     .min(0, "Category must be non-negative")
     .max(2_147_483_647, "Category is too large")
     .optional(),
+  // Whether this inspiration feeds the user's Group Top of Mind boards.
+  // Shared by default (US-052); set false to keep it private.
+  shareToGroups: z.boolean().optional(),
   selectedText: z
     .string()
     .trim()
@@ -406,6 +409,7 @@ routes.post("/", async (c) => {
     category: parsed.data.category ?? null,
     importanceScore: 0,
     wowScore: 0,
+    sharedToGroups: parsed.data.shareToGroups ?? true,
     cluster: null,
     classifiedAt: null,
     createdAt: now,
@@ -453,6 +457,7 @@ routes.post("/", async (c) => {
         text: parsed.data.text,
         kind: parsed.data.kind ?? null,
         category: parsed.data.category ?? null,
+        sharedToGroups: parsed.data.shareToGroups ?? true,
         createdAt: now,
         updatedAt: now,
       })
@@ -464,6 +469,7 @@ routes.post("/", async (c) => {
         category: inspirations.category,
         importanceScore: inspirations.importanceScore,
         wowScore: inspirations.wowScore,
+        sharedToGroups: inspirations.sharedToGroups,
         cluster: inspirations.cluster,
         classifiedAt: inspirations.classifiedAt,
         createdAt: inspirations.createdAt,
@@ -1029,16 +1035,22 @@ const updateInspirationSchema = z
         z.null(),
       ])
       .optional(),
+    // Flip an inspiration between feeding the user's Group Top of Mind boards
+    // (true) and private (false). US-052.
+    shareToGroups: z.boolean().optional(),
   })
   // Reject a payload that names no editable field — without this guard we'd
   // silently bump `updated_at` for a no-op, which is misleading for any
   // caller that sorts by it.
   .refine(
     (v) =>
-      v.text !== undefined || v.kind !== undefined || v.category !== undefined,
+      v.text !== undefined ||
+      v.kind !== undefined ||
+      v.category !== undefined ||
+      v.shareToGroups !== undefined,
     {
       message:
-        "At least one of text, kind, or category must be provided",
+        "At least one of text, kind, category, or shareToGroups must be provided",
       path: ["text"],
     },
   );
@@ -1116,11 +1128,14 @@ routes.patch("/:id", async (c) => {
     text?: string;
     kind?: string | null;
     category?: number | null;
+    sharedToGroups?: boolean;
     updatedAt: Date;
   } = { updatedAt: new Date() };
   if (parsed.data.text !== undefined) patch.text = parsed.data.text;
   if (parsed.data.kind !== undefined) patch.kind = parsed.data.kind;
   if (parsed.data.category !== undefined) patch.category = parsed.data.category;
+  if (parsed.data.shareToGroups !== undefined)
+    patch.sharedToGroups = parsed.data.shareToGroups;
 
   // 4. Single UPDATE with the tenant-scope predicate baked in. `.returning()`
   //    hands back zero rows when the id is missing or owned by another user
@@ -1143,6 +1158,7 @@ routes.patch("/:id", async (c) => {
       category: inspirations.category,
       importanceScore: inspirations.importanceScore,
       wowScore: inspirations.wowScore,
+      sharedToGroups: inspirations.sharedToGroups,
       cluster: inspirations.cluster,
       classifiedAt: inspirations.classifiedAt,
       createdAt: inspirations.createdAt,

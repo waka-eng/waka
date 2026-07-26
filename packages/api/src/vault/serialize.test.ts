@@ -49,6 +49,7 @@ function makeSignal(overrides: Partial<Signal> = {}): Signal {
     category: 2,
     importanceScore: 73,
     wowScore: 81,
+    sharedToGroups: true,
     cluster: "bridge",
     classifiedAt: CREATED_AT,
     createdAt: CREATED_AT,

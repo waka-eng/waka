@@ -387,6 +387,8 @@ export interface ApiInspiration {
   category: number | null;
   importanceScore: number;
   wowScore: number;
+  /** Whether this inspiration feeds the user's Group Top of Mind boards (US-052). */
+  sharedToGroups?: boolean;
   cluster: ClusterKind | null;
   classifiedAt: string | null;
   createdAt: string;
@@ -468,10 +470,14 @@ export interface CreateInspirationRequest {
   }>;
   /** Optional Reflect Deeper Q/A saved with the inspiration to avoid a partial post-save gap. */
   reflections?: CreateReflectionRequest[];
+  /** Whether this inspiration feeds the user's Group Top of Mind boards. Defaults to shared. */
+  shareToGroups?: boolean;
 }
 
 export interface UpdateInspirationRequest {
-  text: string;
+  text?: string;
+  /** Flip whether this inspiration feeds the user's Group Top of Mind boards. */
+  shareToGroups?: boolean;
 }
 
 export type ApiInspirationSparkSource =
@@ -862,6 +868,51 @@ export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
   relatedSignals: ApiTopOfMindRelatedSignalReference[];
 };
 
+// ---------------------------------------------------------------------------
+// Group Top of Mind boards (US-052)
+// ---------------------------------------------------------------------------
+
+export interface ApiGroupSummary {
+  id: string;
+  name: string;
+  role: string;
+  joinCode: string;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface ApiGroupMemberSummary {
+  userId: string;
+  name: string;
+  role: string;
+}
+
+export type ApiGroupEvidencePreview = ApiTopOfMindEvidencePreview & {
+  authorUserId: string;
+  authorName: string;
+};
+
+export type ApiGroupRelatedSignalReference = ApiTopOfMindRelatedSignalReference & {
+  authorUserId: string;
+  authorName: string;
+};
+
+export type ApiGroupTopOfMindNote = Omit<
+  ApiTopOfMindNoteSurface,
+  "evidencePreviews" | "relatedSignals"
+> & {
+  evidencePreviews: ApiGroupEvidencePreview[];
+  relatedSignals: ApiGroupRelatedSignalReference[];
+  authorUserId: string;
+  authorName: string;
+};
+
+export interface ApiGroupTopOfMind {
+  group: ApiGroupSummary;
+  members: ApiGroupMemberSummary[];
+  notes: ApiGroupTopOfMindNote[];
+}
+
 export interface ApiTopOfMindCompatibilityMoment {
   id: string;
   userId: string;
@@ -897,6 +948,98 @@ export interface UpdateTopOfMindNoteRequest {
 
 export interface UpdateTopOfMindNoteResponse {
   topOfMindNote: ApiTopOfMindNoteSurface;
+}
+
+export interface ApiGroupRoomParticipant {
+  id: string;
+  userId: string | null;
+  displayName: string;
+  invitedEmail: string | null;
+  role: string;
+  status: string;
+}
+
+export interface ApiGroupRoomSignalPreview {
+  id: string;
+  signalId: string;
+  userId: string;
+  textPreview: string;
+  shareRaw: boolean;
+  createdAt: string;
+}
+
+export interface ApiGroupRoomPrompt {
+  id: string;
+  roomId: string;
+  promptText: string;
+  rationale: string;
+  actionLabel: string;
+  sourceTopOfMindNoteId: string | null;
+  evidencePreviews: Array<Record<string, unknown>>;
+  createdAt: string;
+}
+
+export interface ApiGroupConversationRoom {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  endedAt: string | null;
+  participants: ApiGroupRoomParticipant[];
+  selectedSignals: ApiGroupRoomSignalPreview[];
+  prompts: ApiGroupRoomPrompt[];
+  postConversation: {
+    feedbackCount: number;
+    latestNote: string | null;
+    nextAction: string;
+  };
+}
+
+export interface ApiGroupRoomFeedback {
+  id: string;
+  roomId: string;
+  promptId: string | null;
+  reaction: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface ListGroupRoomsResponse {
+  rooms: ApiGroupConversationRoom[];
+}
+
+export interface CreateGroupRoomRequest {
+  name?: string;
+  participantEmails?: string[];
+}
+
+export interface CreateGroupRoomResponse {
+  room: ApiGroupConversationRoom;
+}
+
+export interface CreateDiscussionTopicRequest {
+  roomId?: string;
+  title?: string;
+  sourceTopOfMindNoteId?: string;
+  signalIds?: string[];
+}
+
+export interface CreateDiscussionTopicResponse {
+  room: ApiGroupConversationRoom;
+  prompt: ApiGroupRoomPrompt;
+}
+
+export interface CreateGroupRoomFeedbackRequest {
+  promptId?: string;
+  reaction?: "useful" | "unresolved" | "next_topic" | "action";
+  note?: string;
+}
+
+export interface CreateGroupRoomFeedbackResponse {
+  room: ApiGroupConversationRoom;
+  feedback: ApiGroupRoomFeedback;
 }
 
 export type ApiPublicTopOfMindEvidencePreview = Omit<
@@ -1006,6 +1149,11 @@ export interface ApiSavedSignalSearchResult {
   capturedAt: string;
   updatedAt: string;
   resonanceScore: number;
+  /**
+   * Client-only: on a Group Top of Mind evidence drawer, the member who saved
+   * this inspiration. Unset for the viewer's own saved signals.
+   */
+  ownerName?: string;
   signalScores: ApiSignalScores;
   highlightedSnippets: Array<{
     id: string;
@@ -1272,6 +1420,162 @@ export async function updateTopOfMindNote(
   }
 
   return body.topOfMindNote;
+}
+
+// ---------------------------------------------------------------------------
+// Group Top of Mind boards (US-052)
+// ---------------------------------------------------------------------------
+
+/** Flip whether a saved inspiration feeds the user's Group Top of Mind boards. */
+export async function setInspirationSharing(
+  id: string,
+  shareToGroups: boolean,
+): Promise<ApiInspiration> {
+  const body = await patchJson<UpdateInspirationResponse>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    { shareToGroups },
+    "Failed to update sharing",
+  );
+  return body.inspiration;
+}
+
+/** GET /groups — the boards the signed-in user belongs to. */
+export async function fetchGroups(): Promise<ApiGroupSummary[]> {
+  const body = await getJson<{ groups: ApiGroupSummary[] }>(
+    apiPath("/groups"),
+    "Failed to load groups",
+  );
+  return Array.isArray(body.groups) ? body.groups : [];
+}
+
+/** POST /groups — create a board; caller becomes owner. */
+export async function createGroup(name: string): Promise<ApiGroupSummary> {
+  const body = await postJson<{ group: ApiGroupSummary }>(
+    apiPath("/groups"),
+    { name },
+    "Failed to create group",
+  );
+  return body.group;
+}
+
+/** POST /groups/join — join a board by its shareable code. */
+export async function joinGroup(
+  joinCode: string,
+): Promise<{ group: ApiGroupSummary; alreadyMember: boolean }> {
+  const body = await postJson<{ group: ApiGroupSummary; alreadyMember: boolean }>(
+    apiPath("/groups/join"),
+    { joinCode },
+    "Failed to join group",
+  );
+  return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
+}
+
+/** POST /groups/:id/leave */
+export async function leaveGroup(groupId: string): Promise<{ ok: boolean }> {
+  const body = await postJson<{ ok: boolean }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/leave`),
+    {},
+    "Failed to leave group",
+  );
+  return { ok: Boolean(body.ok) };
+}
+
+/** GET /groups/:id/top-of-mind — synthesized group board. */
+export async function fetchGroupTopOfMind(
+  groupId: string,
+  limit?: number,
+): Promise<ApiGroupTopOfMind> {
+  const query = typeof limit === "number" ? `?limit=${limit}` : "";
+  return getJson<ApiGroupTopOfMind>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${query}`),
+    "Failed to load group top of mind",
+  );
+}
+
+/** POST /groups/:id/top-of-mind/refresh — regenerate the group board. */
+export async function refreshGroupTopOfMind(
+  groupId: string,
+): Promise<ApiGroupTopOfMind> {
+  return postJson<ApiGroupTopOfMind>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
+    {},
+    "Failed to refresh group top of mind",
+  );
+}
+
+export async function fetchGroupRooms(limit = 5): Promise<ApiGroupConversationRoom[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const body = await getJson<ListGroupRoomsResponse>(
+    apiPath(`/group-rooms?${params.toString()}`),
+    "Failed to load conversation rooms",
+  );
+
+  if (!Array.isArray(body.rooms)) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed conversation rooms response",
+    });
+  }
+
+  return body.rooms;
+}
+
+export async function createGroupRoom(
+  input: CreateGroupRoomRequest,
+): Promise<ApiGroupConversationRoom> {
+  const body = await postJson<CreateGroupRoomResponse>(
+    apiPath("/group-rooms"),
+    input,
+    "Failed to create conversation room",
+  );
+
+  if (!body.room) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed conversation room response",
+    });
+  }
+
+  return body.room;
+}
+
+export async function createDiscussionTopic(
+  input: CreateDiscussionTopicRequest,
+): Promise<CreateDiscussionTopicResponse> {
+  const body = await postJson<CreateDiscussionTopicResponse>(
+    apiPath("/group-rooms/discussion-topic"),
+    input,
+    "Failed to create discussion topic",
+  );
+
+  if (!body.room || !body.prompt) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed discussion topic response",
+    });
+  }
+
+  return body;
+}
+
+export async function createGroupRoomFeedback(
+  roomId: string,
+  input: CreateGroupRoomFeedbackRequest,
+): Promise<CreateGroupRoomFeedbackResponse> {
+  const body = await postJson<CreateGroupRoomFeedbackResponse>(
+    apiPath(`/group-rooms/${encodeURIComponent(roomId)}/feedback`),
+    input,
+    "Failed to save room feedback",
+  );
+
+  if (!body.room || !body.feedback) {
+    throw new ApiError({
+      status: 200,
+      message: "Malformed room feedback response",
+    });
+  }
+
+  return body;
 }
 
 export async function fetchPublicProfile(

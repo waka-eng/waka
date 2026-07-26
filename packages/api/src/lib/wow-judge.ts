@@ -9,7 +9,10 @@ import {
   wowMoments,
   type WowKind,
 } from "../db/index.js";
-import { findWowMomentCandidates } from "./wow-candidates.js";
+import {
+  findGroupWowMomentCandidates,
+  findWowMomentCandidates,
+} from "./wow-candidates.js";
 import { getDb } from "./db.js";
 import {
   areDuplicateTopOfMindNotes,
@@ -2283,6 +2286,68 @@ export async function judgeWowMomentForInspiration(
     return defaultFalseJudgment(
       "unclear_pattern",
       "Gemini referenced signal ids outside retrieved candidates.",
+      { parseFailureStage: "unsafe_related_ids" },
+    );
+  }
+  if (!judgment.isWowMoment) return judgment;
+
+  const cappedJudgment = capTrueJudgmentSources(
+    judgment,
+    params.triggerInspirationId,
+  );
+  return hasEnoughSourceLinks(cappedJudgment.relatedInspirationIds)
+    ? cappedJudgment
+    : tooFewSourceLinksFalseJudgment();
+}
+
+export interface JudgeGroupWowMomentParams {
+  db?: WakaDb;
+  /** Every member of the group whose shared signals may join the pool. */
+  memberUserIds: string[];
+  /** Which member owns the trigger inspiration. */
+  triggerUserId: string;
+  triggerInspirationId: string;
+  limit?: number;
+  client?: WowJudgeClient;
+  locale?: SupportedLocale;
+}
+
+/**
+ * Judge a group Top of Mind note over the POOLED shared inspirations of all
+ * members. Identical contract to {@link judgeWowMomentForInspiration}, but the
+ * candidate pool spans members, so the resulting note can be grounded in
+ * inspirations owned by different people. The judge only ever references ids
+ * from the provided pool (`relatedIdsAreSafe`), so cross-member evidence is safe.
+ */
+export async function judgeGroupWowMoment(
+  params: JudgeGroupWowMomentParams,
+): Promise<WowMomentJudgment> {
+  const db = params.db ?? getDb();
+  const retrieved = await findGroupWowMomentCandidates({
+    db,
+    memberUserIds: params.memberUserIds,
+    triggerUserId: params.triggerUserId,
+    triggerInspirationId: params.triggerInspirationId,
+    limit: params.limit,
+  });
+  const locale = normalizeSupportedLocale(params.locale);
+  // Reflection text loads under the trigger owner; cross-member candidates
+  // simply contribute without their (optional) reflection enrichment.
+  const input = await toPromptInput(retrieved, db, params.triggerUserId, locale);
+  if (!input) {
+    return defaultFalseJudgment(
+      "not_enough_candidates",
+      "No trigger/candidate set was available for group top-of-mind judgment.",
+    );
+  }
+
+  const client =
+    params.client ?? (await getDefaultModelProvider()).topOfMindNoteJudge;
+  const judgment = await client.judgeWowMoment(input);
+  if (!relatedIdsAreSafe(judgment, input)) {
+    return defaultFalseJudgment(
+      "unclear_pattern",
+      "Gemini referenced signal ids outside the pooled group candidates.",
       { parseFailureStage: "unsafe_related_ids" },
     );
   }

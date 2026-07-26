@@ -58,6 +58,7 @@ function makeSignal(id: string, text: string): Signal {
     category: null,
     importanceScore: 0,
     wowScore: 0,
+    sharedToGroups: true,
     cluster: null,
     classifiedAt: null,
     createdAt: CREATED_AT,

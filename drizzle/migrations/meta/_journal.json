@@ -197,6 +197,27 @@
       "when": 1783695600000,
       "tag": "0027_signal_activations",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1783695700000,
+      "tag": "0028_group_conversation_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783695800000,
+      "tag": "0029_group_top_of_mind_boards",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1783695900000,
+      "tag": "0030_group_top_of_mind_notes",
+      "breakpoints": true
     }
   ]
 }
