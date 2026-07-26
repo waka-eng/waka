@@ -39,6 +39,14 @@ export const ACTIVATION_CHARGES = {
   detail_opened: 0.15,
   detail_returned: 0.15,
   inspiration_updated: 0.1,
+  /**
+   * A capture charges its *neighbors* (`neighbor_capture`), never itself: a
+   * signal is not made important by the act of being written down. The entry
+   * exists so the charge map stays total over the revisit event enum — a
+   * missing key would make `chargeForEvent` return undefined and poison
+   * activation with NaN.
+   */
+  capture_saved: 0,
 } as const;
 
 export type ActivationChargeEvent = keyof typeof ACTIVATION_CHARGES;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  inspirationRevisitEventTypeValues,
+  revisitCountingEventTypes,
+} from "../db/schema-revisits.js";
+
+import {
   ACTIVATION_CEILING,
   ACTIVATION_CHARGES,
   FIRE_MIN_CONTRIBUTORS,
@@ -12,6 +17,8 @@ import {
   foldActivationCharge,
   neighborCaptureCharge,
   shouldRunFireCheck,
+  chargeForEvent,
+  type ActivationChargeEvent,
 } from "./activation.js";
 
 const NOW = new Date("2026-07-06T12:00:00.000Z");
@@ -149,5 +156,44 @@ describe("shouldRunFireCheck", () => {
     expect(shouldRunFireCheck(null, NOW)).toBe(true);
     expect(shouldRunFireCheck(new Date(NOW.getTime() - 60 * 60 * 1000), NOW)).toBe(false);
     expect(shouldRunFireCheck(daysAgo(2), NOW)).toBe(true);
+  });
+});
+
+describe("charge map totality over revisit events", () => {
+  it("covers every revisit event type, so no event can charge NaN", () => {
+    // `pulseSignalActivation` looks charges up by revisit event type. A value
+    // added to the enum without a charge here would make `chargeForEvent`
+    // return undefined and fold NaN into a signal's activation, which decays
+    // to NaN forever. This test fails the moment the two drift apart.
+    for (const event of inspirationRevisitEventTypeValues) {
+      const charge = chargeForEvent(event as ActivationChargeEvent);
+      expect(Number.isFinite(charge), `no charge defined for "${event}"`).toBe(true);
+    }
+  });
+
+  it("gives a capture no self-charge", () => {
+    // A capture charges its neighbours, never itself: writing something down
+    // is not what makes it important.
+    expect(ACTIVATION_CHARGES.capture_saved).toBe(0);
+    const before = { activation: 0.5, activatedAt: NOW };
+    const after = foldActivationCharge(before, ACTIVATION_CHARGES.capture_saved, NOW);
+    expect(after.activation).toBeCloseTo(0.5);
+  });
+});
+
+describe("revisit counting membership", () => {
+  it("excludes the capture event from revisit scoring", () => {
+    // Scoring counts rows in signal_revisit_events to measure how often a
+    // signal was returned to. `capture_saved` lives in the same table but is
+    // the save itself, so counting it would hand every new signal a revisit
+    // it never had and inflate its score at the moment of creation.
+    expect(revisitCountingEventTypes).not.toContain("capture_saved");
+  });
+
+  it("counts every other event type as a return", () => {
+    const expected = inspirationRevisitEventTypeValues.filter(
+      (value) => value !== "capture_saved",
+    );
+    expect([...revisitCountingEventTypes].sort()).toEqual([...expected].sort());
   });
 });

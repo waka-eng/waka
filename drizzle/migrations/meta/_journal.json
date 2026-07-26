@@ -204,6 +204,13 @@
       "when": 1783726136762,
       "tag": "0028_top_of_mind_value_replacement",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784102400000,
+      "tag": "0029_capture_pulse_speed",
+      "breakpoints": true
     }
   ]
 }

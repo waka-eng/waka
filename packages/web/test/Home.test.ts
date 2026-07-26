@@ -3477,6 +3477,7 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Fast save without reflective friction",
       kind: "note",
+      captureElapsedMs: expect.any(Number),
     });
   });
 
@@ -3507,6 +3508,7 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "A windowed studio signal",
       kind: "note",
+      captureElapsedMs: expect.any(Number),
     });
     expect(container.querySelector("#capConfirm")?.textContent).toContain("Inspiration saved.");
     expect(container.querySelector("#reflectQ")?.textContent).toContain("Why did this matter right now?");
@@ -3626,6 +3628,7 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Read https://example.com/article before the next salon",
       kind: "mixed",
+      captureElapsedMs: expect.any(Number),
     });
     expect(finalizeAttachment).toHaveBeenCalledWith({
       type: "link",
@@ -3705,6 +3708,7 @@ describe("HomePage current home experience", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Image inspiration",
       kind: "image",
+      captureElapsedMs: expect.any(Number),
     });
     expect(presignAttachment).toHaveBeenCalledWith({
       filename: "photo.png",
