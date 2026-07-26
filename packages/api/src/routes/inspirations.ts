@@ -138,6 +138,18 @@ const createInspirationSchema = z.object({
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   selectionStart: z.number().int().min(0).optional(),
   selectionEnd: z.number().int().min(0).optional(),
+  /**
+   * Composer-open -> save duration reported by the client. Optional by
+   * design: capture must never fail because timing was unavailable, and an
+   * older client that omits it stays fully supported. Capped at an hour —
+   * anything longer is a composer left open, not a reaction.
+   */
+  captureElapsedMs: z
+    .number()
+    .int("captureElapsedMs must be an integer")
+    .min(0, "captureElapsedMs must be non-negative")
+    .max(3_600_000, "captureElapsedMs is too large")
+    .optional(),
   sparks: z
     .array(
       z.object({
@@ -267,8 +279,21 @@ function withDisplayedWowScore<T extends InspirationResponseRow>(
   };
 }
 
+/**
+ * `capture_saved` is written server-side by the create route and is not a
+ * revisit, so the client-facing route refuses it: accepting it would let a
+ * caller forge pulse-speed rows for a signal it did not just create.
+ */
+const clientRevisitEventTypeValues = inspirationRevisitEventTypeValues.filter(
+  (value): value is Exclude<InspirationRevisitEventType, "capture_saved"> =>
+    value !== "capture_saved",
+) as [
+  Exclude<InspirationRevisitEventType, "capture_saved">,
+  ...Exclude<InspirationRevisitEventType, "capture_saved">[],
+];
+
 const revisitEventSchema = z.object({
-  eventType: z.enum(inspirationRevisitEventTypeValues),
+  eventType: z.enum(clientRevisitEventTypeValues),
 });
 
 async function recordRevisitEvent(input: {
@@ -524,6 +549,29 @@ routes.post("/", async (c) => {
   });
 
   const { inserted, insertedReflections } = persisted;
+
+  // Pulse-speed row. Deliberately outside the transaction and best-effort:
+  // the save is already durable, and losing a timing row must never turn a
+  // successful capture into an error. Written directly rather than through
+  // `recordRevisitEvent` because that helper refreshes scores and pulses
+  // activation — both wrong for a signal created microseconds ago, whose
+  // score is computed just below and whose neighbours are charged by the
+  // capture path itself.
+  if (parsed.data.captureElapsedMs !== undefined) {
+    try {
+      await db.insert(inspirationRevisitEvents).values({
+        userId: user.id,
+        inspirationId: signalId,
+        eventType: "capture_saved",
+        elapsedMs: parsed.data.captureElapsedMs,
+      });
+    } catch (err) {
+      console.warn("[inspirations] failed to record capture pulse:", {
+        inspirationId: signalId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };

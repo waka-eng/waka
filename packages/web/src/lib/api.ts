@@ -468,6 +468,12 @@ export interface CreateInspirationRequest {
   }>;
   /** Optional Reflect Deeper Q/A saved with the inspiration to avoid a partial post-save gap. */
   reflections?: CreateReflectionRequest[];
+  /**
+   * How long the composer was open before this save, in milliseconds. The
+   * pulse-speed proxy: a fast save is a reaction, a slow one a composition.
+   * Optional everywhere — a save must never depend on having timed it.
+   */
+  captureElapsedMs?: number;
 }
 
 export interface UpdateInspirationRequest {

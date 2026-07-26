@@ -365,6 +365,20 @@ function resonanceLabel(value: CaptureResonanceAnswer): string {
   return resonanceOptions.find((option) => option.value === value)?.label ?? value;
 }
 
+/** Server-side cap; longer than this is a composer left open, not a reaction. */
+const MAX_CAPTURE_ELAPSED_MS = 3_600_000;
+
+/**
+ * Milliseconds between the composer opening and this save, clamped to the
+ * range the API accepts. Returns undefined when the reading is unusable so
+ * the field is simply omitted — capture never fails over a timing value.
+ */
+function elapsedSinceCaptureOpened(startedAt: number): number | undefined {
+  const elapsed = Math.round(performance.now() - startedAt);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
+  return Math.min(elapsed, MAX_CAPTURE_ELAPSED_MS);
+}
+
 function buildCaptureMetadataNote(input: {
   resonance: CaptureResonanceAnswer | null;
   resonanceNote: string;
@@ -425,6 +439,16 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const draftWriteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const guidedReflectionRequestSeqRef = useRef(0);
     const resonanceNoteInputRef = useRef<HTMLInputElement | null>(null);
+    /**
+     * When this composer session started, for the pulse-speed measurement.
+     * The component mounts on open and unmounts on close, so the ref's
+     * initial value *is* the open moment; it is re-stamped after each save so
+     * a second capture in the same session is timed from its own start.
+     *
+     * `performance.now()` rather than `Date.now()` so a clock adjustment
+     * mid-compose cannot produce a negative or wildly inflated duration.
+     */
+    const captureStartedAtRef = useRef<number>(performance.now());
 
     useEffect(() => {
       const draft = readStoredCaptureDraft();
@@ -766,6 +790,7 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         const inspiration = await createInspiration({
           text: inspirationText,
           kind,
+          captureElapsedMs: elapsedSinceCaptureOpened(captureStartedAtRef.current),
           ...(captureSparks ? { sparks: captureSparks } : {}),
           ...(reflectiveAnswers.length > 0
             ? {
@@ -824,6 +849,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
         for (const p of pending) {
           if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
         }
+        // A further capture in this same composer session is its own
+        // reaction, timed from now rather than from the original open.
+        captureStartedAtRef.current = performance.now();
         setNote("");
         setResonance(null);
         setResonanceNote("");
