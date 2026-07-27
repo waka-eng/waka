@@ -4480,7 +4480,7 @@
   width: min(var(--w, 320px), 100%);
   max-width: min(560px, calc(100vw - 32px));
   max-height: none;
-  min-height: 200px;
+  min-height: 132px;
   background: var(--bg);
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
@@ -16059,19 +16059,20 @@ textarea {
 .nc-room-title {
   display: inline-flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
   border: 0;
-  background: none;
-  padding: 2px 10px;
-  border-radius: 10px;
+  background: rgba(45, 41, 37, 0.035);
+  padding: 6px 20px 8px;
+  border-radius: 14px;
   cursor: pointer;
   color: inherit;
-  transition: background 160ms ease;
+  transition: background 180ms ease, box-shadow 180ms ease;
 }
 
 .nc-room-title:hover,
 .nc-room-title:focus-visible {
-  background: rgba(45, 41, 37, 0.04);
+  background: rgba(45, 41, 37, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(45, 41, 37, 0.06);
   outline: 0;
 }
 
@@ -16086,9 +16087,9 @@ textarea {
 
 .nc-room-caret {
   align-self: center;
-  margin-left: -4px;
-  color: rgba(45, 41, 37, 0.22);
-  font-size: 13px;
+  margin-left: -2px;
+  color: rgba(45, 41, 37, 0.34);
+  font-size: 20px;
   line-height: 1;
   transition: color 160ms ease, transform 160ms ease;
 }
@@ -16315,4 +16316,66 @@ textarea {
 .nc-bottom-bar--wall .nc-drawer-icon {
   width: 36px;
   height: 36px;
+}
+
+
+/* ============================================================
+ * The thought is set as a thought.
+ *
+ * Post-it bodies used the interface sans, which made the wall's content read
+ * in the same voice as its chrome. Fraunces separates the two: everything the
+ * product says about itself stays in sans, and the thoughts are in serif.
+ * ============================================================ */
+
+.nc-note-body--preview,
+.nc-note-body-edit--inline {
+  font-family: "Fraunces", "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.32;
+}
+
+
+/* ============================================================
+ * One provenance line per note.
+ *
+ * Faces and an evidence count were two rows saying where the thought came
+ * from. Now they are one control: who, then how many, opening the evidence.
+ * ============================================================ */
+
+.nc-note-inspiration-slide.nc-note-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  padding: 4px 8px 4px 4px;
+  margin-left: -4px;
+  color: inherit;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.nc-note-provenance:hover:not(:disabled),
+.nc-note-provenance:focus-visible:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  outline: 0;
+}
+
+.nc-note-provenance:disabled {
+  cursor: default;
+}
+
+.nc-note-provenance-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--ink) 52%, transparent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
 }

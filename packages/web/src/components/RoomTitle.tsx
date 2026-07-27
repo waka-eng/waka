@@ -69,8 +69,7 @@ export function RoomTitle({
   error,
 }: RoomTitleProps): JSX.Element {
   const [open, setOpen] = useState<OpenPanel>(null);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [entry, setEntry] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -93,26 +92,23 @@ export function RoomTitle({
     };
   }, [open]);
 
-  const submitCreate = async () => {
-    const trimmed = name.trim();
+  /**
+   * One field for both. Telling "make a room" from "join a room" is the
+   * product's problem, not the user's: two unlabelled inputs stacked in a
+   * panel read as a rendering fault, and asking which mode you meant before
+   * you have typed anything is a question nobody needs.
+   */
+  const submitEntry = async () => {
+    const trimmed = entry.trim();
     if (!trimmed || busy) return;
     setBusy(true);
     try {
-      await onCreateRoom(trimmed);
-      setName("");
-      setOpen(null);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitJoin = async () => {
-    const trimmed = code.trim();
-    if (!trimmed || busy) return;
-    setBusy(true);
-    try {
-      await onJoinRoom(trimmed);
-      setCode("");
+      if (looksLikeInvite(trimmed)) {
+        await onJoinRoom(extractJoinCode(trimmed));
+      } else {
+        await onCreateRoom(trimmed);
+      }
+      setEntry("");
       setOpen(null);
     } finally {
       setBusy(false);
@@ -201,37 +197,19 @@ export function RoomTitle({
             className="nc-room-new"
             onSubmit={(event) => {
               event.preventDefault();
-              void submitCreate();
+              void submitEntry();
             }}
           >
             {/* Naming it is the whole act of making one, so the field is the
-                control. No separate button, no second row. */}
+                control: no separate button, no second row, no mode to pick. */}
             <input
               className="nc-room-new-input"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="start a room…"
-              maxLength={80}
-              disabled={busy}
-              aria-label="name a new room"
-            />
-          </form>
-
-          <form
-            className="nc-room-new"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitJoin();
-            }}
-          >
-            <input
-              className="nc-room-new-input"
-              value={code}
-              onChange={(event) => setCode(extractJoinCode(event.target.value))}
-              placeholder="or paste an invite…"
+              value={entry}
+              onChange={(event) => setEntry(event.target.value)}
+              placeholder="name a room, or paste an invite…"
               maxLength={200}
               disabled={busy}
-              aria-label="join with an invite code"
+              aria-label="name a room, or paste an invite"
             />
           </form>
         </div>
@@ -258,6 +236,22 @@ export function RoomTitle({
       ) : null}
     </div>
   );
+}
+
+/**
+ * Does this look like an invitation rather than a name?
+ *
+ * Deliberately conservative: a full join link, or a single bare token that
+ * looks like a code. Anything with a space is a name, because room names have
+ * spaces and codes do not. Guessing wrong toward "create" is recoverable --
+ * you get a room you did not want and can leave it -- while guessing wrong
+ * toward "join" fails loudly against a code that does not exist.
+ */
+export function looksLikeInvite(raw: string): boolean {
+  const trimmed = raw.trim();
+  if (/[?&]join=/i.test(trimmed)) return true;
+  if (/\s/.test(trimmed)) return false;
+  return /^[A-Z0-9-]{6,32}$/i.test(trimmed);
 }
 
 /** Accept either a bare code or a full `?join=CODE` link and return the code. */

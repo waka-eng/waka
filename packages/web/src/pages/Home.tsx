@@ -4770,6 +4770,17 @@ export function HomePage(): JSX.Element {
     const noteText = thoughtCardDisplayLabel(signal, locale);
     const draftText = noteFeedback[signal.id]?.correctionText ?? noteText;
     const textDensityClass = thoughtCardTextDensityClass(draftText);
+    // Only a room has contributors; your own wall's notes are yours by
+    // definition and stamping "you" on every card is noise.
+    const noteContributors = isGroupBoardActive
+      ? Array.from(
+          new Set(
+            signal.supportingSignals
+              .map((support) => support.authorName)
+              .filter((name): name is string => Boolean(name && name.trim())),
+          ),
+        )
+      : [];
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${pinned ? " nc-note--pinned" : ""}${savingEdit ? " nc-note--saving" : ""}${textDensityClass}${noteIsInteractive ? "" : " nc-note--passive"}`}
@@ -4814,46 +4825,44 @@ export function HomePage(): JSX.Element {
           <p className="nc-note-body nc-note-body--preview">{noteText}</p>
         )}
       </div>
-      {isGroupBoardActive
-        ? (() => {
-            const contributors = Array.from(
-              new Set(
-                signal.supportingSignals
-                  .map((support) => support.authorName)
-                  .filter((name): name is string => Boolean(name && name.trim())),
-              ),
-            );
-            return contributors.length > 0 ? (
-              <p className="nc-note-contributors" aria-label="Contributing members">
-                <span className="nc-note-faces" aria-hidden="true">
-                  {contributors.map((name) => (
-                    <span
-                      key={name}
-                      className="nc-note-face"
-                      style={{ background: contributorColor(name) }}
-                      title={name}
-                    >
-                      {contributorInitials(name)}
-                    </span>
-                  ))}
-                </span>
-                <span className="nc-note-contributor-names">from {contributors.join(", ")}</span>
-              </p>
-            ) : null;
-          })()
-        : null}
+      {/* One provenance line. Contributor faces and the evidence count were two
+          rows answering the same question -- where did this come from -- so
+          they are one row: who, then how many, opening the evidence. */}
       <div className="nc-note-footer-row">
         {noteIsInteractive && supportingCount > 0 ? (
           <button
             type="button"
-            className="nc-note-inspiration-slide"
+            className="nc-note-inspiration-slide nc-note-provenance"
             disabled={!canOpenEvidenceDrawer}
             onClick={(event) => {
               event.stopPropagation();
               openTopOfMindEvidenceDrawer(signal);
             }}
+            aria-label={
+              noteContributors.length > 0
+                ? `${copy.topOfMindEvidenceCount(supportingCount)} — ${noteContributors.join(", ")}`
+                : copy.topOfMindEvidenceCount(supportingCount)
+            }
           >
-            {copy.topOfMindEvidenceCount(supportingCount)}
+            {noteContributors.length > 0 ? (
+              <span className="nc-note-faces" aria-hidden="true">
+                {noteContributors.map((name) => (
+                  <span
+                    key={name}
+                    className="nc-note-face"
+                    style={{ background: contributorColor(name) }}
+                    title={name}
+                  >
+                    {contributorInitials(name)}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+            <span className="nc-note-provenance-text">
+              {noteContributors.length > 0
+                ? `${noteContributors.join(", ")} · ${supportingCount}`
+                : copy.topOfMindEvidenceCount(supportingCount)}
+            </span>
           </button>
         ) : <span />}
         {noteIsInteractive ? renderPostItActions(signal) : null}
