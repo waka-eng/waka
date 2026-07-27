@@ -59,6 +59,7 @@ import {
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
   type ApiGroupConversationRoom,
+  type ApiGroupMemberSummary,
   type ApiGroupSummary,
   type ApiGroupTopOfMindNote,
   type ApiTopOfMind,
@@ -649,6 +650,20 @@ export function getMemoryPreviewPlacement(
     originY: side === "above" ? "bottom" : "top",
     side,
   };
+}
+
+/** Stable per-person colour, so a face reads as the same person everywhere. */
+const CONTRIBUTOR_COLORS = ["#8a6a2f", "#4a6a55", "#5a5170", "#7a4a4a", "#6a5a3a", "#3f5a6a"];
+function contributorColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return CONTRIBUTOR_COLORS[hash % CONTRIBUTOR_COLORS.length]!;
+}
+function contributorInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
 }
 
 function noteToThoughtCard(
@@ -1665,6 +1680,9 @@ export function HomePage(): JSX.Element {
   const [groupBoardsError, setGroupBoardsError] = useState<string | null>(null);
   const [groupNotes, setGroupNotes] = useState<ApiGroupTopOfMindNote[]>([]);
   const [groupBoardLoading, setGroupBoardLoading] = useState(false);
+  // The board endpoint already returns the group's members; keeping them lets
+  // a room show its cast rather than only its name.
+  const [groupMembers, setGroupMembers] = useState<ApiGroupMemberSummary[]>([]);
   const [groupRefreshing, setGroupRefreshing] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
@@ -1701,6 +1719,7 @@ export function HomePage(): JSX.Element {
   useEffect(() => {
     if (!user || activeBoard === MINE_BOARD_ID) {
       setGroupNotes([]);
+      setGroupMembers([]);
       setGroupBoardLoading(false);
       return;
     }
@@ -1710,6 +1729,7 @@ export function HomePage(): JSX.Element {
       .then((result) => {
         if (cancelled) return;
         setGroupNotes(result.notes);
+        setGroupMembers(result.members ?? []);
         setGroupBoardsError(null);
       })
       .catch((err) => {
@@ -4795,7 +4815,19 @@ export function HomePage(): JSX.Element {
             );
             return contributors.length > 0 ? (
               <p className="nc-note-contributors" aria-label="Contributing members">
-                from {contributors.join(", ")}
+                <span className="nc-note-faces" aria-hidden="true">
+                  {contributors.map((name) => (
+                    <span
+                      key={name}
+                      className="nc-note-face"
+                      style={{ background: contributorColor(name) }}
+                      title={name}
+                    >
+                      {contributorInitials(name)}
+                    </span>
+                  ))}
+                </span>
+                <span className="nc-note-contributor-names">from {contributors.join(", ")}</span>
               </p>
             ) : null;
           })()
@@ -4862,6 +4894,29 @@ export function HomePage(): JSX.Element {
             {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
           </h1>
           {copy.tagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
+          {/* A room says whose place it is. The cast is the group's own member
+              list, so it is the people who actually agreed to be here. */}
+          {isGroupBoardActive && groupMembers.length > 0 ? (
+            <div className="nc-room-cast">
+              <span className="nc-note-faces" aria-hidden="true">
+                {groupMembers.map((member) => (
+                  <span
+                    key={member.userId}
+                    className={`nc-note-face nc-room-face${
+                      member.userId === user?.id ? " nc-room-face--me" : ""
+                    }`}
+                    style={{ background: contributorColor(member.name) }}
+                    title={member.name}
+                  >
+                    {contributorInitials(member.name)}
+                  </span>
+                ))}
+              </span>
+              <span className="nc-room-cast-names">
+                {groupMembers.map((member) => member.name).join(" · ")}
+              </span>
+            </div>
+          ) : null}
         </section>
 
         <GroupBoardBar

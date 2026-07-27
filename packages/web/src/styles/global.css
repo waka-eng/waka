@@ -15952,3 +15952,76 @@ textarea {
   letter-spacing: 0.02em;
   vertical-align: middle;
 }
+
+/* ============================================================
+ * Rooms — showing who a group board belongs to, and whose signals each of
+ * its notes rests on. A group note always spans two or more people, since
+ * synthesis skips judgments whose evidence covers fewer than two owners;
+ * the faces are how the wall says that without opening the evidence drawer.
+ * ============================================================ */
+
+.nc-room-cast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 11px;
+  flex-wrap: wrap;
+}
+
+.nc-room-cast-names {
+  color: rgba(45, 41, 37, 0.44);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 460;
+  letter-spacing: 0;
+}
+
+/* Overlapping faces, so a group reads as a group rather than a list. */
+.nc-note-faces {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.nc-note-face {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  margin-right: -5px;
+  color: rgba(255, 253, 248, 0.96);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0;
+  /* Ring in the note's own paper colour so faces read as sitting on it. */
+  box-shadow: 0 0 0 1.5px var(--bg, #f2f1ee);
+}
+
+.nc-room-face {
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  font-size: 9px;
+  box-shadow: 0 0 0 2px #f2f1ee;
+}
+
+.nc-room-face--me {
+  box-shadow: 0 0 0 2px #f2f1ee, 0 0 0 3.5px rgba(176, 137, 72, 0.55);
+}
+
+/* agikee's contributor line, now carrying faces alongside its names. */
+.nc-note-contributors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nc-note-contributor-names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
