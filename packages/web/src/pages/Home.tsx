@@ -4628,12 +4628,24 @@ export function HomePage(): JSX.Element {
 
   const renderMemoryPathFilters = (): JSX.Element | null => {
     if (homeMode !== "memoryDrawer") return null;
+    // Arriving from "N inspirations led here" is a question about one thought,
+    // so the drawer answers only that. Offering "all saved" beside it invites
+    // you to lose the set you came to look at, and there is no way back to it.
+    if (activeTopOfMindEvidenceFilter) {
+      return (
+        <nav className="memory-path-filters" aria-label={copy.savedSignalPathsLabel}>
+          <span className="memory-path-filter memory-path-filter--active memory-path-filter--only">
+            {activeTopOfMindEvidenceFilter.label}
+            <span className="memory-path-filter-count">
+              {applySearchToSignals(activeTopOfMindEvidenceFilter.signals, savedSignalQuery).length}
+            </span>
+          </span>
+        </nav>
+      );
+    }
     const primaryFilterIds = new Set(["all-saved", "recently-saved"]);
     const primaryFilters = memoryPathFilters.filter((filter) => primaryFilterIds.has(filter.id));
-    const visibleFilters = [
-      ...(activeTopOfMindEvidenceFilter ? [activeTopOfMindEvidenceFilter] : []),
-      ...primaryFilters,
-    ];
+    const visibleFilters = primaryFilters;
     return (
 	      <nav className="memory-path-filters" aria-label={copy.savedSignalPathsLabel}>
 	        {visibleFilters.map((filter) => {
@@ -4645,9 +4657,6 @@ export function HomePage(): JSX.Element {
               className={`memory-path-filter${selectedMemoryPathFilterId === filter.id ? " memory-path-filter--active" : ""}`}
               aria-pressed={selectedMemoryPathFilterId === filter.id}
               onClick={() => {
-                if (activeTopOfMindEvidenceFilter?.id !== filter.id) {
-                  setActiveTopOfMindEvidenceFilter(null);
-                }
                 setSelectedMemoryPathFilterId(filter.id);
                 setSelectedMemoryGroupId(null);
                 setSelectedSavedSignalId(null);

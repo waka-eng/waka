@@ -16379,3 +16379,61 @@ textarea {
   font-weight: 500;
   letter-spacing: 0;
 }
+
+/* Entered from a thought, the drawer answers only that thought — so its one
+   filter is a label, not a choice. */
+.memory-path-filter--only {
+  cursor: default;
+}
+
+
+/* ============================================================
+ * Drawer mode: the search field and the close control are one shape twice.
+ *
+ * They were 64px and 54px tall beside each other, and the close label was 9px
+ * uppercase mono next to a stark cross -- two different type voices and two
+ * different heights in a bar holding two things.
+ * ============================================================ */
+
+.nc-bottom-bar--drawer .nc-primary-action,
+.nc-bottom-bar--drawer .nc-primary-action--search,
+.nc-bottom-bar--drawer .nc-drawer-object {
+  height: 46px;
+  min-height: 46px;
+}
+
+.nc-bottom-bar--drawer .nc-primary-action > .nc-drawer-search {
+  inset: 0;
+  height: 46px;
+  min-height: 46px;
+  padding: 5px;
+}
+
+.nc-bottom-bar--drawer .nc-drawer-search input {
+  height: 36px;
+  min-height: 36px;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12.5px;
+}
+
+.nc-bottom-bar--drawer .nc-drawer-icon {
+  top: 5px;
+  width: 36px;
+  height: 36px;
+}
+
+.nc-bottom-bar--drawer .nc-drawer-object--close {
+  padding: 5px 50px 5px 18px;
+}
+
+/* "close" is a word, not a tally. The mono caps voice belongs to the saved
+   count, which is a number; a verb in the same voice reads like a label on a
+   machine. */
+.nc-bottom-bar--drawer .nc-drawer-count {
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12.5px;
+  font-weight: 540;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(45, 41, 37, 0.62);
+}

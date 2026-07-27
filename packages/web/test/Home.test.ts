@@ -3073,7 +3073,7 @@ describe("HomePage current home experience", () => {
     expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(2);
   });
 
-  it("shows a temporary top-of-mind filter when opened from the evidence slide", async () => {
+  it("shows only the evidence set when opened from the evidence slide", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -3085,11 +3085,14 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
+    // Arriving from "N inspirations led here" is a question about one thought.
+    // Offering "all saved" beside the answer invites you to lose the set you
+    // came to look at, with no way back to it.
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(pathFilters?.textContent).toContain("top of mind");
-    expect(pathFilters?.textContent).toContain("all saved");
-    expect(pathFilters?.textContent).toContain("recently saved");
-    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(3);
+    expect(pathFilters?.textContent).not.toContain("all saved");
+    expect(pathFilters?.textContent).not.toContain("recently saved");
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(1);
   });
 
   it("keeps the drawer centered on desktop and full-bleed on phone CSS", () => {
