@@ -1908,7 +1908,7 @@ describe("HomePage current home experience", () => {
     ].join(" ");
 
     expect(wallCopy).not.toMatch(bannedInternalCopy);
-    expect(container.querySelector(".nc-titlecard")?.textContent).not.toMatch(/\bWAKA\b/);
+    expect(container.querySelector(".nc-room")?.textContent ?? "").not.toMatch(/\bWAKA\b/);
     expect(container.querySelector(".nc-stage")?.textContent).not.toMatch(/\bWAKA\b/);
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();

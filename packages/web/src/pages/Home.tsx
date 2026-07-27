@@ -90,10 +90,10 @@ import {
   updateTopOfMindNote,
 } from "../lib/api";
 import {
-  GroupBoardBar,
+  RoomTitle,
   MINE_BOARD_ID,
   extractJoinCode,
-} from "../components/GroupBoardBar";
+} from "../components/RoomTitle";
 import { useAuth } from "../lib/auth-context";
 import {
   formatSavedCount,
@@ -1367,6 +1367,7 @@ const HOME_COPY = {
     captureCta: "영감 기록",
     captureHint: () => "",
     bottomHint: "영감을 기록하고 돌아보면 WAKA가 반복되는 패턴을 임시 포스트잇으로 띄웁니다.",
+    myRoomName: "나",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1496,6 +1497,7 @@ const HOME_COPY = {
     captureCta: "capture inspiration",
     captureHint: () => "",
     bottomHint: "Capture and reflect; WAKA turns recurring patterns into provisional post-its you can correct.",
+    myRoomName: "just you",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1615,6 +1617,7 @@ const HOME_COPY = {
     captureCta: string;
     captureHint: (count: number) => string;
     bottomHint: string;
+    myRoomName: string;
     captureDialog: string;
     close: string;
   }
@@ -2918,6 +2921,13 @@ export function HomePage(): JSX.Element {
   const displayName = user.name?.trim() || user.email.split("@")[0] || "yunji";
   const displayHandle = displayName.toLowerCase();
   // On a group board, title the wall after the group (e.g. "waka의 탑오브마인드").
+  const activeGroupJoinLink = (() => {
+    const g = groupBoards.find((b) => b.id === activeBoard);
+    if (!g?.joinCode) return null;
+    return typeof window === "undefined"
+      ? `?join=${g.joinCode}`
+      : `${window.location.origin}/?join=${encodeURIComponent(g.joinCode)}`;
+  })();
   const activeGroupName = isGroupBoardActive
     ? groupBoards.find((board) => board.id === activeBoard)?.name ?? null
     : null;
@@ -4882,52 +4892,41 @@ export function HomePage(): JSX.Element {
         aria-hidden={homeMode === "memoryDrawer" ? true : undefined}
         {...(homeMode === "memoryDrawer" ? { inert: "" } : {})}
       >
-        <section className="nc-titlecard">
-          <h1 className="nc-title">
-            {copy.titleLineOne(titleHandle)}
-            {copy.titleLineTwo ? (
-              <>
-                <br />
-                {copy.titleLineTwo}
-              </>
-            ) : null}
-            {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
-          </h1>
-          {copy.tagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
-          {/* A room says whose place it is. The cast is the group's own member
-              list, so it is the people who actually agreed to be here. */}
-          {isGroupBoardActive && groupMembers.length > 0 ? (
-            <div className="nc-room-cast">
-              <span className="nc-note-faces" aria-hidden="true">
-                {groupMembers.map((member) => (
-                  <span
-                    key={member.userId}
-                    className={`nc-note-face nc-room-face${
-                      member.userId === user?.id ? " nc-room-face--me" : ""
-                    }`}
-                    style={{ background: contributorColor(member.name) }}
-                    title={member.name}
-                  >
-                    {contributorInitials(member.name)}
-                  </span>
-                ))}
-              </span>
-              <span className="nc-room-cast-names">
-                {groupMembers.map((member) => member.name).join(" · ")}
-              </span>
-            </div>
-          ) : null}
-        </section>
-
-        <GroupBoardBar
-          boards={groupBoards}
-          activeBoard={activeBoard}
+        {/* One object: names the room, switches rooms, shows the cast, and
+            is how you invite someone into it. Your own wall is a room with one
+            member, so nothing about the layout changes when you switch. */}
+        <RoomTitle
+          title={copy.titleLineOne(
+            isGroupBoardActive && activeGroupName ? activeGroupName : titleHandle,
+          )}
+          rooms={[
+            {
+              id: MINE_BOARD_ID,
+              name: copy.myRoomName,
+              role: "owner",
+              joinCode: "",
+              memberCount: 1,
+              createdAt: "",
+            },
+            ...groupBoards,
+          ]}
+          activeRoom={activeBoard}
           onSelect={setActiveBoard}
-          onCreateGroup={handleCreateGroup}
-          onJoinGroup={handleJoinGroup}
+          members={
+            isGroupBoardActive
+              ? groupMembers
+              : user
+                ? [{ userId: user.id, name: user.name || copy.myRoomName }]
+                : []
+          }
+          currentUserId={user?.id}
+          inviteLink={activeGroupJoinLink}
+          onCreateRoom={handleCreateGroup}
+          onJoinRoom={handleJoinGroup}
           onRefresh={isGroupBoardActive ? handleRefreshGroup : undefined}
           refreshing={groupRefreshing}
-          loading={groupBoardLoading}
+          faceColor={contributorColor}
+          faceInitials={contributorInitials}
           error={groupBoardsError}
         />
 
