@@ -2738,6 +2738,10 @@ describe("HomePage current home experience", () => {
     // discussion topics no surface can read. Gated, not deleted -- flipping the
     // flag restores the feature exactly as it was written.
     expect(home).toContain("if (!SHOW_LEGACY_GROUP_ROOM_SURFACE) return;");
+
+    // The capture hint is onboarding copy, so it expires once you have saved
+    // anything rather than sitting under the primary action forever.
+    expect(home).toContain('homeMode !== "memoryDrawer" && savedEntryCount === 0 ? (');
     expect(home).toMatch(/\{SHOW_LEGACY_GROUP_ROOM_SURFACE \? \(\s*\n\s*<button[\s\S]{0,200}nc-note-icon-btn--discuss/);
   });
 

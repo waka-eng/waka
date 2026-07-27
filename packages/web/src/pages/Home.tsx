@@ -5242,7 +5242,11 @@ export function HomePage(): JSX.Element {
             </small>
           </button>
         ) : null}
-          {homeMode !== "memoryDrawer" ? (
+          {/* Onboarding copy, not furniture: it explains what saving is for,
+              which stops being useful the moment you have saved anything. A
+              permanent instruction under the primary action reads as the
+              product explaining its own button forever. */}
+          {homeMode !== "memoryDrawer" && savedEntryCount === 0 ? (
             <p className="nc-bottom-hint">{copy.bottomHint}</p>
           ) : null}
         </div>
