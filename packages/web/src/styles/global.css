@@ -16437,3 +16437,13 @@ textarea {
   text-transform: none;
   color: rgba(45, 41, 37, 0.62);
 }
+
+/* An empty room list mid-load reads as "you are in no rooms" rather than
+   "not yet", which is why the rail this replaced said so out loud. */
+.nc-room-loading {
+  margin: 0;
+  padding: 9px 11px;
+  color: rgba(45, 41, 37, 0.4);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}

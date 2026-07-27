@@ -2729,6 +2729,18 @@ describe("HomePage current home experience", () => {
     expect(mobileDrawerRules).toContain("min-width: 0");
   });
 
+  it("does no work for the legacy room surface while it is switched off", async () => {
+    const home = readFileSync("src/pages/Home.tsx", "utf8");
+
+    // The surface is behind a flag its author set to false. Everything that
+    // feeds it waits on the same flag rather than running into the dark: a
+    // fetch on every page load for a view nobody can see, and a button writing
+    // discussion topics no surface can read. Gated, not deleted -- flipping the
+    // flag restores the feature exactly as it was written.
+    expect(home).toContain("if (!SHOW_LEGACY_GROUP_ROOM_SURFACE) return;");
+    expect(home).toMatch(/\{SHOW_LEGACY_GROUP_ROOM_SURFACE \? \(\s*\n\s*<button[\s\S]{0,200}nc-note-icon-btn--discuss/);
+  });
+
   it("keeps desktop wall actions centered and mobile actions in document flow", async () => {
     setApiFixtures();
     const container = await renderHomePage();

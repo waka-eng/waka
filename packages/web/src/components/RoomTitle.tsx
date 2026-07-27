@@ -48,6 +48,12 @@ export interface RoomTitleProps {
   faceInitials: (name: string) => string;
   /** Surfaced quietly rather than dropped: rooms failing to load is worth saying. */
   error?: string | null;
+  /**
+   * The board rail this replaced said "Loading boards…". Without it a slow
+   * connection shows a room list that is simply empty, which reads as "you are
+   * in no rooms" rather than "not yet".
+   */
+  loading?: boolean;
 }
 
 type OpenPanel = null | "rooms" | "invite";
@@ -67,6 +73,7 @@ export function RoomTitle({
   faceColor,
   faceInitials,
   error,
+  loading,
 }: RoomTitleProps): JSX.Element {
   const [open, setOpen] = useState<OpenPanel>(null);
   const [entry, setEntry] = useState("");
@@ -175,6 +182,9 @@ export function RoomTitle({
       {open === "rooms" ? (
         <div className="nc-room-panel" role="menu">
           {error ? <p className="nc-room-error">{error}</p> : null}
+          {loading && rooms.length <= 1 ? (
+            <p className="nc-room-loading">finding your rooms…</p>
+          ) : null}
           {rooms.map((room) => (
             <button
               key={room.id}

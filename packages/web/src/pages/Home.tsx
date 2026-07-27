@@ -2245,6 +2245,7 @@ export function HomePage(): JSX.Element {
   }, [user]);
 
   useEffect(() => {
+    if (!SHOW_LEGACY_GROUP_ROOM_SURFACE) return;
     if (!user) return;
     if (groupRoomsLoadedForUserIdRef.current === user.id) return;
     if (groupRoomsLoadedForUserIdRef.current && groupRoomsLoadedForUserIdRef.current !== user.id) {
@@ -3439,23 +3440,28 @@ export function HomePage(): JSX.Element {
               <path d="M9 7V4.8h6V7" />
             </svg>
           </button>
-          <button
-            type="button"
-            className="nc-note-icon-btn nc-note-icon-btn--discuss"
-            disabled={saving || groupRoomStatus.status === "saving"}
-            aria-label="turn this into a discussion topic"
-            title="Discuss"
-            onClick={(event) => {
-              event.stopPropagation();
-              void createDiscussionFromPostIt(signal);
-            }}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-              <path d="M5 6.5h14" />
-              <path d="M5 11.5h9" />
-              <path d="M7 18.5 10.5 15H19a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2z" />
-            </svg>
-          </button>
+          {/* Writes a discussion topic that only the US-051 surface can
+              read, so it waits on the same flag rather than sending
+              people's post-its somewhere nothing displays. */}
+          {SHOW_LEGACY_GROUP_ROOM_SURFACE ? (
+            <button
+              type="button"
+              className="nc-note-icon-btn nc-note-icon-btn--discuss"
+              disabled={saving || groupRoomStatus.status === "saving"}
+              aria-label="turn this into a discussion topic"
+              title="Discuss"
+              onClick={(event) => {
+                event.stopPropagation();
+                void createDiscussionFromPostIt(signal);
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M5 6.5h14" />
+                <path d="M5 11.5h9" />
+                <path d="M7 18.5 10.5 15H19a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2z" />
+              </svg>
+            </button>
+          ) : null}
         </div>
         {feedbackState?.status === "error" ? (
           <p className="nc-note-feedback-status nc-note-feedback-status--error">
@@ -4946,6 +4952,7 @@ export function HomePage(): JSX.Element {
           faceColor={contributorColor}
           faceInitials={contributorInitials}
           error={groupBoardsError}
+          loading={groupBoardLoading}
         />
 
         <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMindRegionLabel}>
