@@ -26,3 +26,5 @@ export * from "./schema-revisits";
 export * from "./schema-feedback";
 export * from "./schema-documents";
 export * from "./schema-activations";
+export * from "./schema-group-rooms";
+export * from "./schema-groups";

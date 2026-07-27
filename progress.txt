@@ -57,6 +57,38 @@
 
 ---
 
+## 2026-06-29 14:30 PDT - Group Top of Mind conversation rooms
+
+- What was implemented
+  - Added persistent group conversation room tables for rooms, participants, selected room signals, generated prompts, and post-conversation feedback.
+  - Added `/api/group-rooms` routes for listing/creating rooms, adding selected signals, turning a Top of Mind note into a discussion topic, generating room prompts, and saving post-conversation feedback.
+  - Added typed web API helpers and a compact Home wall surface for the latest group room.
+  - Added a post-it action that calls "turn this into a discussion topic" and updates the group room surface with the generated prompt.
+  - Marked `US-051` complete in `prd.json`.
+- Files changed
+  - `drizzle/migrations/0027_group_conversation_rooms.sql`
+  - `packages/api/src/db/schema-group-rooms.ts`
+  - `packages/api/src/db/index.ts`
+  - `packages/api/src/routes/group-rooms.ts`
+  - `packages/api/src/routes/group-rooms.test.ts`
+  - `packages/api/src/index.ts`
+  - `packages/api/vitest.unit.config.ts`
+  - `packages/web/src/lib/api.ts`
+  - `packages/web/src/pages/Home.tsx`
+  - `packages/web/src/styles/global.css`
+  - `prd.json`
+  - `progress.txt`
+- Verification run
+  - `pnpm --filter @waka/api typecheck` passed.
+  - `pnpm --filter @waka/web typecheck` passed.
+  - `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts src/routes/group-rooms.test.ts` passed: 5 tests.
+  - `pnpm --filter @waka/web test -- Home.test.ts` passed: 68 tests.
+  - Browser verification with Playwright + Vite passed for `/` at desktop `1280x850` using mocked auth, inspirations, saved signals, Top of Mind, and group-room API responses. Verified the group room surface renders, the post-it discuss action calls `/api/group-rooms/discussion-topic`, success feedback appears, and there is no horizontal overflow.
+- Known residual
+  - Full API unit suite currently has one unrelated failure in `src/routes/admin-meaning-graph.test.ts` for `recentReinforcementCount`; the new group-room tests pass.
+
+---
+
 ## 2026-06-01 19:03 PDT - US-050
 
 - What was implemented
@@ -1912,3 +1944,125 @@
   - Browser verification with Playwright + Vite passed for desktop `1280x850` and mobile `390x844`: word-cloud tag `animationName` is `none`, background click closes the drawer, and the close animation still runs.
 
 ---
+
+## 2026-07-07 - US-052 Group Top of Mind boards
+
+- What was implemented
+  - Boards model: new `groups` + `group_members` tables (join-code membership),
+    separate from the US-051 group_conversation_rooms chat model. Migration 0029.
+  - `signals.shared_to_groups` (boolean, default true) — shared-by-default
+    per-inspiration privacy switch. Wired into POST /inspirations and PATCH.
+  - `/api/groups`: list, create (owner + join code), join by code, leave, and
+    `GET /:groupId/top-of-mind` (member-only; 404 for non-members).
+  - Group synthesis (lib/group-top-of-mind.ts): pools members' synthesized Top
+    of Mind notes, keeps only those backed by a SHARED signal, redacts non-shared
+    evidence, dedupes across members (reuses dedupeTopOfMindNotes). Cross-member
+    signal-level generation is documented as the next phase.
+  - Web: GroupBoardBar switcher (Mine + one tab per group, create/join inline,
+    shareable invite link with ?join=CODE auto-join). Home swaps the wall's note
+    source per active board so group boards reuse the exact post-it pipeline.
+    Capture gains a shared/private toggle (shared default).
+- Files changed
+  - packages/api: db/schema.ts, db/schema-groups.ts, db/index.ts,
+    lib/group-top-of-mind.ts, routes/groups.ts, routes/groups.test.ts,
+    routes/inspirations.ts, index.ts, vitest.unit.config.ts, vault/*.test.ts
+  - packages/web: lib/api.ts, components/GroupBoardBar.tsx,
+    components/capture/CaptureForm.tsx, pages/Home.tsx, styles/global.css,
+    test/GroupBoardBar.test.ts
+  - drizzle/migrations/0029_group_top_of_mind_boards.sql, meta/_journal.json
+  - docs/goals/group-top-of-mind.md, prd.json (US-052)
+- Verification
+  - API + web typecheck pass. API unit suite 202 passed. Web suite 210 passed.
+  - Migration 0029 applied to local DB (idempotent; applied directly because the
+    pre-existing 0028 tables block drizzle-kit migrate's journal replay).
+  - Authenticated E2E on :3030: create/list/join/leave, shared vs private
+    inspiration flags, member sees board, non-member + bad code both 404.
+
+## 2026-07-07 - US-053 Genuine cross-member Group Top of Mind synthesis
+
+- What was implemented
+  - Group boards are now GENUINELY synthesized from the pool of all members'
+    shared inspirations (not a merge of each person's personal notes). Reuses the
+    existing embeddings -> similar-candidate -> model judge pipeline with a
+    candidate pool that spans members.
+  - New pooled retrieval (findGroupWowMomentCandidates) and group judge
+    (judgeGroupWowMoment) reuse wow-candidates/wow-judge internals; private
+    signals are excluded at the query layer.
+  - New persistence: group_top_of_mind_notes + group_top_of_mind_note_signals
+    (per-evidence owner_user_id; composite FK (signal_id, owner_user_id) ->
+    signals(id,user_id)). Migration 0030.
+  - Orchestrator (generateGroupTopOfMind): each shared signal is a trigger,
+    judged over the cross-member pool; results persisted idempotently
+    (idempotency_key = sha256(groupId|kind|sortedRelatedIds|locale)) and deduped.
+  - listGroupTopOfMind now reads persisted group notes with owner-tagged
+    evidence; best-effort synthesis on empty board. refreshGroupTopOfMind +
+    POST /api/groups/:id/top-of-mind/refresh regenerate on demand.
+  - Web: each evidence inspiration is tagged with its owning member (contributor
+    line on the group post-it + "From {name}" on evidence-drawer cards); a
+    Refresh control re-synthesizes the active group board.
+- Files changed
+  - packages/api: db/schema-groups.ts (+ note tables), db/index.ts,
+    lib/wow-candidates.ts, lib/wow-judge.ts, lib/group-top-of-mind.ts (rewritten
+    to read persisted notes), lib/group-top-of-mind-synthesis.ts (new),
+    routes/groups.ts (+refresh), routes/groups.test.ts
+  - packages/web: lib/api.ts, components/GroupBoardBar.tsx, pages/Home.tsx,
+    styles/global.css
+  - drizzle/migrations/0030_group_top_of_mind_notes.sql, meta/_journal.json
+  - docs/goals/group-top-of-mind-synthesis.md, prd.json (US-053)
+- Verification
+  - API + web typecheck pass. API unit 202 passed. Web 210 passed.
+  - Migration 0030 applied to local DB.
+  - LIVE synthesis over the real "Waka" group produced a bridge note
+    "Building as a physical ritual in an AI-native world" grounded in 3
+    inspirations spanning two members (Yunji + jq/젭재규), each evidence row
+    persisted with its owner_user_id. Idempotent re-run creates no duplicates.
+
+## 2026-07-07 - Group Top of Mind: surface more than one note
+
+- Symptom: group board showed only 1 synthesized note.
+- Cause: synthesis tried only 8 triggers (MAX_TRIGGERS) selected purely by
+  wow_score, which clustered on the most prolific member; the ToM judge is
+  deliberately selective (~1 in 8 triggers yields a note), so 8 triggers → 1.
+- Fix: raise MAX_TRIGGERS to 24 and interleave triggers round-robin across
+  members (PER_MEMBER_TRIGGER_CAP=8) so cross-member combinations get a fair
+  chance. Also removed the deprecated US-051 group conversation-rooms card from
+  the personal wall (gated off), and serialize group notes in the note's own
+  generation locale with a title fallback so notes are never filtered for an
+  empty localized title.
+- Verified: re-synthesis on the real "Waka" group produced 7 notes (18 triggers,
+  6 new + 1 existing) spanning Yunji, Jae Gyu Lee, Se One Park, agikee23, 젭재규;
+  the board renders 5 post-its after dedupe. Screenshot confirmed on :3030.
+
+## 2026-07-07 - Group board: title, owner tags, cross-member balance, robustness
+
+- Title: on a group board the wall is titled after the group (e.g. "waka의
+  탑오브마인드") instead of the viewer's handle (Home.tsx titleHandle).
+- Owner tags: every inspiration in the "N inspirations led here" drawer is
+  tagged "from {member}" (ownerName on the evidence signal; fixed the case where
+  the viewer's OWN inspirations weren't tagged).
+- Cross-member balance (fixes Yunji-domination, duplicate notes, missing
+  members): group candidate retrieval now loads the FULL shared member pool
+  (not a wow-score-truncated slice) and applies a soft per-member cap (<= half
+  the candidate slots per member). Pure round-robin was tried first but made
+  candidate sets incoherent -> judge returned unclear_pattern for everything;
+  the soft cap keeps the top-similar candidates (coherence) while letting other
+  members' relevant signals in. Result: notes now span Yunji, 젭재규, Jae Gyu
+  Lee, Se One Park, and JQ (ljk950327).
+- Robustness: refresh now generates FIRST and prunes pre-run notes only on
+  success (a model outage never empties the board); added retry-with-backoff on
+  transient Gemini 503/429 in the synthesis loop. Intermittent 0-note refreshes
+  were traced to Gemini 503 overload windows when bursting many calls.
+- Verified: 202 API + 210 web tests pass; live Waka board shows 5 varied
+  cross-member post-its titled "waka의 탑오브마인드".
+
+## 2026-07-07 - Group Top of Mind must span >= 2 members
+
+- agikee check: agikeekim@gmail.com has 11/11 signals shared AND embedded, so it
+  is fully eligible for group synthesis; it simply didn't cohere into a winning
+  cross-member note. Embedding was not the blocker.
+- New rule: a group Top of Mind is never generated from a single person.
+  Enforced at generation (skip any judgment whose related inspirations span < 2
+  distinct member owners; keep trying other triggers) and at read time (filter
+  notes whose evidence owners number < 2 — hides any legacy single-member notes).
+- Verified: clean regen of Waka -> 24 triggers -> 5 notes, every one spanning
+  >= 2 members (Yunji, 젭재규, Jae Gyu Lee, JQ). 202 API tests pass.

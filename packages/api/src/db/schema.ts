@@ -161,6 +161,13 @@ export const signals = pgTable(
     importanceScore: integer("importance_score").notNull().default(0),
     wowScore: integer("wow_score").notNull().default(0),
 
+    /**
+     * Whether this inspiration may feed the user's Group Top of Mind boards
+     * (US-052). Shared by default; flipping to false keeps it private so it
+     * never contributes to — or is exposed through — any group board.
+     */
+    sharedToGroups: boolean("shared_to_groups").notNull().default(true),
+
     cluster: clusterEnum("cluster"),
     classifiedAt: timestamp("classified_at", { withTimezone: true }),
 

@@ -58,10 +58,17 @@ import {
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
+  type ApiGroupConversationRoom,
+  type ApiGroupSummary,
+  type ApiGroupTopOfMindNote,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
   type ClusterKind,
   createFeedback,
+  createDiscussionTopic,
+  createGroup as apiCreateGroup,
+  createGroupRoom,
+  createGroupRoomFeedback,
   createReflection,
   deleteReflection,
   deleteInspiration,
@@ -69,13 +76,23 @@ import {
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
+  fetchGroupRooms,
+  fetchGroups,
+  fetchGroupTopOfMind,
   fetchTopOfMind,
   fetchTopOfMindNotes,
   generateGuidedReflectionQuestion,
+  joinGroup as apiJoinGroup,
+  refreshGroupTopOfMind as apiRefreshGroupTopOfMind,
   recordInspirationRevisit,
   updateInspiration,
   updateTopOfMindNote,
 } from "../lib/api";
+import {
+  GroupBoardBar,
+  MINE_BOARD_ID,
+  extractJoinCode,
+} from "../components/GroupBoardBar";
 import { useAuth } from "../lib/auth-context";
 import {
   formatSavedCount,
@@ -116,6 +133,11 @@ function shouldShowAdminEntry(env: InternalEntryEnv): boolean {
  */
 type InspirationStatus = "saving" | "saved" | "error";
 type HomeMode = "topOfMind" | "memoryDrawer";
+
+// The legacy US-051 group conversation-rooms surface is superseded by the Group
+// Top of Mind boards (US-052/US-053). Keep the code but never render it on the
+// personal wall so group content no longer "sticks" under the Mine board.
+const SHOW_LEGACY_GROUP_ROOM_SURFACE = false;
 type MemoryBrowseOrder = "newest" | "relevance";
 type TopOfMindFeedbackValue = Extract<
   ApiFeedbackValue,
@@ -489,6 +511,8 @@ interface HomeThoughtCard {
     createdAt: string;
     kind?: string | null;
     resonanceScore?: number;
+    /** On group boards, the member who saved this inspiration. */
+    authorName?: string;
   }>;
   contextNodes: Array<{
     id: string;
@@ -627,7 +651,9 @@ export function getMemoryPreviewPlacement(
   };
 }
 
-function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
+function noteToThoughtCard(
+  note: ApiTopOfMindNoteSurface | ApiGroupTopOfMindNote,
+): HomeThoughtCard {
   const evidenceSignals = note.evidencePreviews.map((evidence) => ({
     id: evidence.signalId,
     preview: evidence.textPreview,
@@ -635,6 +661,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
     createdAt: evidence.createdAt,
     kind: evidence.kind,
     resonanceScore: evidence.resonanceScore,
+    authorName: (evidence as { authorName?: string }).authorName,
   }));
   const relatedSignals = note.relatedSignals
     .filter((signal) => !evidenceSignals.some((evidence) => evidence.id === signal.id))
@@ -645,6 +672,7 @@ function noteToThoughtCard(note: ApiTopOfMindNoteSurface): HomeThoughtCard {
       createdAt: signal.createdAt,
       kind: signal.kind,
       resonanceScore: signal.resonanceScore,
+      authorName: (signal as { authorName?: string }).authorName,
     }));
 
   return {
@@ -1600,6 +1628,12 @@ export function HomePage(): JSX.Element {
   const [topOfMindNotes, setTopOfMindNotes] = useState<ApiTopOfMindNoteSurface[]>([]);
   const [topOfMindNotesLoading, setTopOfMindNotesLoading] = useState(true);
   const [homeStateOwnerId, setHomeStateOwnerId] = useState<string | null>(user?.id ?? null);
+  const [groupRooms, setGroupRooms] = useState<ApiGroupConversationRoom[]>([]);
+  const [groupRoomsLoading, setGroupRoomsLoading] = useState(false);
+  const [groupRoomsError, setGroupRoomsError] = useState<string | null>(null);
+  const [groupRoomStatus, setGroupRoomStatus] = useState<
+    { status: "idle" } | { status: "saving" } | { status: "saved"; message: string } | { status: "error"; message: string }
+  >({ status: "idle" });
   const [locale, setLocale] = useState<SupportedLocale>(() => readStoredLocale());
   const [inspirationFilters, setInspirationFilters] =
     useState<InspirationDiscoveryFilters>(DEFAULT_INSPIRATION_FILTERS);
@@ -1624,6 +1658,14 @@ export function HomePage(): JSX.Element {
   const [captureView] = useState<CaptureView>("note");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [homeMode, setHomeMode] = useState<HomeMode>("topOfMind");
+  // Group Top of Mind boards (US-052). `activeBoard` is MINE_BOARD_ID for the
+  // personal wall, or a group id for a group board.
+  const [activeBoard, setActiveBoard] = useState<string>(MINE_BOARD_ID);
+  const [groupBoards, setGroupBoards] = useState<ApiGroupSummary[]>([]);
+  const [groupBoardsError, setGroupBoardsError] = useState<string | null>(null);
+  const [groupNotes, setGroupNotes] = useState<ApiGroupTopOfMindNote[]>([]);
+  const [groupBoardLoading, setGroupBoardLoading] = useState(false);
+  const [groupRefreshing, setGroupRefreshing] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureClosing, setCaptureClosing] = useState(false);
@@ -1631,6 +1673,120 @@ export function HomePage(): JSX.Element {
   const [captureHasDraft, setCaptureHasDraft] = useState<boolean>(() => captureDraftHasContent());
   const captureSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const drawerCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // --- Group Top of Mind boards (US-052) -----------------------------------
+
+  const loadGroupBoards = useCallback(async (): Promise<ApiGroupSummary[]> => {
+    try {
+      const boards = await fetchGroups();
+      setGroupBoards(boards);
+      setGroupBoardsError(null);
+      return boards;
+    } catch (err) {
+      setGroupBoardsError(err instanceof Error ? err.message : "Failed to load boards");
+      return [];
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setGroupBoards([]);
+      setActiveBoard(MINE_BOARD_ID);
+      return;
+    }
+    void loadGroupBoards();
+  }, [user, loadGroupBoards]);
+
+  // Load the synthesized board whenever a group is selected.
+  useEffect(() => {
+    if (!user || activeBoard === MINE_BOARD_ID) {
+      setGroupNotes([]);
+      setGroupBoardLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setGroupBoardLoading(true);
+    fetchGroupTopOfMind(activeBoard, TOP_OF_MIND_NOTE_LIMIT)
+      .then((result) => {
+        if (cancelled) return;
+        setGroupNotes(result.notes);
+        setGroupBoardsError(null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setGroupNotes([]);
+        setGroupBoardsError(err instanceof Error ? err.message : "Failed to load group board");
+        // A stale/left group id falls back to the personal wall.
+        setActiveBoard(MINE_BOARD_ID);
+      })
+      .finally(() => {
+        if (!cancelled) setGroupBoardLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeBoard]);
+
+  // Auto-join when arriving via a `?join=CODE` invite link.
+  useEffect(() => {
+    if (!user || typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const rawJoin = params.get("join");
+    if (!rawJoin) return;
+    const code = extractJoinCode(rawJoin);
+    let cancelled = false;
+    apiJoinGroup(code)
+      .then(async (result) => {
+        if (cancelled) return;
+        await loadGroupBoards();
+        setActiveBoard(result.group.id);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setGroupBoardsError(err instanceof Error ? err.message : "Could not join that group");
+      })
+      .finally(() => {
+        // Clear the param so a refresh doesn't re-run the join.
+        params.delete("join");
+        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", next);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, loadGroupBoards]);
+
+  const handleCreateGroup = useCallback(
+    async (name: string) => {
+      const group = await apiCreateGroup(name);
+      await loadGroupBoards();
+      setActiveBoard(group.id);
+    },
+    [loadGroupBoards],
+  );
+
+  const handleJoinGroup = useCallback(
+    async (code: string) => {
+      const result = await apiJoinGroup(code);
+      await loadGroupBoards();
+      setActiveBoard(result.group.id);
+    },
+    [loadGroupBoards],
+  );
+
+  const handleRefreshGroup = useCallback(async () => {
+    if (activeBoard === MINE_BOARD_ID) return;
+    setGroupRefreshing(true);
+    try {
+      const result = await apiRefreshGroupTopOfMind(activeBoard);
+      setGroupNotes(result.notes);
+      setGroupBoardsError(null);
+    } catch (err) {
+      setGroupBoardsError(err instanceof Error ? err.message : "Failed to refresh board");
+    } finally {
+      setGroupRefreshing(false);
+    }
+  }, [activeBoard]);
   const deletedTopOfMindUndoTimerRef = useRef<number | null>(null);
   const deletedSavedSignalUndoTimerRef = useRef<number | null>(null);
   const [noteFeedback, setNoteFeedback] = useState<
@@ -1731,6 +1887,7 @@ export function HomePage(): JSX.Element {
   const loadedForUserIdRef = useRef<string | null>(null);
   const activeHomeUserIdRef = useRef<string | null>(user?.id ?? null);
   const topOfMindLoadedForUserIdRef = useRef<string | null>(null);
+  const groupRoomsLoadedForUserIdRef = useRef<string | null>(null);
   const topOfMindRequestIdRef = useRef(0);
   const topOfMindEditTimersRef = useRef<Record<string, number>>({});
   const classificationRefreshTimersRef = useRef<number[]>([]);
@@ -1881,6 +2038,7 @@ export function HomePage(): JSX.Element {
       // /login. Wipe local state defensively just in case.
       loadedForUserIdRef.current = null;
       topOfMindLoadedForUserIdRef.current = null;
+      groupRoomsLoadedForUserIdRef.current = null;
       topOfMindRequestIdRef.current += 1;
       setEntries([]);
       setTopOfMind(null);
@@ -1888,6 +2046,9 @@ export function HomePage(): JSX.Element {
       setTopOfMindError(null);
       setTopOfMindNotes([]);
       setTopOfMindNotesLoading(false);
+      setGroupRooms([]);
+      setGroupRoomsLoading(false);
+      setGroupRoomsError(null);
       return;
     }
 
@@ -2043,6 +2204,31 @@ export function HomePage(): JSX.Element {
       topOfMindRequestIdRef.current += 1;
     };
   }, [refreshTopOfMind, user]);
+
+  const refreshGroupRooms = useCallback(async (options?: { showLoading?: boolean }) => {
+    if (!user) return;
+    if (options?.showLoading) setGroupRoomsLoading(true);
+    setGroupRoomsError(null);
+    try {
+      const rooms = await fetchGroupRooms(3);
+      setGroupRooms(rooms.filter((room) => room.participants.some((participant) => participant.userId === user.id)));
+      groupRoomsLoadedForUserIdRef.current = user.id;
+      setGroupRoomsLoading(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load conversation rooms";
+      setGroupRoomsError(message);
+      setGroupRoomsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (groupRoomsLoadedForUserIdRef.current === user.id) return;
+    if (groupRoomsLoadedForUserIdRef.current && groupRoomsLoadedForUserIdRef.current !== user.id) {
+      setGroupRooms([]);
+    }
+    void refreshGroupRooms({ showLoading: true });
+  }, [refreshGroupRooms, user]);
 
   const handleOptimisticAdd = useCallback((pending: PendingInspiration) => {
     setEntries((prev) => [buildOptimisticEntry(pending), ...prev]);
@@ -2221,8 +2407,16 @@ export function HomePage(): JSX.Element {
   }, []);
 
   const isHomeStateRenderSafe = user !== null && homeStateOwnerId === user.id;
+  const isGroupBoardActive = isHomeStateRenderSafe && activeBoard !== MINE_BOARD_ID;
   const renderEntries = isHomeStateRenderSafe ? entries : [];
-  const renderTopOfMindNotes = isHomeStateRenderSafe ? topOfMindNotes : [];
+  // The wall renders whichever board is active: the personal notes, or the
+  // synthesized notes for the selected group. Group notes extend the personal
+  // note surface, so they flow through the same card pipeline unchanged.
+  const renderTopOfMindNotes = !isHomeStateRenderSafe
+    ? []
+    : isGroupBoardActive
+      ? groupNotes
+      : topOfMindNotes;
   const renderSavedSignals = isHomeStateRenderSafe ? savedSignals : [];
   const renderUserMemoryGroups = isHomeStateRenderSafe ? userMemoryGroups : [];
   const renderTopOfMindNotesLoading = isHomeStateRenderSafe ? topOfMindNotesLoading : user !== null;
@@ -2703,6 +2897,11 @@ export function HomePage(): JSX.Element {
   const meaningfulThoughtCards = uniqueThoughtCards(thoughtCards.filter(isMeaningfulThoughtCard)).slice(0, TOP_OF_MIND_NOTE_LIMIT);
   const displayName = user.name?.trim() || user.email.split("@")[0] || "yunji";
   const displayHandle = displayName.toLowerCase();
+  // On a group board, title the wall after the group (e.g. "waka의 탑오브마인드").
+  const activeGroupName = isGroupBoardActive
+    ? groupBoards.find((board) => board.id === activeBoard)?.name ?? null
+    : null;
+  const titleHandle = activeGroupName ? activeGroupName.toLowerCase() : displayHandle;
   const copy = HOME_COPY[locale];
 
   const chooseHomeMode = (mode: HomeMode) => {
@@ -3066,7 +3265,100 @@ export function HomePage(): JSX.Element {
     }
   };
 
+  const latestGroupRoom = groupRooms[0] ?? null;
+  const latestGroupPrompt = latestGroupRoom?.prompts[0] ?? null;
+
+  const ensureGroupRoom = async (): Promise<ApiGroupConversationRoom> => {
+    if (latestGroupRoom) return latestGroupRoom;
+    const room = await createGroupRoom({ name: "next conversation" });
+    setGroupRooms((prev) => [room, ...prev.filter((item) => item.id !== room.id)]);
+    return room;
+  };
+
+  const createDiscussionFromPostIt = async (signal: HomeThoughtCard) => {
+    if (!signal.feedbackTargetId) return;
+    setGroupRoomStatus({ status: "saving" });
+    try {
+      const room = await ensureGroupRoom();
+      const signalIds = signal.supportingSignals
+        .map((support) => signalIdForSupportingSignal(support))
+        .filter((id): id is string => Boolean(id))
+        .slice(0, 6);
+      const result = await createDiscussionTopic({
+        roomId: room.id,
+        title: thoughtCardDisplayLabel(signal, locale),
+        sourceTopOfMindNoteId: signal.feedbackTargetId,
+        signalIds,
+      });
+      setGroupRooms((prev) => [result.room, ...prev.filter((item) => item.id !== result.room.id)]);
+      setGroupRoomStatus({ status: "saved", message: "discussion topic ready" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create discussion topic";
+      setGroupRoomStatus({ status: "error", message });
+    }
+  };
+
+  const markLatestPromptAsNextTopic = async () => {
+    if (!latestGroupRoom || !latestGroupPrompt) return;
+    setGroupRoomStatus({ status: "saving" });
+    try {
+      const result = await createGroupRoomFeedback(latestGroupRoom.id, {
+        promptId: latestGroupPrompt.id,
+        reaction: "unresolved",
+        note: "Keep this thread alive as the next conversation.",
+      });
+      setGroupRooms((prev) => [result.room, ...prev.filter((item) => item.id !== result.room.id)]);
+      setGroupRoomStatus({ status: "saved", message: result.room.postConversation.nextAction });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save room feedback";
+      setGroupRoomStatus({ status: "error", message });
+    }
+  };
+
+  const renderGroupRoomSurface = (): JSX.Element => {
+    const selectedCount = latestGroupRoom?.selectedSignals.length ?? 0;
+    const promptCount = latestGroupRoom?.prompts.length ?? 0;
+    return (
+      <aside className="group-room-surface" aria-label="group Top of Mind conversation room">
+        <div>
+          <span className="group-room-kicker">group top of mind</span>
+          <h2>{latestGroupRoom?.name ?? "next conversation"}</h2>
+        </div>
+        {groupRoomsLoading ? (
+          <p>loading room...</p>
+        ) : groupRoomsError ? (
+          <p>{groupRoomsError}</p>
+        ) : latestGroupPrompt ? (
+          <p className="group-room-prompt">{latestGroupPrompt.promptText}</p>
+        ) : (
+          <p className="group-room-prompt">Turn a post-it into a discussion topic, then let the room make it sharper.</p>
+        )}
+        <div className="group-room-meta" aria-label="room signals and prompts">
+          <span>{selectedCount} signal{selectedCount === 1 ? "" : "s"}</span>
+          <span>{promptCount} topic{promptCount === 1 ? "" : "s"}</span>
+        </div>
+        {latestGroupPrompt ? (
+          <button type="button" className="group-room-action" onClick={() => void markLatestPromptAsNextTopic()}>
+            keep as next topic
+          </button>
+        ) : (
+          <button type="button" className="group-room-action" onClick={() => void ensureGroupRoom()}>
+            create room
+          </button>
+        )}
+        {groupRoomStatus.status === "saved" || groupRoomStatus.status === "error" ? (
+          <p className={`group-room-status group-room-status--${groupRoomStatus.status}`}>
+            {groupRoomStatus.message}
+          </p>
+        ) : null}
+      </aside>
+    );
+  };
+
   const renderPostItActions = (signal: HomeThoughtCard): JSX.Element | null => {
+    // Group boards are synthesized from many members' shared notes; editing,
+    // pinning, or pulling them down via personal endpoints doesn't apply.
+    if (isGroupBoardActive) return null;
     if (!signal.feedbackTargetId) return null;
     const feedbackState = noteFeedback[signal.id];
     const saving = feedbackState?.status === "saving";
@@ -3115,6 +3407,23 @@ export function HomePage(): JSX.Element {
               <path d="M14 11v6" />
               <path d="M6.5 7 7.4 20h9.2l.9-13" />
               <path d="M9 7V4.8h6V7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="nc-note-icon-btn nc-note-icon-btn--discuss"
+            disabled={saving || groupRoomStatus.status === "saving"}
+            aria-label="turn this into a discussion topic"
+            title="Discuss"
+            onClick={(event) => {
+              event.stopPropagation();
+              void createDiscussionFromPostIt(signal);
+            }}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M5 6.5h14" />
+              <path d="M5 11.5h9" />
+              <path d="M7 18.5 10.5 15H19a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2z" />
             </svg>
           </button>
         </div>
@@ -3358,6 +3667,9 @@ export function HomePage(): JSX.Element {
       <>
         <span className="memory-signal-card-kind">
           {signalMaterialLabel(signal)}
+          {signal.ownerName ? (
+            <span className="memory-signal-card-owner">{signal.ownerName}</span>
+          ) : null}
         </span>
         <strong>{shortText(signal.textPreview, options.compact ? 96 : 180)}</strong>
         {signal.attachmentSummary.slice(0, 2).map((attachment) => (
@@ -3942,6 +4254,8 @@ export function HomePage(): JSX.Element {
     const failedUploadReason = signal.relevanceReasons.find((reason) => reason.includes("failed to upload"));
     const isSelectedSignal = selectedSavedSignalId === signal.id;
     const metaItems = [
+      // On a group board, lead with who saved this inspiration.
+      signal.ownerName ? `from ${signal.ownerName}` : null,
       sourceLabel,
       ...signal.attachmentSummary.slice(0, 2).map((attachment) => attachment.label),
       failedUploadReason,
@@ -4351,10 +4665,19 @@ export function HomePage(): JSX.Element {
     const id = signalIdForSupportingSignal(support);
     if (!id) return null;
     const listedSignal = allSavedSignals.find((signal) => signal.id === id);
-    if (listedSignal) return listedSignal;
+    // Even when the inspiration is one of the viewer's own saved signals, keep
+    // the group-evidence owner tag so every inspiration on a group board is
+    // attributed (including the viewer's).
+    if (listedSignal) {
+      return support.authorName
+        ? { ...listedSignal, ownerName: support.authorName }
+        : listedSignal;
+    }
     return {
       id,
       userId: user.id,
+      // On a group board, tag the inspiration with the member who saved it.
+      ownerName: support.authorName,
       textPreview: support.preview,
       kind: support.kind ?? null,
       capturedAt: support.createdAt ?? new Date().toISOString(),
@@ -4461,6 +4784,22 @@ export function HomePage(): JSX.Element {
           <p className="nc-note-body nc-note-body--preview">{noteText}</p>
         )}
       </div>
+      {isGroupBoardActive
+        ? (() => {
+            const contributors = Array.from(
+              new Set(
+                signal.supportingSignals
+                  .map((support) => support.authorName)
+                  .filter((name): name is string => Boolean(name && name.trim())),
+              ),
+            );
+            return contributors.length > 0 ? (
+              <p className="nc-note-contributors" aria-label="Contributing members">
+                from {contributors.join(", ")}
+              </p>
+            ) : null;
+          })()
+        : null}
       <div className="nc-note-footer-row">
         {noteIsInteractive && supportingCount > 0 ? (
           <button
@@ -4513,7 +4852,7 @@ export function HomePage(): JSX.Element {
       >
         <section className="nc-titlecard">
           <h1 className="nc-title">
-            {copy.titleLineOne(displayHandle)}
+            {copy.titleLineOne(titleHandle)}
             {copy.titleLineTwo ? (
               <>
                 <br />
@@ -4525,13 +4864,37 @@ export function HomePage(): JSX.Element {
           {copy.tagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
         </section>
 
+        <GroupBoardBar
+          boards={groupBoards}
+          activeBoard={activeBoard}
+          onSelect={setActiveBoard}
+          onCreateGroup={handleCreateGroup}
+          onJoinGroup={handleJoinGroup}
+          onRefresh={isGroupBoardActive ? handleRefreshGroup : undefined}
+          refreshing={groupRefreshing}
+          loading={groupBoardLoading}
+          error={groupBoardsError}
+        />
+
         <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMindRegionLabel}>
-          {topOfMindLoading ? (
+          {/* The legacy US-051 group conversation-rooms card is superseded by
+              the Group Top of Mind boards above and no longer shown on the wall. */}
+          {SHOW_LEGACY_GROUP_ROOM_SURFACE ? renderGroupRoomSurface() : null}
+          {isGroupBoardActive && groupBoardLoading ? (
+            <p className="nc-loading">Gathering the group’s Top of Mind…</p>
+          ) : !isGroupBoardActive && topOfMindLoading ? (
             <p className="nc-loading">{copy.loadingThoughts}</p>
-          ) : topOfMindError ? (
+          ) : !isGroupBoardActive && topOfMindError ? (
             <p className="nc-loading">{topOfMindError}</p>
           ) : meaningfulThoughtCards.length > 0 ? (
             meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
+          ) : isGroupBoardActive ? (
+            <div className="nc-first-run-guide" aria-label="Group Top of Mind">
+              <p className="nc-loading">
+                Nothing shared here yet. When members keep inspirations shared, this
+                board fills with the group’s Top of Mind.
+              </p>
+            </div>
           ) : (
             <div className="nc-first-run-guide" aria-label={copy.firstRunTitle}>
               <p className="nc-loading">{copy.emptyThoughts}</p>
