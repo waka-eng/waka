@@ -28,6 +28,7 @@ export default defineConfig({
       "src/lib/top-of-mind-value.test.ts",
       "src/lib/top-of-mind-refresh.test.ts",
       "src/lib/wow-candidates.test.ts",
+      "src/lib/group-combination.test.ts",
       "src/lib/wow-judge.test.ts",
       "src/lib/wow-judge-model.test.ts",
       "src/lib/admin-auth.test.ts",

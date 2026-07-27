@@ -143,6 +143,65 @@ async function loadTriggerSignals(
   return out;
 }
 
+/**
+ * Crude lexical overlap, used only to catch a note that paraphrases one
+ * member's own signals.
+ *
+ * Deliberately generous: this rejects near-copies, not merely-related
+ * readings. It must never be the reason a genuinely new reading is discarded,
+ * so the bar is set where only restatement clears it.
+ */
+const SINGLE_MEMBER_RESTATEMENT_THRESHOLD = 0.82;
+
+function contentTokens(value: string): Set<string> {
+  return new Set(
+    value
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((token) => token.length > 2),
+  );
+}
+
+/** What share of the note's own words already appear in `source`. */
+function overlapRatio(note: string, source: string): number {
+  const left = contentTokens(note);
+  if (left.size === 0) return 0;
+  const right = contentTokens(source);
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  return shared / left.size;
+}
+
+async function restatesASingleMember(
+  db: WakaDb,
+  judgment: Extract<WowMomentJudgment, { isWowMoment: true }>,
+  ownersBySignalId: Map<string, string>,
+): Promise<boolean> {
+  const ids = judgment.relatedInspirationIds.filter((id) => ownersBySignalId.has(id));
+  if (ids.length === 0) return false;
+
+  const rows = await db
+    .select({ id: signals.id, userId: signals.userId, text: signals.text })
+    .from(signals)
+    .where(inArray(signals.id, ids));
+
+  const textsByOwner = new Map<string, string[]>();
+  for (const row of rows) {
+    const bucket = textsByOwner.get(row.userId) ?? [];
+    bucket.push(row.text);
+    textsByOwner.set(row.userId, bucket);
+  }
+
+  const note = `${judgment.title} ${judgment.why ?? ""}`;
+  for (const texts of textsByOwner.values()) {
+    if (overlapRatio(note, texts.join(" ")) >= SINGLE_MEMBER_RESTATEMENT_THRESHOLD) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function loadOwnersBySignalId(
   db: WakaDb,
   signalIds: string[],
@@ -292,6 +351,14 @@ export async function generateGroupTopOfMind(
         .filter((uid): uid is string => Boolean(uid)),
     );
     if (distinctOwners.size < 2) continue;
+
+    // Spanning two members is necessary but not sufficient. A note can cite two
+    // people and still say only what one of them already says alone, which
+    // satisfies the letter of a shared reading and not its point: the group saw
+    // nothing their own collection did not already contain. Checked here rather
+    // than asked for in the prompt, because a model told to find a
+    // combination-only insight will happily claim one.
+    if (await restatesASingleMember(db, judgment, owners)) continue;
 
     const outcome = await persistGroupNote(db, {
       groupId: input.groupId,

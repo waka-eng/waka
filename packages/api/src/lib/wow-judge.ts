@@ -207,10 +207,28 @@ export interface WowJudgePromptCandidate extends WowJudgePromptInspiration {
   scores: { runtimeCandidateScore: number };
 }
 
+/**
+ * Stable, anonymous label for whose signal this is, on a group judgment.
+ *
+ * Anonymous on purpose: the judge should reason about the juxtaposition of two
+ * collections, not about who it imagines these people to be. Absent entirely on
+ * the personal path, where every signal has the same owner and saying so would
+ * be noise.
+ */
+export type MemberLabel = string;
+
 export interface WowJudgeInput {
   trigger: WowJudgePromptInspiration;
   candidates: WowJudgePromptCandidate[];
   locale?: SupportedLocale;
+  /**
+   * Signal id -> anonymous member label, for group judgments only.
+   *
+   * Without this the judge sees a bigger pool and nothing else, so it can say
+   * what a group has in common and cannot say what their combination makes
+   * visible — which is the question a room exists to ask.
+   */
+  memberLabelsBySignalId?: Record<string, MemberLabel>;
 }
 
 export interface WowJudgeClient {
@@ -320,9 +338,13 @@ function trimForPrompt(text: string): string {
     : trimmed;
 }
 
-function serializeInspirationForPrompt(inspiration: WowJudgePromptInspiration) {
+function serializeInspirationForPrompt(
+  inspiration: WowJudgePromptInspiration,
+  memberLabel?: MemberLabel,
+) {
   return {
     id: inspiration.id,
+    ...(memberLabel ? { savedBy: memberLabel } : {}),
     kind: inspiration.kind,
     category: inspiration.category,
     cluster: inspiration.cluster,
@@ -473,22 +495,28 @@ function buildWowJudgeValidExamples(allowedIds: string[]) {
 }
 
 function buildWowJudgeInputPayload(input: WowJudgeInput) {
+  const labels = input.memberLabelsBySignalId;
   return {
-    trigger: serializeInspirationForPrompt(input.trigger),
+    trigger: serializeInspirationForPrompt(input.trigger, labels?.[input.trigger.id]),
     candidates: input.candidates.map((candidate, index) => ({
       rank: index + 1,
       runtimeCandidateScore: candidate.scores.runtimeCandidateScore,
-      ...serializeInspirationForPrompt(candidate),
+      ...serializeInspirationForPrompt(candidate, labels?.[candidate.id]),
     })),
   };
 }
 
-function buildUserPrompt(input: WowJudgeInput): string {
+export function buildUserPrompt(input: WowJudgeInput): string {
   const allowedIds = allowedRelatedInspirationIds(input);
   const locale = normalizeSupportedLocale(input.locale);
   const payload = {
     contractVersion: WOW_JUDGE_CONTRACT_VERSION,
-    task: "Judge whether the trigger signal plus the provided candidate signals form one grounded top-of-mind note. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, or unsafe to claim.",
+    // When signals carry a `savedBy` label the pool spans several people, and
+    // the question changes: not what they have in common, which is the
+    // obvious reading, but what only their combination makes visible.
+    task: input.memberLabelsBySignalId
+      ? "These signals were saved by different people, each tagged with who saved it. Judge whether they form one grounded top-of-mind note that becomes visible ONLY because these particular collections sit next to each other. Shared themes are the obvious reading and are not what you are for. Ground the note in signals from at least two different members, prefer a revealing juxtaposition over a comfortable overlap, and do not restate what one member's signals already say alone. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, derivable from a single member, or unsafe to claim."
+      : "Judge whether the trigger signal plus the provided candidate signals form one grounded top-of-mind note. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, or unsafe to claim.",
     locale: buildLocaleContract(locale),
     allowedIds,
     input: buildWowJudgeInputPayload(input),
@@ -2286,6 +2314,34 @@ export interface JudgeGroupWowMomentParams {
  * inspirations owned by different people. The judge only ever references ids
  * from the provided pool (`relatedIdsAreSafe`), so cross-member evidence is safe.
  */
+/**
+ * Anonymous, stable labels for the members whose signals are in this pool.
+ *
+ * Sorted by user id so the same group always yields the same letters, and
+ * anonymous so the model reasons about the juxtaposition rather than about who
+ * it believes these people are.
+ */
+export function buildMemberLabels(
+  retrieved: Awaited<ReturnType<typeof findGroupWowMomentCandidates>>,
+  memberUserIds: string[],
+): Record<string, MemberLabel> {
+  const labelByUser = new Map<string, MemberLabel>();
+  [...new Set(memberUserIds)].sort().forEach((userId, index) => {
+    labelByUser.set(userId, `member ${String.fromCharCode(65 + (index % 26))}`);
+  });
+
+  const labels: Record<string, MemberLabel> = {};
+  const assign = (signalId: string, userId: string | undefined) => {
+    const label = userId ? labelByUser.get(userId) : undefined;
+    if (label) labels[signalId] = label;
+  };
+  if (retrieved.trigger) assign(retrieved.trigger.id, retrieved.trigger.userId);
+  for (const candidate of retrieved.candidates) {
+    assign(candidate.inspiration.id, candidate.inspiration.userId);
+  }
+  return labels;
+}
+
 export async function judgeGroupWowMoment(
   params: JudgeGroupWowMomentParams,
 ): Promise<WowMomentJudgment> {
@@ -2308,9 +2364,17 @@ export async function judgeGroupWowMoment(
     );
   }
 
+  // Ownership survives into the prompt here, and only here. Without it the
+  // judge sees a larger pool and nothing else, so it can name what a group has
+  // in common but not what their particular combination makes visible.
+  const withLabels: WowJudgeInput = {
+    ...input,
+    memberLabelsBySignalId: buildMemberLabels(retrieved, params.memberUserIds),
+  };
+
   const client =
     params.client ?? (await getDefaultModelProvider()).topOfMindNoteJudge;
-  const judgment = await client.judgeWowMoment(input);
+  const judgment = await client.judgeWowMoment(withLabels);
   if (!relatedIdsAreSafe(judgment, input)) {
     return defaultFalseJudgment(
       "unclear_pattern",
