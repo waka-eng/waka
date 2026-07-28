@@ -1684,6 +1684,11 @@ export function HomePage(): JSX.Element {
   // a room show its cast rather than only its name.
   const [groupMembers, setGroupMembers] = useState<ApiGroupMemberSummary[]>([]);
   const [groupRefreshing, setGroupRefreshing] = useState(false);
+  // A join code lifted off the URL, waiting on the person to say yes. Joining
+  // is not a navigation: it puts your saved signals into a pool other people
+  // read, so a link alone must never be enough to do it.
+  const [pendingJoinCode, setPendingJoinCode] = useState<string | null>(null);
+  const [joinPending, setJoinPending] = useState(false);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureClosing, setCaptureClosing] = useState(false);
@@ -1747,34 +1752,43 @@ export function HomePage(): JSX.Element {
     };
   }, [user, activeBoard]);
 
-  // Auto-join when arriving via a `?join=CODE` invite link.
+  /**
+   * Arriving via a `?join=CODE` invite link *offers* the join; it does not
+   * perform it.
+   *
+   * Joining a group is not a navigation. It puts every signal you have marked
+   * shareable into a pool the group's other members read, tagged with your
+   * name — so a link someone got you to open must never be sufficient on its
+   * own. The code is lifted off the URL immediately (a refresh should not
+   * re-offer it) and held until the person says yes.
+   */
   useEffect(() => {
     if (!user || typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const rawJoin = params.get("join");
     if (!rawJoin) return;
-    const code = extractJoinCode(rawJoin);
-    let cancelled = false;
-    apiJoinGroup(code)
-      .then(async (result) => {
-        if (cancelled) return;
-        await loadGroupBoards();
-        setActiveBoard(result.group.id);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setGroupBoardsError(err instanceof Error ? err.message : "Could not join that group");
-      })
-      .finally(() => {
-        // Clear the param so a refresh doesn't re-run the join.
-        params.delete("join");
-        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
-        window.history.replaceState({}, "", next);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user, loadGroupBoards]);
+    setPendingJoinCode(extractJoinCode(rawJoin));
+    params.delete("join");
+    const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+    window.history.replaceState({}, "", next);
+  }, [user]);
+
+  const confirmPendingJoin = useCallback(async () => {
+    if (!pendingJoinCode || joinPending) return;
+    setJoinPending(true);
+    try {
+      const result = await apiJoinGroup(pendingJoinCode);
+      await loadGroupBoards();
+      setActiveBoard(result.group.id);
+      setPendingJoinCode(null);
+      setGroupBoardsError(null);
+    } catch (err) {
+      setGroupBoardsError(err instanceof Error ? err.message : "Could not join that group");
+      setPendingJoinCode(null);
+    } finally {
+      setJoinPending(false);
+    }
+  }, [pendingJoinCode, joinPending, loadGroupBoards]);
 
   const handleCreateGroup = useCallback(
     async (name: string) => {
@@ -5222,6 +5236,43 @@ export function HomePage(): JSX.Element {
             <p className="nc-bottom-hint">{copy.bottomHint}</p>
           ) : null}
         </div>
+
+      {/* An invite link offers; the person decides. See the `?join=` effect. */}
+      {pendingJoinCode ? (
+        <div
+          className="nc-join-confirm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Join this group?"
+        >
+          <div className="nc-join-confirm-card">
+            <p className="nc-join-confirm-title">Join this group?</p>
+            <p className="nc-join-confirm-body">
+              Everything you have marked shareable becomes readable by this group's
+              members, with your name on it.
+            </p>
+            <code className="nc-join-confirm-code">{pendingJoinCode}</code>
+            <div className="nc-join-confirm-actions">
+              <button
+                type="button"
+                className="nc-join-confirm-cancel"
+                onClick={() => setPendingJoinCode(null)}
+                disabled={joinPending}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                className="nc-join-confirm-accept"
+                onClick={() => void confirmPendingJoin()}
+                disabled={joinPending}
+              >
+                {joinPending ? "Joining…" : "Join"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {captureOpen ? (
         <div

@@ -16025,3 +16025,83 @@ textarea {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Joining a group is consequential enough to interrupt for: it exposes your
+   shareable signals to everyone in it. Borrows the capture modal's scrim so
+   the interruption reads as the product's, not the browser's. */
+.nc-join-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 280;
+  display: grid;
+  place-items: center;
+  background: rgba(250, 249, 246, 0.78);
+  backdrop-filter: blur(10px);
+  padding: 32px;
+}
+
+.nc-join-confirm-card {
+  width: min(380px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  background: #fffdf8;
+  border: 1px solid rgba(45, 41, 37, 0.12);
+  border-radius: 10px;
+  font-family: var(--font-sans);
+}
+
+.nc-join-confirm-title {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(45, 41, 37, 0.92);
+}
+
+.nc-join-confirm-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(45, 41, 37, 0.62);
+}
+
+.nc-join-confirm-code {
+  justify-self: start;
+  padding: 4px 8px;
+  background: rgba(45, 41, 37, 0.05);
+  border-radius: 4px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(45, 41, 37, 0.8);
+}
+
+.nc-join-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.nc-join-confirm-actions button {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nc-join-confirm-cancel {
+  background: transparent;
+  border: 1px solid rgba(45, 41, 37, 0.16);
+  color: rgba(45, 41, 37, 0.62);
+}
+
+.nc-join-confirm-accept {
+  background: rgba(45, 41, 37, 0.9);
+  border: 1px solid rgba(45, 41, 37, 0.9);
+  color: #fffdf8;
+}
+
+.nc-join-confirm-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

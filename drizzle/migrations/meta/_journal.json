@@ -232,6 +232,13 @@
       "when": 1784200200000,
       "tag": "0033_group_top_of_mind_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784300000000,
+      "tag": "0034_group_synthesis_cooldown",
+      "breakpoints": true
     }
   ]
 }

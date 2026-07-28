@@ -54,29 +54,57 @@ CREATE TABLE IF NOT EXISTS "group_room_feedback" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "group_conversation_rooms" ADD CONSTRAINT "group_conversation_rooms_owner_user_id_users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_conversation_rooms" ADD CONSTRAINT "group_conversation_rooms_owner_user_id_users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_participants" ADD CONSTRAINT "group_room_participants_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_participants" ADD CONSTRAINT "group_room_participants_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_participants" ADD CONSTRAINT "group_room_participants_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_participants" ADD CONSTRAINT "group_room_participants_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_signals" ADD CONSTRAINT "group_room_signals_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_signals" ADD CONSTRAINT "group_room_signals_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_signals" ADD CONSTRAINT "group_room_signals_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_signals" ADD CONSTRAINT "group_room_signals_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_signals" ADD CONSTRAINT "group_room_signals_signal_id_signals_id_fk" FOREIGN KEY ("signal_id") REFERENCES "public"."signals"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_signals" ADD CONSTRAINT "group_room_signals_signal_id_signals_id_fk" FOREIGN KEY ("signal_id") REFERENCES "public"."signals"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_prompts" ADD CONSTRAINT "group_room_prompts_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_prompts" ADD CONSTRAINT "group_room_prompts_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_prompts" ADD CONSTRAINT "group_room_prompts_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_prompts" ADD CONSTRAINT "group_room_prompts_created_by_user_id_users_id_fk" FOREIGN KEY ("created_by_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_prompts" ADD CONSTRAINT "group_room_prompts_source_top_of_mind_note_id_wow_moments_id_fk" FOREIGN KEY ("source_top_of_mind_note_id") REFERENCES "public"."wow_moments"("id") ON DELETE set null ON UPDATE no action;
+DO $$ BEGIN
+	-- `wow_moments` is the OLD name; the table is `top_of_mind_notes` and
+	-- `wowMoments` survives only as an alias export in the Drizzle schema. This
+	-- migration was hand-written rather than generated, so it inherited the
+	-- alias and referenced a relation that does not exist.
+	ALTER TABLE "group_room_prompts" ADD CONSTRAINT "group_room_prompts_source_top_of_mind_note_id_wow_moments_id_fk" FOREIGN KEY ("source_top_of_mind_note_id") REFERENCES "public"."top_of_mind_notes"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_feedback" ADD CONSTRAINT "group_room_feedback_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_feedback" ADD CONSTRAINT "group_room_feedback_room_id_group_conversation_rooms_id_fk" FOREIGN KEY ("room_id") REFERENCES "public"."group_conversation_rooms"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_feedback" ADD CONSTRAINT "group_room_feedback_prompt_id_group_room_prompts_id_fk" FOREIGN KEY ("prompt_id") REFERENCES "public"."group_room_prompts"("id") ON DELETE set null ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_feedback" ADD CONSTRAINT "group_room_feedback_prompt_id_group_room_prompts_id_fk" FOREIGN KEY ("prompt_id") REFERENCES "public"."group_room_prompts"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-ALTER TABLE "group_room_feedback" ADD CONSTRAINT "group_room_feedback_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN
+	ALTER TABLE "group_room_feedback" ADD CONSTRAINT "group_room_feedback_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "group_conversation_rooms_owner_created_idx" ON "group_conversation_rooms" USING btree ("owner_user_id","created_at" DESC);
 --> statement-breakpoint

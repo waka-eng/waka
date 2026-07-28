@@ -37,6 +37,15 @@ export const groups = pgTable(
     // Opaque, human-shareable code embedded in the join link. Unique so a code
     // resolves to exactly one group.
     joinCode: text("join_code").notNull(),
+    /**
+     * When synthesis last ran for this board, successful or not.
+     *
+     * Synthesis is a bounded run of model calls, and a run that produces
+     * nothing is a normal outcome — a solo group can never produce a note,
+     * since a group note must span two members. Recording the attempt is what
+     * stops an empty board from re-running the whole pass on every read.
+     */
+    lastSynthesisAt: timestamp("last_synthesis_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

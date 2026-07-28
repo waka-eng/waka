@@ -111,7 +111,12 @@ async function loadTriggerSignals(
       ),
     )
     .where(and(inArray(signals.userId, memberUserIds), eq(signals.sharedToGroups, true)))
-    .orderBy(desc(signals.wowScore), desc(signals.createdAt));
+    .orderBy(desc(signals.wowScore), desc(signals.createdAt))
+    // Bounded read. Only the strongest `PER_MEMBER_TRIGGER_CAP` per member can
+    // survive the bucketing below, so fetching every shared signal a group has
+    // ever saved just to discard almost all of it is a full scan for nothing.
+    // Generous enough that the per-member caps still fill for a lopsided group.
+    .limit(memberUserIds.length * PER_MEMBER_TRIGGER_CAP * 10);
 
   // Group by member (de-duping signal ids), strongest first within each member.
   const byMember = new Map<string, Array<{ id: string; userId: string; wowScore: number }>>();
@@ -247,10 +252,17 @@ async function persistGroupNote(
  */
 export async function generateGroupTopOfMind(
   db: WakaDb,
-  input: { groupId: string; locale?: SupportedLocale },
+  input: { groupId: string; locale?: SupportedLocale; maxTriggers?: number },
 ): Promise<GroupSynthesisResult> {
   const memberUserIds = await loadMemberUserIds(db, input.groupId);
-  const triggers = await loadTriggerSignals(db, memberUserIds);
+  // A group note must span two members, so a single-member group cannot
+  // produce one. Judging its triggers is a guaranteed-empty run of model
+  // calls; skip the whole pass rather than paying for the proof.
+  if (new Set(memberUserIds).size < 2) {
+    return { triggersTried: 0, notesCreated: 0, notesExisting: 0 };
+  }
+  const maxTriggers = Math.max(1, Math.min(input.maxTriggers ?? MAX_TRIGGERS, MAX_TRIGGERS));
+  const triggers = (await loadTriggerSignals(db, memberUserIds)).slice(0, maxTriggers);
   const locale = (input.locale ?? "en-US") as SupportedLocale;
 
   let notesCreated = 0;

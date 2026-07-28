@@ -11,7 +11,7 @@
 
 import { randomBytes } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
 import {
   groupMembers,
@@ -37,6 +37,27 @@ const JOIN_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous 0
 const JOIN_CODE_LENGTH = 8;
 const MAX_JOIN_CODE_ATTEMPTS = 6;
 const PREVIEW_LENGTH = 180;
+
+/**
+ * How long a synthesis attempt suppresses the next one.
+ *
+ * Synthesis is a bounded run of sequential model calls, and "produced nothing"
+ * is a normal, repeatable outcome rather than a failure to retry: a group whose
+ * members' collections genuinely do not combine will return nothing every time,
+ * and a solo group cannot produce a note at all. Without a cooldown that group
+ * pays for a full pass on every board open, forever.
+ */
+const SYNTHESIS_COOLDOWN_MS = 15 * 60 * 1000;
+
+/**
+ * Trigger budget for synthesis kicked off by a *read*.
+ *
+ * A read has someone waiting on it, so it gets a small budget — enough to fill
+ * an empty board on first open without turning a GET into a request that
+ * outlives its own timeout. An explicit refresh, where the wait is the point,
+ * gets the full budget.
+ */
+const READ_PATH_MAX_TRIGGERS = 6;
 
 export interface GroupSummary {
   id: string;
@@ -239,25 +260,77 @@ export async function joinGroupByCode(
   }
 
   const summaries = await listGroupsForUser(db, input.userId);
-  const summary = summaries.find((s) => s.id === group.id)!;
+  const summary = summaries.find((s) => s.id === group.id);
+  // The membership can vanish between the insert and this read (a concurrent
+  // leave, a deleted group). Previously a `!` asserted that away and handed the
+  // route `group: undefined` with a 200 attached; say not-found instead.
+  if (!summary) return { ok: false, reason: "not_found" };
   return { ok: true, group: summary, alreadyMember: Boolean(existing) };
 }
 
-/** Remove the caller from a group. Owners leaving does not delete the group. */
+/**
+ * Remove the caller from a group, and their contributions with them. Owners
+ * leaving does not delete the group.
+ *
+ * Leaving previously deleted only the membership row, which left previews of
+ * the departing member's signals — and their name — on the board indefinitely.
+ * Taking their evidence out can strand a note below the two-member bar that
+ * justified it existing, so those notes go too: a note that now rests on one
+ * person's signals is that person's, not the group's.
+ */
 export async function leaveGroup(
   db: WakaDb,
   input: { userId: string; groupId: string },
 ): Promise<{ ok: boolean }> {
-  const deleted = await db
-    .delete(groupMembers)
-    .where(
-      and(
-        eq(groupMembers.groupId, input.groupId),
-        eq(groupMembers.userId, input.userId),
-      ),
-    )
-    .returning({ id: groupMembers.id });
-  return { ok: deleted.length > 0 };
+  return db.transaction(async (tx) => {
+    const deleted = await tx
+      .delete(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.groupId),
+          eq(groupMembers.userId, input.userId),
+        ),
+      )
+      .returning({ id: groupMembers.id });
+    if (deleted.length === 0) return { ok: false };
+
+    const noteIds = (
+      await tx
+        .select({ id: groupTopOfMindNotes.id })
+        .from(groupTopOfMindNotes)
+        .where(eq(groupTopOfMindNotes.groupId, input.groupId))
+    ).map((row) => row.id);
+    if (noteIds.length === 0) return { ok: true };
+
+    await tx
+      .delete(groupTopOfMindNoteSignals)
+      .where(
+        and(
+          inArray(groupTopOfMindNoteSignals.groupTopOfMindNoteId, noteIds),
+          eq(groupTopOfMindNoteSignals.ownerUserId, input.userId),
+        ),
+      );
+
+    const survivors = await tx
+      .select({
+        noteId: groupTopOfMindNoteSignals.groupTopOfMindNoteId,
+        owners: sql<number>`cast(count(distinct ${groupTopOfMindNoteSignals.ownerUserId}) as int)`,
+      })
+      .from(groupTopOfMindNoteSignals)
+      .where(inArray(groupTopOfMindNoteSignals.groupTopOfMindNoteId, noteIds))
+      .groupBy(groupTopOfMindNoteSignals.groupTopOfMindNoteId);
+
+    const stillShared = new Set(
+      survivors.filter((row) => Number(row.owners) >= 2).map((row) => row.noteId),
+    );
+    const orphaned = noteIds.filter((id) => !stillShared.has(id));
+    if (orphaned.length > 0) {
+      await tx
+        .delete(groupTopOfMindNotes)
+        .where(inArray(groupTopOfMindNotes.id, orphaned));
+    }
+    return { ok: true };
+  });
 }
 
 async function loadGroupWithMembers(
@@ -465,10 +538,23 @@ async function readGroupNotes(
     )
     .orderBy(asc(groupTopOfMindNoteSignals.sortOrder), asc(groupTopOfMindNoteSignals.createdAt));
 
+  // Defense in depth against evidence that outlives its author's membership.
+  // `leaveGroup` clears it at the source; this makes a missed cleanup a note
+  // that disappears rather than one that keeps showing an ex-member's saves.
+  const currentMemberIds = new Set(
+    (
+      await db
+        .select({ userId: groupMembers.userId })
+        .from(groupMembers)
+        .where(eq(groupMembers.groupId, groupId))
+    ).map((row) => row.userId),
+  );
+
   const evidenceByNote = new Map<string, GroupEvidenceRow[]>();
   for (const row of evidenceRows) {
     // Defense in depth: never surface an inspiration that has since gone private.
     if (!row.signalShared) continue;
+    if (!currentMemberIds.has(row.ownerUserId)) continue;
     const bucket = evidenceByNote.get(row.noteId) ?? [];
     bucket.push(row);
     evidenceByNote.set(row.noteId, bucket);
@@ -485,6 +571,31 @@ async function readGroupNotes(
     );
 
   return dedupeTopOfMindNotes(serialized).slice(0, limit);
+}
+
+/**
+ * Take the right to run synthesis for this group, if it is free.
+ *
+ * A single conditional UPDATE, so two concurrent readers cannot both decide the
+ * board is empty and both start a pass — the second one's WHERE no longer
+ * matches and it gets `false`. Returns whether the caller may proceed.
+ */
+async function claimSynthesisRun(db: WakaDb, groupId: string): Promise<boolean> {
+  const now = new Date();
+  const claimed = await db
+    .update(groups)
+    .set({ lastSynthesisAt: now })
+    .where(
+      and(
+        eq(groups.id, groupId),
+        or(
+          isNull(groups.lastSynthesisAt),
+          lt(groups.lastSynthesisAt, new Date(now.getTime() - SYNTHESIS_COOLDOWN_MS)),
+        ),
+      ),
+    )
+    .returning({ id: groups.id });
+  return claimed.length > 0;
 }
 
 /**
@@ -512,13 +623,18 @@ export async function listGroupTopOfMind(
 
   let notes = await readGroupNotes(db, input.groupId, input.limit);
 
-  // Best-effort: if nothing has been synthesized yet, generate now so the board
-  // is not empty on first open. Never fail the read if generation errors.
-  if (notes.length === 0) {
+  // Best-effort first fill, on a cooldown and a small trigger budget.
+  //
+  // An empty board is not evidence that synthesis has not been tried: a group
+  // whose collections do not combine returns nothing every time, so without the
+  // cooldown every open of that board pays for a fresh pass. `claimSynthesisRun`
+  // is a conditional UPDATE, so concurrent readers cannot both start one.
+  if (notes.length === 0 && (await claimSynthesisRun(db, input.groupId))) {
     try {
       await generateGroupTopOfMind(db, {
         groupId: input.groupId,
         locale: input.preferredLocale,
+        maxTriggers: READ_PATH_MAX_TRIGGERS,
       });
       notes = await readGroupNotes(db, input.groupId, input.limit);
     } catch (err) {
@@ -551,22 +667,41 @@ export async function refreshGroupTopOfMind(
   });
   if (!loaded) return null;
 
-  // Generate FIRST, then prune notes that predate this run — but only if the run
-  // actually produced notes. If the model is unavailable (0 created), we keep the
-  // existing board rather than emptying it. This clears stale near-duplicates
-  // from earlier passes on success without risking an empty board on failure.
-  const cutoff = new Date();
+  // An explicit refresh still respects the cooldown: it is a member-triggered
+  // run of model calls, and any member can press it as often as they like.
+  // Declining is not a failure — the board below is still returned.
+  if (!(await claimSynthesisRun(db, input.groupId))) {
+    const notes = await readGroupNotes(db, input.groupId, input.limit);
+    return { group: loaded.group, members: loaded.members, notes };
+  }
+
+  // Note the ids that exist BEFORE generating, then prune exactly those — but
+  // only if the run actually produced something. If the model is unavailable
+  // (0 created) we keep the existing board rather than emptying it.
+  //
+  // Identifying the previous generation by id rather than by "created before
+  // this timestamp" matters twice over: `created_at` comes from the database
+  // clock while the cutoff would come from the app's, so a lagging database
+  // let a run delete its own fresh notes; and a concurrent refresh could
+  // delete notes the other one had just written.
+  const priorNoteIds = (
+    await db
+      .select({ id: groupTopOfMindNotes.id })
+      .from(groupTopOfMindNotes)
+      .where(eq(groupTopOfMindNotes.groupId, input.groupId))
+  ).map((row) => row.id);
+
   const result = await generateGroupTopOfMind(db, {
     groupId: input.groupId,
     locale: input.preferredLocale,
   });
-  if (result.notesCreated > 0) {
+  if (result.notesCreated > 0 && priorNoteIds.length > 0) {
     await db
       .delete(groupTopOfMindNotes)
       .where(
         and(
           eq(groupTopOfMindNotes.groupId, input.groupId),
-          lt(groupTopOfMindNotes.createdAt, cutoff),
+          inArray(groupTopOfMindNotes.id, priorNoteIds),
         ),
       );
   }

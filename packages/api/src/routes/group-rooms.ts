@@ -9,6 +9,7 @@ import {
   groupRoomPrompts,
   groupRoomSignals,
   inspirations,
+  wowMoments,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
@@ -89,6 +90,12 @@ export interface GroupRoomSignalPreview {
   id: string;
   signalId: string;
   userId: string;
+  /**
+   * What the room may read of this signal: the whole text when its owner chose
+   * `shareRaw`, otherwise a {@link PREVIEW_LENGTH}-character preview. The
+   * gating happens here, at the only place room signals are turned into a
+   * response, so no caller can accidentally serve the untruncated text.
+   */
   textPreview: string;
   shareRaw: boolean;
   createdAt: string;
@@ -197,12 +204,23 @@ function buildPrompt(input: {
     evidencePreviews: input.selectedSignals.map((signal) => ({
       signalId: signal.signalId,
       userId: signal.userId,
-      textPreview: signal.shareRaw ? signal.textPreview : truncatePreview(signal.textPreview),
+      // `textPreview` is already gated on `shareRaw` by `serializeRooms`;
+      // re-truncating here was a no-op that read like a second control.
+      textPreview: signal.textPreview,
       rawShared: signal.shareRaw,
     })),
   };
 }
 
+/**
+ * Membership as of *now*, not membership ever.
+ *
+ * Both `status` columns are load-bearing and were previously ignored. A
+ * participant row can outlive the participation (left, removed) and a room can
+ * be ended; neither should still authorize a write. Checking them here rather
+ * than at each call site means a future accept-invite or remove-member flow
+ * inherits the check instead of having to remember it.
+ */
 async function assertRoomMembership(
   db: WakaDb,
   input: { roomId: string; userId: string },
@@ -226,6 +244,8 @@ async function assertRoomMembership(
       and(
         eq(groupConversationRooms.id, input.roomId),
         eq(groupRoomParticipants.userId, input.userId),
+        eq(groupRoomParticipants.status, "active"),
+        eq(groupConversationRooms.status, "active"),
       ),
     )
     .limit(1);
@@ -338,7 +358,12 @@ async function serializeRooms(
           id: signal.id,
           signalId: signal.signalId,
           userId: signal.userId,
-          textPreview: truncatePreview(signal.text),
+          // The one place `shareRaw` is honored. Previously every signal was
+          // truncated here regardless, which made the flag inert: a member who
+          // declined to share raw text shared exactly as much as one who did.
+          textPreview: signal.shareRaw
+            ? signal.text.replace(/\s+/g, " ").trim()
+            : truncatePreview(signal.text),
           shareRaw: signal.shareRaw,
           createdAt: signal.createdAt.toISOString(),
         })),
@@ -387,7 +412,14 @@ export async function listGroupRoomsForUser(
         groupRoomParticipants,
         eq(groupRoomParticipants.roomId, groupConversationRooms.id),
       )
-      .where(eq(groupRoomParticipants.userId, input.userId))
+      .where(
+        and(
+          eq(groupRoomParticipants.userId, input.userId),
+          // A room you were removed from stops being yours to see. Ended rooms
+          // stay listed on purpose — they are history, not access.
+          eq(groupRoomParticipants.status, "active"),
+        ),
+      )
       .orderBy(desc(groupConversationRooms.updatedAt))
       .limit(input.limit);
   } catch (error) {
@@ -472,12 +504,39 @@ export async function addSignalsToGroupRoom(
   return surface;
 }
 
+/**
+ * A Top of Mind note may only seed a prompt for the person who owns it.
+ * Without this the id is a free-text foreign key: any member could stamp a
+ * prompt as sourced from someone else's note, and a 404-vs-201 difference
+ * would confirm whether an arbitrary note id exists.
+ */
+async function assertOwnedTopOfMindNote(
+  db: WakaDb,
+  input: { userId: string; noteId: string },
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: wowMoments.id })
+    .from(wowMoments)
+    .where(and(eq(wowMoments.id, input.noteId), eq(wowMoments.userId, input.userId)))
+    .limit(1);
+  return Boolean(row);
+}
+
 async function createPromptInRoom(
   db: WakaDb,
   input: { userId: string; roomId: string; seedText?: string; sourceTopOfMindNoteId?: string },
 ): Promise<{ room: GroupConversationRoomSurface; prompt: GroupRoomPromptSurface } | null> {
   const room = await assertRoomMembership(db, input);
   if (!room) return null;
+  if (
+    input.sourceTopOfMindNoteId &&
+    !(await assertOwnedTopOfMindNote(db, {
+      userId: input.userId,
+      noteId: input.sourceTopOfMindNoteId,
+    }))
+  ) {
+    return null;
+  }
   const [roomSurface] = await serializeRooms(db, [room]);
   const generated = buildPrompt({
     seedText: input.seedText,
@@ -505,12 +564,16 @@ async function createPromptInRoom(
       createdAt: groupRoomPrompts.createdAt,
     });
 
+  const updatedAt = new Date();
   await db
     .update(groupConversationRooms)
-    .set({ updatedAt: new Date() })
+    .set({ updatedAt })
     .where(eq(groupConversationRooms.id, input.roomId));
 
-  const [updatedRoom] = await listGroupRoomsForUser(db, { userId: input.userId, limit: 1 });
+  // Serialize *this* room. It previously re-read "the caller's most recently
+  // updated room" and relied on the update above having made that the same
+  // room — which a concurrent write to another room quietly breaks.
+  const [updatedRoom] = await serializeRooms(db, [{ ...room, updatedAt }]);
   return {
     room: updatedRoom,
     prompt: {
@@ -561,6 +624,23 @@ export async function createGroupRoomFeedback(
 ): Promise<{ room: GroupConversationRoomSurface; feedback: GroupRoomFeedbackSurface } | null> {
   const room = await assertRoomMembership(db, input);
   if (!room) return null;
+
+  // Feedback belongs to a prompt *in this room*. The FK only proves the prompt
+  // exists somewhere, so without this a member of one room could attach
+  // feedback to another room's prompt and learn that it exists.
+  if (input.promptId) {
+    const [prompt] = await db
+      .select({ id: groupRoomPrompts.id })
+      .from(groupRoomPrompts)
+      .where(
+        and(
+          eq(groupRoomPrompts.id, input.promptId),
+          eq(groupRoomPrompts.roomId, input.roomId),
+        ),
+      )
+      .limit(1);
+    if (!prompt) return null;
+  }
 
   const [feedback] = await db
     .insert(groupRoomFeedback)
