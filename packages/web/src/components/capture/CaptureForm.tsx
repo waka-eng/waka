@@ -426,6 +426,8 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
     const [pending, setPending] = useState<PendingAttachment[]>([]);
     const [resonance, setResonance] = useState<CaptureResonanceAnswer | null>(null);
     const [resonanceNote, setResonanceNote] = useState("");
+    // US-052: shared with the user's groups by default; flip to keep private.
+    const [shareToGroups, setShareToGroups] = useState(true);
     const [saving, setSaving] = useState(false);
     /**
      * Confirmation / error message displayed in `cap-confirm`. The cell
@@ -791,6 +793,9 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           text: inspirationText,
           kind,
           captureElapsedMs: elapsedSinceCaptureOpened(captureStartedAtRef.current),
+          // Shared with groups is the server default; only send the flag when
+          // the user opted this inspiration into private.
+          ...(shareToGroups ? {} : { shareToGroups: false }),
           ...(captureSparks ? { sparks: captureSparks } : {}),
           ...(reflectiveAnswers.length > 0
             ? {
@@ -1118,6 +1123,26 @@ export const CaptureForm = forwardRef<HTMLDivElement, CaptureFormProps>(
           void triggerSave();
         }}
         onReflectiveSave={undefined}
+        captureMeta={
+          <div className="capture-share" role="group" aria-label="Sharing">
+            <button
+              type="button"
+              className={`capture-share-option${shareToGroups ? " capture-share-option--active" : ""}`}
+              aria-pressed={shareToGroups}
+              onClick={() => setShareToGroups(true)}
+            >
+              Shared with groups
+            </button>
+            <button
+              type="button"
+              className={`capture-share-option${!shareToGroups ? " capture-share-option--active" : ""}`}
+              aria-pressed={!shareToGroups}
+              onClick={() => setShareToGroups(false)}
+            >
+              Private
+            </button>
+          </div>
+        }
         processSaveLabel={t(locale, "processThisInspiration")}
         processSaveInProgress={guidedReflectionInProgress}
         processSaveInProgressLabel={t(locale, "reflectDeeperInProgress")}

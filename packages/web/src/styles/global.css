@@ -4286,6 +4286,83 @@
   line-height: 1.45;
 }
 
+.group-room-surface {
+  display: grid;
+  align-self: start;
+  width: min(100%, 284px);
+  min-height: 220px;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(32, 30, 27, 0.16);
+  border-radius: 7px;
+  background: rgba(255, 255, 252, 0.9);
+  color: #24211d;
+  box-shadow: 0 18px 44px rgba(41, 35, 26, 0.12);
+}
+
+.group-room-kicker {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: rgba(36, 33, 29, 0.58);
+}
+
+.group-room-surface h2 {
+  margin: 0;
+  font-family: "Instrument Serif", serif;
+  font-size: 1.58rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.group-room-surface p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.group-room-prompt {
+  min-height: 76px;
+}
+
+.group-room-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: rgba(36, 33, 29, 0.62);
+}
+
+.group-room-action {
+  width: fit-content;
+  border: 1px solid rgba(36, 33, 29, 0.18);
+  border-radius: 999px;
+  background: rgba(36, 33, 29, 0.06);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  padding: 8px 12px;
+}
+
+.group-room-action:hover,
+.group-room-action:focus-visible {
+  background: rgba(36, 33, 29, 0.1);
+}
+
+.group-room-status {
+  font-size: 0.76rem;
+}
+
+.group-room-status--error {
+  color: #8a2f23;
+}
+
 .nc-drawer-object {
   position: absolute;
   right: clamp(26px, 7vw, 96px);
@@ -12869,16 +12946,26 @@ body.reflect-bg {
 
 @media (max-width: 640px) {
   .memory-drawer-stack {
-    right: 12px;
-    bottom: 18px;
-    left: 12px;
-    width: auto;
-    height: min(74dvh, 620px);
+    position: relative;
+    inset: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
     min-height: 0;
+    overflow: visible;
+    pointer-events: auto;
+    padding: 0 0 calc(112px + env(safe-area-inset-bottom));
   }
 
   .memory-drawer-stack::after {
-    right: 52px;
+    display: none;
+  }
+
+  .memory-stack-level {
+    position: relative;
+    inset: auto;
   }
 
   .memory-stack-entrybar,
@@ -14500,7 +14587,16 @@ body.reflect-bg {
   }
 
   .nc-primary-action {
-    width: min(178px, calc(100vw - 96px));
+    width: max-content;
+    min-width: min(242px, calc(100vw - 88px));
+  }
+
+  .nc-primary-action > .nc-save {
+    position: relative;
+    inset: auto;
+    width: max-content;
+    min-width: min(242px, calc(100vw - 88px));
+    height: auto;
   }
 
   .nc-primary-action--reflect {
@@ -14521,8 +14617,9 @@ body.reflect-bg {
 
   .nc-save-cta {
     min-height: 42px;
-    padding: 0 18px;
+    padding: 0 22px;
     font-size: 13px;
+    white-space: nowrap;
   }
 
   .nc-save-icon {
@@ -15318,6 +15415,25 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .memory-drawer-stack {
+    position: relative;
+    inset: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    pointer-events: auto;
+    padding: 0 0 calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .memory-stack-level {
+    position: relative;
+    inset: auto;
+  }
+
   .memory-contents-flow {
     width: 100%;
     max-height: none;
@@ -15631,4 +15747,281 @@ textarea {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Group Top of Mind boards (US-052)
+ * A quiet board switcher above the Top of Mind wall + the capture share toggle.
+ * ------------------------------------------------------------------------- */
+
+.nc-board-switcher {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 auto var(--space-4);
+  padding: 0 var(--space-4);
+  max-width: 760px;
+}
+
+.nc-board-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.nc-board-tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-organic),
+    border-color var(--duration-fast) var(--ease-organic),
+    background var(--duration-fast) var(--ease-organic);
+}
+
+.nc-board-tab:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.nc-board-tab--active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.nc-board-tab--ghost {
+  border-style: dashed;
+}
+
+.nc-board-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(15, 15, 14, 0.08);
+  color: inherit;
+  font-size: 10px;
+}
+
+.nc-board-tab--active .nc-board-tab-count {
+  background: rgba(244, 242, 238, 0.24);
+}
+
+.nc-board-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nc-board-hint--error {
+  color: var(--error);
+}
+
+.nc-board-form {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.nc-board-input {
+  appearance: none;
+  min-width: 240px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.nc-board-input:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+
+.nc-board-go {
+  appearance: none;
+  padding: 6px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nc-board-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nc-board-share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nc-board-share-code {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--cell);
+  color: var(--ink);
+  font-size: 11px;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Capture share toggle (shared-by-default per-inspiration control). */
+.capture-share {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: var(--space-2);
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+}
+
+.capture-share-option {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-organic),
+    background var(--duration-fast) var(--ease-organic);
+}
+
+.capture-share-option--active {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* Group note contributor line + evidence owner tags (US-053). */
+.nc-note-contributors {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* Owner tag on each inspiration in the Group Top of Mind evidence drawer. */
+.memory-signal-card-owner {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+/* ============================================================
+ * Rooms — showing who a group board belongs to, and whose signals each of
+ * its notes rests on. A group note always spans two or more people, since
+ * synthesis skips judgments whose evidence covers fewer than two owners;
+ * the faces are how the wall says that without opening the evidence drawer.
+ * ============================================================ */
+
+.nc-room-cast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 11px;
+  flex-wrap: wrap;
+}
+
+.nc-room-cast-names {
+  color: rgba(45, 41, 37, 0.44);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 460;
+  letter-spacing: 0;
+}
+
+/* Overlapping faces, so a group reads as a group rather than a list. */
+.nc-note-faces {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.nc-note-face {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  margin-right: -5px;
+  color: rgba(255, 253, 248, 0.96);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0;
+  /* Ring in the note's own paper colour so faces read as sitting on it. */
+  box-shadow: 0 0 0 1.5px var(--bg, #f2f1ee);
+}
+
+.nc-room-face {
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  font-size: 9px;
+  box-shadow: 0 0 0 2px #f2f1ee;
+}
+
+.nc-room-face--me {
+  box-shadow: 0 0 0 2px #f2f1ee, 0 0 0 3.5px rgba(176, 137, 72, 0.55);
+}
+
+/* agikee's contributor line, now carrying faces alongside its names. */
+.nc-note-contributors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nc-note-contributor-names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
