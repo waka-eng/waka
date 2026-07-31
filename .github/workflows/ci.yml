@@ -1,0 +1,126 @@
+name: CI
+
+# Nothing gated the code before this. `deploy-dev` and `deploy` build and
+# ship; neither runs a typecheck or a test, so a broken migration or a failed
+# authorization check reached an environment before anyone saw it. This runs
+# on every PR and every push to dev, and is meant to be a required check.
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PNPM_VERSION: "9.12.0"
+  NODE_VERSION: "20"
+
+jobs:
+  check:
+    name: Typecheck, unit tests, migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The full API suite needs a migrated database. Postgres with pgvector,
+    # as a service container, so the suite runs against a real engine rather
+    # than being skipped — and on localhost, which is what the suite's own
+    # disposable-database guard requires.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: waka_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_CONNECTION_URL: postgres://postgres:postgres@localhost:5432/waka_test
+      AUTH_SECRET: ci-test-secret-not-a-real-key-000000
+      JWT_SECRET: ci-test-secret-not-a-real-key-000000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck API
+        run: pnpm --filter @waka/api typecheck
+
+      - name: Typecheck web
+        run: pnpm --filter @waka/web typecheck
+
+      # Runs the whole chain against an empty database, which is the only way
+      # to catch a migration that references a relation that no longer exists.
+      # Production gates its deploy on this same command.
+      - name: Apply migrations
+        run: |
+          psql "$DB_CONNECTION_URL" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
+          pnpm db:migrate
+
+      - name: API unit tests
+        run: pnpm --filter @waka/api test:unit
+
+      # Everything that needs only Postgres. This is the gate: it covers the
+      # group authorization boundary, the vault, the routes, and the migration
+      # journal.
+      - name: API suite (hermetic)
+        run: |
+          pnpm --filter @waka/api test -- \
+            --exclude '**/node_modules/**' \
+            --exclude '**/dist/**' \
+            --exclude '**/.sst/**' \
+            --exclude '**/*.smoke.ts' \
+            --exclude 'test/background-jobs.test.ts' \
+            --exclude 'test/wow-judge.test.ts' \
+            --exclude 'test/wow-moments.test.ts' \
+            --exclude 'test/inspiration-embeddings.test.ts'
+
+      # These four need configuration this workflow does not have: a Gemini key
+      # for the judge and embedding paths, and an admin allowlist that matches
+      # the randomly generated fixture users. Reported rather than skipped
+      # silently, and non-blocking rather than fabricated — a green tick for a
+      # test that never ran is worse than a visible gap. Add GEMINI_API_KEY and
+      # WAKA_ADMIN_EMAILS as repository secrets to turn this into a gate.
+      - name: API suite (needs credentials — non-blocking)
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          WAKA_ADMIN_EMAILS: ${{ secrets.WAKA_ADMIN_EMAILS }}
+        run: |
+          pnpm --filter @waka/api test -- \
+            test/background-jobs.test.ts \
+            test/wow-judge.test.ts \
+            test/wow-moments.test.ts \
+            test/inspiration-embeddings.test.ts
+
+      - name: Web tests
+        run: pnpm --filter @waka/web test

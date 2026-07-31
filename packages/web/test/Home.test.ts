@@ -2736,6 +2736,20 @@ describe("HomePage current home experience", () => {
     expect(mobileDrawerRules).toContain("min-width: 0");
   });
 
+  it("does no work for the legacy room surface while it is switched off", async () => {
+    // The surface is behind a flag its author set to false. Everything that
+    // feeds it waits on the same flag rather than running into the dark.
+    // Asserted through behaviour rather than by grepping Home.tsx for the
+    // gating expression: the source-text version passes for a file that checks
+    // the flag and fetches anyway, and fails for a reformat that changes
+    // nothing.
+    setApiFixtures();
+    await renderHomePage();
+
+    expect(fetchGroupRooms).not.toHaveBeenCalled();
+    expect(document.querySelector(".nc-note-icon-btn--discuss")).toBeNull();
+  });
+
   describe("?join=CODE invite links", () => {
     const withJoinParam = async (code: string) => {
       window.history.replaceState({}, "", `/?join=${code}`);
@@ -2796,6 +2810,16 @@ describe("HomePage current home experience", () => {
       // cannot resurrect an offer the person already declined.
       expect(window.location.search).toBe("");
     });
+  });
+
+  it("expires the capture hint once anything has been saved", async () => {
+    setApiFixtures({ inspirations: [] });
+    const empty = await renderHomePage();
+    expect(empty.querySelector(".nc-bottom-hint")).not.toBeNull();
+
+    setApiFixtures();
+    const withSaves = await renderHomePage();
+    expect(withSaves.querySelector(".nc-bottom-hint")).toBeNull();
   });
 
   it("keeps desktop wall actions centered and mobile actions in document flow", async () => {
