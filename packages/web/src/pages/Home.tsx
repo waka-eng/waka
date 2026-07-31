@@ -90,10 +90,10 @@ import {
   updateTopOfMindNote,
 } from "../lib/api";
 import {
-  GroupBoardBar,
+  RoomTitle,
   MINE_BOARD_ID,
   extractJoinCode,
-} from "../components/GroupBoardBar";
+} from "../components/RoomTitle";
 import { useAuth } from "../lib/auth-context";
 import {
   formatSavedCount,
@@ -1376,6 +1376,7 @@ const HOME_COPY = {
     captureCta: "영감 기록",
     captureHint: () => "",
     bottomHint: "영감을 기록하고 돌아보면 WAKA가 반복되는 패턴을 임시 포스트잇으로 띄웁니다.",
+    myRoomName: "나",
     captureDialog: "영감 기록",
     close: "닫기",
   },
@@ -1505,6 +1506,7 @@ const HOME_COPY = {
     captureCta: "capture inspiration",
     captureHint: () => "",
     bottomHint: "Capture and reflect; WAKA turns recurring patterns into provisional post-its you can correct.",
+    myRoomName: "just you",
     captureDialog: "capture inspiration",
     close: "close",
   },
@@ -1624,6 +1626,7 @@ const HOME_COPY = {
     captureCta: string;
     captureHint: (count: number) => string;
     bottomHint: string;
+    myRoomName: string;
     captureDialog: string;
     close: string;
   }
@@ -2946,6 +2949,13 @@ export function HomePage(): JSX.Element {
   const displayName = user.name?.trim() || user.email.split("@")[0] || "yunji";
   const displayHandle = displayName.toLowerCase();
   // On a group board, title the wall after the group (e.g. "waka의 탑오브마인드").
+  const activeGroupJoinLink = (() => {
+    const g = groupBoards.find((b) => b.id === activeBoard);
+    if (!g?.joinCode) return null;
+    return typeof window === "undefined"
+      ? `?join=${g.joinCode}`
+      : `${window.location.origin}/?join=${encodeURIComponent(g.joinCode)}`;
+  })();
   const activeGroupName = isGroupBoardActive
     ? groupBoards.find((board) => board.id === activeBoard)?.name ?? null
     : null;
@@ -4646,12 +4656,24 @@ export function HomePage(): JSX.Element {
 
   const renderMemoryPathFilters = (): JSX.Element | null => {
     if (homeMode !== "memoryDrawer") return null;
+    // Arriving from "N inspirations led here" is a question about one thought,
+    // so the drawer answers only that. Offering "all saved" beside it invites
+    // you to lose the set you came to look at, and there is no way back to it.
+    if (activeTopOfMindEvidenceFilter) {
+      return (
+        <nav className="memory-path-filters" aria-label={copy.savedSignalPathsLabel}>
+          <span className="memory-path-filter memory-path-filter--active memory-path-filter--only">
+            {activeTopOfMindEvidenceFilter.label}
+            <span className="memory-path-filter-count">
+              {applySearchToSignals(activeTopOfMindEvidenceFilter.signals, savedSignalQuery).length}
+            </span>
+          </span>
+        </nav>
+      );
+    }
     const primaryFilterIds = new Set(["all-saved", "recently-saved"]);
     const primaryFilters = memoryPathFilters.filter((filter) => primaryFilterIds.has(filter.id));
-    const visibleFilters = [
-      ...(activeTopOfMindEvidenceFilter ? [activeTopOfMindEvidenceFilter] : []),
-      ...primaryFilters,
-    ];
+    const visibleFilters = primaryFilters;
     return (
 	      <nav className="memory-path-filters" aria-label={copy.savedSignalPathsLabel}>
 	        {visibleFilters.map((filter) => {
@@ -4663,9 +4685,6 @@ export function HomePage(): JSX.Element {
               className={`memory-path-filter${selectedMemoryPathFilterId === filter.id ? " memory-path-filter--active" : ""}`}
               aria-pressed={selectedMemoryPathFilterId === filter.id}
               onClick={() => {
-                if (activeTopOfMindEvidenceFilter?.id !== filter.id) {
-                  setActiveTopOfMindEvidenceFilter(null);
-                }
                 setSelectedMemoryPathFilterId(filter.id);
                 setSelectedMemoryGroupId(null);
                 setSelectedSavedSignalId(null);
@@ -4788,6 +4807,17 @@ export function HomePage(): JSX.Element {
     const noteText = thoughtCardDisplayLabel(signal, locale);
     const draftText = noteFeedback[signal.id]?.correctionText ?? noteText;
     const textDensityClass = thoughtCardTextDensityClass(draftText);
+    // Only a room has contributors; your own wall's notes are yours by
+    // definition and stamping "you" on every card is noise.
+    const noteContributors = isGroupBoardActive
+      ? Array.from(
+          new Set(
+            signal.supportingSignals
+              .map((support) => support.authorName)
+              .filter((name): name is string => Boolean(name && name.trim())),
+          ),
+        )
+      : [];
     return (
     <article
       className={`nc-note${index === 0 ? " nc-note--featured" : ""}${draggingIndex === index ? " nc-note--dragging" : ""}${pinned ? " nc-note--pinned" : ""}${savingEdit ? " nc-note--saving" : ""}${textDensityClass}${noteIsInteractive ? "" : " nc-note--passive"}`}
@@ -4832,46 +4862,44 @@ export function HomePage(): JSX.Element {
           <p className="nc-note-body nc-note-body--preview">{noteText}</p>
         )}
       </div>
-      {isGroupBoardActive
-        ? (() => {
-            const contributors = Array.from(
-              new Set(
-                signal.supportingSignals
-                  .map((support) => support.authorName)
-                  .filter((name): name is string => Boolean(name && name.trim())),
-              ),
-            );
-            return contributors.length > 0 ? (
-              <p className="nc-note-contributors" aria-label="Contributing members">
-                <span className="nc-note-faces" aria-hidden="true">
-                  {contributors.map((name) => (
-                    <span
-                      key={name}
-                      className="nc-note-face"
-                      style={{ background: contributorColor(name) }}
-                      title={name}
-                    >
-                      {contributorInitials(name)}
-                    </span>
-                  ))}
-                </span>
-                <span className="nc-note-contributor-names">from {contributors.join(", ")}</span>
-              </p>
-            ) : null;
-          })()
-        : null}
+      {/* One provenance line. Contributor faces and the evidence count were two
+          rows answering the same question -- where did this come from -- so
+          they are one row: who, then how many, opening the evidence. */}
       <div className="nc-note-footer-row">
         {noteIsInteractive && supportingCount > 0 ? (
           <button
             type="button"
-            className="nc-note-inspiration-slide"
+            className="nc-note-inspiration-slide nc-note-provenance"
             disabled={!canOpenEvidenceDrawer}
             onClick={(event) => {
               event.stopPropagation();
               openTopOfMindEvidenceDrawer(signal);
             }}
+            aria-label={
+              noteContributors.length > 0
+                ? `${copy.topOfMindEvidenceCount(supportingCount)} — ${noteContributors.join(", ")}`
+                : copy.topOfMindEvidenceCount(supportingCount)
+            }
           >
-            {copy.topOfMindEvidenceCount(supportingCount)}
+            {noteContributors.length > 0 ? (
+              <span className="nc-note-faces" aria-hidden="true">
+                {noteContributors.map((name) => (
+                  <span
+                    key={name}
+                    className="nc-note-face"
+                    style={{ background: contributorColor(name) }}
+                    title={name}
+                  >
+                    {contributorInitials(name)}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+            <span className="nc-note-provenance-text">
+              {noteContributors.length > 0
+                ? `${noteContributors.join(", ")} · ${supportingCount}`
+                : copy.topOfMindEvidenceCount(supportingCount)}
+            </span>
           </button>
         ) : <span />}
         {noteIsInteractive ? renderPostItActions(signal) : null}
@@ -4910,52 +4938,41 @@ export function HomePage(): JSX.Element {
         aria-hidden={homeMode === "memoryDrawer" ? true : undefined}
         {...(homeMode === "memoryDrawer" ? { inert: "" } : {})}
       >
-        <section className="nc-titlecard">
-          <h1 className="nc-title">
-            {copy.titleLineOne(titleHandle)}
-            {copy.titleLineTwo ? (
-              <>
-                <br />
-                {copy.titleLineTwo}
-              </>
-            ) : null}
-            {copy.titleSuffix ? <span className="nc-title-suffix"> ({copy.titleSuffix})</span> : null}
-          </h1>
-          {copy.tagline ? <p className="nc-tagline">{copy.tagline}</p> : null}
-          {/* A room says whose place it is. The cast is the group's own member
-              list, so it is the people who actually agreed to be here. */}
-          {isGroupBoardActive && groupMembers.length > 0 ? (
-            <div className="nc-room-cast">
-              <span className="nc-note-faces" aria-hidden="true">
-                {groupMembers.map((member) => (
-                  <span
-                    key={member.userId}
-                    className={`nc-note-face nc-room-face${
-                      member.userId === user?.id ? " nc-room-face--me" : ""
-                    }`}
-                    style={{ background: contributorColor(member.name) }}
-                    title={member.name}
-                  >
-                    {contributorInitials(member.name)}
-                  </span>
-                ))}
-              </span>
-              <span className="nc-room-cast-names">
-                {groupMembers.map((member) => member.name).join(" · ")}
-              </span>
-            </div>
-          ) : null}
-        </section>
-
-        <GroupBoardBar
-          boards={groupBoards}
-          activeBoard={activeBoard}
+        {/* One object: names the room, switches rooms, shows the cast, and
+            is how you invite someone into it. Your own wall is a room with one
+            member, so nothing about the layout changes when you switch. */}
+        <RoomTitle
+          title={copy.titleLineOne(
+            isGroupBoardActive && activeGroupName ? activeGroupName : titleHandle,
+          )}
+          rooms={[
+            {
+              id: MINE_BOARD_ID,
+              name: copy.myRoomName,
+              role: "owner",
+              joinCode: "",
+              memberCount: 1,
+              createdAt: "",
+            },
+            ...groupBoards,
+          ]}
+          activeRoom={activeBoard}
           onSelect={setActiveBoard}
-          onCreateGroup={handleCreateGroup}
-          onJoinGroup={handleJoinGroup}
+          members={
+            isGroupBoardActive
+              ? groupMembers
+              : user
+                ? [{ userId: user.id, name: user.name || copy.myRoomName }]
+                : []
+          }
+          currentUserId={user?.id}
+          inviteLink={activeGroupJoinLink}
+          onCreateRoom={handleCreateGroup}
+          onJoinRoom={handleJoinGroup}
           onRefresh={isGroupBoardActive ? handleRefreshGroup : undefined}
           refreshing={groupRefreshing}
-          loading={groupBoardLoading}
+          faceColor={contributorColor}
+          faceInitials={contributorInitials}
           error={groupBoardsError}
         />
 
