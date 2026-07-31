@@ -981,6 +981,69 @@
       "priority": 53,
       "passes": true,
       "notes": "Product correction: the user wants the literal selection UX where selecting text summons nearby highlight/reaction controls. Highlighting should feel like marking a sentence in place, not managing highlights elsewhere. SUPERSEDED 2026-06-01 (design decision): capture was deliberately simplified to highlight-only. Selecting text now summons a single inline 'highlight' control and supports MULTIPLE in-place highlights; the reaction/emotion chip grid and the in-popover 'why this mattered' note were intentionally removed to keep capture low-friction. The reaction-choice and custom-note-in-popover criteria of this story are retired and should NOT be treated as a regression. Emotional-pull metadata is no longer collected at capture time by design."
+    },
+    {
+      "id": "US-051",
+      "title": "Create group Top of Mind conversation rooms",
+      "description": "As a user, I want to combine my saved signals with a small group's saved signals so WAKA can turn everyone's current Top of Mind into a live conversation surface and lightweight post-conversation feedback.",
+      "acceptanceCriteria": [
+        "Add a group conversation room concept where two or more invited users can opt into mixing selected saved signals and current top-of-mind notes for that room only",
+        "The same user's saved signals should be able to produce different shared prompts depending on the room membership, so a close-friends room and a work-peers room can surface clearly different discussion directions",
+        "Each participant must be able to add or select signals before the room session without needing heavy tagging, long setup, or manual organization",
+        "Generate a small set of group Top of Mind conversation prompts from overlapping themes, productive tensions, repeated people/place/work signals, and surprising differences between participants",
+        "Include a contextual action for a saved signal or top-of-mind note such as \"turn this into a discussion topic\" that creates or suggests a room prompt",
+        "During the room, keep the interface focused on conversation: prompts, lightweight note capture, and optional per-prompt reactions, not a dense graph or admin-style evidence panel",
+        "After the conversation ends, automatically create a concise feedback surface showing what themes strengthened, what felt unresolved, and which new personal or group top-of-mind notes were created",
+        "The post-conversation feedback should make the next use case obvious: users should leave with a reason to save more signals because those signals improved the quality of the group discussion",
+        "Support at least one actionable outcome from the conversation, such as a follow-up question, next discussion topic, tiny challenge, or one-week action, while allowing the action to simply be another conversation",
+        "Respect privacy boundaries: do not expose another user's raw saved signals unless they explicitly shared them into the room; generated group prompts should cite only safe previews or participant-approved evidence",
+        "Add API and web tests proving room creation, participant scoping, room-specific prompt generation, post-conversation feedback creation, and private signal redaction",
+        "Run API typecheck, web typecheck, targeted room tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 54,
+      "passes": true,
+      "notes": "Derived from the 2026-06-29 product conversation: the same inspiration should produce a different result when mixed with different people; each person saves inspirations, WAKA uses them as Top of Mind for conversation, then the conversation itself creates feedback and more reasons to save. This is also the bridge from personal Top of Mind into a public/opening 'jabsori' style format. Friction must stay extremely low: before the conversation, save or select signals; during the conversation, talk; after the conversation, WAKA immediately reflects back useful themes, unresolved questions, and possible actions."
+    },
+    {
+      "id": "US-052",
+      "title": "Add Group Top of Mind boards with per-inspiration sharing",
+      "description": "As a user, I want to see my own Top of Mind board plus one or more Group Top of Mind boards, create and join groups by link, and decide per inspiration whether it feeds my groups or stays private, so a small group's saved inspirations can synthesize into a shared Top of Mind.",
+      "acceptanceCriteria": [
+        "Add a board switcher to the Top of Mind experience with a 'Mine' board (the existing personal wall) and one board per group the user belongs to; switching boards loads that board's Top of Mind using the same post-it visual language",
+        "Let a user create a new group by name; the creator becomes the owner and receives a shareable join link/code",
+        "Let a user join an existing group by pasting or opening a join link/code; joining is idempotent and adds the user as a member",
+        "Introduce a clean groups and group_members data model separate from the US-051 group_conversation_rooms tables, which are left in place but not part of this experience",
+        "Add a per-inspiration share control that defaults to shared-with-my-groups and can be flipped to private at capture time and later; private inspirations must never feed any group board or expose their evidence",
+        "Generate each Group Top of Mind board as a synthesis of the POOL of all members' shared inspirations, not a side-by-side of each member's own board: keep only synthesized notes backed by at least one shared signal, redact evidence previews for non-shared signals, and dedupe near-duplicate notes across members so a shared pattern becomes one group post-it",
+        "Enforce membership on every group-scoped read so a non-member cannot fetch a group's board or notes",
+        "Document the deferred cross-member signal-level generation path (running the wow-judge over a pooled multi-user candidate set) behind the same /api/groups/:id/top-of-mind surface so the client does not change when it lands",
+        "Add API tests for group create/join/leave/list, tenant + membership scoping, shared-by-default behavior, private redaction, and cross-member dedup synthesis",
+        "Add web tests proving the board switcher renders Mine plus groups, switching fetches the group board, create/join flows exist, and the capture share toggle defaults to shared",
+        "Run API and web typechecks, targeted group tests, and browser verification of the board switcher and a group board on localhost:3030"
+      ],
+      "priority": 55,
+      "passes": false,
+      "notes": "Product correction after US-051: the group experience is not chat rooms; it is BOARDS. The user wants to see boards of (1) their own Top of Mind and (2) group Top of Mind (can be multiple), create new groups, join by link, and for each inspiration choose whether it is part of group Top of Mind or kept private, shared by default. v1 synthesis is deterministic pooling of members' notes filtered to shared-signal evidence plus cross-member dedup, which works locally without a live model; genuine cross-member generation from a pooled candidate set lands in US-053. See docs/goals/group-top-of-mind.md."
+    },
+    {
+      "id": "US-053",
+      "title": "Genuinely synthesize Group Top of Mind from pooled member inspirations",
+      "description": "As a group member, I want the Group Top of Mind board to be newly synthesized from everyone's shared inspirations following the same Top of Mind generation flow, not just each person's existing Top of Mind notes added together, and I want each supporting inspiration tagged with whose it is.",
+      "acceptanceCriteria": [
+        "Generate Group Top of Mind notes from the POOL of all members' shared inspirations by reusing the existing embeddings -> similar-candidate retrieval -> model judge -> note pipeline with a candidate pool that spans members, so a single group note can be grounded in inspirations from more than one member",
+        "Do not build the group board by concatenating or merely deduping each member's already-generated personal Top of Mind notes; the group board must be a fresh synthesis over the shared signal pool",
+        "Exclude private inspirations from the candidate pool and from all evidence at the query layer; a private inspiration must never enter group synthesis or appear on a group board",
+        "Tag every supporting inspiration on a group note with the member who saved it, and expose that ownership in the group Top of Mind API and in the evidence view on the board",
+        "Persist group notes and their owner-tagged evidence in group-scoped tables (separate from the single-user top_of_mind_notes tables, whose composite user FKs cannot store another member's signal) so the board loads fast and stays stable between refreshes",
+        "Provide a refresh path that regenerates the group board from the current shared pool, and best-effort generate on board load when the group board is empty so the experience works without a manual step",
+        "Dedupe near-duplicate group notes and bound the number shown, consistent with the personal Top of Mind surface",
+        "Reuse the existing model provider and judge contract rather than introducing a parallel generation path; be idempotent so re-running synthesis does not create duplicate group notes",
+        "Add API tests for pooled multi-user candidate retrieval with private-signal exclusion, group judge validation that related ids stay within the pool, owner-tagged evidence persistence, and dedupe/idempotency; add web tests for evidence owner tags rendering on a group board",
+        "Run API and web typechecks, targeted synthesis tests, and live verification of a synthesized group board on localhost:3030"
+      ],
+      "priority": 56,
+      "passes": false,
+      "notes": "Extends US-052 per direct product direction on 2026-07-07: the group Top of Mind must be a genuine synthesis of everyone's pooled shared inspirations (same generation flow as personal Top of Mind), not a merge of individual boards, and evidence inspirations must be attributed to their owner. See docs/goals/group-top-of-mind-synthesis.md. Reuses wow-candidates/wow-judge internals via a group-scoped candidate pool and new group_top_of_mind_notes + group_top_of_mind_note_signals tables with per-evidence owner_user_id."
     }
   ]
 }

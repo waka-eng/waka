@@ -8,7 +8,7 @@
  * clear backfill/recompute semantics.
  */
 
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../db/index.js";
 import {
@@ -215,34 +215,17 @@ export function diversifyWowMomentCandidates(
   return selected.slice(0, limit);
 }
 
-/**
- * Find tenant-scoped, already-embedded inspirations that can participate in a
- * future WOW moment alongside `triggerInspirationId`.
- */
-export async function findWowMomentCandidates(
-  params: FindWowMomentCandidatesParams,
-): Promise<FindWowMomentCandidatesResult> {
-  const db = params.db ?? getDb();
-  const limit = normalizeLimit(params.limit);
+type TriggerWithEmbedding = NonNullable<
+  Awaited<ReturnType<typeof loadTriggerWithEmbedding>>
+>;
+type CandidatePoolRow = Awaited<ReturnType<typeof loadTenantCandidatePool>>[number];
 
-  const trigger = await loadTriggerWithEmbedding(
-    db,
-    params.userId,
-    params.triggerInspirationId,
-  );
-  if (!trigger || limit === 0) {
-    return { trigger: trigger?.inspiration ?? null, candidates: [] };
-  }
-
-  const candidatePool = await loadTenantCandidatePool(
-    db,
-    params.userId,
-    params.triggerInspirationId,
-    trigger.embedding,
-    dbCandidatePoolLimit(limit),
-  );
-
-  const rankedCandidates = candidatePool
+/** Score every candidate against the trigger, strongest first (no diversify). */
+function scoreCandidates(
+  trigger: TriggerWithEmbedding,
+  candidatePool: CandidatePoolRow[],
+): WowMomentCandidate[] {
+  return candidatePool
     .filter(({ embedding }) => embedding.embedding.length === trigger.embedding.embedding.length)
     .map(({ inspiration, embedding }) => {
       const similarityScoreToTrigger = calculateSimilarityScore(
@@ -298,8 +281,177 @@ export async function findWowMomentCandidates(
 
       return b.inspiration.createdAt.getTime() - a.inspiration.createdAt.getTime();
     });
+}
 
-  const candidates = diversifyWowMomentCandidates(rankedCandidates, limit);
+/**
+ * Score and text-diversify a candidate pool against a trigger. Used by the
+ * single-user retrieval path.
+ */
+function rankAndDiversifyCandidates(
+  trigger: TriggerWithEmbedding,
+  candidatePool: CandidatePoolRow[],
+  limit: number,
+): WowMomentCandidate[] {
+  return diversifyWowMomentCandidates(scoreCandidates(trigger, candidatePool), limit);
+}
+
+/**
+ * Group candidate selection: keep the highest-similarity candidates (so the set
+ * stays semantically COHERENT enough for the judge to find a real pattern), but
+ * cap how many can come from any single member so one prolific member cannot
+ * fill every slot. This gives other members' *relevant* inspirations a chance to
+ * be evidence without forcing in unrelated signals (which produced incoherent,
+ * "unclear_pattern" judgments). Near-duplicate text is still skipped.
+ */
+function diversifyAcrossMembers(
+  scored: WowMomentCandidate[],
+  limit: number,
+): WowMomentCandidate[] {
+  if (limit <= 0) return [];
+  // Allow at most ~half the slots to a single member.
+  const perMemberCap = Math.max(2, Math.ceil(limit / 2));
+
+  const counts = new Map<string, number>();
+  const selected: WowMomentCandidate[] = [];
+  const overflow: WowMomentCandidate[] = [];
+
+  for (const candidate of scored) {
+    if (selected.length >= limit) break;
+    const isNearDuplicate = selected.some((existing) =>
+      isNearDuplicateTopOfMindText(existing.inspiration.text, candidate.inspiration.text),
+    );
+    if (isNearDuplicate) continue;
+
+    const uid = candidate.inspiration.userId;
+    const used = counts.get(uid) ?? 0;
+    if (used >= perMemberCap) {
+      overflow.push(candidate);
+      continue;
+    }
+    selected.push(candidate);
+    counts.set(uid, used + 1);
+  }
+
+  // Backfill from the capped overflow (still score-ordered) if we're short.
+  if (selected.length < limit) {
+    selected.push(...overflow.slice(0, limit - selected.length));
+  }
+  return selected.slice(0, limit);
+}
+
+/**
+ * Candidate pool for GROUP synthesis: already-embedded, SHARED inspirations
+ * across the given member set (excluding the trigger). Private inspirations are
+ * excluded here so they can never enter group synthesis.
+ */
+async function loadPooledCandidatePool(
+  db: WakaDb,
+  memberUserIds: string[],
+  triggerInspirationId: string,
+  triggerEmbedding: { model: string; dimensions: number; embedding: number[] },
+  poolLimit: number,
+) {
+  return db
+    .select({
+      inspiration: inspirations,
+      embedding: inspirationEmbeddings,
+    })
+    .from(inspirationEmbeddings)
+    .innerJoin(
+      inspirations,
+      and(
+        eq(inspirations.id, inspirationEmbeddings.inspirationId),
+        eq(inspirations.userId, inspirationEmbeddings.userId),
+      ),
+    )
+    .where(
+      and(
+        inArray(inspirations.userId, memberUserIds),
+        eq(inspirations.sharedToGroups, true),
+        ne(inspirationEmbeddings.inspirationId, triggerInspirationId),
+        eq(inspirationEmbeddings.model, triggerEmbedding.model),
+        eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
+      ),
+    )
+    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt))
+    .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
+}
+
+/**
+ * Find tenant-scoped, already-embedded inspirations that can participate in a
+ * future WOW moment alongside `triggerInspirationId`.
+ */
+export async function findWowMomentCandidates(
+  params: FindWowMomentCandidatesParams,
+): Promise<FindWowMomentCandidatesResult> {
+  const db = params.db ?? getDb();
+  const limit = normalizeLimit(params.limit);
+
+  const trigger = await loadTriggerWithEmbedding(
+    db,
+    params.userId,
+    params.triggerInspirationId,
+  );
+  if (!trigger || limit === 0) {
+    return { trigger: trigger?.inspiration ?? null, candidates: [] };
+  }
+
+  const candidatePool = await loadTenantCandidatePool(
+    db,
+    params.userId,
+    params.triggerInspirationId,
+    trigger.embedding,
+    dbCandidatePoolLimit(limit),
+  );
+
+  const candidates = rankAndDiversifyCandidates(trigger, candidatePool, limit);
+
+  return { trigger: trigger.inspiration, candidates };
+}
+
+export interface FindGroupWowMomentCandidatesParams {
+  memberUserIds: string[];
+  triggerUserId: string;
+  triggerInspirationId: string;
+  limit?: number;
+  db?: WakaDb;
+}
+
+/**
+ * Group synthesis candidate retrieval: rank the trigger (owned by
+ * `triggerUserId`) against the POOLED shared inspirations of every member. The
+ * returned candidates may belong to different members — that cross-member pool
+ * is exactly what makes a group note a genuine synthesis rather than a merge of
+ * individual boards.
+ */
+export async function findGroupWowMomentCandidates(
+  params: FindGroupWowMomentCandidatesParams,
+): Promise<FindWowMomentCandidatesResult> {
+  const db = params.db ?? getDb();
+  const limit = normalizeLimit(params.limit);
+
+  const trigger = await loadTriggerWithEmbedding(
+    db,
+    params.triggerUserId,
+    params.triggerInspirationId,
+  );
+  if (!trigger || limit === 0 || params.memberUserIds.length === 0) {
+    return { trigger: trigger?.inspiration ?? null, candidates: [] };
+  }
+
+  // Load the FULL shared member pool (capped at MAX_DB_CANDIDATE_POOL), not a
+  // wow-score-truncated slice — otherwise members whose signals have low/zero
+  // scores (e.g. never run through the personal scoring pipeline) get cut before
+  // the cross-member diversity step and never appear as evidence.
+  const candidatePool = await loadPooledCandidatePool(
+    db,
+    params.memberUserIds,
+    params.triggerInspirationId,
+    trigger.embedding,
+    MAX_DB_CANDIDATE_POOL,
+  );
+
+  const candidates = diversifyAcrossMembers(scoreCandidates(trigger, candidatePool), limit);
 
   return { trigger: trigger.inspiration, candidates };
 }

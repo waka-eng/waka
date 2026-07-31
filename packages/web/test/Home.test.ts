@@ -13,6 +13,7 @@ import {
   createReflection,
   deleteInspiration,
   finalizeAttachment,
+  fetchGroupRooms,
   fetchInspirations,
   fetchReflections,
   fetchSavedSignalDetail,
@@ -20,6 +21,7 @@ import {
   fetchTopOfMind,
   fetchTopOfMindNotes,
   generateGuidedReflectionQuestion,
+  joinGroup,
   presignAttachment,
   recordInspirationRevisit,
   updateInspiration,
@@ -90,6 +92,11 @@ vi.mock("../src/lib/api", async (importOriginal) => {
       updatedAt: "2026-05-01T00:00:00.000Z",
     })),
     fetchReflections: vi.fn(async () => []),
+    fetchGroups: vi.fn(async () => []),
+    fetchGroupRooms: vi.fn(async () => []),
+    joinGroup: vi.fn(async () => {
+      throw new Error("joinGroup mock not configured");
+    }),
     fetchSavedSignals: vi.fn(async () => sampleSavedSignals),
     fetchSavedSignalDetail: vi.fn(async () => sampleSavedSignalDetail),
     fetchInspirationScoreBreakdown: vi.fn(async () => null),
@@ -1908,7 +1915,7 @@ describe("HomePage current home experience", () => {
     ].join(" ");
 
     expect(wallCopy).not.toMatch(bannedInternalCopy);
-    expect(container.querySelector(".nc-titlecard")?.textContent).not.toMatch(/\bWAKA\b/);
+    expect(container.querySelector(".nc-room")?.textContent ?? "").not.toMatch(/\bWAKA\b/);
     expect(container.querySelector(".nc-stage")?.textContent).not.toMatch(/\bWAKA\b/);
 
     expect(container.querySelector(".nc-note-modal")).toBeNull();
@@ -2729,6 +2736,68 @@ describe("HomePage current home experience", () => {
     expect(mobileDrawerRules).toContain("min-width: 0");
   });
 
+  describe("?join=CODE invite links", () => {
+    const withJoinParam = async (code: string) => {
+      window.history.replaceState({}, "", `/?join=${code}`);
+      setApiFixtures();
+      return renderHomePage();
+    };
+
+    afterEach(() => {
+      window.history.replaceState({}, "", "/");
+    });
+
+    it("offers the join instead of performing it", async () => {
+      // Joining puts your shareable signals into a pool other people read, so
+      // a link someone got you to open must never be enough on its own.
+      const container = await withJoinParam("ABCD2345");
+
+      expect(joinGroup).not.toHaveBeenCalled();
+      expect(container.querySelector(".nc-join-confirm")).not.toBeNull();
+      expect(container.querySelector(".nc-join-confirm-code")?.textContent).toBe("ABCD2345");
+    });
+
+    it("joins only once the person accepts", async () => {
+      vi.mocked(joinGroup).mockResolvedValue({
+        group: {
+          id: "group-1",
+          name: "studio",
+          role: "member",
+          joinCode: "ABCD2345",
+          memberCount: 2,
+          createdAt: "2026-07-01T00:00:00.000Z",
+        },
+        alreadyMember: false,
+      });
+      const container = await withJoinParam("ABCD2345");
+
+      const accept = container.querySelector<HTMLButtonElement>(".nc-join-confirm-accept");
+      await act(async () => {
+        accept?.click();
+      });
+      await flushReactWork();
+
+      expect(joinGroup).toHaveBeenCalledWith("ABCD2345");
+      expect(container.querySelector(".nc-join-confirm")).toBeNull();
+    });
+
+    it("declining never calls the API, and a refresh does not re-offer", async () => {
+      const container = await withJoinParam("ABCD2345");
+
+      const cancel = container.querySelector<HTMLButtonElement>(".nc-join-confirm-cancel");
+      await act(async () => {
+        cancel?.click();
+      });
+      await flushReactWork();
+
+      expect(joinGroup).not.toHaveBeenCalled();
+      expect(container.querySelector(".nc-join-confirm")).toBeNull();
+      // The code is stripped from the URL as soon as it is read, so reloading
+      // cannot resurrect an offer the person already declined.
+      expect(window.location.search).toBe("");
+    });
+  });
+
   it("keeps desktop wall actions centered and mobile actions in document flow", async () => {
     setApiFixtures();
     const container = await renderHomePage();
@@ -3073,7 +3142,7 @@ describe("HomePage current home experience", () => {
     expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(2);
   });
 
-  it("shows a temporary top-of-mind filter when opened from the evidence slide", async () => {
+  it("shows only the evidence set when opened from the evidence slide", async () => {
     setApiFixtures();
     const container = await renderHomePage();
     const note = container.querySelector<HTMLElement>(".nc-note");
@@ -3085,11 +3154,14 @@ describe("HomePage current home experience", () => {
     });
     await flushReactWork();
 
+    // Arriving from "N inspirations led here" is a question about one thought.
+    // Offering "all saved" beside the answer invites you to lose the set you
+    // came to look at, with no way back to it.
     const pathFilters = container.querySelector<HTMLElement>(".memory-path-filters");
     expect(pathFilters?.textContent).toContain("top of mind");
-    expect(pathFilters?.textContent).toContain("all saved");
-    expect(pathFilters?.textContent).toContain("recently saved");
-    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(3);
+    expect(pathFilters?.textContent).not.toContain("all saved");
+    expect(pathFilters?.textContent).not.toContain("recently saved");
+    expect(pathFilters?.querySelectorAll(".memory-path-filter").length).toBe(1);
   });
 
   it("keeps the drawer centered on desktop and full-bleed on phone CSS", () => {

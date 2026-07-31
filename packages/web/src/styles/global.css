@@ -4212,14 +4212,16 @@
 .nc-stage--top-of-mind-wall {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), max-content));
-  align-content: start;
+  align-content: center;
   align-items: start;
   justify-content: center;
   gap: clamp(24px, 5vw, 56px) clamp(18px, 4vw, 44px);
   width: min(1180px, calc(100vw - 32px));
-  min-height: 620px;
-  margin: clamp(18px, 4vh, 44px) auto clamp(48px, 8vh, 88px);
-  padding: 12px clamp(4px, 2vw, 18px) 72px;
+  /* Fill the space between the room title and the capture bar, rather than
+     reserving a fixed block and letting the remainder fall out as void. */
+  min-height: max(300px, calc(100dvh - 340px));
+  margin: clamp(14px, 3vh, 32px) auto 0;
+  padding: 12px clamp(4px, 2vw, 18px) 24px;
 }
 
 .nc-stage--top-of-mind-wall::before {
@@ -4284,6 +4286,83 @@
   font-family: "Inter Tight", sans-serif;
   font-size: clamp(14px, 2.4vw, 16px);
   line-height: 1.45;
+}
+
+.group-room-surface {
+  display: grid;
+  align-self: start;
+  width: min(100%, 284px);
+  min-height: 220px;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(32, 30, 27, 0.16);
+  border-radius: 7px;
+  background: rgba(255, 255, 252, 0.9);
+  color: #24211d;
+  box-shadow: 0 18px 44px rgba(41, 35, 26, 0.12);
+}
+
+.group-room-kicker {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  color: rgba(36, 33, 29, 0.58);
+}
+
+.group-room-surface h2 {
+  margin: 0;
+  font-family: "Instrument Serif", serif;
+  font-size: 1.58rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.group-room-surface p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.group-room-prompt {
+  min-height: 76px;
+}
+
+.group-room-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: rgba(36, 33, 29, 0.62);
+}
+
+.group-room-action {
+  width: fit-content;
+  border: 1px solid rgba(36, 33, 29, 0.18);
+  border-radius: 999px;
+  background: rgba(36, 33, 29, 0.06);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 720;
+  letter-spacing: 0;
+  padding: 8px 12px;
+}
+
+.group-room-action:hover,
+.group-room-action:focus-visible {
+  background: rgba(36, 33, 29, 0.1);
+}
+
+.group-room-status {
+  font-size: 0.76rem;
+}
+
+.group-room-status--error {
+  color: #8a2f23;
 }
 
 .nc-drawer-object {
@@ -4401,13 +4480,13 @@
   width: min(var(--w, 320px), 100%);
   max-width: min(560px, calc(100vw - 32px));
   max-height: none;
-  min-height: 230px;
+  min-height: 132px;
   background: var(--bg);
   background-image:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 38%),
     linear-gradient(rgba(0, 0, 0, 0.018), rgba(0, 0, 0, 0.018));
   color: var(--ink);
-  padding: 24px 26px 72px;
+  padding: 26px 28px 56px;
   border-radius: 2px;
   border: 1px solid rgba(0, 0, 0, 0.05);
   transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--tilt, 0deg));
@@ -12869,16 +12948,26 @@ body.reflect-bg {
 
 @media (max-width: 640px) {
   .memory-drawer-stack {
-    right: 12px;
-    bottom: 18px;
-    left: 12px;
-    width: auto;
-    height: min(74dvh, 620px);
+    position: relative;
+    inset: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
     min-height: 0;
+    overflow: visible;
+    pointer-events: auto;
+    padding: 0 0 calc(112px + env(safe-area-inset-bottom));
   }
 
   .memory-drawer-stack::after {
-    right: 52px;
+    display: none;
+  }
+
+  .memory-stack-level {
+    position: relative;
+    inset: auto;
   }
 
   .memory-stack-entrybar,
@@ -12969,8 +13058,8 @@ body.reflect-bg {
   border: 0;
   border-radius: 999px;
   box-shadow:
-    0 12px 26px rgba(26, 23, 20, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    0 8px 20px rgba(26, 23, 20, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transition:
     opacity 220ms ease,
     transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1),
@@ -13037,15 +13126,15 @@ body.reflect-bg {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  min-height: 42px;
+  min-height: 36px;
   width: 100%;
   min-width: 0;
-  padding: 0 18px;
+  padding: 0 16px;
   background: rgba(255, 255, 255, 0.96);
   border-radius: 999px;
   color: #2d2925;
   font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 560;
   letter-spacing: 0;
   line-height: 1;
@@ -13462,6 +13551,16 @@ body.reflect-bg {
   animation: memoryDrawerOverlayIn 240ms ease both;
 }
 
+/* The wall recedes behind its own drawer. Without this the post-its sat at
+   full strength under a translucent list, so two layers of text competed for
+   the same eye. */
+.nc-canvas--drawer-open {
+  filter: saturate(0.55) blur(1.5px);
+  opacity: 0.28;
+  transition: opacity 240ms ease, filter 240ms ease;
+  pointer-events: none;
+}
+
 .memory-drawer-stack--closing {
   animation: memoryDrawerOverlayOut 320ms ease both;
 }
@@ -13730,8 +13829,8 @@ body.reflect-bg {
 
 .nc-bottom-bar .nc-drawer-icon {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  top: 5px;
+  left: 5px;
   transition:
     left 460ms cubic-bezier(0.16, 1, 0.3, 1),
     transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -13745,12 +13844,12 @@ body.reflect-bg {
 
 /* Drawer mode: circle lands at the right inset, label sits left of it. */
 .nc-bottom-bar .nc-drawer-object--close {
-  padding: 6px 57px 6px 18px;
+  padding: 5px 50px 5px 16px;
 }
 
 .nc-bottom-bar .nc-drawer-object--close .nc-drawer-icon {
-  /* 100% is the pill's padding box: full width - 42px circle - 6px inset */
-  left: calc(100% - 48px);
+  /* 100% is the pill's padding box: full width - 36px circle - 5px inset */
+  left: calc(100% - 41px);
   transform: rotate(360deg);
 }
 
@@ -13782,8 +13881,8 @@ body.reflect-bg {
 
 .nc-primary-action {
   position: relative;
-  width: 178px;
-  height: 54px;
+  width: 156px;
+  height: 46px;
   flex: 0 0 auto;
   transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -13811,7 +13910,7 @@ body.reflect-bg {
 .nc-primary-action > .nc-drawer-search,
 .nc-primary-action > .nc-drawer-reflect {
   position: absolute;
-  min-height: 54px;
+  min-height: 46px;
 }
 
 .nc-primary-action > .nc-save {
@@ -14243,9 +14342,9 @@ body.reflect-bg {
   right: auto;
   bottom: auto;
   z-index: auto;
-  width: 54px;
-  min-height: 54px;
-  height: 54px;
+  width: 46px;
+  min-height: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -14322,16 +14421,16 @@ body.reflect-bg {
 
 .nc-drawer-icon {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   place-items: center;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.97);
 }
 
 .nc-drawer-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .nc-drawer-tab,
@@ -14500,7 +14599,16 @@ body.reflect-bg {
   }
 
   .nc-primary-action {
-    width: min(178px, calc(100vw - 96px));
+    width: max-content;
+    min-width: min(242px, calc(100vw - 88px));
+  }
+
+  .nc-primary-action > .nc-save {
+    position: relative;
+    inset: auto;
+    width: max-content;
+    min-width: min(242px, calc(100vw - 88px));
+    height: auto;
   }
 
   .nc-primary-action--reflect {
@@ -14521,8 +14629,9 @@ body.reflect-bg {
 
   .nc-save-cta {
     min-height: 42px;
-    padding: 0 18px;
+    padding: 0 22px;
     font-size: 13px;
+    white-space: nowrap;
   }
 
   .nc-save-icon {
@@ -15318,6 +15427,25 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .memory-drawer-stack {
+    position: relative;
+    inset: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    pointer-events: auto;
+    padding: 0 0 calc(112px + env(safe-area-inset-bottom));
+  }
+
+  .memory-stack-level {
+    position: relative;
+    inset: auto;
+  }
+
   .memory-contents-flow {
     width: 100%;
     max-height: none;
@@ -15631,4 +15759,762 @@ textarea {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Group Top of Mind boards (US-052)
+ * A quiet board switcher above the Top of Mind wall + the capture share toggle.
+ * ------------------------------------------------------------------------- */
+
+.nc-board-switcher {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 auto var(--space-4);
+  padding: 0 var(--space-4);
+  max-width: 760px;
+}
+
+.nc-board-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.nc-board-tab {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 6px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-organic),
+    border-color var(--duration-fast) var(--ease-organic),
+    background var(--duration-fast) var(--ease-organic);
+}
+
+.nc-board-tab:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.nc-board-tab--active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.nc-board-tab--ghost {
+  border-style: dashed;
+}
+
+.nc-board-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(15, 15, 14, 0.08);
+  color: inherit;
+  font-size: 10px;
+}
+
+.nc-board-tab--active .nc-board-tab-count {
+  background: rgba(244, 242, 238, 0.24);
+}
+
+.nc-board-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nc-board-hint--error {
+  color: var(--error);
+}
+
+.nc-board-form {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.nc-board-input {
+  appearance: none;
+  min-width: 240px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.nc-board-input:focus {
+  outline: none;
+  border-color: var(--ink);
+}
+
+.nc-board-go {
+  appearance: none;
+  padding: 6px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nc-board-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nc-board-share {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nc-board-share-code {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--cell);
+  color: var(--ink);
+  font-size: 11px;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Capture share toggle (shared-by-default per-inspiration control). */
+.capture-share {
+  display: inline-flex;
+  gap: 4px;
+  margin-top: var(--space-2);
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--cell);
+}
+
+.capture-share-option {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-organic),
+    background var(--duration-fast) var(--ease-organic);
+}
+
+.capture-share-option--active {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+/* Group note contributor line + evidence owner tags (US-053). */
+.nc-note-contributors {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+/* Owner tag on each inspiration in the Group Top of Mind evidence drawer. */
+.memory-signal-card-owner {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+/* ============================================================
+ * Rooms — showing who a group board belongs to, and whose signals each of
+ * its notes rests on. A group note always spans two or more people, since
+ * synthesis skips judgments whose evidence covers fewer than two owners;
+ * the faces are how the wall says that without opening the evidence drawer.
+ * ============================================================ */
+
+.nc-room-cast {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 11px;
+  flex-wrap: wrap;
+}
+
+.nc-room-cast-names {
+  color: rgba(45, 41, 37, 0.44);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 460;
+  letter-spacing: 0;
+}
+
+/* Overlapping faces, so a group reads as a group rather than a list. */
+.nc-note-faces {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.nc-note-face {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  margin-right: -5px;
+  color: rgba(255, 253, 248, 0.96);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0;
+  /* Ring in the note's own paper colour so faces read as sitting on it. */
+  box-shadow: 0 0 0 1.5px var(--bg, #f2f1ee);
+}
+
+.nc-room-face {
+  width: 24px;
+  height: 24px;
+  margin-right: -6px;
+  font-size: 9px;
+  box-shadow: 0 0 0 2px #f2f1ee;
+}
+
+.nc-room-face--me {
+  box-shadow: 0 0 0 2px #f2f1ee, 0 0 0 3.5px rgba(176, 137, 72, 0.55);
+}
+
+/* agikee's contributor line, now carrying faces alongside its names. */
+.nc-note-contributors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nc-note-contributor-names {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+ * The room object — title, switcher, cast, invite.
+ *
+ * Replaces the board rail. Identity used to be stated four times (title,
+ * faces, names, and a highlighted pill) with room-scoped actions sitting as
+ * peers of rooms-scoped ones. Here it is stated once, and the two scopes
+ * separate by depth: the title opens the rooms, the cast opens the invite.
+ * ============================================================ */
+
+.nc-room {
+  position: relative;
+  z-index: 40;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding-top: clamp(28px, 5vh, 56px);
+}
+
+.nc-room-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  border: 0;
+  background: rgba(45, 41, 37, 0.035);
+  padding: 6px 20px 8px;
+  border-radius: 14px;
+  cursor: pointer;
+  color: inherit;
+  transition: background 180ms ease, box-shadow 180ms ease;
+}
+
+.nc-room-title:hover,
+.nc-room-title:focus-visible {
+  background: rgba(45, 41, 37, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(45, 41, 37, 0.06);
+  outline: 0;
+}
+
+.nc-room-title-text {
+  font-family: "Fraunces", "Times New Roman", serif;
+  font-size: clamp(30px, 4.4vw, 52px);
+  font-weight: 430;
+  letter-spacing: -0.015em;
+  line-height: 1.05;
+  color: #2d2925;
+}
+
+.nc-room-caret {
+  align-self: center;
+  margin-left: -2px;
+  color: rgba(45, 41, 37, 0.34);
+  font-size: 20px;
+  line-height: 1;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.nc-room-title:hover .nc-room-caret,
+.nc-room-title:focus-visible .nc-room-caret {
+  color: rgba(45, 41, 37, 0.55);
+  transform: translateY(1px);
+}
+
+/* The cast is also the invite: adding someone is adding a face here. */
+.nc-room-invite {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 3px;
+  border: 1px dashed rgba(45, 41, 37, 0.26);
+  border-radius: 999px;
+  background: none;
+  color: rgba(45, 41, 37, 0.42);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.nc-room-invite:hover,
+.nc-room-invite:focus-visible {
+  border-color: rgba(45, 41, 37, 0.5);
+  color: rgba(45, 41, 37, 0.8);
+  outline: 0;
+}
+
+/* Panels float over the wall so opening one never moves the thoughts. */
+.nc-room-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 8px;
+  border: 1px solid rgba(45, 41, 37, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.99);
+  box-shadow: 0 30px 60px -40px rgba(26, 23, 20, 0.5);
+}
+
+.nc-room-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  padding: 9px 11px;
+  color: #2d2925;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 460;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nc-room-item:hover,
+.nc-room-item:focus-visible {
+  background: rgba(45, 41, 37, 0.05);
+  outline: 0;
+}
+
+.nc-room-item--active {
+  background: rgba(45, 41, 37, 0.07);
+  font-weight: 560;
+}
+
+.nc-room-item-count {
+  color: rgba(45, 41, 37, 0.38);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.nc-room-new {
+  display: block;
+}
+
+/* Naming it is the whole act of making one, so the field is the control. */
+.nc-room-new-input {
+  width: 100%;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(45, 41, 37, 0.04);
+  padding: 9px 11px;
+  color: #2d2925;
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.nc-room-new-input::placeholder {
+  color: rgba(45, 41, 37, 0.34);
+}
+
+.nc-room-new-input:focus {
+  outline: 0;
+  background: rgba(45, 41, 37, 0.07);
+}
+
+.nc-room-panel--invite {
+  gap: 8px;
+  padding: 12px;
+}
+
+.nc-room-invite-link {
+  display: block;
+  overflow-wrap: anywhere;
+  color: rgba(45, 41, 37, 0.6);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.nc-room-invite-copy,
+.nc-room-refresh {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(45, 41, 37, 0.06);
+  padding: 8px 14px;
+  color: #2d2925;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 540;
+  cursor: pointer;
+}
+
+.nc-room-invite-copy:hover,
+.nc-room-refresh:hover {
+  background: rgba(45, 41, 37, 0.1);
+}
+
+.nc-room-refresh {
+  background: none;
+  color: rgba(45, 41, 37, 0.5);
+  font-weight: 460;
+}
+
+.nc-room-error {
+  margin: 0 0 4px;
+  padding: 8px 11px;
+  color: rgba(150, 60, 45, 0.9);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+}
+
+
+/* ============================================================
+ * A post-it at rest is only a thought.
+ *
+ * Pin, delete and the evidence count used to sit on every card, always,
+ * whether or not anyone was acting on one. Four cards meant twelve controls
+ * competing with the four sentences that are the actual product. They stay
+ * exactly where they were and keep every behaviour -- they just wait to be
+ * asked for.
+ * ============================================================ */
+
+.nc-note .nc-note-actions {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.nc-note:hover .nc-note-actions,
+.nc-note:focus-within .nc-note-actions {
+  opacity: 1;
+}
+
+/* Keyboard users must never lose a control to a hover rule. */
+.nc-note .nc-note-actions:focus-within {
+  opacity: 1;
+}
+
+/* Coarse pointers have no hover, so nothing may hide behind one. */
+@media (hover: none) {
+  .nc-note .nc-note-actions {
+    opacity: 1;
+  }
+}
+
+
+/* ============================================================
+ * Bottom bar: one shape, twice.
+ *
+ * Both controls are a 46px gray surround around a 36px white core. The capture
+ * pill's core was filling its surround while the saves pill kept a 36px disc,
+ * so two things meant to be siblings read as different sizes.
+ * ============================================================ */
+
+.nc-bottom-bar--wall .nc-primary-action,
+.nc-bottom-bar--wall .nc-drawer-object {
+  height: 46px;
+  min-height: 46px;
+}
+
+.nc-bottom-bar--wall .nc-primary-action > .nc-save {
+  inset: 0;
+  height: 46px;
+  min-height: 46px;
+  padding: 5px;
+}
+
+.nc-bottom-bar--wall .nc-primary-action > .nc-save > .nc-save-cta {
+  height: 36px;
+  min-height: 36px;
+}
+
+.nc-bottom-bar--wall .nc-drawer-object {
+  padding: 5px 16px 5px 50px;
+}
+
+.nc-bottom-bar--wall .nc-drawer-icon {
+  width: 36px;
+  height: 36px;
+}
+
+
+/* ============================================================
+ * The thought is set as a thought.
+ *
+ * Post-it bodies used the interface sans, which made the wall's content read
+ * in the same voice as its chrome. Fraunces separates the two: everything the
+ * product says about itself stays in sans, and the thoughts are in serif.
+ * ============================================================ */
+
+.nc-note-body--preview,
+.nc-note-body-edit--inline {
+  font-family: "Fraunces", "Times New Roman", serif;
+  font-weight: 400;
+  letter-spacing: -0.005em;
+  line-height: 1.32;
+}
+
+
+/* ============================================================
+ * One provenance line per note.
+ *
+ * Faces and an evidence count were two rows saying where the thought came
+ * from. Now they are one control: who, then how many, opening the evidence.
+ * ============================================================ */
+
+.nc-note-inspiration-slide.nc-note-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  padding: 4px 8px 4px 4px;
+  margin-left: -4px;
+  color: inherit;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.nc-note-provenance:hover:not(:disabled),
+.nc-note-provenance:focus-visible:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+  outline: 0;
+}
+
+.nc-note-provenance:disabled {
+  cursor: default;
+}
+
+.nc-note-provenance-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--ink) 52%, transparent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Entered from a thought, the drawer answers only that thought — so its one
+   filter is a label, not a choice. */
+.memory-path-filter--only {
+  cursor: default;
+}
+
+
+/* ============================================================
+ * Drawer mode: the search field and the close control are one shape twice.
+ *
+ * They were 64px and 54px tall beside each other, and the close label was 9px
+ * uppercase mono next to a stark cross -- two different type voices and two
+ * different heights in a bar holding two things.
+ * ============================================================ */
+
+.nc-bottom-bar--drawer .nc-primary-action,
+.nc-bottom-bar--drawer .nc-primary-action--search,
+.nc-bottom-bar--drawer .nc-drawer-object {
+  height: 46px;
+  min-height: 46px;
+}
+
+.nc-bottom-bar--drawer .nc-primary-action > .nc-drawer-search {
+  inset: 0;
+  height: 46px;
+  min-height: 46px;
+  padding: 5px;
+}
+
+.nc-bottom-bar--drawer .nc-drawer-search input {
+  height: 36px;
+  min-height: 36px;
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12.5px;
+}
+
+.nc-bottom-bar--drawer .nc-drawer-icon {
+  top: 5px;
+  width: 36px;
+  height: 36px;
+}
+
+.nc-bottom-bar--drawer .nc-drawer-object--close {
+  padding: 5px 50px 5px 18px;
+}
+
+/* "close" is a word, not a tally. The mono caps voice belongs to the saved
+   count, which is a number; a verb in the same voice reads like a label on a
+   machine. */
+.nc-bottom-bar--drawer .nc-drawer-count {
+  font-family: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12.5px;
+  font-weight: 540;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(45, 41, 37, 0.62);
+}
+
+
+/* Joining a group is consequential enough to interrupt for: it exposes your
+   shareable signals to everyone in it. Borrows the capture modal's scrim so
+   the interruption reads as the product's, not the browser's. */
+.nc-join-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 280;
+  display: grid;
+  place-items: center;
+  background: rgba(250, 249, 246, 0.78);
+  backdrop-filter: blur(10px);
+  padding: 32px;
+}
+
+.nc-join-confirm-card {
+  width: min(380px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  background: #fffdf8;
+  border: 1px solid rgba(45, 41, 37, 0.12);
+  border-radius: 10px;
+  font-family: var(--font-sans);
+}
+
+.nc-join-confirm-title {
+  margin: 0;
+  font-size: 15px;
+  color: rgba(45, 41, 37, 0.92);
+}
+
+.nc-join-confirm-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(45, 41, 37, 0.62);
+}
+
+.nc-join-confirm-code {
+  justify-self: start;
+  padding: 4px 8px;
+  background: rgba(45, 41, 37, 0.05);
+  border-radius: 4px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: rgba(45, 41, 37, 0.8);
+}
+
+.nc-join-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.nc-join-confirm-actions button {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nc-join-confirm-cancel {
+  background: transparent;
+  border: 1px solid rgba(45, 41, 37, 0.16);
+  color: rgba(45, 41, 37, 0.62);
+}
+
+.nc-join-confirm-accept {
+  background: rgba(45, 41, 37, 0.9);
+  border: 1px solid rgba(45, 41, 37, 0.9);
+  color: #fffdf8;
+}
+
+.nc-join-confirm-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
