@@ -213,31 +213,31 @@
       "breakpoints": true
     },
     {
-      "idx": 31,
+      "idx": 30,
       "version": "7",
       "when": 1784200000000,
-      "tag": "0031_group_conversation_rooms",
+      "tag": "0030_group_conversation_rooms",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784200100000,
+      "tag": "0031_group_top_of_mind_boards",
       "breakpoints": true
     },
     {
       "idx": 32,
       "version": "7",
-      "when": 1784200100000,
-      "tag": "0032_group_top_of_mind_boards",
+      "when": 1784200200000,
+      "tag": "0032_group_top_of_mind_notes",
       "breakpoints": true
     },
     {
       "idx": 33,
       "version": "7",
-      "when": 1784200200000,
-      "tag": "0033_group_top_of_mind_notes",
-      "breakpoints": true
-    },
-    {
-      "idx": 34,
-      "version": "7",
       "when": 1784300000000,
-      "tag": "0034_group_synthesis_cooldown",
+      "tag": "0033_group_synthesis_cooldown",
       "breakpoints": true
     }
   ]
