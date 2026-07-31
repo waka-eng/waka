@@ -160,8 +160,13 @@ function isMissingGroupRoomTableError(error: unknown): boolean {
   );
 }
 
+/** Collapse runs of whitespace so a preview is one readable line. */
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 function truncatePreview(value: string): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
+  const normalized = normalizeWhitespace(value);
   if (normalized.length <= PREVIEW_LENGTH) return normalized;
   return `${normalized.slice(0, PREVIEW_LENGTH - 3).trimEnd()}...`;
 }
@@ -183,7 +188,7 @@ function buildPrompt(input: {
   seedText?: string;
   selectedSignals: GroupRoomSignalPreview[];
 }): Pick<GroupRoomPromptSurface, "promptText" | "rationale" | "actionLabel" | "evidencePreviews"> {
-  const seed = input.seedText?.replace(/\s+/g, " ").trim();
+  const seed = input.seedText ? normalizeWhitespace(input.seedText) : undefined;
   const signalTerms = input.selectedSignals
     .map((signal) => signal.textPreview.split(/[.!?\n]/u)[0]?.trim())
     .filter((value): value is string => Boolean(value))
@@ -362,7 +367,7 @@ async function serializeRooms(
           // truncated here regardless, which made the flag inert: a member who
           // declined to share raw text shared exactly as much as one who did.
           textPreview: signal.shareRaw
-            ? signal.text.replace(/\s+/g, " ").trim()
+            ? normalizeWhitespace(signal.text)
             : truncatePreview(signal.text),
           shareRaw: signal.shareRaw,
           createdAt: signal.createdAt.toISOString(),

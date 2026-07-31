@@ -138,6 +138,15 @@ type HomeMode = "topOfMind" | "memoryDrawer";
 // The legacy US-051 group conversation-rooms surface is superseded by the Group
 // Top of Mind boards (US-052/US-053). Keep the code but never render it on the
 // personal wall so group content no longer "sticks" under the Mine board.
+/** "try again in 12 minutes" / "try again shortly" — never a raw timestamp. */
+function untilNextRefresh(nextEligibleAt: string | null): string {
+  if (!nextEligibleAt) return "try again shortly";
+  const ms = new Date(nextEligibleAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "try again shortly";
+  const minutes = Math.ceil(ms / 60_000);
+  return `try again in ${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
 const SHOW_LEGACY_GROUP_ROOM_SURFACE = false;
 type MemoryBrowseOrder = "newest" | "relevance";
 type TopOfMindFeedbackValue = Extract<
@@ -1807,15 +1816,6 @@ export function HomePage(): JSX.Element {
     },
     [loadGroupBoards],
   );
-
-  /** "try again in 12 minutes" / "try again shortly" — never a raw timestamp. */
-  const untilNextRefresh = (nextEligibleAt: string | null): string => {
-    if (!nextEligibleAt) return "try again shortly";
-    const ms = new Date(nextEligibleAt).getTime() - Date.now();
-    if (!Number.isFinite(ms) || ms <= 0) return "try again shortly";
-    const minutes = Math.ceil(ms / 60_000);
-    return `try again in ${minutes} minute${minutes === 1 ? "" : "s"}`;
-  };
 
   const handleRefreshGroup = useCallback(async () => {
     if (activeBoard === MINE_BOARD_ID) return;

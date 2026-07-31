@@ -26,7 +26,10 @@ import type { WakaDb } from "./inspiration-embeddings.js";
 import type { SupportedLocale } from "./locales.js";
 import { dedupeTopOfMindNotes } from "./top-of-mind-dedupe.js";
 import { topOfMindNoteFromWowMoment } from "./top-of-mind-notes.js";
-import { generateGroupTopOfMind } from "./group-top-of-mind-synthesis.js";
+import {
+  generateGroupTopOfMind,
+  type GroupSynthesisResult,
+} from "./group-top-of-mind-synthesis.js";
 import type {
   TopOfMindEvidencePreview,
   TopOfMindNoteSurface,
@@ -516,6 +519,12 @@ async function readGroupNotes(
   db: WakaDb,
   groupId: string,
   limit: number,
+  /**
+   * Who is in the group right now. Passed in rather than re-queried: every
+   * caller has just loaded the roster via `loadGroupWithMembers`, and this
+   * function can be called three times in one request.
+   */
+  currentMemberIds: Set<string>,
 ): Promise<GroupTopOfMindNote[]> {
   const noteRows = await db
     .select({
@@ -565,22 +574,13 @@ async function readGroupNotes(
     )
     .orderBy(asc(groupTopOfMindNoteSignals.sortOrder), asc(groupTopOfMindNoteSignals.createdAt));
 
-  // Defense in depth against evidence that outlives its author's membership.
-  // `leaveGroup` clears it at the source; this makes a missed cleanup a note
-  // that disappears rather than one that keeps showing an ex-member's saves.
-  const currentMemberIds = new Set(
-    (
-      await db
-        .select({ userId: groupMembers.userId })
-        .from(groupMembers)
-        .where(eq(groupMembers.groupId, groupId))
-    ).map((row) => row.userId),
-  );
-
   const evidenceByNote = new Map<string, GroupEvidenceRow[]>();
   for (const row of evidenceRows) {
     // Defense in depth: never surface an inspiration that has since gone private.
     if (!row.signalShared) continue;
+    // Nor one whose author has left. `leaveGroup` clears these at the source;
+    // this makes a missed cleanup a note that disappears rather than one that
+    // keeps showing an ex-member's saves.
     if (!currentMemberIds.has(row.ownerUserId)) continue;
     const bucket = evidenceByNote.get(row.noteId) ?? [];
     bucket.push(row);
@@ -681,8 +681,9 @@ export async function listGroupTopOfMind(
   if (!loaded) return null;
 
   const { group, members } = loaded;
+  const memberIds = new Set(members.map((member) => member.userId));
 
-  let notes = await readGroupNotes(db, input.groupId, input.limit);
+  let notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
 
   // Best-effort first fill, on a cooldown and a small trigger budget.
   //
@@ -697,7 +698,7 @@ export async function listGroupTopOfMind(
         locale: input.preferredLocale,
         maxTriggers: READ_PATH_MAX_TRIGGERS,
       });
-      notes = await readGroupNotes(db, input.groupId, input.limit);
+      notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
     } catch (err) {
       // Give the claim back. A throw is not an answer, and holding the full
       // cooldown over one would leave the board stuck for fifteen minutes.
@@ -730,13 +731,14 @@ export async function refreshGroupTopOfMind(
     groupId: input.groupId,
   });
   if (!loaded) return null;
+  const memberIds = new Set(loaded.members.map((member) => member.userId));
 
   // An explicit refresh still respects the cooldown: it is a member-triggered
   // run of model calls, and any member can press it as often as they like.
   // Declining is not a failure — but it is also not a refresh, so say so
   // rather than returning an unchanged board that looks like one.
   if (!(await claimSynthesisRun(db, input.groupId))) {
-    const notes = await readGroupNotes(db, input.groupId, input.limit);
+    const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
     return {
       group: loaded.group,
       members: loaded.members,
@@ -762,7 +764,7 @@ export async function refreshGroupTopOfMind(
       .where(eq(groupTopOfMindNotes.groupId, input.groupId))
   ).map((row) => row.id);
 
-  let result: Awaited<ReturnType<typeof generateGroupTopOfMind>>;
+  let result: GroupSynthesisResult;
   try {
     result = await generateGroupTopOfMind(db, {
       groupId: input.groupId,
@@ -787,7 +789,7 @@ export async function refreshGroupTopOfMind(
       );
   }
 
-  const notes = await readGroupNotes(db, input.groupId, input.limit);
+  const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
   return {
     group: loaded.group,
     members: loaded.members,
