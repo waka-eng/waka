@@ -919,6 +919,16 @@ export interface ApiGroupTopOfMind {
   notes: ApiGroupTopOfMindNote[];
 }
 
+/**
+ * A refresh response. Getting the same board back is ambiguous — it can mean
+ * "looked, found nothing new" or "declined to look" — so the server says which.
+ */
+export interface ApiGroupTopOfMindRefresh extends ApiGroupTopOfMind {
+  refreshed: boolean;
+  /** ISO timestamp the next run becomes possible, or null if it can run now. */
+  nextEligibleAt: string | null;
+}
+
 export interface ApiTopOfMindCompatibilityMoment {
   id: string;
   userId: string;
@@ -1501,8 +1511,8 @@ export async function fetchGroupTopOfMind(
 /** POST /groups/:id/top-of-mind/refresh — regenerate the group board. */
 export async function refreshGroupTopOfMind(
   groupId: string,
-): Promise<ApiGroupTopOfMind> {
-  return postJson<ApiGroupTopOfMind>(
+): Promise<ApiGroupTopOfMindRefresh> {
+  return postJson<ApiGroupTopOfMindRefresh>(
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
     {},
     "Failed to refresh group top of mind",

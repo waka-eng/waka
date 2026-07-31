@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createGroupsRoutes } from "./groups.js";
 import type {
   GroupSummary,
+  GroupTopOfMindRefreshResult,
   GroupTopOfMindResult,
 } from "../lib/group-top-of-mind.js";
 
@@ -133,7 +134,13 @@ describe("GET /api/groups/:groupId/top-of-mind", () => {
 
 describe("POST /api/groups/:groupId/top-of-mind/refresh", () => {
   it("regenerates and returns the board for a member", async () => {
-    const result: GroupTopOfMindResult = { group: groupSummary, members: [], notes: [] };
+    const result: GroupTopOfMindRefreshResult = {
+      group: groupSummary,
+      members: [],
+      notes: [],
+      refreshed: true,
+      nextEligibleAt: null,
+    };
     const refreshGroupNotes = vi.fn(async () => result);
     const app = mountWith({ getDatabase: () => ({}) as any, refreshGroupNotes });
 

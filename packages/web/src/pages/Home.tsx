@@ -1808,13 +1808,27 @@ export function HomePage(): JSX.Element {
     [loadGroupBoards],
   );
 
+  /** "try again in 12 minutes" / "try again shortly" — never a raw timestamp. */
+  const untilNextRefresh = (nextEligibleAt: string | null): string => {
+    if (!nextEligibleAt) return "try again shortly";
+    const ms = new Date(nextEligibleAt).getTime() - Date.now();
+    if (!Number.isFinite(ms) || ms <= 0) return "try again shortly";
+    const minutes = Math.ceil(ms / 60_000);
+    return `try again in ${minutes} minute${minutes === 1 ? "" : "s"}`;
+  };
+
   const handleRefreshGroup = useCallback(async () => {
     if (activeBoard === MINE_BOARD_ID) return;
     setGroupRefreshing(true);
     try {
       const result = await apiRefreshGroupTopOfMind(activeBoard);
       setGroupNotes(result.notes);
-      setGroupBoardsError(null);
+      // A declined run returns the same board, which is indistinguishable from
+      // "looked and found nothing new" unless we say so. Pressing a button and
+      // watching nothing happen is the thing to avoid.
+      setGroupBoardsError(
+        result.refreshed ? null : `Just refreshed — ${untilNextRefresh(result.nextEligibleAt)}`,
+      );
     } catch (err) {
       setGroupBoardsError(err instanceof Error ? err.message : "Failed to refresh board");
     } finally {

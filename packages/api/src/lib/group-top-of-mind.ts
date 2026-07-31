@@ -50,6 +50,18 @@ const PREVIEW_LENGTH = 180;
 const SYNTHESIS_COOLDOWN_MS = 15 * 60 * 1000;
 
 /**
+ * How long a *failed* attempt suppresses the next one.
+ *
+ * A run that completed and produced nothing is a real answer, and asking again
+ * in a minute will produce the same one — that earns the full cooldown. A run
+ * that threw answered nothing at all, usually because the model provider was
+ * briefly unavailable, and holding a board hostage for fifteen minutes over a
+ * blip is the wrong trade. Short enough to recover from, long enough that a
+ * persistent outage is not hammered.
+ */
+const SYNTHESIS_FAILURE_RETRY_MS = 60 * 1000;
+
+/**
  * Trigger budget for synthesis kicked off by a *read*.
  *
  * A read has someone waiting on it, so it gets a small budget — enough to fill
@@ -100,6 +112,21 @@ export interface GroupTopOfMindResult {
   group: GroupSummary;
   members: GroupMemberSummary[];
   notes: GroupTopOfMindNote[];
+}
+
+/**
+ * A refresh, plus whether it actually ran.
+ *
+ * Pressing refresh and receiving the same board back is ambiguous: it can mean
+ * "we looked and found nothing new" or "we declined to look". Those deserve
+ * different words on screen, so the caller is told which happened rather than
+ * being left to infer it from an unchanged list.
+ */
+export interface GroupTopOfMindRefreshResult extends GroupTopOfMindResult {
+  /** False when the cooldown declined this run and nothing was regenerated. */
+  refreshed: boolean;
+  /** ISO timestamp the next run becomes possible, or null if it can run now. */
+  nextEligibleAt: string | null;
 }
 
 function generateJoinCode(): string {
@@ -599,6 +626,40 @@ async function claimSynthesisRun(db: WakaDb, groupId: string): Promise<boolean> 
 }
 
 /**
+ * Hand back most of a claim after the run threw.
+ *
+ * The claim is stamped before generating, so a failure would otherwise hold the
+ * full cooldown having produced no answer — and because an explicit refresh
+ * honours the same cooldown, that left a board with no way to recover from a
+ * provider blip. Rewinds the stamp so the next attempt is allowed after
+ * {@link SYNTHESIS_FAILURE_RETRY_MS} instead of the full window.
+ */
+async function releaseSynthesisClaim(db: WakaDb, groupId: string): Promise<void> {
+  const retryAt = new Date(
+    Date.now() - SYNTHESIS_COOLDOWN_MS + SYNTHESIS_FAILURE_RETRY_MS,
+  );
+  await db
+    .update(groups)
+    .set({ lastSynthesisAt: retryAt })
+    .where(eq(groups.id, groupId));
+}
+
+/** When this group may next run synthesis, or null if it may run now. */
+async function nextSynthesisEligibleAt(
+  db: WakaDb,
+  groupId: string,
+): Promise<string | null> {
+  const [row] = await db
+    .select({ lastSynthesisAt: groups.lastSynthesisAt })
+    .from(groups)
+    .where(eq(groups.id, groupId))
+    .limit(1);
+  if (!row?.lastSynthesisAt) return null;
+  const next = new Date(row.lastSynthesisAt.getTime() + SYNTHESIS_COOLDOWN_MS);
+  return next.getTime() > Date.now() ? next.toISOString() : null;
+}
+
+/**
  * A group's Top of Mind: notes newly synthesized from the pool of all members'
  * shared inspirations (US-053), read from the persisted group tables. When the
  * board is empty, best-effort synthesis runs first so the board fills without a
@@ -638,6 +699,9 @@ export async function listGroupTopOfMind(
       });
       notes = await readGroupNotes(db, input.groupId, input.limit);
     } catch (err) {
+      // Give the claim back. A throw is not an answer, and holding the full
+      // cooldown over one would leave the board stuck for fifteen minutes.
+      await releaseSynthesisClaim(db, input.groupId).catch(() => {});
       console.warn("[group-top-of-mind] best-effort synthesis failed:", {
         groupId: input.groupId,
         error: err instanceof Error ? err.message : String(err),
@@ -660,7 +724,7 @@ export async function refreshGroupTopOfMind(
     limit: number;
     preferredLocale?: SupportedLocale;
   },
-): Promise<GroupTopOfMindResult | null> {
+): Promise<GroupTopOfMindRefreshResult | null> {
   const loaded = await loadGroupWithMembers(db, {
     userId: input.userId,
     groupId: input.groupId,
@@ -669,10 +733,17 @@ export async function refreshGroupTopOfMind(
 
   // An explicit refresh still respects the cooldown: it is a member-triggered
   // run of model calls, and any member can press it as often as they like.
-  // Declining is not a failure — the board below is still returned.
+  // Declining is not a failure — but it is also not a refresh, so say so
+  // rather than returning an unchanged board that looks like one.
   if (!(await claimSynthesisRun(db, input.groupId))) {
     const notes = await readGroupNotes(db, input.groupId, input.limit);
-    return { group: loaded.group, members: loaded.members, notes };
+    return {
+      group: loaded.group,
+      members: loaded.members,
+      notes,
+      refreshed: false,
+      nextEligibleAt: await nextSynthesisEligibleAt(db, input.groupId),
+    };
   }
 
   // Note the ids that exist BEFORE generating, then prune exactly those — but
@@ -691,10 +762,20 @@ export async function refreshGroupTopOfMind(
       .where(eq(groupTopOfMindNotes.groupId, input.groupId))
   ).map((row) => row.id);
 
-  const result = await generateGroupTopOfMind(db, {
-    groupId: input.groupId,
-    locale: input.preferredLocale,
-  });
+  let result: Awaited<ReturnType<typeof generateGroupTopOfMind>>;
+  try {
+    result = await generateGroupTopOfMind(db, {
+      groupId: input.groupId,
+      locale: input.preferredLocale,
+    });
+  } catch (err) {
+    // Same reasoning as the read path: a throw is not an answer, so hand the
+    // claim back rather than charging a full cooldown for it. The error still
+    // propagates — an explicit refresh that failed should say so.
+    await releaseSynthesisClaim(db, input.groupId).catch(() => {});
+    throw err;
+  }
+
   if (result.notesCreated > 0 && priorNoteIds.length > 0) {
     await db
       .delete(groupTopOfMindNotes)
@@ -707,5 +788,11 @@ export async function refreshGroupTopOfMind(
   }
 
   const notes = await readGroupNotes(db, input.groupId, input.limit);
-  return { group: loaded.group, members: loaded.members, notes };
+  return {
+    group: loaded.group,
+    members: loaded.members,
+    notes,
+    refreshed: true,
+    nextEligibleAt: await nextSynthesisEligibleAt(db, input.groupId),
+  };
 }
