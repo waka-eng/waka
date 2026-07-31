@@ -105,6 +105,10 @@ function dbCandidatePoolLimit(limit: number): number {
   return Math.min(MAX_DB_CANDIDATE_POOL, Math.max(limit * 5, limit + 20));
 }
 
+export function scoreCandidateSurprise(similarity: SimilarityScore): SurpriseSimilarityScore {
+  return calculateSurpriseSimilarityFromDirectSimilarity(similarity);
+}
+
 function calculateSurpriseSimilarityFromDirectSimilarity(
   similarity: SimilarityScore,
 ): SurpriseSimilarityScore {
