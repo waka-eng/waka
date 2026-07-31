@@ -284,7 +284,15 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "I keep returning to studios with huge north-facing windows",
       kind: "note",
+      captureElapsedMs: expect.any(Number),
     });
+
+    // The pulse-speed reading must be a usable duration, not a placeholder:
+    // downstream candidate weighting reads it to tell a reaction from a
+    // composition, and a hardcoded 0 would silently flatten that signal.
+    const [payload] = vi.mocked(createInspiration).mock.calls.at(-1) ?? [];
+    expect(payload?.captureElapsedMs).toBeGreaterThanOrEqual(0);
+    expect(payload?.captureElapsedMs).toBeLessThanOrEqual(3_600_000);
     expect(onSaved).not.toHaveBeenCalled();
     expect(container?.querySelector(".cap-save-mirror")).toBeNull();
     expect(window.localStorage.getItem("waka.captureDraft.v1")).toBeNull();
@@ -371,6 +379,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "A messy thing I want safe before I understand it",
       kind: "note",
+      captureElapsedMs: expect.any(Number),
     });
     expect(createReflection).not.toHaveBeenCalled();
 
@@ -446,6 +455,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "I want to build toward this operating cadence",
       kind: "note",
+      captureElapsedMs: expect.any(Number),
     });
   });
 
@@ -507,6 +517,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "A plain idea worth saving",
       kind: "note",
+      captureElapsedMs: expect.any(Number),
     });
     expect(createReflection).not.toHaveBeenCalled();
     expect(container?.querySelector("#reflectArea")?.className).toContain("visible");
@@ -524,6 +535,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "https://example.com/article",
       kind: "link",
+      captureElapsedMs: expect.any(Number),
     });
     expect(finalizeAttachment).toHaveBeenCalledWith({
       type: "link",
@@ -549,6 +561,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Remember this https://example.com/article",
       kind: "mixed",
+      captureElapsedMs: expect.any(Number),
     });
     expect(finalizeAttachment).toHaveBeenCalledTimes(1);
     expect(finalizeAttachment).toHaveBeenCalledWith({
@@ -588,6 +601,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Image inspiration",
       kind: "image",
+      captureElapsedMs: expect.any(Number),
     });
     expect(presignAttachment).toHaveBeenCalledWith({
       filename: "photo.png",
@@ -657,6 +671,7 @@ describe("CaptureForm multi-input quick capture", () => {
     expect(createInspiration).toHaveBeenCalledWith({
       text: "Remember this https://example.com/image.png",
       kind: "mixed",
+      captureElapsedMs: expect.any(Number),
     });
     expect(finalizeAttachment).toHaveBeenCalledWith({
       type: "link",

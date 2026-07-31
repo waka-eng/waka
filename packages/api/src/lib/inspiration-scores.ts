@@ -6,12 +6,13 @@
  * WOW-moment generation path.
  */
 
-import { and, desc, eq, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, ne, sql } from "drizzle-orm";
 
 import {
   attachments,
   inspirationEmbeddings,
   inspirationRevisitEvents,
+  revisitCountingEventTypes,
   inspirations,
   reflections,
 } from "../db/index.js";
@@ -478,6 +479,8 @@ async function discoverRevisitSignals(db: Db, row: InspirationScoreRow) {
       and(
         eq(inspirationRevisitEvents.userId, row.userId),
         eq(inspirationRevisitEvents.inspirationId, row.id),
+        // Only true returns count; see `revisitCountingEventTypes`.
+        inArray(inspirationRevisitEvents.eventType, revisitCountingEventTypes),
       ),
     );
 
