@@ -19,7 +19,13 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
 import { createUserFixture } from "../../test/fixtures/users.js";
-import { groupTopOfMindNoteSignals, groupTopOfMindNotes, signals } from "../db/index.js";
+import {
+  groupTopOfMindNoteSignals,
+  groupTopOfMindNotes,
+  inspirationEmbeddings,
+  signals,
+} from "../db/index.js";
+import { loadTriggerSignals } from "../lib/group-top-of-mind-synthesis.js";
 import {
   createGroupForUser,
   joinGroupByCode,
@@ -52,12 +58,24 @@ async function twoUsers() {
   return { alice: alice.user, bob: bob.user };
 }
 
-async function saveSignal(userId: string, text: string, shared = true) {
+async function saveSignal(userId: string, text: string, shared = true, wowScore = 0) {
   const [row] = await harness.db
     .insert(signals)
-    .values({ userId, text, kind: "note", sharedToGroups: shared })
+    .values({ userId, text, kind: "note", sharedToGroups: shared, wowScore })
     .returning({ id: signals.id });
   return row!.id;
+}
+
+/** Embeddings gate trigger eligibility, so a trigger test has to write one. */
+async function embed(userId: string, signalId: string) {
+  await harness.db.insert(inspirationEmbeddings).values({
+    userId,
+    inspirationId: signalId,
+    model: "test-model",
+    dimensions: 3,
+    embedding: [0.1, 0.2, 0.3],
+    inputHash: `hash-${signalId}`,
+  });
 }
 
 describe("group board membership", () => {
@@ -124,6 +142,31 @@ describe("group board membership", () => {
     expect(remainingEvidence.map((row) => row.ownerUserId)).not.toContain(bob.id);
     const remainingNotes = await harness.db.select().from(groupTopOfMindNotes);
     expect(remainingNotes).toHaveLength(0);
+  });
+});
+
+describe("synthesis trigger selection", () => {
+  it("represents a quiet member even when a prolific one outranks them entirely", async () => {
+    // The round-robin interleave exists so one member cannot dominate a pass.
+    // A single query with a global score-ordered LIMIT silently defeats it:
+    // the quiet member falls outside the window and seeds nothing, so the pass
+    // only ever asks "what does A's collection say", never "what do A and B
+    // say together" — which is the whole point of a group board.
+    const { alice, bob } = await twoUsers();
+
+    for (let i = 0; i < 40; i += 1) {
+      const id = await saveSignal(alice.id, `alice signal ${i}`, true, 900 + i);
+      await embed(alice.id, id);
+    }
+    const bobSignal = await saveSignal(bob.id, "the one thing bob saved", true, 1);
+    await embed(bob.id, bobSignal);
+
+    const triggers = await loadTriggerSignals(db(), [alice.id, bob.id]);
+
+    expect(triggers.map((t) => t.userId)).toContain(bob.id);
+    expect(triggers.some((t) => t.id === bobSignal)).toBe(true);
+    // And still bounded rather than reading everything Alice ever saved.
+    expect(triggers.length).toBeLessThanOrEqual(24);
   });
 });
 

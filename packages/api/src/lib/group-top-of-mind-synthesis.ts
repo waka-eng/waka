@@ -90,49 +90,63 @@ async function loadMemberUserIds(db: WakaDb, groupId: string): Promise<string[]>
  * round-robin across members so one prolific member does not dominate the pass
  * and cross-member combinations get a fair chance. Only shared signals are
  * eligible — private ones never seed group synthesis.
+ *
+ * Exported for tests: "every member is represented even when one member's
+ * signals all outrank another's" is the property this function exists for, and
+ * it is not observable through `generateGroupTopOfMind` without a live judge.
  */
-async function loadTriggerSignals(
+export async function loadTriggerSignals(
   db: WakaDb,
   memberUserIds: string[],
 ): Promise<Array<{ id: string; userId: string; wowScore: number }>> {
-  if (memberUserIds.length === 0) return [];
-  const rows = await db
-    .select({
-      id: signals.id,
-      userId: signals.userId,
-      wowScore: signals.wowScore,
-    })
-    .from(signals)
-    .innerJoin(
-      inspirationEmbeddings,
-      and(
-        eq(inspirationEmbeddings.inspirationId, signals.id),
-        eq(inspirationEmbeddings.userId, signals.userId),
-      ),
-    )
-    .where(and(inArray(signals.userId, memberUserIds), eq(signals.sharedToGroups, true)))
-    .orderBy(desc(signals.wowScore), desc(signals.createdAt))
-    // Bounded read. Only the strongest `PER_MEMBER_TRIGGER_CAP` per member can
-    // survive the bucketing below, so fetching every shared signal a group has
-    // ever saved just to discard almost all of it is a full scan for nothing.
-    // Generous enough that the per-member caps still fill for a lopsided group.
-    .limit(memberUserIds.length * PER_MEMBER_TRIGGER_CAP * 10);
+  const uniqueMemberIds = [...new Set(memberUserIds)];
+  if (uniqueMemberIds.length === 0) return [];
 
-  // Group by member (de-duping signal ids), strongest first within each member.
-  const byMember = new Map<string, Array<{ id: string; userId: string; wowScore: number }>>();
+  // One bounded read per member, run concurrently.
+  //
+  // A single query with a global LIMIT would have to be ordered by score across
+  // the whole group, and then a member whose signals all rank below another's
+  // could fall outside the window entirely — which is precisely the imbalance
+  // the round-robin below exists to prevent. Asking each member for their own
+  // strongest `PER_MEMBER_TRIGGER_CAP` keeps the read bounded AND guarantees
+  // every member is represented, which one query cannot do without a window
+  // function. Member counts are small; signal counts are not.
+  const perMember = await Promise.all(
+    uniqueMemberIds.map((userId) =>
+      db
+        .select({
+          id: signals.id,
+          userId: signals.userId,
+          wowScore: signals.wowScore,
+        })
+        .from(signals)
+        .innerJoin(
+          inspirationEmbeddings,
+          and(
+            eq(inspirationEmbeddings.inspirationId, signals.id),
+            eq(inspirationEmbeddings.userId, signals.userId),
+          ),
+        )
+        .where(and(eq(signals.userId, userId), eq(signals.sharedToGroups, true)))
+        .orderBy(desc(signals.wowScore), desc(signals.createdAt))
+        .limit(PER_MEMBER_TRIGGER_CAP),
+    ),
+  );
+
+  // De-dupe across buckets: the embedding join can return a signal more than
+  // once if it carries several embedding rows.
   const seen = new Set<string>();
-  for (const r of rows) {
-    if (seen.has(r.id)) continue;
-    seen.add(r.id);
-    const bucket = byMember.get(r.userId) ?? [];
-    if (bucket.length < PER_MEMBER_TRIGGER_CAP) {
-      bucket.push(r);
-      byMember.set(r.userId, bucket);
-    }
-  }
+  const buckets = perMember
+    .map((rows) =>
+      rows.filter((row) => {
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      }),
+    )
+    .filter((bucket) => bucket.length > 0);
 
   // Round-robin interleave across members up to MAX_TRIGGERS.
-  const buckets = [...byMember.values()];
   const out: Array<{ id: string; userId: string; wowScore: number }> = [];
   for (let i = 0; out.length < MAX_TRIGGERS; i += 1) {
     let advanced = false;
