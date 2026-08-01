@@ -39,6 +39,11 @@ export interface CanonicalInspirationEmbeddingInput {
   text: string;
   kind: string | null;
   category: number | null;
+  /**
+   * Fetched page text for URL saves (title/description), when we have it.
+   * See `signal-enrichment.ts`.
+   */
+  enrichment?: string | null;
   reflections?: Array<Pick<Reflection, "question" | "answer" | "skipped" | "createdAt">>;
 }
 
@@ -72,12 +77,25 @@ export function buildCanonicalInspirationEmbeddingInput(
       return [`reflection_${index + 1}_question:`, question, `reflection_${index + 1}_answer:`, answer].join("\n");
     });
 
+  /**
+   * Enrichment joins the input ONLY when present, rather than as an always-on
+   * `enrichment:none` line under a bumped version. The distinction is the
+   * regeneration blast radius: this way an un-enriched row's input stays
+   * byte-identical to what it hashed before enrichment existed, so nothing
+   * regenerates until a row actually gains enrichment — at which point its
+   * hash changes and `ensureInspirationEmbedding` regenerates exactly that
+   * one. A version bump would have re-embedded every signal ever saved to say
+   * "none" about most of them.
+   */
+  const enrichment = normalizeTextForEmbedding(inspiration.enrichment ?? "");
+
   return [
     "waka.inspiration_embedding_input.v2",
     `kind:${kind}`,
     `category:${category}`,
     "text:",
     text,
+    ...(enrichment.length > 0 ? ["enrichment:", enrichment] : []),
     "reflections:",
     reflectionLines.length > 0 ? reflectionLines.join("\n") : "none",
   ].join("\n");
