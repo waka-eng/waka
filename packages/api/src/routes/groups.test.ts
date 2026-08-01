@@ -106,6 +106,51 @@ describe("POST /api/groups/join", () => {
   });
 });
 
+describe("DELETE /api/groups/:groupId", () => {
+  it("deletes the room for its owner", async () => {
+    const deleteGroupFn = vi.fn(async () => ({ ok: true }) as const);
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(200);
+    expect(deleteGroupFn).toHaveBeenCalledWith({}, { userId: user.id, groupId });
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("returns 403 for a member who does not own the room", async () => {
+    const deleteGroupFn = vi.fn(
+      async () => ({ ok: false, reason: "not_owner" }) as const,
+    );
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 for a non-member, so an id is not confirmed to exist", async () => {
+    const deleteGroupFn = vi.fn(
+      async () => ({ ok: false, reason: "not_found" }) as const,
+    );
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a malformed group id before touching the service", async () => {
+    const deleteGroupFn = vi.fn(async () => ({ ok: true }) as const);
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request("/api/groups/not-a-uuid", { method: "DELETE" });
+
+    expect(response.status).toBe(400);
+    expect(deleteGroupFn).not.toHaveBeenCalled();
+  });
+});
+
 describe("GET /api/groups/:groupId/top-of-mind", () => {
   it("returns the synthesized board for a member", async () => {
     const result: GroupTopOfMindResult = { group: groupSummary, members: [], notes: [] };

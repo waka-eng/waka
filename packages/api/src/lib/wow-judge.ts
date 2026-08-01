@@ -20,6 +20,7 @@ import {
   normalizeSupportedLocale,
   type SupportedLocale,
 } from "./locales.js";
+import { memberLetter } from "./member-labels.js";
 import { getDefaultModelProvider } from "./model-provider.js";
 import {
   buildGeminiJsonHeaders,
@@ -2331,16 +2332,6 @@ export interface JudgeGroupWowMomentParams {
  * one. Group size is unbounded (anyone with the code joins), so the 27th member
  * is a real case, not a hypothetical.
  */
-function memberLetter(index: number): string {
-  let n = index;
-  let out = "";
-  do {
-    out = String.fromCharCode(65 + (n % 26)) + out;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return out;
-}
-
 export function buildMemberLabels(
   retrieved: Awaited<ReturnType<typeof findGroupWowMomentCandidates>>,
   memberUserIds: string[],

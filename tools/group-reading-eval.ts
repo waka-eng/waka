@@ -32,21 +32,35 @@ loadDotenv();
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
-import { groupMembers, groups, signals, users } from "../packages/api/src/db/index";
+import {
+  groupMembers,
+  groups,
+  signals,
+  users,
+} from "../packages/api/src/db/index";
 import { getDb } from "../packages/api/src/lib/db";
+import { GeminiEmbeddingHttpClient } from "../packages/api/src/lib/inspiration-embeddings";
+import { cosineSimilarity } from "../packages/api/src/scoring/wow-score";
 import { judgeGroupWowMoment } from "../packages/api/src/lib/wow-judge";
+import {
+  loadOwnersBySignalId,
+  loadTriggerSignals,
+  restatesASingleMember,
+} from "../packages/api/src/lib/group-top-of-mind-synthesis";
 
 function parseArgs(argv: string[]) {
   let groupId: string | undefined;
   let triggers = 10;
   let list = false;
+  let variant = "baseline";
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--group") groupId = argv[++i];
     else if (argv[i] === "--triggers") triggers = Number.parseInt(argv[++i] ?? "10", 10);
+    else if (argv[i] === "--variant") variant = argv[++i] ?? "baseline";
     else if (argv[i] === "--list") list = true;
   }
   if (!Number.isFinite(triggers) || triggers < 1) triggers = 10;
-  return { groupId, triggers, list };
+  return { groupId, triggers, list, variant };
 }
 
 function preview(text: string, max = 78): string {
@@ -54,7 +68,14 @@ function preview(text: string, max = 78): string {
   return t.length <= max ? t : `${t.slice(0, max - 1)}…`;
 }
 
-/** Crude similarity, only to show whether the readings repeat each other. */
+/**
+ * Lexical overlap. Kept only as a secondary reading, never as the verdict.
+ *
+ * It called a board of five phrasings of "physical versus screen" distinct at
+ * 0.08, because those five sentences share no words. Counting words cannot see
+ * a board that says one thing in five vocabularies, which is the exact failure
+ * this eval exists to catch.
+ */
 function overlap(a: string, b: string): number {
   const tok = (v: string) =>
     new Set(v.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 3));
@@ -64,6 +85,72 @@ function overlap(a: string, b: string): number {
   let shared = 0;
   for (const t of x) if (y.has(t)) shared += 1;
   return shared / x.size;
+}
+
+function meanPairwiseCosine(vectors: number[][]): number {
+  let total = 0;
+  let pairs = 0;
+  for (let i = 0; i < vectors.length; i += 1) {
+    for (let j = i + 1; j < vectors.length; j += 1) {
+      total += cosineSimilarity(vectors[i]!, vectors[j]!);
+      pairs += 1;
+    }
+  }
+  return pairs === 0 ? 0 : total / pairs;
+}
+
+/**
+ * How much more alike are these readings than unrelated readings are?
+ *
+ * Raw cosine is unusable as a verdict: in this embedding space a collapsed
+ * board scored 0.964 and *unrelated* text scored 0.926, so any absolute
+ * threshold either passes everything or fails everything. Nearly reported a
+ * healthy board as collapsed on that basis.
+ *
+ * So the number is normalized against a baseline drawn from the same space: a
+ * fixed corpus of note-shaped statements about deliberately unrelated things.
+ * Fixed rather than sampled from other groups, because most databases have
+ * exactly one group with notes, and because a constant denominator is what
+ * makes two runs on different days comparable at all. The result is the
+ * fraction of the available headroom the board has closed: 0 means "no more
+ * alike than any two unrelated notes", 1 means "identical".
+ *
+ * **This number is NOT calibrated, and this tool deliberately does not turn it
+ * into a verdict.** Measured 2026-08-01 against the only labelled pair
+ * available — the five-note board known to be five phrasings of one idea, and
+ * the six-note board believed to be plural — it scored 0.38 and 0.41. It
+ * ranked them the wrong way round and separated them by noise. Both the
+ * lexical metric it replaces and this one have now failed to detect a collapse
+ * that is obvious to a reader, so the honest output is the number and its
+ * provenance, not a pass. Anyone setting a threshold here needs labelled
+ * boards first.
+ *
+ * Returns null when there is no baseline to measure against, because a made-up
+ * denominator is worse than an absent number.
+ */
+/**
+ * Note-register statements about unrelated things.
+ *
+ * Their mean pairwise similarity is "how alike are two arbitrary notes in this
+ * embedding space" — the floor any real board sits above. Deliberately spread
+ * across domains none of which this product is about, so a board cannot look
+ * distinct merely by sharing the baseline's subject.
+ */
+const BASELINE_CORPUS = [
+  "Kitchens laid out around the cook's hands rather than around the appliances",
+  "Long-distance runners negotiate with pain differently than sprinters do",
+  "A municipal budget is a record of what a city is afraid of",
+  "The grammar that subtitles invented for silent film",
+  "Soil testing as a slow form of listening to a field",
+  "Actuaries and the price of a year that probably will not happen",
+  "Choral breathing is how a group keeps time without a conductor",
+  "Warehouse routing when the map changes several times an hour",
+] as const;
+
+function collapseExcess(within: number, baseline: number): number | null {
+  const headroom = 1 - baseline;
+  if (headroom <= 0.001) return null;
+  return (within - baseline) / headroom;
 }
 
 async function main(): Promise<void> {
@@ -101,23 +188,50 @@ async function main(): Promise<void> {
   const memberUserIds = members.map((m) => m.userId);
   console.log(`\n${members.length} members: ${members.map((m) => m.name).join(", ")}`);
 
-  // Spread triggers across members so no single archive drives every reading.
-  const perMember = Math.max(1, Math.ceil(opts.triggers / members.length));
-  const chosen: Array<{ id: string; userId: string; text: string }> = [];
-  for (const member of members) {
-    const mine = await db
-      .select({ id: signals.id, userId: signals.userId, text: signals.text })
-      .from(signals)
-      .where(and(eq(signals.userId, member.userId), eq(signals.sharedToGroups, true)))
-      .orderBy(desc(signals.wowScore))
-      .limit(perMember);
-    chosen.push(...mine);
-  }
+  // Production's own trigger selection, not a re-implementation of it. The
+  // earlier version blocked triggers by member while production round-robins
+  // them, so the two did not even ask the same questions in the same order.
+  const triggerRows = await loadTriggerSignals(db as never, memberUserIds);
+  const texts = triggerRows.length
+    ? await db
+        .select({ id: signals.id, text: signals.text })
+        .from(signals)
+        .where(inArray(signals.id, triggerRows.map((t) => t.id)))
+    : [];
+  const textById = new Map(texts.map((t) => [t.id, t.text]));
+  const chosen = triggerRows
+    .slice(0, opts.triggers)
+    .map((t) => ({ id: t.id, userId: t.userId, text: textById.get(t.id) ?? "" }));
 
   console.log(`judging ${chosen.length} triggers with the real group judge\n`);
 
   const readings: string[] = [];
   const reasons = new Map<string, number>();
+  /**
+   * Which members a note actually rests on. Coverage is the number this goal
+   * turns on: a board can be full of good notes and still leave a member with
+   * nothing on it, and only the evidence owners say whether that happened.
+   */
+  /**
+   * A judgment is not a note. Production applies two more gates before anything
+   * reaches a board, and an eval that skips them measures the judge rather than
+   * the board — which made earlier runs of this read twice as good as the board
+   * they were meant to predict.
+   */
+  const discarded = new Map<string, number>();
+  const evidenceByMember = new Map<string, number>();
+  const notesByMember = new Map<string, number>();
+  /**
+   * Members reached by the time the Nth note exists.
+   *
+   * Production stops at `TARGET_NOTES`, so a member whose trigger comes after
+   * that point is never asked — their absence from the board says nothing about
+   * whether their signals combine. This sweep asks everyone, which measures
+   * something different, so record the stopping point too.
+   */
+  const TARGET_NOTES = 6;
+  const membersAtTarget = new Set<string>();
+  let coverageAtTarget: number | null = null;
 
   for (const [i, trigger] of chosen.entries()) {
     const who = members.find((m) => m.userId === trigger.userId)?.name ?? "?";
@@ -130,8 +244,47 @@ async function main(): Promise<void> {
         triggerInspirationId: trigger.id,
       });
       if (judgment.isWowMoment) {
+        // Gate 1: evidence must span two members, or it is one person's note.
+        const ownersBySignalId = await loadOwnersBySignalId(
+          db as never,
+          judgment.relatedInspirationIds,
+        );
+        const distinctOwners = new Set(
+          judgment.relatedInspirationIds
+            .map((id) => ownersBySignalId.get(id))
+            .filter((uid): uid is string => Boolean(uid)),
+        );
+        if (distinctOwners.size < 2) {
+          discarded.set("single_owner", (discarded.get("single_owner") ?? 0) + 1);
+          console.log("judged, discarded (single owner)");
+          continue;
+        }
+        // Gate 2: spanning two members but saying only what one already says.
+        if (await restatesASingleMember(db as never, judgment, ownersBySignalId)) {
+          discarded.set("restates_one_member", (discarded.get("restates_one_member") ?? 0) + 1);
+          console.log("judged, discarded (restates one member)");
+          continue;
+        }
+
         readings.push(judgment.title);
-        console.log("reading");
+        const owners = await db
+          .select({ id: signals.id, userId: signals.userId })
+          .from(signals)
+          .where(inArray(signals.id, judgment.relatedInspirationIds));
+        const seen = new Set<string>();
+        for (const row of owners) {
+          const name = members.find((m) => m.userId === row.userId)?.name ?? "?";
+          evidenceByMember.set(name, (evidenceByMember.get(name) ?? 0) + 1);
+          seen.add(name);
+        }
+        for (const name of seen) {
+          notesByMember.set(name, (notesByMember.get(name) ?? 0) + 1);
+          if (readings.length <= TARGET_NOTES) membersAtTarget.add(name);
+        }
+        if (readings.length === TARGET_NOTES && coverageAtTarget === null) {
+          coverageAtTarget = membersAtTarget.size;
+        }
+        console.log(`reading  [${[...seen].join(" + ")}]`);
       } else {
         reasons.set(judgment.reason, (reasons.get(judgment.reason) ?? 0) + 1);
         console.log(`no (${judgment.reason})`);
@@ -143,7 +296,14 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`\n--- readings (${readings.length}/${chosen.length}) ---\n`);
+  if (discarded.size > 0) {
+    console.log("\n--- judged, then discarded before reaching a board ---\n");
+    for (const [why, n] of [...discarded].sort((a, b) => b[1] - a[1])) {
+      console.log(`  ${String(n).padStart(3)}  ${why}`);
+    }
+  }
+
+  console.log(`\n--- readings that survive to a board (${readings.length}/${chosen.length}) ---\n`);
   for (const r of readings) console.log(`  "${r}"`);
 
   if (reasons.size > 0) {
@@ -153,13 +313,37 @@ async function main(): Promise<void> {
     }
   }
 
-  // The number that matters. The previous run produced nine readings that were
-  // near-restatements of one another; if that has not moved, labelling whose
-  // signal is whose changed the prompt and not the product.
+  // Coverage: how many members a board actually rests on. A board can be full
+  // of good notes and still leave someone with nothing on it, which is the
+  // failure this goal exists to measure.
+  console.log("\n--- who the readings rest on ---\n");
+  for (const member of members) {
+    const evidence = evidenceByMember.get(member.name) ?? 0;
+    const inNotes = notesByMember.get(member.name) ?? 0;
+    const bar = evidence > 0 ? "#".repeat(Math.min(20, evidence)) : "";
+    console.log(
+      `  ${String(member.name).padEnd(14)} ${String(evidence).padStart(3)} evidence  ` +
+        `in ${String(inNotes).padStart(2)} notes  ${bar}`,
+    );
+  }
+  const covered = members.filter((m) => (evidenceByMember.get(m.name) ?? 0) > 0).length;
+  console.log(`\n  coverage: ${covered}/${members.length} members (every trigger asked)`);
+  console.log(
+    `  coverage at ${TARGET_NOTES} notes: ` +
+      (coverageAtTarget === null
+        ? `n/a — the pass produced only ${readings.length}`
+        : `${coverageAtTarget}/${members.length} — what production sees, since it stops there`),
+  );
+
+  // The number that matters for quality. The previous run produced nine readings
+  // that were near-restatements of one another; if that has not moved, labelling
+  // whose signal is whose changed the prompt and not the product.
+  let mean = 0;
+  let worst = 0;
+  let semanticExcess: number | null = null;
   if (readings.length > 1) {
     let total = 0;
     let pairs = 0;
-    let worst = 0;
     for (let i = 0; i < readings.length; i += 1) {
       for (let j = i + 1; j < readings.length; j += 1) {
         const o = overlap(readings[i]!, readings[j]!);
@@ -168,16 +352,59 @@ async function main(): Promise<void> {
         pairs += 1;
       }
     }
-    const mean = total / pairs;
+    mean = total / pairs;
     console.log("\n--- do the readings repeat each other? ---\n");
-    console.log(`  mean pairwise word overlap: ${mean.toFixed(2)}`);
+    console.log(`  mean pairwise word overlap: ${mean.toFixed(2)} (lexical, secondary)`);
     console.log(`  most similar pair:          ${worst.toFixed(2)}`);
-    console.log(
-      mean > 0.45
-        ? "\n  Still collapsing: the judge is saying one thing several ways.\n"
-        : "\n  Readings are distinct from one another.\n",
-    );
+
+    /**
+     * The verdict is semantic. Words are what a board happens to use; meaning
+     * is what it says, and collapse is a claim about meaning.
+     */
+    try {
+      const embedder = new GeminiEmbeddingHttpClient();
+      const vectors = await Promise.all(readings.map((text) => embedder.embed(text)));
+      const within = meanPairwiseCosine(vectors);
+
+      const baseline = meanPairwiseCosine(
+        await Promise.all(BASELINE_CORPUS.map((line) => embedder.embed(line))),
+      );
+      const excess = collapseExcess(within, baseline);
+      semanticExcess = excess;
+      console.log(`  mean pairwise cosine:       ${within.toFixed(3)}`);
+      console.log(`  baseline (unrelated notes): ${baseline.toFixed(3)}`);
+      console.log(
+        `  collapse excess:            ${excess === null ? "n/a" : excess.toFixed(2)} (0 = as varied as unrelated notes, 1 = identical)`,
+      );
+      // No verdict: see `collapseExcess`. On the one labelled pair available
+      // this number ranked a known-collapsed board ABOVE a plural one, so
+      // printing "distinct" here would be the old bug in a new unit.
+      console.log(
+        "\n  Not calibrated — compare across runs, do not read as pass/fail.\n",
+      );
+    } catch (err) {
+      // A failed measurement is reported as absent, never as a pass.
+      console.log(
+        `  semantic:                   could not measure (${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
   }
+
+  // One line, machine-readable, so two runs diff without reading prose. This is
+  // what the goal's gates are judged on.
+  const refused = [...reasons]
+    .sort((a, b) => b[1] - a[1])
+    .map(([reason, n]) => `${reason}:${n}`)
+    .join(",");
+  console.log(
+    `\nVARIANT=${opts.variant} notes=${readings.length}/${chosen.length} ` +
+      `coverage=${covered}/${members.length} ` +
+      `covAtTarget=${coverageAtTarget ?? "na"}/${members.length} ` +
+      `overlap=${mean.toFixed(2)} ` +
+      `collapse=${semanticExcess === null ? "na" : semanticExcess.toFixed(2)} ` +
+      `worst=${worst.toFixed(2)} refused={${refused}} ` +
+      `discarded={${[...discarded].map(([w, n]) => `${w}:${n}`).join(",")}}`,
+  );
 }
 
 main()

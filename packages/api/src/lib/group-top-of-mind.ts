@@ -11,9 +11,10 @@
 
 import { randomBytes } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import {
+  groupMemberEvents,
   groupMembers,
   groups,
   groupTopOfMindNoteSignals,
@@ -30,6 +31,7 @@ import {
   generateGroupTopOfMind,
   type GroupSynthesisResult,
 } from "./group-top-of-mind-synthesis.js";
+import { scoreReadingDivergencesForGroup } from "./reading-divergence.js";
 import type {
   TopOfMindEvidencePreview,
   TopOfMindNoteSurface,
@@ -226,6 +228,13 @@ export async function createGroupForUser(
           role: "owner",
           createdAt: now,
         });
+        // The room's first hinge: it began when its first heart arrived.
+        await tx.insert(groupMemberEvents).values({
+          groupId: created.id,
+          userId: input.userId,
+          event: "joined",
+          at: now,
+        });
         return created;
       });
 
@@ -278,15 +287,30 @@ export async function joinGroupByCode(
     .limit(1);
 
   if (!existing) {
-    await db
-      .insert(groupMembers)
-      .values({
-        groupId: group.id,
-        userId: input.userId,
-        role: "member",
-        createdAt: new Date(),
-      })
-      .onConflictDoNothing();
+    const joinedAt = new Date();
+    await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(groupMembers)
+        .values({
+          groupId: group.id,
+          userId: input.userId,
+          role: "member",
+          createdAt: joinedAt,
+        })
+        .onConflictDoNothing()
+        .returning({ id: groupMembers.id });
+      // Only record the hinge if this call is the one that made it. A
+      // concurrent join takes the conflict path and must not write a second
+      // arrival for the same person at the same moment.
+      if (inserted.length > 0) {
+        await tx.insert(groupMemberEvents).values({
+          groupId: group.id,
+          userId: input.userId,
+          event: "joined",
+          at: joinedAt,
+        });
+      }
+    });
   }
 
   const summaries = await listGroupsForUser(db, input.userId);
@@ -298,16 +322,110 @@ export async function joinGroupByCode(
   return { ok: true, group: summary, alreadyMember: Boolean(existing) };
 }
 
+export type DeleteGroupResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" | "not_owner" };
+
 /**
- * Remove the caller from a group, and their contributions with them. Owners
- * leaving does not delete the group.
+ * Delete a group outright. Owner only.
  *
- * Leaving previously deleted only the membership row, which left previews of
- * the departing member's signals — and their name — on the board indefinitely.
- * Taking their evidence out can strand a note below the two-member bar that
- * justified it existing, so those notes go too: a note that now rests on one
- * person's signals is that person's, not the group's.
+ * Deleting is not a bigger version of leaving: leaving removes you, deleting
+ * removes a board other people are still reading, along with every note the
+ * group's collections produced together. So it belongs to the one person who
+ * created it, and members get {@link leaveGroup} instead.
+ *
+ * `groups.owner_user_id` is the authority rather than the `owner` role on the
+ * membership row — the role describes a seat at the table, the column names who
+ * the table belongs to, and only the second survives an owner leaving.
+ *
+ * Everything below the group goes with it via ON DELETE CASCADE: memberships,
+ * the group's Top of Mind notes, and each note's evidence rows. Members' own
+ * signals are untouched; a group note only ever referenced them.
  */
+export async function deleteGroup(
+  db: WakaDb,
+  input: { userId: string; groupId: string },
+): Promise<DeleteGroupResult> {
+  const owner = await assertGroupOwner(db, input);
+  if (!owner.ok) return owner as DeleteGroupResult;
+
+  await db.delete(groups).where(eq(groups.id, input.groupId));
+  return { ok: true };
+}
+
+/**
+ * Which readings stop being the room's when one member leaves?
+ *
+ * A group reading must span two members, so one that no longer does stops
+ * being one. Split out from the SQL around it because it is the decision —
+ * everything else is fetching rows and writing a status.
+ */
+export function retiredNoteIdsAfterDeparture(
+  activeNoteIds: string[],
+  remainingOwnerCountByNote: Map<string, number>,
+): string[] {
+  return activeNoteIds.filter((id) => (remainingOwnerCountByNote.get(id) ?? 0) < 2);
+}
+
+/**
+ * Take a departing member's readings off the wall — without unmaking them.
+ *
+ * Leaving stops future contribution, not past fact. A reading this member's
+ * signals helped make still happened, and the room's timeline has to be able
+ * to show the era it belonged to, faces intact. So the evidence rows stay and
+ * the note is *retired*: it leaves the present tense, not the record.
+ *
+ * Which readings retire is unchanged — a group reading must span two members,
+ * so one that no longer does stops being one. It is computed against the
+ * departing member rather than by deleting their rows first, because the rows
+ * are now the thing we are keeping.
+ */
+async function pruneMemberFromBoard(
+  tx: Parameters<Parameters<WakaDb["transaction"]>[0]>[0],
+  input: { userId: string; groupId: string },
+): Promise<void> {
+  const noteIds = (
+    await tx
+      .select({ id: groupTopOfMindNotes.id })
+      .from(groupTopOfMindNotes)
+      .where(
+        and(
+          eq(groupTopOfMindNotes.groupId, input.groupId),
+          eq(groupTopOfMindNotes.lifecycleStatus, "active"),
+        ),
+      )
+  ).map((row) => row.id);
+  if (noteIds.length === 0) return;
+
+  const remaining = await tx
+    .select({
+      noteId: groupTopOfMindNoteSignals.groupTopOfMindNoteId,
+      owners: sql<number>`cast(count(distinct ${groupTopOfMindNoteSignals.ownerUserId}) as int)`,
+    })
+    .from(groupTopOfMindNoteSignals)
+    .where(
+      and(
+        inArray(groupTopOfMindNoteSignals.groupTopOfMindNoteId, noteIds),
+        // Count the owners who are still here, without removing the one who
+        // is not: the departing member's evidence rows are kept for the
+        // timeline, so they must be excluded from the count instead.
+        ne(groupTopOfMindNoteSignals.ownerUserId, input.userId),
+      ),
+    )
+    .groupBy(groupTopOfMindNoteSignals.groupTopOfMindNoteId);
+
+  const retired = retiredNoteIdsAfterDeparture(
+    noteIds,
+    new Map(remaining.map((row) => [row.noteId, Number(row.owners)])),
+  );
+  if (retired.length > 0) {
+    await tx
+      .update(groupTopOfMindNotes)
+      .set({ lifecycleStatus: "replaced", replacedAt: new Date() })
+      .where(inArray(groupTopOfMindNotes.id, retired));
+  }
+}
+
 export async function leaveGroup(
   db: WakaDb,
   input: { userId: string; groupId: string },
@@ -323,47 +441,119 @@ export async function leaveGroup(
       )
       .returning({ id: groupMembers.id });
     if (deleted.length === 0) return { ok: false };
-
-    const noteIds = (
-      await tx
-        .select({ id: groupTopOfMindNotes.id })
-        .from(groupTopOfMindNotes)
-        .where(eq(groupTopOfMindNotes.groupId, input.groupId))
-    ).map((row) => row.id);
-    if (noteIds.length === 0) return { ok: true };
-
-    await tx
-      .delete(groupTopOfMindNoteSignals)
-      .where(
-        and(
-          inArray(groupTopOfMindNoteSignals.groupTopOfMindNoteId, noteIds),
-          eq(groupTopOfMindNoteSignals.ownerUserId, input.userId),
-        ),
-      );
-
-    const survivors = await tx
-      .select({
-        noteId: groupTopOfMindNoteSignals.groupTopOfMindNoteId,
-        owners: sql<number>`cast(count(distinct ${groupTopOfMindNoteSignals.ownerUserId}) as int)`,
-      })
-      .from(groupTopOfMindNoteSignals)
-      .where(inArray(groupTopOfMindNoteSignals.groupTopOfMindNoteId, noteIds))
-      .groupBy(groupTopOfMindNoteSignals.groupTopOfMindNoteId);
-
-    const stillShared = new Set(
-      survivors.filter((row) => Number(row.owners) >= 2).map((row) => row.noteId),
-    );
-    const orphaned = noteIds.filter((id) => !stillShared.has(id));
-    if (orphaned.length > 0) {
-      await tx
-        .delete(groupTopOfMindNotes)
-        .where(inArray(groupTopOfMindNotes.id, orphaned));
-    }
+    await tx.insert(groupMemberEvents).values({
+      groupId: input.groupId,
+      userId: input.userId,
+      event: "left",
+    });
+    await pruneMemberFromBoard(tx, input);
     return { ok: true };
   });
 }
 
-async function loadGroupWithMembers(
+export type GroupOwnerActionResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" | "not_owner" | "invalid" };
+
+/**
+ * Is this caller the group's owner?
+ *
+ * Returns the same shape the owner-only mutations report, so each of them can
+ * start with one line and they cannot drift apart on what "not found" means: a
+ * non-member never learns whether an id names a real room, while a member who
+ * simply is not the owner gets the real reason.
+ */
+async function assertGroupOwner(
+  db: WakaDb,
+  input: { userId: string; groupId: string },
+): Promise<GroupOwnerActionResult> {
+  const [group] = await db
+    .select({ ownerUserId: groups.ownerUserId })
+    .from(groups)
+    .where(eq(groups.id, input.groupId))
+    .limit(1);
+  if (!group) return { ok: false, reason: "not_found" };
+  if (group.ownerUserId === input.userId) return { ok: true };
+
+  const [membership] = await db
+    .select({ id: groupMembers.id })
+    .from(groupMembers)
+    .where(
+      and(
+        eq(groupMembers.groupId, input.groupId),
+        eq(groupMembers.userId, input.userId),
+      ),
+    )
+    .limit(1);
+  return { ok: false, reason: membership ? "not_owner" : "not_found" };
+}
+
+/** Rename a room. Owner only. */
+export async function renameGroup(
+  db: WakaDb,
+  input: { userId: string; groupId: string; name: string },
+): Promise<GroupOwnerActionResult> {
+  const name = input.name.trim();
+  if (!name) return { ok: false, reason: "invalid" };
+
+  const owner = await assertGroupOwner(db, input);
+  if (!owner.ok) return owner;
+
+  await db
+    .update(groups)
+    .set({ name, updatedAt: new Date() })
+    .where(eq(groups.id, input.groupId));
+  return { ok: true };
+}
+
+/**
+ * Remove someone else from a room. Owner only.
+ *
+ * The owner cannot remove themselves: that is either leaving or deleting, and
+ * both already exist. Allowing it here would produce a room whose
+ * `owner_user_id` names a non-member, which nothing downstream expects.
+ *
+ * The removed member's contributions come off the board with them, exactly as
+ * if they had left — the board should not record who chose.
+ */
+export async function removeGroupMember(
+  db: WakaDb,
+  input: { userId: string; groupId: string; memberUserId: string },
+): Promise<GroupOwnerActionResult> {
+  if (input.memberUserId === input.userId) return { ok: false, reason: "invalid" };
+
+  const owner = await assertGroupOwner(db, input);
+  if (!owner.ok) return owner;
+
+  return db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.groupId),
+          eq(groupMembers.userId, input.memberUserId),
+        ),
+      )
+      .returning({ id: groupMembers.id });
+    if (removed.length === 0) return { ok: false, reason: "not_found" } as const;
+
+    // `removed`, not `left` — the timeline should not put someone's own
+    // words in their mouth.
+    await tx.insert(groupMemberEvents).values({
+      groupId: input.groupId,
+      userId: input.memberUserId,
+      event: "removed",
+    });
+
+    await pruneMemberFromBoard(tx, {
+      userId: input.memberUserId,
+      groupId: input.groupId,
+    });
+    return { ok: true } as const;
+  });
+}
+
+export async function loadGroupWithMembers(
   db: WakaDb,
   input: { userId: string; groupId: string },
 ): Promise<{ group: GroupSummary; members: GroupMemberSummary[] } | null> {
@@ -542,7 +732,14 @@ async function readGroupNotes(
       updatedAt: groupTopOfMindNotes.updatedAt,
     })
     .from(groupTopOfMindNotes)
-    .where(eq(groupTopOfMindNotes.groupId, groupId))
+    // The wall is the present tense. Retired readings stay in the table for
+    // the room's timeline and are never shown as what the room reads now.
+    .where(
+      and(
+        eq(groupTopOfMindNotes.groupId, groupId),
+        eq(groupTopOfMindNotes.lifecycleStatus, "active"),
+      ),
+    )
     .orderBy(desc(groupTopOfMindNotes.wowScore), desc(groupTopOfMindNotes.createdAt))
     .limit(Math.max(limit * 3, limit + 10));
 
@@ -660,6 +857,28 @@ async function nextSynthesisEligibleAt(
 }
 
 /**
+ * Best-effort divergence measurement after a synthesis run.
+ *
+ * Nothing user-facing reads these rows: the founder's call was that a save
+ * should say which top of mind it led to in which room, not carry a separate
+ * score about it. They remain because the ambition reader ranks a
+ * combination's evidence by them — a signal that reads differently here than
+ * alone is the strongest evidence that the reading is combination-only.
+ *
+ * The board never waits on a failed measurement and never fails because of one.
+ */
+async function measureReadingDivergences(db: WakaDb, groupId: string): Promise<void> {
+  try {
+    await scoreReadingDivergencesForGroup(db, { groupId });
+  } catch (err) {
+    console.warn("[group-top-of-mind] reading-divergence pass failed:", {
+      groupId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * A group's Top of Mind: notes newly synthesized from the pool of all members'
  * shared inspirations (US-053), read from the persisted group tables. When the
  * board is empty, best-effort synthesis runs first so the board fills without a
@@ -699,6 +918,7 @@ export async function listGroupTopOfMind(
         maxTriggers: READ_PATH_MAX_TRIGGERS,
       });
       notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
+      await measureReadingDivergences(db, input.groupId);
     } catch (err) {
       // Give the claim back. A throw is not an answer, and holding the full
       // cooldown over one would leave the board stuck for fifteen minutes.
@@ -761,7 +981,12 @@ export async function refreshGroupTopOfMind(
     await db
       .select({ id: groupTopOfMindNotes.id })
       .from(groupTopOfMindNotes)
-      .where(eq(groupTopOfMindNotes.groupId, input.groupId))
+      .where(
+        and(
+          eq(groupTopOfMindNotes.groupId, input.groupId),
+          eq(groupTopOfMindNotes.lifecycleStatus, "active"),
+        ),
+      )
   ).map((row) => row.id);
 
   let result: GroupSynthesisResult;
@@ -778,16 +1003,34 @@ export async function refreshGroupTopOfMind(
     throw err;
   }
 
-  if (result.notesCreated > 0 && priorNoteIds.length > 0) {
+  // Retire the previous generation — except the readings this pass reached
+  // again. A note the run re-derived has been confirmed, not superseded, and
+  // retiring it loses exactly what the group found most stable: the reading
+  // arrives at the same idempotency key, is skipped as a duplicate, and was
+  // then removed as a "prior". Refresh took the board from six notes to four
+  // that way.
+  //
+  // Marked, never deleted. What the room used to read is the timeline, and it
+  // is the one thing that cannot be reconstructed later.
+  const stale = priorNoteIds.filter((id) => !result.reconfirmedNoteIds.includes(id));
+  if (result.notesCreated > 0 && stale.length > 0) {
+    // `result.passAt`, not a fresh clock reading: the new notes carry that
+    // instant, so retiring the old ones at the same moment makes the handover
+    // atomic in the timeline. Reading the clock here instead left a window —
+    // 62 seconds on a real run — where the board appeared to hold both
+    // generations at once, which no one ever saw.
     await db
-      .delete(groupTopOfMindNotes)
+      .update(groupTopOfMindNotes)
+      .set({ lifecycleStatus: "replaced", replacedAt: result.passAt })
       .where(
         and(
           eq(groupTopOfMindNotes.groupId, input.groupId),
-          inArray(groupTopOfMindNotes.id, priorNoteIds),
+          inArray(groupTopOfMindNotes.id, stale),
         ),
       );
   }
+
+  await measureReadingDivergences(db, input.groupId);
 
   const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
   return {

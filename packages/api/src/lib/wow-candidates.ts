@@ -8,7 +8,7 @@
  * clear backfill/recompute semantics.
  */
 
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../db/index.js";
 import {
@@ -188,7 +188,9 @@ async function loadTenantCandidatePool(
         eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
       ),
     )
-    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt))
+    // `id` last: a tie must break the same way on every pass, or the candidate
+    // pool differs between runs and the board changes for no visible reason.
+    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt), asc(inspirations.id))
     .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
 }
 
@@ -310,12 +312,30 @@ function rankAndDiversifyCandidates(
 function diversifyAcrossMembers(
   scored: WowMomentCandidate[],
   limit: number,
+  /**
+   * Who owns the trigger. They are already represented by it, so they get one
+   * fewer candidate slot than everyone else.
+   */
+  triggerUserId?: string,
 ): WowMomentCandidate[] {
   if (limit <= 0) return [];
-  // Allow at most ~half the slots to a single member.
-  const perMemberCap = Math.max(2, Math.ceil(limit / 2));
+  /**
+   * At most a third of the slots to any one member, not half.
+   *
+   * Half was enough for a member to drown their own trigger. Seeding a note put
+   * their signals in 5 of the 9 things the judge saw (four candidates plus the
+   * trigger), so the judge wrote a reading that mostly restated them — and
+   * `restatesASingleMember` then threw that reading away. The effect was that a
+   * member with a coherent, self-similar collection seeded note after note and
+   * appeared in none of them, while a member whose signals scattered across
+   * *other* people's triggers was cited constantly. Observed on a real six
+   * member board: two members held zero evidence rows across every note.
+   */
+  const perMemberCap = Math.max(2, Math.ceil(limit / 3));
 
   const counts = new Map<string, number>();
+  // The trigger is not in `scored`, so charge its owner for it up front.
+  if (triggerUserId) counts.set(triggerUserId, 1);
   const selected: WowMomentCandidate[] = [];
   const overflow: WowMomentCandidate[] = [];
 
@@ -377,7 +397,9 @@ async function loadPooledCandidatePool(
         eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
       ),
     )
-    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt))
+    // `id` last: a tie must break the same way on every pass, or the candidate
+    // pool differs between runs and the board changes for no visible reason.
+    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt), asc(inspirations.id))
     .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
 }
 
@@ -455,7 +477,11 @@ export async function findGroupWowMomentCandidates(
     MAX_DB_CANDIDATE_POOL,
   );
 
-  const candidates = diversifyAcrossMembers(scoreCandidates(trigger, candidatePool), limit);
+  const candidates = diversifyAcrossMembers(
+    scoreCandidates(trigger, candidatePool),
+    limit,
+    params.triggerUserId,
+  );
 
   return { trigger: trigger.inspiration, candidates };
 }
