@@ -59,6 +59,7 @@ import {
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
 import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
+import { listReadingsForSignal } from "../lib/signal-readings.js";
 import { pulseSignalActivation } from "../lib/signal-activation.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 import { enqueueClassification } from "../lib/queue.js";
@@ -200,6 +201,7 @@ export interface InspirationsRouteDependencies {
   enqueueClassificationJob?: typeof enqueueClassification;
   persistScores?: typeof persistLocalInspirationScores;
   persistSingleScore?: typeof persistSingleLocalInspirationScoreById;
+  listSignalReadings?: typeof listReadingsForSignal;
 }
 
 type InspirationResponseRow = {
@@ -377,6 +379,7 @@ export function createInspirationsRoutes(
   const enqueueClassificationJob = deps.enqueueClassificationJob ?? enqueueClassification;
   const persistScores = deps.persistScores ?? persistLocalInspirationScores;
   const persistSingleScore = deps.persistSingleScore ?? persistSingleLocalInspirationScoreById;
+  const listSignalReadings = deps.listSignalReadings ?? listReadingsForSignal;
 
   // Every route under this router requires a valid session. Mounting the
   // middleware once at the router level (rather than per-handler) ensures we
@@ -435,6 +438,9 @@ routes.post("/", async (c) => {
     importanceScore: 0,
     wowScore: 0,
     sharedToGroups: parsed.data.shareToGroups ?? true,
+    captureElapsedMs: parsed.data.captureElapsedMs ?? null,
+    enrichment: null,
+    enrichedAt: null,
     cluster: null,
     classifiedAt: null,
     createdAt: now,
@@ -1539,6 +1545,54 @@ routes.get("/:id/reflections", async (c) => {
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
 
   return c.json({ reflections: rows }, 200);
+});
+
+/**
+ * GET /api/inspirations/:id/readings
+ *
+ * Every active Top of Mind note that cited this signal — the owner's solo
+ * reading(s) plus one per room the owner currently belongs to. This is the
+ * juxtaposition surface: the same save, read alone and read beside other
+ * hearts, side by side.
+ *
+ * Visibility: owner-only, like every route on this router. Solo readings are
+ * the caller's own; group readings are limited to current memberships inside
+ * `listReadingsForSignal` itself (the `group_members` join), so nothing here
+ * depends on the route remembering to filter.
+ */
+routes.get("/:id/readings", async (c) => {
+  const idCheck = z.string().uuid().safeParse(c.req.param("id"));
+  if (!idCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+
+  // Confirm the signal exists AND belongs to the caller — 404 (not 403) on
+  // miss or cross-tenant, same as the sibling routes, so this endpoint
+  // cannot be used to enumerate ids or to read another user's readings.
+  const [parent] = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(
+      and(
+        eq(inspirations.id, idCheck.data),
+        eq(inspirations.userId, user.id),
+      ),
+    )
+    .limit(1);
+
+  if (!parent) {
+    return c.json({ error: "Inspiration not found" }, 404);
+  }
+
+  const readings = await listSignalReadings(db, {
+    userId: user.id,
+    signalId: idCheck.data,
+  });
+
+  return c.json({ readings }, 200);
 });
 
 // DELETE /api/inspirations/:id/reflections/:reflectionId

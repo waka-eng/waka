@@ -456,7 +456,11 @@ function groupRelatedRowsByMomentId(
 
 export async function listTopOfMindNotesForUser(
   db: WakaDb,
-  input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
+  input: {
+    userId: string;
+    limit: number;
+    preferredLocale?: SupportedLocale;
+  },
 ): Promise<TopOfMindNoteSurface[]> {
   const fetchLimit = Math.min(
     MAX_TOP_OF_MIND_LIMIT,
