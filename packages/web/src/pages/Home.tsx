@@ -55,6 +55,7 @@ import {
   type ApiInspiration,
   type ApiInspirationKind,
   type ApiReflection,
+  type ApiSignalReading,
   type ApiInspirationScorePatch,
   type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
@@ -75,6 +76,7 @@ import {
   deleteInspiration,
   fetchReflections,
   fetchSavedSignalDetail,
+  fetchSignalReadings,
   fetchSavedSignals,
   fetchInspirations,
   fetchGroupRooms,
@@ -83,17 +85,20 @@ import {
   fetchTopOfMind,
   fetchTopOfMindNotes,
   generateGuidedReflectionQuestion,
+  deleteGroup as apiDeleteGroup,
+  leaveGroup as apiLeaveGroup,
+  renameGroup as apiRenameGroup,
+  removeGroupMember as apiRemoveGroupMember,
   joinGroup as apiJoinGroup,
   refreshGroupTopOfMind as apiRefreshGroupTopOfMind,
   recordInspirationRevisit,
   updateInspiration,
   updateTopOfMindNote,
 } from "../lib/api";
-import {
-  RoomTitle,
-  MINE_BOARD_ID,
-  extractJoinCode,
-} from "../components/RoomTitle";
+import { RoomTitle } from "../components/RoomTitle";
+import { GroupWall } from "../components/GroupWall";
+import { RoomRail } from "../components/RoomRail";
+import { MINE_BOARD_ID, extractJoinCode } from "../components/rooms";
 import { useAuth } from "../lib/auth-context";
 import {
   formatSavedCount,
@@ -1301,6 +1306,13 @@ const HOME_COPY = {
     savedSignalReflectionDelete: "삭제",
     savedSignalReflectionLoading: "돌아보기를 불러오는 중...",
     savedSignalReflectionEmpty: "돌아보기가 여기에 나타납니다.",
+    readingsSectionLabel: "이 영감이 읽힌 방식",
+    readingsAloneLabel: "혼자일 때",
+    readingsInRoomLabel: (name: string) => `${name}에서`,
+    readingsLedToLabel: (title: string) => `“${title}”로 이어졌습니다`,
+    readingsDivergenceLabel: "여기서는 다르게 읽힙니다",
+    readingsNeighborsLabel: "옆에 있던 영감",
+    ledToLabel: "이 영감이 만든 탑오브마인드",
     savedSignalListLabel: "저장된 영감 목록",
     savedSignalPathsLabel: "저장된 영감 경로",
     savedSignalNoSearchMatches: (query: string, path: string) => `${path}에서 “${query}”와 맞는 저장된 영감이 없습니다.`,
@@ -1439,6 +1451,13 @@ const HOME_COPY = {
     savedSignalReflectionDelete: "delete",
     savedSignalReflectionLoading: "loading reflections...",
     savedSignalReflectionEmpty: "Your reflection will appear here.",
+    readingsSectionLabel: "how this inspiration reads",
+    readingsAloneLabel: "alone",
+    readingsInRoomLabel: (name: string) => `in ${name}`,
+    readingsLedToLabel: (title: string) => `led to “${title}”`,
+    readingsDivergenceLabel: "reads differently here",
+    readingsNeighborsLabel: "next to",
+    ledToLabel: "top of mind this led to",
     savedSignalListLabel: "saved inspiration list",
     savedSignalPathsLabel: "saved inspiration paths",
     savedSignalNoSearchMatches: (query: string, path: string) => `No saved inspirations match “${query}” in ${path}.`,
@@ -1563,6 +1582,13 @@ const HOME_COPY = {
     savedSignalReflectionDelete: string;
     savedSignalReflectionLoading: string;
     savedSignalReflectionEmpty: string;
+    readingsSectionLabel: string;
+    readingsAloneLabel: string;
+    readingsInRoomLabel: (name: string) => string;
+    readingsLedToLabel: (title: string) => string;
+    readingsDivergenceLabel: string;
+    readingsNeighborsLabel: string;
+    ledToLabel: string;
     savedSignalListLabel: string;
     savedSignalPathsLabel: string;
     savedSignalNoSearchMatches: (query: string, path: string) => string;
@@ -1701,6 +1727,11 @@ export function HomePage(): JSX.Element {
   // read, so a link alone must never be enough to do it.
   const [pendingJoinCode, setPendingJoinCode] = useState<string | null>(null);
   const [joinPending, setJoinPending] = useState(false);
+  /**
+   * Which half of the move the wall is in. Switching rooms is travel, so the
+   * notes leave before the next room's arrive rather than cross-fading.
+   */
+  const [travel, setTravel] = useState<"out" | "in" | null>(null);
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
   const [captureClosing, setCaptureClosing] = useState(false);
@@ -1820,6 +1851,102 @@ export function HomePage(): JSX.Element {
     [loadGroupBoards],
   );
 
+  /**
+   * Deleting or leaving the room you are standing in leaves you nowhere, so
+   * both fall back to your own wall. Done before reloading the list so the
+   * board that is going away is never briefly the active one.
+   */
+  const stepOffBoard = useCallback(
+    (roomId: string) => {
+      if (activeBoard === roomId) setActiveBoard(MINE_BOARD_ID);
+    },
+    [activeBoard],
+  );
+
+  const handleDeleteGroup = useCallback(
+    async (roomId: string) => {
+      try {
+        await apiDeleteGroup(roomId);
+        stepOffBoard(roomId);
+        await loadGroupBoards();
+        setGroupBoardsError(null);
+      } catch (err) {
+        setGroupBoardsError(
+          err instanceof Error ? err.message : "Could not delete that room",
+        );
+        throw err;
+      }
+    },
+    [loadGroupBoards, stepOffBoard],
+  );
+
+  const handleLeaveGroup = useCallback(
+    async (roomId: string) => {
+      try {
+        await apiLeaveGroup(roomId);
+        stepOffBoard(roomId);
+        await loadGroupBoards();
+        setGroupBoardsError(null);
+      } catch (err) {
+        setGroupBoardsError(
+          err instanceof Error ? err.message : "Could not leave that room",
+        );
+        throw err;
+      }
+    },
+    [loadGroupBoards, stepOffBoard],
+  );
+
+  /**
+   * Switching rooms is a move, not a swap: the wall empties upward, the board
+   * changes while nothing is on screen, and the new room's notes arrive from
+   * below. Doing it in one step would cross-fade, which says the content
+   * changed rather than that you did.
+   */
+  const travelToRoom = useCallback(
+    (roomId: string) => {
+      if (roomId === activeBoard) return;
+      setTravel("out");
+      window.setTimeout(() => {
+        setActiveBoard(roomId);
+        setTravel("in");
+        window.setTimeout(() => setTravel(null), 640);
+      }, 300);
+    },
+    [activeBoard],
+  );
+
+  const handleRenameGroup = useCallback(
+    async (roomId: string, name: string) => {
+      try {
+        await apiRenameGroup(roomId, name);
+        await loadGroupBoards();
+        setGroupBoardsError(null);
+      } catch (err) {
+        setGroupBoardsError(err instanceof Error ? err.message : "Could not rename that room");
+        throw err;
+      }
+    },
+    [loadGroupBoards],
+  );
+
+  const handleRemoveMember = useCallback(
+    async (roomId: string, memberUserId: string) => {
+      try {
+        await apiRemoveGroupMember(roomId, memberUserId);
+        // The cast and the board both change when someone leaves it, so reload
+        // the active board rather than only the room list.
+        await loadGroupBoards();
+        setActiveBoard((current) => current);
+        setGroupBoardsError(null);
+      } catch (err) {
+        setGroupBoardsError(err instanceof Error ? err.message : "Could not remove that member");
+        throw err;
+      }
+    },
+    [loadGroupBoards],
+  );
+
   const handleRefreshGroup = useCallback(async () => {
     if (activeBoard === MINE_BOARD_ID) return;
     setGroupRefreshing(true);
@@ -1896,6 +2023,7 @@ export function HomePage(): JSX.Element {
     text: string;
   } | null>(null);
   const [savedSignalReflections, setSavedSignalReflections] = useState<Record<string, ApiReflection[]>>({});
+  const [savedSignalReadings, setSavedSignalReadings] = useState<Record<string, ApiSignalReading[]>>({});
   const [expandedReflectionThreads, setExpandedReflectionThreads] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectionLoadingIds, setSavedSignalReflectionLoadingIds] = useState<Set<string>>(() => new Set());
   const [savedSignalReflectingId, setSavedSignalReflectingId] = useState<string | null>(null);
@@ -2560,6 +2688,8 @@ export function HomePage(): JSX.Element {
     matchingSnippets: [],
     relatedContextTerms: [],
     relatedTopOfMindNoteTitles: [],
+    // A save still being captured has not reached any board yet.
+    relatedGroupNotes: [],
     attachmentSummary: entry.attachments.map((attachment) => ({
       id: attachment.id,
       type: attachment.type,
@@ -2788,6 +2918,37 @@ export function HomePage(): JSX.Element {
       cancelled = true;
     };
   }, [homeMode, savedSignalReflections, selectedSavedSignalId, user]);
+
+  // Readings of the opened signal — every Top of Mind note, solo and per-room,
+  // that cited it as evidence. Loaded once per signal like reflections above.
+  // No loading state on purpose: an uncited signal (the common case) resolves
+  // to [] and the section never renders, rather than flashing and vanishing.
+  useEffect(() => {
+    if (!user || homeMode !== "memoryDrawer" || !selectedSavedSignalId) return;
+    if (savedSignalReadings[selectedSavedSignalId]) return;
+
+    const requestUserId = user.id;
+    const requestSignalId = selectedSavedSignalId;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const readings = await fetchSignalReadings(requestSignalId);
+        if (cancelled || activeHomeUserIdRef.current !== requestUserId) return;
+        setSavedSignalReadings((current) => ({
+          ...current,
+          [requestSignalId]: readings,
+        }));
+      } catch (error) {
+        if (!cancelled && activeHomeUserIdRef.current === requestUserId) {
+          console.error("[home] failed to load inspiration readings:", error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [homeMode, savedSignalReadings, selectedSavedSignalId, user]);
 
   const historyContent = useMemo(() => {
     if (cardItems.length === 0) return undefined;
@@ -4411,6 +4572,74 @@ export function HomePage(): JSX.Element {
               {drawerActionStatus.message}
             </p>
           ) : null}
+          {/* Readings: the same save, read alone and read beside each room's
+              other hearts. The contrast IS the content — the belief statements
+              sit adjacent and disagree (or agree) on their own. Absent
+              entirely when nothing cited this signal.
+
+              Each reading names the Top of Mind it produced and the room it
+              produced it in, because "in Waka" alone never said what this save
+              actually made happen there. Where a room reads the save
+              differently from the way its owner does, that difference is said
+              here — beside the save it is about, rather than as a card on the
+              owner's own wall competing with their real top-of-minds. */}
+          {(savedSignalReadings[signal.id]?.length ?? 0) > 0 ? (
+            <section
+              className="memory-contents-readings"
+              aria-label={copy.readingsSectionLabel}
+            >
+              <span className="memory-contents-readings-label">
+                {copy.readingsSectionLabel}
+              </span>
+              <ul className="memory-reading-list">
+                {(savedSignalReadings[signal.id] ?? []).map((reading) => {
+                  const contextLabel =
+                    reading.context.scope === "alone"
+                      ? copy.readingsAloneLabel
+                      : copy.readingsInRoomLabel(reading.context.groupName);
+                  // The title is now said out loud above, so a belief
+                  // statement that merely repeats it would print twice.
+                  const belief = reading.note.beliefStatement?.trim() ?? "";
+                  return (
+                    <li key={reading.note.id} className="memory-reading">
+                      <span className="memory-reading-context">{contextLabel}</span>
+                      <p className="memory-reading-led-to">
+                        {copy.readingsLedToLabel(reading.note.title)}
+                      </p>
+                      {belief && belief !== reading.note.title ? (
+                        <p className="memory-reading-belief">{belief}</p>
+                      ) : null}
+                      {reading.myRole.reason ? (
+                        <p className="memory-reading-reason">{reading.myRole.reason}</p>
+                      ) : null}
+                      {reading.neighbors.length > 0 ? (
+                        <ul
+                          className="memory-reading-neighbors"
+                          aria-label={copy.readingsNeighborsLabel}
+                        >
+                          {reading.neighbors.map((neighbor) => (
+                            <li key={neighbor.signalId} className="memory-reading-neighbor">
+                              <span
+                                className="nc-note-face"
+                                style={{ background: contributorColor(neighbor.ownerName) }}
+                                title={neighbor.ownerName}
+                                aria-hidden="true"
+                              >
+                                {contributorInitials(neighbor.ownerName)}
+                              </span>
+                              <span className="memory-reading-neighbor-preview">
+                                {neighbor.textPreview}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
           <section className="memory-contents-reflection-prompts">
             <div className="memory-contents-feedback-actions" aria-label={copy.savedSignalFeedbackLabel}>
               {copy.savedSignalFeedbackActions.map((action) => {
@@ -4595,6 +4824,22 @@ export function HomePage(): JSX.Element {
       >
         <span className="memory-contents-item-text">{shortText(signal.textPreview, 160)}</span>
         <span className="memory-contents-item-meta">{metaItems.join(" · ")}</span>
+        {/* Where this save led. Scanning the list, you can see that this one
+            became that reading in that room — the relationship the group
+            boards already record, finally visible from the save's side. */}
+        {/* Optional-chained despite `normalizeSavedSignal` defaulting this at
+            the client boundary: the blast radius of a miss is the whole drawer,
+            not one chip, and that is exactly how it failed the first time. */}
+        {(signal.relatedGroupNotes?.length ?? 0) > 0 ? (
+          <span className="memory-contents-item-led" aria-label={copy.ledToLabel}>
+            {signal.relatedGroupNotes.map((note) => (
+              <span key={`${note.groupId}-${note.noteTitle}`} className="memory-led-chip">
+                <span className="memory-led-room">{note.groupName}</span>
+                <span className="memory-led-note">{note.noteTitle}</span>
+              </span>
+            ))}
+          </span>
+        ) : null}
       </button>
     );
   };
@@ -4767,6 +5012,9 @@ export function HomePage(): JSX.Element {
       matchingSnippets: [],
       relatedContextTerms: [],
       relatedTopOfMindNoteTitles: [],
+      // Stand-in for a group board's evidence row: the list route is what
+      // resolves where a save led, and this never came through it.
+      relatedGroupNotes: [],
       attachmentSummary: [],
       relevanceReasons: support.reason ? [support.reason] : [],
     };
@@ -4836,7 +5084,14 @@ export function HomePage(): JSX.Element {
         ["--w" as string]: layout.w,
         ["--dx" as string]: `${drag.x}px`,
         ["--dy" as string]: `${drag.y}px`,
-        ["--decay" as string]: String(1 - index * 0.08),
+        // Notes recede with position, but the fade has a floor. Unclamped it
+        // reached 0 at the thirteenth note and went negative after, so a long
+        // wall ended in notes that were completely invisible until hovered —
+        // which reads as a wall that stops rather than one that recedes.
+        ["--decay" as string]: String(Math.max(0.42, 1 - index * 0.08)),
+        // Position in the stack, so travelling staggers rather than sliding
+        // as one sheet.
+        ["--travel-i" as string]: String(index),
       }}
       onPointerDown={noteIsInteractive ? onNotePointerDown(index) : undefined}
     >
@@ -4951,19 +5206,6 @@ export function HomePage(): JSX.Element {
           title={copy.titleLineOne(
             isGroupBoardActive && activeGroupName ? activeGroupName : titleHandle,
           )}
-          rooms={[
-            {
-              id: MINE_BOARD_ID,
-              name: copy.myRoomName,
-              role: "owner",
-              joinCode: "",
-              memberCount: 1,
-              createdAt: "",
-            },
-            ...groupBoards,
-          ]}
-          activeRoom={activeBoard}
-          onSelect={setActiveBoard}
           members={
             isGroupBoardActive
               ? groupMembers
@@ -4973,49 +5215,60 @@ export function HomePage(): JSX.Element {
           }
           currentUserId={user?.id}
           inviteLink={activeGroupJoinLink}
-          onCreateRoom={handleCreateGroup}
-          onJoinRoom={handleJoinGroup}
           onRefresh={isGroupBoardActive ? handleRefreshGroup : undefined}
           refreshing={groupRefreshing}
           faceColor={contributorColor}
           faceInitials={contributorInitials}
           error={groupBoardsError}
-          loading={groupBoardLoading}
+          activeRoomSummary={
+            isGroupBoardActive
+              ? (groupBoards.find((board) => board.id === activeBoard) ?? null)
+              : null
+          }
+          onCreateRoom={handleCreateGroup}
+          onJoinRoom={handleJoinGroup}
+          onRenameRoom={handleRenameGroup}
+          onRemoveMember={handleRemoveMember}
+          onDeleteRoom={handleDeleteGroup}
+          onLeaveRoom={handleLeaveGroup}
         />
 
-        <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMindRegionLabel}>
-          {/* The legacy US-051 group conversation-rooms card is superseded by
-              the Group Top of Mind boards above and no longer shown on the wall. */}
-          {SHOW_LEGACY_GROUP_ROOM_SURFACE ? renderGroupRoomSurface() : null}
-          {isGroupBoardActive && groupBoardLoading ? (
-            <p className="nc-loading">Gathering the group’s Top of Mind…</p>
-          ) : !isGroupBoardActive && topOfMindLoading ? (
-            <p className="nc-loading">{copy.loadingThoughts}</p>
-          ) : !isGroupBoardActive && topOfMindError ? (
-            <p className="nc-loading">{topOfMindError}</p>
-          ) : meaningfulThoughtCards.length > 0 ? (
+        <RoomRail
+          rooms={[
+            { id: MINE_BOARD_ID, name: copy.myRoomName, role: "owner", joinCode: "", memberCount: 1, createdAt: "" },
+            ...groupBoards,
+          ]}
+          activeRoom={activeBoard}
+          onSelect={travelToRoom}
+        />
+
+        <GroupWall
+          copy={{
+            regionLabel: copy.topOfMindRegionLabel,
+            loadingThoughts: copy.loadingThoughts,
+            emptyThoughts: copy.emptyThoughts,
+            firstRunTitle: copy.firstRunTitle,
+            firstRunSteps: copy.firstRunSteps,
+            groupLoading: "Gathering the group’s Top of Mind…",
+            groupEmpty:
+              "Nothing shared here yet. When members keep inspirations shared, this board fills with the group’s Top of Mind.",
+            groupEmptyLabel: "Group Top of Mind",
+          }}
+          travel={travel}
+          isGroupBoardActive={isGroupBoardActive}
+          groupBoardLoading={groupBoardLoading}
+          ownBoardLoading={topOfMindLoading}
+          ownBoardError={topOfMindError}
+          cardCount={meaningfulThoughtCards.length}
+          renderCards={() =>
             meaningfulThoughtCards.map((card, index) => renderThoughtCard(card, index))
-          ) : isGroupBoardActive ? (
-            <div className="nc-first-run-guide" aria-label="Group Top of Mind">
-              <p className="nc-loading">
-                Nothing shared here yet. When members keep inspirations shared, this
-                board fills with the group’s Top of Mind.
-              </p>
-            </div>
-          ) : (
-            <div className="nc-first-run-guide" aria-label={copy.firstRunTitle}>
-              <p className="nc-loading">{copy.emptyThoughts}</p>
-              <div className="nc-first-run-card">
-                <h2>{copy.firstRunTitle}</h2>
-                <ol>
-                  {copy.firstRunSteps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-              </div>
-            </div>
-          )}
-        </section>
+          }
+          /* The legacy US-051 group conversation-rooms card is superseded by
+             the Group Top of Mind boards above and no longer shown on the wall. */
+          legacySurface={
+            SHOW_LEGACY_GROUP_ROOM_SURFACE ? renderGroupRoomSurface() : null
+          }
+        />
       </main>
 
       {homeMode === "memoryDrawer" ? (

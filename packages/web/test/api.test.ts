@@ -144,6 +144,7 @@ const savedSignalResult: ApiSavedSignalSearchResult = {
   matchingSnippets: ["quiet research rooms"],
   relatedContextTerms: ["environment: quiet rooms"],
   relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
+  relatedGroupNotes: [],
   attachmentSummary: [],
   relevanceReasons: ["highlight match"],
 };

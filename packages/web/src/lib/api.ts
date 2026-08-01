@@ -1181,6 +1181,8 @@ export interface ApiSavedSignalSearchResult {
   matchingSnippets: string[];
   relatedContextTerms: string[];
   relatedTopOfMindNoteTitles: string[];
+  /** Group boards this save fed: where else it led, and in whose company. */
+  relatedGroupNotes: Array<{ groupId: string; groupName: string; noteTitle: string }>;
   attachmentSummary: Array<{
     id: string;
     type: AttachmentType;
@@ -1496,6 +1498,107 @@ export async function leaveGroup(groupId: string): Promise<{ ok: boolean }> {
   return { ok: Boolean(body.ok) };
 }
 
+/**
+ * DELETE /groups/:id — the owner deletes the room outright.
+ *
+ * Distinct from leaving: this removes the board for everyone in it, along with
+ * every note their collections produced together. Members' own saved signals
+ * are untouched.
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  const path = apiPath(`/groups/${encodeURIComponent(groupId)}`);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while deleting the room",
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — fall through to the status-based message.
+  }
+  const errorBody = (body ?? {}) as { error?: string };
+  throw new ApiError({
+    status: res.status,
+    message: errorBody.error ?? "Failed to delete the room",
+  });
+}
+
+/** PATCH /groups/:id — rename the room. Owner only. */
+export async function renameGroup(groupId: string, name: string): Promise<void> {
+  await requestJson(
+    apiPath(`/groups/${encodeURIComponent(groupId)}`),
+    "PATCH",
+    { name },
+    "Failed to rename the room",
+  );
+}
+
+/** DELETE /groups/:id/members/:memberId — owner removes someone. */
+export async function removeGroupMember(
+  groupId: string,
+  memberUserId: string,
+): Promise<void> {
+  await requestJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberUserId)}`,
+    ),
+    "DELETE",
+    undefined,
+    "Failed to remove that member",
+  );
+}
+
+/**
+ * Shared shape for the room's owner-only mutations: send, accept any 2xx, and
+ * surface the server's own message when it refuses. Written once because the
+ * three of them differ only in verb and wording.
+ */
+async function requestJson(
+  path: string,
+  method: "PATCH" | "DELETE",
+  body: unknown,
+  fallbackMessage: string,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: "include",
+      headers: body
+        ? { Accept: "application/json", "Content-Type": "application/json" }
+        : { Accept: "application/json" },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new ApiError({ status: 0, message: "Network unreachable" });
+  }
+  if (res.ok) return;
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    // Non-JSON error body — fall back to the caller's message.
+  }
+  throw new ApiError({
+    status: res.status,
+    message: (parsed as { error?: string } | null)?.error ?? fallbackMessage,
+  });
+}
+
 /** GET /groups/:id/top-of-mind — synthesized group board. */
 export async function fetchGroupTopOfMind(
   groupId: string,
@@ -1617,6 +1720,28 @@ export async function fetchPublicProfile(
   return body;
 }
 
+/**
+ * Fill in list fields an older API may not send.
+ *
+ * The saved-signals list is rendered from these arrays directly, so a field
+ * added on the server but absent from a response — a web bundle deployed ahead
+ * of the API, or a stale dev server — took the whole drawer down with a
+ * TypeError rather than simply showing one less thing. Defaulting here means
+ * every caller can trust the declared shape.
+ */
+function normalizeSavedSignal<T extends ApiSavedSignalSearchResult>(signal: T): T {
+  return {
+    ...signal,
+    relatedTopOfMindNoteTitles: signal.relatedTopOfMindNoteTitles ?? [],
+    relatedGroupNotes: signal.relatedGroupNotes ?? [],
+    highlightedSnippets: signal.highlightedSnippets ?? [],
+    matchingSnippets: signal.matchingSnippets ?? [],
+    relatedContextTerms: signal.relatedContextTerms ?? [],
+    attachmentSummary: signal.attachmentSummary ?? [],
+    relevanceReasons: signal.relevanceReasons ?? [],
+  };
+}
+
 export async function fetchSavedSignals(
   options: FetchSavedSignalsOptions = {},
 ): Promise<ApiSavedSignalSearchResult[]> {
@@ -1638,7 +1763,7 @@ export async function fetchSavedSignals(
     });
   }
 
-  return body.signals;
+  return body.signals.map(normalizeSavedSignal);
 }
 
 export async function fetchSavedSignalDetail(
@@ -1656,7 +1781,62 @@ export async function fetchSavedSignalDetail(
     });
   }
 
-  return body.signal;
+  return normalizeSavedSignal(body.signal);
+}
+
+/** One co-cited save — what your signal sat next to inside a reading. */
+export interface ApiSignalReadingNeighbor {
+  signalId: string;
+  textPreview: string;
+  ownerUserId: string;
+  ownerName: string;
+  ownerAvatarUrl: string | null;
+  isMine: boolean;
+}
+
+export type ApiSignalReadingContext =
+  | { scope: "alone" }
+  | { scope: "group"; groupId: string; groupName: string };
+
+/**
+ * How differently a room reads this save from the way its owner does. Only
+ * ever present on a group reading — "alone" is the side being compared
+ * against, so it has nothing to differ from.
+ */
+export interface ApiSignalReadingDivergence {
+  /** 0 = the room reads it the way you do; 100 = a different ambition. */
+  score: number;
+  /** The judge's one sentence naming the difference. */
+  rationale: string;
+}
+
+/**
+ * One Top of Mind note that cited a signal — read alone or beside a room.
+ * Solo readings are the owner's own; group readings are shared with the room
+ * (the API only returns rooms the caller currently belongs to).
+ */
+export interface ApiSignalReading {
+  context: ApiSignalReadingContext;
+  note: {
+    id: string;
+    title: string;
+    kind: string;
+    beliefStatement: string | null;
+    why: string;
+    createdAt: string;
+  };
+  myRole: { role: string; reason: string };
+  neighbors: ApiSignalReadingNeighbor[];
+}
+
+export async function fetchSignalReadings(
+  signalId: string,
+): Promise<ApiSignalReading[]> {
+  const body = await getJson<{ readings: ApiSignalReading[] }>(
+    apiPath(`/inspirations/${encodeURIComponent(signalId)}/readings`),
+    "Failed to load inspiration readings",
+  );
+  return Array.isArray(body.readings) ? body.readings : [];
 }
 
 export async function createFeedback(

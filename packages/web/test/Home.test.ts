@@ -213,6 +213,7 @@ const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
     matchingSnippets: ["bridge rhythms"],
     relatedContextTerms: ["places that make movement visible"],
     relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
+    relatedGroupNotes: [],
     attachmentSummary: [],
     relevanceReasons: ["highlighted"],
   },
@@ -235,6 +236,7 @@ const sampleSavedSignals: ApiSavedSignalSearchResult[] = [
     matchingSnippets: [],
     relatedContextTerms: ["memory as a working material"],
     relatedTopOfMindNoteTitles: [],
+    relatedGroupNotes: [],
     attachmentSummary: [],
     relevanceReasons: [],
   },
@@ -3054,6 +3056,7 @@ describe("HomePage current home experience", () => {
         kind: "note",
         relatedContextTerms: ["public making rooms", "meaning_nodes", "context_node", "node id ctx_1234"],
         relatedTopOfMindNoteTitles: ["make the thing before explaining it"],
+        relatedGroupNotes: [],
         attachmentSummary: [],
       },
       {
@@ -3072,6 +3075,7 @@ describe("HomePage current home experience", () => {
         textPreview: "Image inspiration",
         kind: "image",
         relatedTopOfMindNoteTitles: [],
+        relatedGroupNotes: [],
         relatedContextTerms: ["studio wall"],
         attachmentSummary: [
           { id: "att-image", type: "image", label: "studio-wall.png" },
@@ -3083,6 +3087,7 @@ describe("HomePage current home experience", () => {
         textPreview: "Mixed save with a note and a link about collaborators",
         kind: "mixed",
         relatedTopOfMindNoteTitles: [],
+        relatedGroupNotes: [],
         relatedContextTerms: ["collaborators"],
         attachmentSummary: [
           { id: "att-mixed-link", type: "link", label: "https://example.com/collab" },
@@ -3134,6 +3139,7 @@ describe("HomePage current home experience", () => {
       textPreview: `Saved inspiration for path ${index + 1}`,
       capturedAt: `2026-05-${String(20 - index).padStart(2, "0")}T12:00:00.000Z`,
       relatedTopOfMindNoteTitles: [],
+      relatedGroupNotes: [],
       relatedContextTerms: [`category path ${index + 1}`],
       highlightedSnippets: [],
       matchingSnippets: [],
@@ -3278,6 +3284,7 @@ describe("HomePage current home experience", () => {
           textPreview: "Old highlighted save about bridge rooms",
           capturedAt: "2026-04-01T12:00:00.000Z",
           relatedTopOfMindNoteTitles: [],
+          relatedGroupNotes: [],
           relatedContextTerms: ["bridge rooms"],
           highlightedSnippets: [{ id: "spark-old", text: "bridge rooms", source: "user", confidence: 0.9, isPrimary: true }],
           signalScores: { resonance: 9, recurrence: 9, agency: 9, identitySignal: 9, decisionRelevance: 9 },
@@ -3288,6 +3295,7 @@ describe("HomePage current home experience", () => {
           textPreview: "Recent lightly relevant save about a room",
           capturedAt: "2026-05-20T12:00:00.000Z",
           relatedTopOfMindNoteTitles: [],
+          relatedGroupNotes: [],
           relatedContextTerms: ["bridge rooms"],
           highlightedSnippets: [{ id: "spark-new", text: "room", source: "user", confidence: 0.8, isPrimary: true }],
           signalScores: { resonance: 1, recurrence: 1, agency: 1, identitySignal: 1, decisionRelevance: 1 },
@@ -3303,6 +3311,66 @@ describe("HomePage current home experience", () => {
     expect(contents?.textContent?.indexOf("Recent lightly relevant")).toBeLessThan(
       contents?.textContent?.indexOf("Old highlighted save") ?? 9999,
     );
+  });
+
+  /**
+   * The claim the readings work exists to make, seen from the save's side:
+   * scanning your own list, you can tell that this one became that reading in
+   * that room. The room's name has to appear beside the note's, because "it
+   * led somewhere" without saying where is the part that was already there.
+   */
+  it("shows which room reading a save led to", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          id: "sig-led",
+          textPreview: "A save that fed a room's reading",
+          relatedGroupNotes: [
+            { groupId: "grp-1", groupName: "waka", noteTitle: "Deployment as the new frontier" },
+          ],
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const led = container.querySelector<HTMLElement>(".memory-contents-item-led");
+    expect(led).not.toBeNull();
+    expect(led?.querySelector(".memory-led-room")?.textContent).toBe("waka");
+    expect(led?.querySelector(".memory-led-note")?.textContent).toBe(
+      "Deployment as the new frontier",
+    );
+  });
+
+  /**
+   * The drawer renders these arrays directly, so a field an older API has not
+   * sent must cost one chip rather than every save on the screen. Pinned
+   * because it has already failed this way once, with nothing loading at all.
+   */
+  it("still lists a save whose group-notes field is missing entirely", async () => {
+    setApiFixtures({
+      savedSignals: [
+        {
+          ...sampleSavedSignals[0],
+          id: "sig-legacy",
+          textPreview: "A save from before the field existed",
+          relatedGroupNotes: undefined as never,
+        },
+      ],
+    });
+    const container = await renderHomePage();
+
+    await clickSavesTab(container);
+    await waitForTimers(130);
+    await flushReactWork();
+
+    const contents = container.querySelector<HTMLElement>(".memory-category-panel");
+    expect(contents?.textContent).toContain("A save from before the field existed");
+    expect(contents?.querySelector(".memory-contents-item-led")).toBeNull();
   });
 
   it("keeps category contents inside the anchored stack", async () => {

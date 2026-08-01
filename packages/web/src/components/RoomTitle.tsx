@@ -20,6 +20,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { ApiGroupSummary } from "../lib/api";
+import { extractJoinCode, looksLikeInvite } from "./rooms";
 
 export const MINE_BOARD_ID = "__mine__";
 
@@ -31,17 +32,11 @@ export interface RoomMember {
 export interface RoomTitleProps {
   /** Rendered name of the current room. Your own wall styles part of it. */
   title: ReactNode;
-  /** Every room you can move to, yours included. */
-  rooms: ApiGroupSummary[];
-  activeRoom: string;
-  onSelect: (room: string) => void;
   /** Who is in this room. One entry on your own wall: you. */
   members: RoomMember[];
   currentUserId?: string;
   /** Invite link for the active room, when it is a group. */
   inviteLink?: string | null;
-  onCreateRoom: (name: string) => Promise<void>;
-  onJoinRoom: (code: string) => Promise<void>;
   onRefresh?: () => Promise<void> | void;
   refreshing?: boolean;
   faceColor: (name: string) => string;
@@ -49,36 +44,53 @@ export interface RoomTitleProps {
   /** Surfaced quietly rather than dropped: rooms failing to load is worth saying. */
   error?: string | null;
   /**
-   * The board rail this replaced said "Loading boards…". Without it a slow
-   * connection shows a room list that is simply empty, which reads as "you are
-   * in no rooms" rather than "not yet".
+   * The room you are standing in, when it is a group. Settings act on this and
+   * only this — the switcher stays a switcher.
    */
-  loading?: boolean;
+  activeRoomSummary?: ApiGroupSummary | null;
+  /**
+   * Making a room and joining one. Here rather than in the rail because the
+   * rail is absent when you have nowhere to go — which is exactly when you
+   * most need a way to make your first room.
+   */
+  onCreateRoom?: (name: string) => Promise<void>;
+  onJoinRoom?: (code: string) => Promise<void>;
+  onRenameRoom?: (roomId: string, name: string) => Promise<void>;
+  onRemoveMember?: (roomId: string, memberUserId: string) => Promise<void>;
+  /** Owner-only. Omit and the delete row does not render. */
+  onDeleteRoom?: (roomId: string) => Promise<void>;
+  /** For rooms you are in but do not own. */
+  onLeaveRoom?: (roomId: string) => Promise<void>;
 }
 
-type OpenPanel = null | "rooms" | "invite";
+type OpenPanel = null | "invite" | "settings";
 
 export function RoomTitle({
   title,
-  rooms,
-  activeRoom,
-  onSelect,
   members,
   currentUserId,
   inviteLink,
-  onCreateRoom,
-  onJoinRoom,
   onRefresh,
   refreshing,
   faceColor,
   faceInitials,
   error,
-  loading,
+  activeRoomSummary,
+  onCreateRoom,
+  onJoinRoom,
+  onRenameRoom,
+  onRemoveMember,
+  onDeleteRoom,
+  onLeaveRoom,
 }: RoomTitleProps): JSX.Element {
   const [open, setOpen] = useState<OpenPanel>(null);
-  const [entry, setEntry] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [entry, setEntry] = useState("");
+  // Destroying the room asks a second time. Nothing else in settings does,
+  // because nothing else is unrecoverable.
+  const [confirmingDestroy, setConfirmingDestroy] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   // Anything opened from the title closes on outside click or Escape, so the
@@ -99,27 +111,43 @@ export function RoomTitle({
     };
   }, [open]);
 
-  /**
-   * One field for both. Telling "make a room" from "join a room" is the
-   * product's problem, not the user's: two unlabelled inputs stacked in a
-   * panel read as a rendering fault, and asking which mode you meant before
-   * you have typed anything is a question nobody needs.
-   */
+  const owns = activeRoomSummary?.role === "owner";
+
   const submitEntry = async () => {
     const trimmed = entry.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed) return;
+    await run(async () => {
+      if (looksLikeInvite(trimmed)) await onJoinRoom?.(extractJoinCode(trimmed));
+      else await onCreateRoom?.(trimmed);
+      setEntry("");
+    });
+  };
+
+  const openSettings = () => {
+    setNameDraft(activeRoomSummary?.name ?? "");
+    setEntry("");
+    setConfirmingDestroy(false);
+    setOpen((p) => (p === "settings" ? null : "settings"));
+  };
+
+  /** Runs a settings action, keeping the panel open so errors stay in context. */
+  const run = async (fn: () => Promise<void>, closeAfter = false) => {
+    if (busy) return;
     setBusy(true);
     try {
-      if (looksLikeInvite(trimmed)) {
-        await onJoinRoom(extractJoinCode(trimmed));
-      } else {
-        await onCreateRoom(trimmed);
-      }
-      setEntry("");
-      setOpen(null);
+      await fn();
+      if (closeAfter) setOpen(null);
+    } catch {
+      // The caller surfaces the message above the panel.
     } finally {
       setBusy(false);
     }
+  };
+
+  const submitRename = async () => {
+    const next = nameDraft.trim();
+    if (!activeRoomSummary || !onRenameRoom || !next || next === activeRoomSummary.name) return;
+    await run(() => onRenameRoom(activeRoomSummary.id, next));
   };
 
   const copy = async () => {
@@ -135,18 +163,12 @@ export function RoomTitle({
 
   return (
     <div className="nc-room" ref={rootRef}>
-      <button
-        type="button"
-        className="nc-room-title"
-        onClick={() => setOpen((p) => (p === "rooms" ? null : "rooms"))}
-        aria-expanded={open === "rooms"}
-        aria-haspopup="menu"
-      >
+      {/* A title, not a menu. Switching rooms is the rail's job now — it can
+          say "there are other places" without being clicked, which is the one
+          thing this could never do. */}
+      <h1 className="nc-room-title">
         <span className="nc-room-title-text">{title}</span>
-        <span className="nc-room-caret" aria-hidden="true">
-          ⌄
-        </span>
-      </button>
+      </h1>
 
       {/* The cast, and the way to add to it. Inviting is adding a face here,
           so it lives here rather than beside the list of rooms. */}
@@ -177,56 +199,181 @@ export function RoomTitle({
             ＋
           </button>
         ) : null}
+        {activeRoomSummary || onCreateRoom || onJoinRoom ? (
+          <button
+            type="button"
+            className="nc-room-settings-open"
+            onClick={openSettings}
+            aria-expanded={open === "settings"}
+            aria-label={activeRoomSummary ? "room settings" : "rooms"}
+            title={activeRoomSummary ? "Room settings" : "Rooms"}
+          >
+            ⚙
+          </button>
+        ) : null}
       </div>
 
-      {open === "rooms" ? (
-        <div className="nc-room-panel" role="menu">
-          {error ? <p className="nc-room-error">{error}</p> : null}
-          {/* `rooms` always contains the personal wall, so one entry means no
-              actual rooms have arrived yet. Once loading is done, say so —
-              silence after a load reads the same as a load that never ran. */}
-          {loading && rooms.length <= 1 ? (
-            <p className="nc-room-loading">finding your rooms…</p>
-          ) : !loading && rooms.length <= 1 ? (
-            <p className="nc-room-loading">no rooms yet — start one below</p>
-          ) : null}
-          {rooms.map((room) => (
-            <button
-              key={room.id}
-              type="button"
-              role="menuitem"
-              className={`nc-room-item${room.id === activeRoom ? " nc-room-item--active" : ""}`}
-              onClick={() => {
-                onSelect(room.id);
-                setOpen(null);
-              }}
-            >
-              <span className="nc-room-item-name">{room.name}</span>
-              {room.memberCount > 1 ? (
-                <span className="nc-room-item-count">{room.memberCount}</span>
-              ) : null}
-            </button>
-          ))}
+      {open === "settings" ? (
+        /* Settings belong to the room you are in, not to the list of rooms:
+           putting them in the switcher made every row carry a destructive
+           control you had to pass over just to change rooms.
 
+           Making a room is here too. It is the one thing you can need when
+           there is no room to have settings for, so the panel opens on your
+           own wall as well — with the field and nothing else. */
+        <div
+          className="nc-room-panel nc-room-settings"
+          role="dialog"
+          aria-label={activeRoomSummary ? "Room settings" : "Rooms"}
+        >
+          {error ? <p className="nc-room-error">{error}</p> : null}
+
+          {activeRoomSummary ? (
+          <>
+          <label className="nc-room-settings-label" htmlFor="nc-room-name">
+            Name
+          </label>
           <form
-            className="nc-room-new"
+            className="nc-room-settings-name"
             onSubmit={(event) => {
               event.preventDefault();
-              void submitEntry();
+              void submitRename();
             }}
           >
-            {/* Naming it is the whole act of making one, so the field is the
-                control: no separate button, no second row, no mode to pick. */}
             <input
+              id="nc-room-name"
               className="nc-room-new-input"
-              value={entry}
-              onChange={(event) => setEntry(event.target.value)}
-              placeholder="name a room, or paste an invite…"
-              maxLength={200}
-              disabled={busy}
-              aria-label="name a room, or paste an invite"
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              disabled={!owns || busy}
+              maxLength={120}
             />
+            {owns && nameDraft.trim() && nameDraft.trim() !== activeRoomSummary.name ? (
+              <button type="submit" className="nc-room-settings-save" disabled={busy}>
+                save
+              </button>
+            ) : null}
           </form>
+
+          <p className="nc-room-settings-label">
+            Members <span className="nc-room-item-count">{members.length}</span>
+          </p>
+          <ul className="nc-room-settings-members">
+            {members.map((member) => (
+              <li key={member.userId} className="nc-room-settings-member">
+                <span
+                  className="nc-note-face nc-room-face"
+                  style={{ background: faceColor(member.name) }}
+                  aria-hidden="true"
+                >
+                  {faceInitials(member.name)}
+                </span>
+                <span className="nc-room-settings-member-name">
+                  {member.name}
+                  {member.userId === currentUserId ? " (you)" : ""}
+                </span>
+                {owns && onRemoveMember && member.userId !== currentUserId ? (
+                  <button
+                    type="button"
+                    className="nc-room-settings-remove"
+                    disabled={busy}
+                    aria-label={`Remove ${member.name}`}
+                    onClick={() =>
+                      void run(() => onRemoveMember(activeRoomSummary.id, member.userId))
+                    }
+                  >
+                    remove
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+
+          {inviteLink ? (
+            <>
+              <p className="nc-room-settings-label">Invite link</p>
+              <div className="nc-room-settings-invite">
+                <code className="nc-room-invite-link">{inviteLink}</code>
+                <button type="button" className="nc-room-invite-copy" onClick={() => void copy()}>
+                  {copied ? "copied" : "copy"}
+                </button>
+              </div>
+            </>
+          ) : null}
+
+          </>
+          ) : null}
+
+          {onCreateRoom || onJoinRoom ? (
+            <>
+              <p className="nc-room-settings-label">
+                {activeRoomSummary ? "Another room" : "Rooms"}
+              </p>
+              <form
+                className="nc-room-settings-name"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void submitEntry();
+                }}
+              >
+                {/* Still one field for both. Telling a name from a code is the
+                    product's problem, not the user's. */}
+                <input
+                  className="nc-room-new-input"
+                  value={entry}
+                  onChange={(event) => setEntry(event.target.value)}
+                  placeholder="name a room, or paste an invite…"
+                  maxLength={200}
+                  disabled={busy}
+                />
+              </form>
+            </>
+          ) : null}
+
+          {/* The one irreversible thing here, kept apart and asked twice. */}
+          {activeRoomSummary && ((owns && onDeleteRoom) || (!owns && onLeaveRoom)) ? (
+            <div className="nc-room-settings-danger">
+              {confirmingDestroy ? (
+                <>
+                  <span className="nc-room-settings-danger-q">
+                    {owns ? "Delete this room for everyone?" : "Leave this room?"}
+                  </span>
+                  <button
+                    type="button"
+                    className="nc-room-item-confirm-yes"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(
+                        () =>
+                          owns
+                            ? onDeleteRoom!(activeRoomSummary.id)
+                            : onLeaveRoom!(activeRoomSummary.id),
+                        true,
+                      )
+                    }
+                  >
+                    {owns ? "delete" : "leave"}
+                  </button>
+                  <button
+                    type="button"
+                    className="nc-room-item-confirm-no"
+                    disabled={busy}
+                    onClick={() => setConfirmingDestroy(false)}
+                  >
+                    cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="nc-room-settings-danger-open"
+                  onClick={() => setConfirmingDestroy(true)}
+                >
+                  {owns ? "Delete room" : "Leave room"}
+                </button>
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -251,34 +398,4 @@ export function RoomTitle({
       ) : null}
     </div>
   );
-}
-
-/**
- * Does this look like an invitation rather than a name?
- *
- * Deliberately conservative: a full join link, or a single bare token that
- * looks like a code. Anything with a space is a name, because room names have
- * spaces and codes do not. Guessing wrong toward "create" is recoverable --
- * you get a room you did not want and can leave it -- while guessing wrong
- * toward "join" fails loudly against a code that does not exist.
- */
-export function looksLikeInvite(raw: string): boolean {
-  const trimmed = raw.trim();
-  if (/[?&]join=/i.test(trimmed)) return true;
-  if (/\s/.test(trimmed)) return false;
-  return /^[A-Z0-9-]{6,32}$/i.test(trimmed);
-}
-
-/** Accept either a bare code or a full `?join=CODE` link and return the code. */
-export function extractJoinCode(raw: string): string {
-  const trimmed = raw.trim();
-  const match = trimmed.match(/[?&]join=([^&\s]+)/i);
-  if (match?.[1]) {
-    try {
-      return decodeURIComponent(match[1]);
-    } catch {
-      return match[1];
-    }
-  }
-  return trimmed;
 }

@@ -2048,6 +2048,142 @@
   font-size: 12px;
 }
 
+/* Readings: the same save read alone and read beside each room. Belief
+   statements carry the section; everything else stays quiet around them. */
+.memory-contents-readings {
+  display: grid;
+  gap: 14px;
+  padding: 16px 0 4px;
+  border-top: 1px solid rgba(45, 41, 37, 0.1);
+}
+
+.memory-contents-readings-label {
+  color: rgba(45, 41, 37, 0.48);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 620;
+  text-transform: lowercase;
+}
+
+.memory-reading-list {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-reading {
+  display: grid;
+  gap: 4px;
+}
+
+.memory-reading-context {
+  color: rgba(45, 41, 37, 0.52);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 620;
+  text-transform: lowercase;
+}
+
+/* What this save actually produced here. Carries the weight in the block,
+   because "in Waka" on its own never said what happened in Waka. */
+.memory-reading-led-to {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.9);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.memory-reading-belief {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.86);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.memory-reading-reason {
+  margin: 0;
+  color: rgba(45, 41, 37, 0.56);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* Names the gap before stating it, so the sentence is not mistaken for more
+   of the room's reading. */
+.memory-reading-neighbors {
+  display: grid;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-reading-neighbor {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+/* The neighbor face sits inline rather than in a stacked cluster, so it
+   needs no overlap offset and rings in the drawer's paper instead. */
+.memory-reading-neighbor .nc-note-face {
+  flex: none;
+  margin-right: 0;
+  box-shadow: 0 0 0 1.5px rgba(242, 241, 238, 0.9);
+}
+
+.memory-reading-neighbor-preview {
+  overflow: hidden;
+  color: rgba(45, 41, 37, 0.62);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Where a save led. One chip per group reading it fed: the room, then what
+   that room made of it. Sits under the meta line so scanning the list reads
+   as text-then-provenance rather than a second column. */
+.memory-contents-item-led {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 5px;
+}
+
+.memory-led-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(45, 41, 37, 0.055);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+.memory-led-room {
+  flex: none;
+  color: rgba(45, 41, 37, 0.82);
+  font-weight: 640;
+}
+
+.memory-led-note {
+  overflow: hidden;
+  color: rgba(45, 41, 37, 0.58);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .memory-contents-reflection-prompts {
   display: grid;
   gap: 12px;
@@ -16056,24 +16192,19 @@ textarea {
   padding-top: clamp(28px, 5vh, 56px);
 }
 
+/* A heading, not a control. The tinted pill, the radius and the pointer were
+   a button's affordance — with switching moved to the rail they promised
+   something that no longer happens, so they go with it. */
 .nc-room-title {
   display: inline-flex;
   align-items: baseline;
   gap: 12px;
+  margin: 0;
   border: 0;
-  background: rgba(45, 41, 37, 0.035);
-  padding: 6px 20px 8px;
-  border-radius: 14px;
-  cursor: pointer;
+  background: none;
+  padding: 6px 0 8px;
   color: inherit;
-  transition: background 180ms ease, box-shadow 180ms ease;
-}
-
-.nc-room-title:hover,
-.nc-room-title:focus-visible {
-  background: rgba(45, 41, 37, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(45, 41, 37, 0.06);
-  outline: 0;
+  font-weight: inherit;
 }
 
 .nc-room-title-text {
@@ -16083,21 +16214,6 @@ textarea {
   letter-spacing: -0.015em;
   line-height: 1.05;
   color: #2d2925;
-}
-
-.nc-room-caret {
-  align-self: center;
-  margin-left: -2px;
-  color: rgba(45, 41, 37, 0.34);
-  font-size: 20px;
-  line-height: 1;
-  transition: color 160ms ease, transform 160ms ease;
-}
-
-.nc-room-title:hover .nc-room-caret,
-.nc-room-title:focus-visible .nc-room-caret {
-  color: rgba(45, 41, 37, 0.55);
-  transform: translateY(1px);
 }
 
 /* The cast is also the invite: adding someone is adding a face here. */
@@ -16143,43 +16259,177 @@ textarea {
   box-shadow: 0 30px 60px -40px rgba(26, 23, 20, 0.5);
 }
 
-.nc-room-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  width: 100%;
+/* Settings live on the wall, beside the cast — they act on the room you are
+   standing in. Keeping them out of the switcher means changing rooms never
+   requires passing over a destructive control. */
+.nc-room-settings-open {
+  flex: 0 0 auto;
   border: 0;
-  border-radius: 9px;
+  border-radius: 6px;
   background: none;
-  padding: 9px 11px;
-  color: #2d2925;
-  font-family: var(--font-sans);
+  padding: 2px 6px;
+  color: rgba(45, 41, 37, 0.4);
   font-size: 14px;
-  font-weight: 460;
-  text-align: left;
+  line-height: 1;
   cursor: pointer;
 }
 
-.nc-room-item:hover,
-.nc-room-item:focus-visible {
-  background: rgba(45, 41, 37, 0.05);
+.nc-room-settings-open:hover,
+.nc-room-settings-open:focus-visible {
+  color: rgba(45, 41, 37, 0.8);
   outline: 0;
 }
 
-.nc-room-item--active {
-  background: rgba(45, 41, 37, 0.07);
-  font-weight: 560;
+.nc-room-settings {
+  display: grid;
+  gap: 8px;
+  min-width: 300px;
+}
+
+.nc-room-settings-label {
+  margin: 6px 0 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(45, 41, 37, 0.4);
+}
+
+.nc-room-settings-name {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.nc-room-settings-save {
+  border: 0;
+  border-radius: 6px;
+  background: rgba(45, 41, 37, 0.9);
+  color: #fffdf8;
+  padding: 6px 10px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nc-room-settings-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.nc-room-settings-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: rgba(45, 41, 37, 0.86);
+}
+
+.nc-room-settings-member-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hidden until the row is hovered: a column of "remove" buttons reads as a
+   list of people to get rid of rather than the room's cast. */
+.nc-room-settings-remove {
+  opacity: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 3px 7px;
+  color: rgba(45, 41, 37, 0.45);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.nc-room-settings-member:hover .nc-room-settings-remove,
+.nc-room-settings-remove:focus-visible {
+  opacity: 1;
+}
+
+.nc-room-settings-remove:hover,
+.nc-room-settings-remove:focus-visible {
+  color: #a3341f;
+  outline: 0;
+}
+
+.nc-room-settings-invite {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nc-room-settings-danger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(45, 41, 37, 0.1);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.nc-room-settings-danger-q {
+  flex: 1 1 auto;
+  color: rgba(45, 41, 37, 0.62);
+}
+
+.nc-room-settings-danger-open {
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  padding: 4px 0;
+  color: #a3341f;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nc-room-item-confirm-yes,
+.nc-room-item-confirm-no {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nc-room-item-confirm-yes {
+  background: #a3341f;
+  color: #fffdf8;
+}
+
+.nc-room-item-confirm-no {
+  background: rgba(45, 41, 37, 0.06);
+  color: rgba(45, 41, 37, 0.62);
+}
+
+.nc-room-item-confirm-yes:disabled,
+.nc-room-item-confirm-no:disabled,
+.nc-room-settings-save:disabled,
+.nc-room-settings-remove:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .nc-room-item-count {
   color: rgba(45, 41, 37, 0.38);
   font-family: var(--font-mono);
   font-size: 10px;
-}
-
-.nc-room-new {
-  display: block;
 }
 
 /* Naming it is the whole act of making one, so the field is the control. */
@@ -16440,14 +16690,6 @@ textarea {
 
 /* An empty room list mid-load reads as "you are in no rooms" rather than
    "not yet", which is why the rail this replaced said so out loud. */
-.nc-room-loading {
-  margin: 0;
-  padding: 9px 11px;
-  color: rgba(45, 41, 37, 0.4);
-  font-family: var(--font-sans);
-  font-size: 13px;
-}
-
 /* Joining a group is consequential enough to interrupt for: it exposes your
    shareable signals to everyone in it. Borrows the capture modal's scrim so
    the interruption reads as the product's, not the browser's. */
@@ -16527,3 +16769,165 @@ textarea {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ============================================================
+ * The rooms, seen edge-on.
+ *
+ * A permanent strip at the wall's edge. Its job is to say "there are other
+ * places" — which is the one thing the title could not say, and the reason
+ * nobody found the switcher.
+ * ============================================================ */
+
+.nc-rail {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(calc(-50% + var(--rail-drag, 0px)));
+  z-index: 45;
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  /* Follows the finger while dragging, then settles with a little overshoot —
+     the difference between a control with weight and a button that plays. */
+  transition: transform 420ms cubic-bezier(0.22, 1.4, 0.36, 1);
+  touch-action: none;
+}
+
+.nc-rail-room {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 7px 14px 7px 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  /* Depth: each step back is smaller, dimmer and cooler. */
+  transform: scale(calc(1 - var(--depth, 0) * 0.22))
+    translateX(calc(var(--depth, 0) * -8px));
+  transform-origin: left center;
+  opacity: calc(1 - var(--depth, 0) * 0.62);
+  filter: saturate(calc(1 - var(--depth, 0) * 0.7));
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease,
+    filter 320ms ease;
+}
+
+/* The lit edge. Warmth is recency — a room saved into today glows, one left
+   alone for a month does not. Read as light rather than counted as a badge,
+   because a number turns a room you like into a chore. */
+.nc-rail-room-edge {
+  width: 3px;
+  height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: color-mix(
+    in oklab,
+    #c8632f calc(var(--warmth, 0) * 100%),
+    rgba(45, 41, 37, 0.22)
+  );
+  transition: height 320ms cubic-bezier(0.22, 1, 0.36, 1), background 400ms ease;
+}
+
+.nc-rail-room--here .nc-rail-room-edge {
+  height: 38px;
+}
+
+.nc-rail-room-name {
+  color: rgba(45, 41, 37, 0.55);
+  transition: color 240ms ease;
+  white-space: nowrap;
+}
+
+.nc-rail-room--here .nc-rail-room-name {
+  color: rgba(45, 41, 37, 0.92);
+  font-weight: 520;
+}
+
+.nc-rail-room:hover .nc-rail-room-name,
+.nc-rail-room:focus-visible .nc-rail-room-name {
+  color: rgba(45, 41, 37, 0.92);
+}
+
+.nc-rail-room:focus-visible {
+  outline: 0;
+}
+
+.nc-rail-room:hover,
+.nc-rail-room:focus-visible {
+  transform: scale(calc(1 - var(--depth, 0) * 0.22)) translateX(2px);
+  opacity: 1;
+}
+
+.nc-rail-room-count {
+  font-size: 11px;
+  color: rgba(45, 41, 37, 0.35);
+}
+
+/* Travel. The wall does not cross-fade to the next room — this room's notes
+   leave upward and the next room's arrive from below, staggered by their
+   position so the set moves like a stack rather than a slide. */
+.nc-stage--travelling-out .nc-note {
+  animation: nc-wall-leave 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  animation-delay: calc(var(--travel-i, 0) * 26ms);
+}
+
+.nc-stage--travelling-in .nc-note {
+  animation: nc-wall-arrive 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(var(--travel-i, 0) * 34ms);
+}
+
+@keyframes nc-wall-leave {
+  to {
+    opacity: 0;
+    transform: translate(var(--dx, 0), calc(var(--dy, 0px) - 42px))
+      rotate(var(--tilt, 0deg)) scale(0.97);
+  }
+}
+
+@keyframes nc-wall-arrive {
+  from {
+    opacity: 0;
+    transform: translate(var(--dx, 0), calc(var(--dy, 0px) + 54px))
+      rotate(var(--tilt, 0deg)) scale(0.98);
+  }
+}
+
+/* Motion is the whole idea here, but it is not worth making anyone ill. */
+@media (prefers-reduced-motion: reduce) {
+  .nc-rail,
+  .nc-rail-room,
+  .nc-rail-room-edge,
+  .nc-stage--travelling-out .nc-note,
+  .nc-stage--travelling-in .nc-note {
+    transition-duration: 1ms;
+    animation: none;
+  }
+}
+
+/* The wall is centred; on a narrow screen the rail would sit on top of it. */
+@media (max-width: 720px) {
+  .nc-rail {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: none;
+    grid-auto-flow: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(rgba(250, 249, 246, 0), rgba(250, 249, 246, 0.92) 40%);
+  }
+
+  .nc-rail-room {
+    padding: 6px 10px;
+  }
+
+  .nc-rail-room-edge {
+    display: none;
+  }
+}
+
+
