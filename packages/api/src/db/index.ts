@@ -28,3 +28,6 @@ export * from "./schema-documents";
 export * from "./schema-activations";
 export * from "./schema-group-rooms";
 export * from "./schema-groups";
+export * from "./schema-member-events";
+export * from "./schema-combinations";
+export * from "./schema-reading-divergence";

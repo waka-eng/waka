@@ -23,6 +23,18 @@ import {
 
 import { inspirations, signals, users } from "./schema";
 
+/**
+ * The Postgres `wow_kind` type has one MORE value than this list: migration
+ * 0037 added `divergence` for the reading-divergence announcer, which was
+ * removed with the divergence surface (11d88b4) before it ever shipped. No
+ * code produces or consumes it.
+ *
+ * Left in the database on purpose. Postgres has no `ALTER TYPE … DROP VALUE`,
+ * so removing it means recreating the type and rewriting every column that
+ * uses it — real risk to buy back a byte nothing reads. Absent here, it cannot
+ * be written; absent there, an already-migrated database would break. Do not
+ * "fix" the mismatch by adding it back.
+ */
 export const wowKindEnumValues = [
   "recurrence",
   "bridge",

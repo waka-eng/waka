@@ -239,6 +239,76 @@
       "when": 1784300000000,
       "tag": "0033_group_synthesis_cooldown",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784400000000,
+      "tag": "0034_signal_readings_reverse_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784400100000,
+      "tag": "0035_signal_enrichment",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784400200000,
+      "tag": "0036_signal_reading_divergences",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1784400300000,
+      "tag": "0037_wow_kind_divergence",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784400400000,
+      "tag": "0038_group_note_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1784400500000,
+      "tag": "0039_combination_readings",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784400600000,
+      "tag": "0040_group_member_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1784400700000,
+      "tag": "0041_combination_reading_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1784400800000,
+      "tag": "0042_combination_reading_open_facets",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1784400900000,
+      "tag": "0043_signal_capture_elapsed",
+      "breakpoints": true
     }
   ]
 }
