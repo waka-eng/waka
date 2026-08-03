@@ -13922,7 +13922,9 @@ body.reflect-bg {
 .nc-bottom-bar {
   position: fixed;
   left: 50%;
-  bottom: 54px;
+  /* Closer to the edge: the wall is the page, and the bar is the page's own
+     chrome rather than something floating in the middle of it. */
+  bottom: 24px;
   z-index: 45;
   display: inline-flex;
   align-items: center;
@@ -17279,4 +17281,32 @@ textarea {
 
 .memory-led-summary[aria-expanded="true"]::after {
   transform: translateY(1px) rotate(-135deg);
+}
+
+/*
+   Naming what a mark is for.
+
+   A highlighted sentence with nothing said about it is only an emphasis — the
+   reader has to guess why those words and not the others. Saying which reading
+   it became is the difference between "this is important" and "this is the
+   part that turned into THAT".
+*/
+.memory-contents-reading-because {
+  margin: 0 0 10px;
+  padding-left: 11px;
+  border-left: 2px solid rgba(212, 175, 78, 0.55);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: rgba(20, 18, 16, 0.55);
+}
+
+/* Stronger than the first pass: the wash alone read as a stray emphasis at a
+   glance, and this mark has to be findable in a wall of text. */
+.memory-contents-quote-mark {
+  background: rgba(212, 175, 78, 0.26);
+  box-shadow: 0 0 0 3px rgba(212, 175, 78, 0.26);
+  border-radius: 2px;
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }

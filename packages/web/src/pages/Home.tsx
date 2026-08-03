@@ -1366,6 +1366,7 @@ const HOME_COPY = {
     readingsNoQuote: "이 읽기에서는 어느 부분인지 표시되지 않았습니다",
     ledToSummary: (count: number, places: string[]) =>
       `${places.join(", ")}에서 탑오브마인드 ${count}개로 이어졌습니다`,
+    ledToThis: (title: string) => `표시된 부분이 “${title}”로 이어졌습니다`,
     timeRailRegionLabel: "이 방이 지나온 시간",
     timeRailNow: "지금",
     timeRailFormed: "방이 만들어짐",
@@ -1517,6 +1518,7 @@ const HOME_COPY = {
     readingsNoQuote: "this reading did not point at a particular part",
     ledToSummary: (count: number, places: string[]) =>
       `generated ${count} top of mind${count === 1 ? "" : "s"} in ${places.join(", ")}`,
+    ledToThis: (title: string) => `the highlighted part led to “${title}”`,
     timeRailRegionLabel: "this room over time",
     timeRailNow: "now",
     timeRailFormed: "the room was formed",
@@ -1656,6 +1658,7 @@ const HOME_COPY = {
     readingsSummary: (count: number, places: string[]) => string;
     readingsNoQuote: string;
     ledToSummary: (count: number, places: string[]) => string;
+    ledToThis: (title: string) => string;
     timeRailRegionLabel: string;
     timeRailNow: string;
     timeRailFormed: string;
@@ -1837,6 +1840,8 @@ export function HomePage(): JSX.Element {
    */
   const [arrivedThroughNote, setArrivedThroughNote] = useState<{
     noteId: string;
+    /** What the reading says, so the highlight can name what it led to. */
+    noteLabel: string;
     quoteBySignalId: Map<string, string>;
   } | null>(null);
   // A join code lifted off the URL, waiting on the person to say yes. Joining
@@ -4916,16 +4921,32 @@ export function HomePage(): JSX.Element {
                 view of the same text with the words that carried THAT reading
                 lit. Choosing it again puts the editor back.
               */
-              <div
-                className="memory-contents-expanded-text memory-contents-expanded-reading"
-                aria-label={copy.savedSignalEditLabel}
-              >
-                {highlightQuote(
-                  detailText,
-                  activeReading?.signalId === signal.id && activeReading.quote
-                    ? activeReading.quote
-                    : arrivedThroughNote?.quoteBySignalId.get(signal.id) ?? null,
-                )}
+              <div className="memory-contents-reading-frame">
+                {/*
+                  Naming what the mark is for.
+
+                  A highlighted sentence with nothing said about it is just an
+                  emphasis — the reader has to guess why those words and not
+                  the others. Saying which reading it led to is the difference
+                  between "this is important" and "this is the part that
+                  became THAT".
+                */}
+                {arrivedThroughNote?.quoteBySignalId.get(signal.id) ? (
+                  <p className="memory-contents-reading-because">
+                    {copy.ledToThis(arrivedThroughNote.noteLabel)}
+                  </p>
+                ) : null}
+                <div
+                  className="memory-contents-expanded-text memory-contents-expanded-reading"
+                  aria-label={copy.savedSignalEditLabel}
+                >
+                  {highlightQuote(
+                    detailText,
+                    activeReading?.signalId === signal.id && activeReading.quote
+                      ? activeReading.quote
+                      : arrivedThroughNote?.quoteBySignalId.get(signal.id) ?? null,
+                  )}
+                </div>
               </div>
             ) : (
               <textarea
@@ -5473,6 +5494,7 @@ export function HomePage(): JSX.Element {
      */
     setArrivedThroughNote({
       noteId: signal.feedbackTargetId ?? signal.id,
+      noteLabel: thoughtCardDisplayLabel(signal, locale),
       quoteBySignalId: new Map(
         signal.supportingSignals
           .filter((support) => support.quote)
