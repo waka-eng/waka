@@ -3107,10 +3107,21 @@ describe("HomePage current home experience", () => {
 
     const led = container.querySelector<HTMLElement>(".memory-contents-item-led");
     expect(led).not.toBeNull();
-    expect(led?.querySelector(".memory-led-room")?.textContent).toBe("waka");
-    expect(led?.querySelector(".memory-led-note")?.textContent).toBe(
-      "Deployment as the new frontier",
-    );
+    // A count first: four readings printed as four full-width chips buried the
+    // save they were about. The titles are one click away.
+    const summary = led?.querySelector<HTMLElement>(".memory-led-summary");
+    expect(summary?.textContent).toContain("1 top of mind");
+    expect(summary?.textContent).toContain("waka");
+    expect(led?.querySelector(".memory-led-note")).toBeNull();
+
+    await act(async () => {
+      summary!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(
+      container.querySelector<HTMLElement>(".memory-contents-item-led .memory-led-note")?.textContent,
+    ).toBe("Deployment as the new frontier");
   });
 
   /**

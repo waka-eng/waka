@@ -1364,6 +1364,8 @@ const HOME_COPY = {
     readingsSummary: (count: number, places: string[]) =>
       `${places.join(", ")}에서 탑오브마인드 ${count}개를 만들었습니다`,
     readingsNoQuote: "이 읽기에서는 어느 부분인지 표시되지 않았습니다",
+    ledToSummary: (count: number, places: string[]) =>
+      `${places.join(", ")}에서 탑오브마인드 ${count}개로 이어졌습니다`,
     timeRailRegionLabel: "이 방이 지나온 시간",
     timeRailNow: "지금",
     timeRailFormed: "방이 만들어짐",
@@ -1513,6 +1515,8 @@ const HOME_COPY = {
     readingsSummary: (count: number, places: string[]) =>
       `generated ${count} top of mind${count === 1 ? "" : "s"} in ${places.join(", ")}`,
     readingsNoQuote: "this reading did not point at a particular part",
+    ledToSummary: (count: number, places: string[]) =>
+      `generated ${count} top of mind${count === 1 ? "" : "s"} in ${places.join(", ")}`,
     timeRailRegionLabel: "this room over time",
     timeRailNow: "now",
     timeRailFormed: "the room was formed",
@@ -1651,6 +1655,7 @@ const HOME_COPY = {
     readingsSectionLabel: string;
     readingsSummary: (count: number, places: string[]) => string;
     readingsNoQuote: string;
+    ledToSummary: (count: number, places: string[]) => string;
     timeRailRegionLabel: string;
     timeRailNow: string;
     timeRailFormed: string;
@@ -1809,6 +1814,8 @@ export function HomePage(): JSX.Element {
   const [scrubbedNotes, setScrubbedNotes] = useState<ApiTimelineNote[] | null>(null);
   /** Which saves have their readings unfolded. Collapsed is the resting state. */
   const [expandedReadings, setExpandedReadings] = useState<Set<string>>(new Set());
+  /** Which collapsed cards have unfolded the readings they led to. */
+  const [expandedLedChips, setExpandedLedChips] = useState<Set<string>>(new Set());
   /**
    * The reading you are currently looking at a save through.
    *
@@ -1820,6 +1827,17 @@ export function HomePage(): JSX.Element {
     signalId: string;
     noteId: string;
     quote: string | null;
+  } | null>(null);
+  /**
+   * The reading you opened these saves through, if you came from one.
+   *
+   * Set when the evidence drawer is opened from a post-it, cleared when the
+   * drawer closes. It is what makes the same save light up differently
+   * depending on which reading you arrived by — which is the entire claim.
+   */
+  const [arrivedThroughNote, setArrivedThroughNote] = useState<{
+    noteId: string;
+    quoteBySignalId: Map<string, string>;
   } | null>(null);
   // A join code lifted off the URL, waiting on the person to say yes. Joining
   // is not a navigation: it puts your saved signals into a pool other people
@@ -2383,6 +2401,9 @@ export function HomePage(): JSX.Element {
     setSelectedSavedSignalId(null);
     setSelectedSupportingSignalFallback(null);
     setActiveTopOfMindEvidenceFilter(null);
+    // You are no longer looking through any reading, so nothing should stay lit.
+    setArrivedThroughNote(null);
+    setActiveReading(null);
     setSavedSignalDetail(null);
     setSavedSignalDetailLoading(false);
     setSavedSignalDrafts({});
@@ -4885,7 +4906,8 @@ export function HomePage(): JSX.Element {
           >
             {detailPending ? (
               <p className="memory-contents-loading">{copy.savedSignalOpening}</p>
-            ) : activeReading?.signalId === signal.id && activeReading.quote ? (
+            ) : (activeReading?.signalId === signal.id && activeReading.quote)
+              || arrivedThroughNote?.quoteBySignalId.get(signal.id) ? (
               /*
                 Reading through a reading.
 
@@ -4898,7 +4920,12 @@ export function HomePage(): JSX.Element {
                 className="memory-contents-expanded-text memory-contents-expanded-reading"
                 aria-label={copy.savedSignalEditLabel}
               >
-                {highlightQuote(detailText, activeReading.quote)}
+                {highlightQuote(
+                  detailText,
+                  activeReading?.signalId === signal.id && activeReading.quote
+                    ? activeReading.quote
+                    : arrivedThroughNote?.quoteBySignalId.get(signal.id) ?? null,
+                )}
               </div>
             ) : (
               <textarea
@@ -5192,12 +5219,52 @@ export function HomePage(): JSX.Element {
             not one chip, and that is exactly how it failed the first time. */}
         {(signal.relatedGroupNotes?.length ?? 0) > 0 ? (
           <span className="memory-contents-item-led" aria-label={copy.ledToLabel}>
-            {signal.relatedGroupNotes.map((note) => (
-              <span key={`${note.groupId}-${note.noteTitle}`} className="memory-led-chip">
-                <span className="memory-led-room">{note.groupName}</span>
-                <span className="memory-led-note">{note.noteTitle}</span>
-              </span>
-            ))}
+            {/*
+              A count first, the titles on request.
+
+              Four readings printed as four full-width chips buried the save
+              they were about. What a person wants at a glance is "did this go
+              anywhere, and how far" — the titles are the answer to a question
+              they have not asked yet.
+            */}
+            <span
+              className="memory-led-summary"
+              role="button"
+              tabIndex={0}
+              aria-expanded={expandedLedChips.has(signal.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setExpandedLedChips((current) => {
+                  const next = new Set(current);
+                  if (next.has(signal.id)) next.delete(signal.id);
+                  else next.add(signal.id);
+                  return next;
+                });
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                event.stopPropagation();
+                setExpandedLedChips((current) => {
+                  const next = new Set(current);
+                  if (next.has(signal.id)) next.delete(signal.id);
+                  else next.add(signal.id);
+                  return next;
+                });
+              }}
+            >
+              {copy.ledToSummary(
+                signal.relatedGroupNotes.length,
+                Array.from(new Set(signal.relatedGroupNotes.map((note) => note.groupName))),
+              )}
+            </span>
+            {expandedLedChips.has(signal.id)
+              ? signal.relatedGroupNotes.map((note) => (
+                  <span key={`${note.groupId}-${note.noteTitle}`} className="memory-led-chip">
+                    <span className="memory-led-note">{note.noteTitle}</span>
+                  </span>
+                ))
+              : null}
           </span>
         ) : null}
       </button>
@@ -5395,6 +5462,23 @@ export function HomePage(): JSX.Element {
         .filter((supportSignal): supportSignal is ApiSavedSignalSearchResult => supportSignal !== null),
     );
     if (evidenceSignals.length === 0) return;
+
+    /**
+     * You are arriving THROUGH this reading, so the saves open already lit.
+     *
+     * Which words matter is only answerable once you have said which reading
+     * you are asking about — and coming from a post-it, you already have. The
+     * quotes travel with the note's own evidence, one per save, so this is a
+     * lookup rather than a second request.
+     */
+    setArrivedThroughNote({
+      noteId: signal.feedbackTargetId ?? signal.id,
+      quoteBySignalId: new Map(
+        signal.supportingSignals
+          .filter((support) => support.quote)
+          .map((support) => [support.id, support.quote as string]),
+      ),
+    });
 
     const filterId = `top-of-mind-evidence-${signal.id}`;
     setActiveTopOfMindEvidenceFilter({

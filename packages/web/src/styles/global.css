@@ -17251,3 +17251,32 @@ textarea {
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
+
+/* A count first, the titles on request. Four full-width chips buried the save
+   they were about; the titles answer a question nobody has asked yet. */
+.memory-led-summary {
+  display: inline-block;
+  padding: 3px 0;
+  font-size: 0.72rem;
+  color: rgba(20, 18, 16, 0.48);
+  cursor: pointer;
+  user-select: none;
+}
+
+.memory-led-summary:hover { color: rgba(20, 18, 16, 0.8); }
+
+.memory-led-summary::after {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 7px;
+  border-right: 1.1px solid currentColor;
+  border-bottom: 1.1px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 200ms ease;
+}
+
+.memory-led-summary[aria-expanded="true"]::after {
+  transform: translateY(1px) rotate(-135deg);
+}
