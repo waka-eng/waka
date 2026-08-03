@@ -1622,6 +1622,65 @@ export async function refreshGroupTopOfMind(
   );
 }
 
+
+/** A note, as it stood at some moment on the room's timeline. */
+export interface ApiTimelineNote {
+  id: string;
+  title: string;
+  why: string;
+  /**
+   * Stable across revisions of the same reading. The rail keys its animation
+   * on this: a note that survives a scrubbed boundary must stay perfectly
+   * still, and only identity can tell "unchanged" from "replaced by something
+   * that reads similarly".
+   */
+  idempotencyKey: string;
+  createdAt: string;
+  replacedAt: string | null;
+}
+
+export type ApiTimelineEvent =
+  | { kind: "formed"; at: string }
+  | { kind: "note_written"; at: string; noteId: string; title: string }
+  | { kind: "note_replaced"; at: string; noteId: string; title: string }
+  | {
+      kind: "member";
+      at: string;
+      event: "joined" | "left" | "removed";
+      userId: string;
+      name: string;
+    };
+
+export interface ApiRoomTimeline {
+  groupId: string;
+  formedAt: string;
+  events: ApiTimelineEvent[];
+}
+
+export interface ApiRoomTimelineResponse {
+  timeline: ApiRoomTimeline;
+  board: { at: string; notes: ApiTimelineNote[] } | null;
+}
+
+/**
+ * GET /groups/:id/timeline — everything the room did, and the board as it
+ * stood at `at`.
+ *
+ * `at` omitted means now, which must equal today's wall exactly — that
+ * equivalence is what makes the rail's resting position honest rather than a
+ * second rendering of the same idea.
+ */
+export async function fetchRoomTimeline(
+  groupId: string,
+  at?: string,
+): Promise<ApiRoomTimelineResponse> {
+  const query = at ? `?at=${encodeURIComponent(at)}` : "";
+  return getJson<ApiRoomTimelineResponse>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/timeline${query}`),
+    "Failed to load the room's timeline",
+  );
+}
+
 export async function fetchGroupRooms(limit = 5): Promise<ApiGroupConversationRoom[]> {
   const params = new URLSearchParams({ limit: String(limit) });
   const body = await getJson<ListGroupRoomsResponse>(

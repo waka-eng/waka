@@ -16931,3 +16931,159 @@ textarea {
 }
 
 
+
+/* ---------------------------------------------------------------------------
+   The time rail — the room's life along the bottom edge of its wall.
+
+   Sits at the bottom because travel between rooms is vertical; the two axes
+   must not collide. Quiet by default and legible on approach: a room's past is
+   there when you reach for it, never asking to be used.
+--------------------------------------------------------------------------- */
+
+.nc-timerail {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.1rem 1.6rem 0.9rem;
+  margin-top: auto;
+  pointer-events: auto;
+}
+
+.nc-timerail-track {
+  position: relative;
+  height: 22px;
+  cursor: ew-resize;
+  touch-action: pan-y;
+  outline: none;
+}
+
+.nc-timerail-track:focus-visible .nc-timerail-line {
+  background: rgba(20, 18, 16, 0.28);
+}
+
+.nc-timerail-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: rgba(20, 18, 16, 0.12);
+  transition: background 220ms ease;
+}
+
+/* How far the room has been travelled back through: warm where you have been. */
+.nc-timerail-line--travelled {
+  background: rgba(20, 18, 16, 0.22);
+}
+
+.nc-timerail-mark {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 0;
+  border-radius: 50%;
+  background: rgba(20, 18, 16, 0.22);
+  cursor: pointer;
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 200ms ease,
+    box-shadow 200ms ease;
+}
+
+.nc-timerail-mark:hover {
+  transform: translate(-50%, -50%) scale(1.35);
+  background: rgba(20, 18, 16, 0.45);
+}
+
+.nc-timerail-mark--past { background: rgba(20, 18, 16, 0.34); }
+
+/* A board turning: the room changed its mind. */
+.nc-timerail-mark--turn { border-radius: 50%; }
+
+/* Formation: where the room begins, so it reads as an endpoint not an event. */
+.nc-timerail-mark--formed {
+  width: 7px;
+  height: 7px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(20, 18, 16, 0.35);
+}
+
+/*
+   A heart arriving is a hinge, not another dot.
+
+   The same signals read differently because another person is in the room —
+   that is the product's whole claim on the time axis, so this mark gets the
+   emphasis budget: taller, squared off, and impossible to mistake for a turn.
+*/
+.nc-timerail-mark--arrival,
+.nc-timerail-mark--departure {
+  width: 3px;
+  height: 17px;
+  border-radius: 1.5px;
+  background: rgba(20, 18, 16, 0.5);
+}
+
+/* A departure is the same hinge, drawn as an outline: it happened, and it
+   stopped a future rather than starting one. */
+.nc-timerail-mark--departure {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px rgba(20, 18, 16, 0.4);
+}
+
+/* Now is where the rail rests, and it should look like a destination. */
+.nc-timerail-mark--now {
+  width: 11px;
+  height: 11px;
+  background: transparent;
+  box-shadow: inset 0 0 0 2px rgba(20, 18, 16, 0.4);
+}
+
+.nc-timerail-mark--current {
+  background: rgba(20, 18, 16, 0.85);
+  box-shadow: 0 0 0 4px rgba(20, 18, 16, 0.08);
+}
+
+.nc-timerail-mark--now.nc-timerail-mark--current {
+  background: transparent;
+  box-shadow:
+    inset 0 0 0 2px rgba(20, 18, 16, 0.85),
+    0 0 0 4px rgba(20, 18, 16, 0.08);
+}
+
+.nc-timerail-caption {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+  color: rgba(20, 18, 16, 0.45);
+  min-height: 1.1em;
+  transition: color 200ms ease;
+}
+
+.nc-timerail--dragging .nc-timerail-caption { color: rgba(20, 18, 16, 0.7); }
+
+/*
+   The wall, standing somewhere other than now.
+
+   Deliberately restrained: a wash and a slight settling, not sepia. The past
+   is not a different product, it is this one earlier — and the notes have to
+   stay readable, because reading them is the entire reason to travel.
+*/
+.nc-stage--in-past {
+  filter: saturate(0.82);
+  transition: filter 320ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-timerail-mark,
+  .nc-timerail-line,
+  .nc-stage--in-past {
+    transition: none;
+  }
+}

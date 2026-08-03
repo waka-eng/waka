@@ -52,6 +52,15 @@ export interface GroupWallProps {
   renderCards: () => ReactNode[];
   /** Legacy US-051 conversation-room card, when its flag is on. */
   legacySurface?: ReactNode;
+  /**
+   * The room's life along the bottom edge, when there is a life to show.
+   *
+   * Rendered inside the stage rather than beside it: the rail is a property of
+   * this wall, and a wall standing in the past has to be able to say so.
+   */
+  timeRail?: ReactNode;
+  /** True when the board shown is what the room read at some earlier moment. */
+  inPast?: boolean;
 }
 
 export function GroupWall({
@@ -64,6 +73,8 @@ export function GroupWall({
   cardCount,
   renderCards,
   legacySurface,
+  timeRail,
+  inPast,
 }: GroupWallProps): JSX.Element {
   return (
     <section
@@ -73,7 +84,7 @@ export function GroupWall({
           : travel === "in"
             ? " nc-stage--travelling-in"
             : ""
-      }`}
+      }${inPast ? " nc-stage--in-past" : ""}`}
       aria-label={copy.regionLabel}
     >
       {legacySurface}
@@ -102,6 +113,7 @@ export function GroupWall({
           </div>
         </div>
       )}
+      {timeRail}
     </section>
   );
 }

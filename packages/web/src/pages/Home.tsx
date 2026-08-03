@@ -63,6 +63,8 @@ import {
   type ApiGroupMemberSummary,
   type ApiGroupSummary,
   type ApiGroupTopOfMindNote,
+  type ApiRoomTimeline,
+  type ApiTimelineNote,
   type ApiTopOfMind,
   type ApiTopOfMindNoteSurface,
   type ClusterKind,
@@ -82,6 +84,7 @@ import {
   fetchGroupRooms,
   fetchGroups,
   fetchGroupTopOfMind,
+  fetchRoomTimeline,
   fetchTopOfMind,
   fetchTopOfMindNotes,
   generateGuidedReflectionQuestion,
@@ -97,6 +100,7 @@ import {
 } from "../lib/api";
 import { RoomTitle } from "../components/RoomTitle";
 import { GroupWall } from "../components/GroupWall";
+import { TimeRail } from "../components/TimeRail";
 import { RoomRail } from "../components/RoomRail";
 import { MINE_BOARD_ID, extractJoinCode } from "../components/rooms";
 import { useAuth } from "../lib/auth-context";
@@ -1307,6 +1311,12 @@ const HOME_COPY = {
     savedSignalReflectionLoading: "돌아보기를 불러오는 중...",
     savedSignalReflectionEmpty: "돌아보기가 여기에 나타납니다.",
     readingsSectionLabel: "이 영감이 읽힌 방식",
+    timeRailRegionLabel: "이 방이 지나온 시간",
+    timeRailNow: "지금",
+    timeRailFormed: "방이 만들어짐",
+    timeRailTurned: "읽는 방식이 바뀜",
+    timeRailArrived: (name: string) => `${name} 합류 — 같은 신호가 다르게 읽히기 시작함`,
+    timeRailDeparted: (name: string) => `${name} 떠남`,
     readingsAloneLabel: "혼자일 때",
     readingsInRoomLabel: (name: string) => `${name}에서`,
     readingsLedToLabel: (title: string) => `“${title}”로 이어졌습니다`,
@@ -1452,6 +1462,12 @@ const HOME_COPY = {
     savedSignalReflectionLoading: "loading reflections...",
     savedSignalReflectionEmpty: "Your reflection will appear here.",
     readingsSectionLabel: "how this inspiration reads",
+    timeRailRegionLabel: "this room over time",
+    timeRailNow: "now",
+    timeRailFormed: "the room was formed",
+    timeRailTurned: "the reading turned",
+    timeRailArrived: (name: string) => `${name} arrived — the same signals began reading differently`,
+    timeRailDeparted: (name: string) => `${name} left`,
     readingsAloneLabel: "alone",
     readingsInRoomLabel: (name: string) => `in ${name}`,
     readingsLedToLabel: (title: string) => `led to “${title}”`,
@@ -1583,6 +1599,12 @@ const HOME_COPY = {
     savedSignalReflectionLoading: string;
     savedSignalReflectionEmpty: string;
     readingsSectionLabel: string;
+    timeRailRegionLabel: string;
+    timeRailNow: string;
+    timeRailFormed: string;
+    timeRailTurned: string;
+    timeRailArrived: (name: string) => string;
+    timeRailDeparted: (name: string) => string;
     readingsAloneLabel: string;
     readingsInRoomLabel: (name: string) => string;
     readingsLedToLabel: (title: string) => string;
@@ -1722,6 +1744,16 @@ export function HomePage(): JSX.Element {
   // a room show its cast rather than only its name.
   const [groupMembers, setGroupMembers] = useState<ApiGroupMemberSummary[]>([]);
   const [groupRefreshing, setGroupRefreshing] = useState(false);
+  /**
+   * The room's life, and where on it the wall is standing.
+   *
+   * `scrubbedAt === null` is the present, which is a position like any other
+   * rather than the absence of one — the rail rests there and travel back is
+   * always reversible.
+   */
+  const [roomTimeline, setRoomTimeline] = useState<ApiRoomTimeline | null>(null);
+  const [scrubbedAt, setScrubbedAt] = useState<string | null>(null);
+  const [scrubbedNotes, setScrubbedNotes] = useState<ApiTimelineNote[] | null>(null);
   // A join code lifted off the URL, waiting on the person to say yes. Joining
   // is not a navigation: it puts your saved signals into a pool other people
   // read, so a link alone must never be enough to do it.
@@ -1762,6 +1794,57 @@ export function HomePage(): JSX.Element {
     }
     void loadGroupBoards();
   }, [user, loadGroupBoards]);
+
+  /**
+   * A room's life is loaded once per room, and scrubbing is then pure client
+   * state — the marks number in the handful, so holding them costs nothing and
+   * dragging never waits on a request.
+   */
+  useEffect(() => {
+    if (!user || activeBoard === MINE_BOARD_ID) {
+      setRoomTimeline(null);
+      setScrubbedAt(null);
+      setScrubbedNotes(null);
+      return;
+    }
+    let cancelled = false;
+    fetchRoomTimeline(activeBoard)
+      .then((result) => {
+        if (!cancelled) setRoomTimeline(result.timeline);
+      })
+      .catch(() => {
+        // A room without a readable history still shows its wall; the rail
+        // simply does not appear. Never an error the wall has to carry.
+        if (!cancelled) setRoomTimeline(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeBoard]);
+
+  /**
+   * Resolve the board for a scrubbed position.
+   *
+   * Sequence-guarded: dragging fires these faster than they return, and a slow
+   * earlier response landing last would show a moment the rail has already
+   * left. The counter is what stops the wall crossing itself.
+   */
+  const scrubSeq = useRef(0);
+  useEffect(() => {
+    if (!user || activeBoard === MINE_BOARD_ID || scrubbedAt === null) {
+      setScrubbedNotes(null);
+      return;
+    }
+    const seq = ++scrubSeq.current;
+    fetchRoomTimeline(activeBoard, scrubbedAt)
+      .then((result) => {
+        if (seq !== scrubSeq.current) return;
+        setScrubbedNotes(result.board?.notes ?? []);
+      })
+      .catch(() => {
+        if (seq === scrubSeq.current) setScrubbedNotes(null);
+      });
+  }, [user, activeBoard, scrubbedAt]);
 
   // Load the synthesized board whenever a group is selected.
   useEffect(() => {
@@ -2592,10 +2675,32 @@ export function HomePage(): JSX.Element {
   // The wall renders whichever board is active: the personal notes, or the
   // synthesized notes for the selected group. Group notes extend the personal
   // note surface, so they flow through the same card pipeline unchanged.
+  /**
+   * A board as it stood then, shaped like the board as it stands now.
+   *
+   * The timeline read model carries what a note SAID — title, why, identity —
+   * and not the evidence rows behind it, so a scrubbed card shows the reading
+   * without claiming to show whose saves fed it. Better an honest smaller card
+   * than one that implies evidence it did not fetch.
+   */
+  const scrubbedGroupNotes: ApiGroupTopOfMindNote[] | null = scrubbedNotes
+    ? scrubbedNotes.map((note) => ({
+        id: note.id,
+        title: note.title,
+        why: note.why,
+        kind: "bridge",
+        status: "active",
+        evidencePreviews: [],
+        relatedSignals: [],
+        authorUserId: "",
+        authorName: "",
+      }) as unknown as ApiGroupTopOfMindNote)
+    : null;
+
   const renderTopOfMindNotes = !isHomeStateRenderSafe
     ? []
     : isGroupBoardActive
-      ? groupNotes
+      ? (scrubbedGroupNotes ?? groupNotes)
       : topOfMindNotes;
   const renderSavedSignals = isHomeStateRenderSafe ? savedSignals : [];
   const renderUserMemoryGroups = isHomeStateRenderSafe ? userMemoryGroups : [];
@@ -3123,6 +3228,30 @@ export function HomePage(): JSX.Element {
     : null;
   const titleHandle = activeGroupName ? activeGroupName.toLowerCase() : displayHandle;
   const copy = HOME_COPY[locale];
+
+  /**
+   * The rail carries no English of its own — every word it shows comes from
+   * the same locale table as the rest of the wall, so a Korean room's history
+   * reads in Korean.
+   */
+  /*
+   * A plain object, NOT a useMemo.
+   *
+   * `copy` is resolved below an early return, so a hook here would run on some
+   * renders and not others — which is exactly the hook-order break the Home
+   * test guards against. The rail recomputes its marks from a handful of
+   * events, so there is nothing here worth a hook.
+   */
+  const timeRailCopy = {
+    regionLabel: copy.timeRailRegionLabel,
+    now: copy.timeRailNow,
+    formed: copy.timeRailFormed,
+    turned: copy.timeRailTurned,
+    arrived: copy.timeRailArrived,
+    departed: copy.timeRailDeparted,
+    sinceLabel: (count: number, when: string) => `${count} · ${when}`,
+  };
+
 
   const chooseHomeMode = (mode: HomeMode) => {
     clearDrawerCloseTimer();
@@ -5267,6 +5396,17 @@ export function HomePage(): JSX.Element {
              the Group Top of Mind boards above and no longer shown on the wall. */
           legacySurface={
             SHOW_LEGACY_GROUP_ROOM_SURFACE ? renderGroupRoomSurface() : null
+          }
+          inPast={isGroupBoardActive && scrubbedAt !== null}
+          timeRail={
+            isGroupBoardActive ? (
+              <TimeRail
+                timeline={roomTimeline}
+                position={scrubbedAt}
+                onScrub={setScrubbedAt}
+                copy={timeRailCopy}
+              />
+            ) : null
           }
         />
       </main>
