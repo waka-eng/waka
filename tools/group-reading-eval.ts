@@ -47,6 +47,7 @@ import {
   loadOwnersBySignalId,
   loadTriggerSignals,
   restatesASingleMember,
+  type ReachMode,
 } from "../packages/api/src/lib/group-top-of-mind-synthesis";
 
 function parseArgs(argv: string[]) {
@@ -54,14 +55,18 @@ function parseArgs(argv: string[]) {
   let triggers = 10;
   let list = false;
   let variant = "baseline";
+  let reach: ReachMode = "nearest";
+  let evidence: CandidateReachMode = "standing";
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--group") groupId = argv[++i];
     else if (argv[i] === "--triggers") triggers = Number.parseInt(argv[++i] ?? "10", 10);
     else if (argv[i] === "--variant") variant = argv[++i] ?? "baseline";
+    else if (argv[i] === "--reach") reach = (argv[++i] ?? "nearest") as ReachMode;
+    else if (argv[i] === "--evidence") evidence = (argv[++i] ?? "standing") as CandidateReachMode;
     else if (argv[i] === "--list") list = true;
   }
   if (!Number.isFinite(triggers) || triggers < 1) triggers = 10;
-  return { groupId, triggers, list, variant };
+  return { groupId, triggers, list, variant, reach, evidence };
 }
 
 function preview(text: string, max = 78): string {
@@ -192,7 +197,7 @@ async function main(): Promise<void> {
   // Production's own trigger selection, not a re-implementation of it. The
   // earlier version blocked triggers by member while production round-robins
   // them, so the two did not even ask the same questions in the same order.
-  const triggerRows = await loadTriggerSignals(db as never, memberUserIds);
+  const triggerRows = await loadTriggerSignals(db as never, memberUserIds, opts.reach);
   const texts = triggerRows.length
     ? await db
         .select({ id: signals.id, text: signals.text })
@@ -472,7 +477,7 @@ async function main(): Promise<void> {
     .map(([reason, n]) => `${reason}:${n}`)
     .join(",");
   console.log(
-    `\nVARIANT=${opts.variant} notes=${readings.length}/${chosen.length} ` +
+    `\nVARIANT=${opts.variant} reach=${opts.reach} evidence=${opts.evidence} notes=${readings.length}/${chosen.length} ` +
       `coverage=${covered}/${members.length} ` +
       `covAtTarget=${coverageAtTarget ?? "na"}/${members.length} ` +
       `overlap=${mean.toFixed(2)} ` +

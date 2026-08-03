@@ -201,9 +201,24 @@ async function loadMemberUserIds(db: WakaDb, groupId: string): Promise<string[]>
  * signals all outrank another's" is the property this function exists for, and
  * it is not observable through `generateGroupTopOfMind` without a live judge.
  */
+/**
+ * How a signal's reach into other collections is scored.
+ *
+ * `nearest` — how strongly it resembles someone else's saves. Finds the
+ * overlap a person could see for themselves.
+ *
+ * `non_obvious` — how close it sits to the SURPRISING band of this room's own
+ * similarity spread: related enough that something is there, different enough
+ * that nobody would have noticed. Measured against the room rather than an
+ * absolute number, because four colleagues sit far closer together than four
+ * strangers and "surprisingly related" means different things to each.
+ */
+export type ReachMode = "nearest" | "non_obvious";
+
 export async function loadTriggerSignals(
   db: WakaDb,
   memberUserIds: string[],
+  reachMode: ReachMode = "nearest",
 ): Promise<Array<{ id: string; userId: string; wowScore: number }>> {
   const uniqueMemberIds = [...new Set(memberUserIds)];
   if (uniqueMemberIds.length === 0) return [];
@@ -299,18 +314,27 @@ export async function loadTriggerSignals(
    * came from sat thirteenth by `wow_score` and would never have been asked.
    */
   const everything = audibleByMember.flat();
+
+  /**
+   * Every cross-member similarity in the room, so "surprising" can be judged
+   * against this room's own spread rather than an absolute number.
+   */
+  const crossPairs: number[] = [];
   const crossReach = new Map<string, number>();
   for (const signal of everything) {
     const own = signal.embedding as number[] | null;
     if (!own) continue;
     let best = -1;
+    const mine: number[] = [];
     for (const other of everything) {
       if (other.userId === signal.userId) continue;
       const theirs = other.embedding as number[] | null;
       if (!theirs || theirs.length !== own.length) continue;
       const score = cosineSimilarity(own, theirs);
+      mine.push(score);
       if (score > best) best = score;
     }
+    crossPairs.push(...mine);
     crossReach.set(signal.id, best);
   }
 
@@ -323,9 +347,37 @@ export async function loadTriggerSignals(
    * take, never how to escape the centre. The cap belongs on how many are
    * *taken* below, not on what may be considered.
    */
+  /**
+   * The band where a connection is worth a product.
+   *
+   * A very obvious synthesis does not need WAKA — anyone can make it
+   * themselves. So the signal worth asking about is not the one that most
+   * resembles someone else's collection; it is the one sitting where there is
+   * clearly something, and clearly not something you would have spotted.
+   *
+   * Taken as a percentile of this room's OWN cross-member spread. Four
+   * colleagues sit near 0.80 with each other and four strangers near 0.45, so
+   * an absolute band would be dead in the first room and shred the second.
+   */
+  const sortedPairs = [...crossPairs].sort((a, b) => a - b);
+  const percentile = (p: number) =>
+    sortedPairs.length === 0
+      ? 0
+      : sortedPairs[Math.min(sortedPairs.length - 1, Math.floor(p * sortedPairs.length))]!;
+  // Related, but not the top of the pile: the middle of the room's own spread.
+  const surprisingAt = percentile(0.6);
+
+  const reachScore = (id: string): number => {
+    const reach = crossReach.get(id) ?? -1;
+    if (reach < 0) return -1;
+    if (reachMode === "nearest") return reach;
+    // Closer to the band is better, so distance is negated into a score.
+    return -Math.abs(reach - surprisingAt);
+  };
+
   const ranked = audibleByMember.map((rows) =>
     [...rows].sort((a, b) => {
-      const delta = (crossReach.get(b.id) ?? -1) - (crossReach.get(a.id) ?? -1);
+      const delta = reachScore(b.id) - reachScore(a.id);
       // Ties fall back to id so a pass stays reproducible.
       return delta !== 0 ? delta : a.id.localeCompare(b.id);
     }),

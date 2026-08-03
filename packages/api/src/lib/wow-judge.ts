@@ -12,6 +12,7 @@ import {
 import {
   findGroupWowMomentCandidates,
   findWowMomentCandidates,
+  type CandidateReachMode,
 } from "./wow-candidates.js";
 import { getDb } from "./db.js";
 
@@ -2355,6 +2356,8 @@ export async function judgeWowMomentForInspiration(
 }
 
 export interface JudgeGroupWowMomentParams {
+  /** How the evidence around the trigger is chosen. Default is the shipped one. */
+  reachMode?: CandidateReachMode;
   db?: WakaDb;
   /** Every member of the group whose shared signals may join the pool. */
   memberUserIds: string[];
@@ -2421,6 +2424,7 @@ export async function judgeGroupWowMoment(
     triggerUserId: params.triggerUserId,
     triggerInspirationId: params.triggerInspirationId,
     limit: params.limit,
+    reachMode: params.reachMode,
   });
   const locale = normalizeSupportedLocale(params.locale);
   // Reflection text loads under the trigger owner; cross-member candidates
