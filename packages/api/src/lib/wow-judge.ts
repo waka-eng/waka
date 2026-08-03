@@ -636,9 +636,27 @@ export function buildWowJudgmentRequest(
                       type: "STRING",
                       description: "Concise source-grounded reason.",
                     },
+                    /**
+                     * The words in THAT signal which carried the reading.
+                     *
+                     * The prompt asked for this and the parser accepted it,
+                     * but the response schema did not declare it — and Gemini
+                     * is called in structured-output mode, so the model was
+                     * physically unable to return the field however clearly it
+                     * was asked. 39 citations came back with zero quotes.
+                     *
+                     * Not in `required`: a reading whose evidence has no single
+                     * quotable run is still a good reading, and forcing the
+                     * field would buy invented spans.
+                     */
+                    quote: {
+                      type: "STRING",
+                      description:
+                        "Verbatim span copied from that signal's own text, character for character. Never paraphrased, never stitched from separate places. Omit rather than approximate.",
+                    },
                   },
                   required: ["inspirationId", "role", "reason"],
-                  propertyOrdering: ["inspirationId", "role", "reason"],
+                  propertyOrdering: ["inspirationId", "role", "reason", "quote"],
                 },
               },
             },
