@@ -6010,7 +6010,16 @@ export function HomePage(): JSX.Element {
               which stops being useful the moment you have saved anything. A
               permanent instruction under the primary action reads as the
               product explaining its own button forever. */}
-          {homeMode !== "memoryDrawer" && savedEntryCount === 0 ? (
+          {/*
+              Not until we KNOW the wall is empty.
+
+              `savedEntryCount` is 0 before anything has loaded, so this
+              flashed its first-run explanation at every established user on
+              every page load and then vanished when their saves arrived —
+              onboarding copy addressed to someone who finished onboarding
+              months ago.
+          */}
+          {homeMode !== "memoryDrawer" && !initialLoading && savedEntryCount === 0 ? (
             <p className="nc-bottom-hint">{copy.bottomHint}</p>
           ) : null}
         </div>
