@@ -3,17 +3,80 @@
 Gathered 2026-08-03. Findings and mechanisms, deliberately not recommendations —
 the previous rounds jumped to a design position and six of six were rejected.
 
-## A limitation to state first
+## Note on method
 
-I could not actually *see* Awwwards or Dribbble work. Those sites are
-image-based; fetching them returns tags and metadata, not the design. Anything
-I claimed about them would be invented. What follows is from written analysis,
-research papers, and product documentation — where the mechanism is described
-in words rather than shown.
+Two kinds of source. Sections 1–9 are written analysis, research papers and
+product documentation. Section 0 below is **measured**: eight current Awwwards
+Site-of-the-Day winners, fetched and their stylesheets read directly. Typeface
+names and hex values are counted from the source, not described from memory.
 
-**If visual reference is what matters most, the honest path is you sending
-three or four screenshots of work you admire.** Two minutes of your time
-replaces a category of research I cannot do.
+What reading source cannot give: composition, motion, and how any of it feels
+in sequence. Screenshots of work you admire would still close that gap.
+
+---
+
+## 0. What award-winning sites are actually built from
+
+Measured from the stylesheets of eight current Awwwards Site-of-the-Day
+winners: 2xa.studio, bymonolog.com, 21hrs.space, vectrfl.com, dragonfly.xyz,
+depoluxe.xyz, glitchandgrit.com, normalisboring.es.
+
+### Typefaces
+
+| Site | Faces |
+|---|---|
+| dragonfly.xyz | **FK Roman Standard** (575 uses) · NON Natural Grotesk · NON Natural Mono |
+| bymonolog.com | **Khteka** · Animo · **Suisse Mono** |
+| 2xa.studio | **Geist** sans + Geist Mono |
+| 21hrs.space | **Futura Std** · **Akkurat Mono** |
+| vectrfl.com | **Söhne Buch** |
+| depoluxe.xyz | **EB Garamond** |
+
+**Two observations.**
+
+**A three-role system is the norm, and WAKA already has its shape.** Dragonfly
+runs serif + grotesk + mono; bymonolog runs primary + secondary + mono; 2xa
+runs sans + mono. WAKA's Instrument Serif / Inter Tight / JetBrains Mono is
+structurally the same idea.
+
+**The faces are not.** Söhne, FK Roman Standard, Khteka, Suisse Mono, Akkurat,
+NON Natural — independent foundry licences, chosen deliberately. Instrument
+Serif and Inter Tight are both free Google Fonts, and Inter in particular is
+the most-used interface face on the web. *The structure is right; the
+specificity is missing.*
+
+### Colour — the sharpest finding
+
+Counted hex values across the same eight stylesheets:
+
+**Grounds are cool and near-neutral.** `#f2f2f2` · `#e6e6e8` · `#fcfcfc` ·
+`#f5f4f2` · `#efeeec` · `#fafafa`
+
+**Darks carry a blue bias, not a warm one.** `#050419` · `#020420` · `#1c1c1c`
+· `#252729` · `#080807`
+
+**Every site has exactly one loud, saturated accent:**
+`#3932dc` indigo · `#fa4c14` orange · `#0000fe` pure blue · `#ff5100` safety
+orange · `#ec39b6` magenta · `#5014fa` violet
+
+That is the pattern: **a quiet cool ground, and one accent that is genuinely
+loud.** Not a palette of five agreeable tones — one colour doing all the work,
+usually near full saturation.
+
+**WAKA is the inverse on both axes.** The ground is warm parchment `#f4f2ee`;
+there are five muted pastels and no accent at all. The one saturated colour in
+the product — the salience gold — appears at 26% opacity, which is the only
+place a real accent could have lived.
+
+### One craft detail worth stealing
+
+bymonolog ships optical trim tokens:
+`--font--primary-trim-top: .33em` / `--trim-bottom: .38em`. Per-face
+compensation for the gap between a font's box and its actual letterforms, so
+vertical rhythm is measured from the type rather than from the em box. That is
+the level of care the "high craft" label refers to.
+
+---
 
 ---
 
