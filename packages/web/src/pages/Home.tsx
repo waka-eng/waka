@@ -1308,11 +1308,6 @@ const HOME_COPY = {
     feedbackSaved: "저장됨",
     feedbackSaving: "저장 중...",
     feedbackError: "포스트잇을 바꾸지 못했습니다",
-    savedSignalFeedbackActions: [
-      { label: "아직 살아 있음", value: "true" },
-      { label: "달라진 모양", value: "partly" },
-      { label: "더는 아님", value: "not_true" },
-    ],
     savedSignalCorrectionLabel: "무엇이 달라졌나요?",
     savedSignalCorrectionPlaceholder: "선택 사항 — 지금은 어떻게 달라졌나요?",
     savedSignalCorrectionSave: "저장",
@@ -1327,7 +1322,6 @@ const HOME_COPY = {
     savedSignalCollapseLabel: "영감 접기",
     savedSignalEditLabel: "저장된 영감 수정",
     savedSignalFeedbackLabel: "영감 피드백",
-    savedSignalFeedbackActionLabel: (label: string) => `영감 피드백: ${label}`,
     savedSignalReflectionConversationLabel: "영감 돌아보기 대화",
     savedSignalOpening: "영감을 여는 중...",
     savedSignalReflectionCount: (count: number) => `이 영감에서 나온 돌아보기 ${count}개`,
@@ -1460,11 +1454,6 @@ const HOME_COPY = {
     feedbackSaved: "saved",
     feedbackSaving: "saving...",
     feedbackError: "could not change post-it",
-    savedSignalFeedbackActions: [
-      { label: "still alive", value: "true" },
-      { label: "changed shape", value: "partly" },
-      { label: "not anymore", value: "not_true" },
-    ],
     savedSignalCorrectionLabel: "what changed?",
     savedSignalCorrectionPlaceholder: "optional — how does it feel different now?",
     savedSignalCorrectionSave: "save",
@@ -1479,7 +1468,6 @@ const HOME_COPY = {
     savedSignalCollapseLabel: "collapse inspiration",
     savedSignalEditLabel: "edit saved inspiration",
     savedSignalFeedbackLabel: "saved inspiration feedback",
-    savedSignalFeedbackActionLabel: (label: string) => `saved inspiration feedback: ${label}`,
     savedSignalReflectionConversationLabel: "reflection conversation",
     savedSignalOpening: "opening inspiration...",
     savedSignalReflectionCount: (count: number) => `${count} reflection${count === 1 ? "" : "s"} from this inspiration`,
@@ -1602,7 +1590,6 @@ const HOME_COPY = {
     feedbackSaved: string;
     feedbackSaving: string;
     feedbackError: string;
-    savedSignalFeedbackActions: Array<{ label: string; value: SavedSignalFeedbackValue }>;
     savedSignalCorrectionLabel: string;
     savedSignalCorrectionPlaceholder: string;
     savedSignalCorrectionSave: string;
@@ -1617,7 +1604,6 @@ const HOME_COPY = {
     savedSignalCollapseLabel: string;
     savedSignalEditLabel: string;
     savedSignalFeedbackLabel: string;
-    savedSignalFeedbackActionLabel: (label: string) => string;
     savedSignalReflectionConversationLabel: string;
     savedSignalOpening: string;
     savedSignalReflectionCount: (count: number) => string;
@@ -4805,13 +4791,7 @@ export function HomePage(): JSX.Element {
       const reflectionsLoading = savedSignalReflectionLoadingIds.has(signal.id);
       const isReflecting = savedSignalReflectingId === signal.id;
       const reflectionsExpanded = expandedReflectionThreads.has(signal.id);
-      const persistedFeedbackValue = fullDetailReady
-        ? [...savedSignalDetail.resonanceFeedback]
-            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-            .at(-1)?.value ?? null
-        : null;
       const detailFeedback = savedSignalFeedback[signal.id];
-      const selectedFeedbackValue = detailFeedback?.value ?? persistedFeedbackValue;
       const detailFeedbackStatus = detailFeedback?.status ?? "idle";
       const detailFeedbackError = detailFeedback?.error ?? null;
       const pendingCorrection = pendingSavedSignalCorrection?.signalId === signal.id
@@ -4949,36 +4929,6 @@ export function HomePage(): JSX.Element {
             </section>
           ) : null}
           <section className="memory-contents-reflection-prompts">
-            <div className="memory-contents-feedback-actions" aria-label={copy.savedSignalFeedbackLabel}>
-              {copy.savedSignalFeedbackActions.map((action) => {
-                const isSelected = selectedFeedbackValue === action.value;
-                const isSaving = isFeedbackSaving && isSelected;
-                return (
-                  <button
-                    key={action.value}
-                    type="button"
-                    className={`memory-contents-feedback-action${isSelected ? " memory-contents-feedback-action--selected" : ""}`}
-                    aria-label={copy.savedSignalFeedbackActionLabel(action.label)}
-                    aria-pressed={isSelected}
-                    disabled={isFeedbackSaving}
-                    onClick={() => {
-                      if (action.value === "true") {
-                        void submitSavedSignalFeedback(signal, action.value);
-                        return;
-                      }
-                      setPendingSavedSignalCorrection({
-                        signalId: signal.id,
-                        value: action.value,
-                        text: "",
-                      });
-                    }}
-                  >
-                    {action.label}
-                    {isSaving ? <span>{copy.savedSignalFeedbackSaving}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
             {pendingCorrection ? (
               <div className="memory-contents-feedback-correction">
                 <label>
