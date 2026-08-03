@@ -212,3 +212,62 @@ describe("POST /api/groups/:groupId/top-of-mind/refresh", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("GET /api/groups/:groupId/timeline", () => {
+  /**
+   * A first load needs the room's life; travelling does not. Rebuilding the
+   * whole event list to answer a scrub is what made the wall arrive a beat
+   * after the rail, and historical boards never change, so the client keeps
+   * what it is given.
+   */
+  const board = { at: "2026-08-01T00:00:00.000Z", notes: [] };
+  const timeline = { groupId: "g", formedAt: board.at, events: [] };
+
+  it("carries the room's life on a first load", async () => {
+    const loadTimeline = vi.fn(async () => timeline);
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      loadTimeline: loadTimeline as any,
+      loadBoardAsOf: (async () => board) as any,
+    });
+
+    const response = await app.request(`/api/groups/${groupSummary.id}/timeline`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ timeline, board });
+    expect(loadTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not rebuild it to answer a travel request", async () => {
+    const loadTimeline = vi.fn(async () => timeline);
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      loadTimeline: loadTimeline as any,
+      loadBoardAsOf: (async () => board) as any,
+    });
+
+    const response = await app.request(
+      `/api/groups/${groupSummary.id}/timeline?at=2026-08-01T00%3A00%3A00.000Z`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ timeline: null, board });
+    expect(loadTimeline).not.toHaveBeenCalled();
+  });
+
+  it("still tells a non-member nothing, travelling or not", async () => {
+    // `boardAsOf` gates on membership itself, so dropping the timeline read
+    // must not drop the authorization that used to come with it.
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      loadTimeline: (async () => null) as any,
+      loadBoardAsOf: (async () => null) as any,
+    });
+
+    const response = await app.request(
+      `/api/groups/${groupSummary.id}/timeline?at=2026-08-01T00%3A00%3A00.000Z`,
+    );
+
+    expect(response.status).toBe(404);
+  });
+});

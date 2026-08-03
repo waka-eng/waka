@@ -1668,7 +1668,13 @@ export interface ApiRoomTimeline {
 }
 
 export interface ApiRoomTimelineResponse {
-  timeline: ApiRoomTimeline;
+  /**
+   * Null when a past board was asked for.
+   *
+   * A caller travelling already holds the room's life; rebuilding it on every
+   * scrub only to be discarded is what made the wall lag the rail.
+   */
+  timeline: ApiRoomTimeline | null;
   board: { at: string; notes: ApiTimelineNote[] } | null;
 }
 

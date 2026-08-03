@@ -1841,29 +1841,81 @@ export function HomePage(): JSX.Element {
   }, [user?.id, activeBoard]);
 
   /**
-   * Resolve the board for a scrubbed position.
+   * Every board this room has ever shown, held once.
    *
-   * Sequence-guarded: dragging fires these faster than they return, and a slow
-   * earlier response landing last would show a moment the rail has already
-   * left. The counter is what stops the wall crossing itself.
+   * A room's history is a handful of moments, so the whole of it fits in
+   * memory and travel costs nothing after the first visit. Without this, each
+   * scrub was a fresh round-trip that re-sent the entire event list alongside
+   * the one board it was asked for — the rail moved instantly and the wall
+   * caught up a beat later, which reads as the instrument being broken rather
+   * than the network being slow.
    */
+  const boardsByMoment = useRef(new Map<string, ApiTimelineNote[]>());
   const scrubSeq = useRef(0);
+
+  useEffect(() => {
+    boardsByMoment.current = new Map();
+  }, [activeBoard]);
+
   useEffect(() => {
     if (!user || activeBoard === MINE_BOARD_ID || scrubbedAt === null) {
       setScrubbedNotes(null);
       return;
     }
+    // Already visited: show it in the same frame the rail moved.
+    const cached = boardsByMoment.current.get(scrubbedAt);
+    if (cached) {
+      setScrubbedNotes(cached);
+      return;
+    }
     const seq = ++scrubSeq.current;
     fetchRoomTimeline(activeBoard, scrubbedAt)
       .then((result) => {
+        const notes = result.board?.notes ?? [];
+        boardsByMoment.current.set(scrubbedAt, notes);
+        // Sequence-guarded: dragging fires these faster than they return, and a
+        // slow earlier response landing last would show a moment the rail has
+        // already left.
         if (seq !== scrubSeq.current) return;
-        setScrubbedNotes(result.board?.notes ?? []);
+        setScrubbedNotes(notes);
       })
       .catch((err) => {
         console.error("[home] board-as-of failed", { activeBoard, scrubbedAt, err });
         if (seq === scrubSeq.current) setScrubbedNotes(null);
       });
   }, [user?.id, activeBoard, scrubbedAt]);
+
+  /**
+   * Warm every moment in the background, one at a time.
+   *
+   * Sequential and unhurried on purpose: this is work nobody asked for, and it
+   * must never compete with the board the person is actually looking at. By
+   * the time anyone reaches for the rail the whole room's history is usually
+   * already in hand, and travel is instant from the first drag rather than the
+   * second.
+   */
+  useEffect(() => {
+    if (!user || activeBoard === MINE_BOARD_ID || !roomTimeline) return;
+    let cancelled = false;
+    const moments = [...new Set(roomTimeline.events.map((event) => event.at))];
+    void (async () => {
+      for (const at of moments) {
+        if (cancelled) return;
+        if (boardsByMoment.current.has(at)) continue;
+        try {
+          const result = await fetchRoomTimeline(activeBoard, at);
+          if (cancelled) return;
+          boardsByMoment.current.set(at, result.board?.notes ?? []);
+        } catch {
+          // A moment that will not load is simply fetched again if visited.
+          return;
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, activeBoard, roomTimeline]);
 
   // Load the synthesized board whenever a group is selected.
   useEffect(() => {

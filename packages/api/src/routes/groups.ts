@@ -385,6 +385,33 @@ export function createGroupsRoutes(
       );
     }
     const user = c.get("user");
+
+    /**
+     * A caller asking for one past board already has the room's life.
+     *
+     * Resolving a scrub used to re-read every note and every membership event
+     * to rebuild an event list the client was about to discard — the rail moved
+     * instantly and the wall arrived a beat later. `at` is the signal that this
+     * is a travel request rather than a first load, so the timeline is only
+     * built when it is actually being asked for.
+     *
+     * `boardAsOf` gates on membership itself, so dropping the timeline read
+     * drops no authorization with it: a non-member still gets the same 404 a
+     * missing room would give them.
+     */
+    const wantsTimeline = parsedQuery.data.at === undefined;
+
+    const board = await loadBoardAsOf(getDatabase(), {
+      userId: user.id,
+      groupId: parsedParams.data.groupId,
+      at: parsedQuery.data.at,
+    });
+    if (!board) {
+      return c.json({ error: "Group not found" }, 404);
+    }
+
+    if (!wantsTimeline) return c.json({ timeline: null, board });
+
     const timeline = await loadTimeline(getDatabase(), {
       userId: user.id,
       groupId: parsedParams.data.groupId,
@@ -392,11 +419,6 @@ export function createGroupsRoutes(
     if (!timeline) {
       return c.json({ error: "Group not found" }, 404);
     }
-    const board = await loadBoardAsOf(getDatabase(), {
-      userId: user.id,
-      groupId: parsedParams.data.groupId,
-      at: parsedQuery.data.at,
-    });
     return c.json({ timeline, board });
   });
 
