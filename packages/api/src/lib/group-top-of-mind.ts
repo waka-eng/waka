@@ -629,6 +629,10 @@ interface GroupNoteRow {
 }
 
 interface GroupEvidenceRow {
+  /** The words that carried the reading, verified present in the save. */
+  quote?: string | null;
+  /** Whose words: the person's own, or the page they linked. */
+  quoteSource?: string | null;
   noteId: string;
   signalId: string;
   ownerUserId: string;
@@ -678,7 +682,14 @@ function serializeGroupNote(
     signalId: e.signalId,
     role: e.role,
     reason: e.reason,
-    textPreview: truncatePreview(e.signalText),
+    /**
+     * The words that carried it, when the judge named them and they were
+     * really there. Otherwise the opening of the save, which is only ever
+     * whatever happened to be written first.
+     */
+    textPreview: e.quote ? truncatePreview(e.quote) : truncatePreview(e.signalText),
+    quote: e.quote ?? null,
+    quoteSource: (e.quoteSource as "own" | "enrichment" | null) ?? null,
     kind: e.signalKind,
     createdAt: e.signalCreatedAt.toISOString(),
     resonanceScore: e.signalWowScore,
@@ -766,6 +777,8 @@ async function readGroupNotes(
       signalCreatedAt: signals.createdAt,
       signalWowScore: signals.wowScore,
       signalShared: signals.sharedToGroups,
+      quote: groupTopOfMindNoteSignals.quote,
+      quoteSource: groupTopOfMindNoteSignals.quoteSource,
     })
     .from(groupTopOfMindNoteSignals)
     .innerJoin(signals, eq(groupTopOfMindNoteSignals.signalId, signals.id))

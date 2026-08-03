@@ -84,6 +84,14 @@ const MAX_RAW_GEMINI_PREVIEW_CHARS = 360;
 const MAX_REPAIR_INPUT_CHARS = 2000;
 const MAX_SOURCE_ROLE_CHARS = 64;
 const MAX_SOURCE_REASON_CHARS = 180;
+/**
+ * How long a quoted span may be.
+ *
+ * Long enough for a sentence, short enough that quoting cannot become
+ * reproducing: a highlight that swallows a paragraph has stopped pointing at
+ * anything.
+ */
+const MAX_SOURCE_QUOTE_CHARS = 220;
 const MAX_OUTPUT_TOKENS = 3072;
 const MAX_REPAIR_OUTPUT_TOKENS = 1024;
 const MAX_BELIEF_STATEMENT_REPAIR_OUTPUT_TOKENS = 512;
@@ -193,6 +201,17 @@ export interface WowSourceEvidence {
   inspirationId: string;
   role: string;
   reason: string;
+  /**
+   * The run of words in that save which carried the reading.
+   *
+   * Absent when the judge did not name one, or named one that is not actually
+   * in the save. A missing highlight is honest; a wrong one attributes words to
+   * someone who never wrote them, which is worse than saying nothing.
+   *
+   * Optional rather than nullable so a judgment that predates this — or a test
+   * fixture that does not care — is still a valid judgment.
+   */
+  quote?: string | null;
 }
 
 export interface WowJudgePromptInspiration {
@@ -307,7 +326,7 @@ or "I am done with" unless they sound natural and non-template-like.
 Natural Korean equivalents may stay softer, such as "...일지도 모릅니다",
 "...듯합니다", "...수 있습니다".
 Do not put signal ids or partial ids in why or beliefStatement; ids belong only in
-relatedInspirationIds and sourceEvidence.inspirationId. For true outputs, choose the tight 3 to 5 signals total pattern: trigger first, then two to four strongest/most necessary related candidate ids in returned order. Do not synthesize broad multi-source patterns archive summaries. For each related signal in true outputs, include sourceEvidence with a product-facing role label and concise why-it-matters reason grounded in that source. Good role labels: "The atmosphere", "The philosophy", "The practice", "The tension", "The repeated signal"; not primary/supporting/contrast/related, scores, IDs, dates, or classifier jargon. Do not repeat phrases. Prefer false over over-claiming.
+relatedInspirationIds and sourceEvidence.inspirationId. For true outputs, choose the tight 3 to 5 signals total pattern: trigger first, then two to four strongest/most necessary related candidate ids in returned order. Do not synthesize broad multi-source patterns archive summaries. For each related signal in true outputs, include sourceEvidence with a product-facing role label and concise why-it-matters reason grounded in that source. Where one run of words in that signal carries the reading, copy it verbatim into quote - character for character from that signal's own text, never paraphrased and never stitched from separate places. Omit quote rather than approximate it. Good role labels: "The atmosphere", "The philosophy", "The practice", "The tension", "The repeated signal"; not primary/supporting/contrast/related, scores, IDs, dates, or classifier jargon. Do not repeat phrases. Prefer false over over-claiming.
 For false judgments, choose the most specific reason and keep debugSummary compact
 (<= 120 characters). False judgments must not include why. Do not include secrets
 or quote long user text.
@@ -866,18 +885,20 @@ export function normalizeWowSourceEvidence(
   relatedInspirationIds: string[],
 ): WowSourceEvidence[] {
   const sourceRows = Array.isArray(sourceEvidence) ? sourceEvidence : [];
-  const rowsById = new Map<string, { role?: unknown; reason?: unknown }>();
+  const rowsById = new Map<string, { role?: unknown; reason?: unknown; quote?: unknown }>();
   for (const row of sourceRows) {
     if (typeof row !== "object" || row === null) continue;
     const payload = row as {
       inspirationId?: unknown;
       role?: unknown;
       reason?: unknown;
+      quote?: unknown;
     };
     if (typeof payload.inspirationId !== "string") continue;
     rowsById.set(payload.inspirationId, {
       role: payload.role,
       reason: payload.reason,
+      quote: payload.quote,
     });
   }
 
@@ -887,6 +908,9 @@ export function normalizeWowSourceEvidence(
       inspirationId,
       role: normalizeSourceRoleLabel(row?.role),
       reason: normalizeSourceReason(row?.reason),
+      quote: typeof row?.quote === "string" && row.quote.trim().length > 0
+        ? sanitizeSourceEvidenceText(row.quote, MAX_SOURCE_QUOTE_CHARS)
+        : null,
     };
   });
 }
@@ -916,6 +940,22 @@ const sourceEvidenceSchema = z
             (value) => !isUnsafeSourceReason(value),
             "sourceEvidence reason must be product-facing",
           ),
+        /**
+         * Optional on purpose: a judgment that names no span is still a good
+         * judgment, and refusing one for lacking a highlight would trade a
+         * reading for a decoration.
+         *
+         * `nullish`, not `optional`: the normalizer emits null for "no span",
+         * and `optional` accepts only undefined — so a judgment that reached
+         * this schema carrying an explicit null failed the whole object under
+         * `strict()` and came back false. A missing quote must never be able
+         * to cost a reading.
+         */
+        quote: z
+          .string()
+          .transform((value) => sanitizeSourceEvidenceText(value, MAX_SOURCE_QUOTE_CHARS))
+          .pipe(z.string().max(MAX_SOURCE_QUOTE_CHARS))
+          .nullish(),
       })
       .strict(),
   )

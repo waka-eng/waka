@@ -25,6 +25,7 @@ export default defineConfig({
       "src/lib/inspiration-embeddings.test.ts",
       "src/lib/signal-packets.test.ts",
       "src/lib/signal-enrichment.test.ts",
+      "src/lib/salience.test.ts",
       "src/lib/combination-reading.test.ts",
       "src/lib/reading-divergence.test.ts",
       "src/lib/reading-divergence-gemini.test.ts",

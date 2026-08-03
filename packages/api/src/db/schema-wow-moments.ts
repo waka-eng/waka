@@ -147,6 +147,22 @@ export const topOfMindNoteSignals = pgTable(
       .references(() => signals.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("related"),
     reason: text("reason").notNull().default(""),
+    /**
+     * The run of words in this save that carried the reading.
+     *
+     * Null unless the judge named a span AND that span is genuinely present in
+     * the save — a missing highlight is honest, a wrong one puts words in
+     * someone's mouth.
+     */
+    quote: text("quote"),
+    /**
+     * Who was speaking: the person, or the page they linked.
+     *
+     * A save's readable text has two authors, and attributing an article's
+     * argument to a member who only saved the link would be a claim about them
+     * that nobody made.
+     */
+    quoteSource: text("quote_source"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

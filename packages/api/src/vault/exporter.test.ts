@@ -99,6 +99,8 @@ function makeLink(
     inspirationId,
     role: "trigger",
     reason: "",
+    quote: null,
+    quoteSource: null,
     sortOrder: 0,
     createdAt: CREATED_AT,
   };

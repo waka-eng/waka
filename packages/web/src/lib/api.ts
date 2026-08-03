@@ -856,6 +856,10 @@ export interface ApiTopOfMindEvidencePreview {
   role: string;
   reason: string;
   textPreview: string;
+  /** The words that carried the reading, when the judge named them provably. */
+  quote?: string | null;
+  /** Whose words they were: the person's, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   kind: string | null;
   createdAt: string;
   resonanceScore: number;
@@ -1158,6 +1162,14 @@ export type SavedSignalArchiveFilter =
 export type SavedSignalArchiveSort = "recent" | "resonance" | "revisited";
 
 export interface ApiSavedSignalSearchResult {
+  /**
+   * When this save is standing in for evidence, the words that carried the
+   * reading — so the drawer can say "these were the words" rather than showing
+   * a truncation that looks identical either way.
+   */
+  quote?: string | null;
+  /** Whose words they were: the person's own, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   id: string;
   userId: string;
   textPreview: string;

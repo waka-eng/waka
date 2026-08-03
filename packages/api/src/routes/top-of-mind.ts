@@ -131,6 +131,20 @@ export interface TopOfMindEvidencePreview {
   role: string;
   reason: string;
   textPreview: string;
+  /**
+   * The run of words in the save that carried this reading, when the judge
+   * named one and it was really there. Null far more often than not, and that
+   * is the point: a missing highlight is honest.
+   */
+  quote?: string | null;
+  /**
+   * Who was speaking — the person, or the page they linked.
+   *
+   * A save's readable text has two authors, and attributing an article's
+   * argument to a member who only saved the link would be a claim about them
+   * that nobody made.
+   */
+  quoteSource?: "own" | "enrichment" | null;
   kind: string | null;
   createdAt: string;
   resonanceScore: number;

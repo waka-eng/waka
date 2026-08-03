@@ -534,6 +534,10 @@ interface HomeThoughtCard {
     resonanceScore?: number;
     /** On group boards, the member who saved this inspiration. */
     authorName?: string;
+    /** The words that carried the reading, when they could be proven present. */
+    quote?: string | null;
+    /** Whose words they were: the person's own, or the page they linked. */
+    quoteSource?: "own" | "enrichment" | null;
   }>;
   contextNodes: Array<{
     id: string;
@@ -705,6 +709,16 @@ function noteToThoughtCard(
     kind: evidence.kind,
     resonanceScore: evidence.resonanceScore,
     authorName: (evidence as { authorName?: string }).authorName,
+    /**
+     * The words that carried this reading, and whose they were.
+     *
+     * Null far more often than not — the judge has to name a span AND that
+     * span has to actually be in the save. Where it is present the preview is
+     * already the quote rather than the opening of the save, so this only says
+     * whether to mark it as quoted, and by whom.
+     */
+    quote: evidence.quote ?? null,
+    quoteSource: evidence.quoteSource ?? null,
   }));
   const relatedSignals = note.relatedSignals
     .filter((signal) => !evidenceSignals.some((evidence) => evidence.id === signal.id))
@@ -4174,7 +4188,23 @@ export function HomePage(): JSX.Element {
             <span className="memory-signal-card-owner">{signal.ownerName}</span>
           ) : null}
         </span>
-        <strong>{shortText(signal.textPreview, options.compact ? 96 : 180)}</strong>
+        <strong className={signal.quote ? "memory-signal-card-quote" : undefined}>
+          {shortText(signal.textPreview, options.compact ? 96 : 180)}
+        </strong>
+        {/*
+          Whose words these were.
+
+          A save's readable text has two authors — the person, and the page they
+          linked. Saying which one carried the reading is the difference between
+          "you wrote this" and "the thing you linked said this", and collapsing
+          them would attribute an article's argument to someone who only saved
+          a link.
+        */}
+        {signal.quote && signal.quoteSource === "enrichment" ? (
+          <span className="memory-signal-card-quote-source">
+            {t(locale, "quoteFromLinkedPage")}
+          </span>
+        ) : null}
         {signal.attachmentSummary.slice(0, 2).map((attachment) => (
           <span
             key={attachment.id}
@@ -5275,6 +5305,14 @@ export function HomePage(): JSX.Element {
       // On a group board, tag the inspiration with the member who saved it.
       ownerName: support.authorName,
       textPreview: support.preview,
+      /**
+       * Marked as a quotation when the preview IS the span the reading rested
+       * on, rather than the opening of the save. Carried through so the drawer
+       * can say "these were the words" instead of showing a truncation that
+       * looks the same either way.
+       */
+      quote: support.quote ?? null,
+      quoteSource: support.quoteSource ?? null,
       kind: support.kind ?? null,
       capturedAt: support.createdAt ?? new Date().toISOString(),
       updatedAt: support.createdAt ?? new Date().toISOString(),

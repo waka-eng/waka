@@ -28,6 +28,7 @@ import { GeminiEmbeddingHttpClient, type WakaDb } from "./inspiration-embeddings
 import type { SupportedLocale } from "./locales.js";
 import { selectBoard } from "../scoring/board-selection.js";
 import { cosineSimilarity, fromPersistedScore } from "../scoring/wow-score.js";
+import { verifyQuote } from "./salience.js";
 import { MIN_AUDIBLE_CHARS, isAudible } from "./signal-enrichment.js";
 import { judgeGroupWowMoment, type WowMomentJudgment } from "./wow-judge.js";
 
@@ -649,17 +650,43 @@ async function persistGroupNote(
       return { outcome: "existing", noteId: existing?.id };
     }
 
+    /**
+     * The words each save contributed, kept only when they are really there.
+     *
+     * The judge names a span; this is where we decide whether to believe it.
+     * Read inside the transaction that writes the citations so a quote is
+     * checked against the save as it stands at the moment it is attributed.
+     */
+    const quotedTexts = await tx
+      .select({
+        id: signals.id,
+        text: signals.text,
+        enrichment: signals.enrichment,
+      })
+      .from(signals)
+      .where(inArray(signals.id, relatedIds));
+    const textById = new Map(quotedTexts.map((row) => [row.id, row]));
+
     await tx
       .insert(groupTopOfMindNoteSignals)
       .values(
         relatedIds.map((signalId, index) => {
           const evidence = sourceEvidenceById.get(signalId);
+          const source = textById.get(signalId);
+          const verified = source
+            ? verifyQuote(evidence?.quote, {
+                text: source.text,
+                enrichment: source.enrichment,
+              })
+            : null;
           return {
             groupTopOfMindNoteId: created.id,
             signalId,
             ownerUserId: input.ownersBySignalId.get(signalId)!,
             role: evidence?.role ?? "related",
             reason: evidence?.reason ?? "",
+            quote: verified?.quote ?? null,
+            quoteSource: verified?.source ?? null,
             sortOrder: index,
           };
         }),

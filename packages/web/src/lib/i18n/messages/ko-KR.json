@@ -267,5 +267,6 @@
   "profileDeleting": "삭제 중…",
   "profileDeleteError": "계정을 삭제하지 못했어요.",
   "profileSignOutError": "로그아웃하지 못했어요.",
-  "profileBackHome": "홈으로 돌아가기"
+  "profileBackHome": "홈으로 돌아가기",
+  "quoteFromLinkedPage": "링크한 페이지의 말"
 }

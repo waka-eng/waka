@@ -17130,3 +17130,29 @@ textarea {
   letter-spacing: 0.02em;
   vertical-align: -4px;
 }
+
+/*
+   The words that carried a reading.
+
+   When the judge named a span and it was really there, the preview IS that
+   span rather than the opening of the save — so it is set as a quotation
+   instead of a truncation, because the two look identical otherwise and mean
+   completely different things.
+*/
+.memory-signal-card-quote {
+  font-style: italic;
+  quotes: "\201C" "\201D";
+}
+
+.memory-signal-card-quote::before { content: open-quote; }
+.memory-signal-card-quote::after { content: close-quote; }
+
+/* Whose words they were. A quote from the fetched page is the article
+   speaking, not the person who saved the link. */
+.memory-signal-card-quote-source {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  color: rgba(20, 18, 16, 0.42);
+}
