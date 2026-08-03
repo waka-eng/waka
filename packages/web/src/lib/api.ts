@@ -1913,6 +1913,10 @@ export interface ApiSignalReading {
     createdAt: string;
   };
   myRole: { role: string; reason: string };
+  /** The words in THIS save that carried THIS reading. */
+  quote: string | null;
+  /** Whose words they were — the person's own, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   neighbors: ApiSignalReadingNeighbor[];
 }
 

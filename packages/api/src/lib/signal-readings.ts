@@ -76,6 +76,16 @@ export interface SignalReading {
   };
   /** The judge's sentence about what role THIS signal played in the note. */
   myRole: { role: string; reason: string };
+  /**
+   * The words in THIS save that carried THIS reading.
+   *
+   * Per (reading, save), which is what makes the surface worth having: the
+   * same save read by two rooms lights up different sentences, and that
+   * difference is the product's whole claim made visible in one view.
+   */
+  quote: string | null;
+  /** Whose words they were — the person's own, or the page they linked. */
+  quoteSource: "own" | "enrichment" | null;
   neighbors: SignalReadingNeighbor[];
 }
 
@@ -113,6 +123,8 @@ async function listSoloReadings(
       createdAt: topOfMindNotes.createdAt,
       role: topOfMindNoteSignals.role,
       reason: topOfMindNoteSignals.reason,
+      quote: topOfMindNoteSignals.quote,
+      quoteSource: topOfMindNoteSignals.quoteSource,
     })
     .from(topOfMindNoteSignals)
     .innerJoin(
@@ -182,6 +194,8 @@ async function listSoloReadings(
       createdAt: row.createdAt.toISOString(),
     },
     myRole: { role: row.role, reason: row.reason },
+    quote: row.quote ?? null,
+    quoteSource: (row.quoteSource as "own" | "enrichment" | null) ?? null,
     neighbors: neighborsByNote.get(row.noteId) ?? [],
   }));
 }
@@ -204,6 +218,8 @@ async function listGroupReadings(
       why: groupTopOfMindNotes.why,
       createdAt: groupTopOfMindNotes.createdAt,
       role: groupTopOfMindNoteSignals.role,
+      quote: groupTopOfMindNoteSignals.quote,
+      quoteSource: groupTopOfMindNoteSignals.quoteSource,
       reason: groupTopOfMindNoteSignals.reason,
     })
     .from(groupTopOfMindNoteSignals)
@@ -307,6 +323,8 @@ async function listGroupReadings(
       createdAt: row.createdAt.toISOString(),
     },
     myRole: { role: row.role, reason: row.reason },
+    quote: row.quote ?? null,
+    quoteSource: (row.quoteSource as "own" | "enrichment" | null) ?? null,
     neighbors: neighborsByNote.get(row.noteId) ?? [],
   }));
 }

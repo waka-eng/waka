@@ -20,7 +20,7 @@
  * is not clobbered by the response.
  */
 
-import {
+import { type ReactNode,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -698,6 +698,36 @@ function noteWhen(iso: string): string {
   });
 }
 
+
+/**
+ * The save's own text, with the words that carried a reading lit up.
+ *
+ * The quote was verified against the save with whitespace normalized, so
+ * finding it again has to be whitespace-tolerant — the stored span may have
+ * been re-wrapped by the model, and an exact search would miss the very
+ * quote we already proved was there.
+ *
+ * Returns the text unmarked when the span cannot be located, which happens
+ * when the save has been edited since. Showing it plain is honest; guessing
+ * at a nearby range would highlight words nobody pointed at.
+ */
+export function highlightQuote(text: string, quote: string | null): ReactNode {
+  if (!quote) return text;
+  const escaped = quote
+    .trim()
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  const match = new RegExp(escaped, "i").exec(text);
+  if (!match) return text;
+  return [
+    text.slice(0, match.index),
+    <mark key="q" className="memory-contents-quote-mark">
+      {match[0]}
+    </mark>,
+    text.slice(match.index + match[0].length),
+  ];
+}
+
 function noteToThoughtCard(
   note: ApiTopOfMindNoteSurface | ApiGroupTopOfMindNote,
 ): HomeThoughtCard {
@@ -1331,6 +1361,9 @@ const HOME_COPY = {
     savedSignalReflectionLoading: "돌아보기를 불러오는 중...",
     savedSignalReflectionEmpty: "돌아보기가 여기에 나타납니다.",
     readingsSectionLabel: "이 영감이 읽힌 방식",
+    readingsSummary: (count: number, places: string[]) =>
+      `${places.join(", ")}에서 탑오브마인드 ${count}개를 만들었습니다`,
+    readingsNoQuote: "이 읽기에서는 어느 부분인지 표시되지 않았습니다",
     timeRailRegionLabel: "이 방이 지나온 시간",
     timeRailNow: "지금",
     timeRailFormed: "방이 만들어짐",
@@ -1477,6 +1510,9 @@ const HOME_COPY = {
     savedSignalReflectionLoading: "loading reflections...",
     savedSignalReflectionEmpty: "Your reflection will appear here.",
     readingsSectionLabel: "how this inspiration reads",
+    readingsSummary: (count: number, places: string[]) =>
+      `generated ${count} top of mind${count === 1 ? "" : "s"} in ${places.join(", ")}`,
+    readingsNoQuote: "this reading did not point at a particular part",
     timeRailRegionLabel: "this room over time",
     timeRailNow: "now",
     timeRailFormed: "the room was formed",
@@ -1613,6 +1649,8 @@ const HOME_COPY = {
     savedSignalReflectionLoading: string;
     savedSignalReflectionEmpty: string;
     readingsSectionLabel: string;
+    readingsSummary: (count: number, places: string[]) => string;
+    readingsNoQuote: string;
     timeRailRegionLabel: string;
     timeRailNow: string;
     timeRailFormed: string;
@@ -1769,6 +1807,20 @@ export function HomePage(): JSX.Element {
   const [roomTimeline, setRoomTimeline] = useState<ApiRoomTimeline | null>(null);
   const [scrubbedAt, setScrubbedAt] = useState<string | null>(null);
   const [scrubbedNotes, setScrubbedNotes] = useState<ApiTimelineNote[] | null>(null);
+  /** Which saves have their readings unfolded. Collapsed is the resting state. */
+  const [expandedReadings, setExpandedReadings] = useState<Set<string>>(new Set());
+  /**
+   * The reading you are currently looking at a save through.
+   *
+   * This is the whole point of the surface: the same save read by two rooms
+   * rests on different sentences, so "which words" is only answerable once you
+   * have said WHICH READING you are asking about.
+   */
+  const [activeReading, setActiveReading] = useState<{
+    signalId: string;
+    noteId: string;
+    quote: string | null;
+  } | null>(null);
   // A join code lifted off the URL, waiting on the person to say yes. Joining
   // is not a navigation: it puts your saved signals into a pool other people
   // read, so a link alone must never be enough to do it.
@@ -4833,6 +4885,21 @@ export function HomePage(): JSX.Element {
           >
             {detailPending ? (
               <p className="memory-contents-loading">{copy.savedSignalOpening}</p>
+            ) : activeReading?.signalId === signal.id && activeReading.quote ? (
+              /*
+                Reading through a reading.
+
+                A textarea cannot mark a span, and marking is the entire point
+                here — so choosing a reading swaps the editor for a read-only
+                view of the same text with the words that carried THAT reading
+                lit. Choosing it again puts the editor back.
+              */
+              <div
+                className="memory-contents-expanded-text memory-contents-expanded-reading"
+                aria-label={copy.savedSignalEditLabel}
+              >
+                {highlightQuote(detailText, activeReading.quote)}
+              </div>
             ) : (
               <textarea
                 className="memory-contents-expanded-text memory-contents-expanded-editor"
@@ -4876,56 +4943,91 @@ export function HomePage(): JSX.Element {
               className="memory-contents-readings"
               aria-label={copy.readingsSectionLabel}
             >
-              <span className="memory-contents-readings-label">
-                {copy.readingsSectionLabel}
-              </span>
-              <ul className="memory-reading-list">
-                {(savedSignalReadings[signal.id] ?? []).map((reading) => {
-                  const contextLabel =
-                    reading.context.scope === "alone"
-                      ? copy.readingsAloneLabel
-                      : copy.readingsInRoomLabel(reading.context.groupName);
-                  // The title is now said out loud above, so a belief
-                  // statement that merely repeats it would print twice.
-                  const belief = reading.note.beliefStatement?.trim() ?? "";
-                  return (
-                    <li key={reading.note.id} className="memory-reading">
-                      <span className="memory-reading-context">{contextLabel}</span>
-                      <p className="memory-reading-led-to">
-                        {copy.readingsLedToLabel(reading.note.title)}
-                      </p>
-                      {belief && belief !== reading.note.title ? (
-                        <p className="memory-reading-belief">{belief}</p>
-                      ) : null}
-                      {reading.myRole.reason ? (
-                        <p className="memory-reading-reason">{reading.myRole.reason}</p>
-                      ) : null}
-                      {reading.neighbors.length > 0 ? (
-                        <ul
-                          className="memory-reading-neighbors"
-                          aria-label={copy.readingsNeighborsLabel}
+              {/*
+                One line first, then the readings, then the words.
+
+                This used to print every reading in full at once — title,
+                belief, the judge's reason, and two neighbour previews each —
+                so four readings filled the surface and none of them landed.
+                What a person wants from a save is: how many did this produce,
+                which ones, and then WHICH WORDS. Three steps, each answering
+                the question the last one raises.
+              */}
+              <button
+                type="button"
+                className="memory-contents-readings-summary"
+                aria-expanded={expandedReadings.has(signal.id)}
+                onClick={() =>
+                  setExpandedReadings((current) => {
+                    const next = new Set(current);
+                    if (next.has(signal.id)) next.delete(signal.id);
+                    else next.add(signal.id);
+                    return next;
+                  })
+                }
+              >
+                {copy.readingsSummary(
+                  savedSignalReadings[signal.id]?.length ?? 0,
+                  Array.from(
+                    new Set(
+                      (savedSignalReadings[signal.id] ?? []).map((reading) =>
+                        reading.context.scope === "alone"
+                          ? copy.readingsAloneLabel
+                          : reading.context.groupName,
+                      ),
+                    ),
+                  ),
+                )}
+              </button>
+
+              {expandedReadings.has(signal.id) ? (
+                <ul className="memory-reading-list">
+                  {(savedSignalReadings[signal.id] ?? []).map((reading) => {
+                    const isOpen = activeReading?.signalId === signal.id
+                      && activeReading.noteId === reading.note.id;
+                    const contextLabel =
+                      reading.context.scope === "alone"
+                        ? copy.readingsAloneLabel
+                        : copy.readingsInRoomLabel(reading.context.groupName);
+                    return (
+                      <li key={reading.note.id} className="memory-reading">
+                        {/*
+                          Choosing a reading is what highlights the save.
+
+                          The same save read by two rooms lights up different
+                          sentences, and that difference IS the claim — so the
+                          reading has to be selectable, not merely listed.
+                        */}
+                        <button
+                          type="button"
+                          className={`memory-reading-pick${isOpen ? " memory-reading-pick--open" : ""}`}
+                          aria-pressed={isOpen}
+                          disabled={!reading.quote}
+                          title={reading.quote ? undefined : copy.readingsNoQuote}
+                          onClick={() =>
+                            setActiveReading((current) =>
+                              current?.signalId === signal.id
+                                && current.noteId === reading.note.id
+                                ? null
+                                : {
+                                    signalId: signal.id,
+                                    noteId: reading.note.id,
+                                    quote: reading.quote,
+                                  },
+                            )
+                          }
                         >
-                          {reading.neighbors.map((neighbor) => (
-                            <li key={neighbor.signalId} className="memory-reading-neighbor">
-                              <span
-                                className="nc-note-face"
-                                style={{ background: contributorColor(neighbor.ownerName) }}
-                                title={neighbor.ownerName}
-                                aria-hidden="true"
-                              >
-                                {contributorInitials(neighbor.ownerName)}
-                              </span>
-                              <span className="memory-reading-neighbor-preview">
-                                {neighbor.textPreview}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
+                          <span className="memory-reading-context">{contextLabel}</span>
+                          <span className="memory-reading-title">{reading.note.title}</span>
+                        </button>
+                        {isOpen && reading.myRole.reason ? (
+                          <p className="memory-reading-reason">{reading.myRole.reason}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
             </section>
           ) : null}
           <section className="memory-contents-reflection-prompts">

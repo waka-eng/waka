@@ -59,6 +59,8 @@ const aloneReading: SignalReading = {
     createdAt: "2026-07-01T00:00:00.000Z",
   },
   myRole: { role: "anchor", reason: "The save that started the thread." },
+      quote: null,
+      quoteSource: null,
   neighbors: [],
 };
 

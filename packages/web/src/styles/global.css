@@ -17156,3 +17156,98 @@ textarea {
   letter-spacing: 0.02em;
   color: rgba(20, 18, 16, 0.42);
 }
+
+/* ---------------------------------------------------------------------------
+   Which part of a save led to which reading.
+
+   Three steps, each answering the question the last one raises: how many
+   readings did this save produce, which ones, and then which words. The
+   surface printed all three at once before, so four readings filled it and
+   none of them landed.
+--------------------------------------------------------------------------- */
+
+.memory-contents-readings-summary {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  color: rgba(20, 18, 16, 0.55);
+  cursor: pointer;
+}
+
+.memory-contents-readings-summary:hover { color: rgba(20, 18, 16, 0.85); }
+
+.memory-contents-readings-summary::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 8px;
+  border-right: 1.2px solid currentColor;
+  border-bottom: 1.2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 200ms ease;
+}
+
+.memory-contents-readings-summary[aria-expanded="true"]::after {
+  transform: translateY(1px) rotate(-135deg);
+}
+
+/* A reading you can stand inside, not a paragraph you read past. */
+.memory-reading-pick {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 7px 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: rgba(20, 18, 16, 0.82);
+}
+
+.memory-reading-pick:disabled { cursor: default; opacity: 0.45; }
+.memory-reading-pick:not(:disabled):hover { color: rgba(20, 18, 16, 1); }
+
+.memory-reading-pick--open { font-weight: 500; color: rgba(20, 18, 16, 1); }
+
+.memory-reading-pick .memory-reading-context {
+  flex: none;
+  font-size: 0.7rem;
+  color: rgba(20, 18, 16, 0.42);
+}
+
+.memory-reading-title { font-size: 0.86rem; line-height: 1.4; }
+
+/*
+   The save, read through one reading.
+
+   Same text, no editor: a textarea cannot mark a span, and the mark is the
+   whole point. The highlight is a wash rather than a block of colour — it
+   should point without shouting, and the sentence has to stay readable as
+   part of the paragraph it lives in.
+*/
+.memory-contents-expanded-reading {
+  white-space: pre-wrap;
+  cursor: default;
+}
+
+.memory-contents-quote-mark {
+  background: linear-gradient(
+    to bottom,
+    transparent 6%,
+    rgba(212, 175, 78, 0.28) 6%,
+    rgba(212, 175, 78, 0.28) 94%,
+    transparent 94%
+  );
+  color: inherit;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
