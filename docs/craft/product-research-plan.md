@@ -46,6 +46,26 @@ Two more answers that constrain the design:
   than to stop. A wall that can only ever be six is a wall that must pad. The
   design has to make **two post-its a legitimate, finished state** — not an
   error, not an empty state, not a board still loading.
+- **A room never tells anyone they do not belong.** Founder-stated, and it
+  settles what "the room as its own entity" means: a room **remembers** — it
+  accumulates a character that changes how a new signal reads — but it never
+  **wants** in a way that measures a person against it. No drift warnings, no
+  alignment scores, no "this isn't what we're about."
+
+  *The teeth: the product already says this by accident.* A member whose signals
+  never reach a board is being told something, in silence, by a surface that
+  never decided to say it — and it happened to a real person with fourteen
+  signals. The audibility gate can now remove someone entirely. Coverage is
+  reported as "3/6 members", which frames a person as covered or not.
+
+  **Absence from a board must never read as a verdict on a person.** Every
+  surface that can show a member missing needs an answer for why, and the
+  answer has to be about the material, never about them.
+
+  *And it is in direct tension with precision:* a wall of two strong readings
+  shows fewer people than a wall of six weak ones. Choosing fewer readings
+  cannot be allowed to become choosing fewer people. Nobody has designed for
+  this collision and it is the sharpest open question in the document.
 - **Four kinds of heart** a signal can meet: another person's, your own past
   self's, a stranger's, and the room's own accumulated character. Only the
   first is built. *Design consequence: the combination mechanic needs one
