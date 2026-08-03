@@ -2050,103 +2050,19 @@
 
 /* Readings: the same save read alone and read beside each room. Belief
    statements carry the section; everything else stays quiet around them. */
+/*
+   Where this save was read.
+
+   No rule above it and no gap between rows: the previous version put a
+   14px grid gap on the list AND a border on every row, so eleven readings
+   became eleven blocks separated by twenty-two lines. A list of sentences
+   should read as a list of sentences.
+*/
 .memory-contents-readings {
-  display: grid;
-  gap: 14px;
-  padding: 16px 0 4px;
-  border-top: 1px solid rgba(45, 41, 37, 0.1);
+  display: block;
+  padding: 14px 0 4px;
 }
 
-.memory-contents-readings-label {
-  color: rgba(45, 41, 37, 0.48);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 620;
-  text-transform: lowercase;
-}
-
-.memory-reading-list {
-  display: grid;
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.memory-reading {
-  display: grid;
-  gap: 4px;
-}
-
-.memory-reading-context {
-  color: rgba(45, 41, 37, 0.52);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 620;
-  text-transform: lowercase;
-}
-
-/* What this save actually produced here. Carries the weight in the block,
-   because "in Waka" on its own never said what happened in Waka. */
-.memory-reading-led-to {
-  margin: 0;
-  color: rgba(45, 41, 37, 0.9);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 560;
-  line-height: 1.45;
-}
-
-.memory-reading-belief {
-  margin: 0;
-  color: rgba(45, 41, 37, 0.86);
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.memory-reading-reason {
-  margin: 0;
-  color: rgba(45, 41, 37, 0.56);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-
-/* Names the gap before stating it, so the sentence is not mistaken for more
-   of the room's reading. */
-.memory-reading-neighbors {
-  display: grid;
-  gap: 5px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.memory-reading-neighbor {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-/* The neighbor face sits inline rather than in a stacked cluster, so it
-   needs no overlap offset and rings in the drawer's paper instead. */
-.memory-reading-neighbor .nc-note-face {
-  flex: none;
-  margin-right: 0;
-  box-shadow: 0 0 0 1.5px rgba(242, 241, 238, 0.9);
-}
-
-.memory-reading-neighbor-preview {
-  overflow: hidden;
-  color: rgba(45, 41, 37, 0.62);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* Where a save led. One chip per group reading it fed: the room, then what
    that room made of it. Sits under the meta line so scanning the list reads
@@ -17335,30 +17251,54 @@ textarea {
   transform: translateY(1px) rotate(-135deg);
 }
 
-/*
-   Naming what a mark is for.
-
-   A highlighted sentence with nothing said about it is only an emphasis — the
-   reader has to guess why those words and not the others. Saying which reading
-   it became is the difference between "this is important" and "this is the
-   part that turned into THAT".
-*/
-.memory-contents-reading-because {
-  margin: 0 0 10px;
-  padding-left: 11px;
-  border-left: 2px solid rgba(212, 175, 78, 0.55);
-  font-size: 0.74rem;
-  line-height: 1.45;
-  color: rgba(20, 18, 16, 0.55);
-}
-
 /* Stronger than the first pass: the wash alone read as a stray emphasis at a
    glance, and this mark has to be findable in a wall of text. */
+/*
+   The mark, and what it became.
+
+   A banner above the paragraph said the same thing whether or not you were
+   looking at the highlight, and pushed the save itself down the page. Riding
+   on the mark, it answers exactly when the question is asked.
+*/
 .memory-contents-quote-mark {
+  position: relative;
   background: rgba(212, 175, 78, 0.26);
   box-shadow: 0 0 0 3px rgba(212, 175, 78, 0.26);
   border-radius: 2px;
   color: inherit;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+
+.memory-contents-quote-mark[data-led-to]:hover {
+  background: rgba(212, 175, 78, 0.42);
+  box-shadow: 0 0 0 3px rgba(212, 175, 78, 0.42);
+}
+
+.memory-contents-quote-mark[data-led-to]::after {
+  content: attr(data-led-to);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 9px);
+  z-index: 3;
+  width: max-content;
+  max-width: 22rem;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(28, 25, 22, 0.94);
+  color: rgba(250, 248, 245, 0.94);
+  font-size: 0.74rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(3px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.memory-contents-quote-mark[data-led-to]:hover::after {
+  opacity: 1;
+  transform: translateY(0);
 }

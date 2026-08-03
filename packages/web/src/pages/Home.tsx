@@ -711,7 +711,11 @@ function noteWhen(iso: string): string {
  * when the save has been edited since. Showing it plain is honest; guessing
  * at a nearby range would highlight words nobody pointed at.
  */
-export function highlightQuote(text: string, quote: string | null): ReactNode {
+export function highlightQuote(
+  text: string,
+  quote: string | null,
+  ledTo?: string,
+): ReactNode {
   if (!quote) return text;
   const escaped = quote
     .trim()
@@ -721,7 +725,14 @@ export function highlightQuote(text: string, quote: string | null): ReactNode {
   if (!match) return text;
   return [
     text.slice(0, match.index),
-    <mark key="q" className="memory-contents-quote-mark">
+    /*
+       What it became rides on the mark, not above the text.
+
+       A banner over the paragraph said the same thing whether or not you were
+       looking at the highlight, and pushed the save itself down the page. On
+       the mark it answers exactly when the question is asked.
+    */
+    <mark key="q" className="memory-contents-quote-mark" data-led-to={ledTo}>
       {match[0]}
     </mark>,
     text.slice(match.index + match[0].length),
@@ -4931,11 +4942,6 @@ export function HomePage(): JSX.Element {
                   between "this is important" and "this is the part that
                   became THAT".
                 */}
-                {arrivedThroughNote?.quoteBySignalId.get(signal.id) ? (
-                  <p className="memory-contents-reading-because">
-                    {copy.ledToThis(arrivedThroughNote.noteLabel)}
-                  </p>
-                ) : null}
                 <div
                   className="memory-contents-expanded-text memory-contents-expanded-reading"
                   aria-label={copy.savedSignalEditLabel}
@@ -4945,6 +4951,15 @@ export function HomePage(): JSX.Element {
                     activeReading?.signalId === signal.id && activeReading.quote
                       ? activeReading.quote
                       : arrivedThroughNote?.quoteBySignalId.get(signal.id) ?? null,
+                    activeReading?.signalId === signal.id
+                      ? copy.ledToThis(
+                          savedSignalReadings[signal.id]?.find(
+                            (reading) => reading.note.id === activeReading.noteId,
+                          )?.note.title ?? "",
+                        )
+                      : arrivedThroughNote
+                        ? copy.ledToThis(arrivedThroughNote.noteLabel)
+                        : undefined,
                   )}
                 </div>
               </div>
