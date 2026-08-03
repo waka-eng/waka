@@ -257,11 +257,29 @@ describe("synthesis trigger selection", () => {
     // say together" — which is the whole point of a group board.
     const { alice, bob } = await twoUsers();
 
+    /**
+     * Long enough to be heard.
+     *
+     * Saves below the audibility floor never seed a reading — there are no
+     * words in them to read — so a fixture written as `alice signal 3` now
+     * describes a save the pipeline correctly ignores, and this test would
+     * assert fairness over an empty pass. Fairness is what it is for, so its
+     * fixtures have to be saves a real person could have written.
+     */
+    const audible = (text: string) =>
+      `${text}. ${"Something worth keeping, written out at the length a person actually writes. "
+        .repeat(2)}`;
+
     for (let i = 0; i < 40; i += 1) {
-      const id = await saveSignal(alice.id, `alice signal ${i}`, true, 900 + i);
+      const id = await saveSignal(alice.id, audible(`alice signal ${i}`), true, 900 + i);
       await embed(alice.id, id);
     }
-    const bobSignal = await saveSignal(bob.id, "the one thing bob saved", true, 1);
+    const bobSignal = await saveSignal(
+      bob.id,
+      audible("the one thing bob saved"),
+      true,
+      1,
+    );
     await embed(bob.id, bobSignal);
 
     const triggers = await loadTriggerSignals(db(), [alice.id, bob.id]);
