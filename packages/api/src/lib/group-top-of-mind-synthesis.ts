@@ -60,6 +60,22 @@ const PER_MEMBER_TRIGGER_SCAN = 60;
  */
 const TRIGGER_DIVERSITY_WEIGHT = 0.6;
 
+/**
+ * A reading that cleared every gate and is waiting to be chosen.
+ *
+ * Carries what selection needs and nothing else: who its evidence belongs to
+ * (so a board can spread across members) and the judgment itself (whose title
+ * and belief statement are what "says a different thing" is measured over).
+ */
+export interface BoardCandidate {
+  judgment: Extract<WowMomentJudgment, { isWowMoment: true }>;
+  /** Signal id -> owner, as the persist step needs it. */
+  owners: Map<string, string>;
+  /** Distinct members this reading rests on. Always at least two. */
+  ownerIds: string[];
+  triggerWowScore: number;
+}
+
 export interface GroupSynthesisResult {
   /**
    * The single instant this whole pass is stamped with.
@@ -653,8 +669,33 @@ export async function generateGroupTopOfMind(
   let triggersTried = 0;
   const reconfirmedNoteIds: string[] = [];
 
+  /**
+   * Readings that cleared every gate, held rather than written.
+   *
+   * Generating and persisting used to be the same step: a judgment that
+   * survived went straight onto the board, and the pass stopped at
+   * `TARGET_NOTES`. That made the wall "the first six that worked" rather than
+   * the best six — arrival order decided it, and no stage was ever in a
+   * position to see the six together.
+   *
+   * Separating the two is what lets a *set* exist at all. Selection lands
+   * between them.
+   */
+  const candidates: BoardCandidate[] = [];
+
   for (const trigger of triggers) {
-    if (notesCreated >= TARGET_NOTES) break;
+    /**
+     * Bounded by candidates now, where it used to be bounded by notes actually
+     * created. The two differ in one case: a pass that keeps re-deriving
+     * readings already on the board used to carry on until it had six NEW
+     * ones, and now stops once it holds six that cleared the gates.
+     *
+     * Called out rather than hidden because it is the only behavioural change
+     * in an otherwise pure separation — the outcome of a persist is not
+     * knowable until after the loop, which is the entire point of moving it.
+     * Selection raises this bound deliberately in any case.
+     */
+    if (candidates.length >= TARGET_NOTES) break;
     triggersTried += 1;
 
     let judgment: WowMomentJudgment;
@@ -697,12 +738,21 @@ export async function generateGroupTopOfMind(
     // combination-only insight will happily claim one.
     if (await restatesASingleMember(db, judgment, owners)) continue;
 
+    candidates.push({
+      judgment,
+      owners,
+      ownerIds: [...distinctOwners],
+      triggerWowScore: trigger.wowScore,
+    });
+  }
+
+  for (const candidate of candidates) {
     const outcome = await persistGroupNote(db, {
       groupId: input.groupId,
-      judgment,
+      judgment: candidate.judgment,
       locale,
-      triggerWowScore: trigger.wowScore,
-      ownersBySignalId: owners,
+      triggerWowScore: candidate.triggerWowScore,
+      ownersBySignalId: candidate.owners,
       passAt,
     });
     if (outcome.outcome === "created") notesCreated += 1;
