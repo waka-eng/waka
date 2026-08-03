@@ -711,32 +711,75 @@ function noteWhen(iso: string): string {
  * when the save has been edited since. Showing it plain is honest; guessing
  * at a nearby range would highlight words nobody pointed at.
  */
-export function highlightQuote(
-  text: string,
-  quote: string | null,
-  ledTo?: string,
-): ReactNode {
-  if (!quote) return text;
-  const escaped = quote
-    .trim()
-    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\s+/g, "\\s+");
-  const match = new RegExp(escaped, "i").exec(text);
-  if (!match) return text;
-  return [
-    text.slice(0, match.index),
-    /*
-       What it became rides on the mark, not above the text.
+/** One span of a save, and what it became. */
+export interface QuoteMark {
+  quote: string;
+  ledTo: string;
+}
 
-       A banner over the paragraph said the same thing whether or not you were
-       looking at the highlight, and pushed the save itself down the page. On
-       the mark it answers exactly when the question is asked.
+/**
+ * The save's own text, with every span that carried a reading lit up.
+ *
+ * The quotes were verified against the save with whitespace normalized, so
+ * finding them again has to be whitespace-tolerant — a stored span may have
+ * been re-wrapped by the model, and an exact search would miss the very quote
+ * we already proved was there.
+ *
+ * A span that cannot be located is skipped, which happens when the save has
+ * been edited since. Showing the text plain is honest; guessing at a nearby
+ * range would highlight words nobody pointed at.
+ */
+export function highlightQuotes(text: string, marks: QuoteMark[]): ReactNode {
+  const found: Array<{ start: number; end: number; ledTo: string[] }> = [];
+
+  for (const mark of marks) {
+    if (!mark.quote) continue;
+    const escaped = mark.quote
+      .trim()
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
+    const match = new RegExp(escaped, "i").exec(text);
+    if (!match) continue;
+
+    /*
+       Two readings can rest on the same words, and they should share one mark
+       rather than stack two — overlapping <mark> elements would nest and the
+       wash would double where they meet.
     */
-    <mark key="q" className="memory-contents-quote-mark" data-led-to={ledTo}>
-      {match[0]}
-    </mark>,
-    text.slice(match.index + match[0].length),
-  ];
+    const overlapping = found.find(
+      (span) => match.index < span.end && span.start < match.index + match[0].length,
+    );
+    if (overlapping) {
+      if (!overlapping.ledTo.includes(mark.ledTo)) overlapping.ledTo.push(mark.ledTo);
+      continue;
+    }
+    found.push({
+      start: match.index,
+      end: match.index + match[0].length,
+      ledTo: [mark.ledTo],
+    });
+  }
+
+  if (found.length === 0) return text;
+  found.sort((a, b) => a.start - b.start);
+
+  const out: ReactNode[] = [];
+  let cursor = 0;
+  found.forEach((span, index) => {
+    if (span.start > cursor) out.push(text.slice(cursor, span.start));
+    out.push(
+      <mark
+        key={`q${index}`}
+        className="memory-contents-quote-mark"
+        data-led-to={span.ledTo.join("\n")}
+      >
+        {text.slice(span.start, span.end)}
+      </mark>,
+    );
+    cursor = span.end;
+  });
+  if (cursor < text.length) out.push(text.slice(cursor));
+  return out;
 }
 
 function noteToThoughtCard(
@@ -1372,8 +1415,10 @@ const HOME_COPY = {
     savedSignalReflectionLoading: "돌아보기를 불러오는 중...",
     savedSignalReflectionEmpty: "돌아보기가 여기에 나타납니다.",
     readingsSectionLabel: "이 영감이 읽힌 방식",
-    readingsSummary: (count: number, places: string[]) =>
-      `${places.join(", ")}에서 탑오브마인드 ${count}개를 만들었습니다`,
+    readingsSummary: (count: number, marked: number) =>
+      marked > 0
+        ? `탑오브마인드 ${count}개로 이어졌고, 그중 ${marked}개는 아래에 표시되어 있습니다`
+        : `탑오브마인드 ${count}개로 이어졌습니다`,
     readingsNoQuote: "이 읽기에서는 어느 부분인지 표시되지 않았습니다",
     ledToSummary: (count: number, places: string[]) =>
       `${places.join(", ")}에서 탑오브마인드 ${count}개로 이어졌습니다`,
@@ -1524,8 +1569,10 @@ const HOME_COPY = {
     savedSignalReflectionLoading: "loading reflections...",
     savedSignalReflectionEmpty: "Your reflection will appear here.",
     readingsSectionLabel: "how this inspiration reads",
-    readingsSummary: (count: number, places: string[]) =>
-      `generated ${count} top of mind${count === 1 ? "" : "s"} in ${places.join(", ")}`,
+    readingsSummary: (count: number, marked: number) =>
+      marked > 0
+        ? `led to ${count} top of mind${count === 1 ? "" : "s"} · ${marked} marked below`
+        : `led to ${count} top of mind${count === 1 ? "" : "s"}`,
     readingsNoQuote: "this reading did not point at a particular part",
     ledToSummary: (count: number, places: string[]) =>
       `generated ${count} top of mind${count === 1 ? "" : "s"} in ${places.join(", ")}`,
@@ -1666,7 +1713,7 @@ const HOME_COPY = {
     savedSignalReflectionLoading: string;
     savedSignalReflectionEmpty: string;
     readingsSectionLabel: string;
-    readingsSummary: (count: number, places: string[]) => string;
+    readingsSummary: (count: number, marked: number) => string;
     readingsNoQuote: string;
     ledToSummary: (count: number, places: string[]) => string;
     ledToThis: (title: string) => string;
@@ -1826,22 +1873,12 @@ export function HomePage(): JSX.Element {
   const [roomTimeline, setRoomTimeline] = useState<ApiRoomTimeline | null>(null);
   const [scrubbedAt, setScrubbedAt] = useState<string | null>(null);
   const [scrubbedNotes, setScrubbedNotes] = useState<ApiTimelineNote[] | null>(null);
+  /** The save whose text you have clicked into to edit, if any. */
+  const [editingSignalId, setEditingSignalId] = useState<string | null>(null);
   /** Which saves have their readings unfolded. Collapsed is the resting state. */
   const [expandedReadings, setExpandedReadings] = useState<Set<string>>(new Set());
   /** Which collapsed cards have unfolded the readings they led to. */
   const [expandedLedChips, setExpandedLedChips] = useState<Set<string>>(new Set());
-  /**
-   * The reading you are currently looking at a save through.
-   *
-   * This is the whole point of the surface: the same save read by two rooms
-   * rests on different sentences, so "which words" is only answerable once you
-   * have said WHICH READING you are asking about.
-   */
-  const [activeReading, setActiveReading] = useState<{
-    signalId: string;
-    noteId: string;
-    quote: string | null;
-  } | null>(null);
   /**
    * The reading you opened these saves through, if you came from one.
    *
@@ -2419,7 +2456,6 @@ export function HomePage(): JSX.Element {
     setActiveTopOfMindEvidenceFilter(null);
     // You are no longer looking through any reading, so nothing should stay lit.
     setArrivedThroughNote(null);
-    setActiveReading(null);
     setSavedSignalDetail(null);
     setSavedSignalDetailLoading(false);
     setSavedSignalDrafts({});
@@ -4922,46 +4958,23 @@ export function HomePage(): JSX.Element {
           >
             {detailPending ? (
               <p className="memory-contents-loading">{copy.savedSignalOpening}</p>
-            ) : (activeReading?.signalId === signal.id && activeReading.quote)
-              || arrivedThroughNote?.quoteBySignalId.get(signal.id) ? (
+            ) : quoteMarksFor(signal.id).length > 0 && editingSignalId !== signal.id ? (
               /*
-                Reading through a reading.
+                The save, with everything it led to lit.
 
-                A textarea cannot mark a span, and marking is the entire point
-                here — so choosing a reading swaps the editor for a read-only
-                view of the same text with the words that carried THAT reading
-                lit. Choosing it again puts the editor back.
+                A textarea cannot mark a span, so the highlighted view is
+                read-only and clicking the text hands the editor back. Arriving
+                from a post-it narrows this to that one reading's span; opening
+                the save directly shows every span it produced, which is what
+                lets the list of readings go away — the text IS the index.
               */
-              <div className="memory-contents-reading-frame">
-                {/*
-                  Naming what the mark is for.
-
-                  A highlighted sentence with nothing said about it is just an
-                  emphasis — the reader has to guess why those words and not
-                  the others. Saying which reading it led to is the difference
-                  between "this is important" and "this is the part that
-                  became THAT".
-                */}
-                <div
-                  className="memory-contents-expanded-text memory-contents-expanded-reading"
-                  aria-label={copy.savedSignalEditLabel}
-                >
-                  {highlightQuote(
-                    detailText,
-                    activeReading?.signalId === signal.id && activeReading.quote
-                      ? activeReading.quote
-                      : arrivedThroughNote?.quoteBySignalId.get(signal.id) ?? null,
-                    activeReading?.signalId === signal.id
-                      ? copy.ledToThis(
-                          savedSignalReadings[signal.id]?.find(
-                            (reading) => reading.note.id === activeReading.noteId,
-                          )?.note.title ?? "",
-                        )
-                      : arrivedThroughNote
-                        ? copy.ledToThis(arrivedThroughNote.noteLabel)
-                        : undefined,
-                  )}
-                </div>
+              <div
+                className="memory-contents-expanded-text memory-contents-expanded-reading"
+                aria-label={copy.savedSignalEditLabel}
+                onClick={() => setEditingSignalId(signal.id)}
+                title={copy.savedSignalEditLabel}
+              >
+                {highlightQuotes(detailText, quoteMarksFor(signal.id))}
               </div>
             ) : (
               <textarea
@@ -5031,103 +5044,23 @@ export function HomePage(): JSX.Element {
               >
                 {copy.readingsSummary(
                   savedSignalReadings[signal.id]?.length ?? 0,
-                  Array.from(
-                    new Set(
-                      (savedSignalReadings[signal.id] ?? []).map((reading) =>
-                        reading.context.scope === "alone"
-                          ? copy.readingsAloneLabel
-                          : reading.context.groupName,
-                      ),
-                    ),
-                  ),
+                  (savedSignalReadings[signal.id] ?? []).filter((r) => r.quote).length,
                 )}
               </button>
 
               {expandedReadings.has(signal.id) ? (
-                <div className="memory-reading-groups">
-                  {/*
-                    Grouped by where it was read, not repeated per row.
-
-                    Eleven readings printed as eleven identical rows, each
-                    restating "alone" or "in waka", made the place feel like
-                    part of every title instead of the thing that separates two
-                    kinds of reading. The context is a heading now, said once.
-                  */}
-                  {[
-                    { key: "alone", label: copy.readingsAloneLabel },
-                    ...Array.from(
-                      new Map(
-                        (savedSignalReadings[signal.id] ?? [])
-                          .flatMap((reading) =>
-                            reading.context.scope === "group"
-                              ? ([
-                                  [
-                                    reading.context.groupId,
-                                    { key: reading.context.groupId, label: reading.context.groupName },
-                                  ],
-                                ] as const)
-                              : [],
-                          ),
-                      ).values(),
-                    ),
-                  ].map((group) => {
-                    const inGroup = (savedSignalReadings[signal.id] ?? []).filter((reading) =>
-                      group.key === "alone"
-                        ? reading.context.scope === "alone"
-                        : reading.context.scope === "group" && reading.context.groupId === group.key,
-                    );
-                    if (inGroup.length === 0) return null;
-                    return (
-                      <div key={group.key} className="memory-reading-group">
-                        <span className="memory-reading-group-label">{group.label}</span>
-                        <ul className="memory-reading-list">
-                          {inGroup.map((reading) => {
-                            const isOpen = activeReading?.signalId === signal.id
-                              && activeReading.noteId === reading.note.id;
-                            return (
-                              <li key={reading.note.id} className="memory-reading">
-                                {/*
-                                  Choosing a reading is what highlights the save.
-
-                                  The same save read by two rooms rests on
-                                  different sentences, and that difference IS
-                                  the claim — so a reading has to be selectable,
-                                  not merely listed. One that named no span says
-                                  so by being inert rather than by failing
-                                  silently when clicked.
-                                */}
-                                <button
-                                  type="button"
-                                  className={`memory-reading-pick${isOpen ? " memory-reading-pick--open" : ""}${reading.quote ? " memory-reading-pick--has-part" : ""}`}
-                                  aria-pressed={isOpen}
-                                  disabled={!reading.quote}
-                                  title={reading.quote ? undefined : copy.readingsNoQuote}
-                                  onClick={() =>
-                                    setActiveReading((current) =>
-                                      current?.signalId === signal.id
-                                        && current.noteId === reading.note.id
-                                        ? null
-                                        : {
-                                            signalId: signal.id,
-                                            noteId: reading.note.id,
-                                            quote: reading.quote,
-                                          },
-                                    )
-                                  }
-                                >
-                                  <span className="memory-reading-title">{reading.note.title}</span>
-                                  {reading.quote ? (
-                                    <span className="memory-reading-part" aria-hidden="true" />
-                                  ) : null}
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    );
-                  })}
-                </div>
+                <ul className="memory-reading-plain">
+                  {(savedSignalReadings[signal.id] ?? []).map((reading) => (
+                    <li key={reading.note.id} className="memory-reading-plain-row">
+                      <span className="memory-reading-plain-where">
+                        {reading.context.scope === "alone"
+                          ? copy.readingsAloneLabel
+                          : reading.context.groupName}
+                      </span>
+                      <span className="memory-reading-plain-title">{reading.note.title}</span>
+                    </li>
+                  ))}
+                </ul>
               ) : null}
             </section>
           ) : null}
@@ -5527,6 +5460,30 @@ export function HomePage(): JSX.Element {
       attachmentSummary: [],
       relevanceReasons: support.reason ? [support.reason] : [],
     };
+  };
+
+  /**
+   * Which spans to light, decided by how you arrived.
+   *
+   * Through a post-it: only the span that fed THAT reading, because you asked
+   * a specific question and the answer is one sentence.
+   *
+   * Straight from the drawer: every span the save produced, each naming its
+   * own reading on hover. The text becomes the index of what it led to, which
+   * is why the list of readings underneath can go away — it was saying in
+   * eleven rows what the paragraph can say in place.
+   */
+  const quoteMarksFor = (signalId: string): QuoteMark[] => {
+    const throughNote = arrivedThroughNote?.quoteBySignalId.get(signalId);
+    if (throughNote) {
+      return [{ quote: throughNote, ledTo: copy.ledToThis(arrivedThroughNote!.noteLabel) }];
+    }
+    return (savedSignalReadings[signalId] ?? [])
+      .filter((reading) => reading.quote)
+      .map((reading) => ({
+        quote: reading.quote as string,
+        ledTo: copy.ledToThis(reading.note.title),
+      }));
   };
 
   const openTopOfMindEvidenceDrawer = (signal: HomeThoughtCard) => {
