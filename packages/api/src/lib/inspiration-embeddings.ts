@@ -437,3 +437,54 @@ export async function ensureInspirationEmbedding(
     return { status, embedding: stored, generated: true, inputHash };
   });
 }
+
+/**
+ * Re-embed a signal whose content changed after capture.
+ *
+ * Capture already does the right thing: `generateAutoWowMomentForInspiration`
+ * enriches, then embeds, so a new save's first vector is its audible one.
+ * Nothing did the same for the changes that come *after* — and four of the
+ * five inputs to a canonical embedding can still move: text, kind, category,
+ * reflections, enrichment.
+ *
+ * The consequence measured on a real board: 19 of 63 shared signals held a
+ * vector that no longer matched the row it described. The pipeline reads
+ * vectors, never rows, so those signals were being matched as an older version
+ * of themselves. Worst of all it punished effort — writing a reflection is the
+ * most deliberate thing a person can do to a save, and it silently made that
+ * save's vector wrong, so it connected to less than it had before.
+ *
+ * Best-effort by design, and never a gate on the write that triggered it. The
+ * user's reflection is saved whatever the embedding provider is doing; the
+ * same stance `auto-wow-generation` takes toward enrichment. `ensureInspiration
+ * Embedding` compares hashes first, so a change that does not affect the
+ * canonical input costs one query and no provider call.
+ *
+ * Not queued because there is no job type for it and re-using
+ * `process_inspiration` would drag a judge pass — many model calls — behind
+ * every edit of a reflection. If the added latency ever matters, the upgrade
+ * is its own job type, not a bigger existing one.
+ */
+export async function refreshEmbeddingAfterChange(
+  params: EnsureInspirationEmbeddingParams & { reason: "edited" | "reflected" },
+): Promise<void> {
+  try {
+    const result = await ensureInspirationEmbedding(params);
+    if (result.generated) {
+      console.log("[embeddings] refreshed after change", {
+        inspirationId: params.inspirationId,
+        reason: params.reason,
+        status: result.status,
+      });
+    }
+  } catch (err) {
+    // Never silent: a vector that failed to refresh is a signal that will be
+    // read as its older self until something touches it again, and that is
+    // invisible from every surface.
+    console.warn("[embeddings] refresh after change failed", {
+      inspirationId: params.inspirationId,
+      reason: params.reason,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}

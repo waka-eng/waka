@@ -52,6 +52,7 @@ import {
   type SignalSpark,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { refreshEmbeddingAfterChange } from "../lib/inspiration-embeddings.js";
 import {
   calculateDisplayedInspirationScore,
   calculateInspirationScoreBreakdown,
@@ -1239,6 +1240,16 @@ routes.patch("/:id", async (c) => {
     });
   }
 
+  // The text just changed, so the vector describing it no longer does. Cheap
+  // when the edit did not touch the canonical input — the hash is compared
+  // before any provider call — and never a gate on the edit itself.
+  await refreshEmbeddingAfterChange({
+    db,
+    userId: user.id,
+    inspirationId: updated.id,
+    reason: "edited",
+  });
+
   const updatedScores = await persistScores(db, updated);
   const scoredUpdated = { ...updated, ...updatedScores };
   await materializeSignalDocument({
@@ -1405,6 +1416,16 @@ routes.post("/:id/reflections", async (c) => {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+
+  // A reflection joins the canonical embedding input, so the save now means
+  // something the stored vector has never seen. Refreshed before the judge is
+  // asked to look again, or the pass reasons about the pre-reflection save.
+  await refreshEmbeddingAfterChange({
+    db,
+    userId: user.id,
+    inspirationId: parent.id,
+    reason: "reflected",
+  });
 
   try {
     await enqueueClassificationJob(parent.id, user.id, {
