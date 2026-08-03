@@ -5,11 +5,14 @@ import {
   hashEmbeddingInput,
 } from "./inspiration-embeddings.js";
 import {
+  MIN_AUDIBLE_CHARS,
+  audibleLength,
   enrichmentBudgetFor,
   extractArticleBody,
   extractFirstUrl,
   extractHtmlSummary,
   extractYouTubeDescription,
+  isAudible,
   isAuthWallSummary,
   isPrivateAddress,
   stripBoilerplateLines,
@@ -255,6 +258,65 @@ describe("addresses the enrichment fetch must refuse", () => {
   it("allows ordinary public addresses", () => {
     for (const address of ["93.184.216.34", "8.8.8.8", "172.32.0.1", "2606:2800:220:1::1"]) {
       expect(isPrivateAddress(address), address).toBe(false);
+    }
+  });
+});
+
+describe("audibility", () => {
+  /**
+   * The real one, from Waka's board. 40 characters, none of them words.
+   * This save was a synthesis trigger and a candidate before the gate existed.
+   */
+  const bareLink = "https://youtu.be/8IWA3Pud2aA?si=g1k0-YrZn";
+
+  it("hears no words in a bare link, however long the URL", () => {
+    expect(audibleLength(bareLink, null)).toBe(0);
+    expect(isAudible({ text: bareLink, enrichment: null })).toBe(false);
+    // A longer URL must not become more audible — the link is the thing being
+    // explained, not the explanation.
+    expect(isAudible({ text: `${bareLink}&utm_source=${"x".repeat(400)}`, enrichment: null })).toBe(
+      false,
+    );
+  });
+
+  it("hears a link once enrichment gives it the page's words", () => {
+    const enrichment = "가".repeat(MIN_AUDIBLE_CHARS);
+    expect(isAudible({ text: bareLink, enrichment })).toBe(true);
+  });
+
+  it("hears someone's own writing without any enrichment", () => {
+    expect(isAudible({ text: "a".repeat(MIN_AUDIBLE_CHARS), enrichment: null })).toBe(true);
+    expect(isAudible({ text: "a".repeat(MIN_AUDIBLE_CHARS - 1), enrichment: null })).toBe(false);
+  });
+
+  it("counts a note that merely contains a link by its own words", () => {
+    const shortNote = `read this ${bareLink}`;
+    expect(isAudible({ text: shortNote, enrichment: null })).toBe(false);
+    const realNote = `${"이 글은 ".repeat(40)} ${bareLink}`;
+    expect(isAudible({ text: realNote, enrichment: null })).toBe(true);
+  });
+
+  /**
+   * The SQL prefilters in `group-top-of-mind-synthesis` and `wow-candidates`
+   * repeat this predicate so the scan window is not spent on silent saves.
+   * They are written to OVER-include — no whitespace normalization — so the two
+   * can never disagree in the direction that silently drops a real signal.
+   * This pins that direction.
+   */
+  it("is never stricter than the SQL prefilter that precedes it", () => {
+    const sqlApproximation = (text: string, enrichment: string | null) =>
+      text.replace(/https?:\/\/\S+/g, " ").length + (enrichment?.length ?? 0);
+
+    for (const [text, enrichment] of [
+      [bareLink, null],
+      ["read this " + bareLink, null],
+      ["a".repeat(200), null],
+      [bareLink, "b".repeat(200)],
+      ["  spaced   out   words  ".repeat(20), null],
+    ] as const) {
+      if (isAudible({ text, enrichment })) {
+        expect(sqlApproximation(text, enrichment)).toBeGreaterThanOrEqual(MIN_AUDIBLE_CHARS);
+      }
     }
   });
 });

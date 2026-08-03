@@ -8,7 +8,7 @@
  * clear backfill/recompute semantics.
  */
 
-import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../db/index.js";
 import {
@@ -27,6 +27,7 @@ import {
 } from "../scoring/wow-score.js";
 import { getDb } from "./db.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { MIN_AUDIBLE_CHARS } from "./signal-enrichment.js";
 import { isNearDuplicateTopOfMindText } from "./top-of-mind-dedupe.js";
 
 const DEFAULT_LIMIT = 10;
@@ -395,6 +396,21 @@ async function loadPooledCandidatePool(
         ne(inspirationEmbeddings.inspirationId, triggerInspirationId),
         eq(inspirationEmbeddings.model, triggerEmbedding.model),
         eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
+        /**
+         * A save with nothing readable in it cannot support a reading.
+         *
+         * It embeds to noise, so it lands near whatever the trigger is and
+         * takes one of the very few candidate slots — `diversifyAcrossMembers`
+         * caps each member at `ceil(limit / 3)`, so on a group pass one silent
+         * link is a third of a member's entire representation. Worse, it does
+         * this while contributing no words the judge can cite, so the note it
+         * helps produce cannot rest on it.
+         *
+         * Generous by construction (no whitespace normalization); the
+         * authority is `isAudible` in `signal-enrichment.ts`, and the two are
+         * pinned equivalent by test.
+         */
+        sql`length(regexp_replace(${inspirations.text}, 'https?://\\S+', ' ', 'g')) + coalesce(length(${inspirations.enrichment}), 0) >= ${MIN_AUDIBLE_CHARS}`,
       ),
     )
     // `id` last: a tie must break the same way on every pass, or the candidate

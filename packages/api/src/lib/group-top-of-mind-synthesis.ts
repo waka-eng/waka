@@ -14,7 +14,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import {
   groupMembers,
@@ -27,6 +27,7 @@ import { getDb } from "./db.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import type { SupportedLocale } from "./locales.js";
 import { cosineSimilarity } from "../scoring/wow-score.js";
+import { MIN_AUDIBLE_CHARS, isAudible } from "./signal-enrichment.js";
 import { judgeGroupWowMoment, type WowMomentJudgment } from "./wow-judge.js";
 
 // Bound the model calls per synthesis run. Each trigger is one judge call, and
@@ -182,6 +183,8 @@ export async function loadTriggerSignals(
           id: signals.id,
           userId: signals.userId,
           wowScore: signals.wowScore,
+          text: signals.text,
+          enrichment: signals.enrichment,
           embedding: inspirationEmbeddings.embedding,
         })
         .from(signals)
@@ -192,12 +195,52 @@ export async function loadTriggerSignals(
             eq(inspirationEmbeddings.userId, signals.userId),
           ),
         )
-        .where(and(eq(signals.userId, userId), eq(signals.sharedToGroups, true)))
+        .where(
+          and(
+            eq(signals.userId, userId),
+            eq(signals.sharedToGroups, true),
+            /**
+             * Deliberately GENEROUS, and not the authority.
+             *
+             * `isAudible` decides; this only stops the scan window being spent
+             * on saves with nothing in them. Written to over-include (no
+             * whitespace normalization) so the two predicates can never
+             * disagree in the direction that silently drops a real signal.
+             */
+            sql`length(regexp_replace(${signals.text}, 'https?://\\S+', ' ', 'g')) + coalesce(length(${signals.enrichment}), 0) >= ${MIN_AUDIBLE_CHARS}`,
+          ),
+        )
         // `id` last so ties break the same way every run.
         .orderBy(desc(signals.wowScore), desc(signals.createdAt), asc(signals.id))
         .limit(PER_MEMBER_TRIGGER_SCAN),
     ),
   );
+
+  /**
+   * The authoritative gate.
+   *
+   * A save with no readable words cannot seed a reading — there is nothing in
+   * it to read — and letting one through costs a whole judge call plus a
+   * candidate slot, and drags every similarity threshold toward the floor
+   * because a bare URL embeds to noise. Measured on Waka: one member held 13
+   * bare links out of 14 shared saves, appeared in no reading, and the absence
+   * read as "their taste does not combine" when it was only that nobody could
+   * hear them.
+   *
+   * This gates being *quoted*, never being *saved*. A silent save still lives
+   * on its owner's wall and still counts as something they reacted to.
+   */
+  const audibleByMember = perMember.map((rows) => rows.filter(isAudible));
+  const excluded = perMember.reduce((sum, rows) => sum + rows.length, 0) -
+    audibleByMember.reduce((sum, rows) => sum + rows.length, 0);
+  if (excluded > 0) {
+    // Never silent: a pass that quietly ignores a third of a room looks
+    // identical to a room that had nothing to say.
+    console.log("[group-synthesis] inaudible signals skipped as triggers", {
+      excluded,
+      minAudibleChars: MIN_AUDIBLE_CHARS,
+    });
+  }
 
   /**
    * Rank each member's signals by how strongly they reach *someone else*, not
@@ -217,7 +260,7 @@ export async function loadTriggerSignals(
    * same budget of four produced a real note with another member; the signal it
    * came from sat thirteenth by `wow_score` and would never have been asked.
    */
-  const everything = perMember.flat();
+  const everything = audibleByMember.flat();
   const crossReach = new Map<string, number>();
   for (const signal of everything) {
     const own = signal.embedding as number[] | null;
@@ -242,7 +285,7 @@ export async function loadTriggerSignals(
    * take, never how to escape the centre. The cap belongs on how many are
    * *taken* below, not on what may be considered.
    */
-  const ranked = perMember.map((rows) =>
+  const ranked = audibleByMember.map((rows) =>
     [...rows].sort((a, b) => {
       const delta = (crossReach.get(b.id) ?? -1) - (crossReach.get(a.id) ?? -1);
       // Ties fall back to id so a pass stays reproducible.

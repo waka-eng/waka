@@ -40,6 +40,49 @@ const MAX_REDIRECTS = 4;
 const AUDIBILITY_FLOOR_CHARS = 1200;
 /** Never fetch more than this, however silent the save. Not an article mirror. */
 const MAX_ENRICHMENT_CHARS = 1600;
+
+/**
+ * Below this many readable characters, a save says nothing an embedding can
+ * use, and the pipeline must not pretend otherwise.
+ *
+ * Distinct from {@link AUDIBILITY_FLOOR_CHARS}, which is what enrichment aims
+ * *at*. This is the far lower bar for being heard at all — a title and a
+ * fragment. The two were previously one number in the lib and a different one
+ * in a backfill script, so nothing enforced either.
+ *
+ * 120 is where the measurement was taken (migration 0035): 61% of shared
+ * signals cleared it, and the member who sat at 1 of 14 was the one nobody
+ * could read.
+ */
+export const MIN_AUDIBLE_CHARS = 120;
+
+/**
+ * How much of this save an embedding can actually read.
+ *
+ * URLs are stripped before counting, for the same reason the enrichment budget
+ * strips them: a long link would otherwise argue that a save is full of words.
+ * A bare `https://youtu.be/8IWA3Pud2aA?si=g1k0` is 40 characters of nothing.
+ *
+ * Enrichment counts, because that is the entire point of it — a link that has
+ * been fetched carries the page's own words and is genuinely audible now.
+ */
+export function audibleLength(text: string, enrichment: string | null): number {
+  const ownWords = text.replace(/https?:\/\/\S+/g, " ");
+  return `${ownWords} ${enrichment ?? ""}`.replace(/\s+/g, " ").trim().length;
+}
+
+/**
+ * Can the pipeline hear this save?
+ *
+ * The gate, not a judgement of worth. A save below the floor still lives on
+ * its owner's wall, still belongs to them, and still counts as something they
+ * reacted to — it simply cannot seed or support a reading, because there is
+ * nothing in it to read. Saving is never gatekept; being *quoted* requires
+ * words.
+ */
+export function isAudible(signal: { text: string; enrichment: string | null }): boolean {
+  return audibleLength(signal.text, signal.enrichment) >= MIN_AUDIBLE_CHARS;
+}
 /**
  * Even a save that needs no help should say WHAT it linked to. This is enough
  * for a title and a blurb — identification, not substance.
