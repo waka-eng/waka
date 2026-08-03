@@ -107,6 +107,21 @@ export function enrichmentBudgetFor(text: string): number {
   return Math.min(topUp, MAX_ENRICHMENT_CHARS);
 }
 /**
+ * How much of a fetched page the extractors are allowed to see.
+ *
+ * The regexes below run over attacker-chosen HTML: the page belongs to
+ * whoever wrote it, and a user only chose to save a link to it. Handing a
+ * pattern 1.5 MB of hostile markup is a denial-of-service waiting to be
+ * written, and nothing useful lives that far down anyway — og tags and the
+ * player JSON are in the head, and the article body extractor takes what it
+ * needs from the first screens of markup.
+ *
+ * Small enough to bound the worst case, large enough that a real article's
+ * opening paragraphs are always inside it.
+ */
+const MAX_HTML_CHARS = 64_000;
+
+/**
  * A realistic browser UA, not an honest bot one. YouTube (and others) serve
  * bot UAs a stripped page with no og tags at all; the page's own words are
  * public, we are fetching them once, and the polite string got us silence.
@@ -431,7 +446,7 @@ async function fetchYouTubeSummary(url: string, budget: number): Promise<string 
   try {
     const res = await fetchWithTimeout(url);
     if (res.ok) {
-      const html = (await res.text()).slice(0, 1_500_000);
+      const html = (await res.text()).slice(0, MAX_HTML_CHARS);
       // The player JSON first: it is the only copy of the description that
       // still has line breaks, so it is the only one the sign-off can be
       // stripped out of. `og:description` is the fallback for a page whose
@@ -469,7 +484,7 @@ export async function fetchUrlEnrichment(
     if (!contentType.includes("html")) return null;
     // "Meta lives in the head" is a lie on modern sites: YouTube puts its og
     // tags ~690KB in. Read generously; this runs once per URL ever.
-    const html = (await res.text()).slice(0, 1_500_000);
+    const html = (await res.text()).slice(0, MAX_HTML_CHARS);
     return extractHtmlSummary(html, budget);
   } catch {
     return null;
