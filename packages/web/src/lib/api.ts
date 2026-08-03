@@ -1637,6 +1637,16 @@ export interface ApiTimelineNote {
   idempotencyKey: string;
   createdAt: string;
   replacedAt: string | null;
+  /** Whose saves this reading rests on — a past card keeps its faces. */
+  evidence: ApiTimelineEvidence[];
+}
+
+export interface ApiTimelineEvidence {
+  signalId: string;
+  ownerUserId: string;
+  ownerName: string;
+  textPreview: string;
+  reason: string;
 }
 
 export type ApiTimelineEvent =

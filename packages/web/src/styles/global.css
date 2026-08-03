@@ -16933,157 +16933,169 @@ textarea {
 
 
 /* ---------------------------------------------------------------------------
-   The time rail — the room's life along the bottom edge of its wall.
+   The time rail — the room's life, seen edge-on down the right.
 
-   Sits at the bottom because travel between rooms is vertical; the two axes
-   must not collide. Quiet by default and legible on approach: a room's past is
-   there when you reach for it, never asking to be used.
+   The same object as the room switcher on the left, mirrored. Rooms are a place
+   you move BETWEEN; time is a place you move WITHIN. Same depth, same recede,
+   same drag-with-weight, same click-a-place-and-go. Learn one, you know both.
+
+   Oldest at the top, now at the bottom — the direction a conversation runs.
+
+   It must live OUTSIDE the wall's own element. The wall carries a filter when
+   it stands in the past and transforms while travelling between rooms, and
+   either makes a fixed descendant position against THAT element instead of the
+   viewport — which is why every earlier version appeared to jump.
 --------------------------------------------------------------------------- */
 
 .nc-timerail {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1.1rem 1.6rem 0.9rem;
-  margin-top: auto;
-  pointer-events: auto;
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(calc(-50% + var(--rail-drag, 0px)));
+  /* Above the room switcher (45); the two never meet, but the rail under the
+     pointer wins if a narrow window ever brings them together. */
+  z-index: 46;
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  justify-items: end;
+  /* Follows the finger while dragging, then settles with a little overshoot —
+     the difference between a control with weight and a button that plays. */
+  transition: transform 420ms cubic-bezier(0.22, 1.4, 0.36, 1);
+  touch-action: none;
 }
 
-.nc-timerail-track {
+.nc-timerail-moment {
   position: relative;
-  height: 22px;
-  cursor: ew-resize;
-  touch-action: pan-y;
-  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border: 0;
+  background: none;
+  padding: 7px 14px 7px 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: rgba(20, 18, 16, 0.82);
+  cursor: pointer;
+  /* Depth: each step back is smaller, dimmer and cooler. */
+  transform: scale(calc(1 - var(--depth, 0) * 0.22))
+    translateX(calc(var(--depth, 0) * 8px));
+  transform-origin: right center;
+  opacity: calc(1 - var(--depth, 0) * 0.62);
+  filter: saturate(calc(1 - var(--depth, 0) * 0.7));
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 320ms ease,
+    filter 320ms ease;
 }
 
-.nc-timerail-track:focus-visible .nc-timerail-line {
-  background: rgba(20, 18, 16, 0.28);
-}
+.nc-timerail-moment--here { color: rgba(20, 18, 16, 0.98); font-weight: 500; }
 
-.nc-timerail-line {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 100%;
-  height: 1px;
-  transform: translateY(-50%);
-  background: rgba(20, 18, 16, 0.12);
-  transition: background 220ms ease;
-}
-
-/* How far the room has been travelled back through: warm where you have been. */
-.nc-timerail-line--travelled {
-  background: rgba(20, 18, 16, 0.22);
-}
-
-.nc-timerail-mark {
-  position: absolute;
-  top: 50%;
+/* The mark. A turn is a dot; an arrival is a bar; now is an open circle. */
+.nc-timerail-moment-edge {
+  flex: none;
   width: 9px;
   height: 9px;
-  padding: 0;
-  transform: translate(-50%, -50%);
-  border: 0;
   border-radius: 50%;
-  background: rgba(20, 18, 16, 0.22);
-  cursor: pointer;
-  transition:
-    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
-    background 200ms ease,
-    box-shadow 200ms ease;
+  background: rgba(20, 18, 16, 0.32);
+  transition: background 200ms ease, box-shadow 200ms ease;
 }
 
-.nc-timerail-mark:hover {
-  transform: translate(-50%, -50%) scale(1.35);
-  background: rgba(20, 18, 16, 0.45);
+.nc-timerail-moment--here .nc-timerail-moment-edge {
+  background: rgba(20, 18, 16, 0.92);
+  box-shadow: 0 0 0 4px rgba(20, 18, 16, 0.08);
 }
 
-.nc-timerail-mark--past { background: rgba(20, 18, 16, 0.34); }
-
-/* A board turning: the room changed its mind. */
-.nc-timerail-mark--turn { border-radius: 50%; }
-
-/* Formation: where the room begins, so it reads as an endpoint not an event. */
-.nc-timerail-mark--formed {
-  width: 7px;
-  height: 7px;
+/* Formation is an endpoint, not an event. */
+.nc-timerail-moment--formed .nc-timerail-moment-edge {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px rgba(20, 18, 16, 0.35);
+  box-shadow: inset 0 0 0 1.5px rgba(20, 18, 16, 0.4);
 }
 
 /*
    A heart arriving is a hinge, not another dot.
 
    The same signals read differently because another person is in the room —
-   that is the product's whole claim on the time axis, so this mark gets the
-   emphasis budget: taller, squared off, and impossible to mistake for a turn.
+   the product's whole claim on the time axis — so it takes the emphasis budget.
 */
-.nc-timerail-mark--arrival,
-.nc-timerail-mark--departure {
+.nc-timerail-moment--arrival .nc-timerail-moment-edge,
+.nc-timerail-moment--departure .nc-timerail-moment-edge {
   width: 3px;
-  height: 17px;
+  height: 18px;
   border-radius: 1.5px;
-  background: rgba(20, 18, 16, 0.5);
+  background: rgba(20, 18, 16, 0.62);
 }
 
-/* A departure is the same hinge, drawn as an outline: it happened, and it
-   stopped a future rather than starting one. */
-.nc-timerail-mark--departure {
+/* A departure happened, and it closed a future rather than opening one. */
+.nc-timerail-moment--departure .nc-timerail-moment-edge {
   background: transparent;
-  box-shadow: inset 0 0 0 1.5px rgba(20, 18, 16, 0.4);
+  box-shadow: inset 0 0 0 1.5px rgba(20, 18, 16, 0.45);
 }
 
-/* Now is where the rail rests, and it should look like a destination. */
-.nc-timerail-mark--now {
+/* Now is a destination, and it is where the rail rests. */
+.nc-timerail-moment--now .nc-timerail-moment-edge {
   width: 11px;
   height: 11px;
   background: transparent;
-  box-shadow: inset 0 0 0 2px rgba(20, 18, 16, 0.4);
+  box-shadow: inset 0 0 0 2px rgba(20, 18, 16, 0.5);
 }
 
-.nc-timerail-mark--current {
-  background: rgba(20, 18, 16, 0.85);
-  box-shadow: 0 0 0 4px rgba(20, 18, 16, 0.08);
-}
-
-.nc-timerail-mark--now.nc-timerail-mark--current {
-  background: transparent;
+.nc-timerail-moment--now.nc-timerail-moment--here .nc-timerail-moment-edge {
   box-shadow:
-    inset 0 0 0 2px rgba(20, 18, 16, 0.85),
+    inset 0 0 0 2px rgba(20, 18, 16, 0.95),
     0 0 0 4px rgba(20, 18, 16, 0.08);
 }
 
-.nc-timerail-caption {
-  margin: 0;
+/*
+   What happened, in words — on approach only, and never in the layout.
+
+   Absolutely placed so its length cannot resize the rail. An earlier version
+   put it in a sizing column and the whole control slid sideways whenever the
+   text under the pointer changed length.
+*/
+.nc-timerail-moment-label {
+  position: absolute;
+  right: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 16rem;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: rgba(247, 245, 242, 0.94);
+  box-shadow: 0 1px 12px rgba(20, 18, 16, 0.07);
   font-size: 0.72rem;
-  letter-spacing: 0.01em;
-  color: rgba(20, 18, 16, 0.45);
-  min-height: 1.1em;
-  transition: color 200ms ease;
+  line-height: 1.35;
+  color: rgba(20, 18, 16, 0.7);
+  text-align: right;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
 }
 
-.nc-timerail--dragging .nc-timerail-caption { color: rgba(20, 18, 16, 0.7); }
+.nc-timerail-moment:hover .nc-timerail-moment-label,
+.nc-timerail-moment:focus-visible .nc-timerail-moment-label { opacity: 1; }
 
 /*
    The wall, standing somewhere other than now.
 
-   Deliberately restrained: a wash and a slight settling, not sepia. The past
-   is not a different product, it is this one earlier — and the notes have to
-   stay readable, because reading them is the entire reason to travel.
+   Restrained on purpose: a wash, not sepia. The past is not a different
+   product, it is this one earlier — and the notes have to stay readable,
+   because reading them is the entire reason to travel.
 */
 .nc-stage--in-past {
-  filter: saturate(0.82);
+  filter: saturate(0.8);
   transition: filter 320ms ease;
 }
 
+@media (max-width: 900px) {
+  .nc-timerail-moment-when { display: none; }
+  .nc-timerail-moment { padding: 6px 10px 6px 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .nc-timerail-mark,
-  .nc-timerail-line,
-  .nc-stage--in-past {
-    transition: none;
-  }
+  .nc-timerail,
+  .nc-timerail-moment,
+  .nc-stage--in-past { transition: none; }
 }

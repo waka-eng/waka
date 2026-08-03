@@ -22,12 +22,14 @@
  * Membership gates everything, like every other group read.
  */
 
-import { and, asc, eq, gt, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 
 import {
   groupMemberEvents,
+  groupTopOfMindNoteSignals,
   groupTopOfMindNotes,
   groups,
+  signals,
   users,
 } from "../db/index.js";
 import { loadGroupWithMembers } from "./group-top-of-mind.js";
@@ -47,6 +49,23 @@ export interface TimelineNote {
   idempotencyKey: string;
   createdAt: string;
   replacedAt: string | null;
+  /**
+   * Whose saves this reading rests on, and what they said.
+   *
+   * A past board without its faces is a different product from the present
+   * one: the whole claim is that a reading exists because these particular
+   * collections sat next to each other, and a card that cannot say whose is
+   * back to being an observation from nowhere.
+   */
+  evidence: TimelineEvidence[];
+}
+
+export interface TimelineEvidence {
+  signalId: string;
+  ownerUserId: string;
+  ownerName: string;
+  textPreview: string;
+  reason: string;
 }
 
 export type TimelineEvent =
@@ -130,6 +149,55 @@ export async function boardAsOf(
     )
     .orderBy(asc(groupTopOfMindNotes.createdAt), asc(groupTopOfMindNotes.id));
 
+  if (rows.length === 0) return { at: at.toISOString(), notes: [] };
+
+  /**
+   * The faces behind each reading.
+   *
+   * Filtered exactly as the live board filters: a signal that has since gone
+   * private, or whose owner has left the room, is not shown to anyone still in
+   * it. Travelling backwards must not become a way to read what the present
+   * refuses to show — the timeline is a record of what happened, never a hole
+   * in the privacy contract.
+   */
+  const currentMemberIds = new Set(loaded.members.map((member) => member.userId));
+  const evidenceRows = await db
+    .select({
+      noteId: groupTopOfMindNoteSignals.groupTopOfMindNoteId,
+      signalId: groupTopOfMindNoteSignals.signalId,
+      ownerUserId: groupTopOfMindNoteSignals.ownerUserId,
+      ownerName: users.name,
+      reason: groupTopOfMindNoteSignals.reason,
+      sortOrder: groupTopOfMindNoteSignals.sortOrder,
+      text: signals.text,
+      shared: signals.sharedToGroups,
+    })
+    .from(groupTopOfMindNoteSignals)
+    .innerJoin(signals, eq(signals.id, groupTopOfMindNoteSignals.signalId))
+    .innerJoin(users, eq(users.id, groupTopOfMindNoteSignals.ownerUserId))
+    .where(
+      inArray(
+        groupTopOfMindNoteSignals.groupTopOfMindNoteId,
+        rows.map((row) => row.id),
+      ),
+    )
+    .orderBy(asc(groupTopOfMindNoteSignals.sortOrder));
+
+  const evidenceByNote = new Map<string, TimelineEvidence[]>();
+  for (const row of evidenceRows) {
+    if (!row.shared) continue;
+    if (!currentMemberIds.has(row.ownerUserId)) continue;
+    const bucket = evidenceByNote.get(row.noteId) ?? [];
+    bucket.push({
+      signalId: row.signalId,
+      ownerUserId: row.ownerUserId,
+      ownerName: row.ownerName,
+      textPreview: row.text.replace(/\s+/g, " ").trim().slice(0, 240),
+      reason: row.reason ?? "",
+    });
+    evidenceByNote.set(row.noteId, bucket);
+  }
+
   return {
     at: at.toISOString(),
     notes: rows.map((row) => ({
@@ -139,6 +207,7 @@ export async function boardAsOf(
       idempotencyKey: row.idempotencyKey,
       createdAt: row.createdAt.toISOString(),
       replacedAt: row.replacedAt?.toISOString() ?? null,
+      evidence: evidenceByNote.get(row.id) ?? [],
     })),
   };
 }

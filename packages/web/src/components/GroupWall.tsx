@@ -31,6 +31,15 @@ export interface GroupWallCopy {
   groupLoading: string;
   /** A room exists but nothing has been shared into it yet. */
   groupEmpty: string;
+  /**
+   * The room existed at this moment but had not read anything yet.
+   *
+   * Distinct from "nothing shared here": travelling to before a room's first
+   * reading is a true fact about the room's life, and the empty-room copy told
+   * the viewer to go and share something, which is advice about the present
+   * delivered from the past.
+   */
+  pastEmpty: string;
   groupEmptyLabel: string;
 }
 
@@ -52,13 +61,6 @@ export interface GroupWallProps {
   renderCards: () => ReactNode[];
   /** Legacy US-051 conversation-room card, when its flag is on. */
   legacySurface?: ReactNode;
-  /**
-   * The room's life along the bottom edge, when there is a life to show.
-   *
-   * Rendered inside the stage rather than beside it: the rail is a property of
-   * this wall, and a wall standing in the past has to be able to say so.
-   */
-  timeRail?: ReactNode;
   /** True when the board shown is what the room read at some earlier moment. */
   inPast?: boolean;
 }
@@ -73,7 +75,6 @@ export function GroupWall({
   cardCount,
   renderCards,
   legacySurface,
-  timeRail,
   inPast,
 }: GroupWallProps): JSX.Element {
   return (
@@ -98,7 +99,7 @@ export function GroupWall({
         renderCards()
       ) : isGroupBoardActive ? (
         <div className="nc-first-run-guide" aria-label={copy.groupEmptyLabel}>
-          <p className="nc-loading">{copy.groupEmpty}</p>
+          <p className="nc-loading">{inPast ? copy.pastEmpty : copy.groupEmpty}</p>
         </div>
       ) : (
         <div className="nc-first-run-guide" aria-label={copy.firstRunTitle}>
@@ -113,7 +114,6 @@ export function GroupWall({
           </div>
         </div>
       )}
-      {timeRail}
     </section>
   );
 }

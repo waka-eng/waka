@@ -59,6 +59,20 @@ export function RoomRail({
 }: RoomRailProps): JSX.Element | null {
   const [drag, setDrag] = useState(0);
   const draggingRef = useRef<{ startY: number } | null>(null);
+  /**
+   * Whether a drag is actually in progress, as STATE rather than only a ref.
+   *
+   * The listeners below used to be attached from a ref, which React cannot see
+   * — so whether they were bound depended on some unrelated render happening
+   * to re-run the effect. If a pointerup landed before that render, the ref was
+   * never cleared, the listeners stayed attached forever, and from then on
+   * every click anywhere on the page ran the drag-commit path and switched
+   * rooms. The first room in the list is your own wall, so the app appeared to
+   * throw you out of every room you opened.
+   */
+  const [dragging, setDragging] = useState(false);
+  /** The live drag distance, readable from a listener without a stale closure. */
+  const dragRef = useRef(0);
   const activeIndex = Math.max(
     0,
     rooms.findIndex((room) => room.id === activeRoom),
@@ -76,27 +90,42 @@ export function RoomRail({
   // lands. A button that plays an animation is not the same thing as an object
   // with weight, and the difference is the whole point of the surface.
   useEffect(() => {
-    if (!draggingRef.current) return;
+    if (!dragging) return;
     const onMove = (event: PointerEvent) => {
       const start = draggingRef.current;
       if (!start) return;
-      setDrag(event.clientY - start.startY);
+      const distance = event.clientY - start.startY;
+      dragRef.current = distance;
+      setDrag(distance);
     };
+    /**
+     * Commit OUTSIDE the state updater.
+     *
+     * `commit` navigates, and it used to be called from inside `setDrag`'s
+     * updater — React may run an updater more than once, and running it at all
+     * is supposed to be free of side effects. That is why the room change
+     * appeared in stack traces with no click in them at all.
+     */
     const onUp = () => {
-      setDrag((current) => {
-        if (current <= -COMMIT_DISTANCE) commit(1);
-        else if (current >= COMMIT_DISTANCE) commit(-1);
-        return 0;
-      });
+      const distance = dragRef.current;
       draggingRef.current = null;
+      dragRef.current = 0;
+      setDragging(false);
+      setDrag(0);
+      if (distance <= -COMMIT_DISTANCE) commit(1);
+      else if (distance >= COMMIT_DISTANCE) commit(-1);
     };
     document.addEventListener("pointermove", onMove);
     document.addEventListener("pointerup", onUp);
+    // `pointercancel` too: a gesture the browser takes over (scroll, back-swipe)
+    // never sends pointerup, and without this the drag stayed armed for good.
+    document.addEventListener("pointercancel", onUp);
     return () => {
       document.removeEventListener("pointermove", onMove);
       document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
     };
-  }, [commit, drag]);
+  }, [commit, dragging]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -137,7 +166,9 @@ export function RoomRail({
               }}
               onPointerDown={(event) => {
                 draggingRef.current = { startY: event.clientY };
+                dragRef.current = 0;
                 setDrag(0);
+                setDragging(true);
               }}
               onClick={() => onSelect(room.id)}
             >

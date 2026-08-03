@@ -1,17 +1,20 @@
 /**
- * The room's life, along the bottom edge of its wall.
+ * The room's life, seen edge-on down the right.
  *
  * Every surface in this product is present tense: the wall says what the room
- * reads now. This is the one that says what it read then. Drag left and the
- * board becomes what it was; let go at the right-hand end and you are back in
- * the present.
+ * reads now. This is the one that says what it read then. Drag up and the board
+ * becomes what it was; the bottom of the rail is the present.
  *
  * Three decisions carry it.
  *
- * **Horizontal, at the bottom.** Travel between rooms is vertical (`RoomRail`
- * moves the wall up and down). Time has to be the other axis or the two
- * gestures fight, and a diagonal drag would do both at once. The first
- * movement of a drag locks the axis for exactly that reason.
+ * **Right edge, mirroring the rooms on the left.** Rooms are a place you move
+ * between; time is a place you move within — one on each side, and neither can
+ * be mistaken for the other. It sat along the bottom of the wall first, where
+ * it jumped every time the number of post-its changed, because it was riding
+ * on content whose height it did not control.
+ *
+ * **Oldest at the top, now at the bottom.** The same direction a conversation
+ * runs: you scroll down toward the present.
  *
  * **Marks, not a continuum.** A room's history is a handful of moments — a
  * board that turned, a person arriving — not a smooth quantity. Measured on
@@ -30,6 +33,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ApiRoomTimeline, ApiTimelineEvent } from "../lib/api";
+
+/**
+ * Writes this close together are one event, not several.
+ *
+ * A synthesis pass stamps its notes with one instant now, but older rows landed
+ * seconds apart as each was written. Waka's board carries six timestamps inside
+ * seventy seconds — one pass, rendered as six separate times the room changed
+ * its mind. Anything inside this window collapses to the moment it began.
+ */
+const SAME_EVENT_WINDOW_MS = 10 * 60 * 1000;
+
+/** How far each step from the current moment recedes — the rooms' own rate. */
+const DEPTH_STEP = 0.16;
+/** Drag distance, in px, that commits to the neighbouring moment. */
+const COMMIT_DISTANCE = 56;
 
 /** What a position on the rail stands for. */
 export interface TimeMark {
@@ -52,7 +70,7 @@ export interface TimeRailProps {
     turned: string;
     arrived: (name: string) => string;
     departed: (name: string) => string;
-    sinceLabel: (count: number, when: string) => string;
+    backToNow: string;
   };
 }
 
@@ -106,14 +124,44 @@ export function marksFromTimeline(
   }
 
   marks.sort((a, b) => a.at.localeCompare(b.at));
-  return marks;
+
+  /**
+   * Collapse writes that were really one event.
+   *
+   * An arrival always survives — it is a fact about a person, and folding it
+   * into a neighbouring turn would erase the reason the reading changed. Only
+   * consecutive turns merge, and they merge into the first, because a pass
+   * belongs to the moment it began.
+   */
+  const collapsed: TimeMark[] = [];
+  for (const mark of marks) {
+    const previous = collapsed[collapsed.length - 1];
+    const mergeable =
+      previous &&
+      previous.kind === "turn" &&
+      mark.kind === "turn" &&
+      new Date(mark.at).getTime() - new Date(previous.at).getTime() < SAME_EVENT_WINDOW_MS;
+    if (mergeable) continue;
+    collapsed.push(mark);
+  }
+  return collapsed;
 }
 
-/** Nearest mark to a fraction along the rail. */
-function markAtFraction(marks: TimeMark[], fraction: number): TimeMark | null {
-  if (marks.length === 0) return null;
-  const index = Math.round(fraction * (marks.length - 1));
-  return marks[Math.max(0, Math.min(marks.length - 1, index))] ?? null;
+/**
+ * When a moment was, said the way a person would say it.
+ *
+ * Same-year moments drop the year — a room's history is mostly months, and
+ * "Aug 1" reads faster than "1 Aug 2026" on a control you are dragging.
+ */
+function whenLabel(at: string): string {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return "";
+  const sameYear = date.getFullYear() === new Date().getFullYear();
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
 }
 
 export function TimeRail({
@@ -122,135 +170,136 @@ export function TimeRail({
   onScrub,
   copy,
 }: TimeRailProps): JSX.Element | null {
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [hovered, setHovered] = useState<number | null>(null);
-
   const marks = useMemo(
     () => (timeline ? marksFromTimeline(timeline, copy) : []),
     [timeline, copy],
   );
 
   /**
-   * The present is a real place on the rail, not the absence of one.
-   *
-   * Without a mark for it there is nothing to drag back TO, and letting go
-   * anywhere near the right-hand end would leave the wall subtly in the past.
+   * The present is a place on the rail, not the absence of one — otherwise
+   * "now" is the only moment you cannot point at.
    */
   const all = useMemo<TimeMark[]>(
     () => [...marks, { at: "", kind: "now", label: copy.now }],
     [marks, copy.now],
   );
 
-  const currentIndex = position === null
+  const activeIndex = position === null
     ? all.length - 1
     : Math.max(0, all.findIndex((m) => m.at === position));
 
-  const scrubToClientX = useCallback(
-    (clientX: number) => {
-      const track = trackRef.current;
-      if (!track || all.length === 0) return;
-      const rect = track.getBoundingClientRect();
-      const fraction = (clientX - rect.left) / Math.max(1, rect.width);
-      const mark = markAtFraction(all, Math.max(0, Math.min(1, fraction)));
-      if (!mark) return;
-      onScrub(mark.kind === "now" ? null : mark.at);
-    },
-    [all, onScrub],
-  );
+  const [drag, setDrag] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef(0);
+  const startRef = useRef<{ startY: number } | null>(null);
 
-  useEffect(() => {
-    if (!dragging) return;
-    const move = (event: PointerEvent) => scrubToClientX(event.clientX);
-    const up = () => setDragging(false);
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-  }, [dragging, scrubToClientX]);
+  const commit = useCallback(
+    (delta: number) => {
+      const next = all[activeIndex + delta];
+      if (next) onScrub(next.kind === "now" ? null : next.at);
+    },
+    [all, activeIndex, onScrub],
+  );
 
   /**
-   * Keyboard travel, not an afterthought.
-   *
-   * The rail is the only way to reach the room's past, so it cannot be a
-   * drag-only surface — that would make a whole dimension of the product
-   * unreachable without a pointer.
+   * Dragging moves the rail with your finger and settles where it lands, the
+   * same weight the room rail has. Kept in STATE rather than a ref so React
+   * knows when the listeners should be bound, and committed OUTSIDE any state
+   * updater — the room rail did both the other way and could leave a drag armed
+   * forever, which turned every later click into a navigation.
    */
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (all.length === 0) return;
-      let next = currentIndex;
-      if (event.key === "ArrowLeft") next = currentIndex - 1;
-      else if (event.key === "ArrowRight") next = currentIndex + 1;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = all.length - 1;
-      else return;
-      event.preventDefault();
-      const mark = all[Math.max(0, Math.min(all.length - 1, next))];
-      if (mark) onScrub(mark.kind === "now" ? null : mark.at);
-    },
-    [all, currentIndex, onScrub],
-  );
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (event: PointerEvent) => {
+      const start = startRef.current;
+      if (!start) return;
+      const distance = event.clientY - start.startY;
+      dragRef.current = distance;
+      setDrag(distance);
+    };
+    const onUp = () => {
+      const distance = dragRef.current;
+      startRef.current = null;
+      dragRef.current = 0;
+      setDragging(false);
+      setDrag(0);
+      // Down the rail is forward in time, the direction the list is ordered.
+      if (distance <= -COMMIT_DISTANCE) commit(-1);
+      else if (distance >= COMMIT_DISTANCE) commit(1);
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+    };
+  }, [commit, dragging]);
+
+  /**
+   * Alt+← / Alt+→ travels in time, mirroring the rooms' Alt+↑ / Alt+↓.
+   * Same modifier, the other axis — the shortcut says what the two surfaces are
+   * without a legend.
+   */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement) {
+        const tag = event.target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || event.target.isContentEditable) return;
+      }
+      if (!event.altKey) return;
+      if (event.key === "ArrowLeft") commit(-1);
+      if (event.key === "ArrowRight") commit(1);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [commit]);
 
   // A room with nothing but its own formation has no journey to offer, and an
-  // empty rail reads as a broken control rather than as an honest young room.
+  // empty rail reads as a broken control rather than an honest young room.
   if (!timeline || marks.length < 2) return null;
 
-  const fill = all.length <= 1 ? 1 : currentIndex / (all.length - 1);
-
   return (
-    <div
-      className={`nc-timerail${dragging ? " nc-timerail--dragging" : ""}`}
+    <nav
+      className="nc-timerail"
       aria-label={copy.regionLabel}
+      style={{ ["--rail-drag" as string]: `${drag * 0.35}px` }}
     >
-      <div
-        ref={trackRef}
-        className="nc-timerail-track"
-        role="slider"
-        tabIndex={0}
-        aria-valuemin={0}
-        aria-valuemax={all.length - 1}
-        aria-valuenow={currentIndex}
-        aria-valuetext={all[currentIndex]?.label ?? copy.now}
-        onKeyDown={onKeyDown}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          setDragging(true);
-          scrubToClientX(event.clientX);
-        }}
-      >
-        <span className="nc-timerail-line" aria-hidden="true" />
-        <span
-          className="nc-timerail-line nc-timerail-line--travelled"
-          style={{ width: `${fill * 100}%` }}
-          aria-hidden="true"
-        />
-        {all.map((mark, index) => (
+      {all.map((mark, index) => {
+        const distance = Math.abs(index - activeIndex);
+        const isHere = index === activeIndex;
+        return (
           <button
             key={`${mark.at}-${index}`}
             type="button"
             className={
-              `nc-timerail-mark nc-timerail-mark--${mark.kind}` +
-              (index === currentIndex ? " nc-timerail-mark--current" : "") +
-              (index <= currentIndex ? " nc-timerail-mark--past" : "")
+              `nc-timerail-moment nc-timerail-moment--${mark.kind}` +
+              (isHere ? " nc-timerail-moment--here" : "")
             }
-            style={{ left: `${(index / Math.max(1, all.length - 1)) * 100}%` }}
-            title={mark.label}
-            aria-label={mark.label}
-            onPointerEnter={() => setHovered(index)}
-            onPointerLeave={() => setHovered((h) => (h === index ? null : h))}
-            onClick={(event) => {
-              event.stopPropagation();
-              onScrub(mark.kind === "now" ? null : mark.at);
+            aria-current={isHere ? "true" : undefined}
+            style={{
+              // Depth: each step back is smaller, dimmer and cooler — the room
+              // rail's own rate, mirrored so this recedes toward the right edge.
+              ["--depth" as string]: String(Math.min(1, distance * DEPTH_STEP)),
             }}
-          />
-        ))}
-      </div>
-      <p className="nc-timerail-caption" aria-live="polite">
-        {all[hovered ?? currentIndex]?.label ?? copy.now}
-      </p>
-    </div>
+            onPointerDown={(event) => {
+              startRef.current = { startY: event.clientY };
+              dragRef.current = 0;
+              setDrag(0);
+              setDragging(true);
+            }}
+            onClick={() => onScrub(mark.kind === "now" ? null : mark.at)}
+            title={mark.label}
+          >
+            <span className="nc-timerail-moment-label">{mark.label}</span>
+            <span className="nc-timerail-moment-when">
+              {mark.kind === "now" ? copy.now : whenLabel(mark.at)}
+            </span>
+            <span className="nc-timerail-moment-edge" aria-hidden="true" />
+          </button>
+        );
+      })}
+    </nav>
   );
 }

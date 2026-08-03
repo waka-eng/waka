@@ -1317,6 +1317,8 @@ const HOME_COPY = {
     timeRailTurned: "읽는 방식이 바뀜",
     timeRailArrived: (name: string) => `${name} 합류 — 같은 신호가 다르게 읽히기 시작함`,
     timeRailDeparted: (name: string) => `${name} 떠남`,
+    timeRailBackToNow: "지금으로",
+    timeRailPastEmpty: "이 순간에는 이 방이 아직 아무것도 읽지 않았습니다.",
     readingsAloneLabel: "혼자일 때",
     readingsInRoomLabel: (name: string) => `${name}에서`,
     readingsLedToLabel: (title: string) => `“${title}”로 이어졌습니다`,
@@ -1468,6 +1470,8 @@ const HOME_COPY = {
     timeRailTurned: "the reading turned",
     timeRailArrived: (name: string) => `${name} arrived — the same signals began reading differently`,
     timeRailDeparted: (name: string) => `${name} left`,
+    timeRailBackToNow: "back to now",
+    timeRailPastEmpty: "At this moment the room had not read anything yet.",
     readingsAloneLabel: "alone",
     readingsInRoomLabel: (name: string) => `in ${name}`,
     readingsLedToLabel: (title: string) => `led to “${title}”`,
@@ -1605,6 +1609,8 @@ const HOME_COPY = {
     timeRailTurned: string;
     timeRailArrived: (name: string) => string;
     timeRailDeparted: (name: string) => string;
+    timeRailBackToNow: string;
+    timeRailPastEmpty: string;
     readingsAloneLabel: string;
     readingsInRoomLabel: (name: string) => string;
     readingsLedToLabel: (title: string) => string;
@@ -1812,15 +1818,27 @@ export function HomePage(): JSX.Element {
       .then((result) => {
         if (!cancelled) setRoomTimeline(result.timeline);
       })
-      .catch(() => {
+      .catch((err) => {
         // A room without a readable history still shows its wall; the rail
-        // simply does not appear. Never an error the wall has to carry.
+        // simply does not appear. Never an error the wall has to carry — but
+        // never silent either, or a rail that fails to load is indistinguishable from a room too young to have one.
+        console.error("[home] room timeline failed to load", { activeBoard, err });
         if (!cancelled) setRoomTimeline(null);
       });
     return () => {
       cancelled = true;
     };
-  }, [user, activeBoard]);
+    /**
+     * Keyed on the user's ID, not the user object.
+     *
+     * The object is rebuilt by the auth context on renders that change nothing
+     * about who is signed in, so depending on it re-ran this effect on every
+     * render — each run cancelling the request the previous one had in flight.
+     * A fetch that is always superseded never lands, and the rail never
+     * appeared. `user?.id` is what the rest of this file keys on for the same
+     * reason.
+     */
+  }, [user?.id, activeBoard]);
 
   /**
    * Resolve the board for a scrubbed position.
@@ -1841,10 +1859,11 @@ export function HomePage(): JSX.Element {
         if (seq !== scrubSeq.current) return;
         setScrubbedNotes(result.board?.notes ?? []);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error("[home] board-as-of failed", { activeBoard, scrubbedAt, err });
         if (seq === scrubSeq.current) setScrubbedNotes(null);
       });
-  }, [user, activeBoard, scrubbedAt]);
+  }, [user?.id, activeBoard, scrubbedAt]);
 
   // Load the synthesized board whenever a group is selected.
   useEffect(() => {
@@ -1866,9 +1885,19 @@ export function HomePage(): JSX.Element {
       .catch((err) => {
         if (cancelled) return;
         setGroupNotes([]);
-        setGroupBoardsError(err instanceof Error ? err.message : "Failed to load group board");
-        // A stale/left group id falls back to the personal wall.
-        setActiveBoard(MINE_BOARD_ID);
+        const message = err instanceof Error ? err.message : "Failed to load group board";
+        setGroupBoardsError(message);
+        console.error("[home] group board failed to load", { activeBoard, err });
+        /**
+         * Leave the room ONLY when the room is genuinely not yours any more.
+         *
+         * This used to eject on any failure at all, so a timeout or a blip
+         * threw you out to your own wall mid-session — the room you were
+         * reading simply vanished, and nothing said why. A stale or left group
+         * is a 403/404; everything else is worth staying put for and showing
+         * the error on the wall you are already on.
+         */
+        if (/not found|forbidden|403|404/i.test(message)) setActiveBoard(MINE_BOARD_ID);
       })
       .finally(() => {
         if (!cancelled) setGroupBoardLoading(false);
@@ -2678,23 +2707,72 @@ export function HomePage(): JSX.Element {
   /**
    * A board as it stood then, shaped like the board as it stands now.
    *
-   * The timeline read model carries what a note SAID — title, why, identity —
-   * and not the evidence rows behind it, so a scrubbed card shows the reading
-   * without claiming to show whose saves fed it. Better an honest smaller card
-   * than one that implies evidence it did not fetch.
+   * Every field the card pipeline touches is present, because a card is walked
+   * by several passes that assume arrays exist — the first version of this
+   * fabricated a partial note and the wall crashed on `relatedSignalIds` the
+   * moment anyone scrubbed. A past board must be a WHOLE board or it is not a
+   * board at all.
+   *
+   * A reading that is still on the wall keeps its live card, evidence and
+   * faces intact: same reading, same id, nothing lost by travelling to a
+   * moment it already existed in. Only readings the room has since retired are
+   * rebuilt from the timeline, and those carry what the reading SAID without
+   * claiming evidence this endpoint never fetched.
    */
   const scrubbedGroupNotes: ApiGroupTopOfMindNote[] | null = scrubbedNotes
-    ? scrubbedNotes.map((note) => ({
-        id: note.id,
-        title: note.title,
-        why: note.why,
-        kind: "bridge",
-        status: "active",
-        evidencePreviews: [],
-        relatedSignals: [],
-        authorUserId: "",
-        authorName: "",
-      }) as unknown as ApiGroupTopOfMindNote)
+    ? scrubbedNotes.map((note) => {
+        const live = groupNotes.find((candidate) => candidate.id === note.id);
+        if (live) return live;
+        return {
+          id: note.id,
+          userId: "",
+          title: note.title,
+          ambitionDimension: "people",
+          ambientSignal: "",
+          matchedEnvironment: "",
+          antiEnvironment: "",
+          evidenceRationale: note.why,
+          rejectedAlternativeInterpretation: null,
+          type: "observation",
+          body: note.why,
+          prompt: null,
+          guidance: null,
+          confidence: 0,
+          status: "active",
+          isPinned: false,
+          userFeedbackValue: null,
+          relatedSignalIds: [],
+          relatedContextNodeIds: [],
+          createdAt: note.createdAt,
+          updatedAt: note.createdAt,
+          source: "wow_moment_compatibility",
+          isProvisional: true,
+          legacy: { wowMomentId: note.id, wowKind: "bridge", wowScore: 0 },
+          /*
+             The faces travel with the reading. Without them a past card is an
+             observation from nowhere, and the room's whole claim is that a
+             reading exists BECAUSE these particular collections sat together.
+          */
+          /*
+             Defensive: an API that predates this field must not blank the wall.
+             A missing array threw inside render and took the whole page down —
+             a card missing its faces is a worse card, never a broken app.
+          */
+          evidencePreviews: (note.evidence ?? []).map((item) => ({
+            signalId: item.signalId,
+            textPreview: item.textPreview,
+            reason: item.reason,
+            createdAt: note.createdAt,
+            kind: null,
+            resonanceScore: null,
+            authorUserId: item.ownerUserId,
+            authorName: item.ownerName,
+          })),
+          relatedSignals: [],
+          authorUserId: note.evidence?.[0]?.ownerUserId ?? "",
+          authorName: note.evidence?.[0]?.ownerName ?? "",
+        } as unknown as ApiGroupTopOfMindNote;
+      })
     : null;
 
   const renderTopOfMindNotes = !isHomeStateRenderSafe
@@ -3249,7 +3327,7 @@ export function HomePage(): JSX.Element {
     turned: copy.timeRailTurned,
     arrived: copy.timeRailArrived,
     departed: copy.timeRailDeparted,
-    sinceLabel: (count: number, when: string) => `${count} · ${when}`,
+    backToNow: copy.timeRailBackToNow,
   };
 
 
@@ -5381,6 +5459,7 @@ export function HomePage(): JSX.Element {
             groupLoading: "Gathering the group’s Top of Mind…",
             groupEmpty:
               "Nothing shared here yet. When members keep inspirations shared, this board fills with the group’s Top of Mind.",
+            pastEmpty: copy.timeRailPastEmpty,
             groupEmptyLabel: "Group Top of Mind",
           }}
           travel={travel}
@@ -5398,17 +5477,26 @@ export function HomePage(): JSX.Element {
             SHOW_LEGACY_GROUP_ROOM_SURFACE ? renderGroupRoomSurface() : null
           }
           inPast={isGroupBoardActive && scrubbedAt !== null}
-          timeRail={
-            isGroupBoardActive ? (
-              <TimeRail
-                timeline={roomTimeline}
-                position={scrubbedAt}
-                onScrub={setScrubbedAt}
-                copy={timeRailCopy}
-              />
-            ) : null
-          }
         />
+
+        {/*
+          Outside the stage, deliberately.
+
+          The wall carries a `filter` when it stands in the past and transforms
+          while it travels between rooms, and either one makes a `position:
+          fixed` descendant position itself against THAT element rather than the
+          viewport. Rendered inside, the rail rode the wall and appeared to jump
+          on every state change. A fixed edge surface has to be a child of the
+          page, like the room rail beside it.
+        */}
+        {isGroupBoardActive ? (
+          <TimeRail
+            timeline={roomTimeline}
+            position={scrubbedAt}
+            onScrub={setScrubbedAt}
+            copy={timeRailCopy}
+          />
+        ) : null}
       </main>
 
       {homeMode === "memoryDrawer" ? (
