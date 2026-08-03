@@ -114,3 +114,48 @@ describe("marksFromTimeline", () => {
     ]);
   });
 });
+
+describe("the collapse window against synthesis's own cooldown", () => {
+  /**
+   * The window exists to fold one pass's sequential writes into one mark. It
+   * must never fold two passes, and it cannot: synthesis is gated by a
+   * 15-minute cooldown, so two real turns are always further apart than this
+   * window is wide. Pinned because the two numbers live in different packages
+   * and nothing else would notice them crossing.
+   */
+  const SYNTHESIS_COOLDOWN_MS = 15 * 60 * 1000;
+
+  it("folds writes from one pass", () => {
+    const base = new Date("2026-08-01T19:36:00.000Z").getTime();
+    const marks = marksFromTimeline(
+      timeline(
+        [0, 30_000, 40_000, 49_000, 58_000, 61_000].map((offset, index) => ({
+          kind: "note_written" as const,
+          at: new Date(base + offset).toISOString(),
+          noteId: String(index),
+          title: `note ${index}`,
+        })),
+      ),
+      copy,
+    );
+    expect(marks).toHaveLength(1);
+    expect(marks[0]?.at).toBe(new Date(base).toISOString());
+  });
+
+  it("keeps two passes separate, at the closest they can ever be", () => {
+    const base = new Date("2026-08-01T19:36:00.000Z").getTime();
+    const marks = marksFromTimeline(
+      timeline([
+        { kind: "note_written", at: new Date(base).toISOString(), noteId: "1", title: "a" },
+        {
+          kind: "note_written",
+          at: new Date(base + SYNTHESIS_COOLDOWN_MS).toISOString(),
+          noteId: "2",
+          title: "b",
+        },
+      ]),
+      copy,
+    );
+    expect(marks).toHaveLength(2);
+  });
+});

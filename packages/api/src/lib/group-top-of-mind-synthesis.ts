@@ -51,6 +51,15 @@ const PER_MEMBER_TRIGGER_CAP = 8;
  */
 const CANDIDATE_POOL_TARGET = 12;
 /**
+ * How many candidate readings are embedded at once before selection.
+ *
+ * A pass can hold a dozen, and firing them all at the provider together is the
+ * shape most likely to earn a rate limit — which would fail the whole batch and
+ * drop the board back to arrival order, losing selection for reasons that have
+ * nothing to do with the readings. Small batches cost a second and cannot.
+ */
+const EMBED_BATCH_SIZE = 4;
+/**
  * How many of a member's signals to consider before ranking them.
  *
  * Wider than the cap because the ranking below is not the order the database
@@ -712,16 +721,18 @@ async function chooseBoard(
   let embeddings: number[][];
   try {
     const client = new GeminiEmbeddingHttpClient();
-    embeddings = await Promise.all(
-      candidates.map((candidate) =>
-        client.embed(
-          // What the reading SAYS, not what it rests on — two readings can cite
-          // the same saves and mean different things, which is the whole reason
-          // a room is worth reading.
-          `${candidate.judgment.title}\n${candidate.judgment.beliefStatement ?? candidate.judgment.why}`,
-        ),
-      ),
+    // What the reading SAYS, not what it rests on — two readings can cite the
+    // same saves and mean different things, which is the whole reason a room is
+    // worth reading.
+    const texts = candidates.map(
+      (candidate) =>
+        `${candidate.judgment.title}\n${candidate.judgment.beliefStatement ?? candidate.judgment.why}`,
     );
+    embeddings = [];
+    for (let i = 0; i < texts.length; i += EMBED_BATCH_SIZE) {
+      const batch = texts.slice(i, i + EMBED_BATCH_SIZE);
+      embeddings.push(...(await Promise.all(batch.map((text) => client.embed(text)))));
+    }
   } catch (err) {
     console.warn("[group-synthesis] could not embed candidates; keeping arrival order", {
       groupId,

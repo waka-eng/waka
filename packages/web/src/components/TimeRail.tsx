@@ -41,6 +41,13 @@ import type { ApiRoomTimeline, ApiTimelineEvent } from "../lib/api";
  * seconds apart as each was written. Waka's board carries six timestamps inside
  * seventy seconds — one pass, rendered as six separate times the room changed
  * its mind. Anything inside this window collapses to the moment it began.
+ *
+ * **It cannot hide a real turn.** Synthesis is gated by a 15-minute cooldown
+ * (`SYNTHESIS_COOLDOWN_MS`), so two genuine turns are never closer together
+ * than that. This window is deliberately shorter, which makes "collapses the
+ * writes of one pass" and "never collapses two passes" the same rule rather
+ * than a lucky choice of number. Raising it past the cooldown would start
+ * hiding history, so it must stay below.
  */
 const SAME_EVENT_WINDOW_MS = 10 * 60 * 1000;
 
