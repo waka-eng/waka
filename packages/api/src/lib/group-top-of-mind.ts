@@ -599,7 +599,14 @@ export async function loadGroupWithMembers(
   };
 }
 
-function truncatePreview(value: string): string {
+/**
+ * Exported so the timeline truncates identically.
+ *
+ * A past board that showed more of someone's save than today's board does
+ * would make travelling backwards a way to read what the present withholds —
+ * the read model had 240 characters against this 180 before it was caught.
+ */
+export function truncatePreview(value: string): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized.length > PREVIEW_LENGTH
     ? `${normalized.slice(0, PREVIEW_LENGTH - 1)}…`

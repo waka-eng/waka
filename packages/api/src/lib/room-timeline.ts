@@ -32,7 +32,7 @@ import {
   signals,
   users,
 } from "../db/index.js";
-import { loadGroupWithMembers } from "./group-top-of-mind.js";
+import { loadGroupWithMembers, truncatePreview } from "./group-top-of-mind.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 
 /** A note, as it stood at some moment. */
@@ -192,7 +192,9 @@ export async function boardAsOf(
       signalId: row.signalId,
       ownerUserId: row.ownerUserId,
       ownerName: row.ownerName,
-      textPreview: row.text.replace(/\s+/g, " ").trim().slice(0, 240),
+      // The live board's own truncation, not a second one: a past card must
+      // never show more of a save than today's card does.
+      textPreview: truncatePreview(row.text),
       reason: row.reason ?? "",
     });
     evidenceByNote.set(row.noteId, bucket);

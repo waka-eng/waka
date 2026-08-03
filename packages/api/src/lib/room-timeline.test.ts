@@ -123,3 +123,24 @@ describe("a synthesis pass is one event", () => {
     }
   });
 });
+
+describe("a reading the room considered but never showed", () => {
+  /**
+   * Selection keeps the readings it did not put on the wall, written retired at
+   * the instant they were created. They must never appear on ANY board — not
+   * today's, and not one scrubbed to the exact moment they were written, which
+   * is the only instant where a naive window would let them through.
+   */
+  const PASS_AT = new Date("2026-08-01T19:36:00.000Z");
+
+  it("is off the board at the instant it was written", () => {
+    expect(noteIsOnBoardAt({ createdAt: PASS_AT, replacedAt: PASS_AT }, PASS_AT)).toBe(false);
+  });
+
+  it("is off the board before and after that instant", () => {
+    const before = new Date(PASS_AT.getTime() - 1000);
+    const after = new Date(PASS_AT.getTime() + 1000);
+    expect(noteIsOnBoardAt({ createdAt: PASS_AT, replacedAt: PASS_AT }, before)).toBe(false);
+    expect(noteIsOnBoardAt({ createdAt: PASS_AT, replacedAt: PASS_AT }, after)).toBe(false);
+  });
+});
