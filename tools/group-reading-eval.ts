@@ -40,6 +40,7 @@ import {
 } from "../packages/api/src/db/index";
 import { getDb } from "../packages/api/src/lib/db";
 import { GeminiEmbeddingHttpClient } from "../packages/api/src/lib/inspiration-embeddings";
+import { selectBoard } from "../packages/api/src/scoring/board-selection";
 import { cosineSimilarity } from "../packages/api/src/scoring/wow-score";
 import { judgeGroupWowMoment } from "../packages/api/src/lib/wow-judge";
 import {
@@ -230,6 +231,19 @@ async function main(): Promise<void> {
    * something different, so record the stopping point too.
    */
   const TARGET_NOTES = 6;
+  /**
+   * Every reading that cleared the gates, in the order the pass reached them.
+   *
+   * Kept so one generation can be turned into TWO walls — the six arrival
+   * order would show, and the six selection picks. Same readings, same judge
+   * calls, so the comparison costs nothing beyond a handful of embeddings.
+   */
+  const survivors: Array<{
+    title: string;
+    belief: string;
+    ownerIds: string[];
+    wowScore: number;
+  }> = [];
   const membersAtTarget = new Set<string>();
   let coverageAtTarget: number | null = null;
 
@@ -267,6 +281,12 @@ async function main(): Promise<void> {
         }
 
         readings.push(judgment.title);
+        survivors.push({
+          title: judgment.title,
+          belief: judgment.beliefStatement ?? judgment.why,
+          ownerIds: [...distinctOwners],
+          wowScore: trigger.wowScore ?? 0,
+        });
         const owners = await db
           .select({ id: signals.id, userId: signals.userId })
           .from(signals)
@@ -356,6 +376,61 @@ async function main(): Promise<void> {
     console.log("\n--- do the readings repeat each other? ---\n");
     console.log(`  mean pairwise word overlap: ${mean.toFixed(2)} (lexical, secondary)`);
     console.log(`  most similar pair:          ${worst.toFixed(2)}`);
+
+  /**
+   * The two walls, side by side.
+   *
+   * This is the whole point of holding the survivors: one generation pass, two
+   * boards. The left is what arrival order shows today — the first six that
+   * cleared the gates. The right is what selection picks — the six covering
+   * the most people and saying the most different things.
+   *
+   * Same readings and the same judge calls produced both, so the comparison
+   * costs a handful of embeddings and nothing else. The verdict is yours: read
+   * both and say which wall you would rather have on a wall.
+   */
+  if (survivors.length > TARGET_NOTES) {
+    console.log(`\n--- the same ${survivors.length} readings, two ways ---\n`);
+
+    const arrival = survivors.slice(0, TARGET_NOTES);
+
+    let picked = arrival;
+    try {
+      const embedder = new GeminiEmbeddingHttpClient();
+      const vectors = await Promise.all(
+        survivors.map((r) => embedder.embed(`${r.title}\n${r.belief}`)),
+      );
+      const chosenIds = new Set(
+        selectBoard(
+          survivors.map((r, i) => ({
+            id: String(i),
+            embedding: vectors[i] ?? [],
+            ownerIds: r.ownerIds,
+            quality: Math.max(0, Math.min(1, r.wowScore / 100)),
+          })),
+          TARGET_NOTES,
+        ).map((c) => c.id),
+      );
+      picked = survivors.filter((_, i) => chosenIds.has(String(i)));
+    } catch (err) {
+      console.log(`  (could not embed to select: ${err instanceof Error ? err.message : String(err)})`);
+    }
+
+    const reach = (rows: typeof survivors) =>
+      new Set(rows.flatMap((r) => r.ownerIds)).size;
+
+    console.log("  ARRIVAL ORDER — what the wall shows today");
+    for (const r of arrival) console.log(`    · ${preview(r.title, 68)}`);
+    console.log(`    reaches ${reach(arrival)} members`);
+
+    console.log("\n  SELECTED — what the editor picks");
+    for (const r of picked) console.log(`    · ${preview(r.title, 68)}`);
+    console.log(`    reaches ${reach(picked)} members`);
+
+    const changed = picked.filter((r) => !arrival.some((a) => a.title === r.title)).length;
+    console.log(`\n  ${changed} of ${TARGET_NOTES} places differ between the two walls.`);
+    console.log("  Read both. Which one covers more distinct ideas?");
+  }
 
     /**
      * The verdict is semantic. Words are what a board happens to use; meaning

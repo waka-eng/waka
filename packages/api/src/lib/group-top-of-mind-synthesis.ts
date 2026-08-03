@@ -24,9 +24,10 @@ import {
   signals,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import type { WakaDb } from "./inspiration-embeddings.js";
+import { GeminiEmbeddingHttpClient, type WakaDb } from "./inspiration-embeddings.js";
 import type { SupportedLocale } from "./locales.js";
-import { cosineSimilarity } from "../scoring/wow-score.js";
+import { selectBoard } from "../scoring/board-selection.js";
+import { cosineSimilarity, fromPersistedScore } from "../scoring/wow-score.js";
 import { MIN_AUDIBLE_CHARS, isAudible } from "./signal-enrichment.js";
 import { judgeGroupWowMoment, type WowMomentJudgment } from "./wow-judge.js";
 
@@ -40,6 +41,15 @@ const CANDIDATE_LIMIT = 8;
 // How many of each member's strongest shared signals to consider as triggers
 // before interleaving. Keeps one prolific member from dominating the pass.
 const PER_MEMBER_TRIGGER_CAP = 8;
+/**
+ * How many readings a pass gathers before choosing a wall from them.
+ *
+ * Above `TARGET_NOTES` on purpose: selection with exactly as many candidates
+ * as places is not selection, and the board falls back to arrival order. The
+ * gap between the two is the only thing that costs extra model calls, so this
+ * is the dial to turn if cost ever bites — not the choosing.
+ */
+const CANDIDATE_POOL_TARGET = 12;
 /**
  * How many of a member's signals to consider before ranking them.
  *
@@ -74,6 +84,8 @@ export interface BoardCandidate {
   /** Distinct members this reading rests on. Always at least two. */
   ownerIds: string[];
   triggerWowScore: number;
+  /** Stable identity — the same key persistence dedupes on. */
+  key: string;
 }
 
 export interface GroupSynthesisResult {
@@ -540,6 +552,20 @@ async function persistGroupNote(
     ownersBySignalId: Map<string, string>;
     /** One instant for the whole pass — see `GroupSynthesisResult.passAt`. */
     passAt: Date;
+    /**
+     * A reading the pass produced but selection did not put on the wall.
+     *
+     * Written retired at the instant it was created, so it never appears on a
+     * board — `noteIsOnBoardAt` is half-open, and a note replaced at the same
+     * moment it was written is already gone at that moment.
+     *
+     * Kept rather than dropped because it cost the same to make and it is the
+     * most interesting thing a timeline can show: not only what the wall said,
+     * but what the room considered and set aside. Also keeps the spark
+     * engine's line intact — only decisions become memory, and choosing not to
+     * show a reading is a decision.
+     */
+    consideredOnly?: boolean;
   },
 ): Promise<{ outcome: "created" | "existing" | "skipped"; noteId?: string }> {
   const sourceEvidenceById = new Map(
@@ -569,6 +595,9 @@ async function persistGroupNote(
         wowScore: input.triggerWowScore,
         createdAt: input.passAt,
         updatedAt: input.passAt,
+        ...(input.consideredOnly
+          ? { lifecycleStatus: "replaced" as const, replacedAt: input.passAt }
+          : {}),
       })
       .onConflictDoNothing({
         target: [groupTopOfMindNotes.groupId, groupTopOfMindNotes.idempotencyKey],
@@ -637,6 +666,91 @@ async function persistGroupNote(
   });
 }
 
+
+/**
+ * Turn the readings a pass produced into the wall it should show.
+ *
+ * The only part of selection that needs the world: it embeds each reading so
+ * "says a different thing" can be measured, and asks the board which readings
+ * it already holds so a re-confirmed one keeps its place instead of competing
+ * for it.
+ *
+ * Falls back to the candidates in hand when embedding is unavailable. A pass
+ * that cannot measure difference should still produce a board — worse than a
+ * chosen one, no worse than what the pass did before selection existed.
+ */
+async function chooseBoard(
+  db: WakaDb,
+  groupId: string,
+  candidates: BoardCandidate[],
+  k: number,
+): Promise<BoardCandidate[]> {
+  if (candidates.length <= k) return candidates;
+
+  /**
+   * Readings this room already shows.
+   *
+   * A reading the pass reached again has been CONFIRMED, not superseded.
+   * Letting selection drop one would reintroduce the bug that took a real
+   * board from six notes to four, and would make the wall churn between
+   * refreshes for reasons nobody could see.
+   */
+  const activeKeys = new Set(
+    (
+      await db
+        .select({ key: groupTopOfMindNotes.idempotencyKey })
+        .from(groupTopOfMindNotes)
+        .where(
+          and(
+            eq(groupTopOfMindNotes.groupId, groupId),
+            eq(groupTopOfMindNotes.lifecycleStatus, "active"),
+          ),
+        )
+    ).map((row) => row.key),
+  );
+
+  let embeddings: number[][];
+  try {
+    const client = new GeminiEmbeddingHttpClient();
+    embeddings = await Promise.all(
+      candidates.map((candidate) =>
+        client.embed(
+          // What the reading SAYS, not what it rests on — two readings can cite
+          // the same saves and mean different things, which is the whole reason
+          // a room is worth reading.
+          `${candidate.judgment.title}\n${candidate.judgment.beliefStatement ?? candidate.judgment.why}`,
+        ),
+      ),
+    );
+  } catch (err) {
+    console.warn("[group-synthesis] could not embed candidates; keeping arrival order", {
+      groupId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return candidates.slice(0, k);
+  }
+
+  const selectable = candidates.map((candidate, index) => ({
+    id: candidate.key,
+    embedding: embeddings[index] ?? [],
+    ownerIds: candidate.ownerIds,
+    quality: fromPersistedScore(candidate.triggerWowScore),
+    reconfirmed: activeKeys.has(candidate.key),
+  }));
+
+  const chosenIds = new Set(selectBoard(selectable, k).map((c) => c.id));
+  const chosen = candidates.filter((candidate) => chosenIds.has(candidate.key));
+
+  console.log("[group-synthesis] board chosen", {
+    groupId,
+    candidates: candidates.length,
+    chosen: chosen.length,
+    reconfirmed: selectable.filter((c) => c.reconfirmed).length,
+  });
+
+  return chosen;
+}
+
 /**
  * Run group synthesis for one group: pool members' shared signals, judge each
  * viable trigger over the cross-member candidate pool, and persist the resulting
@@ -685,17 +799,16 @@ export async function generateGroupTopOfMind(
 
   for (const trigger of triggers) {
     /**
-     * Bounded by candidates now, where it used to be bounded by notes actually
-     * created. The two differ in one case: a pass that keeps re-deriving
-     * readings already on the board used to carry on until it had six NEW
-     * ones, and now stops once it holds six that cleared the gates.
+     * Deliberately NOT stopping at `TARGET_NOTES`.
      *
-     * Called out rather than hidden because it is the only behavioural change
-     * in an otherwise pure separation — the outcome of a persist is not
-     * knowable until after the loop, which is the entire point of moving it.
-     * Selection raises this bound deliberately in any case.
+     * Selection needs more readings than the wall has places, or it has
+     * nothing to choose between and the board falls back to arrival order.
+     * The pool is what costs the extra model calls, and `MAX_TRIGGERS` is the
+     * dial if that ever matters — the stopping rule is not.
+     *
+     * A hard ceiling still applies so a huge room cannot run away with a pass.
      */
-    if (candidates.length >= TARGET_NOTES) break;
+    if (candidates.length >= CANDIDATE_POOL_TARGET) break;
     triggersTried += 1;
 
     let judgment: WowMomentJudgment;
@@ -743,10 +856,26 @@ export async function generateGroupTopOfMind(
       owners,
       ownerIds: [...distinctOwners],
       triggerWowScore: trigger.wowScore,
+      // The same identity persistence will use, so "did selection pick this?"
+      // and "is this already on the board?" are the same question.
+      key: idempotencyKeyFor(input.groupId, judgment, locale),
     });
   }
 
+  /**
+   * Choose the wall, then write it.
+   *
+   * Everything above decided which readings are TRUE. This decides which of
+   * them make the best board — the most people spoken for, the most different
+   * things said. Without it the wall is whichever readings the trigger order
+   * happened to reach first, which on a real board produced three readings
+   * that were three phrasings of one idea.
+   */
+  const chosen = await chooseBoard(db, input.groupId, candidates, TARGET_NOTES);
+  const chosenKeys = new Set(chosen.map((c) => c.key));
+
   for (const candidate of candidates) {
+    const selected = chosenKeys.has(candidate.key);
     const outcome = await persistGroupNote(db, {
       groupId: input.groupId,
       judgment: candidate.judgment,
@@ -754,7 +883,9 @@ export async function generateGroupTopOfMind(
       triggerWowScore: candidate.triggerWowScore,
       ownersBySignalId: candidate.owners,
       passAt,
+      consideredOnly: !selected,
     });
+    if (!selected) continue;
     if (outcome.outcome === "created") notesCreated += 1;
     else if (outcome.outcome === "existing") {
       notesExisting += 1;
