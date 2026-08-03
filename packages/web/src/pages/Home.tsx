@@ -5029,52 +5029,90 @@ export function HomePage(): JSX.Element {
               </button>
 
               {expandedReadings.has(signal.id) ? (
-                <ul className="memory-reading-list">
-                  {(savedSignalReadings[signal.id] ?? []).map((reading) => {
-                    const isOpen = activeReading?.signalId === signal.id
-                      && activeReading.noteId === reading.note.id;
-                    const contextLabel =
-                      reading.context.scope === "alone"
-                        ? copy.readingsAloneLabel
-                        : copy.readingsInRoomLabel(reading.context.groupName);
-                    return (
-                      <li key={reading.note.id} className="memory-reading">
-                        {/*
-                          Choosing a reading is what highlights the save.
+                <div className="memory-reading-groups">
+                  {/*
+                    Grouped by where it was read, not repeated per row.
 
-                          The same save read by two rooms lights up different
-                          sentences, and that difference IS the claim — so the
-                          reading has to be selectable, not merely listed.
-                        */}
-                        <button
-                          type="button"
-                          className={`memory-reading-pick${isOpen ? " memory-reading-pick--open" : ""}`}
-                          aria-pressed={isOpen}
-                          disabled={!reading.quote}
-                          title={reading.quote ? undefined : copy.readingsNoQuote}
-                          onClick={() =>
-                            setActiveReading((current) =>
-                              current?.signalId === signal.id
-                                && current.noteId === reading.note.id
-                                ? null
-                                : {
-                                    signalId: signal.id,
-                                    noteId: reading.note.id,
-                                    quote: reading.quote,
-                                  },
-                            )
-                          }
-                        >
-                          <span className="memory-reading-context">{contextLabel}</span>
-                          <span className="memory-reading-title">{reading.note.title}</span>
-                        </button>
-                        {isOpen && reading.myRole.reason ? (
-                          <p className="memory-reading-reason">{reading.myRole.reason}</p>
-                        ) : null}
-                      </li>
+                    Eleven readings printed as eleven identical rows, each
+                    restating "alone" or "in waka", made the place feel like
+                    part of every title instead of the thing that separates two
+                    kinds of reading. The context is a heading now, said once.
+                  */}
+                  {[
+                    { key: "alone", label: copy.readingsAloneLabel },
+                    ...Array.from(
+                      new Map(
+                        (savedSignalReadings[signal.id] ?? [])
+                          .flatMap((reading) =>
+                            reading.context.scope === "group"
+                              ? ([
+                                  [
+                                    reading.context.groupId,
+                                    { key: reading.context.groupId, label: reading.context.groupName },
+                                  ],
+                                ] as const)
+                              : [],
+                          ),
+                      ).values(),
+                    ),
+                  ].map((group) => {
+                    const inGroup = (savedSignalReadings[signal.id] ?? []).filter((reading) =>
+                      group.key === "alone"
+                        ? reading.context.scope === "alone"
+                        : reading.context.scope === "group" && reading.context.groupId === group.key,
+                    );
+                    if (inGroup.length === 0) return null;
+                    return (
+                      <div key={group.key} className="memory-reading-group">
+                        <span className="memory-reading-group-label">{group.label}</span>
+                        <ul className="memory-reading-list">
+                          {inGroup.map((reading) => {
+                            const isOpen = activeReading?.signalId === signal.id
+                              && activeReading.noteId === reading.note.id;
+                            return (
+                              <li key={reading.note.id} className="memory-reading">
+                                {/*
+                                  Choosing a reading is what highlights the save.
+
+                                  The same save read by two rooms rests on
+                                  different sentences, and that difference IS
+                                  the claim — so a reading has to be selectable,
+                                  not merely listed. One that named no span says
+                                  so by being inert rather than by failing
+                                  silently when clicked.
+                                */}
+                                <button
+                                  type="button"
+                                  className={`memory-reading-pick${isOpen ? " memory-reading-pick--open" : ""}${reading.quote ? " memory-reading-pick--has-part" : ""}`}
+                                  aria-pressed={isOpen}
+                                  disabled={!reading.quote}
+                                  title={reading.quote ? undefined : copy.readingsNoQuote}
+                                  onClick={() =>
+                                    setActiveReading((current) =>
+                                      current?.signalId === signal.id
+                                        && current.noteId === reading.note.id
+                                        ? null
+                                        : {
+                                            signalId: signal.id,
+                                            noteId: reading.note.id,
+                                            quote: reading.quote,
+                                          },
+                                    )
+                                  }
+                                >
+                                  <span className="memory-reading-title">{reading.note.title}</span>
+                                  {reading.quote ? (
+                                    <span className="memory-reading-part" aria-hidden="true" />
+                                  ) : null}
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
                     );
                   })}
-                </ul>
+                </div>
               ) : null}
             </section>
           ) : null}

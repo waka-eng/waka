@@ -17199,33 +17199,85 @@ textarea {
   transform: translateY(1px) rotate(-135deg);
 }
 
-/* A reading you can stand inside, not a paragraph you read past. */
+/*
+   Where a save was read, said once.
+
+   Eleven readings printed as eleven identical rows — each restating "alone" or
+   "in waka" — made the place feel like part of every title rather than the
+   thing that separates two kinds of reading.
+*/
+.memory-reading-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 10px 0 2px;
+}
+
+.memory-reading-group-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(20, 18, 16, 0.34);
+}
+
+.memory-reading-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* No dividers. A rule between every row turned a list of five things into ten
+   horizontal lines, and the eye counted the lines instead of the readings. */
+.memory-reading { margin: 0; }
+
 .memory-reading-pick {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 9px;
   width: 100%;
   border: 0;
   background: none;
   padding: 7px 0;
   font: inherit;
   text-align: left;
+  color: rgba(20, 18, 16, 0.5);
+  cursor: default;
+}
+
+/* Only a reading that named a span can be stood inside. The rest are a record
+   that this save fed them, and they say so by being inert rather than by
+   failing silently when clicked. */
+.memory-reading-pick--has-part {
+  color: rgba(20, 18, 16, 0.88);
   cursor: pointer;
-  color: rgba(20, 18, 16, 0.82);
 }
 
-.memory-reading-pick:disabled { cursor: default; opacity: 0.45; }
-.memory-reading-pick:not(:disabled):hover { color: rgba(20, 18, 16, 1); }
+.memory-reading-pick--has-part:hover { color: rgba(20, 18, 16, 1); }
 
-.memory-reading-pick--open { font-weight: 500; color: rgba(20, 18, 16, 1); }
+.memory-reading-pick--open {
+  color: rgba(20, 18, 16, 1);
+  font-weight: 500;
+}
 
-.memory-reading-pick .memory-reading-context {
+.memory-reading-title { font-size: 0.86rem; line-height: 1.45; }
+
+/* A quiet mark that this reading can show you its part. It fills in when you
+   are standing in it. */
+.memory-reading-part {
   flex: none;
-  font-size: 0.7rem;
-  color: rgba(20, 18, 16, 0.42);
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.2px rgba(212, 175, 78, 0.85);
+  transition: background 180ms ease;
 }
 
-.memory-reading-title { font-size: 0.86rem; line-height: 1.4; }
+.memory-reading-pick--open .memory-reading-part {
+  background: rgba(212, 175, 78, 0.85);
+}
 
 /*
    The save, read through one reading.
