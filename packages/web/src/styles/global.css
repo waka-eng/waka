@@ -17099,3 +17099,34 @@ textarea {
   .nc-timerail-moment,
   .nc-stage--in-past { transition: none; }
 }
+
+/*
+   When a reading arrived.
+
+   Quiet and last in the provenance line: a wall that can be travelled needs its
+   notes dated, but the date is context for the reading, never the point of it.
+*/
+.nc-note-when {
+  margin-left: 8px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--ink, #201d1a) 42%, transparent);
+  white-space: nowrap;
+}
+
+/* A face on the moment someone joined, so an arrival names a person by
+   showing them rather than by describing what their arrival meant. */
+.nc-timerail-moment-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-right: 6px;
+  border-radius: 50%;
+  color: #fbf9f6;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: -4px;
+}

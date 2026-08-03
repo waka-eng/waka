@@ -100,6 +100,7 @@ import {
 } from "../lib/api";
 import { RoomTitle } from "../components/RoomTitle";
 import { GroupWall } from "../components/GroupWall";
+import { contributorColor, contributorInitials } from "../components/faces";
 import { TimeRail } from "../components/TimeRail";
 import { RoomRail } from "../components/RoomRail";
 import { MINE_BOARD_ID, extractJoinCode } from "../components/rooms";
@@ -510,6 +511,7 @@ function isPublicMemoryPathLabel(label: string): boolean {
 }
 
 interface HomeThoughtCard {
+  createdAt?: string;
   id: string;
   feedbackTargetId?: string;
   label: string;
@@ -670,18 +672,26 @@ export function getMemoryPreviewPlacement(
   };
 }
 
-/** Stable per-person colour, so a face reads as the same person everywhere. */
-const CONTRIBUTOR_COLORS = ["#8a6a2f", "#4a6a55", "#5a5170", "#7a4a4a", "#6a5a3a", "#3f5a6a"];
-function contributorColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return CONTRIBUTOR_COLORS[hash % CONTRIBUTOR_COLORS.length]!;
-}
-function contributorInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
+/**
+ * When a reading arrived, said the way a person would say it.
+ *
+ * Relative while it is recent, because "2 days ago" is what you actually want
+ * to know about something on today's wall; absolute once it is old enough that
+ * counting days stops meaning anything.
+ */
+function noteWhen(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const days = Math.floor((Date.now() - at.getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+  const sameYear = at.getFullYear() === new Date().getFullYear();
+  return at.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
 }
 
 function noteToThoughtCard(
@@ -711,6 +721,8 @@ function noteToThoughtCard(
   return {
     id: note.id,
     feedbackTargetId: note.id,
+    /** When the room first read this. A wall that changes needs its notes dated. */
+    createdAt: note.createdAt,
     label: note.title || note.ambientSignal,
     ambitionDimension: note.ambitionDimension,
     ambientSignal: note.ambientSignal,
@@ -1314,8 +1326,7 @@ const HOME_COPY = {
     timeRailRegionLabel: "이 방이 지나온 시간",
     timeRailNow: "지금",
     timeRailFormed: "방이 만들어짐",
-    timeRailTurned: "읽는 방식이 바뀜",
-    timeRailArrived: (name: string) => `${name} 합류 — 같은 신호가 다르게 읽히기 시작함`,
+    timeRailArrived: (name: string) => `${name} 합류`,
     timeRailDeparted: (name: string) => `${name} 떠남`,
     timeRailBackToNow: "지금으로",
     timeRailPastEmpty: "이 순간에는 이 방이 아직 아무것도 읽지 않았습니다.",
@@ -1467,8 +1478,7 @@ const HOME_COPY = {
     timeRailRegionLabel: "this room over time",
     timeRailNow: "now",
     timeRailFormed: "the room was formed",
-    timeRailTurned: "the reading turned",
-    timeRailArrived: (name: string) => `${name} arrived — the same signals began reading differently`,
+    timeRailArrived: (name: string) => `${name} joined`,
     timeRailDeparted: (name: string) => `${name} left`,
     timeRailBackToNow: "back to now",
     timeRailPastEmpty: "At this moment the room had not read anything yet.",
@@ -1606,7 +1616,6 @@ const HOME_COPY = {
     timeRailRegionLabel: string;
     timeRailNow: string;
     timeRailFormed: string;
-    timeRailTurned: string;
     timeRailArrived: (name: string) => string;
     timeRailDeparted: (name: string) => string;
     timeRailBackToNow: string;
@@ -3387,7 +3396,6 @@ export function HomePage(): JSX.Element {
     regionLabel: copy.timeRailRegionLabel,
     now: copy.timeRailNow,
     formed: copy.timeRailFormed,
-    turned: copy.timeRailTurned,
     arrived: copy.timeRailArrived,
     departed: copy.timeRailDeparted,
     backToNow: copy.timeRailBackToNow,
@@ -5431,6 +5439,16 @@ export function HomePage(): JSX.Element {
                 ? `${noteContributors.join(", ")} · ${supportingCount}`
                 : copy.topOfMindEvidenceCount(supportingCount)}
             </span>
+            {/*
+              When the room first read this.
+
+              A wall that can be travelled needs its notes dated, or scrubbing
+              back is the only way to learn that a reading is three weeks old
+              while the one beside it arrived this morning.
+            */}
+            {signal.createdAt ? (
+              <span className="nc-note-when">{noteWhen(signal.createdAt)}</span>
+            ) : null}
           </button>
         ) : <span />}
         {noteIsInteractive ? renderPostItActions(signal) : null}

@@ -32,6 +32,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { contributorColor, contributorInitials } from "./faces";
 import type { ApiRoomTimeline, ApiTimelineEvent } from "../lib/api";
 
 /**
@@ -60,8 +61,10 @@ const COMMIT_DISTANCE = 56;
 export interface TimeMark {
   at: string;
   kind: "formed" | "turn" | "arrival" | "departure" | "now";
-  /** What to say about this moment, in one line. */
+  /** What to say about this moment, in one line. Empty when the mark says it. */
   label: string;
+  /** Whose arrival or departure this was, so the rail can show their face. */
+  who?: string;
 }
 
 export interface TimeRailProps {
@@ -74,7 +77,6 @@ export interface TimeRailProps {
     regionLabel: string;
     now: string;
     formed: string;
-    turned: string;
     arrived: (name: string) => string;
     departed: (name: string) => string;
     backToNow: string;
@@ -113,10 +115,11 @@ export function marksFromTimeline(
       marks.push({
         at,
         kind: member.event === "joined" ? "arrival" : "departure",
-        label:
-          member.event === "joined"
-            ? copy.arrived(member.name)
-            : copy.departed(member.name),
+        // Their name and nothing else. What their arrival MEANT is the wall
+        // changing beside the mark; saying it in words as well was the label
+        // explaining a thing the product is already showing.
+        label: member.event === "joined" ? copy.arrived(member.name) : copy.departed(member.name),
+        who: member.name,
       });
       continue;
     }
@@ -126,7 +129,15 @@ export function marksFromTimeline(
     }
     const written = events.filter((e) => e.kind === "note_written");
     if (written.length > 0) {
-      marks.push({ at, kind: "turn", label: copy.turned });
+      /**
+       * A turn carries no label.
+       *
+       * "the reading turned" is what the dot and the date already say — it
+       * restates the mark instead of telling you anything the mark cannot.
+       * Arrivals and formation earn their words because they name something
+       * the shape alone cannot: who, and that this is where the room begins.
+       */
+      marks.push({ at, kind: "turn", label: "" });
     }
   }
 
@@ -299,7 +310,20 @@ export function TimeRail({
             onClick={() => onScrub(mark.kind === "now" ? null : mark.at)}
             title={mark.label}
           >
-            <span className="nc-timerail-moment-label">{mark.label}</span>
+            {mark.label ? (
+              <span className="nc-timerail-moment-label">
+                {mark.who ? (
+                  <span
+                    className="nc-timerail-moment-face"
+                    style={{ background: contributorColor(mark.who) }}
+                    aria-hidden="true"
+                  >
+                    {contributorInitials(mark.who)}
+                  </span>
+                ) : null}
+                {mark.label}
+              </span>
+            ) : null}
             <span className="nc-timerail-moment-when">
               {mark.kind === "now" ? copy.now : whenLabel(mark.at)}
             </span>

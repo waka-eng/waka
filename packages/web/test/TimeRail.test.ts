@@ -7,7 +7,6 @@ const copy = {
   regionLabel: "this room over time",
   now: "now",
   formed: "the room was formed",
-  turned: "the reading turned",
   arrived: (name: string) => `${name} arrived`,
   departed: (name: string) => `${name} left`,
   sinceLabel: (count: number, when: string) => `${count} · ${when}`,
@@ -35,7 +34,7 @@ describe("marksFromTimeline", () => {
       copy,
     );
     expect(marks).toHaveLength(1);
-    expect(marks[0]).toMatchObject({ at, kind: "turn" });
+    expect(marks[0]).toMatchObject({ at, kind: "turn", label: "" });
   });
 
   it("does not count a retirement as its own moment", () => {
