@@ -464,12 +464,28 @@ export async function ensureInspirationEmbedding(
  * `process_inspiration` would drag a judge pass — many model calls — behind
  * every edit of a reflection. If the added latency ever matters, the upgrade
  * is its own job type, not a bigger existing one.
+ *
+ * **Awaited, and bounded.** It runs in the request because the API is deployed
+ * as Lambda, where work left unawaited after the response is simply killed —
+ * fire-and-forget would mean the refresh usually never happened. So the write
+ * does wait on it, and a slow provider would otherwise hold a user's reflection
+ * open for as long as it liked. The timeout is what keeps a bad day for the
+ * embedding service from becoming a bad day for saving your own words.
  */
+const REFRESH_TIMEOUT_MS = 4000;
 export async function refreshEmbeddingAfterChange(
   params: EnsureInspirationEmbeddingParams & { reason: "edited" | "reflected" },
 ): Promise<void> {
   try {
-    const result = await ensureInspirationEmbedding(params);
+    const result = await Promise.race([
+      ensureInspirationEmbedding(params),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`embedding refresh exceeded ${REFRESH_TIMEOUT_MS}ms`)),
+          REFRESH_TIMEOUT_MS,
+        ),
+      ),
+    ]);
     if (result.generated) {
       console.log("[embeddings] refreshed after change", {
         inspirationId: params.inspirationId,

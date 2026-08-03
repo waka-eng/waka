@@ -2720,9 +2720,17 @@ export function HomePage(): JSX.Element {
    * claiming evidence this endpoint never fetched.
    */
   const scrubbedGroupNotes: ApiGroupTopOfMindNote[] | null = scrubbedNotes
-    ? scrubbedNotes.map((note) => {
+    ? scrubbedNotes.map((note): ApiGroupTopOfMindNote => {
         const live = groupNotes.find((candidate) => candidate.id === note.id);
         if (live) return live;
+        /*
+           Typed, deliberately, rather than cast.
+           
+           The first version asserted this shape with `as unknown as` and shipped
+           a note missing `relatedSignalIds` — the card pipeline walked it and
+           took the whole page down. The annotation is what makes the compiler
+           the thing that catches the next missing field instead of a user.
+        */
         return {
           id: note.id,
           userId: "",
@@ -2733,7 +2741,7 @@ export function HomePage(): JSX.Element {
           antiEnvironment: "",
           evidenceRationale: note.why,
           rejectedAlternativeInterpretation: null,
-          type: "observation",
+          type: "pattern",
           body: note.why,
           prompt: null,
           guidance: null,
@@ -2747,7 +2755,7 @@ export function HomePage(): JSX.Element {
           updatedAt: note.createdAt,
           source: "wow_moment_compatibility",
           isProvisional: true,
-          legacy: { wowMomentId: note.id, wowKind: "bridge", wowScore: 0 },
+          legacy: { wowMomentId: note.id, wowKind: "bridge" as const, wowScore: 0 },
           /*
              The faces travel with the reading. Without them a past card is an
              observation from nowhere, and the room's whole claim is that a
@@ -2760,18 +2768,21 @@ export function HomePage(): JSX.Element {
           */
           evidencePreviews: (note.evidence ?? []).map((item) => ({
             signalId: item.signalId,
+            role: "related",
             textPreview: item.textPreview,
             reason: item.reason,
             createdAt: note.createdAt,
             kind: null,
-            resonanceScore: null,
+            // Not carried by the timeline read model, and not invented: a past
+            // card shows what the reading rested on, never a score it never had.
+            resonanceScore: 0,
             authorUserId: item.ownerUserId,
             authorName: item.ownerName,
           })),
           relatedSignals: [],
           authorUserId: note.evidence?.[0]?.ownerUserId ?? "",
           authorName: note.evidence?.[0]?.ownerName ?? "",
-        } as unknown as ApiGroupTopOfMindNote;
+        };
       })
     : null;
 
