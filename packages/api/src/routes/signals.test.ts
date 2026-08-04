@@ -44,6 +44,7 @@ describe("GET /api/signals", () => {
         matchingSnippets: ["quiet research rooms"],
         relatedContextTerms: ["environment: quiet rooms"],
         relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
+        relatedGroupNotes: [],
         attachmentSummary: [],
         relevanceReasons: ["highlight match", "context match"],
       },
@@ -78,6 +79,7 @@ describe("GET /api/signals", () => {
           highlightedSnippets: [{ text: "quiet research rooms" }],
           relatedContextTerms: ["environment: quiet rooms"],
           relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
+        relatedGroupNotes: [],
         },
       ],
     });
@@ -112,6 +114,7 @@ describe("GET /api/signals", () => {
       matchingSnippets: [],
       relatedContextTerms: ["environment"],
       relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
+        relatedGroupNotes: [],
       attachmentSummary: [],
       relevanceReasons: ["has highlighted snippets"],
       attachments: [],

@@ -1,12 +1,14 @@
 import { eq } from "drizzle-orm";
 
 import { users } from "../db/index.js";
+import { getDb } from "./db.js";
 import {
   ensureInspirationEmbedding,
   type EnsureInspirationEmbeddingResult,
   type WakaDb,
 } from "./inspiration-embeddings.js";
 import { persistLocalInspirationScoresById } from "./inspiration-scores.js";
+import { ensureSignalEnrichment } from "./signal-enrichment.js";
 import {
   judgeWowMomentForInspiration,
   persistWowMomentForInspirationJudgment,
@@ -95,6 +97,20 @@ export async function generateAutoWowMomentForInspiration(
   const limit = params.limit ?? DEFAULT_WOW_GENERATION_LIMIT;
 
   try {
+    // Give a bare-link save its words before it is embedded. Best-effort and
+    // at-most-once: a page that will not speak is recorded and never blocks
+    // the pipeline. Doing it here — the async path every new save already
+    // takes — means the first embedding a link save ever gets is the audible
+    // one, rather than a mute wrapper regenerated later.
+    try {
+      await ensureSignalEnrichment(params.db ?? getDb(), {
+        userId: params.userId,
+        signalId: params.inspirationId,
+      });
+    } catch {
+      // Enrichment is a favor to the embedding, never a gate on it.
+    }
+
     const embeddingResult = await ensureEmbedding({
       db: params.db,
       userId: params.userId,

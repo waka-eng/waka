@@ -272,7 +272,6 @@ export async function updateAuthPreferences(
   );
 }
 
-
 export interface UpdateAuthProfileRequest {
   name: string;
   preferredLocale: SupportedLocale;
@@ -597,74 +596,6 @@ export async function recordInspirationRevisit(
   );
 }
 
-export async function fetchInspirationSparks(
-  inspirationId: string,
-): Promise<ApiInspirationSpark[]> {
-  const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    "Failed to load signal highlights",
-  );
-  return Array.isArray(body.sparks) ? body.sparks : [];
-}
-
-export async function createInspirationSpark(
-  inspirationId: string,
-  input: {
-    text: string;
-    source?: ApiInspirationSparkSource;
-    startOffset?: number;
-    endOffset?: number;
-    confidence?: number;
-    isPrimary?: boolean;
-    note?: string;
-  },
-): Promise<ApiInspirationSpark> {
-  const body = await postJson<{ spark: ApiInspirationSpark }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    input,
-    "Failed to save spark",
-  );
-  return body.spark;
-}
-
-export async function deleteInspirationSpark(
-  inspirationId: string,
-  sparkId: string,
-): Promise<void> {
-  const path = apiPath(
-    `/inspirations/${encodeURIComponent(inspirationId)}/sparks/${encodeURIComponent(sparkId)}`,
-  );
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while removing highlight",
-    });
-  }
-
-  if (res.ok) return;
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-  const errorBody = (body ?? {}) as { error?: string };
-  throw new ApiError({
-    status: res.status,
-    message:
-      errorBody.error ??
-      `Failed to remove highlight (HTTP ${res.status}). Please try again.`,
-  });
-}
-
 export async function fetchInspirationScoreBreakdown(
   id: string,
 ): Promise<ApiInspirationScoreBreakdown> {
@@ -856,6 +787,10 @@ export interface ApiTopOfMindEvidencePreview {
   role: string;
   reason: string;
   textPreview: string;
+  /** The words that carried the reading, when the judge named them provably. */
+  quote?: string | null;
+  /** Whose words they were: the person's, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   kind: string | null;
   createdAt: string;
   resonanceScore: number;
@@ -1158,6 +1093,14 @@ export type SavedSignalArchiveFilter =
 export type SavedSignalArchiveSort = "recent" | "resonance" | "revisited";
 
 export interface ApiSavedSignalSearchResult {
+  /**
+   * When this save is standing in for evidence, the words that carried the
+   * reading — so the drawer can say "these were the words" rather than showing
+   * a truncation that looks identical either way.
+   */
+  quote?: string | null;
+  /** Whose words they were: the person's own, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   id: string;
   userId: string;
   textPreview: string;
@@ -1181,6 +1124,8 @@ export interface ApiSavedSignalSearchResult {
   matchingSnippets: string[];
   relatedContextTerms: string[];
   relatedTopOfMindNoteTitles: string[];
+  /** Group boards this save fed: where else it led, and in whose company. */
+  relatedGroupNotes: Array<{ groupId: string; groupName: string; noteTitle: string }>;
   attachmentSummary: Array<{
     id: string;
     type: AttachmentType;
@@ -1496,6 +1441,107 @@ export async function leaveGroup(groupId: string): Promise<{ ok: boolean }> {
   return { ok: Boolean(body.ok) };
 }
 
+/**
+ * DELETE /groups/:id — the owner deletes the room outright.
+ *
+ * Distinct from leaving: this removes the board for everyone in it, along with
+ * every note their collections produced together. Members' own saved signals
+ * are untouched.
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  const path = apiPath(`/groups/${encodeURIComponent(groupId)}`);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while deleting the room",
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — fall through to the status-based message.
+  }
+  const errorBody = (body ?? {}) as { error?: string };
+  throw new ApiError({
+    status: res.status,
+    message: errorBody.error ?? "Failed to delete the room",
+  });
+}
+
+/** PATCH /groups/:id — rename the room. Owner only. */
+export async function renameGroup(groupId: string, name: string): Promise<void> {
+  await requestJson(
+    apiPath(`/groups/${encodeURIComponent(groupId)}`),
+    "PATCH",
+    { name },
+    "Failed to rename the room",
+  );
+}
+
+/** DELETE /groups/:id/members/:memberId — owner removes someone. */
+export async function removeGroupMember(
+  groupId: string,
+  memberUserId: string,
+): Promise<void> {
+  await requestJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberUserId)}`,
+    ),
+    "DELETE",
+    undefined,
+    "Failed to remove that member",
+  );
+}
+
+/**
+ * Shared shape for the room's owner-only mutations: send, accept any 2xx, and
+ * surface the server's own message when it refuses. Written once because the
+ * three of them differ only in verb and wording.
+ */
+async function requestJson(
+  path: string,
+  method: "PATCH" | "DELETE",
+  body: unknown,
+  fallbackMessage: string,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: "include",
+      headers: body
+        ? { Accept: "application/json", "Content-Type": "application/json" }
+        : { Accept: "application/json" },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new ApiError({ status: 0, message: "Network unreachable" });
+  }
+  if (res.ok) return;
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    // Non-JSON error body — fall back to the caller's message.
+  }
+  throw new ApiError({
+    status: res.status,
+    message: (parsed as { error?: string } | null)?.error ?? fallbackMessage,
+  });
+}
+
 /** GET /groups/:id/top-of-mind — synthesized group board. */
 export async function fetchGroupTopOfMind(
   groupId: string,
@@ -1519,79 +1565,78 @@ export async function refreshGroupTopOfMind(
   );
 }
 
-export async function fetchGroupRooms(limit = 5): Promise<ApiGroupConversationRoom[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  const body = await getJson<ListGroupRoomsResponse>(
-    apiPath(`/group-rooms?${params.toString()}`),
-    "Failed to load conversation rooms",
-  );
-
-  if (!Array.isArray(body.rooms)) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed conversation rooms response",
-    });
-  }
-
-  return body.rooms;
+/** A note, as it stood at some moment on the room's timeline. */
+export interface ApiTimelineNote {
+  id: string;
+  title: string;
+  why: string;
+  /**
+   * Stable across revisions of the same reading. The rail keys its animation
+   * on this: a note that survives a scrubbed boundary must stay perfectly
+   * still, and only identity can tell "unchanged" from "replaced by something
+   * that reads similarly".
+   */
+  idempotencyKey: string;
+  createdAt: string;
+  replacedAt: string | null;
+  /** Whose saves this reading rests on — a past card keeps its faces. */
+  evidence: ApiTimelineEvidence[];
 }
 
-export async function createGroupRoom(
-  input: CreateGroupRoomRequest,
-): Promise<ApiGroupConversationRoom> {
-  const body = await postJson<CreateGroupRoomResponse>(
-    apiPath("/group-rooms"),
-    input,
-    "Failed to create conversation room",
-  );
-
-  if (!body.room) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed conversation room response",
-    });
-  }
-
-  return body.room;
+export interface ApiTimelineEvidence {
+  signalId: string;
+  ownerUserId: string;
+  ownerName: string;
+  textPreview: string;
+  reason: string;
 }
 
-export async function createDiscussionTopic(
-  input: CreateDiscussionTopicRequest,
-): Promise<CreateDiscussionTopicResponse> {
-  const body = await postJson<CreateDiscussionTopicResponse>(
-    apiPath("/group-rooms/discussion-topic"),
-    input,
-    "Failed to create discussion topic",
-  );
+export type ApiTimelineEvent =
+  | { kind: "formed"; at: string }
+  | { kind: "note_written"; at: string; noteId: string; title: string }
+  | { kind: "note_replaced"; at: string; noteId: string; title: string }
+  | {
+      kind: "member";
+      at: string;
+      event: "joined" | "left" | "removed";
+      userId: string;
+      name: string;
+    };
 
-  if (!body.room || !body.prompt) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed discussion topic response",
-    });
-  }
-
-  return body;
+export interface ApiRoomTimeline {
+  groupId: string;
+  formedAt: string;
+  events: ApiTimelineEvent[];
 }
 
-export async function createGroupRoomFeedback(
-  roomId: string,
-  input: CreateGroupRoomFeedbackRequest,
-): Promise<CreateGroupRoomFeedbackResponse> {
-  const body = await postJson<CreateGroupRoomFeedbackResponse>(
-    apiPath(`/group-rooms/${encodeURIComponent(roomId)}/feedback`),
-    input,
-    "Failed to save room feedback",
+export interface ApiRoomTimelineResponse {
+  /**
+   * Null when a past board was asked for.
+   *
+   * A caller travelling already holds the room's life; rebuilding it on every
+   * scrub only to be discarded is what made the wall lag the rail.
+   */
+  timeline: ApiRoomTimeline | null;
+  board: { at: string; notes: ApiTimelineNote[] } | null;
+}
+
+/**
+ * GET /groups/:id/timeline — everything the room did, and the board as it
+ * stood at `at`.
+ *
+ * `at` omitted means now, which must equal today's wall exactly — that
+ * equivalence is what makes the rail's resting position honest rather than a
+ * second rendering of the same idea.
+ */
+export async function fetchRoomTimeline(
+  groupId: string,
+  at?: string,
+): Promise<ApiRoomTimelineResponse> {
+  const query = at ? `?at=${encodeURIComponent(at)}` : "";
+  return getJson<ApiRoomTimelineResponse>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/timeline${query}`),
+    "Failed to load the room's timeline",
   );
-
-  if (!body.room || !body.feedback) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed room feedback response",
-    });
-  }
-
-  return body;
 }
 
 export async function fetchPublicProfile(
@@ -1617,6 +1662,28 @@ export async function fetchPublicProfile(
   return body;
 }
 
+/**
+ * Fill in list fields an older API may not send.
+ *
+ * The saved-signals list is rendered from these arrays directly, so a field
+ * added on the server but absent from a response — a web bundle deployed ahead
+ * of the API, or a stale dev server — took the whole drawer down with a
+ * TypeError rather than simply showing one less thing. Defaulting here means
+ * every caller can trust the declared shape.
+ */
+function normalizeSavedSignal<T extends ApiSavedSignalSearchResult>(signal: T): T {
+  return {
+    ...signal,
+    relatedTopOfMindNoteTitles: signal.relatedTopOfMindNoteTitles ?? [],
+    relatedGroupNotes: signal.relatedGroupNotes ?? [],
+    highlightedSnippets: signal.highlightedSnippets ?? [],
+    matchingSnippets: signal.matchingSnippets ?? [],
+    relatedContextTerms: signal.relatedContextTerms ?? [],
+    attachmentSummary: signal.attachmentSummary ?? [],
+    relevanceReasons: signal.relevanceReasons ?? [],
+  };
+}
+
 export async function fetchSavedSignals(
   options: FetchSavedSignalsOptions = {},
 ): Promise<ApiSavedSignalSearchResult[]> {
@@ -1638,7 +1705,7 @@ export async function fetchSavedSignals(
     });
   }
 
-  return body.signals;
+  return body.signals.map(normalizeSavedSignal);
 }
 
 export async function fetchSavedSignalDetail(
@@ -1656,7 +1723,66 @@ export async function fetchSavedSignalDetail(
     });
   }
 
-  return body.signal;
+  return normalizeSavedSignal(body.signal);
+}
+
+/** One co-cited save — what your signal sat next to inside a reading. */
+export interface ApiSignalReadingNeighbor {
+  signalId: string;
+  textPreview: string;
+  ownerUserId: string;
+  ownerName: string;
+  ownerAvatarUrl: string | null;
+  isMine: boolean;
+}
+
+export type ApiSignalReadingContext =
+  | { scope: "alone" }
+  | { scope: "group"; groupId: string; groupName: string };
+
+/**
+ * How differently a room reads this save from the way its owner does. Only
+ * ever present on a group reading — "alone" is the side being compared
+ * against, so it has nothing to differ from.
+ */
+export interface ApiSignalReadingDivergence {
+  /** 0 = the room reads it the way you do; 100 = a different ambition. */
+  score: number;
+  /** The judge's one sentence naming the difference. */
+  rationale: string;
+}
+
+/**
+ * One Top of Mind note that cited a signal — read alone or beside a room.
+ * Solo readings are the owner's own; group readings are shared with the room
+ * (the API only returns rooms the caller currently belongs to).
+ */
+export interface ApiSignalReading {
+  context: ApiSignalReadingContext;
+  note: {
+    id: string;
+    title: string;
+    kind: string;
+    beliefStatement: string | null;
+    why: string;
+    createdAt: string;
+  };
+  myRole: { role: string; reason: string };
+  /** The words in THIS save that carried THIS reading. */
+  quote: string | null;
+  /** Whose words they were — the person's own, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
+  neighbors: ApiSignalReadingNeighbor[];
+}
+
+export async function fetchSignalReadings(
+  signalId: string,
+): Promise<ApiSignalReading[]> {
+  const body = await getJson<{ readings: ApiSignalReading[] }>(
+    apiPath(`/inspirations/${encodeURIComponent(signalId)}/readings`),
+    "Failed to load inspiration readings",
+  );
+  return Array.isArray(body.readings) ? body.readings : [];
 }
 
 export async function createFeedback(
@@ -1676,50 +1802,6 @@ export async function createFeedback(
   }
 
   return body.feedback;
-}
-
-export async function fetchBackgroundJobs(
-  options: FetchBackgroundJobsOptions = {},
-): Promise<ApiBackgroundJob[]> {
-  const params = new URLSearchParams();
-  if (options.type) params.set("type", options.type);
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-  const path = apiPath(`/admin/background-jobs${query ? `?${query}` : ""}`);
-
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while loading background jobs",
-    });
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-
-  if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to load background jobs (HTTP ${res.status}). Please try again.`,
-    });
-  }
-
-  const payload = (body ?? {}) as Partial<ListBackgroundJobsResponse>;
-  return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
 export type ApiMeaningGraphMemoryState =
@@ -2031,14 +2113,6 @@ export interface ApiTopOfMind {
     meaningNoteCount: number;
     relationshipEdgeCount: number;
   };
-}
-
-export async function fetchTopOfMind(): Promise<ApiTopOfMind> {
-  const body = await getJson<{ topOfMind: ApiTopOfMind }>(
-    apiPath("/top-of-mind"),
-    "Failed to load top of mind",
-  );
-  return body.topOfMind;
 }
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@
  * clear backfill/recompute semantics.
  */
 
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql } from "drizzle-orm";
 
 import { inspirationEmbeddings, inspirations, type Inspiration } from "../db/index.js";
 import {
@@ -27,6 +27,7 @@ import {
 } from "../scoring/wow-score.js";
 import { getDb } from "./db.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { MIN_AUDIBLE_CHARS } from "./signal-enrichment.js";
 import { isNearDuplicateTopOfMindText } from "./top-of-mind-dedupe.js";
 
 const DEFAULT_LIMIT = 10;
@@ -188,7 +189,9 @@ async function loadTenantCandidatePool(
         eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
       ),
     )
-    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt))
+    // `id` last: a tie must break the same way on every pass, or the candidate
+    // pool differs between runs and the board changes for no visible reason.
+    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt), asc(inspirations.id))
     .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
 }
 
@@ -228,6 +231,7 @@ type CandidatePoolRow = Awaited<ReturnType<typeof loadTenantCandidatePool>>[numb
 function scoreCandidates(
   trigger: TriggerWithEmbedding,
   candidatePool: CandidatePoolRow[],
+  reachMode: CandidateReachMode = "standing",
 ): WowMomentCandidate[] {
   return candidatePool
     .filter(({ embedding }) => embedding.embedding.length === trigger.embedding.embedding.length)
@@ -244,7 +248,14 @@ function scoreCandidates(
       );
       const persistedWowScore = fromPersistedScore(inspiration.wowScore);
       const runtimeCandidateScore = calculateRuntimeCandidateScore({
-        wowScore: persistedWowScore,
+        /*
+           Under `pairwise`, the candidate's standing score is withheld — not
+           re-weighted, withheld — so the ranking can only speak about the
+           relationship. It is the cleanest way to see how much of the shipped
+           pool is chosen by "this signal matters" rather than "this signal
+           matters HERE".
+        */
+        wowScore: reachMode === "pairwise" ? 0 : persistedWowScore,
         similarityToTrigger: similarityScoreToTrigger,
         surpriseSimilarityToTrigger: surpriseSimilarityScoreToTrigger,
         timeDistanceToTrigger: timeDistanceScoreToTrigger,
@@ -310,12 +321,30 @@ function rankAndDiversifyCandidates(
 function diversifyAcrossMembers(
   scored: WowMomentCandidate[],
   limit: number,
+  /**
+   * Who owns the trigger. They are already represented by it, so they get one
+   * fewer candidate slot than everyone else.
+   */
+  triggerUserId?: string,
 ): WowMomentCandidate[] {
   if (limit <= 0) return [];
-  // Allow at most ~half the slots to a single member.
-  const perMemberCap = Math.max(2, Math.ceil(limit / 2));
+  /**
+   * At most a third of the slots to any one member, not half.
+   *
+   * Half was enough for a member to drown their own trigger. Seeding a note put
+   * their signals in 5 of the 9 things the judge saw (four candidates plus the
+   * trigger), so the judge wrote a reading that mostly restated them — and
+   * `restatesASingleMember` then threw that reading away. The effect was that a
+   * member with a coherent, self-similar collection seeded note after note and
+   * appeared in none of them, while a member whose signals scattered across
+   * *other* people's triggers was cited constantly. Observed on a real six
+   * member board: two members held zero evidence rows across every note.
+   */
+  const perMemberCap = Math.max(2, Math.ceil(limit / 3));
 
   const counts = new Map<string, number>();
+  // The trigger is not in `scored`, so charge its owner for it up front.
+  if (triggerUserId) counts.set(triggerUserId, 1);
   const selected: WowMomentCandidate[] = [];
   const overflow: WowMomentCandidate[] = [];
 
@@ -375,9 +404,26 @@ async function loadPooledCandidatePool(
         ne(inspirationEmbeddings.inspirationId, triggerInspirationId),
         eq(inspirationEmbeddings.model, triggerEmbedding.model),
         eq(inspirationEmbeddings.dimensions, triggerEmbedding.dimensions),
+        /**
+         * A save with nothing readable in it cannot support a reading.
+         *
+         * It embeds to noise, so it lands near whatever the trigger is and
+         * takes one of the very few candidate slots — `diversifyAcrossMembers`
+         * caps each member at `ceil(limit / 3)`, so on a group pass one silent
+         * link is a third of a member's entire representation. Worse, it does
+         * this while contributing no words the judge can cite, so the note it
+         * helps produce cannot rest on it.
+         *
+         * Generous by construction (no whitespace normalization); the
+         * authority is `isAudible` in `signal-enrichment.ts`, and the two are
+         * pinned equivalent by test.
+         */
+        sql`length(regexp_replace(${inspirations.text}, 'https?://\\S+', ' ', 'g')) + coalesce(length(${inspirations.enrichment}), 0) >= ${MIN_AUDIBLE_CHARS}`,
       ),
     )
-    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt))
+    // `id` last: a tie must break the same way on every pass, or the candidate
+    // pool differs between runs and the board changes for no visible reason.
+    .orderBy(desc(inspirations.wowScore), desc(inspirations.createdAt), asc(inspirations.id))
     .limit(Math.min(poolLimit, MAX_DB_CANDIDATE_POOL));
 }
 
@@ -413,7 +459,28 @@ export async function findWowMomentCandidates(
   return { trigger: trigger.inspiration, candidates };
 }
 
+/**
+ * How the eight signals placed around a trigger are chosen.
+ *
+ * `standing` — the shipped ranking: half its weight is the candidate's own
+ * `wow_score`, which says how much that signal matters on its owner's board and
+ * nothing about whether it makes an interesting pair with THIS trigger.
+ *
+ * `pairwise` — score only the relationship: how it sits against the trigger,
+ * ignoring what it is worth alone.
+ *
+ * Measured on a real room: under `standing`, sixteen different triggers drew
+ * their evidence from the same eleven signals, 75% overlap between any two
+ * pools, one signal in all sixteen. Thirteen of twenty-four audible signals
+ * were never shown to the judge at all — which is why sixteen judgements
+ * produced one idea.
+ */
+export type CandidateReachMode = "standing" | "pairwise";
+
 export interface FindGroupWowMomentCandidatesParams {
+  /** How the eight signals around the trigger are chosen. Default preserves
+   *  the shipped behaviour. */
+  reachMode?: CandidateReachMode;
   memberUserIds: string[];
   triggerUserId: string;
   triggerInspirationId: string;
@@ -455,7 +522,11 @@ export async function findGroupWowMomentCandidates(
     MAX_DB_CANDIDATE_POOL,
   );
 
-  const candidates = diversifyAcrossMembers(scoreCandidates(trigger, candidatePool), limit);
+  const candidates = diversifyAcrossMembers(
+    scoreCandidates(trigger, candidatePool, params.reachMode ?? "standing"),
+    limit,
+    params.triggerUserId,
+  );
 
   return { trigger: trigger.inspiration, candidates };
 }

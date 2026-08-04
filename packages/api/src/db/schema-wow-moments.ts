@@ -23,6 +23,18 @@ import {
 
 import { inspirations, signals, users } from "./schema";
 
+/**
+ * The Postgres `wow_kind` type has one MORE value than this list: migration
+ * 0037 added `divergence` for the reading-divergence announcer, which was
+ * removed with the divergence surface (11d88b4) before it ever shipped. No
+ * code produces or consumes it.
+ *
+ * Left in the database on purpose. Postgres has no `ALTER TYPE … DROP VALUE`,
+ * so removing it means recreating the type and rewriting every column that
+ * uses it — real risk to buy back a byte nothing reads. Absent here, it cannot
+ * be written; absent there, an already-migrated database would break. Do not
+ * "fix" the mismatch by adding it back.
+ */
 export const wowKindEnumValues = [
   "recurrence",
   "bridge",
@@ -135,6 +147,22 @@ export const topOfMindNoteSignals = pgTable(
       .references(() => signals.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("related"),
     reason: text("reason").notNull().default(""),
+    /**
+     * The run of words in this save that carried the reading.
+     *
+     * Null unless the judge named a span AND that span is genuinely present in
+     * the save — a missing highlight is honest, a wrong one puts words in
+     * someone's mouth.
+     */
+    quote: text("quote"),
+    /**
+     * Who was speaking: the person, or the page they linked.
+     *
+     * A save's readable text has two authors, and attributing an article's
+     * argument to a member who only saved the link would be a claim about them
+     * that nobody made.
+     */
+    quoteSource: text("quote_source"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

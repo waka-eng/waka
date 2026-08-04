@@ -106,6 +106,51 @@ describe("POST /api/groups/join", () => {
   });
 });
 
+describe("DELETE /api/groups/:groupId", () => {
+  it("deletes the room for its owner", async () => {
+    const deleteGroupFn = vi.fn(async () => ({ ok: true }) as const);
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(200);
+    expect(deleteGroupFn).toHaveBeenCalledWith({}, { userId: user.id, groupId });
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+
+  it("returns 403 for a member who does not own the room", async () => {
+    const deleteGroupFn = vi.fn(
+      async () => ({ ok: false, reason: "not_owner" }) as const,
+    );
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 for a non-member, so an id is not confirmed to exist", async () => {
+    const deleteGroupFn = vi.fn(
+      async () => ({ ok: false, reason: "not_found" }) as const,
+    );
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("rejects a malformed group id before touching the service", async () => {
+    const deleteGroupFn = vi.fn(async () => ({ ok: true }) as const);
+    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+
+    const response = await app.request("/api/groups/not-a-uuid", { method: "DELETE" });
+
+    expect(response.status).toBe(400);
+    expect(deleteGroupFn).not.toHaveBeenCalled();
+  });
+});
+
 describe("GET /api/groups/:groupId/top-of-mind", () => {
   it("returns the synthesized board for a member", async () => {
     const result: GroupTopOfMindResult = { group: groupSummary, members: [], notes: [] };
@@ -163,6 +208,65 @@ describe("POST /api/groups/:groupId/top-of-mind/refresh", () => {
     const response = await app.request(`/api/groups/${groupId}/top-of-mind/refresh`, {
       method: "POST",
     });
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("GET /api/groups/:groupId/timeline", () => {
+  /**
+   * A first load needs the room's life; travelling does not. Rebuilding the
+   * whole event list to answer a scrub is what made the wall arrive a beat
+   * after the rail, and historical boards never change, so the client keeps
+   * what it is given.
+   */
+  const board = { at: "2026-08-01T00:00:00.000Z", notes: [] };
+  const timeline = { groupId: "g", formedAt: board.at, events: [] };
+
+  it("carries the room's life on a first load", async () => {
+    const loadTimeline = vi.fn(async () => timeline);
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      loadTimeline: loadTimeline as any,
+      loadBoardAsOf: (async () => board) as any,
+    });
+
+    const response = await app.request(`/api/groups/${groupSummary.id}/timeline`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ timeline, board });
+    expect(loadTimeline).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not rebuild it to answer a travel request", async () => {
+    const loadTimeline = vi.fn(async () => timeline);
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      loadTimeline: loadTimeline as any,
+      loadBoardAsOf: (async () => board) as any,
+    });
+
+    const response = await app.request(
+      `/api/groups/${groupSummary.id}/timeline?at=2026-08-01T00%3A00%3A00.000Z`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ timeline: null, board });
+    expect(loadTimeline).not.toHaveBeenCalled();
+  });
+
+  it("still tells a non-member nothing, travelling or not", async () => {
+    // `boardAsOf` gates on membership itself, so dropping the timeline read
+    // must not drop the authorization that used to come with it.
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      loadTimeline: (async () => null) as any,
+      loadBoardAsOf: (async () => null) as any,
+    });
+
+    const response = await app.request(
+      `/api/groups/${groupSummary.id}/timeline?at=2026-08-01T00%3A00%3A00.000Z`,
+    );
 
     expect(response.status).toBe(404);
   });

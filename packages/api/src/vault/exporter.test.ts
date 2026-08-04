@@ -55,6 +55,9 @@ function makeSignal(id: string, text: string): Signal {
     importanceScore: 0,
     wowScore: 0,
     sharedToGroups: true,
+    captureElapsedMs: null,
+  enrichment: null,
+    enrichedAt: null,
     cluster: null,
     classifiedAt: null,
     createdAt: CREATED_AT,
@@ -96,6 +99,8 @@ function makeLink(
     inspirationId,
     role: "trigger",
     reason: "",
+    quote: null,
+    quoteSource: null,
     sortOrder: 0,
     createdAt: CREATED_AT,
   };

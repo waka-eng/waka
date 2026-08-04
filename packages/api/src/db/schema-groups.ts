@@ -108,6 +108,14 @@ export const groupTopOfMindNotes = pgTable(
     reflectionGuide: text("reflection_guide"),
     locale: text("locale").notNull().default("en-US"),
     wowScore: integer("wow_score").notNull().default(0),
+    /**
+     * `active` is what the wall shows; `replaced` is what the room used to
+     * read. A reading that stops being current is marked, never deleted —
+     * the room's succession is the timeline, and it cannot be backfilled.
+     */
+    lifecycleStatus: text("lifecycle_status").notNull().default("active"),
+    replacedAt: timestamp("replaced_at", { withTimezone: true }),
+    replacedByNoteId: uuid("replaced_by_note_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -119,6 +127,21 @@ export const groupTopOfMindNotes = pgTable(
       table.groupId,
       table.createdAt.desc(),
     ),
+    groupLifecycleIdx: index("group_top_of_mind_notes_group_lifecycle_idx").on(
+      table.groupId,
+      table.lifecycleStatus,
+    ),
+    // The timeline's board-as-of-T resolver scans this.
+    groupTimelineIdx: index("group_top_of_mind_notes_group_timeline_idx").on(
+      table.groupId,
+      table.createdAt,
+      table.replacedAt,
+    ),
+    replacedByFk: foreignKey({
+      name: "group_top_of_mind_notes_replaced_by_note_id_fk",
+      columns: [table.replacedByNoteId],
+      foreignColumns: [table.id],
+    }).onDelete("set null"),
   }),
 );
 
@@ -142,6 +165,22 @@ export const groupTopOfMindNoteSignals = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     role: text("role").notNull().default("related"),
     reason: text("reason").notNull().default(""),
+    /**
+     * The run of words in this save that carried the reading.
+     *
+     * Null unless the judge named a span AND that span is genuinely present in
+     * the save — a missing highlight is honest, a wrong one puts words in
+     * someone's mouth.
+     */
+    quote: text("quote"),
+    /**
+     * Who was speaking: the person, or the page they linked.
+     *
+     * A save's readable text has two authors, and attributing an article's
+     * argument to a member who only saved the link would be a claim about them
+     * that nobody made.
+     */
+    quoteSource: text("quote_source"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -153,6 +192,11 @@ export const groupTopOfMindNoteSignals = pgTable(
     noteSignalUnique: uniqueIndex(
       "group_top_of_mind_note_signals_note_signal_unique_idx",
     ).on(table.groupTopOfMindNoteId, table.signalId),
+    // Reverse lookup for the readings surface: "which group notes cited this
+    // signal?" — mirrors top_of_mind_note_signals_signal_idx on the solo side.
+    signalIdx: index("group_top_of_mind_note_signals_signal_idx").on(
+      table.signalId,
+    ),
     signalOwnerFk: foreignKey({
       name: "group_top_of_mind_note_signals_signal_owner_fk",
       columns: [table.signalId, table.ownerUserId],

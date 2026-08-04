@@ -168,6 +168,30 @@ export const signals = pgTable(
      */
     sharedToGroups: boolean("shared_to_groups").notNull().default(true),
 
+    /**
+     * What the heart actually reacted to, when the save is a bare link.
+     *
+     * The pipeline synthesizes from text embeddings, so a naked URL is nearly
+     * mute: the reaction was to something inside the page and only the wrapper
+     * was stored. Fetched title/description text lives here and joins the
+     * embedding input — see `buildCanonicalInspirationEmbeddingInput`.
+     *
+     * `enrichedAt` marks the ATTEMPT: null enrichment with a timestamp means
+     * "we tried, the page would not speak", and stops endless refetching.
+     */
+    enrichment: text("enrichment"),
+    enrichedAt: timestamp("enriched_at", { withTimezone: true }),
+
+    /**
+     * Composer-open → save, in milliseconds. Null when unknown, which is a real
+     * answer: saves made before this was recorded genuinely cannot say, and a
+     * zero would claim they were instant.
+     *
+     * Crude on purpose — it orders reactions before compositions, it does not
+     * measure attention. See `CombinationPulseProfile`.
+     */
+    captureElapsedMs: integer("capture_elapsed_ms"),
+
     cluster: clusterEnum("cluster"),
     classifiedAt: timestamp("classified_at", { withTimezone: true }),
 

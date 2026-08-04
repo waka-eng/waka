@@ -50,6 +50,9 @@ function makeSignal(overrides: Partial<Signal> = {}): Signal {
     importanceScore: 73,
     wowScore: 81,
     sharedToGroups: true,
+    captureElapsedMs: null,
+  enrichment: null,
+    enrichedAt: null,
     cluster: "bridge",
     classifiedAt: CREATED_AT,
     createdAt: CREATED_AT,
@@ -165,6 +168,8 @@ function makeLink(
     inspirationId: SIGNAL_ID,
     role: "trigger",
     reason: "",
+    quote: null,
+    quoteSource: null,
     sortOrder: 0,
     createdAt: CREATED_AT,
     ...overrides,
@@ -416,6 +421,8 @@ describe("buildTopOfMindNoteDoc", () => {
       inspirationId: "99999999-9999-4999-8999-999999999999",
       role: "related",
       reason: "unexpected bridge",
+      quote: null,
+      quoteSource: null,
       sortOrder: 1,
     });
     const doc = buildTopOfMindNoteDoc({

@@ -628,3 +628,30 @@ describe("wow judge concrete contract", () => {
     });
   });
 });
+
+describe("the response schema declares everything the prompt asks for", () => {
+  /**
+   * Gemini is called in structured-output mode, so a field the schema does not
+   * declare cannot come back however clearly the prompt asks for it. `quote`
+   * was asked for, parsed, verified and persisted — and never arrived, because
+   * only the schema was missing it. 39 citations, zero quotes.
+   */
+  it("lets a citation carry the span it rested on", () => {
+    const request = buildWowJudgmentRequest(sampleInput);
+    const schema = request.generationConfig.responseSchema as {
+      anyOf: Array<{
+        properties?: {
+          sourceEvidence?: { items?: { properties?: Record<string, unknown>; required?: string[] } };
+        };
+      }>;
+    };
+    const evidence = schema.anyOf
+      .map((shape) => shape.properties?.sourceEvidence?.items)
+      .find((items) => items?.properties);
+
+    expect(evidence?.properties).toHaveProperty("quote");
+    // Never required: a reading whose evidence has no single quotable run is
+    // still a good reading, and forcing the field would buy invented spans.
+    expect(evidence?.required).not.toContain("quote");
+  });
+});
