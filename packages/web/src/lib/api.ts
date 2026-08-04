@@ -272,7 +272,6 @@ export async function updateAuthPreferences(
   );
 }
 
-
 export interface UpdateAuthProfileRequest {
   name: string;
   preferredLocale: SupportedLocale;
@@ -595,74 +594,6 @@ export async function recordInspirationRevisit(
     { eventType },
     "Failed to record signal revisit",
   );
-}
-
-export async function fetchInspirationSparks(
-  inspirationId: string,
-): Promise<ApiInspirationSpark[]> {
-  const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    "Failed to load signal highlights",
-  );
-  return Array.isArray(body.sparks) ? body.sparks : [];
-}
-
-export async function createInspirationSpark(
-  inspirationId: string,
-  input: {
-    text: string;
-    source?: ApiInspirationSparkSource;
-    startOffset?: number;
-    endOffset?: number;
-    confidence?: number;
-    isPrimary?: boolean;
-    note?: string;
-  },
-): Promise<ApiInspirationSpark> {
-  const body = await postJson<{ spark: ApiInspirationSpark }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    input,
-    "Failed to save spark",
-  );
-  return body.spark;
-}
-
-export async function deleteInspirationSpark(
-  inspirationId: string,
-  sparkId: string,
-): Promise<void> {
-  const path = apiPath(
-    `/inspirations/${encodeURIComponent(inspirationId)}/sparks/${encodeURIComponent(sparkId)}`,
-  );
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while removing highlight",
-    });
-  }
-
-  if (res.ok) return;
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-  const errorBody = (body ?? {}) as { error?: string };
-  throw new ApiError({
-    status: res.status,
-    message:
-      errorBody.error ??
-      `Failed to remove highlight (HTTP ${res.status}). Please try again.`,
-  });
 }
 
 export async function fetchInspirationScoreBreakdown(
@@ -1634,7 +1565,6 @@ export async function refreshGroupTopOfMind(
   );
 }
 
-
 /** A note, as it stood at some moment on the room's timeline. */
 export interface ApiTimelineNote {
   id: string;
@@ -1707,81 +1637,6 @@ export async function fetchRoomTimeline(
     apiPath(`/groups/${encodeURIComponent(groupId)}/timeline${query}`),
     "Failed to load the room's timeline",
   );
-}
-
-export async function fetchGroupRooms(limit = 5): Promise<ApiGroupConversationRoom[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  const body = await getJson<ListGroupRoomsResponse>(
-    apiPath(`/group-rooms?${params.toString()}`),
-    "Failed to load conversation rooms",
-  );
-
-  if (!Array.isArray(body.rooms)) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed conversation rooms response",
-    });
-  }
-
-  return body.rooms;
-}
-
-export async function createGroupRoom(
-  input: CreateGroupRoomRequest,
-): Promise<ApiGroupConversationRoom> {
-  const body = await postJson<CreateGroupRoomResponse>(
-    apiPath("/group-rooms"),
-    input,
-    "Failed to create conversation room",
-  );
-
-  if (!body.room) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed conversation room response",
-    });
-  }
-
-  return body.room;
-}
-
-export async function createDiscussionTopic(
-  input: CreateDiscussionTopicRequest,
-): Promise<CreateDiscussionTopicResponse> {
-  const body = await postJson<CreateDiscussionTopicResponse>(
-    apiPath("/group-rooms/discussion-topic"),
-    input,
-    "Failed to create discussion topic",
-  );
-
-  if (!body.room || !body.prompt) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed discussion topic response",
-    });
-  }
-
-  return body;
-}
-
-export async function createGroupRoomFeedback(
-  roomId: string,
-  input: CreateGroupRoomFeedbackRequest,
-): Promise<CreateGroupRoomFeedbackResponse> {
-  const body = await postJson<CreateGroupRoomFeedbackResponse>(
-    apiPath(`/group-rooms/${encodeURIComponent(roomId)}/feedback`),
-    input,
-    "Failed to save room feedback",
-  );
-
-  if (!body.room || !body.feedback) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed room feedback response",
-    });
-  }
-
-  return body;
 }
 
 export async function fetchPublicProfile(
@@ -1947,50 +1802,6 @@ export async function createFeedback(
   }
 
   return body.feedback;
-}
-
-export async function fetchBackgroundJobs(
-  options: FetchBackgroundJobsOptions = {},
-): Promise<ApiBackgroundJob[]> {
-  const params = new URLSearchParams();
-  if (options.type) params.set("type", options.type);
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-  const path = apiPath(`/admin/background-jobs${query ? `?${query}` : ""}`);
-
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while loading background jobs",
-    });
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-
-  if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to load background jobs (HTTP ${res.status}). Please try again.`,
-    });
-  }
-
-  const payload = (body ?? {}) as Partial<ListBackgroundJobsResponse>;
-  return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
 export type ApiMeaningGraphMemoryState =
@@ -2302,14 +2113,6 @@ export interface ApiTopOfMind {
     meaningNoteCount: number;
     relationshipEdgeCount: number;
   };
-}
-
-export async function fetchTopOfMind(): Promise<ApiTopOfMind> {
-  const body = await getJson<{ topOfMind: ApiTopOfMind }>(
-    apiPath("/top-of-mind"),
-    "Failed to load top of mind",
-  );
-  return body.topOfMind;
 }
 
 // ---------------------------------------------------------------------------

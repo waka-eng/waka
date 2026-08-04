@@ -1,0 +1,466 @@
+/*
+ * WAKA — the design system, applied across every surface.
+ * ==========================================================================
+ *
+ * WHY THIS FILE EXISTS
+ *
+ * `global.css` grew to seventeen thousand lines by accretion. Measuring what
+ * it actually contains explains how the product looks, better than any
+ * screenshot does:
+ *
+ *   • Type lives almost entirely between 9px and 14px. 95 declarations at
+ *     10px, 68 at 12px, 43 at 9px. The largest thing anywhere is 24px. So the
+ *     product's dynamic range is under 3x, and every screen presents all of
+ *     its information at the same importance -- which is why it reads as
+ *     careful but never as designed. Reference: award-winning editorial sites
+ *     run 10-17x, with body deliberately fixed and display fluid.
+ *
+ *   • The MONOSPACE face is the most-used voice in the product: 132
+ *     declarations, against 84 sans and 69 serif. A product about what makes
+ *     hearts beat together is currently dressed as a terminal.
+ *
+ *   • Seven different easing curves. The sites that feel expensive pick one
+ *     and use it everywhere -- vectrfl uses a single curve 44 times.
+ *
+ *   • ~89 font-family declarations bypass the tokens entirely and hardcode a
+ *     stack, so the tokens cannot actually change anything.
+ *
+ * This file is the one system, applied everywhere. It is loaded AFTER
+ * global.css and deliberately wins. That is a cascade layer of the exact kind
+ * criticised elsewhere in this codebase, and it is a means, not an end: once
+ * this design is accepted, the superseded blocks in global.css get deleted and
+ * this file becomes the only one. Until then it stays separable, so the whole
+ * makeover is one import away from being reverted.
+ *
+ * WHAT IT DOES NOT DO
+ *
+ * It does not restructure layout. The expanded save's eight stacked sections
+ * and the drawer-as-list are structural problems that need JSX, not CSS, and
+ * they are handled separately. This file changes what the product SOUNDS like:
+ * type, colour, motion, rhythm, and voice.
+ */
+
+:root {
+  /* -----------------------------------------------------------------------
+   * TYPE SCALE
+   *
+   * Six steps, 11px to 84px -- roughly 7.6x, against the old 2.7x.
+   *
+   * The two ends are doing opposite jobs on purpose. `--t-meta` and `--t-ui`
+   * are FIXED: a timestamp does not become more important on a large monitor,
+   * and fluid UI text is how interfaces end up feeling unanchored.
+   * `--t-display` and `--t-reading` are FLUID, because a claim about who you
+   * are should take the room it is given.
+   * -------------------------------------------------------------------- */
+  /*
+     TWO CLUSTERS AND A CLIFF -- measured, not guessed.
+     ---------------------------------------------------------------------
+     meech213.com's scale, read off the page:
+
+       0.6  0.75  0.85  1  1.1  1.15  1.25  1.5  1.55  2   ...   12  12.5  18 rem
+
+     Note what is NOT there. Nothing between 2rem (32px) and 12rem (192px).
+     The scale is not a ramp -- it is a reading cluster and a display cluster
+     with a cliff between them, and the cliff is the design. Its ground is
+     #f6f1eb, which is WAKA's own parchment to within a couple of points.
+
+     So the palette was never the problem. WAKA had a smooth ramp from 9px to
+     24px where the reference has a 21x jump, and a smooth ramp is why every
+     screen here reads at one importance no matter what is on it.
+
+     Display gets sub-1 leading and heavy negative tracking, again measured:
+     line-height 0.84-0.9, letter-spacing -0.04 to -0.08em. At this size
+     normal leading looks like a document; tight leading looks like a poster.
+  */
+
+  /* --- the display cluster. Only the room's name lives here. --- */
+  --t-display: clamp(64px, 13vw, 200px);
+  --t-display-lh: 0.86;
+  --t-display-ls: -0.05em;
+
+  /* --- the cliff --- */
+
+  /* --- the reading cluster. Everything else lives here. --- */
+  --t-reading: clamp(21px, 2.2vw, 30px);
+  --t-lead: clamp(16px, 1.2vw, 19px);
+  --t-body: 15px;
+  --t-ui: 13px;
+  --t-meta: 11px;
+
+  /* -----------------------------------------------------------------------
+   * VOICE
+   *
+   * Three faces, three jobs, and the job decides -- not the surface.
+   *
+   *   serif  -- THE ROOM'S VOICE. Readings, room names, anything the machine
+   *             claims about a person. Editorial, because these are sentences
+   *             to be read rather than controls to be operated.
+   *   sans   -- YOUR VOICE, and the interface's. What you wrote, what you
+   *             type, and every control.
+   *   mono   -- genuinely technical only: invite codes, ids, raw values.
+   *
+   * That last line is the change. Mono was carrying eyebrows, labels, counts,
+   * timestamps and button captions -- 132 declarations of lab coat.
+   * -------------------------------------------------------------------- */
+  --voice-room: var(--font-serif);
+  --voice-you: var(--font-sans);
+  --voice-machine: var(--font-mono);
+
+  /* -----------------------------------------------------------------------
+   * MOTION -- one curve.
+   *
+   * A fast decelerating ease. Everything that moves uses it, so the product
+   * has a single physical character instead of seven.
+   *
+   * `--dur-fast` for state that must feel instant (hover, focus), `--dur` for
+   * things that travel, `--dur-slow` only for something arriving or leaving
+   * the screen entirely.
+   * -------------------------------------------------------------------- */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 150ms;
+  --dur: 280ms;
+  --dur-slow: 520ms;
+
+  /* -----------------------------------------------------------------------
+   * SURFACE
+   *
+   * Radius is polar, the way the reference sites are: 2px for anything that
+   * is paper, 999px for anything that is a control. Nothing in between -- the
+   * 6-to-12px middle is what makes a page read as a generic dashboard.
+   * -------------------------------------------------------------------- */
+  --r-paper: 2px;
+  --r-pill: 999px;
+
+  --ink-1: var(--ink);
+  --ink-2: color-mix(in srgb, var(--ink) 62%, transparent);
+  --ink-3: color-mix(in srgb, var(--ink) 40%, transparent);
+  --ink-4: color-mix(in srgb, var(--ink) 22%, transparent);
+
+  --rule: color-mix(in srgb, var(--ink) 11%, transparent);
+  --rule-strong: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+/* ==========================================================================
+   1. VOICE, APPLIED BY ROLE
+
+   A label is a label on whichever surface it appears. These were mono at
+   8-9px with 0.18-0.22em tracking -- the single most repeated gesture in the
+   product, and the one that made every screen read as an instrument panel.
+   ======================================================================= */
+
+.nc-rail-room-count,
+.reference-capture-kicker,
+.reference-capture-close,
+.nc-note-evidence-label,
+.nc-note-evidence-source,
+.memory-reading-plain-where,
+.login-eyebrow,
+.field-label,
+.history-title,
+.capture-trigger-label,
+.cell .lbl {
+  font-family: var(--voice-you);
+  font-size: var(--t-meta);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+/* Counts, timestamps, provenance: quieter still, and never tracked. */
+.nc-note-when,
+.nc-note-provenance-text,
+.memory-contents-item-meta,
+.memory-led-summary,
+.memory-contents-readings-summary,
+.nc-room-item-count,
+.nc-drawer-count,
+.nc-bottom-hint,
+.history-item-meta,
+.history-attachment-meta,
+.nc-timerail-moment-when,
+.meta {
+  font-family: var(--voice-you);
+  font-size: var(--t-meta);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+/* ==========================================================================
+   2. THE ROOM'S NAME -- the display cluster, and the only thing in it
+   ======================================================================= */
+
+.nc-room-title-text,
+.nc-room-name,
+.login-title,
+.nc-title {
+  font-family: var(--voice-room);
+  font-size: var(--t-display);
+  font-weight: 400;
+  line-height: var(--t-display-lh);
+  letter-spacing: var(--t-display-ls);
+  text-transform: none;
+  color: var(--ink-1);
+}
+
+/* Auth and onboarding are one screen with one word on them, so they get the
+   same treatment -- capped lower, because they sit inside a card. */
+.login-title { font-size: clamp(46px, 8vw, 104px); }
+
+/*
+   `align-content: center` is what made a wall of two look broken -- two
+   readings floating mid-screen with equal emptiness above and below reads as
+   "still loading", not as "this is what held". Starting at the top makes two
+   readings a short page, which is what a finished wall of two should be.
+*/
+.nc-stage--top-of-mind-wall {
+  align-content: start;
+  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: clamp(30px, 5vh, 60px) clamp(24px, 4vw, 52px);
+  min-height: 0;
+  margin-top: clamp(20px, 4vh, 44px);
+  padding-inline: 0;
+}
+
+/* ==========================================================================
+   4. THE POST-IT
+
+   Keeps its paper, tilt and shadow. What changes is that the words on it are
+   finally sized like the most important thing on the screen.
+   ======================================================================= */
+
+.nc-note { border-radius: var(--r-paper); }
+
+.nc-note-body,
+
+/* Length tempers the size; the floor stays legible. The old ladder bottomed
+   out at 9px, which is below the size at which anyone reads anything. */
+
+.nc-note:hover .nc-note-footer-row,
+.nc-note:focus-within .nc-note-footer-row { opacity: 1; }
+
+/* ==========================================================================
+   5. CAPTURE
+
+   Three complaints, one cause: it is a box, a box is a form, and a form is
+   filing. Saving something that quickened your pulse is not data entry.
+   ======================================================================= */
+
+/* Your words, in your voice -- sans against the wall's serif, so yours and
+   the room's are distinguishable without anything having to say so. */
+
+/* ==========================================================================
+   6. A SAVE
+
+   The material itself, set as running text at a real reading size. It was
+   13-15px -- the same as the buttons around it.
+   ======================================================================= */
+
+.memory-contents-expanded-text,
+.memory-contents-expanded-reading,
+.memory-contents-expanded-editor,
+
+/* Anything the machine claims about a person takes the room's face. */
+.memory-reading-plain-title,
+.memory-contents-reflection-question,
+
+.memory-reading-plain-title,
+
+.history-empty,
+.memory-contents-reflection-empty,
+.nc-loading {
+  font-family: var(--voice-you);
+  font-size: var(--t-ui);
+  color: var(--ink-3);
+}
+
+/* ==========================================================================
+   8. CONTROLS
+
+   One shape for a real action, one for a quiet one, on every surface.
+   ======================================================================= */
+
+.memory-contents-secondary-action,
+.nc-edit-cancel,
+.nc-room-item-confirm-no,
+.nc-room-item-confirm-yes,
+.nc-drawer-reflect-actions button,
+.nc-join-confirm-accept,
+.nc-join-confirm-cancel,
+.btn-primary,
+.btn-destructive,
+.btn-google {
+  font-family: var(--voice-you);
+  font-size: var(--t-ui);
+  letter-spacing: 0;
+  border-radius: var(--r-pill);
+  transition:
+    border-color var(--dur-fast) var(--ease);
+}
+
+.field-input,
+
+/* The accent appears in exactly two places: a mark, and what has focus. */
+:where(button, a, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--mark);
+  outline-offset: 3px;
+}
+
+/* ==========================================================================
+   10. AUTH, ONBOARDING, PROFILE
+
+   Three screens sharing one set of classes, so one block covers all of them.
+   ======================================================================= */
+
+.login-card {
+  border-radius: var(--r-paper);
+}
+
+.login-subtitle {
+  font-family: var(--voice-you);
+  font-size: var(--t-lead);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.field-hint,
+.login-footer,
+.login-link,
+.login-divider__label,
+.login-tabs {
+  font-family: var(--voice-you);
+  font-size: var(--t-ui);
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+
+.form-error,
+.field-error {
+  font-family: var(--voice-you);
+  font-size: var(--t-ui);
+}
+
+/* ==========================================================================
+   11. ONE CURVE
+
+   Everything that moves resolves to `--ease`. Timing only -- this cannot
+   affect layout, so it is safe to apply broadly.
+   ======================================================================= */
+
+.nc-note,
+.nc-note-footer-row,
+.nc-note-inspiration-slide,
+.nc-save,
+.nc-save-cta,
+.nc-rail,
+.nc-timerail,
+.nc-room-panel,
+.memory-contents-item,
+.memory-contents-secondary-action,
+.reference-capture-modal,
+.history-panel,
+.history-item,
+.capture-trigger,
+.btn-primary,
+.btn-destructive,
+.btn-google,
+.field-input {
+  transition-timing-function: var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-note,
+  .nc-note-footer-row,
+  .memory-contents-item,
+  .history-item,
+  .reference-capture-modal {
+    transition-duration: 1ms;
+    animation-duration: 1ms;
+  }
+}
+
+/* ==========================================================================
+   12. A SAVE — TWO COMPOSITIONS, DECIDED BY HOW YOU ARRIVED
+
+   There was one composition serving both arrivals, and the only difference
+   was which spans got marked. That is why both felt wrong: the two arrivals
+   are different questions, and a screen answering both answers neither.
+   ======================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-save-cta::after { transition: none; }
+}
+
+/* ==========================================================================
+   14. THE GROUND
+
+   The prototype's ground is flat parchment. This one has three animated
+   colour blobs and a grain overlay behind everything, inherited from the
+   original index.html prototype -- which is why every screenshot reads as
+   washed out no matter what is drawn on top of it. Text sits on a moving,
+   unevenly-tinted field, so nothing has a stable contrast relationship with
+   its background and the whole product looks slightly foggy.
+
+   never from weather.
+   ======================================================================= */
+
+.bg-field,
+.noise {
+  display: none;
+}
+
+body {
+  background: var(--bg);
+}
+
+/* ==========================================================================
+   15. ONE SURFACE
+
+   The prototype's central idea: opening a save does not navigate. The wall
+   recedes in place and what you opened comes forward, in the same box.
+
+   Today that is five stacked overlays -- a 460px history panel, a draggable
+   memory window layer, the capture modal, the room panel and the drop
+   overlay -- across 26 `position: fixed` rules reaching z-index 1000. Each
+   was reasonable alone; together they are why the product feels like parts
+   rather than one place.
+
+   These rules take the first step: the drawer stops being a floating sheet
+   and becomes the same ground, and the wall behind it recedes rather than
+   being covered over.
+   ======================================================================= */
+
+/*
+   A save in the list is a piece of text, not a bordered tile.
+
+   Rows had a hairline border, a radius, a tinted fill and a hover fill --
+   four devices to say "this is a row", on a surface where the only thing that
+   matters is the words. The rule between them is enough.
+*/
+
+/* The floating draggable memory-window layer was a third way to look at a
+   save, stacked on top of two others. Deleted. */
+
+/*
+   The wall recedes while something is open in front of it.
+
+   and the readings are still there behind what you are reading. This is what
+   makes opening a save feel like moving within one place instead of being
+   taken somewhere else.
+*/
+.nc-stage--top-of-mind-wall {
+  transition: transform var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
+  transform-origin: center top;
+}
+
+body:has(.memory-contents-item--expanded) .nc-stage--top-of-mind-wall,
+body:has(.reference-capture-modal) .nc-stage--top-of-mind-wall {
+  transform: scale(0.97) translateY(-10px);
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nc-stage--top-of-mind-wall { transition: none; }
+}

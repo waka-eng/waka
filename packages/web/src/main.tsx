@@ -32,13 +32,17 @@ import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./lib/auth-context";
 import AdminHomePage from "./pages/AdminHome";
 import AdminWowStatusPage from "./pages/AdminWowStatus";
-import HomePage from "./pages/Home";
+import SurfacePage from "./pages/Surface";
 import LoginPage from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
 import MeaningGraphPage from "./pages/MeaningGraph";
 import "./styles/global.css";
+// Loaded after global.css and deliberately wins. See the header of that file
+// for what it supersedes and why it is separable rather than merged.
+import "./styles/system.css";
+import "./styles/surface.css";
 
 const root = document.getElementById("root");
 if (!root) {
@@ -85,7 +89,7 @@ ReactDOM.createRoot(root).render(
             path="/"
             element={
               <RequireAuth>
-                <HomePage />
+                <SurfacePage />
               </RequireAuth>
             }
           />
