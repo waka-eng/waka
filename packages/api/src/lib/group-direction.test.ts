@@ -26,13 +26,13 @@ describe("shared direction review", () => {
     expect(requiredDirectionResponses(9)).toBe(5);
   });
 
-  it("adopts only when the quorum accepts and nobody is holding the current wording", () => {
+  it("lets a matching majority decide either way", () => {
     expect(
       directionReviewDecision({ memberCount: 4, acceptCount: 3, keepCurrentCount: 0 }),
     ).toBe("adopted");
     expect(
       directionReviewDecision({ memberCount: 4, acceptCount: 3, keepCurrentCount: 1 }),
-    ).toBe("pending");
+    ).toBe("adopted");
     expect(
       directionReviewDecision({ memberCount: 4, acceptCount: 1, keepCurrentCount: 3 }),
     ).toBe("kept_current");

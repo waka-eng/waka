@@ -1512,7 +1512,7 @@
   flex-wrap: wrap;
   gap: 7px 12px;
   margin-top: 13px;
-  font-size: var(--sf-meta);
+  font-size: var(--sf-ui);
   color: var(--sf-ink-4);
 }
 
@@ -1742,7 +1742,7 @@
 
 .sf-direction-current-meta {
   margin: 0;
-  font-size: var(--sf-meta);
+  font-size: var(--sf-ui);
   line-height: 1.45;
   color: var(--sf-ink-3);
 }
@@ -1884,7 +1884,7 @@
 .sf-direction-evidence blockquote footer {
   margin-top: 7px;
   font-size: var(--sf-meta);
-  color: var(--sf-ink-4);
+  color: var(--sf-ink-3);
 }
 
 .sf-direction-proposal {
@@ -1912,7 +1912,7 @@
 }
 
 .sf-direction-proposal-head > span:last-child {
-  font-size: var(--sf-meta);
+  font-size: var(--sf-ui);
   color: var(--sf-ink-3);
 }
 
@@ -2047,12 +2047,20 @@
 }
 
 .sf-direction-shape-head > span {
-  font-size: var(--sf-meta);
+  font-size: var(--sf-ui);
   color: var(--sf-ink-3);
 }
 
 .sf-direction-compose {
   margin-top: 18px;
+}
+
+.sf-direction-shape-next {
+  max-width: 62ch;
+  margin: 0 0 13px;
+  font-size: var(--sf-ui);
+  line-height: 1.45;
+  color: var(--sf-ink-3);
 }
 
 .sf-direction-compose textarea {
@@ -2081,8 +2089,17 @@
 }
 
 .sf-direction-compose > div button:first-child {
-  color: var(--sf-mark);
+  padding: 8px 13px;
+  border: 1px solid color-mix(in srgb, var(--sf-mark) 42%, var(--sf-rule));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sf-mark) 7%, transparent);
+  color: var(--sf-ink);
   font-weight: 600;
+}
+
+.sf-direction-compose > div button:first-child:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .sf-direction-compose-locked {

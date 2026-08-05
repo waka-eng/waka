@@ -44,6 +44,14 @@ import "./styles/global.css";
 import "./styles/system.css";
 import "./styles/surface.css";
 
+function ProtectedSurface() {
+  return (
+    <RequireAuth>
+      <SurfacePage />
+    </RequireAuth>
+  );
+}
+
 const root = document.getElementById("root");
 if (!root) {
   throw new Error(
@@ -85,14 +93,19 @@ ReactDOM.createRoot(root).render(
               - anonymous        → <Navigate> to /login with state.from set,
               - authenticated    → render the underlying page.
           */}
-          <Route
-            path="/"
-            element={
-              <RequireAuth>
-                <SurfacePage />
-              </RequireAuth>
-            }
-          />
+          <Route element={<ProtectedSurface />}>
+            <Route path="/" />
+            <Route path="/capture" />
+            <Route path="/inspirations" />
+            <Route path="/inspirations/:signalId" />
+            <Route path="/readings/:readingId" />
+            <Route path="/rooms/:roomId" />
+            <Route path="/rooms/:roomId/capture" />
+            <Route path="/rooms/:roomId/inspirations" />
+            <Route path="/rooms/:roomId/inspirations/:signalId" />
+            <Route path="/rooms/:roomId/readings/:readingId" />
+            <Route path="/rooms/:roomId/direction" />
+          </Route>
           <Route
             path="/admin"
             element={

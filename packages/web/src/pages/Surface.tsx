@@ -32,6 +32,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { contributorColor, contributorInitials } from "../components/faces";
 import { useAuth } from "../lib/auth-context";
@@ -86,12 +87,19 @@ import {
   type ApiGroupReadingGenerationStatus,
   type ApiReflection,
   type ApiRoomTimeline,
+  type ApiSavedSignalDetail,
   type ApiSavedSignalSearchResult,
   type ApiSignalReading,
   type InspirationRevisitEventType,
   type ApiTopOfMindNoteSurface,
   type ApiTopOfMindGenerationStatus,
 } from "../lib/api";
+import {
+  buildSurfacePath,
+  parseSurfacePath,
+  type SurfaceRoomId,
+  type SurfaceView,
+} from "../lib/surface-route";
 
 /**
  * The states of the one surface.
@@ -99,10 +107,11 @@ import {
  * `wall` is home. Everything else is something happening in front of it, and
  * the wall is still there behind -- receded, never replaced.
  */
-type State = "wall" | "reading" | "save" | "ask" | "capture" | "direction";
-
-/** The room you are standing in. `null` is your own wall. */
-type RoomId = string | null;
+interface SurfaceNavigationOptions {
+  roomId?: SurfaceRoomId;
+  entityId?: string | null;
+  replace?: boolean;
+}
 
 /**
  * A reading, flattened out of the two shapes the API returns for it.
@@ -336,18 +345,59 @@ const DRAFT_KEY = "waka.captureDraft.v1";
 export function roomShapingProgressCopy(
   contributorCount: number,
   memberCount: number,
-  requiredContributors: number,
-  state: "forming" | "revealed",
 ): string {
   const count = Math.max(0, contributorCount);
   const members = Math.max(0, memberCount);
-  const required = Math.max(0, requiredContributors);
-  const remaining = Math.max(0, required - count);
-  const participation = `${count} of ${members} shaped this version`;
-  if (remaining > 0) {
-    return `${participation} · ${remaining}${count > 0 ? " more" : ""} needed for ${state === "forming" ? "the first draft" : "an update"}`;
+  return `${count} of ${members} ${members === 1 ? "member" : "members"} added a take`;
+}
+
+/**
+ * A contribution earns a reread; it does not guarantee new wording. Keep that
+ * distinction visible at the point where someone is deciding whether to add
+ * a take, rather than teaching it in explanatory copy elsewhere on the page.
+ */
+export function roomShapingNextStepCopy(input: {
+  contributorCount: number;
+  requiredContributors: number;
+  state: "forming" | "revealed";
+  phase: ApiGroupReadingGenerationStatus["phase"] | null;
+  hasProposal: boolean;
+}): string {
+  if (input.hasProposal) {
+    return "A possible next version is ready for the room to decide.";
   }
-  return `${participation} · ${state === "forming" ? "first draft" : "update"} can form`;
+
+  const remaining = Math.max(
+    0,
+    Math.max(0, input.requiredContributors) - Math.max(0, input.contributorCount),
+  );
+  const target = input.state === "forming" ? "a grounded first draft" : "a possible next version";
+  if (remaining > 0) {
+    return `${remaining} more ${remaining === 1 ? "member" : "members"} before WAKA looks for ${target}.`;
+  }
+  if (input.phase === "processing") {
+    return `WAKA is rereading the room for ${target}.`;
+  }
+  if (input.phase === "failed") {
+    return "The reread did not finish. Everyone’s takes are still saved.";
+  }
+  if (input.phase === null) {
+    return `Enough members have shaped this. A reread for ${target} is next.`;
+  }
+  return input.state === "forming"
+    ? "The room was reread; a grounded first draft has not formed yet."
+    : "The room was reread; this version still holds.";
+}
+
+export function roomProposalReviewCopy(
+  responseCount: number,
+  memberCount: number,
+  requiredResponses: number,
+): string {
+  const responses = Math.max(0, responseCount);
+  const members = Math.max(0, memberCount);
+  const required = Math.max(0, requiredResponses);
+  return `${responses} of ${members} ${members === 1 ? "member" : "members"} responded · ${required} matching choices decide`;
 }
 
 export interface RoomFirstReadPresentation {
@@ -434,9 +484,29 @@ function urlsIn(text: string): string[] {
 
 export default function SurfacePage(): JSX.Element {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const surfaceRoute = useMemo(
+    () => parseSurfacePath(location.pathname),
+    [location.pathname],
+  );
+  const state = surfaceRoute.view;
+  const room = surfaceRoute.roomId;
+  const routeEntityId = surfaceRoute.entityId;
+  const navigateSurface = useCallback(
+    (view: SurfaceView, options: SurfaceNavigationOptions = {}) => {
+      navigate(
+        buildSurfacePath({
+          view,
+          roomId: options.roomId === undefined ? room : options.roomId,
+          entityId: options.entityId ?? null,
+        }),
+        { replace: options.replace ?? false },
+      );
+    },
+    [navigate, room],
+  );
 
-  const [state, setState] = useState<State>("wall");
-  const [room, setRoom] = useState<RoomId>(null);
   const [rooms, setRooms] = useState<ApiGroupSummary[]>([]);
   const [members, setMembers] = useState<ApiGroupMemberSummary[]>([]);
   const [readings, setReadings] = useState<Reading[]>([]);
@@ -453,6 +523,7 @@ export default function SurfacePage(): JSX.Element {
   const [selectedDirectionVersion, setSelectedDirectionVersion] =
     useState<string | null>(null);
   const directionInputRef = useRef<HTMLTextAreaElement>(null);
+  const previousRoom = useRef(room);
 
   const [openReading, setOpenReading] = useState<Reading | null>(null);
   /*
@@ -967,11 +1038,16 @@ export default function SurfacePage(): JSX.Element {
     void recordInspirationRevisit(id, how).catch(() => undefined);
   }, []);
 
-  const enterReading = useCallback((reading: Reading) => {
+  const enterReading = useCallback((
+    reading: Reading,
+    options: { navigate?: boolean } = {},
+  ) => {
     setOpenReading(reading);
     setOpenEvidence(reading.evidence);
     setExpanded(new Set());
-    setState("reading");
+    if (options.navigate !== false) {
+      navigateSurface("reading", { entityId: reading.id });
+    }
     // Every cited save, in parallel. The previews the board ships are 180
     // characters of whatever sat at the start of the save, which is rarely the
     // part that mattered.
@@ -999,9 +1075,12 @@ export default function SurfacePage(): JSX.Element {
           );
         });
     });
-  }, [sawSave, user?.id]);
+  }, [navigateSurface, sawSave, user?.id]);
 
-  const enterSave = useCallback((signal: ApiSavedSignalSearchResult) => {
+  const enterSave = useCallback((
+    signal: ApiSavedSignalSearchResult,
+    options: { navigate?: boolean; detail?: ApiSavedSignalDetail } = {},
+  ) => {
     setOpenSave(signal);
     setSaveDraft(null);
     setSaveRating(null);
@@ -1013,7 +1092,9 @@ export default function SurfacePage(): JSX.Element {
     setReflections([]);
     setQuestion(null);
     setAnswer("");
-    setState("save");
+    if (options.navigate !== false) {
+      navigateSurface("save", { entityId: signal.id });
+    }
     sawSave(signal.id, "detail_opened");
     void fetchSignalReadings(signal.id)
       .then(setBecame)
@@ -1029,28 +1110,78 @@ export default function SurfacePage(): JSX.Element {
           error instanceof Error ? error.message : "Its reflections could not be loaded.",
         ),
       );
-    void fetchSavedSignalDetail(signal.id)
+    const applyDetail = (detail: ApiSavedSignalDetail) => {
+      setFullText((current) => ({
+        ...current,
+        [signal.id]: detail.rawText ?? detail.textPreview ?? "",
+      }));
+      const shared = (detail as { sharedToGroups?: boolean }).sharedToGroups;
+      if (typeof shared === "boolean") setOpenSaveShared(shared);
+      setOpenSaveAttachments(
+        (detail.attachments ?? [])
+          .map((a) => a.type)
+          .filter((t): t is "link" | "image" | "file" =>
+            t === "link" || t === "image" || t === "file",
+          ),
+      );
+    };
+    if (options.detail) {
+      applyDetail(options.detail);
+    } else {
+      void fetchSavedSignalDetail(signal.id)
+        .then(applyDetail)
+        .catch((error) => {
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "That inspiration could not be loaded.",
+          );
+        });
+    }
+  }, [navigateSurface, sawSave]);
+
+  // Deep links and a hard refresh restore the same in-surface entity instead
+  // of falling back to an empty overlay. Back/Forward usually reuses the
+  // already-open object, while these effects cover a fresh mount.
+  useEffect(() => {
+    if (
+      state !== "reading" ||
+      !routeEntityId ||
+      openReading?.id === routeEntityId
+    ) {
+      return;
+    }
+    const reading = readings.find((item) => item.id === routeEntityId);
+    if (reading) {
+      enterReading(reading, { navigate: false });
+      return;
+    }
+    if (!loading) {
+      setSurfaceNotice("That room reading is no longer available.");
+      navigateSurface("wall", { replace: true });
+    }
+  }, [enterReading, loading, navigateSurface, openReading?.id, readings, routeEntityId, state]);
+
+  useEffect(() => {
+    if (state !== "save" || !routeEntityId || openSave?.id === routeEntityId) {
+      return undefined;
+    }
+    let cancelled = false;
+    void fetchSavedSignalDetail(routeEntityId)
       .then((detail) => {
-        setFullText((current) => ({
-          ...current,
-          [signal.id]: detail.rawText ?? detail.textPreview ?? "",
-        }));
-        const shared = (detail as { sharedToGroups?: boolean }).sharedToGroups;
-        if (typeof shared === "boolean") setOpenSaveShared(shared);
-        setOpenSaveAttachments(
-          (detail.attachments ?? [])
-            .map((a) => a.type)
-            .filter((t): t is "link" | "image" | "file" =>
-              t === "link" || t === "image" || t === "file",
-            ),
-        );
+        if (!cancelled) {
+          enterSave(detail, { navigate: false, detail });
+        }
       })
       .catch((error) => {
+        if (cancelled) return;
         setSurfaceNotice(
           error instanceof Error ? error.message : "That inspiration could not be loaded.",
         );
+        navigateSurface("ask", { replace: true });
       });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [enterSave, navigateSurface, openSave?.id, routeEntityId, state]);
 
   /*
     Keeping something.
@@ -1176,7 +1307,7 @@ export default function SurfacePage(): JSX.Element {
       event.preventDefault();
       setDropping(false);
       setFiles((current) => [...current, ...dropped]);
-      setState("capture");
+      navigateSurface("capture");
       composerOpenedAt.current = Date.now();
       window.setTimeout(() => draftRef.current?.focus(), 60);
     };
@@ -1188,7 +1319,7 @@ export default function SurfacePage(): JSX.Element {
       window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
     };
-  }, []);
+  }, [navigateSurface]);
 
   /*
     Ask the next question.
@@ -1242,12 +1373,12 @@ export default function SurfacePage(): JSX.Element {
   }, [answer, answering, openSave, question]);
 
   const toWall = useCallback(() => {
-    setState("wall");
+    navigateSurface("wall", { replace: true });
     setOpenReading(null);
     setOpenEvidence([]);
     setOpenSave(null);
     setKept(null);
-  }, []);
+  }, [navigateSurface]);
 
   // Escape always means "back to the wall". One surface, one way out.
   useEffect(() => {
@@ -1599,14 +1730,14 @@ export default function SurfacePage(): JSX.Element {
       await deleteInspiration(signal.id);
       setResults((current) => current.filter((r) => r.id !== signal.id));
       setOpenSave(null);
-      setState("ask");
+      navigateSurface("ask", { replace: true });
       setSurfaceNotice(null);
     } catch (error) {
       setSurfaceNotice(
         error instanceof Error ? error.message : "That inspiration was not deleted.",
       );
     }
-  }, []);
+  }, [navigateSurface]);
 
   const dropReflection = useCallback(async (reflection: ApiReflection) => {
     try {
@@ -1629,6 +1760,25 @@ export default function SurfacePage(): JSX.Element {
   */
   const [rereading, setRereading] = useState(false);
   const [lastRead, setLastRead] = useState<string | null>(null);
+
+  // URL navigation can change rooms through Back/Forward without running a
+  // room-menu click handler. Clear the prior room's visible data immediately
+  // so it cannot flash under the next room while its saved wall loads.
+  useEffect(() => {
+    if (previousRoom.current === room) return;
+    previousRoom.current = room;
+    setLoading(true);
+    setReadings([]);
+    setMembers([]);
+    setDirection(null);
+    setRoomGenerationStatus(null);
+    setSelectedDirectionVersion(null);
+    setOpenReading(null);
+    setOpenEvidence([]);
+    setOpenSave(null);
+    setLastRead(null);
+    setBoards({});
+  }, [room]);
 
   /* When the room last wrote anything — the newest reading on the wall is the
      honest proxy, since that is the last time a pass produced something. */
@@ -1681,21 +1831,15 @@ export default function SurfacePage(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [lastRead]);
 
-  const shapeDirection = useCallback((target: "proposal" | "composer" = "composer") => {
+  const shapeDirection = useCallback(() => {
     if (!room) return;
     setSelectedDirectionVersion(null);
-    setState("direction");
+    if (state !== "direction") navigateSurface("direction");
     window.setTimeout(() => {
-      if (target === "proposal") {
-        document.querySelector<HTMLElement>(".sf-direction-proposal")?.scrollIntoView({
-          block: "center",
-        });
-        return;
-      }
       directionInputRef.current?.scrollIntoView({ block: "center" });
       directionInputRef.current?.focus({ preventScroll: true });
     }, 60);
-  }, [room]);
+  }, [navigateSurface, room, state]);
 
   const saveDirectionContribution = useCallback(async () => {
     if (!room || !directionDraft.trim() || directionSaving) return;
@@ -1805,7 +1949,7 @@ export default function SurfacePage(): JSX.Element {
     surface and asks — the one place on here where ceremony is correct.
   */
   const [offeredCode, setOfferedCode] = useState<string | null>(() => {
-    const code = new URLSearchParams(window.location.search).get("join");
+    const code = new URLSearchParams(location.search).get("join");
     return code && code.trim() ? code.trim() : null;
   });
 
@@ -1821,21 +1965,21 @@ export default function SurfacePage(): JSX.Element {
       setDirection(null);
       setRoomGenerationStatus(null);
       setLastRead(null);
-      setRoom(joined.group.id);
+      navigateSurface("wall", { roomId: joined.group.id, replace: true });
     } catch (error) {
       setSurfaceNotice(
         error instanceof Error ? error.message : "That invitation could not be accepted.",
       );
+      navigate(location.pathname, { replace: true });
     } finally {
       setOfferedCode(null);
-      window.history.replaceState({}, "", window.location.pathname);
     }
-  }, [offeredCode]);
+  }, [location.pathname, navigate, navigateSurface, offeredCode]);
 
   const declineInvite = useCallback(() => {
     setOfferedCode(null);
-    window.history.replaceState({}, "", window.location.pathname);
-  }, []);
+    navigate(location.pathname, { replace: true });
+  }, [location.pathname, navigate]);
 
 
   const [roomInput, setRoomInput] = useState("");
@@ -1863,8 +2007,7 @@ export default function SurfacePage(): JSX.Element {
       setDirection(null);
       setRoomGenerationStatus(null);
       setLastRead(null);
-      setRoom(made.id);
-      setState("wall");
+      navigateSurface("wall", { roomId: made.id });
     } catch (error) {
       setRoomError(
         error instanceof Error
@@ -1876,7 +2019,7 @@ export default function SurfacePage(): JSX.Element {
     } finally {
       setRoomBusy(false);
     }
-  }, [roomBusy, roomInput]);
+  }, [navigateSurface, roomBusy, roomInput]);
 
   /* A <details> menu has no controlled state, so closing one after a choice
      means reaching for the element. */
@@ -2031,7 +2174,7 @@ export default function SurfacePage(): JSX.Element {
             try {
               await deleteGroup(room);
               setRooms((current) => current.filter((r) => r.id !== room));
-              setRoom(null);
+              navigateSurface("wall", { roomId: null, replace: true });
             } catch (error) {
               setSurfaceNotice(
                 error instanceof Error ? error.message : "That room was not deleted.",
@@ -2051,7 +2194,7 @@ export default function SurfacePage(): JSX.Element {
           try {
             await leaveGroup(room);
             setRooms((current) => current.filter((r) => r.id !== room));
-            setRoom(null);
+            navigateSurface("wall", { roomId: null, replace: true });
           } catch (error) {
             setSurfaceNotice(
               error instanceof Error ? error.message : "You did not leave the room.",
@@ -2161,9 +2304,7 @@ export default function SurfacePage(): JSX.Element {
                     : "open to the room"}
               </small>
               {direction?.proposal ? (
-                <button type="button" className="sf-direction-new" onClick={() => shapeDirection("proposal")}>
-                  update ready to review
-                </button>
+                <span className="sf-direction-new">next version ready</span>
               ) : null}
             </div>
             <p className="sf-room-intent-claim">
@@ -2175,9 +2316,11 @@ export default function SurfacePage(): JSX.Element {
             <div className="sf-room-intent-foot">
               <span>
                 {direction
-                  ? `${direction.sharedInspirationCount} shared inspiration${direction.sharedInspirationCount === 1 ? "" : "s"} · ${direction.sharedContributorCount} of ${direction.memberCount} members represented`
+                  ? `${direction.sharedInspirationCount} shared inspiration${direction.sharedInspirationCount === 1 ? "" : "s"} in the room · ${hasRevealedDirection && direction.current
+                      ? `this version traces to ${direction.current.contributorCount} of ${direction.memberCount} members`
+                      : `${direction.sharedContributorCount} of ${direction.memberCount} members brought material`}`
                   : ""}
-                {direction?.current ? ` · updated ${whenShort(direction.current.createdAt)}` : ""}
+                {direction?.current ? ` · version from ${whenShort(direction.current.createdAt)}` : ""}
                 {direction?.current && direction.newInspirationCount
                   ? ` · ${direction.newInspirationCount} new inspiration${direction.newInspirationCount === 1 ? "" : "s"} since this reading`
                   : ""}
@@ -2211,7 +2354,9 @@ export default function SurfacePage(): JSX.Element {
                     void copyRoomInvite();
                     return;
                   }
-                  shapeDirection(direction?.proposal ? "proposal" : "composer");
+                  setSelectedDirectionVersion(null);
+                  navigateSurface("direction");
+                  window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 60);
                 }}
               >
                 {members.length < 2
@@ -2219,9 +2364,9 @@ export default function SurfacePage(): JSX.Element {
                     ? "invite link copied"
                     : "invite someone"
                   : direction?.proposal
-                    ? "review update"
+                    ? "review next version"
                     : direction?.current
-                      ? "shape this together"
+                      ? "open shared read"
                       : "view first read"}
               </button>
             </div>
@@ -2408,7 +2553,7 @@ export default function SurfacePage(): JSX.Element {
                     <span className="sf-label">SHARED TOP OF MIND</span>
                     <h2>What we’re finding together</h2>
                     <p className="sf-direction-titleline-note">
-                      The first read starts automatically from shared inspirations. Members shape how it evolves.
+                      Shared inspirations are the evidence. Member takes guide the next read; the room decides each new version.
                     </p>
                   </div>
                   {direction?.current && direction.newInspirationCount ? (
@@ -2483,14 +2628,14 @@ export default function SurfacePage(): JSX.Element {
                             <span>shared inspiration{sharedInspirationCount === 1 ? "" : "s"}</span>
                             <b>{sharedContributorCount}/{members.length}</b>
                             <span>
-                              members represented
+                              members brought inspiration
                               {direction && sharedContributorCount < direction.requiredContributors
                                 ? ` · ${direction.requiredContributors - sharedContributorCount} more needed`
                                 : ""}
                             </span>
                           </div>
                         ) : null}
-                        {members.length < 2 ? (
+                        {!loading && members.length < 2 ? (
                           <button
                             type="button"
                             className="sf-direction-primary"
@@ -2514,8 +2659,14 @@ export default function SurfacePage(): JSX.Element {
                     {direction?.proposal?.ambition ? (
                       <article className="sf-direction-proposal">
                         <div className="sf-direction-proposal-head">
-                          <span className="sf-label">SUGGESTED UPDATE</span>
-                          <span>{direction.responses.length} of {direction.requiredResponses} reviewed</span>
+                          <span className="sf-label">POSSIBLE NEXT VERSION</span>
+                          <span>
+                            {roomProposalReviewCopy(
+                              direction.responses.length,
+                              direction.memberCount,
+                              direction.requiredResponses,
+                            )}
+                          </span>
                         </div>
                         <p className="sf-direction-proposal-statement">
                           {direction.proposal.ambition}
@@ -2534,7 +2685,7 @@ export default function SurfacePage(): JSX.Element {
                             disabled={directionReviewing}
                             onClick={() => void reviewDirection("accept")}
                           >
-                            use update
+                            make this next
                           </button>
                           <button
                             type="button"
@@ -2543,25 +2694,25 @@ export default function SurfacePage(): JSX.Element {
                             disabled={directionReviewing}
                             onClick={() => void reviewDirection("keep_current")}
                           >
-                            keep current
+                            keep current version
                           </button>
-                          <button type="button" className="sf-quiet" onClick={() => shapeDirection("composer")}>
-                            suggest a change
+                          <button type="button" className="sf-quiet" onClick={() => shapeDirection()}>
+                            add another take
                           </button>
                         </div>
                       </article>
                     ) : null}
 
                     {hasRevealedDirection && direction?.current ? (
-                      <details className="sf-direction-context">
+                      <details className="sf-direction-context" open>
                         <summary>
                           <span>Why this read</span>
-                          <small>{direction.current.facets.length} theme{direction.current.facets.length === 1 ? "" : "s"} · {direction.current.evidence.length} source{direction.current.evidence.length === 1 ? "" : "s"}</small>
+                          <small>{direction.current.facets.length} detail{direction.current.facets.length === 1 ? "" : "s"} · {direction.current.evidence.length} source quote{direction.current.evidence.length === 1 ? "" : "s"}</small>
                         </summary>
                         <div className="sf-direction-context-body">
                           {direction.current.facets.length ? (
                             <div className="sf-direction-growth">
-                              <small>what’s growing</small>
+                              <small>what this read notices</small>
                               {direction.current.facets.map((facet) => (
                                 <p key={`${facet.dimension}:${facet.text}`}>
                                   <b>{facet.dimension}</b>
@@ -2614,14 +2765,21 @@ export default function SurfacePage(): JSX.Element {
                             {roomShapingProgressCopy(
                               directionContributorCount,
                               direction.memberCount,
-                              direction.requiredContributors,
-                              direction.current.state,
                             )}
                           </span>
                         ) : null}
                       </div>
                       {direction?.current && members.length >= 2 ? (
                         <div className="sf-direction-compose">
+                          <p className="sf-direction-shape-next">
+                            {roomShapingNextStepCopy({
+                              contributorCount: directionContributorCount,
+                              requiredContributors: direction.requiredContributors,
+                              state: direction.current.state,
+                              phase: roomGenerationStatus?.phase ?? null,
+                              hasProposal: Boolean(direction.proposal),
+                            })}
+                          </p>
                           <label className="sr-only" htmlFor="sf-direction-thought">
                             Your take on this shared read
                           </label>
@@ -2644,7 +2802,7 @@ export default function SurfacePage(): JSX.Element {
                               disabled={!directionDraft.trim() || directionSaving}
                               onClick={() => void saveDirectionContribution()}
                             >
-                              {directionSaving ? "sharing…" : "share take"}
+                              {directionSaving ? "adding…" : "add my take"}
                             </button>
                           </div>
                         </div>
@@ -2699,24 +2857,19 @@ export default function SurfacePage(): JSX.Element {
                   <details className="sf-direction-history-disclosure">
                     <summary>Earlier versions ({direction.history.length - 1})</summary>
                     <div>
-                      {direction.history.map((version, index) => {
-                        const isCurrent = version.id === direction.current?.id;
-                        return (
+                      {direction.history
+                        .filter((version) => version.id !== direction.current?.id)
+                        .map((version) => (
                           <button
                             type="button"
                             key={version.id}
-                            className={`${selectedDirectionVersion === version.id ? "on" : ""}${isCurrent ? " current" : ""}`}
-                            onClick={() =>
-                              isCurrent
-                                ? setSelectedDirectionVersion(null)
-                                : setSelectedDirectionVersion(version.id)
-                            }
+                            className={selectedDirectionVersion === version.id ? "on" : ""}
+                            onClick={() => setSelectedDirectionVersion(version.id)}
                           >
-                            <span>{isCurrent ? `version ${version.versionNumber} · current` : `version ${version.versionNumber} · ${whenShort(version.createdAt)}`}</span>
-                            <p>{version.changeSummary ?? (index === direction.history.length - 1 ? "First shared top of mind" : version.ambition)}</p>
+                            <span>version {version.versionNumber} · {whenShort(version.createdAt)}</span>
+                            <p>{version.changeSummary ?? (version.versionNumber === 1 ? "First shared top of mind" : version.ambition)}</p>
                           </button>
-                        );
-                      })}
+                        ))}
                     </div>
                   </details>
                 ) : null}
@@ -2809,7 +2962,11 @@ export default function SurfacePage(): JSX.Element {
         <section className={`sf-layer sf-layer--save${state === "save" ? " on" : ""}`}>
           {openSave ? (
             <div className="sf-column">
-              <button type="button" className="sf-back" onClick={() => setState("ask")}>
+              <button
+                type="button"
+                className="sf-back"
+                onClick={() => navigateSurface("ask", { replace: true })}
+              >
                 ← what you asked
               </button>
               <div className="sf-savemeta">
@@ -3133,7 +3290,9 @@ export default function SurfacePage(): JSX.Element {
             aria-pressed={state === "capture"}
             onClick={() => {
               const opening = state !== "capture";
-              setState(opening ? "capture" : "wall");
+              navigateSurface(opening ? "capture" : "wall", {
+                replace: !opening,
+              });
               if (opening) composerOpenedAt.current = Date.now();
               window.setTimeout(() => draftRef.current?.focus(), 60);
             }}
@@ -3148,7 +3307,11 @@ export default function SurfacePage(): JSX.Element {
             type="button"
             className={`sf-primary-verb${state === "ask" ? " on" : ""}`}
             aria-pressed={state === "ask"}
-            onClick={() => setState(state === "ask" ? "wall" : "ask")}
+            onClick={() =>
+              navigateSurface(state === "ask" ? "wall" : "ask", {
+                replace: state === "ask",
+              })
+            }
           >
             {/* The count is the point: it says how much you have kept before
                 you have asked for anything, which is the only number on this
@@ -3174,13 +3337,12 @@ export default function SurfacePage(): JSX.Element {
                 type="button"
                 className={`sf-room-row${room === null ? " on" : ""}`}
                 onClick={() => {
-                  toWall();
                   setLoading(true);
                   setMembers([]);
                   setDirection(null);
                   setRoomGenerationStatus(null);
                   setLastRead(null);
-                  setRoom(null);
+                  navigateSurface("wall", { roomId: null });
                   closeMenus();
                 }}
               >
@@ -3193,13 +3355,12 @@ export default function SurfacePage(): JSX.Element {
                   type="button"
                   className={`sf-room-row${room === r.id ? " on" : ""}`}
                   onClick={() => {
-                    toWall();
                     setLoading(true);
                     setMembers([]);
                     setDirection(null);
                     setRoomGenerationStatus(null);
                     setLastRead(null);
-                    setRoom(r.id);
+                    navigateSurface("wall", { roomId: r.id });
                     closeMenus();
                   }}
                 >

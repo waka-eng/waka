@@ -5,6 +5,8 @@ import {
   markQuote,
   roomDirectionEvidenceCopy,
   roomFirstReadPresentation,
+  roomProposalReviewCopy,
+  roomShapingNextStepCopy,
   roomShapingProgressCopy,
 } from "../src/pages/Surface";
 
@@ -153,21 +155,57 @@ describe("room direction evidence copy", () => {
 });
 
 describe("room shaping progress copy", () => {
-  it("shows half-room readiness without making the threshold look like a cap", () => {
-    expect(roomShapingProgressCopy(0, 5, 3, "revealed")).toBe(
-      "0 of 5 shaped this version · 3 needed for an update",
-    );
-    expect(roomShapingProgressCopy(1, 5, 3, "revealed")).toBe(
-      "1 of 5 shaped this version · 2 more needed for an update",
-    );
-    expect(roomShapingProgressCopy(3, 5, 3, "revealed")).toBe(
-      "3 of 5 shaped this version · update can form",
-    );
+  it("makes the denominator explicitly the room's members", () => {
+    expect(roomShapingProgressCopy(0, 5)).toBe("0 of 5 members added a take");
+    expect(roomShapingProgressCopy(1, 6)).toBe("1 of 6 members added a take");
   });
 
-  it("uses first-read language while the room is forming", () => {
-    expect(roomShapingProgressCopy(2, 4, 2, "forming")).toBe(
-      "2 of 4 shaped this version · first draft can form",
+  it("says that participation earns a reread rather than promising an update", () => {
+    expect(roomShapingNextStepCopy({
+      contributorCount: 1,
+      requiredContributors: 3,
+      state: "revealed",
+      phase: "ready",
+      hasProposal: false,
+    })).toBe("2 more members before WAKA looks for a possible next version.");
+    expect(roomShapingNextStepCopy({
+      contributorCount: 3,
+      requiredContributors: 3,
+      state: "revealed",
+      phase: "processing",
+      hasProposal: false,
+    })).toBe("WAKA is rereading the room for a possible next version.");
+    expect(roomShapingNextStepCopy({
+      contributorCount: 3,
+      requiredContributors: 3,
+      state: "revealed",
+      phase: "ready",
+      hasProposal: false,
+    })).toBe("The room was reread; this version still holds.");
+  });
+
+  it("keeps the first-draft and proposal outcomes distinct", () => {
+    expect(roomShapingNextStepCopy({
+      contributorCount: 1,
+      requiredContributors: 2,
+      state: "forming",
+      phase: "needs_more_context",
+      hasProposal: false,
+    })).toBe("1 more member before WAKA looks for a grounded first draft.");
+    expect(roomShapingNextStepCopy({
+      contributorCount: 3,
+      requiredContributors: 3,
+      state: "revealed",
+      phase: "ready",
+      hasProposal: true,
+    })).toBe("A possible next version is ready for the room to decide.");
+  });
+});
+
+describe("room proposal review copy", () => {
+  it("distinguishes participation from the matching choice that decides", () => {
+    expect(roomProposalReviewCopy(2, 6, 4)).toBe(
+      "2 of 6 members responded · 4 matching choices decide",
     );
   });
 });
