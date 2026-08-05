@@ -146,7 +146,7 @@ export function directionReviewDecision(input: {
 }): "adopted" | "kept_current" | "pending" {
   const required = requiredDirectionResponses(input.memberCount);
   if (input.keepCurrentCount >= required) return "kept_current";
-  if (input.acceptCount >= required && input.keepCurrentCount === 0) return "adopted";
+  if (input.acceptCount >= required) return "adopted";
   return "pending";
 }
 
