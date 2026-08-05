@@ -66,16 +66,6 @@ const SYNTHESIS_COOLDOWN_MS = 15 * 60 * 1000;
  */
 const SYNTHESIS_FAILURE_RETRY_MS = 60 * 1000;
 
-/**
- * Trigger budget for synthesis kicked off by a *read*.
- *
- * A read has someone waiting on it, so it gets a small budget — enough to fill
- * an empty board on first open without turning a GET into a request that
- * outlives its own timeout. An explicit refresh, where the wait is the point,
- * gets the full budget.
- */
-const READ_PATH_MAX_TRIGGERS = 6;
-
 export interface GroupSummary {
   id: string;
   name: string;
@@ -557,41 +547,37 @@ export async function loadGroupWithMembers(
   db: WakaDb,
   input: { userId: string; groupId: string },
 ): Promise<{ group: GroupSummary; members: GroupMemberSummary[] } | null> {
-  const memberRows = await db
+  // One round-trip, not a roster read followed by a group read. This helper is
+  // on every room surface (board, ambition and timeline), so the old two-query
+  // shape multiplied remote-database latency before any useful data rendered.
+  const rows = await db
     .select({
       userId: groupMembers.userId,
       role: groupMembers.role,
       name: users.name,
-    })
-    .from(groupMembers)
-    .innerJoin(users, eq(groupMembers.userId, users.id))
-    .where(eq(groupMembers.groupId, input.groupId));
-
-  const me = memberRows.find((row) => row.userId === input.userId);
-  if (!me) return null; // not a member → caller must treat as 404/403
-
-  const [group] = await db
-    .select({
-      id: groups.id,
-      name: groups.name,
+      groupId: groups.id,
+      groupName: groups.name,
       joinCode: groups.joinCode,
-      createdAt: groups.createdAt,
+      groupCreatedAt: groups.createdAt,
     })
     .from(groups)
-    .where(eq(groups.id, input.groupId))
-    .limit(1);
-  if (!group) return null;
+    .innerJoin(groupMembers, eq(groupMembers.groupId, groups.id))
+    .innerJoin(users, eq(groupMembers.userId, users.id))
+    .where(eq(groups.id, input.groupId));
+
+  const me = rows.find((row) => row.userId === input.userId);
+  if (!me) return null; // not a member → caller must treat as 404/403
 
   return {
     group: {
-      id: group.id,
-      name: group.name,
+      id: me.groupId,
+      name: me.groupName,
       role: me.role,
-      joinCode: group.joinCode,
-      memberCount: memberRows.length,
-      createdAt: group.createdAt.toISOString(),
+      joinCode: me.joinCode,
+      memberCount: rows.length,
+      createdAt: me.groupCreatedAt.toISOString(),
     },
-    members: memberRows.map((row) => ({
+    members: rows.map((row) => ({
       userId: row.userId,
       name: row.name,
       role: row.role,
@@ -826,6 +812,15 @@ async function readGroupNotes(
  */
 async function claimSynthesisRun(db: WakaDb, groupId: string): Promise<boolean> {
   const now = new Date();
+  const hasNewSharedMaterial = sql<boolean>`exists (
+    select 1
+    from ${signals} as changed_signal
+    inner join ${groupMembers} as changed_member
+      on changed_member.user_id = changed_signal.user_id
+    where changed_member.group_id = ${groups.id}
+      and changed_signal.shared_to_groups = true
+      and changed_signal.updated_at > ${groups.lastSynthesisAt}
+  )`;
   const claimed = await db
     .update(groups)
     .set({ lastSynthesisAt: now })
@@ -835,6 +830,11 @@ async function claimSynthesisRun(db: WakaDb, groupId: string): Promise<boolean> 
         or(
           isNull(groups.lastSynthesisAt),
           lt(groups.lastSynthesisAt, new Date(now.getTime() - SYNTHESIS_COOLDOWN_MS)),
+          // A cooldown protects an unchanged room from repeated model calls;
+          // it must not suppress the first read after somebody adds or edits
+          // shared material. That made the explicit "read again" control look
+          // broken for the exact fifteen minutes after a new member arrived.
+          hasNewSharedMaterial,
         ),
       ),
     )
@@ -900,9 +900,11 @@ async function measureReadingDivergences(db: WakaDb, groupId: string): Promise<v
 
 /**
  * A group's Top of Mind: notes newly synthesized from the pool of all members'
- * shared inspirations (US-053), read from the persisted group tables. When the
- * board is empty, best-effort synthesis runs first so the board fills without a
- * manual step. Returns null when the caller is not a member.
+ * shared inspirations (US-053), read from the persisted group tables.
+ *
+ * This is deliberately stored-only. Generation belongs to the durable room
+ * reading job: a wall opening should be a database read, never a chain of model
+ * calls whose worst case becomes the page's loading time.
  */
 export async function listGroupTopOfMind(
   db: WakaDb,
@@ -922,34 +924,7 @@ export async function listGroupTopOfMind(
   const { group, members } = loaded;
   const memberIds = new Set(members.map((member) => member.userId));
 
-  let notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
-
-  // Best-effort first fill, on a cooldown and a small trigger budget.
-  //
-  // An empty board is not evidence that synthesis has not been tried: a group
-  // whose collections do not combine returns nothing every time, so without the
-  // cooldown every open of that board pays for a fresh pass. `claimSynthesisRun`
-  // is a conditional UPDATE, so concurrent readers cannot both start one.
-  if (notes.length === 0 && (await claimSynthesisRun(db, input.groupId))) {
-    try {
-      await generateGroupTopOfMind(db, {
-        groupId: input.groupId,
-        locale: input.preferredLocale,
-        maxTriggers: READ_PATH_MAX_TRIGGERS,
-      });
-      notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
-      await measureReadingDivergences(db, input.groupId);
-    } catch (err) {
-      // Give the claim back. A throw is not an answer, and holding the full
-      // cooldown over one would leave the board stuck for fifteen minutes.
-      await releaseSynthesisClaim(db, input.groupId).catch(() => {});
-      console.warn("[group-top-of-mind] best-effort synthesis failed:", {
-        groupId: input.groupId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
+  const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
   return { group, members, notes };
 }
 
@@ -964,6 +939,8 @@ export async function refreshGroupTopOfMind(
     groupId: string;
     limit: number;
     preferredLocale?: SupportedLocale;
+    /** A background pass stays bounded; legacy/manual callers retain the full default. */
+    maxTriggers?: number;
   },
 ): Promise<GroupTopOfMindRefreshResult | null> {
   const loaded = await loadGroupWithMembers(db, {
@@ -1014,6 +991,7 @@ export async function refreshGroupTopOfMind(
     result = await generateGroupTopOfMind(db, {
       groupId: input.groupId,
       locale: input.preferredLocale,
+      ...(input.maxTriggers === undefined ? {} : { maxTriggers: input.maxTriggers }),
     });
   } catch (err) {
     // Same reasoning as the read path: a throw is not an answer, so hand the

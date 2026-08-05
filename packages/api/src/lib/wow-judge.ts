@@ -26,6 +26,7 @@ import { getDefaultModelProvider } from "./model-provider.js";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -1768,7 +1769,7 @@ export class GeminiWowJudgeClient implements WowJudgeClient {
     apiKey: string,
     request: GenerateContentRequest,
   ): Promise<unknown | null> {
-    const response = await this.fetchFn(buildWowGenerateContentUrl(), {
+    const response = await fetchModelWithTimeout(this.fetchFn, buildWowGenerateContentUrl(), {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),
       body: JSON.stringify(request),

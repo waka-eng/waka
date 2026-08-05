@@ -45,6 +45,20 @@ const MIN_PASSWORD_LENGTH = 8;
 
 const DEFAULT_REDIRECT = "/";
 
+function safeInAppPath(value: unknown): string | null {
+  if (typeof value !== "string" || !value.startsWith("/") || value.length > 2_048) {
+    return null;
+  }
+  try {
+    const internalOrigin = "https://waka.invalid";
+    const target = new URL(value, internalOrigin);
+    if (target.origin !== internalOrigin || target.pathname === "/login") return null;
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the absolute (or relative) URL the browser should navigate to in
  * order to start the Google OAuth flow.
@@ -57,8 +71,9 @@ const DEFAULT_REDIRECT = "/";
  * unit-tested and reused if a future page adds a "Re-authenticate with
  * Google" affordance.
  */
-function googleLoginUrl(): string {
-  return apiPath("/auth/google/login");
+function googleLoginUrl(returnTo: string): string {
+  const params = new URLSearchParams({ returnTo });
+  return `${apiPath("/auth/google/login")}?${params.toString()}`;
 }
 
 /**
@@ -95,10 +110,11 @@ function oauthErrorMessageKey(code: string | null): MessageKey | null {
  */
 function resolveRedirect(location: Location): string {
   const state = location.state as { from?: unknown } | null;
-  const from = state?.from;
-  if (typeof from === "string" && from.startsWith("/") && from !== "/login") {
-    return from;
-  }
+  const from = safeInAppPath(state?.from);
+  if (from) return from;
+  const queryReturnTo = new URLSearchParams(location.search).get("returnTo");
+  const returnTo = safeInAppPath(queryReturnTo);
+  if (returnTo) return returnTo;
   return DEFAULT_REDIRECT;
 }
 
@@ -510,9 +526,11 @@ export function LoginForm(): JSX.Element {
 function GoogleSignInButton({
   disabled = false,
   locale = readStoredLocale(),
+  returnTo = DEFAULT_REDIRECT,
 }: {
   disabled?: boolean;
   locale?: SupportedLocale;
+  returnTo?: string;
 }): JSX.Element {
   function handleClick(): void {
     if (disabled) return;
@@ -520,7 +538,7 @@ function GoogleSignInButton({
     // history so the user can hit "Back" from Google's consent page and
     // land where they were. replace() would silently swallow that history
     // entry, which is hostile to users who change their mind.
-    window.location.assign(googleLoginUrl());
+    window.location.assign(googleLoginUrl(returnTo));
   }
 
   return (
@@ -709,7 +727,7 @@ export default function LoginPage(): JSX.Element {
           </div>
         ) : null}
 
-        <GoogleSignInButton locale={locale} />
+        <GoogleSignInButton locale={locale} returnTo={resolveRedirect(location)} />
 
         <OrDivider locale={locale} />
 

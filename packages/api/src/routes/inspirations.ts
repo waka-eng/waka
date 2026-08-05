@@ -63,7 +63,10 @@ import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
 import { listReadingsForSignal } from "../lib/signal-readings.js";
 import { pulseSignalActivation } from "../lib/signal-activation.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
-import { enqueueClassification } from "../lib/queue.js";
+import {
+  enqueueClassification,
+  enqueueGroupReadingRefreshesForUser,
+} from "../lib/queue.js";
 import { withSignalLayer } from "../lib/signals.js";
 import {
   deleteSignalDocument,
@@ -200,6 +203,7 @@ export interface InspirationsRouteDependencies {
   getVault?: () => VaultStore;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   enqueueClassificationJob?: typeof enqueueClassification;
+  enqueueGroupReadingJobs?: typeof enqueueGroupReadingRefreshesForUser;
   persistScores?: typeof persistLocalInspirationScores;
   persistSingleScore?: typeof persistSingleLocalInspirationScoreById;
   listSignalReadings?: typeof listReadingsForSignal;
@@ -378,6 +382,8 @@ export function createInspirationsRoutes(
   const getDatabase = deps.getDatabase ?? getDb;
   const getVault = deps.getVault ?? getRuntimeVault;
   const enqueueClassificationJob = deps.enqueueClassificationJob ?? enqueueClassification;
+  const enqueueGroupReadingJobs =
+    deps.enqueueGroupReadingJobs ?? enqueueGroupReadingRefreshesForUser;
   const persistScores = deps.persistScores ?? persistLocalInspirationScores;
   const persistSingleScore = deps.persistSingleScore ?? persistSingleLocalInspirationScoreById;
   const listSignalReadings = deps.listSignalReadings ?? listReadingsForSignal;
@@ -1259,6 +1265,16 @@ routes.patch("/:id", async (c) => {
     signalId: scoredUpdated.id,
   });
 
+  // The vector and row are both current now. Queue each affected room from the
+  // new material fingerprint; this is idempotent across rapid edits and across
+  // the classifier's own post-processing trigger.
+  await enqueueGroupReadingJobs(user.id).catch((err) => {
+    console.warn("[inspirations] room reread could not be queued after update", {
+      inspirationId: updated.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
   return c.json({ inspiration: withDisplayedWowScore(scoredUpdated) }, 200);
 });
 
@@ -1861,6 +1877,13 @@ routes.delete("/:id", async (c) => {
     // for consistency with the not-owned path.
     return c.json({ error: "Inspiration not found" }, 404);
   }
+
+  await enqueueGroupReadingJobs(user.id).catch((err) => {
+    console.warn("[inspirations] room reread could not be queued after delete", {
+      inspirationId: idCheck.data,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // 6. 200 with a confirmation payload. Body shape is `{ id }` so the SPA
   //    can match the optimistic remove against the server's confirmation

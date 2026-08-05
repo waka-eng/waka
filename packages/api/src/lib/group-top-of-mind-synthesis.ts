@@ -14,7 +14,7 @@
 
 import { createHash } from "node:crypto";
 
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import {
   groupMembers,
@@ -24,7 +24,11 @@ import {
   signals,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import { GeminiEmbeddingHttpClient, type WakaDb } from "./inspiration-embeddings.js";
+import {
+  ensureInspirationEmbedding,
+  GeminiEmbeddingHttpClient,
+  type WakaDb,
+} from "./inspiration-embeddings.js";
 import type { SupportedLocale } from "./locales.js";
 import { selectBoard } from "../scoring/board-selection.js";
 import { cosineSimilarity, fromPersistedScore } from "../scoring/wow-score.js";
@@ -214,6 +218,89 @@ async function loadMemberUserIds(db: WakaDb, groupId: string): Promise<string[]>
  * strangers and "surprisingly related" means different things to each.
  */
 export type ReachMode = "nearest" | "non_obvious";
+
+/**
+ * Fill a bounded number of missing vectors before a room pass.
+ *
+ * New captures get their vector in the durable classifier. This small lazy
+ * backfill covers signals saved before that pipeline existed (or while the old
+ * best-effort path was unavailable), so a room does not silently conclude that
+ * its members have nothing in common merely because its similarity substrate
+ * is absent. Candidates are interleaved across members and embedding failures
+ * leave the remaining usable material available to the pass.
+ */
+async function ensureMissingGroupEmbeddings(
+  db: WakaDb,
+  memberUserIds: string[],
+  budget: number,
+): Promise<void> {
+  const uniqueMemberIds = [...new Set(memberUserIds)];
+  if (uniqueMemberIds.length === 0 || budget <= 0) return;
+
+  const missingByMember = await Promise.all(
+    uniqueMemberIds.map((userId) =>
+      db
+        .select({
+          id: signals.id,
+          userId: signals.userId,
+          text: signals.text,
+          enrichment: signals.enrichment,
+        })
+        .from(signals)
+        .leftJoin(
+          inspirationEmbeddings,
+          and(
+            eq(inspirationEmbeddings.inspirationId, signals.id),
+            eq(inspirationEmbeddings.userId, signals.userId),
+          ),
+        )
+        .where(
+          and(
+            eq(signals.userId, userId),
+            eq(signals.sharedToGroups, true),
+            isNull(inspirationEmbeddings.id),
+            sql`length(regexp_replace(${signals.text}, 'https?://\\S+', ' ', 'g')) + coalesce(length(${signals.enrichment}), 0) >= ${MIN_AUDIBLE_CHARS}`,
+          ),
+        )
+        .orderBy(desc(signals.wowScore), desc(signals.createdAt), asc(signals.id))
+        .limit(budget),
+    ),
+  );
+
+  const queues = missingByMember.map((rows) => rows.filter(isAudible));
+  const selected: Array<{ id: string; userId: string }> = [];
+  while (selected.length < budget && queues.some((queue) => queue.length > 0)) {
+    for (const queue of queues) {
+      const signal = queue.shift();
+      if (signal) selected.push(signal);
+      if (selected.length >= budget) break;
+    }
+  }
+
+  // Embeddings are independent network calls. A small fixed-width batch keeps
+  // the provider load polite while avoiding N serial round-trips on older
+  // rooms — the dominant cost in the measured 50-second first pass.
+  const EMBEDDING_CONCURRENCY = 3;
+  let failed = 0;
+  for (let offset = 0; offset < selected.length; offset += EMBEDDING_CONCURRENCY) {
+    const outcomes = await Promise.allSettled(
+      selected.slice(offset, offset + EMBEDDING_CONCURRENCY).map((signal) =>
+        ensureInspirationEmbedding({
+          db,
+          userId: signal.userId,
+          inspirationId: signal.id,
+        }),
+      ),
+    );
+    failed += outcomes.filter((outcome) => outcome.status === "rejected").length;
+  }
+  if (failed > 0) {
+    console.warn("[group-synthesis] missing embeddings could not all be prepared", {
+      attempted: selected.length,
+      failed,
+    });
+  }
+}
 
 export async function loadTriggerSignals(
   db: WakaDb,
@@ -865,6 +952,7 @@ export async function generateGroupTopOfMind(
     return { passAt, triggersTried: 0, notesCreated: 0, notesExisting: 0, reconfirmedNoteIds: [] };
   }
   const maxTriggers = Math.max(1, Math.min(input.maxTriggers ?? MAX_TRIGGERS, MAX_TRIGGERS));
+  await ensureMissingGroupEmbeddings(db, memberUserIds, maxTriggers);
   const triggers = (await loadTriggerSignals(db, memberUserIds)).slice(0, maxTriggers);
   const locale = (input.locale ?? "en-US") as SupportedLocale;
 

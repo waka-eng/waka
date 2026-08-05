@@ -35,7 +35,11 @@ export const backgroundJobStatusEnum = pgEnum(
   backgroundJobStatusValues,
 );
 
-export const backgroundJobTypeValues = ["process_inspiration", "meaning_graph_rebuild"] as const;
+export const backgroundJobTypeValues = [
+  "process_inspiration",
+  "meaning_graph_rebuild",
+  "group_reading_refresh",
+] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum(
   "background_job_type",
@@ -71,7 +75,18 @@ export interface MeaningGraphRebuildPayload {
   completedAt?: string;
 }
 
-export type BackgroundJobPayload = ProcessInspirationPayload | MeaningGraphRebuildPayload;
+export interface GroupReadingRefreshPayload {
+  groupId: string;
+  requestedByUserId: string;
+  preferredLocale: string;
+  materialFingerprint: string;
+  reason: "bootstrap" | "material_changed" | "membership_changed" | "manual";
+}
+
+export type BackgroundJobPayload =
+  | ProcessInspirationPayload
+  | MeaningGraphRebuildPayload
+  | GroupReadingRefreshPayload;
 
 export const backgroundJobs = pgTable(
   "background_jobs",

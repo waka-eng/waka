@@ -7,6 +7,7 @@ import type {
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -59,16 +60,18 @@ Field rules:
 - firstPersonPostItCandidate: a private sticky-note thought in the user's own
   voice. Usually one or two short sentences, never fewer than 5 words, more than
   42 words, or more than 360 characters. It MUST name a
-  concrete ambition object (people, peers, room, place, city, work, build,
-  thing, path, taste, life, self, standard, experiment, question, environment)
+  concrete ambition object (people, peers, room, place, city, work, workshop,
+  studio, project, build, thing, path, taste, life, self, standard, experiment,
+  question, environment)
   AND imply a reason, contrast, or tension using words like before, after,
   without, instead, than, where, who, because, until, against, not, less, more,
   cost, allowed, dead, normal, braver, lonely, or clarity. Ground it in the
   specific signals, not the bare category. Avoid generic slogans such as
   "public before perfect", "taste as default", "test it outside", or
   "courage normal". Do NOT start with outside voice (you, your, this person,
-  waka) or with forced templates (I need, I want, I am, I'm, I refuse,
-  I am done with) unless it reads completely natural. Do NOT hedge with I think,
+  waka). Natural first-person openings such as "I want" or "I need" are welcome
+  when they name a specific desire grounded in the signals. Avoid theatrical
+  stock declarations such as "I refuse" or "I am done with". Do NOT hedge with I think,
   maybe, might, probably, seems, or kind of. Do NOT reuse stock per-dimension
   or title templates or give similar context nodes the same post-it. Distinguish
   this node using saved signals, feedback, rejected interpretations, memory
@@ -343,7 +346,7 @@ export class GeminiAmbitionSynthesisClient {
     input: AmbitionSynthesisInput,
   ): Promise<AmbitionSynthesisOutput | null> {
     const apiKey = this.apiKey ?? getGeminiApiKey();
-    const response = await this.fetchFn(buildAmbitionSynthesisGenerateContentUrl(), {
+    const response = await fetchModelWithTimeout(this.fetchFn, buildAmbitionSynthesisGenerateContentUrl(), {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),
       body: JSON.stringify(buildAmbitionSynthesisRequest(input)),

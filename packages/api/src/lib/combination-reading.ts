@@ -33,6 +33,7 @@ import { z } from "zod";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -41,10 +42,12 @@ import type {
   CombinationPulseProfile,
   CombinationReadingFacet,
 } from "../db/schema-combinations.js";
+import type { GroupDirectionContributionKind } from "../db/schema-group-direction.js";
+import { requiredDirectionContributors } from "./group-direction-policy.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
 
 const GEMINI_MODEL = "gemini-3.1-flash-lite";
-export const COMBINATION_READER_PROMPT_VERSION = "combination_reader_v1";
+export const COMBINATION_READER_PROMPT_VERSION = "combination_reader_v4";
 const MAX_OUTPUT_TOKENS = 1400;
 /** Long enough for a real want; short enough that it cannot become a summary. */
 const MAX_AMBITION_CHARS = 240;
@@ -63,6 +66,8 @@ const MAX_DIMENSION_CHARS = 40;
 /** Three is a reading with dimensions; more is the stack this layer forbids. */
 const MAX_FACETS = 3;
 const MAX_QUOTE_CHARS = 220;
+const INTERNAL_VALIDATION_FORMING_MESSAGE =
+  "This room's shared top of mind is still taking shape. Member responses to what feels central, missing, or worth changing will help it sharpen.";
 /**
  * The longest run of characters an ambition may share verbatim with a save
  * before it counts as quoting rather than speaking their language.
@@ -128,6 +133,26 @@ export interface CombinationReaderInput {
   evidence: CombinationReaderEvidence[];
   /** Member labels present in this combination, e.g. ["member A", "member B"]. */
   memberLabels: string[];
+  /**
+   * The wording members are living with now. Supplying it turns a fresh read
+   * into a proposed evolution rather than an unrelated diagnosis.
+   */
+  currentReading?: {
+    ambition: string;
+    facets: CombinationReadingFacet[];
+    awayFrom: string | null;
+    tension: string | null;
+    nextQuestion: string | null;
+  } | null;
+  /** Small, attributed room notes written through "Shape this together". */
+  roomContributions?: Array<{
+    id: string;
+    userId: string;
+    memberLabel: string;
+    kind: GroupDirectionContributionKind;
+    body: string;
+    createdAt: Date;
+  }>;
   locale?: SupportedLocale;
 }
 
@@ -153,6 +178,8 @@ export type CombinationReading =
       quotes: CombinationMemberQuote[];
       groundedNoteIds: string[];
       whatsMissing: string | null;
+      /** Why this wording moved from the current direction, when one exists. */
+      changeSummary: string | null;
     }
   | {
       state: "forming";
@@ -198,15 +225,66 @@ export function evidenceSpan(
  * from this project's own history of comparing runs that differed in more than
  * one way.
  */
-export function signalSetHash(input: CombinationReaderInput): string {
-  const noteIds = input.notes.map((note) => note.id).sort();
-  const signalIds = input.evidence.map((item) => item.signalId).sort();
+function readerInputHash(
+  input: CombinationReaderInput,
+  options: { includeContributions: boolean },
+): string {
+  const notes = input.notes
+    .map((note) => ({
+      id: note.id,
+      title: note.title,
+      why: note.why,
+      evidenceSignalIds: [...note.evidenceSignalIds].sort(),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const evidence = input.evidence
+    .map((item) => ({
+      signalId: item.signalId,
+      userId: item.userId,
+      memberLabel: item.memberLabel,
+      text: item.text,
+      divergenceScore: item.divergenceScore ?? null,
+      captureElapsedMs: item.captureElapsedMs ?? null,
+    }))
+    .sort((a, b) => a.signalId.localeCompare(b.signalId));
+  const contributions = options.includeContributions
+    ? (input.roomContributions ?? [])
+        .map((item) => ({
+          id: item.id,
+          userId: item.userId,
+          kind: item.kind,
+          body: item.body,
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+    : [];
   return createHash("sha256")
-    .update(`${COMBINATION_READER_PROMPT_VERSION}|${noteIds.join(",")}|${signalIds.join(",")}`)
+    .update(JSON.stringify({
+      promptVersion: COMBINATION_READER_PROMPT_VERSION,
+      locale: normalizeSupportedLocale(input.locale),
+      members: [...input.memberLabels].sort(),
+      notes,
+      evidence,
+      contributions,
+    }))
     .digest("hex");
 }
 
-const SYSTEM_INSTRUCTION = `You read what a combination of people is AFTER.
+/** Full generation identity, including explicit member contributions. */
+export function signalSetHash(input: CombinationReaderInput): string {
+  return readerInputHash(input, { includeContributions: true });
+}
+
+/** Saved-material identity, used to avoid a reread after a proposal is adopted. */
+export function materialSetHash(input: CombinationReaderInput): string {
+  return readerInputHash(input, { includeContributions: false });
+}
+
+const SYSTEM_INSTRUCTION = `You read a room's SHARED TOP OF MIND: what its
+people are collectively circling right now.
+
+This is a living, provisional read — not a permanent mission, a personality
+claim, or a declaration that everyone agrees. It should be easy for members to
+recognise, correct, and replace as the room changes.
 
 You are given notes that have already been judged as genuine cross-member
 readings and the signals each note rests on, plus "alsoSaved" — other things
@@ -215,51 +293,78 @@ anonymous member label, whether it was saved as a fast REACTION or a slower
 COMPOSITION, and "readsDifferentlyHere": 0-100 for how differently that signal
 reads beside THIS group versus alone.
 
-The notes tell you which combinations are real. The signals tell you how these
-people actually talk. Build the want from the signals; use the notes only to
-know which ground is solid.
+The notes tell you which cross-member patterns are real. The signals are the
+material these members chose to bring into the room. Build the shared read from
+the signals; use the notes to know which ground is solid.
 
-Your task is not to summarise the notes. It is to say what this particular
-combination of people WANTS. State it once, in one sentence, in the people's
-own vocabulary.
+Your task is not to summarise the board or invent a grand direction. Name the
+one live focus, question, tension, or pull that becomes visible because these
+particular collections sit together. State it once, in one sentence, in the
+people's own vocabulary.
 
 Rules:
-- ONE ambition sentence. Never a list of themes, never a stack of the notes.
+- Put that one shared-top-of-mind sentence in the "ambition" field. Never a
+  list of themes and never a stack of the notes.
+- Write it as a present-tense observation, not a collective manifesto. Do not
+  begin with "we want", "we are", "our goal", or another first-person plural
+  declaration unless multiple members explicitly used that voice. This is what
+  is top of mind now, not a promise the room is making forever.
 - Speak in the members' OWN VOCABULARY — their terms, their register — but do
   NOT quote them. The ambition must contain no quotation marks and no borrowed
-  phrases lifted word for word. Write the want as they would say it plainly to
-  a friend, not as a sentence built out of citations.
-- Separately, in the quotes field, list the real lines the ambition rests on: at least
-  one per member you are claiming it from, covering at least two members. That
-  is where the evidence lives. The sentence itself stays clean.
-- facets are OPTIONAL: zero to three. A facet is one dimension this want
+  phrases lifted word for word. Write the live focus as they would say it
+  plainly to a friend, not as a sentence built out of citations.
+- Separately, in the quotes field, list the real lines the ambition rests on:
+  at least one per member you are claiming it from, covering at least the
+  "requiredMemberVoices" count in the input. Every quote must be an EXACT CONTIGUOUS SPAN copied from
+  the text of its cited signalId. Keep it short. Do not paraphrase, translate,
+  repair grammar, change capitalization, or normalize punctuation in a quote.
+  That is where the evidence lives. The sentence itself stays clean.
+- facets are OPTIONAL: zero to three. A facet is one dimension this shared read
   actually has, and YOU name the dimension from the evidence — it might be the
   pace, the material, the standard of craft, who it is for, what it refuses,
   where it has to happen, who they want to build it with. Do not reach for any
-  fixed set of dimensions; most wants have one or two, and some have none.
+  fixed set of dimensions; most reads have one or two, and some have none.
   Each facet must be as concrete as the ambition. Omit rather than invent, and
   say what is missing instead.
 - awayFrom / tension / nextQuestion are OPTIONAL too. Omit any the evidence
   does not genuinely speak to.
-- If the signals do not yet say enough together to name a want, return
+- "currentReading" is the wording already visible in the room. Preserve what
+  still holds. If the new material only reinforces it, return that same
+  ambition and facets rather than manufacturing novelty.
+- "roomContributions" are explicit member responses to the current wording.
+  They are high-intent guidance about emphasis and language, but every claim in
+  the ambition must still be traceable to shared signals from at least two
+  members.
+- When there is no accepted note yet, responses from at least the
+  "requiredMemberVoices" count may establish provisional human grounding for
+  a first shared read. The wording must still cite shared signals selected by
+  that many distinct members. One person's response can guide a read, but
+  cannot establish it.
+- When currentReading exists, include a short changeSummary that says plainly
+  what the suggested wording adds, removes, or reframes. Do not describe model
+  mechanics or call it an AI suggestion.
+- If the signals and member responses do not yet say enough together to name a
+  shared top of mind, return
   state "forming" and describe plainly what is thin. That is a correct answer,
   not a failure.
 - Reactions carry more weight than compositions: a fast save is a pulse before
   the reasons arrived.
 - A high "readsDifferentlyHere" is the strongest evidence you have. A signal
   that means something else beside these people than it does alone is the
-  combination doing its work — build the want from those first.
-- Be CONCRETE. These people save specific, strange, particular things. A want
+  combination doing its work — build the shared read from those first.
+- Be CONCRETE. These people save specific, strange, particular things. A read
   pitched at the level of an industry trend ("building physical AI products")
   has failed even if it is accurate. Name the thing they would recognise as
-  theirs.
+  theirs. Do not turn a present-tense room signal into a permanent life goal.
 - "alsoSaved" signals may not create a claim on their own, but they are how a
-  member whose saves ground no note still has a voice in what this group wants.
+  member whose saves ground no note still has a voice in the room's shared read.
 - Never mention member labels in the ambition text itself. Speak about the
-  want, not about the mechanics of who saved what.
-- Write EVERY field in the language named by "locale" in the payload, whatever
-  language the signals themselves are in. A board that answers in a different
-  language on each refresh is not the same board.`;
+  live focus, not about the mechanics of who saved what.
+- Write every GENERATED PROSE field in the language named by "locale" in the
+  payload, whatever language the signals themselves are in. Quotes are the one
+  exception: copy them exactly from their source signal and never translate
+  them. A board that answers in a different language on each refresh is not the
+  same board.`;
 
 /**
  * Order evidence by where the combination did the most work.
@@ -292,6 +397,15 @@ function buildUserPayload(input: CombinationReaderInput) {
     promptVersion: COMBINATION_READER_PROMPT_VERSION,
     locale: normalizeSupportedLocale(input.locale),
     members: input.memberLabels,
+    requiredMemberVoices: requiredDirectionContributors(input.memberLabels.length),
+    currentReading: input.currentReading ?? null,
+    roomContributions: (input.roomContributions ?? []).map((item) => ({
+      responseId: item.id,
+      from: item.memberLabel,
+      kind: item.kind,
+      body: item.body.slice(0, 600),
+      at: item.createdAt.toISOString(),
+    })),
     /**
      * Saves that ground no note yet. They cannot create a combination — the
      * notes above already decided that — but they are how a member who
@@ -359,6 +473,7 @@ const readingResponseSchema = z.union([
       tension: z.string().trim().max(MAX_FACET_CHARS).nullish(),
       nextQuestion: z.string().trim().max(MAX_FACET_CHARS).nullish(),
       whatsMissing: z.string().trim().max(MAX_WHATS_MISSING_CHARS * 4).nullish(),
+      changeSummary: z.string().trim().max(MAX_WHATS_MISSING_CHARS).nullish(),
       quotes: z
         .array(
           z.object({
@@ -397,6 +512,7 @@ const RESPONSE_SCHEMA = {
     tension: { type: "STRING" },
     nextQuestion: { type: "STRING" },
     whatsMissing: { type: "STRING" },
+    changeSummary: { type: "STRING" },
     quotes: {
       type: "ARRAY",
       items: {
@@ -443,15 +559,55 @@ export function verifyQuotes(
   evidence: CombinationReaderEvidence[],
 ): CombinationMemberQuote[] {
   const byId = new Map(evidence.map((item) => [item.signalId, item]));
-  const normalize = (value: string) => value.replace(/\s+/g, " ").trim().toLowerCase();
   const kept: CombinationMemberQuote[] = [];
   for (const quote of quotes) {
     const source = byId.get(quote.signalId);
     if (!source) continue;
-    if (!normalize(source.text).includes(normalize(quote.quote))) continue;
-    kept.push({ userId: source.userId, signalId: source.signalId, quote: quote.quote.trim() });
+    const sourceSpan = findExactWordSpan(source.text, quote.quote);
+    if (!sourceSpan) continue;
+    kept.push({ userId: source.userId, signalId: source.signalId, quote: sourceSpan });
   }
   return kept;
+}
+
+interface WordToken {
+  normalized: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Token offsets let punctuation be compared loosely while the returned quote
+ * still comes byte-for-byte from the member's saved signal.
+ *
+ * This accepts harmless presentation drift such as straight versus curly
+ * apostrophes, em dashes versus hyphens, case, and whitespace. It does not
+ * accept added, removed, or reordered words, so a fluent paraphrase cannot be
+ * mistaken for provenance.
+ */
+function wordTokens(value: string): WordToken[] {
+  return Array.from(value.matchAll(/[\p{L}\p{N}]+/gu), (match) => ({
+    normalized: match[0].normalize("NFKC").toLowerCase(),
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+}
+
+function findExactWordSpan(source: string, proposedQuote: string): string | null {
+  const sourceTokens = wordTokens(source);
+  const quoteTokens = wordTokens(proposedQuote);
+  if (quoteTokens.length === 0 || quoteTokens.length > sourceTokens.length) return null;
+
+  for (let start = 0; start <= sourceTokens.length - quoteTokens.length; start += 1) {
+    const matches = quoteTokens.every(
+      (token, offset) => sourceTokens[start + offset]!.normalized === token.normalized,
+    );
+    if (!matches) continue;
+    const first = sourceTokens[start]!;
+    const last = sourceTokens[start + quoteTokens.length - 1]!;
+    return source.slice(first.start, last.end);
+  }
+  return null;
 }
 
 /**
@@ -538,7 +694,8 @@ export class GeminiCombinationReader implements CombinationReaderClient {
 
   async read(input: CombinationReaderInput): Promise<CombinationReading> {
     const apiKey = this.apiKey ?? getGeminiApiKey();
-    const response = await this.fetchFn(
+    const response = await fetchModelWithTimeout(
+      this.fetchFn,
       buildGeminiModelEndpoint(GEMINI_MODEL, "generateContent"),
       {
         method: "POST",
@@ -591,25 +748,29 @@ export class GeminiCombinationReader implements CombinationReaderClient {
     const derivedNoteIds = input.notes
       .filter((note) => note.evidenceSignalIds.some((id) => quotedSignalIds.has(id)))
       .map((note) => note.id);
-    const claimed = (data.groundedNoteIds ?? []).filter((id) =>
-      input.notes.some((note) => note.id === id),
-    );
-    const groundedNoteIds = [...new Set([...claimed, ...derivedNoteIds])];
+    const groundedNoteIds = [...new Set(derivedNoteIds)];
+    const collectiveContributionCount = new Set(
+      (input.roomContributions ?? []).map((contribution) => contribution.userId),
+    ).size;
+    const requiredContributors = requiredDirectionContributors(input.memberLabels.length);
 
     // The integrity conditions, enforced here rather than trusted from the
-    // model: real traceable words, from at least two hearts, saying something
-    // the notes did not already say.
-    if (quotes.length === 0 || distinctQuoted.size < 2) {
+    // model: real traceable words from at least half of the room (and never
+    // fewer than two people in a multi-person room), saying something the
+    // notes did not already say.
+    if (quotes.length === 0 || distinctQuoted.size < requiredContributors) {
       return {
         state: "forming",
-        whatsMissing:
-          "A want was proposed but could not be traced to at least two members' own words.",
+        whatsMissing: INTERNAL_VALIDATION_FORMING_MESSAGE,
       };
     }
-    if (groundedNoteIds.length === 0) {
+    if (
+      groundedNoteIds.length === 0 &&
+      collectiveContributionCount < requiredContributors
+    ) {
       return {
         state: "forming",
-        whatsMissing: "A want was proposed but not grounded in any accepted reading.",
+        whatsMissing: INTERNAL_VALIDATION_FORMING_MESSAGE,
       };
     }
     if (data.ambition.length > MAX_AMBITION_CHARS) {
@@ -621,22 +782,19 @@ export class GeminiCombinationReader implements CombinationReaderClient {
        */
       return {
         state: "forming",
-        whatsMissing:
-          "The reading ran to a summary of the board rather than one thing the combination wants.",
+        whatsMissing: INTERNAL_VALIDATION_FORMING_MESSAGE,
       };
     }
     if (borrowsVerbatim(data.ambition, input.evidence)) {
       return {
         state: "forming",
-        whatsMissing:
-          "The reading quoted saves verbatim instead of saying the want in the group's own plain words.",
+        whatsMissing: INTERNAL_VALIDATION_FORMING_MESSAGE,
       };
     }
     if (restatesANote(data.ambition, input.notes)) {
       return {
         state: "forming",
-        whatsMissing:
-          "The reading restated a single note rather than naming what the combination wants.",
+        whatsMissing: INTERNAL_VALIDATION_FORMING_MESSAGE,
       };
     }
 
@@ -651,6 +809,7 @@ export class GeminiCombinationReader implements CombinationReaderClient {
       tension: data.tension ?? null,
       nextQuestion: data.nextQuestion ?? null,
       whatsMissing: data.whatsMissing ? trimProse(data.whatsMissing) : null,
+      changeSummary: data.changeSummary ? trimProse(data.changeSummary) : null,
       quotes,
       groundedNoteIds,
     };

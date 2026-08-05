@@ -43,14 +43,21 @@ function getConnectionString(): string {
 export function getDb() {
   if (cachedDb) return cachedDb;
 
+  const configuredPoolMax = Number.parseInt(process.env.WAKA_DB_POOL_MAX ?? "", 10);
+  const poolMax = Number.isFinite(configuredPoolMax) && configuredPoolMax > 0
+    ? Math.min(configuredPoolMax, 10)
+    : process.env.AWS_LAMBDA_FUNCTION_NAME
+      ? 1
+      : 5;
+
   // `prepare: false` keeps the driver compatible with Neon's pgbouncer
-  // pooler in transaction mode. Lambda never reuses a single connection
-  // long enough for prepared-statement caching to pay off anyway.
+  // pooler in transaction mode. Lambda remains deliberately single-connection
+  // to avoid multiplying connections across concurrent invocations. The local
+  // monolith also runs the background worker, so it needs a small pool: with
+  // max=1, a room pass serialized every page read behind its own DB work.
   const sql = postgres(getConnectionString(), {
     prepare: false,
-    // 1 connection is plenty inside a single Lambda invocation; Neon's
-    // pooler handles fan-in across concurrent invocations for us.
-    max: 1,
+    max: poolMax,
   });
 
   cachedDb = drizzle(sql, { schema });

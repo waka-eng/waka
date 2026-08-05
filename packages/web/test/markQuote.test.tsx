@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { markQuote } from "../src/pages/Surface";
+import {
+  canLoadFullSignal,
+  markQuote,
+  roomDirectionEvidenceCopy,
+  roomFirstReadPresentation,
+  roomShapingProgressCopy,
+} from "../src/pages/Surface";
 
 /**
  * Ported from `highlightQuote.test.ts`, which tested the same job on the old
@@ -62,5 +68,106 @@ describe("markQuote — bounds", () => {
     const out = markQuote(`before ${huge} after`, huge);
     const kids = (out as { props?: { children?: unknown } }).props?.children;
     expect(Array.isArray(kids)).toBe(false);
+  });
+});
+
+describe("room evidence access", () => {
+  it("loads full detail for the viewer's own evidence", () => {
+    expect(canLoadFullSignal("group", "viewer-1", "viewer-1")).toBe(true);
+  });
+
+  it("keeps another member's evidence at the shared-excerpt boundary", () => {
+    expect(canLoadFullSignal("group", "member-2", "viewer-1")).toBe(false);
+  });
+
+  it("continues to load full detail on the viewer's solo wall", () => {
+    expect(canLoadFullSignal("solo", null, "viewer-1")).toBe(true);
+  });
+});
+
+describe("room top-of-mind formation copy", () => {
+  it("does not flash a ready-to-shape message before status arrives", () => {
+    const presentation = roomFirstReadPresentation({
+      memberCount: 3,
+      sharedInspirationCount: 5,
+      phase: null,
+      loading: true,
+      hasFormingRead: false,
+    });
+
+    expect(presentation.title).toBe("Opening the shared read…");
+    expect(presentation.title).not.toMatch(/ready to shape/i);
+  });
+
+  it("explains that processing will create the first draft automatically", () => {
+    const presentation = roomFirstReadPresentation({
+      memberCount: 5,
+      sharedInspirationCount: 5,
+      phase: "processing",
+      loading: false,
+      hasFormingRead: false,
+    });
+
+    expect(presentation).toEqual({
+      label: "FIRST READ · IN PROGRESS",
+      title: "Finding the room’s first shared thread…",
+      detail: "If a shared thread holds, a living draft appears here automatically.",
+    });
+  });
+
+  it("separates an honest forming result from background processing", () => {
+    const presentation = roomFirstReadPresentation({
+      memberCount: 5,
+      sharedInspirationCount: 5,
+      phase: "needs_more_context",
+      loading: false,
+      hasFormingRead: true,
+    });
+
+    expect(presentation.title).toBe("No shared thread holds yet.");
+    expect(presentation.detail).toContain("Member takes");
+  });
+
+  it("keeps the invite state distinct", () => {
+    expect(roomFirstReadPresentation({
+      memberCount: 1,
+      sharedInspirationCount: 3,
+      phase: "needs_people",
+      loading: false,
+      hasFormingRead: false,
+    }).label).toBe("WAITING FOR SOMEONE");
+  });
+});
+
+describe("room direction evidence copy", () => {
+  it("names evidence representation without implying active participation", () => {
+    const copy = roomDirectionEvidenceCopy([
+      { signalId: "signal-a", userId: "member-a" },
+      { signalId: "signal-a", userId: "member-a" },
+      { signalId: "signal-b", userId: "member-b" },
+    ], 5);
+
+    expect(copy).toBe("2 inspirations behind this draft · 2 of 5 members represented");
+    expect(copy).not.toMatch(/contributed|shaped|approved/i);
+  });
+});
+
+describe("room shaping progress copy", () => {
+  it("shows half-room readiness without making the threshold look like a cap", () => {
+    expect(roomShapingProgressCopy(0, 5, 3, "revealed")).toBe(
+      "0 of 5 shaped this version · 3 needed for an update",
+    );
+    expect(roomShapingProgressCopy(1, 5, 3, "revealed")).toBe(
+      "1 of 5 shaped this version · 2 more needed for an update",
+    );
+    expect(roomShapingProgressCopy(3, 5, 3, "revealed")).toBe(
+      "3 of 5 shaped this version · update can form",
+    );
+  });
+
+  it("uses first-read language while the room is forming", () => {
+    expect(roomShapingProgressCopy(2, 4, 2, "forming")).toBe(
+      "2 of 4 shaped this version · first draft can form",
+    );
   });
 });

@@ -26,6 +26,7 @@ import { getDb } from "./db.js";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -170,7 +171,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
 
   async embed(input: string): Promise<number[]> {
     const apiKey = getGeminiApiKey();
-    const response = await fetch(buildEmbedContentUrl(this.model), {
+    const response = await fetchModelWithTimeout(fetch, buildEmbedContentUrl(this.model), {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),
       body: JSON.stringify({

@@ -46,9 +46,12 @@ export const combinations = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    memberSetUnique: uniqueIndex("combinations_member_set_hash_unique_idx").on(
-      table.memberSetHash,
-    ),
+    roomMemberSetUnique: uniqueIndex("combinations_room_member_set_unique_idx")
+      .on(table.groupId, table.memberSetHash)
+      .where(sql`${table.groupId} IS NOT NULL`),
+    unscopedMemberSetUnique: uniqueIndex("combinations_unscoped_member_set_unique_idx")
+      .on(table.memberSetHash)
+      .where(sql`${table.groupId} IS NULL`),
     groupIdx: index("combinations_group_idx").on(table.groupId),
   }),
 );
@@ -158,6 +161,22 @@ export const combinationReadings = pgTable(
     model: text("model").notNull(),
     promptVersion: text("prompt_version").notNull(),
     signalSetHash: text("signal_set_hash").notNull(),
+    /**
+     * The signal/note-only fingerprint, excluding member responses.
+     *
+     * A response can cause a proposed rewrite, but once that proposal is
+     * adopted the same saved material must not immediately trigger another
+     * pass simply because the response now belongs to the previous version.
+     */
+    materialSetHash: text("material_set_hash").notNull(),
+    /** Exact shared saves considered by this version. Used to count what is
+     * genuinely new without guessing from timestamps. */
+    evidenceSignalIds: jsonb("evidence_signal_ids").$type<string[]>().notNull().default([]),
+
+    /** The version this candidate was written against, when there was one. */
+    previousReadingId: uuid("previous_reading_id"),
+    /** One plain sentence explaining why the proposed wording moved. */
+    changeSummary: text("change_summary"),
 
     /**
      * `active` is what a wall shows; `replaced` is what the combination used
@@ -187,6 +206,11 @@ export const combinationReadings = pgTable(
     replacedByFk: foreignKey({
       name: "combination_readings_replaced_by_reading_id_fk",
       columns: [table.replacedByReadingId],
+      foreignColumns: [table.id],
+    }).onDelete("set null"),
+    previousReadingFk: foreignKey({
+      name: "combination_readings_previous_reading_id_fk",
+      columns: [table.previousReadingId],
       foreignColumns: [table.id],
     }).onDelete("set null"),
   }),

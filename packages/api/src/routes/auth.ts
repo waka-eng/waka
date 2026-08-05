@@ -29,6 +29,7 @@ import {
 } from "../lib/auth.js";
 import { isAdminUser } from "../lib/admin-auth.js";
 import { getDb } from "../lib/db.js";
+import { eraseUserAccount } from "../lib/account-erasure.js";
 import { DEFAULT_LOCALE, normalizeSupportedLocale, supportedLocaleSchema } from "../lib/locales.js";
 import {
   type AuthEnv,
@@ -600,7 +601,7 @@ authRoutes.delete("/me", requireAuth, async (c) => {
   }
 
   const currentUser = c.get("user");
-  await getDb().delete(users).where(eq(users.id, currentUser.id));
+  await eraseUserAccount(currentUser.id, { db: getDb() });
   c.header("Set-Cookie", buildSessionClearCookie());
   return c.json({ ok: true });
 });

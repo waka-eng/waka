@@ -21,6 +21,12 @@ const dbState = vi.hoisted(() => ({
   db: {} as any,
 }));
 
+const erasureState = vi.hoisted(() => ({
+  erase: vi.fn(async (_userId: string, deps: { db: any }) => {
+    await deps.db.delete({}).where({});
+  }),
+}));
+
 vi.mock("../lib/middleware.js", () => ({
   requireAuth: async (c: any, next: () => Promise<void>) => {
     const authorization = c.req.header("Authorization");
@@ -35,6 +41,10 @@ vi.mock("../lib/middleware.js", () => ({
 
 vi.mock("../lib/db.js", () => ({
   getDb: () => dbState.db,
+}));
+
+vi.mock("../lib/account-erasure.js", () => ({
+  eraseUserAccount: erasureState.erase,
 }));
 
 vi.mock("../lib/auth.js", () => ({
@@ -442,6 +452,7 @@ describe("DELETE /api/auth/me", () => {
     expect(response.status).toBe(200);
     expect(db.delete).toHaveBeenCalledTimes(1);
     expect(db.where).toHaveBeenCalledTimes(1);
+    expect(erasureState.erase).toHaveBeenCalledWith(authState.user.id, { db });
     expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
     await expect(response.json()).resolves.toEqual({ ok: true });
   });

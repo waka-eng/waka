@@ -23,8 +23,20 @@ import {
 } from "../lib/group-top-of-mind.js";
 import {
   getGroupCombinationReading,
-  refreshGroupCombinationReading,
 } from "../lib/group-combination-reading.js";
+import {
+  addGroupDirectionContribution,
+  getGroupDirection,
+  respondToGroupDirectionProposal,
+} from "../lib/group-direction.js";
+import {
+  groupDirectionContributionKinds,
+  groupDirectionResponseValues,
+} from "../db/index.js";
+import {
+  enqueueGroupReadingRefreshForGroup,
+  getGroupReadingGenerationStatus,
+} from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { boardAsOf, loadRoomTimeline } from "../lib/room-timeline.js";
 
@@ -77,6 +89,28 @@ const listNotesQuerySchema = z
   })
   .strict();
 
+const readingStatusQuerySchema = z
+  .object({ ensure: z.enum(["0", "1"]).optional() })
+  .strict();
+
+const directionContributionSchema = z
+  .object({
+    kind: z.enum(groupDirectionContributionKinds),
+    body: z.string().trim().min(1).max(600),
+  })
+  .strict();
+
+const directionProposalParamsSchema = z
+  .object({
+    groupId: z.string().uuid(),
+    proposalId: z.string().uuid(),
+  })
+  .strict();
+
+const directionResponseSchema = z
+  .object({ value: z.enum(groupDirectionResponseValues) })
+  .strict();
+
 export interface GroupsRouteDependencies {
   getDatabase?: typeof getDb;
   listGroups?: typeof listGroupsForUser;
@@ -89,7 +123,11 @@ export interface GroupsRouteDependencies {
   listGroupNotes?: typeof listGroupTopOfMind;
   refreshGroupNotes?: typeof refreshGroupTopOfMind;
   getReading?: typeof getGroupCombinationReading;
-  refreshReading?: typeof refreshGroupCombinationReading;
+  getDirection?: typeof getGroupDirection;
+  addDirectionContribution?: typeof addGroupDirectionContribution;
+  respondToDirectionProposal?: typeof respondToGroupDirectionProposal;
+  getReadingStatus?: typeof getGroupReadingGenerationStatus;
+  enqueueRoomReading?: typeof enqueueGroupReadingRefreshForGroup;
   loadTimeline?: typeof loadRoomTimeline;
   loadBoardAsOf?: typeof boardAsOf;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
@@ -110,7 +148,13 @@ export function createGroupsRoutes(
   const listGroupNotes = deps.listGroupNotes ?? listGroupTopOfMind;
   const refreshGroupNotes = deps.refreshGroupNotes ?? refreshGroupTopOfMind;
   const getCombinationReading = deps.getReading ?? getGroupCombinationReading;
-  const refreshCombinationReading = deps.refreshReading ?? refreshGroupCombinationReading;
+  const loadDirection = deps.getDirection ?? getGroupDirection;
+  const addDirectionNote =
+    deps.addDirectionContribution ?? addGroupDirectionContribution;
+  const respondToDirection =
+    deps.respondToDirectionProposal ?? respondToGroupDirectionProposal;
+  const getReadingStatus = deps.getReadingStatus ?? getGroupReadingGenerationStatus;
+  const enqueueRoomReading = deps.enqueueRoomReading ?? enqueueGroupReadingRefreshForGroup;
   const loadTimeline = deps.loadTimeline ?? loadRoomTimeline;
   const loadBoardAsOf = deps.loadBoardAsOf ?? boardAsOf;
 
@@ -169,6 +213,14 @@ export function createGroupsRoutes(
     if (!result.ok) {
       return c.json({ error: "No group matches that join code" }, 404);
     }
+    if (!result.alreadyMember) {
+      await enqueueRoomReading(result.group.id, "membership_changed").catch((err) => {
+        console.warn("[groups] room reread could not be queued after join", {
+          groupId: result.group.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
     return c.json({ group: result.group, alreadyMember: result.alreadyMember });
   });
 
@@ -183,6 +235,16 @@ export function createGroupsRoutes(
       userId: user.id,
       groupId: parsedParams.data.groupId,
     });
+    if (result.ok) {
+      await enqueueRoomReading(parsedParams.data.groupId, "membership_changed").catch(
+        (err) => {
+          console.warn("[groups] room reread could not be queued after leave", {
+            groupId: parsedParams.data.groupId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        },
+      );
+    }
     return c.json({ ok: result.ok });
   });
 
@@ -251,6 +313,14 @@ export function createGroupsRoutes(
       const failure = ownerActionFailure(result.reason, "Only the room's owner can rename it");
       return c.json({ error: failure.error }, failure.status);
     }
+    await enqueueRoomReading(parsedParams.data.groupId, "membership_changed").catch(
+      (err) => {
+        console.warn("[groups] room reread could not be queued after removal", {
+          groupId: parsedParams.data.groupId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      },
+    );
     return c.json({ ok: true });
   });
 
@@ -346,23 +416,142 @@ export function createGroupsRoutes(
     return c.json({ reading: result.reading });
   });
 
-  // POST /api/groups/:groupId/reading/refresh — read the combination again.
-  // Costs a model call only when the shared material has actually moved.
+  // GET /api/groups/:groupId/reading/status — stored room state plus the
+  // durable pass that will advance it. Ensuring the idempotent job here also
+  // backfills rooms created before automatic invalidation existed.
+  routes.get("/:groupId/reading/status", async (c) => {
+    const parsedParams = groupParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json({ error: "Invalid group id" }, 400);
+    }
+    const parsedQuery = readingStatusQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) return c.json({ error: "Invalid query" }, 400);
+    const user = c.get("user");
+    const status = await getReadingStatus({
+      requestedByUserId: user.id,
+      groupId: parsedParams.data.groupId,
+      preferredLocale: user.preferredLocale,
+      ...(parsedQuery.data.ensure === "0" ? { ensure: false } : {}),
+    });
+    if (!status) return c.json({ error: "Group not found" }, 404);
+    return c.json({ status });
+  });
+
+  // POST /api/groups/:groupId/reading/refresh — queue one complete room pass.
+  // The response is immediate; the status endpoint carries progress while the
+  // saved wall and ambition remain visible.
   routes.post("/:groupId/reading/refresh", async (c) => {
     const parsedParams = groupParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json({ error: "Invalid group id" }, 400);
     }
     const user = c.get("user");
-    const reading = await refreshCombinationReading(getDatabase(), {
+    const status = await getReadingStatus({
+      requestedByUserId: user.id,
+      groupId: parsedParams.data.groupId,
+      preferredLocale: user.preferredLocale,
+      force: true,
+    });
+    if (!status) return c.json({ error: "Group not found" }, 404);
+    return c.json({ status }, status.phase === "processing" ? 202 : 200);
+  });
+
+  /** GET /api/groups/:groupId/direction — current, proposal, shaping notes and history. */
+  routes.get("/:groupId/direction", async (c) => {
+    const parsedParams = groupParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);
+    const user = c.get("user");
+    const direction = await loadDirection(getDatabase(), {
       userId: user.id,
       groupId: parsedParams.data.groupId,
       preferredLocale: user.preferredLocale,
     });
-    if (!reading) {
-      return c.json({ error: "Group not found" }, 404);
+    if (!direction) return c.json({ error: "Group not found" }, 404);
+    return c.json({ direction });
+  });
+
+  /** POST /api/groups/:groupId/direction/contributions — one attributed room note. */
+  routes.post("/:groupId/direction/contributions", async (c) => {
+    const parsedParams = groupParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: "Request body must be valid JSON" }, 400);
     }
-    return c.json({ reading });
+    const parsedBody = directionContributionSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return c.json(
+        {
+          error: "Invalid contribution",
+          details: parsedBody.error.flatten().fieldErrors,
+        },
+        400,
+      );
+    }
+    const user = c.get("user");
+    const result = await addDirectionNote(getDatabase(), {
+      userId: user.id,
+      groupId: parsedParams.data.groupId,
+      preferredLocale: user.preferredLocale,
+      ...parsedBody.data,
+    });
+    if (!result.ok) {
+      return result.reason === "not_ready"
+        ? c.json({ error: "The room is still preparing its first shared read" }, 409)
+        : c.json({ error: "Group not found" }, 404);
+    }
+    if (result.updateReady) {
+      await enqueueRoomReading(parsedParams.data.groupId, "material_changed").catch(
+        (error) => {
+          console.warn("[groups] room reread could not be queued after a contribution", {
+            groupId: parsedParams.data.groupId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      );
+    }
+    return c.json({
+      contribution: result.contribution,
+      contributorCount: result.contributorCount,
+      requiredContributors: result.requiredContributors,
+      updateReady: result.updateReady,
+    }, 201);
+  });
+
+  /** POST .../respond — review the one proposed evolution currently in the room. */
+  routes.post("/:groupId/direction/proposals/:proposalId/respond", async (c) => {
+    const parsedParams = directionProposalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid group or proposal id" }, 400);
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: "Request body must be valid JSON" }, 400);
+    }
+    const parsedBody = directionResponseSchema.safeParse(rawBody);
+    if (!parsedBody.success) return c.json({ error: "Invalid response" }, 400);
+    const user = c.get("user");
+    const result = await respondToDirection(getDatabase(), {
+      userId: user.id,
+      groupId: parsedParams.data.groupId,
+      proposalId: parsedParams.data.proposalId,
+      preferredLocale: user.preferredLocale,
+      value: parsedBody.data.value,
+    });
+    if (!result.ok) {
+      return result.reason === "not_available"
+        ? c.json({ error: "That suggested update is no longer available" }, 409)
+        : c.json({ error: "Group not found" }, 404);
+    }
+    const direction = await loadDirection(getDatabase(), {
+      userId: user.id,
+      groupId: parsedParams.data.groupId,
+      preferredLocale: user.preferredLocale,
+    });
+    if (!direction) return c.json({ error: "Group not found" }, 404);
+    return c.json({ decision: result.decision, direction });
   });
 
   /**

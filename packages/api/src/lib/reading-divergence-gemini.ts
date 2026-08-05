@@ -14,6 +14,7 @@ import { z } from "zod";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -230,7 +231,8 @@ export class GeminiReadingDivergenceClient implements ReadingDivergenceClient {
     input: ReadingDivergenceInput,
   ): Promise<ReadingDivergenceJudgment | null> {
     const apiKey = this.apiKey ?? getGeminiApiKey();
-    const response = await this.fetchFn(
+    const response = await fetchModelWithTimeout(
+      this.fetchFn,
       buildGeminiModelEndpoint(GEMINI_MODEL, "generateContent"),
       {
         method: "POST",

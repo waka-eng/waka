@@ -101,12 +101,14 @@ function makeDb(selectResults: unknown[][]) {
   return { select, update, updateSet, insert };
 }
 
-function callbackRequest() {
+function callbackRequest(returnToCookie?: string) {
   return createApp().request("/api/auth/google/callback?code=code-123&state=state-123", {
     method: "GET",
     redirect: "manual",
     headers: {
-      Cookie: "waka_oauth_state=state-123; waka_oauth_pkce=pkce-verifier",
+      Cookie: `waka_oauth_state=state-123; waka_oauth_pkce=pkce-verifier${
+        returnToCookie ? `; waka_oauth_return_to=${encodeURIComponent(returnToCookie)}` : ""
+      }`,
     },
   } as RequestInit);
 }
@@ -164,5 +166,33 @@ describe("Google OAuth callback email verification", () => {
       userId: "existing-user-id",
       token: "signed-session-token",
     });
+  });
+
+  it("returns an invited user to the in-app join offer after OAuth", async () => {
+    mockState.db = makeDb([
+      [],
+      [{ id: "existing-user-id", email: "user@example.com", name: "Existing User" }],
+    ]);
+    mockGoogleToken({ email_verified: true });
+
+    const response = await callbackRequest("/?join=ROOM-123");
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "http://localhost:5173/?join=ROOM-123",
+    );
+  });
+
+  it("rejects a backslash-shaped cross-origin return path", async () => {
+    mockState.db = makeDb([
+      [],
+      [{ id: "existing-user-id", email: "user@example.com", name: "Existing User" }],
+    ]);
+    mockGoogleToken({ email_verified: true });
+
+    const response = await callbackRequest("/\\evil.example/path");
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("http://localhost:5173/");
   });
 });

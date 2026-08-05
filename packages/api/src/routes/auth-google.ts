@@ -85,6 +85,9 @@ const STATE_COOKIE_NAME = "waka_oauth_state";
 /** Cookie that carries the PKCE code_verifier between /login and /callback. */
 const PKCE_COOKIE_NAME = "waka_oauth_pkce";
 
+/** Safe in-app destination preserved across the cross-origin OAuth round-trip. */
+const RETURN_TO_COOKIE_NAME = "waka_oauth_return_to";
+
 /**
  * Where the post-callback cookie is delivered to before we redirect the
  * browser back into the SPA. We send users to "/" by default — the SPA's
@@ -93,6 +96,24 @@ const PKCE_COOKIE_NAME = "waka_oauth_pkce";
  * failed, in which case the user sees the regular login form).
  */
 const POST_LOGIN_PATH = "/";
+
+function safeReturnTo(value: string | null | undefined): string {
+  if (!value || value.length > 2_048) return POST_LOGIN_PATH;
+  if (!value.startsWith("/")) return POST_LOGIN_PATH;
+  try {
+    // Parsing against a fixed origin catches protocol-relative paths and the
+    // backslash variant (`/\\host`) that URL parsers normalize into one. A
+    // prefix-only check looks safe but can still become a cross-origin redirect.
+    const internalOrigin = "https://waka.invalid";
+    const target = new URL(value, internalOrigin);
+    if (target.origin !== internalOrigin || target.pathname === "/login") {
+      return POST_LOGIN_PATH;
+    }
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return POST_LOGIN_PATH;
+  }
+}
 
 /**
  * 10 minutes is the maximum window between the user clicking "Continue
@@ -241,6 +262,12 @@ googleAuthRoutes.get("/login", async (c) => {
 
   setCookie(c, STATE_COOKIE_NAME, state, tempCookieOptions());
   setCookie(c, PKCE_COOKIE_NAME, codeVerifier, tempCookieOptions());
+  setCookie(
+    c,
+    RETURN_TO_COOKIE_NAME,
+    safeReturnTo(c.req.query("returnTo")),
+    tempCookieOptions(),
+  );
 
   const redirectUri = getGoogleRedirectUri();
 
@@ -290,13 +317,16 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
     // Vite's default dev server matches the proxy target the SPA uses to
     // hit the API. If the SPA and API are co-served, this also works.
     "http://localhost:5173";
+  const returnTo = safeReturnTo(getCookie(c, RETURN_TO_COOKIE_NAME));
 
   function failTo(reason: string): Response {
     // Best-effort cleanup so a stale state cookie doesn't poison a retry.
     deleteCookie(c, STATE_COOKIE_NAME, { path: "/" });
     deleteCookie(c, PKCE_COOKIE_NAME, { path: "/" });
+    deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: "/" });
     const target = new URL("/login", webOrigin);
     target.searchParams.set("error", reason);
+    if (returnTo !== POST_LOGIN_PATH) target.searchParams.set("returnTo", returnTo);
     return c.redirect(target.toString(), 302);
   }
 
@@ -558,13 +588,14 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   c.header("Set-Cookie", buildSessionCookie(sessionToken), { append: true });
   deleteCookie(c, STATE_COOKIE_NAME, { path: "/" });
   deleteCookie(c, PKCE_COOKIE_NAME, { path: "/" });
+  deleteCookie(c, RETURN_TO_COOKIE_NAME, { path: "/" });
 
   // Reference getOAuthRedirectOrigin() so a future audit catches the case
   // where the API and SPA are deliberately co-hosted (single origin) — we
   // would then prefer the API origin for the redirect base.
   void getOAuthRedirectOrigin;
 
-  return c.redirect(new URL(POST_LOGIN_PATH, webOrigin).toString(), 302);
+  return c.redirect(new URL(returnTo, webOrigin).toString(), 302);
 }
 
 googleAuthRoutes.get("/callback", handleGoogleCallback);

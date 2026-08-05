@@ -56,6 +56,7 @@ import { type Cluster, clusterEnumValues } from "../db/index.js";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "../lib/gemini-http.js";
@@ -518,7 +519,7 @@ export async function classifyInspirationText(
   const url = buildGenerateContentUrl();
   const requestBody = buildClassificationRequest(text);
 
-  const response = await fetch(url, {
+  const response = await fetchModelWithTimeout(fetch, url, {
     method: "POST",
     headers: buildGeminiJsonHeaders(apiKey),
     body: JSON.stringify(requestBody),

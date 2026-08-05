@@ -275,18 +275,25 @@ export default $config({
       // env var. That keeps the handler unit-testable outside Lambda
       // (vitest / smoke runs) where the SST env is not present.
       environment: runtimeEnvironment,
+      // Group readings are bounded but intentionally synthesize across
+      // several members and can take longer than Lambda's short default on a
+      // cold or first/backfill pass. The browser keeps an explicit reading
+      // state visible for this request.
+      timeout: "60 seconds",
     });
 
     new sst.aws.Cron("BackgroundJobDrain", {
-      schedule: "rate(12 hours)",
-      enabled: $app.stage === "production",
+      // Postgres is the durable queue; this frequent wake-up is what makes it
+      // independent of an API Lambda surviving long enough to run setImmediate.
+      schedule: "rate(1 minute)",
+      enabled: true,
       function: {
         handler: "packages/api/src/background-worker.handler",
-        timeout: "4 minutes",
+        timeout: "14 minutes",
         link: runtimeLinks,
         environment: {
           ...runtimeEnvironment,
-          WAKA_BACKGROUND_JOB_CRON_LIMIT: "5",
+          WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
         },
       },
     });

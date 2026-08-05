@@ -2,16 +2,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
+  addGroupDirectionContribution,
   createInspiration,
   createFeedback,
   fetchSavedSignalDetail,
   fetchSavedSignals,
   fetchInspirations,
+  fetchGroupDirection,
   fetchPublicProfile,
   fetchTopOfMindNote,
   fetchTopOfMindNotes,
   fetchLegacyTopOfMindCompatibilityMoments,
   formatMeaningGraphRebuildError,
+  respondToGroupDirectionProposal,
   updateAuthPreferences,
   type ApiInspiration,
   type ApiSavedSignalDetail,
@@ -492,6 +495,88 @@ describe("createFeedback", () => {
       status: 404,
       message: "Feedback target not found",
     } satisfies Partial<ApiError>);
+  });
+});
+
+describe("collaborative room direction API", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const direction = {
+    current: null,
+    proposal: null,
+    history: [],
+    contributions: [],
+    responses: [],
+    memberCount: 2,
+    sharedInspirationCount: 4,
+    sharedContributorCount: 2,
+    newInspirationCount: 4,
+    newContributorCount: 2,
+    contributorCount: 0,
+    requiredContributors: 2,
+    requiredResponses: 2,
+    viewerResponse: null,
+  };
+
+  it("loads the current, proposal, collaboration and history in one request", async () => {
+    stubFetch(Response.json({ direction }));
+    await expect(fetchGroupDirection("room-1")).resolves.toEqual(direction);
+    expect(fetch).toHaveBeenCalledWith("/api/groups/room-1/direction", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("adds a structured shaping note", async () => {
+    const contribution = {
+      id: "thought-1",
+      readingId: "reading-1",
+      userId: "user-1",
+      memberName: "River",
+      kind: "missing" as const,
+      body: "Experimentation is missing.",
+      createdAt: "2026-08-04T00:00:00.000Z",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    };
+    const result = {
+      contribution,
+      contributorCount: 1,
+      requiredContributors: 3,
+      updateReady: false,
+    };
+    stubFetch(Response.json(result, { status: 201 }));
+    await expect(
+      addGroupDirectionContribution("room-1", {
+        kind: "missing",
+        body: "Experimentation is missing.",
+      }),
+    ).resolves.toEqual(result);
+    expect(fetch).toHaveBeenCalledWith("/api/groups/room-1/direction/contributions", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "missing", body: "Experimentation is missing." }),
+    });
+  });
+
+  it("sends a review response to the exact proposal", async () => {
+    const result = { decision: "pending" as const, direction };
+    stubFetch(Response.json(result));
+    await expect(
+      respondToGroupDirectionProposal("room-1", "proposal-1", "accept"),
+    ).resolves.toEqual(result);
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/groups/room-1/direction/proposals/proposal-1/respond",
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: "accept" }),
+      },
+    );
   });
 });
 

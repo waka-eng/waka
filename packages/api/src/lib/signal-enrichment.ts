@@ -50,11 +50,12 @@ const MAX_ENRICHMENT_CHARS = 1600;
  * fragment. The two were previously one number in the lib and a different one
  * in a backfill script, so nothing enforced either.
  *
- * 120 is where the measurement was taken (migration 0035): 61% of shared
- * signals cleared it, and the member who sat at 1 of 14 was the one nobody
- * could read.
+ * 60 admits one concrete captured sentence while still rejecting bare links,
+ * labels, and fragmentary titles. The capture surface is intentionally quick;
+ * requiring 120 characters made several coherent sentences collectively
+ * invisible to rooms even though the solo context graph could read them.
  */
-export const MIN_AUDIBLE_CHARS = 120;
+export const MIN_AUDIBLE_CHARS = 60;
 
 /**
  * How much of this save an embedding can actually read.

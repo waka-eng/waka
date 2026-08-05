@@ -809,6 +809,29 @@ export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
   relatedSignals: ApiTopOfMindRelatedSignalReference[];
 };
 
+export type ApiTopOfMindGenerationPhase =
+  | "empty"
+  | "processing"
+  | "needs_more_context"
+  | "ready"
+  | "failed";
+
+export interface ApiTopOfMindGenerationStatus {
+  phase: ApiTopOfMindGenerationPhase;
+  message: string;
+  signalCount: number;
+  contextNodeCount: number;
+  evidenceCount: number;
+  noteCount: number;
+  job: {
+    id: string;
+    type: "process_inspiration" | "meaning_graph_rebuild";
+    status: "pending" | "running" | "succeeded" | "failed";
+    lastError: string | null;
+    updatedAt: string;
+  } | null;
+}
+
 // ---------------------------------------------------------------------------
 // Group Top of Mind boards (US-052)
 // ---------------------------------------------------------------------------
@@ -862,6 +885,117 @@ export interface ApiGroupTopOfMindRefresh extends ApiGroupTopOfMind {
   refreshed: boolean;
   /** ISO timestamp the next run becomes possible, or null if it can run now. */
   nextEligibleAt: string | null;
+}
+
+export interface ApiGroupCombinationReading {
+  id: string;
+  state: "revealed" | "forming";
+  ambition: string | null;
+  facets: Array<{ dimension: string; text: string }>;
+  awayFrom: string | null;
+  tension: string | null;
+  nextQuestion: string | null;
+  whatsMissing: string | null;
+  quotes: Array<{ userId: string; signalId: string; quote: string }>;
+  reconfirmedCount: number;
+  evidenceSpanStart: string | null;
+  evidenceSpanEnd: string | null;
+  updatedAt: string;
+  createdAt: string;
+  changeSummary: string | null;
+}
+
+export type ApiGroupDirectionContributionKind =
+  | "take"
+  | "feels_true"
+  | "missing"
+  | "change";
+
+export type ApiGroupDirectionResponseValue = "accept" | "keep_current";
+
+export interface ApiGroupDirectionEvidence {
+  signalId: string;
+  userId: string;
+  memberName: string;
+  quote: string;
+  textPreview: string;
+}
+
+export interface ApiGroupDirectionReading {
+  id: string;
+  versionNumber: number;
+  state: "revealed" | "forming";
+  ambition: string | null;
+  facets: Array<{ dimension: string; text: string }>;
+  awayFrom: string | null;
+  tension: string | null;
+  nextQuestion: string | null;
+  whatsMissing: string | null;
+  changeSummary: string | null;
+  evidence: ApiGroupDirectionEvidence[];
+  contributorCount: number;
+  reconfirmedCount: number;
+  evidenceSpanStart: string | null;
+  evidenceSpanEnd: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiGroupDirectionContribution {
+  id: string;
+  readingId: string;
+  userId: string;
+  memberName: string;
+  kind: ApiGroupDirectionContributionKind;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiGroupDirectionResponse {
+  userId: string;
+  memberName: string;
+  value: ApiGroupDirectionResponseValue;
+  updatedAt: string;
+}
+
+export interface ApiGroupDirection {
+  current: ApiGroupDirectionReading | null;
+  proposal: ApiGroupDirectionReading | null;
+  history: ApiGroupDirectionReading[];
+  contributions: ApiGroupDirectionContribution[];
+  responses: ApiGroupDirectionResponse[];
+  memberCount: number;
+  sharedInspirationCount: number;
+  sharedContributorCount: number;
+  newInspirationCount: number;
+  newContributorCount: number;
+  contributorCount: number;
+  requiredContributors: number;
+  requiredResponses: number;
+  viewerResponse: ApiGroupDirectionResponseValue | null;
+}
+
+export type ApiGroupReadingGenerationPhase =
+  | "processing"
+  | "ready"
+  | "needs_people"
+  | "needs_more_context"
+  | "failed";
+
+export interface ApiGroupReadingGenerationStatus {
+  phase: ApiGroupReadingGenerationPhase;
+  message: string;
+  memberCount: number;
+  sharedSignalCount: number;
+  noteCount: number;
+  job: {
+    id: string;
+    type: "group_reading_refresh";
+    status: "pending" | "running" | "succeeded" | "failed";
+    lastError: string | null;
+    updatedAt: string;
+  } | null;
 }
 
 export interface ApiTopOfMindCompatibilityMoment {
@@ -1383,6 +1517,53 @@ export async function updateTopOfMindNote(
   return body.topOfMindNote;
 }
 
+export async function setTopOfMindNotePinned(
+  noteId: string,
+  pinned: boolean,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await patchJson<UpdateTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/pin`),
+    { pinned },
+    pinned ? "Failed to hold that note" : "Failed to release that note",
+  );
+  return body.topOfMindNote;
+}
+
+export async function dismissTopOfMindNote(noteId: string): Promise<void> {
+  await postJson(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/dismiss`),
+    {},
+    "Failed to take that note down",
+  );
+}
+
+export async function restoreTopOfMindNote(
+  noteId: string,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await postJson<UpdateTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/restore`),
+    {},
+    "Failed to put that note back",
+  );
+  return body.topOfMindNote;
+}
+
+export async function fetchTopOfMindStatus(): Promise<ApiTopOfMindGenerationStatus> {
+  const body = await getJson<{ status: ApiTopOfMindGenerationStatus }>(
+    apiPath("/top-of-mind/status"),
+    "Failed to load top-of-mind status",
+  );
+  return body.status;
+}
+
+export async function refreshTopOfMind(): Promise<{ job: ApiMeaningGraphRebuildJob }> {
+  return postJson(
+    apiPath("/top-of-mind/refresh"),
+    {},
+    "Failed to start a new top-of-mind reading",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Group Top of Mind boards (US-052)
 // ---------------------------------------------------------------------------
@@ -1562,6 +1743,80 @@ export async function refreshGroupTopOfMind(
     apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
     {},
     "Failed to refresh group top of mind",
+  );
+}
+
+export async function fetchGroupCombinationReading(
+  groupId: string,
+): Promise<ApiGroupCombinationReading | null> {
+  const body = await getJson<{ reading: ApiGroupCombinationReading | null }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/reading`),
+    "Failed to load the room's shared top of mind",
+  );
+  return body.reading;
+}
+
+export async function fetchGroupReadingStatus(
+  groupId: string,
+  options: { ensure?: boolean } = {},
+): Promise<ApiGroupReadingGenerationStatus> {
+  const query = options.ensure === false ? "?ensure=0" : "";
+  const body = await getJson<{ status: ApiGroupReadingGenerationStatus }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/reading/status${query}`),
+    "Failed to load this room's reading status",
+  );
+  return body.status;
+}
+
+export async function requestGroupReadingRefresh(
+  groupId: string,
+): Promise<ApiGroupReadingGenerationStatus> {
+  const body = await postJson<{ status: ApiGroupReadingGenerationStatus }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/reading/refresh`),
+    {},
+    "Failed to start this room's reread",
+  );
+  return body.status;
+}
+
+export async function fetchGroupDirection(groupId: string): Promise<ApiGroupDirection> {
+  const body = await getJson<{ direction: ApiGroupDirection }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/direction`),
+    "Failed to load this room's shared top of mind",
+  );
+  return body.direction;
+}
+
+export async function addGroupDirectionContribution(
+  groupId: string,
+  input: { kind: ApiGroupDirectionContributionKind; body: string },
+): Promise<{
+  contribution: ApiGroupDirectionContribution;
+  contributorCount: number;
+  requiredContributors: number;
+  updateReady: boolean;
+}> {
+  return postJson(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/direction/contributions`),
+    input,
+    "Failed to add your thought",
+  );
+}
+
+export async function respondToGroupDirectionProposal(
+  groupId: string,
+  proposalId: string,
+  value: ApiGroupDirectionResponseValue,
+): Promise<{
+  decision: "adopted" | "kept_current" | "pending";
+  direction: ApiGroupDirection;
+}> {
+  return postJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/direction/proposals/${encodeURIComponent(proposalId)}/respond`,
+    ),
+    { value },
+    "Failed to save your response",
   );
 }
 

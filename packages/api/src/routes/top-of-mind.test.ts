@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createTopOfMindRoutes,
+  getTopOfMindGenerationStatusForUser,
   getTopOfMindNoteForUser,
   listTopOfMindNotesForUser,
   type TopOfMindNoteSurface,
@@ -72,6 +73,22 @@ function createFeedbackRowsSelect<T>(terminal: T) {
     from: vi.fn(() => ({
       where: vi.fn(() => ({
         orderBy: vi.fn(async () => terminal),
+      })),
+    })),
+  };
+}
+
+function createWhereRowsSelect<T>(terminal: T) {
+  return {
+    from: vi.fn(() => ({ where: vi.fn(async () => terminal) })),
+  };
+}
+
+function createLatestJobSelect<T>(terminal: T) {
+  return {
+    from: vi.fn(() => ({
+      where: vi.fn(() => ({
+        orderBy: vi.fn(() => ({ limit: vi.fn(async () => terminal) })),
       })),
     })),
   };
@@ -1180,6 +1197,7 @@ describe("GET /api/top-of-mind", () => {
           id: moment.id,
           title: longCorrectionText,
           ambientSignal: longCorrectionText,
+          body: longCorrectionText,
         },
       ],
     });
@@ -1461,5 +1479,136 @@ describe("GET /api/top-of-mind/:noteId", () => {
 
     expect(response.status).toBe(400);
     expect(getNote).not.toHaveBeenCalled();
+  });
+});
+
+describe("top-of-mind wall actions", () => {
+  const noteId = "00000000-0000-4000-8000-000000000010";
+  const note = {
+    id: noteId,
+    isPinned: true,
+    status: "active",
+  } as TopOfMindNoteSurface;
+
+  it("persists pin state through a dedicated endpoint", async () => {
+    const setPinned = vi.fn(async () => note);
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => ({}) as any,
+        getTopOfMind: vi.fn(),
+        setPinned,
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const response = await app.request(`/api/top-of-mind/${noteId}/pin`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pinned: true }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(setPinned).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userId: user.id, noteId, pinned: true }),
+    );
+  });
+
+  it("dismisses and restores the same provisional note", async () => {
+    const dismissNote = vi.fn(async () => true);
+    const restoreNote = vi.fn(async () => note);
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => ({}) as any,
+        getTopOfMind: vi.fn(),
+        dismissNote,
+        restoreNote,
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    expect(
+      (await app.request(`/api/top-of-mind/${noteId}/dismiss`, { method: "POST" })).status,
+    ).toBe(200);
+    expect(
+      (await app.request(`/api/top-of-mind/${noteId}/restore`, { method: "POST" })).status,
+    ).toBe(200);
+    expect(dismissNote).toHaveBeenCalledWith(expect.anything(), { userId: user.id, noteId });
+    expect(restoreNote).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ userId: user.id, noteId }),
+    );
+  });
+
+  it("exposes processing status and queues an explicit solo reread", async () => {
+    const getStatus = vi.fn(async () => ({
+      phase: "processing" as const,
+      message: "Reading your inspirations into context.",
+      signalCount: 5,
+      contextNodeCount: 2,
+      evidenceCount: 5,
+      noteCount: 0,
+      job: null,
+    }));
+    const requestRefresh = vi.fn(async () => ({ jobId: "job-1", job: { id: "job-1" } as any }));
+    const app = new Hono();
+    app.route(
+      "/api/top-of-mind",
+      createTopOfMindRoutes({
+        getDatabase: () => ({}) as any,
+        getTopOfMind: vi.fn(),
+        getStatus,
+        requestRefresh,
+        authMiddleware: authMiddleware(),
+      }),
+    );
+
+    const statusResponse = await app.request("/api/top-of-mind/status");
+    const refreshResponse = await app.request("/api/top-of-mind/refresh", { method: "POST" });
+
+    expect(statusResponse.status).toBe(200);
+    await expect(statusResponse.json()).resolves.toMatchObject({ status: { phase: "processing" } });
+    expect(refreshResponse.status).toBe(202);
+    expect(requestRefresh).toHaveBeenCalledWith(user.id);
+  });
+
+  it("does not call an all-dismissed wall ready just because generated rows remain", async () => {
+    const db = {
+      select: vi
+        .fn()
+        .mockReturnValueOnce(createWhereRowsSelect([{ count: 5 }]))
+        .mockReturnValueOnce(createWhereRowsSelect([{ count: 2 }]))
+        .mockReturnValueOnce(createWhereRowsSelect([{ count: 5 }]))
+        .mockReturnValueOnce(createWhereRowsSelect([{ id: noteId }]))
+        .mockReturnValueOnce(
+          createLatestJobSelect([
+            {
+              id: "00000000-0000-4000-8000-000000000099",
+              type: "process_inspiration",
+              status: "succeeded",
+              lastError: null,
+              updatedAt: new Date("2026-08-04T10:00:00.000Z"),
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          createFeedbackRowsSelect([
+            {
+              targetId: noteId,
+              value: "not_true",
+              correctionText: null,
+              metadata: {},
+            },
+          ]),
+        ),
+    };
+
+    const status = await getTopOfMindGenerationStatusForUser(db as any, user.id);
+
+    expect(status).toMatchObject({ phase: "needs_more_context", noteCount: 0 });
   });
 });

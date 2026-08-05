@@ -44,10 +44,14 @@ import {
 import {
   createInspiration,
   createFeedback,
+  addGroupDirectionContribution,
+  dismissTopOfMindNote,
   createGroup,
   deleteGroup,
   createReflection,
   fetchGroupTopOfMind,
+  fetchGroupDirection,
+  fetchGroupReadingStatus,
   fetchGroups,
   fetchReflections,
   fetchRoomTimeline,
@@ -61,24 +65,32 @@ import {
   uploadToPresignedUrl,
   deleteReflection,
   recordInspirationRevisit,
-  refreshGroupTopOfMind,
+  requestGroupReadingRefresh,
+  respondToGroupDirectionProposal,
+  refreshTopOfMind,
+  restoreTopOfMindNote,
+  setTopOfMindNotePinned,
   updateInspiration,
   joinGroup,
   leaveGroup,
   removeGroupMember,
   renameGroup,
   fetchTopOfMindNotes,
+  fetchTopOfMindStatus,
   generateGuidedReflectionQuestion,
   updateTopOfMindNote,
   type ApiGroupMemberSummary,
   type ApiGroupSummary,
   type ApiGroupTopOfMindNote,
+  type ApiGroupDirection,
+  type ApiGroupReadingGenerationStatus,
   type ApiReflection,
   type ApiRoomTimeline,
   type ApiSavedSignalSearchResult,
   type ApiSignalReading,
   type InspirationRevisitEventType,
   type ApiTopOfMindNoteSurface,
+  type ApiTopOfMindGenerationStatus,
 } from "../lib/api";
 
 /**
@@ -87,7 +99,7 @@ import {
  * `wall` is home. Everything else is something happening in front of it, and
  * the wall is still there behind -- receded, never replaced.
  */
-type State = "wall" | "reading" | "save" | "ask" | "capture";
+type State = "wall" | "reading" | "save" | "ask" | "capture" | "direction";
 
 /** The room you are standing in. `null` is your own wall. */
 type RoomId = string | null;
@@ -101,10 +113,33 @@ type RoomId = string | null;
  */
 interface Reading {
   id: string;
+  title: string | null;
   text: string;
+  scope: "solo" | "group";
+  isPinned: boolean;
   hands: string[];
-  evidence: { id: string; text: string; quote: string | null; author: string | null }[];
+  evidence: {
+    id: string;
+    text: string;
+    quote: string | null;
+    author: string | null;
+    ownerUserId: string | null;
+  }[];
   createdAt: string | null;
+}
+
+/**
+ * Full signal detail belongs to the owner. A room member receives the shared
+ * excerpt that grounded the room reading, but must never probe another
+ * member's owner-only signal endpoint just because the two signals were cited
+ * together.
+ */
+export function canLoadFullSignal(
+  scope: "solo" | "group",
+  ownerUserId: string | null,
+  viewerUserId: string | undefined,
+): boolean {
+  return scope === "solo" || Boolean(viewerUserId && ownerUserId === viewerUserId);
 }
 
 function readingFromGroupNote(note: ApiGroupTopOfMindNote): Reading {
@@ -113,9 +148,13 @@ function readingFromGroupNote(note: ApiGroupTopOfMindNote): Reading {
     text: preview.textPreview ?? "",
     quote: preview.quote ?? null,
     author: preview.authorName ?? null,
+    ownerUserId: preview.authorUserId ?? null,
   }));
   return {
     id: note.id,
+    title: note.title?.trim() || null,
+    scope: "group",
+    isPinned: false,
     // `body` is the sentence the judge wrote; `title` is its short label. The
     // sentence is what belongs on a post-it -- the label reads as a heading
     // for something that is not there.
@@ -134,9 +173,13 @@ function readingFromSoloNote(note: ApiTopOfMindNoteSurface): Reading {
     text: preview.textPreview ?? "",
     quote: preview.quote ?? null,
     author: null,
+    ownerUserId: null,
   }));
   return {
     id: note.id,
+    title: note.title?.trim() || null,
+    scope: "solo",
+    isPinned: note.isPinned,
     text: note.body?.trim() || note.title || "",
     // Your own wall has no other hands on it, and stamping "you" on every
     // reading is noise.
@@ -290,6 +333,99 @@ function showsDebug(): boolean {
    about keeping things must never lose. */
 const DRAFT_KEY = "waka.captureDraft.v1";
 
+export function roomShapingProgressCopy(
+  contributorCount: number,
+  memberCount: number,
+  requiredContributors: number,
+  state: "forming" | "revealed",
+): string {
+  const count = Math.max(0, contributorCount);
+  const members = Math.max(0, memberCount);
+  const required = Math.max(0, requiredContributors);
+  const remaining = Math.max(0, required - count);
+  const participation = `${count} of ${members} shaped this version`;
+  if (remaining > 0) {
+    return `${participation} · ${remaining}${count > 0 ? " more" : ""} needed for ${state === "forming" ? "the first draft" : "an update"}`;
+  }
+  return `${participation} · ${state === "forming" ? "first draft" : "update"} can form`;
+}
+
+export interface RoomFirstReadPresentation {
+  label: string;
+  title: string;
+  detail: string | null;
+}
+
+/**
+ * The first read used to collapse opening, waiting, processing and an honest
+ * "no thread yet" result into one TAKING SHAPE card. Keep those states plain
+ * and stable so an automatic draft arriving never looks accidental.
+ */
+export function roomFirstReadPresentation(input: {
+  memberCount: number;
+  sharedInspirationCount: number;
+  phase: ApiGroupReadingGenerationStatus["phase"] | null;
+  loading: boolean;
+  hasFormingRead: boolean;
+}): RoomFirstReadPresentation {
+  if (input.loading) {
+    return {
+      label: "CHECKING THE ROOM",
+      title: "Opening the shared read…",
+      detail: null,
+    };
+  }
+  if (input.memberCount < 2) {
+    return {
+      label: "WAITING FOR SOMEONE",
+      title: "Invite another person to begin.",
+      detail: "A shared read needs at least two people.",
+    };
+  }
+  if (input.phase === "failed") {
+    return {
+      label: "FIRST READ · PAUSED",
+      title: "The first read didn’t finish.",
+      detail: "The room’s shared inspirations are still here.",
+    };
+  }
+  if (input.sharedInspirationCount === 0) {
+    return {
+      label: "WAITING FOR SHARED MATERIAL",
+      title: "There are no shared inspirations to read yet.",
+      detail: null,
+    };
+  }
+  if (input.phase === "processing" || input.phase === null) {
+    return {
+      label: "FIRST READ · IN PROGRESS",
+      title: "Finding the room’s first shared thread…",
+      detail: "If a shared thread holds, a living draft appears here automatically.",
+    };
+  }
+  if (input.hasFormingRead) {
+    return {
+      label: "FIRST READ · OPEN TO THE ROOM",
+      title: "No shared thread holds yet.",
+      detail: "Member takes can help the first draft form.",
+    };
+  }
+  return {
+    label: "FIRST READ · TAKING SHAPE",
+    title: "No shared thread holds yet.",
+    detail: "The room can try the read again as its shared material changes.",
+  };
+}
+
+export function roomDirectionEvidenceCopy(
+  evidence: Array<{ signalId: string; userId: string }>,
+  memberCount: number,
+): string {
+  const inspirationCount = new Set(evidence.map((item) => item.signalId)).size;
+  const representedCount = new Set(evidence.map((item) => item.userId)).size;
+  return `${inspirationCount} inspiration${inspirationCount === 1 ? "" : "s"} behind this draft · ${representedCount} of ${memberCount} member${memberCount === 1 ? "" : "s"} represented`;
+}
+
 /** Every URL in what you typed. These become link attachments, which is what
  *  makes the page behind them readable to the judge at all. */
 function urlsIn(text: string): string[] {
@@ -305,6 +441,18 @@ export default function SurfacePage(): JSX.Element {
   const [members, setMembers] = useState<ApiGroupMemberSummary[]>([]);
   const [readings, setReadings] = useState<Reading[]>([]);
   const [loading, setLoading] = useState(true);
+  const [surfaceNotice, setSurfaceNotice] = useState<string | null>(null);
+  const [generationStatus, setGenerationStatus] =
+    useState<ApiTopOfMindGenerationStatus | null>(null);
+  const [direction, setDirection] = useState<ApiGroupDirection | null>(null);
+  const [roomGenerationStatus, setRoomGenerationStatus] =
+    useState<ApiGroupReadingGenerationStatus | null>(null);
+  const [directionDraft, setDirectionDraft] = useState("");
+  const [directionSaving, setDirectionSaving] = useState(false);
+  const [directionReviewing, setDirectionReviewing] = useState(false);
+  const [selectedDirectionVersion, setSelectedDirectionVersion] =
+    useState<string | null>(null);
+  const directionInputRef = useRef<HTMLTextAreaElement>(null);
 
   const [openReading, setOpenReading] = useState<Reading | null>(null);
   /*
@@ -368,16 +516,6 @@ export default function SurfacePage(): JSX.Element {
   /* The unfiltered solo wall, so travelling can always come back. */
   const soloAll = useRef<Reading[]>([]);
 
-  const reloadSolo = useCallback(() => {
-    void fetchTopOfMindNotes({ limit: 12 })
-      .then((notes) => {
-        const mapped = notes.map(readingFromSoloNote);
-        soloAll.current = mapped;
-        setReadings(mapped);
-      })
-      .catch(() => undefined);
-  }, []);
-
   const travel = useCallback(
     (at: string | null) => {
       if (!room) {
@@ -412,24 +550,32 @@ export default function SurfacePage(): JSX.Element {
             what the room actually said then rather than what it would say
             about that material now.
           */
-          const mapped = board.map((note) => ({
+            const mapped = board.map((note) => ({
               id: note.id,
+              title: note.title?.trim() || null,
               text: note.why?.trim() || note.title,
+              scope: "group" as const,
+              isPinned: false,
               hands: Array.from(new Set(note.evidence.map((e) => e.ownerName).filter(Boolean))),
               evidence: note.evidence.map((e) => ({
                 id: e.signalId,
                 text: e.textPreview,
                 quote: null,
                 author: e.ownerName,
+                ownerUserId: e.ownerUserId,
               })),
             createdAt: note.createdAt,
           }));
           setBoards((current) => ({ ...current, [at ?? "now"]: mapped }));
           setReadings(mapped);
         })
-        .catch(() => undefined);
+        .catch((error) => {
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "That moment could not be loaded.",
+          );
+        });
     },
-    [boards, reloadSolo, room],
+    [boards, room],
   );
 
   /*
@@ -532,17 +678,58 @@ export default function SurfacePage(): JSX.Element {
     if (!user) return;
     let cancelled = false;
     setLoading(true);
+    setSurfaceNotice(null);
     (async () => {
       try {
         let next: Reading[];
         if (room) {
-          const board = await fetchGroupTopOfMind(room);
+          // All three calls are stored/queue reads. The wall and ambition are
+          // independent saved surfaces, so load them together; generation
+          // progress must never hold either one behind a spinner.
+          void fetchGroupReadingStatus(room)
+            .then((status) => {
+              if (!cancelled) setRoomGenerationStatus(status);
+            })
+            .catch((error) => {
+              if (!cancelled) {
+                setSurfaceNotice(
+                  error instanceof Error
+                    ? error.message
+                    : "This room's reading status is unavailable.",
+                );
+              }
+            });
+          const [board, roomDirection] = await Promise.all([
+            fetchGroupTopOfMind(room),
+            fetchGroupDirection(room).catch((error) => {
+              if (!cancelled) {
+                setSurfaceNotice(
+                  error instanceof Error
+                    ? error.message
+                    : "This room's shared top of mind could not be loaded.",
+                );
+              }
+              return null;
+            }),
+          ]);
           next = board.notes.map(readingFromGroupNote);
-          if (!cancelled) setMembers(board.members ?? []);
+          if (!cancelled) {
+            setMembers(board.members ?? []);
+            setDirection(roomDirection);
+            setGenerationStatus(null);
+          }
         } else {
-          next = (await fetchTopOfMindNotes({ limit: 12 })).map(readingFromSoloNote);
+          const [notes, status] = await Promise.all([
+            fetchTopOfMindNotes({ limit: 12 }),
+            fetchTopOfMindStatus(),
+          ]);
+          next = notes.map(readingFromSoloNote);
           if (!cancelled) {
             setMembers([]);
+            setDirection(null);
+            setRoomGenerationStatus(null);
+            setGenerationStatus(status);
+            if (status.phase === "failed") setSurfaceNotice(status.message);
             soloAll.current = next;
           }
         }
@@ -550,11 +737,13 @@ export default function SurfacePage(): JSX.Element {
         // Precision over recall: however many held is however many show. There
         // is no fill target here, so a wall of two is a finished wall.
         setReadings(next.filter((r) => r.text.trim().length > 0));
-      } catch {
-        // A room that will not load shows an empty wall rather than an error
-        // banner: the empty state already says "nothing holds here yet", and a
-        // second message about plumbing is not what you came for.
-        if (!cancelled) setReadings([]);
+      } catch (error) {
+        if (!cancelled) {
+          setReadings([]);
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "This wall could not be loaded.",
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -563,6 +752,89 @@ export default function SurfacePage(): JSX.Element {
       cancelled = true;
     };
   }, [room, user?.id]);
+
+  useEffect(() => {
+    if (room || generationStatus?.phase !== "processing") return undefined;
+    let cancelled = false;
+    const poll = window.setInterval(() => {
+      void fetchTopOfMindStatus()
+        .then(async (status) => {
+          if (cancelled) return;
+          if (status.phase === "processing") {
+            setGenerationStatus(status);
+            return;
+          }
+
+          // Load the completed reading before changing the phase. Changing the
+          // phase first tears down this effect and marks the request cancelled,
+          // which used to leave a successfully generated wall visibly empty.
+          const notes = await fetchTopOfMindNotes({ limit: 12 });
+          if (cancelled) return;
+          const mapped = notes.map(readingFromSoloNote);
+          soloAll.current = mapped;
+          setReadings(mapped);
+          setGenerationStatus(status);
+          if (status.phase === "failed") setSurfaceNotice(status.message);
+          window.clearInterval(poll);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setSurfaceNotice(
+              error instanceof Error ? error.message : "Reading status is unavailable.",
+            );
+          }
+        });
+    }, 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+    };
+  }, [generationStatus?.phase, room]);
+
+  useEffect(() => {
+    if (!room || roomGenerationStatus?.phase !== "processing") return undefined;
+    let cancelled = false;
+    const poll = window.setInterval(() => {
+      void fetchGroupReadingStatus(room, { ensure: false })
+        .then(async (status) => {
+          if (cancelled) return;
+          if (status.phase === "processing") {
+            setRoomGenerationStatus(status);
+            return;
+          }
+
+          // The worker has committed both stages. Swap in the saved result as
+          // one visible update; the old wall stayed usable for the whole pass.
+          const [board, roomDirection] = await Promise.all([
+            fetchGroupTopOfMind(room),
+            fetchGroupDirection(room),
+          ]);
+          if (cancelled) return;
+          setMembers(board.members ?? []);
+          setReadings(board.notes.map(readingFromGroupNote));
+          setDirection(roomDirection);
+          setRoomGenerationStatus(status);
+          setLastRead(
+            status.phase === "failed"
+              ? "the latest reread did not finish"
+              : "read just now",
+          );
+          if (status.phase === "failed") setSurfaceNotice(status.message);
+          window.clearInterval(poll);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            setSurfaceNotice(
+              error instanceof Error ? error.message : "Reading status is unavailable.",
+            );
+          }
+        });
+    }, 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+    };
+  }, [room, roomGenerationStatus?.phase]);
 
   useEffect(() => {
     // Only a room has a life. Your own wall is one person's, and there is no
@@ -577,8 +849,13 @@ export default function SurfacePage(): JSX.Element {
       .then((response) => {
         if (!cancelled) setTimeline(response.timeline);
       })
-      .catch(() => {
-        if (!cancelled) setTimeline(null);
+      .catch((error) => {
+        if (!cancelled) {
+          setTimeline(null);
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "This room's timeline is unavailable.",
+          );
+        }
       });
     return () => {
       cancelled = true;
@@ -606,7 +883,13 @@ export default function SurfacePage(): JSX.Element {
       .then((all) => {
         if (!cancelled) setSavedCount(all.length);
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        if (!cancelled) {
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "Your inspiration count is unavailable.",
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -619,7 +902,13 @@ export default function SurfacePage(): JSX.Element {
       .then((next) => {
         if (!cancelled) setRooms(next);
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        if (!cancelled) {
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "Your rooms could not be loaded.",
+          );
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -637,8 +926,13 @@ export default function SurfacePage(): JSX.Element {
         .then((next) => {
           if (!cancelled) setResults(next);
         })
-        .catch(() => {
-          if (!cancelled) setResults([]);
+        .catch((error) => {
+          if (!cancelled) {
+            setResults([]);
+            setSurfaceNotice(
+              error instanceof Error ? error.message : "Your inspirations could not be searched.",
+            );
+          }
         })
         .finally(() => {
           if (!cancelled) setSearching(false);
@@ -683,6 +977,14 @@ export default function SurfacePage(): JSX.Element {
     // part that mattered.
     reading.evidence.forEach((piece) => {
       if (!piece.id) return;
+      /**
+       * `/api/signals/:id` is intentionally owner-only. A room note can cite
+       * another member's shared inspiration, but membership grants the excerpt
+       * the room used — not access to that person's private signal archive.
+       * Asking the owner-only endpoint for those citations produced the very
+       * misleading "Signal not found" error when a room reading opened.
+       */
+      if (!canLoadFullSignal(reading.scope, piece.ownerUserId, user?.id)) return;
       sawSave(piece.id, "detail_opened");
       void fetchSavedSignalDetail(piece.id)
         .then((detail) =>
@@ -691,9 +993,13 @@ export default function SurfacePage(): JSX.Element {
             [piece.id]: detail.rawText ?? detail.textPreview ?? "",
           })),
         )
-        .catch(() => undefined);
+        .catch((error) => {
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "That inspiration could not be opened.",
+          );
+        });
     });
-  }, [sawSave]);
+  }, [sawSave, user?.id]);
 
   const enterSave = useCallback((signal: ApiSavedSignalSearchResult) => {
     setOpenSave(signal);
@@ -709,8 +1015,20 @@ export default function SurfacePage(): JSX.Element {
     setAnswer("");
     setState("save");
     sawSave(signal.id, "detail_opened");
-    void fetchSignalReadings(signal.id).then(setBecame).catch(() => undefined);
-    void fetchReflections(signal.id).then(setReflections).catch(() => undefined);
+    void fetchSignalReadings(signal.id)
+      .then(setBecame)
+      .catch((error) =>
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "Its readings could not be loaded.",
+        ),
+      );
+    void fetchReflections(signal.id)
+      .then(setReflections)
+      .catch((error) =>
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "Its reflections could not be loaded.",
+        ),
+      );
     void fetchSavedSignalDetail(signal.id)
       .then((detail) => {
         setFullText((current) => ({
@@ -727,7 +1045,11 @@ export default function SurfacePage(): JSX.Element {
             ),
         );
       })
-      .catch(() => undefined);
+      .catch((error) => {
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "That inspiration could not be loaded.",
+        );
+      });
   }, []);
 
   /*
@@ -793,16 +1115,35 @@ export default function SurfacePage(): JSX.Element {
         /* private mode */
       }
       setKept(
-        links.length > 0
-          ? "Kept, and the page behind that link is being read."
-          : "Kept. It sits with what you have been circling — the room reads it on its next pass.",
+        !shareToGroups
+          ? "Kept privately. Your rooms will not read this one."
+          : links.length > 0
+            ? "Kept and shared. The page behind that link is being read."
+            : room
+              ? "Kept and shared with this room. It will join the next read."
+              : "Kept. It sits with what you have been circling.",
       );
+      if (room) {
+        void Promise.all([
+          fetchGroupReadingStatus(room),
+          fetchGroupDirection(room),
+        ])
+          .then(([status, nextDirection]) => {
+            setRoomGenerationStatus(status);
+            setDirection(nextDirection);
+          })
+          .catch(() => undefined);
+      } else {
+        void fetchTopOfMindStatus()
+          .then((status) => setGenerationStatus(status))
+          .catch(() => undefined);
+      }
     } catch {
       setKept("Could not keep that. It is still in the box; try again.");
     } finally {
       setKeeping(false);
     }
-  }, [draft, files, keeping, shareToGroups]);
+  }, [draft, files, keeping, room, shareToGroups]);
 
   /* The draft survives a refresh. */
   useEffect(() => {
@@ -1015,13 +1356,17 @@ export default function SurfacePage(): JSX.Element {
             ...current,
             [moment.at]: board.map((note) => ({
               id: note.id,
+              title: note.title?.trim() || null,
               text: note.why?.trim() || note.title,
+              scope: "group" as const,
+              isPinned: false,
               hands: Array.from(new Set(note.evidence.map((e) => e.ownerName).filter(Boolean))),
               evidence: note.evidence.map((e) => ({
                 id: e.signalId,
                 text: e.textPreview,
                 quote: null,
                 author: e.ownerName,
+                ownerUserId: e.ownerUserId,
               })),
               createdAt: note.createdAt,
             })),
@@ -1137,58 +1482,69 @@ export default function SurfacePage(): JSX.Element {
     editable thing, the way it was in the shipped wall. Pin and take-down are
     two small marks in the corner of the paper.
   */
-  const [held, setHeld] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [undo, setUndo] = useState<{ id: string; text: string } | null>(null);
+  const [undo, setUndo] = useState<Reading | null>(null);
   const undoTimer = useRef<number | null>(null);
   const saveTimers = useRef<Record<string, number>>({});
 
   /* Autosave, debounced. A correction you have to confirm is a correction you
      will abandon halfway. */
   const rewrite = useCallback((reading: Reading, next: string) => {
+    if (reading.scope !== "solo") return;
     setDrafts((current) => ({ ...current, [reading.id]: next }));
     if (saveTimers.current[reading.id]) window.clearTimeout(saveTimers.current[reading.id]);
     saveTimers.current[reading.id] = window.setTimeout(() => {
       const text = next.trim();
       if (!text || text === reading.text) return;
-      setReadings((current) =>
-        current.map((r) => (r.id === reading.id ? { ...r, text } : r)),
-      );
-      void updateTopOfMindNote(reading.id, { title: text }).catch(() => undefined);
+      void updateTopOfMindNote(reading.id, { title: text })
+        .then((updated) => {
+          const canonical = readingFromSoloNote(updated);
+          setReadings((current) =>
+            current.map((r) => (r.id === reading.id ? canonical : r)),
+          );
+          setSurfaceNotice(null);
+        })
+        .catch((error) => {
+          setDrafts((current) => ({ ...current, [reading.id]: reading.text }));
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "That correction was not saved.",
+          );
+        });
     }, 900);
   }, []);
 
-  const hold = useCallback(
-    (reading: Reading) => {
-      const on = !held.has(reading.id);
-      setHeld((current) => {
-        const next = new Set(current);
-        if (on) next.add(reading.id);
-        else next.delete(reading.id);
-        return next;
+  const hold = useCallback((reading: Reading) => {
+    if (reading.scope !== "solo") return;
+    const pinned = !reading.isPinned;
+    void setTopOfMindNotePinned(reading.id, pinned)
+      .then((updated) => {
+        const canonical = readingFromSoloNote(updated);
+        setReadings((current) =>
+          current.map((item) => (item.id === reading.id ? canonical : item)),
+        );
+        setSurfaceNotice(null);
+      })
+      .catch((error) => {
+        setSurfaceNotice(error instanceof Error ? error.message : "That note did not move.");
       });
-      void createFeedback({
-        targetType: "top_of_mind_note",
-        targetId: reading.id,
-        // The API has no "un-hold", so releasing one is recorded as the
-        // opposite judgement rather than as an absence.
-        value: on ? "important" : "not_important",
-      }).catch(() => undefined);
-    },
-    [held],
-  );
+  }, []);
 
   const takeDown = useCallback((reading: Reading) => {
-    setReadings((current) => current.filter((r) => r.id !== reading.id));
-    if (undoTimer.current) window.clearTimeout(undoTimer.current);
-    setUndo({ id: reading.id, text: reading.text });
-    undoTimer.current = window.setTimeout(() => setUndo(null), 4200);
-    void createFeedback({
-      targetType: "top_of_mind_note",
-      targetId: reading.id,
-      value: "not_true",
-      correctionText: "taken down from the wall",
-    }).catch(() => undefined);
+    if (reading.scope !== "solo") return;
+    void dismissTopOfMindNote(reading.id)
+      .then(() => {
+        setReadings((current) => current.filter((r) => r.id !== reading.id));
+        soloAll.current = soloAll.current.filter((r) => r.id !== reading.id);
+        if (undoTimer.current) window.clearTimeout(undoTimer.current);
+        setUndo(reading);
+        undoTimer.current = window.setTimeout(() => setUndo(null), 4200);
+        setSurfaceNotice(null);
+      })
+      .catch((error) => {
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "That note could not be taken down.",
+        );
+      });
   }, []);
 
   /*
@@ -1208,8 +1564,15 @@ export default function SurfacePage(): JSX.Element {
         if (!text) return;
         setFullText((current) => ({ ...current, [id]: text }));
         void updateInspiration(id, { text })
-          .then(() => sawSave(id, "inspiration_updated"))
-          .catch(() => undefined);
+          .then(() => {
+            sawSave(id, "inspiration_updated");
+            setSurfaceNotice(null);
+          })
+          .catch((error) => {
+            setSurfaceNotice(
+              error instanceof Error ? error.message : "That change was not saved.",
+            );
+          });
       }, 900);
     },
     [sawSave],
@@ -1224,7 +1587,7 @@ export default function SurfacePage(): JSX.Element {
     would be the product lying about what it just did, so this is the one act
     on the surface that stops and asks.
   */
-  const dropSave = useCallback((signal: ApiSavedSignalSearchResult) => {
+  const dropSave = useCallback(async (signal: ApiSavedSignalSearchResult) => {
     if (
       !window.confirm(
         "Delete this inspiration? Readings already made from it stay, but it cannot be brought back.",
@@ -1232,15 +1595,29 @@ export default function SurfacePage(): JSX.Element {
     ) {
       return;
     }
-    setResults((current) => current.filter((r) => r.id !== signal.id));
-    setOpenSave(null);
-    setState("ask");
-    void deleteInspiration(signal.id).catch(() => undefined);
+    try {
+      await deleteInspiration(signal.id);
+      setResults((current) => current.filter((r) => r.id !== signal.id));
+      setOpenSave(null);
+      setState("ask");
+      setSurfaceNotice(null);
+    } catch (error) {
+      setSurfaceNotice(
+        error instanceof Error ? error.message : "That inspiration was not deleted.",
+      );
+    }
   }, []);
 
-  const dropReflection = useCallback((reflection: ApiReflection) => {
-    setReflections((current) => current.filter((r) => r.id !== reflection.id));
-    void deleteReflection(reflection.inspirationId, reflection.id).catch(() => undefined);
+  const dropReflection = useCallback(async (reflection: ApiReflection) => {
+    try {
+      await deleteReflection(reflection.inspirationId, reflection.id);
+      setReflections((current) => current.filter((r) => r.id !== reflection.id));
+      setSurfaceNotice(null);
+    } catch (error) {
+      setSurfaceNotice(
+        error instanceof Error ? error.message : "That reflection was not deleted.",
+      );
+    }
   }, []);
 
   /*
@@ -1275,20 +1652,22 @@ export default function SurfacePage(): JSX.Element {
     setRereading(true);
     try {
       if (!room) {
-        // Your own wall has no refresh endpoint — the solo pass runs on its
-        // own schedule — so reading it again means asking for it again.
-        const notes = await fetchTopOfMindNotes({ limit: 12 });
-        setReadings(notes.map(readingFromSoloNote));
-        setLastRead("read just now");
+        await refreshTopOfMind();
+        const status = await fetchTopOfMindStatus();
+        setGenerationStatus(status);
+        setLastRead("reading your context now…");
         return;
       }
-      const next = await refreshGroupTopOfMind(room);
-      setReadings(next.notes.map(readingFromGroupNote));
+      const status = await requestGroupReadingRefresh(room);
+      setRoomGenerationStatus(status);
       setLastRead(
-        next.refreshed ? "read just now" : "looked just now — nothing new held",
+        status.phase === "processing"
+          ? "reading new shared material…"
+          : status.message,
       );
-    } catch {
-      setLastRead("could not read the room just now");
+    } catch (error) {
+      setLastRead("could not read this just now");
+      setSurfaceNotice(error instanceof Error ? error.message : "The reading did not start.");
     } finally {
       setRereading(false);
     }
@@ -1302,32 +1681,121 @@ export default function SurfacePage(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [lastRead]);
 
-  const reload = useCallback(() => {
-    void (room
-      ? fetchGroupTopOfMind(room).then((b) => setReadings(b.notes.map(readingFromGroupNote)))
-      : fetchTopOfMindNotes({ limit: 12 }).then((n) => setReadings(n.map(readingFromSoloNote))));
+  const shapeDirection = useCallback((target: "proposal" | "composer" = "composer") => {
+    if (!room) return;
+    setSelectedDirectionVersion(null);
+    setState("direction");
+    window.setTimeout(() => {
+      if (target === "proposal") {
+        document.querySelector<HTMLElement>(".sf-direction-proposal")?.scrollIntoView({
+          block: "center",
+        });
+        return;
+      }
+      directionInputRef.current?.scrollIntoView({ block: "center" });
+      directionInputRef.current?.focus({ preventScroll: true });
+    }, 60);
   }, [room]);
+
+  const saveDirectionContribution = useCallback(async () => {
+    if (!room || !directionDraft.trim() || directionSaving) return;
+    setDirectionSaving(true);
+    try {
+      const result = await addGroupDirectionContribution(room, {
+        kind: "take",
+        body: directionDraft.trim(),
+      });
+      const contribution = result.contribution;
+      setDirection((current) =>
+        current
+          ? {
+              ...current,
+              contributorCount: result.contributorCount,
+              requiredContributors: result.requiredContributors,
+              contributions: [
+                contribution,
+                ...current.contributions.filter((item) => item.id !== contribution.id),
+              ],
+            }
+          : current,
+      );
+      setDirectionDraft("");
+      setSurfaceNotice(null);
+
+      // The note is already durable. These reads only surface whether the room
+      // has enough collective movement to prepare a proposal yet.
+      const [nextDirection, status] = await Promise.all([
+        fetchGroupDirection(room),
+        fetchGroupReadingStatus(room, { ensure: false }),
+      ]);
+      setDirection(nextDirection);
+      setRoomGenerationStatus(status);
+    } catch (error) {
+      setSurfaceNotice(
+        error instanceof Error ? error.message : "That thought was not added to the room.",
+      );
+    } finally {
+      setDirectionSaving(false);
+    }
+  }, [directionDraft, directionSaving, room]);
+
+  const reviewDirection = useCallback(
+    async (value: "accept" | "keep_current") => {
+      if (!room || !direction?.proposal || directionReviewing) return;
+      setDirectionReviewing(true);
+      try {
+        const result = await respondToGroupDirectionProposal(
+          room,
+          direction.proposal.id,
+          value,
+        );
+        setDirection(result.direction);
+        setSelectedDirectionVersion(null);
+        setSurfaceNotice(null);
+        if (result.decision === "adopted") setLastRead("the room adopted a new top of mind");
+        if (result.decision === "kept_current") setLastRead("the room kept its current top of mind");
+      } catch (error) {
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "That response was not saved.",
+        );
+      } finally {
+        setDirectionReviewing(false);
+      }
+    },
+    [direction?.proposal, directionReviewing, room],
+  );
+
+  const openDirectionVersion = useMemo(
+    () =>
+      selectedDirectionVersion
+        ? direction?.history.find((version) => version.id === selectedDirectionVersion) ?? null
+        : null,
+    [direction?.history, selectedDirectionVersion],
+  );
 
   const putBack = useCallback(() => {
     if (!undo) return;
     if (undoTimer.current) window.clearTimeout(undoTimer.current);
-    // A deleted save is gone server-side; the honest undo is to say so rather
-    // than to pretend. Only a reading can actually be put back, because taking
-    // one down is feedback, not a delete.
-    setUndo(null);
-    // Re-fetch rather than splice it back at the end: the wall is ordered by
-    // shared material, and a note put back in the wrong place is a lie about
-    // what it sits beside.
-    reload();
-  }, [reload, undo]);
+    void restoreTopOfMindNote(undo.id)
+      .then((restored) => {
+        const canonical = readingFromSoloNote(restored);
+        setUndo(null);
+        setReadings((current) => [...current, canonical]);
+        soloAll.current = [...soloAll.current, canonical];
+        setSurfaceNotice(null);
+      })
+      .catch((error) => {
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "That note could not be put back.",
+        );
+      });
+  }, [undo]);
 
   /*
     Making a room, and getting into one.
 
-    ONE field does both. "Which of these am I doing" is a question the product
-    can answer from what you typed — a join code is short and has no spaces, a
-    room name is anything else — so asking the person to pick a mode first is
-    work the machine should be doing.
+    One field accepts either kind of value, but the two explicit verbs keep a
+    one-word room name from being mistaken for an invite code.
   */
   /*
     An invite link OFFERS the join; it never performs it.
@@ -1348,9 +1816,16 @@ export default function SurfacePage(): JSX.Element {
       setRooms((current) =>
         current.some((r) => r.id === joined.group.id) ? current : [...current, joined.group],
       );
+      setLoading(true);
+      setMembers([]);
+      setDirection(null);
+      setRoomGenerationStatus(null);
+      setLastRead(null);
       setRoom(joined.group.id);
-    } catch {
-      /* a bad code simply does not open a room */
+    } catch (error) {
+      setSurfaceNotice(
+        error instanceof Error ? error.message : "That invitation could not be accepted.",
+      );
     } finally {
       setOfferedCode(null);
       window.history.replaceState({}, "", window.location.pathname);
@@ -1369,25 +1844,34 @@ export default function SurfacePage(): JSX.Element {
   const [renameTo, setRenameTo] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const makeOrJoinRoom = useCallback(async () => {
+  const makeOrJoinRoom = useCallback(async (intent: "make" | "join") => {
     const value = roomInput.trim();
     if (!value || roomBusy) return;
     setRoomBusy(true);
     setRoomError(null);
     try {
-      const looksLikeCode = /^[A-Za-z0-9-]{4,24}$/.test(value) && !value.includes(" ");
-      const made = looksLikeCode
-        ? await joinGroup(value).then((r) => r.group)
-        : await createGroup(value);
+      const made =
+        intent === "join"
+          ? await joinGroup(value).then((r) => r.group)
+          : await createGroup(value);
       setRooms((current) =>
         current.some((r) => r.id === made.id) ? current : [...current, made],
       );
       setRoomInput("");
+      setLoading(true);
+      setMembers([]);
+      setDirection(null);
+      setRoomGenerationStatus(null);
+      setLastRead(null);
       setRoom(made.id);
       setState("wall");
-    } catch {
+    } catch (error) {
       setRoomError(
-        "That is not a room name we could make, or a code we could find. Try again.",
+        error instanceof Error
+          ? error.message
+          : intent === "join"
+            ? "That room code could not be found."
+            : "That room could not be made.",
       );
     } finally {
       setRoomBusy(false);
@@ -1404,6 +1888,37 @@ export default function SurfacePage(): JSX.Element {
 
   const roomName = room ? (rooms.find((r) => r.id === room)?.name ?? "room") : "your top of mind";
   const activeRoom = room ? (rooms.find((r) => r.id === room) ?? null) : null;
+  const hasRevealedDirection =
+    direction?.current?.state === "revealed" && Boolean(direction.current.ambition);
+  const roomIsReading = roomGenerationStatus?.phase === "processing";
+  const directionContributorCount = direction?.contributorCount ?? 0;
+  const sharedInspirationCount =
+    direction?.sharedInspirationCount ?? roomGenerationStatus?.sharedSignalCount ?? 0;
+  const sharedContributorCount = direction?.sharedContributorCount ?? 0;
+  const firstReadPresentation = roomFirstReadPresentation({
+    memberCount: members.length,
+    sharedInspirationCount,
+    phase: roomGenerationStatus?.phase ?? null,
+    loading,
+    hasFormingRead: direction?.current?.state === "forming",
+  });
+  const copyRoomInvite = useCallback(async () => {
+    if (!activeRoom?.joinCode) return;
+    const inviteUrl = new URL("/", window.location.origin);
+    inviteUrl.searchParams.set("join", activeRoom.joinCode);
+    if (!navigator.clipboard) {
+      setSurfaceNotice("Copy is unavailable here. Open the people menu to select the room code.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(inviteUrl.toString());
+      setCopied(true);
+      setSurfaceNotice(null);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setSurfaceNotice("The invite link could not be copied.");
+    }
+  }, [activeRoom?.joinCode]);
 
   // The name steps back when the surface is busy: still present, so you always
   // know which wall you are at, but no longer competing with what you came to
@@ -1429,8 +1944,18 @@ export default function SurfacePage(): JSX.Element {
         onBlur={() => {
           const next = renameTo.trim();
           if (!next || next === roomName) return;
-          setRooms((current) => current.map((r) => (r.id === room ? { ...r, name: next } : r)));
-          void renameGroup(room, next).catch(() => undefined);
+          void renameGroup(room, next)
+            .then(() => {
+              setRooms((current) =>
+                current.map((r) => (r.id === room ? { ...r, name: next } : r)),
+              );
+              setSurfaceNotice(null);
+            })
+            .catch((error) => {
+              setSurfaceNotice(
+                error instanceof Error ? error.message : "That room was not renamed.",
+              );
+            });
         }}
       />
 
@@ -1438,13 +1963,7 @@ export default function SurfacePage(): JSX.Element {
         <button
           type="button"
           className="sf-invite"
-          onClick={() => {
-            void navigator.clipboard
-              ?.writeText(activeRoom.joinCode)
-              .then(() => setCopied(true))
-              .catch(() => undefined);
-            window.setTimeout(() => setCopied(false), 1800);
-          }}
+          onClick={() => void copyRoomInvite()}
         >
           <span className="sf-invite-code">{activeRoom.joinCode}</span>
           <small>{copied ? "copied" : "invite someone"}</small>
@@ -1471,8 +1990,18 @@ export default function SurfacePage(): JSX.Element {
                 type="button"
                 className="sf-remove"
                 onClick={() => {
-                  setMembers((current) => current.filter((m) => m.userId !== member.userId));
-                  void removeGroupMember(room, member.userId).catch(() => undefined);
+                  void removeGroupMember(room, member.userId)
+                    .then(() => {
+                      setMembers((current) =>
+                        current.filter((m) => m.userId !== member.userId),
+                      );
+                      setSurfaceNotice(null);
+                    })
+                    .catch((error) => {
+                      setSurfaceNotice(
+                        error instanceof Error ? error.message : "That person was not removed.",
+                      );
+                    });
                 }}
               >
                 remove
@@ -1491,7 +2020,7 @@ export default function SurfacePage(): JSX.Element {
         <button
           type="button"
           className="sf-leave"
-          onClick={() => {
+          onClick={async () => {
             if (
               !window.confirm(
                 `Delete “${roomName}” for everyone? The readings it made are lost with it.`,
@@ -1499,9 +2028,15 @@ export default function SurfacePage(): JSX.Element {
             ) {
               return;
             }
-            setRooms((current) => current.filter((r) => r.id !== room));
-            setRoom(null);
-            void deleteGroup(room).catch(() => undefined);
+            try {
+              await deleteGroup(room);
+              setRooms((current) => current.filter((r) => r.id !== room));
+              setRoom(null);
+            } catch (error) {
+              setSurfaceNotice(
+                error instanceof Error ? error.message : "That room was not deleted.",
+              );
+            }
           }}
         >
           delete this room
@@ -1511,11 +2046,17 @@ export default function SurfacePage(): JSX.Element {
       <button
         type="button"
         className="sf-leave"
-        onClick={() => {
+        onClick={async () => {
           if (!window.confirm("Leave this room? Your saves stop being read here.")) return;
-          setRooms((current) => current.filter((r) => r.id !== room));
-          setRoom(null);
-          void leaveGroup(room).catch(() => undefined);
+          try {
+            await leaveGroup(room);
+            setRooms((current) => current.filter((r) => r.id !== room));
+            setRoom(null);
+          } catch (error) {
+            setSurfaceNotice(
+              error instanceof Error ? error.message : "You did not leave the room.",
+            );
+          }
         }}
       >
         leave this room
@@ -1578,12 +2119,24 @@ export default function SurfacePage(): JSX.Element {
           it is the button. Icon and text, each doing one job.
         */}
         <p className="sf-lastread">
-          <span>{lastRead ?? lastReadLabel}</span>
+          <span>
+            {lastRead ??
+              (room && loading
+                ? "opening the saved room…"
+                : room && roomGenerationStatus?.phase === "processing"
+                ? "reading new shared material…"
+                : lastReadLabel)}
+          </span>
           <button
             type="button"
-            className={`sf-reread${rereading ? " spinning" : ""}`}
+            className={`sf-reread${rereading || loading || (!room && generationStatus?.phase === "processing") || (room && roomGenerationStatus?.phase === "processing") ? " spinning" : ""}`}
             onClick={() => void reread()}
-            disabled={rereading}
+            disabled={
+              rereading ||
+              loading ||
+              (!room && generationStatus?.phase === "processing") ||
+              Boolean(room && roomGenerationStatus?.phase === "processing")
+            }
             title="read this room again"
             aria-label="read this room again"
           >
@@ -1593,14 +2146,104 @@ export default function SurfacePage(): JSX.Element {
             </svg>
           </button>
         </p>
+        {room && state !== "direction" ? (
+          <section
+            className="sf-room-intent"
+            data-state={direction?.current?.state ?? "forming"}
+            aria-label="shared top of mind"
+          >
+            <div className="sf-room-intent-head">
+              <small>
+                shared top of mind · {hasRevealedDirection
+                  ? "living draft"
+                  : roomIsReading || !direction?.current
+                    ? "first read in progress"
+                    : "open to the room"}
+              </small>
+              {direction?.proposal ? (
+                <button type="button" className="sf-direction-new" onClick={() => shapeDirection("proposal")}>
+                  update ready to review
+                </button>
+              ) : null}
+            </div>
+            <p className="sf-room-intent-claim">
+              {direction?.current?.ambition ??
+                (loading
+                  ? "Opening the room’s saved read…"
+                  : firstReadPresentation.title)}
+            </p>
+            <div className="sf-room-intent-foot">
+              <span>
+                {direction
+                  ? `${direction.sharedInspirationCount} shared inspiration${direction.sharedInspirationCount === 1 ? "" : "s"} · ${direction.sharedContributorCount} of ${direction.memberCount} members represented`
+                  : ""}
+                {direction?.current ? ` · updated ${whenShort(direction.current.createdAt)}` : ""}
+                {direction?.current && direction.newInspirationCount
+                  ? ` · ${direction.newInspirationCount} new inspiration${direction.newInspirationCount === 1 ? "" : "s"} since this reading`
+                  : ""}
+              </span>
+              {direction?.current?.evidence.length ? (
+                <span
+                  className="sf-direction-faces"
+                  aria-label={`${direction.current.contributorCount} members represented in this draft`}
+                >
+                  {Array.from(
+                    new Map(
+                      direction.current.evidence.map((item) => [item.userId, item.memberName]),
+                    ).entries(),
+                  ).map(([userId, name]) => (
+                    <span
+                      key={userId}
+                      className="sf-face"
+                      title={name}
+                      style={{ background: contributorColor(name) }}
+                    >
+                      {contributorInitials(name)}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="sf-direction-open"
+                onClick={() => {
+                  if (members.length < 2) {
+                    void copyRoomInvite();
+                    return;
+                  }
+                  shapeDirection(direction?.proposal ? "proposal" : "composer");
+                }}
+              >
+                {members.length < 2
+                  ? copied
+                    ? "invite link copied"
+                    : "invite someone"
+                  : direction?.proposal
+                    ? "review update"
+                    : direction?.current
+                      ? "shape this together"
+                      : "view first read"}
+              </button>
+            </div>
+          </section>
+        ) : null}
       </header>
 
       <div className="sf-body">
+        {surfaceNotice ? (
+          <p className="sf-surface-notice" role="alert">{surfaceNotice}</p>
+        ) : null}
         {/* ---------------------------------------------------------- WALL */}
         <section className={`sf-layer sf-layer--wall${state === "wall" ? " on" : ""}`}>
           {loading ? null : readings.length === 0 ? (
             <p className="sf-empty">
-              Nothing here holds yet. That is about the material, not about anyone in the room.
+              {!room && generationStatus
+                ? generationStatus.message
+                : roomGenerationStatus
+                  ? roomGenerationStatus.message
+                  : room && members.length < 2
+                  ? "This room needs another person before it can make a shared reading. Use the + by your face to invite someone."
+                  : "Nothing here holds yet. That is about the material, not about anyone in the room."}
             </p>
           ) : (
             <div className="sf-wall">
@@ -1611,7 +2254,7 @@ export default function SurfacePage(): JSX.Element {
                 return (
                   <article
                     key={reading.id}
-                    className={`sf-postit${dragging === i ? " sf-postit--dragging" : ""}${held.has(reading.id) ? " sf-postit--held" : ""}`}
+                    className={`sf-postit${dragging === i ? " sf-postit--dragging" : ""}${reading.isPinned ? " sf-postit--held" : ""}`}
                     style={{
                       ["--bg" as string]: paper.hue,
                       ["--ink" as string]: paper.ink,
@@ -1648,7 +2291,12 @@ export default function SurfacePage(): JSX.Element {
                       value={drafts[reading.id] ?? reading.text}
                       rows={1}
                       spellCheck
-                      aria-label="this reading — edit to correct it"
+                      readOnly={reading.scope === "group"}
+                      aria-label={
+                        reading.scope === "solo"
+                          ? "this reading — edit to correct it"
+                          : "shared room reading"
+                      }
                       onPointerDown={(event) => event.stopPropagation()}
                       onChange={(event) => rewrite(reading, event.target.value)}
                     />
@@ -1693,13 +2341,14 @@ export default function SurfacePage(): JSX.Element {
                         layout that shifted under the cursor. Here the row is
                         the same shape always and only their contrast changes.
                       */}
+                      {reading.scope === "solo" ? (
                       <span className="sf-postit-acts">
                         <button
                           type="button"
-                          className={`sf-act${held.has(reading.id) ? " on" : ""}`}
-                          title={held.has(reading.id) ? "held — click to release" : "hold this"}
-                          aria-label={held.has(reading.id) ? "release" : "hold"}
-                          aria-pressed={held.has(reading.id)}
+                          className={`sf-act${reading.isPinned ? " on" : ""}`}
+                          title={reading.isPinned ? "held — click to release" : "hold this"}
+                          aria-label={reading.isPinned ? "release" : "hold"}
+                          aria-pressed={reading.isPinned}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => {
                             event.stopPropagation();
@@ -1734,12 +2383,346 @@ export default function SurfacePage(): JSX.Element {
                           </svg>
                         </button>
                       </span>
+                      ) : null}
                     </footer>
                   </article>
                 );
               })}
             </div>
           )}
+        </section>
+
+        {/* ------------------------------------------- SHARED TOP OF MIND */}
+        <section
+          className={`sf-layer sf-layer--direction${state === "direction" ? " on" : ""}`}
+          aria-label="shape this room's shared top of mind"
+        >
+          {room ? (
+            <div className="sf-direction-workspace">
+              <main className="sf-direction-main">
+                <button type="button" className="sf-back" onClick={toWall}>
+                  ← the wall
+                </button>
+                <div className="sf-direction-titleline">
+                  <div>
+                    <span className="sf-label">SHARED TOP OF MIND</span>
+                    <h2>What we’re finding together</h2>
+                    <p className="sf-direction-titleline-note">
+                      The first read starts automatically from shared inspirations. Members shape how it evolves.
+                    </p>
+                  </div>
+                  {direction?.current && direction.newInspirationCount ? (
+                    <span>
+                      {direction.newInspirationCount} new inspiration{direction.newInspirationCount === 1 ? "" : "s"} from {direction.newContributorCount} member{direction.newContributorCount === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
+                </div>
+
+                {openDirectionVersion ? (
+                  <article className="sf-direction-version-focus">
+                    <button
+                      type="button"
+                      className="sf-quiet"
+                      onClick={() => setSelectedDirectionVersion(null)}
+                    >
+                      ← current top of mind
+                    </button>
+                    <span className="sf-label">
+                      VERSION {openDirectionVersion.versionNumber} · {" "}
+                      {new Date(openDirectionVersion.createdAt).toLocaleDateString(undefined, {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                    <p className="sf-direction-statement">{openDirectionVersion.ambition}</p>
+                    {openDirectionVersion.changeSummary ? (
+                      <p className="sf-direction-change">{openDirectionVersion.changeSummary}</p>
+                    ) : (
+                      <p className="sf-direction-change">The room’s first shared top of mind.</p>
+                    )}
+                    {openDirectionVersion.evidence.length ? (
+                      <div className="sf-direction-evidence">
+                        <span className="sf-label">SHARED INSPIRATIONS BEHIND IT</span>
+                        {openDirectionVersion.evidence.map((piece) => (
+                          <blockquote key={`${piece.signalId}:${piece.quote}`}>
+                            <p>“{piece.quote}”</p>
+                            <footer>shared by {piece.memberName}</footer>
+                          </blockquote>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                ) : (
+                  <>
+                    {hasRevealedDirection && direction?.current ? (
+                      <article className="sf-direction-current">
+                        <span className="sf-label">
+                          CURRENT · VERSION {direction.current.versionNumber} · LIVING DRAFT
+                        </span>
+                        <p className="sf-direction-statement">{direction.current.ambition}</p>
+                        <p className="sf-direction-current-meta">
+                          {roomDirectionEvidenceCopy(
+                            direction.current.evidence,
+                            direction.memberCount,
+                          )} · {whenShort(direction.current.createdAt)}
+                        </p>
+                      </article>
+                    ) : (
+                      <article className="sf-direction-forming">
+                        <span className="sf-label">{firstReadPresentation.label}</span>
+                        <h3>{firstReadPresentation.title}</h3>
+                        {firstReadPresentation.detail ? (
+                          <p className="sf-direction-forming-note">
+                            {firstReadPresentation.detail}
+                          </p>
+                        ) : null}
+                        {!loading ? (
+                          <div className="sf-direction-material-count">
+                            <b>{sharedInspirationCount}</b>
+                            <span>shared inspiration{sharedInspirationCount === 1 ? "" : "s"}</span>
+                            <b>{sharedContributorCount}/{members.length}</b>
+                            <span>
+                              members represented
+                              {direction && sharedContributorCount < direction.requiredContributors
+                                ? ` · ${direction.requiredContributors - sharedContributorCount} more needed`
+                                : ""}
+                            </span>
+                          </div>
+                        ) : null}
+                        {members.length < 2 ? (
+                          <button
+                            type="button"
+                            className="sf-direction-primary"
+                            onClick={() => void copyRoomInvite()}
+                          >
+                            {copied ? "invite link copied" : "invite someone"}
+                          </button>
+                        ) : roomGenerationStatus?.phase === "failed" ? (
+                          <button
+                            type="button"
+                            className="sf-direction-primary"
+                            disabled={rereading}
+                            onClick={() => void reread()}
+                          >
+                            {rereading ? "trying again…" : "try the room read again"}
+                          </button>
+                        ) : null}
+                      </article>
+                    )}
+
+                    {direction?.proposal?.ambition ? (
+                      <article className="sf-direction-proposal">
+                        <div className="sf-direction-proposal-head">
+                          <span className="sf-label">SUGGESTED UPDATE</span>
+                          <span>{direction.responses.length} of {direction.requiredResponses} reviewed</span>
+                        </div>
+                        <p className="sf-direction-proposal-statement">
+                          {direction.proposal.ambition}
+                        </p>
+                        {direction.proposal.changeSummary ? (
+                          <details className="sf-direction-proposal-change">
+                            <summary>What changed</summary>
+                            <p>{direction.proposal.changeSummary}</p>
+                          </details>
+                        ) : null}
+                        <div className="sf-direction-review-actions">
+                          <button
+                            type="button"
+                            className={direction.viewerResponse === "accept" ? "on" : ""}
+                            aria-pressed={direction.viewerResponse === "accept"}
+                            disabled={directionReviewing}
+                            onClick={() => void reviewDirection("accept")}
+                          >
+                            use update
+                          </button>
+                          <button
+                            type="button"
+                            className={direction.viewerResponse === "keep_current" ? "on" : ""}
+                            aria-pressed={direction.viewerResponse === "keep_current"}
+                            disabled={directionReviewing}
+                            onClick={() => void reviewDirection("keep_current")}
+                          >
+                            keep current
+                          </button>
+                          <button type="button" className="sf-quiet" onClick={() => shapeDirection("composer")}>
+                            suggest a change
+                          </button>
+                        </div>
+                      </article>
+                    ) : null}
+
+                    {hasRevealedDirection && direction?.current ? (
+                      <details className="sf-direction-context">
+                        <summary>
+                          <span>Why this read</span>
+                          <small>{direction.current.facets.length} theme{direction.current.facets.length === 1 ? "" : "s"} · {direction.current.evidence.length} source{direction.current.evidence.length === 1 ? "" : "s"}</small>
+                        </summary>
+                        <div className="sf-direction-context-body">
+                          {direction.current.facets.length ? (
+                            <div className="sf-direction-growth">
+                              <small>what’s growing</small>
+                              {direction.current.facets.map((facet) => (
+                                <p key={`${facet.dimension}:${facet.text}`}>
+                                  <b>{facet.dimension}</b>
+                                  {facet.text}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
+                          <div className="sf-direction-details">
+                            {direction.current.awayFrom ? (
+                              <div>
+                                <small>moving away from</small>
+                                <p>{direction.current.awayFrom}</p>
+                              </div>
+                            ) : null}
+                            {direction.current.tension ? (
+                              <div>
+                                <small>a tension worth keeping</small>
+                                <p>{direction.current.tension}</p>
+                              </div>
+                            ) : null}
+                            {direction.current.nextQuestion ? (
+                              <div>
+                                <small>open question</small>
+                                <p>{direction.current.nextQuestion}</p>
+                              </div>
+                            ) : null}
+                          </div>
+                          {direction.current.evidence.length ? (
+                            <div className="sf-direction-evidence">
+                              <span className="sf-label">SHARED INSPIRATIONS BEHIND IT</span>
+                              {direction.current.evidence.map((piece) => (
+                                <blockquote key={`${piece.signalId}:${piece.quote}`}>
+                                  <p>“{piece.quote}”</p>
+                                  <footer>shared by {piece.memberName}</footer>
+                                </blockquote>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </details>
+                    ) : null}
+
+                    {direction?.current ? (
+                    <section className="sf-direction-shape">
+                      <div className="sf-direction-shape-head">
+                        <h3>Shape this together</h3>
+                        {direction?.current && members.length >= 2 ? (
+                          <span>
+                            {roomShapingProgressCopy(
+                              directionContributorCount,
+                              direction.memberCount,
+                              direction.requiredContributors,
+                              direction.current.state,
+                            )}
+                          </span>
+                        ) : null}
+                      </div>
+                      {direction?.current && members.length >= 2 ? (
+                        <div className="sf-direction-compose">
+                          <label className="sr-only" htmlFor="sf-direction-thought">
+                            Your take on this shared read
+                          </label>
+                          <textarea
+                            id="sf-direction-thought"
+                            ref={directionInputRef}
+                            value={directionDraft}
+                            maxLength={600}
+                            placeholder="What should this read say?"
+                            onChange={(event) => setDirectionDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                                void saveDirectionContribution();
+                              }
+                            }}
+                          />
+                          <div>
+                            <button
+                              type="button"
+                              disabled={!directionDraft.trim() || directionSaving}
+                              onClick={() => void saveDirectionContribution()}
+                            >
+                              {directionSaving ? "sharing…" : "share take"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="sf-direction-compose-locked">
+                          {members.length < 2 ? (
+                            <button
+                              type="button"
+                              className="sf-direction-primary"
+                              onClick={() => void copyRoomInvite()}
+                            >
+                              {copied ? "invite link copied" : "invite someone"}
+                            </button>
+                          ) : (
+                            <p>Preparing the first shared read…</p>
+                          )}
+                        </div>
+                      )}
+                      {direction?.contributions.length ? (
+                        <div className="sf-direction-notes">
+                          {direction.contributions.map((note, index) => {
+                            const paper = NOTE_COLORS[index % NOTE_COLORS.length]!;
+                            return (
+                              <article
+                                key={note.id}
+                                style={{
+                                  ["--bg" as string]: paper.hue,
+                                  ["--ink" as string]: paper.ink,
+                                  ["--note-tilt" as string]: `${index % 2 === 0 ? -0.8 : 0.7}deg`,
+                                }}
+                              >
+                                <p>{note.body}</p>
+                                <footer>
+                                  <span
+                                    className="sf-face"
+                                    style={{ background: contributorColor(note.memberName) }}
+                                  >
+                                    {contributorInitials(note.memberName)}
+                                  </span>
+                                  {note.memberName}
+                                </footer>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </section>
+                    ) : null}
+                  </>
+                )}
+                {direction && direction.history.length > 1 ? (
+                  <details className="sf-direction-history-disclosure">
+                    <summary>Earlier versions ({direction.history.length - 1})</summary>
+                    <div>
+                      {direction.history.map((version, index) => {
+                        const isCurrent = version.id === direction.current?.id;
+                        return (
+                          <button
+                            type="button"
+                            key={version.id}
+                            className={`${selectedDirectionVersion === version.id ? "on" : ""}${isCurrent ? " current" : ""}`}
+                            onClick={() =>
+                              isCurrent
+                                ? setSelectedDirectionVersion(null)
+                                : setSelectedDirectionVersion(version.id)
+                            }
+                          >
+                            <span>{isCurrent ? `version ${version.versionNumber} · current` : `version ${version.versionNumber} · ${whenShort(version.createdAt)}`}</span>
+                            <p>{version.changeSummary ?? (index === direction.history.length - 1 ? "First shared top of mind" : version.ambition)}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ) : null}
+              </main>
+            </div>
+          ) : null}
         </section>
 
         {/* ------------------------------------------------------- READING */}
@@ -1752,7 +2735,8 @@ export default function SurfacePage(): JSX.Element {
               <p className="sf-claim">{openReading.text}</p>
               <div className="sf-label">
                 made from {openEvidence.length} inspiration
-                {openEvidence.length === 1 ? "" : "s"} you saved
+                {openEvidence.length === 1 ? "" : "s"}
+                {openReading.scope === "group" ? " shared in this room" : " you saved"}
               </div>
               {/*
                 One block per save, each with the hand that wrote it. A reading
@@ -1763,6 +2747,11 @@ export default function SurfacePage(): JSX.Element {
               {openEvidence.map((piece) => {
                 const whole = fullText[piece.id];
                 const isOpen = expanded.has(piece.id);
+                const canOpenWhole = canLoadFullSignal(
+                  openReading.scope,
+                  piece.ownerUserId,
+                  user?.id,
+                );
                 return (
                   <article key={piece.id} className="sf-evidence">
                     <header className="sf-evidence-head">
@@ -1791,20 +2780,24 @@ export default function SurfacePage(): JSX.Element {
                         no exact words named — {paragraphs(piece.text)[0]?.slice(0, 120)}…
                       </p>
                     )}
-                    <button
-                      type="button"
-                      className="sf-more"
-                      onClick={() =>
-                        setExpanded((current) => {
-                          const next = new Set(current);
-                          if (next.has(piece.id)) next.delete(piece.id);
-                          else next.add(piece.id);
-                          return next;
-                        })
-                      }
-                    >
-                      {isOpen ? "less" : "the whole save"}
-                    </button>
+                    {canOpenWhole ? (
+                      <button
+                        type="button"
+                        className="sf-more"
+                        onClick={() =>
+                          setExpanded((current) => {
+                            const next = new Set(current);
+                            if (next.has(piece.id)) next.delete(piece.id);
+                            else next.add(piece.id);
+                            return next;
+                          })
+                        }
+                      >
+                        {isOpen ? "less" : "the whole save"}
+                      </button>
+                    ) : (
+                      <span className="sf-shared-excerpt">shared excerpt</span>
+                    )}
                   </article>
                 );
               })}
@@ -1934,12 +2927,20 @@ export default function SurfacePage(): JSX.Element {
                     type="button"
                     className={saveRating === value ? "on" : ""}
                     onClick={() => {
-                      setSaveRating(value);
                       void createFeedback({
                         targetType: "signal",
                         targetId: openSave.id,
                         value,
-                      }).catch(() => undefined);
+                      })
+                        .then(() => {
+                          setSaveRating(value);
+                          setSurfaceNotice(null);
+                        })
+                        .catch((error) => {
+                          setSurfaceNotice(
+                            error instanceof Error ? error.message : "That response was not saved.",
+                          );
+                        });
                     }}
                   >
                     {value === "not_true" ? "not any more" : value === "partly" ? "partly" : "still true"}
@@ -1953,8 +2954,18 @@ export default function SurfacePage(): JSX.Element {
                   className={`sf-share${openSaveShared ? "" : " private"}`}
                   onClick={() => {
                     const next = !openSaveShared;
-                    setOpenSaveShared(next);
-                    void setInspirationSharing(openSave.id, next).catch(() => undefined);
+                    void setInspirationSharing(openSave.id, next)
+                      .then(() => {
+                        setOpenSaveShared(next);
+                        setSurfaceNotice(null);
+                      })
+                      .catch((error) => {
+                        setSurfaceNotice(
+                          error instanceof Error
+                            ? error.message
+                            : "That sharing preference was not saved.",
+                        );
+                      });
                   }}
                 >
                   {openSaveShared ? "your rooms can read this" : "private to you"}
@@ -2118,7 +3129,8 @@ export default function SurfacePage(): JSX.Element {
           ) : null}
           <button
             type="button"
-            className={state === "capture" ? "on" : ""}
+            className={`sf-primary-verb${state === "capture" ? " on" : ""}`}
+            aria-pressed={state === "capture"}
             onClick={() => {
               const opening = state !== "capture";
               setState(opening ? "capture" : "wall");
@@ -2134,7 +3146,8 @@ export default function SurfacePage(): JSX.Element {
           </button>
           <button
             type="button"
-            className={state === "ask" ? "on" : ""}
+            className={`sf-primary-verb${state === "ask" ? " on" : ""}`}
+            aria-pressed={state === "ask"}
             onClick={() => setState(state === "ask" ? "wall" : "ask")}
           >
             {/* The count is the point: it says how much you have kept before
@@ -2155,12 +3168,18 @@ export default function SurfacePage(): JSX.Element {
             away while you pick.
           */}
           <details className="sf-rooms-menu">
-            <summary>rooms</summary>
+            <summary className="sf-primary-verb">rooms</summary>
             <div className="sf-rooms-panel">
               <button
                 type="button"
                 className={`sf-room-row${room === null ? " on" : ""}`}
                 onClick={() => {
+                  toWall();
+                  setLoading(true);
+                  setMembers([]);
+                  setDirection(null);
+                  setRoomGenerationStatus(null);
+                  setLastRead(null);
                   setRoom(null);
                   closeMenus();
                 }}
@@ -2174,6 +3193,12 @@ export default function SurfacePage(): JSX.Element {
                   type="button"
                   className={`sf-room-row${room === r.id ? " on" : ""}`}
                   onClick={() => {
+                    toWall();
+                    setLoading(true);
+                    setMembers([]);
+                    setDirection(null);
+                    setRoomGenerationStatus(null);
+                    setLastRead(null);
                     setRoom(r.id);
                     closeMenus();
                   }}
@@ -2185,34 +3210,38 @@ export default function SurfacePage(): JSX.Element {
                 </button>
               ))}
               {/*
-                One field for both. A join code is short with no spaces; a room
-                name is anything else — so the machine decides which you meant
-                rather than making you pick a mode first.
+                One field, two explicit acts. A short one-word room name and an
+                invite code can look identical, so guessing here loses data.
               */}
               <form
                 className="sf-room-new"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  void makeOrJoinRoom();
+                  void makeOrJoinRoom("make");
                 }}
               >
                 <input
                   value={roomInput}
-                  placeholder="new room, or a code to join one"
+                  placeholder="room name or invite code"
                   onChange={(event) => {
                     setRoomInput(event.target.value);
                     setRoomError(null);
                   }}
-                  aria-label="new room, or a code to join one"
+                  aria-label="room name or invite code"
                 />
                 {roomInput.trim() ? (
-                  <button type="submit" disabled={roomBusy}>
-                    {roomBusy
-                      ? "…"
-                      : /^[A-Za-z0-9-]{4,24}$/.test(roomInput.trim())
-                        ? "join"
-                        : "make"}
-                  </button>
+                  <span className="sf-room-new-acts">
+                    <button type="submit" disabled={roomBusy}>
+                      {roomBusy ? "…" : "make"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={roomBusy}
+                      onClick={() => void makeOrJoinRoom("join")}
+                    >
+                      join
+                    </button>
+                  </span>
                 ) : null}
               </form>
               {roomError ? <p className="sf-room-err">{roomError}</p> : null}
@@ -2284,9 +3313,9 @@ export default function SurfacePage(): JSX.Element {
           The pile is also the way into the room: who is here and how someone
           else gets in belong to the faces, not to a settings screen.
         */}
-        {room && members.length > 0 ? (
+        {room ? (
           <details className="sf-cast-menu">
-            <summary aria-label="about this room">
+            <summary aria-label="about this room and invite someone">
               <span className="sf-cast">
                 {members
                   .filter((m) => m.userId !== user?.id)
@@ -2300,6 +3329,7 @@ export default function SurfacePage(): JSX.Element {
                       {contributorInitials(member.name)}
                     </span>
                   ))}
+                <span className="sf-cast-add" aria-hidden="true">＋</span>
               </span>
             </summary>
             <div className="sf-roomsettings">{roomPanel}</div>

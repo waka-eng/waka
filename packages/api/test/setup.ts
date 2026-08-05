@@ -77,13 +77,16 @@ if (envFile) {
   // default search order) made the whole suite fail at import with a DNS
   // error against the placeholder host.
   //
-  // `override: false` on the base load still honours any value already
-  // exported into the shell; the explicit `override: true` on `.env.local`
-  // lets a developer's local config win over both the shell and `.env`.
+  // `.env.local` overrides repository placeholders, while values explicitly
+  // exported by the runner remain authoritative. The latter is a safety
+  // boundary: a command that points at a disposable local test database must
+  // never be silently redirected to the developer database in `.env.local`.
+  const explicitEnvironment = { ...process.env };
   const baseEnv = resolve(rootDir, ".env");
   if (existsSync(baseEnv)) loadDotenv({ path: baseEnv });
   const localEnv = resolve(rootDir, ".env.local");
   if (existsSync(localEnv)) loadDotenv({ path: localEnv, override: true });
+  Object.assign(process.env, explicitEnvironment);
 }
 
 // ---------------------------------------------------------------------------

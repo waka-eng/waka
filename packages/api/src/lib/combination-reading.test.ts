@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COMBINATION_READER_PROMPT_VERSION,
   GeminiCombinationReader,
   borrowsVerbatim,
   buildCombinationReaderRequest,
@@ -15,6 +16,7 @@ import {
 
 const A = "00000000-0000-4000-8000-0000000000a1";
 const B = "00000000-0000-4000-8000-0000000000b2";
+const C = "00000000-0000-4000-8000-0000000000c3";
 
 function evidence(
   overrides: Partial<CombinationReaderEvidence> & Pick<CombinationReaderEvidence, "signalId">,
@@ -120,6 +122,24 @@ describe("signal set hash", () => {
     };
     expect(signalSetHash(grown)).not.toBe(signalSetHash(input));
   });
+
+  it("changes when existing content changes even if every id stays the same", () => {
+    const edited: CombinationReaderInput = {
+      ...input,
+      evidence: input.evidence.map((item) =>
+        item.signalId === "sig-a"
+          ? { ...item, text: `${item.text} — now with a courtyard` }
+          : item,
+      ),
+    };
+    const revisedNote: CombinationReaderInput = {
+      ...input,
+      notes: input.notes.map((note) => ({ ...note, why: `${note.why} A new connection emerged.` })),
+    };
+
+    expect(signalSetHash(edited)).not.toBe(signalSetHash(input));
+    expect(signalSetHash(revisedNote)).not.toBe(signalSetHash(input));
+  });
 });
 
 describe("quote verification", () => {
@@ -142,6 +162,50 @@ describe("quote verification", () => {
       input.evidence,
     );
     expect(kept).toHaveLength(1);
+    expect(kept[0]!.quote).toBe("the bench they put");
+  });
+
+  it("tolerates Unicode punctuation drift but returns the exact source span", () => {
+    const source = evidence({
+      signalId: "sig-punctuation",
+      text: "I don’t want polished rooms—give me edges.",
+    });
+    const kept = verifyQuotes(
+      [
+        {
+          savedBy: "member A",
+          signalId: source.signalId,
+          quote: "i don't want polished rooms - give me edges",
+        },
+      ],
+      [source],
+    );
+    expect(kept).toEqual([
+      {
+        userId: A,
+        signalId: source.signalId,
+        quote: "I don’t want polished rooms—give me edges",
+      },
+    ]);
+  });
+
+  it("rejects a paraphrase even when most words match", () => {
+    const source = evidence({
+      signalId: "sig-punctuation",
+      text: "I don’t want polished rooms—give me edges.",
+    });
+    expect(
+      verifyQuotes(
+        [
+          {
+            savedBy: "member A",
+            signalId: source.signalId,
+            quote: "I don't want sterile polished rooms, give me edges",
+          },
+        ],
+        [source],
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -245,6 +309,18 @@ describe("the request sent to the model", () => {
     // Deterministic, like every other judged stage in this pipeline.
     expect(request.generationConfig.temperature).toBe(0);
   });
+
+  it("requires exact, untranslated source spans and carries the new prompt version", () => {
+    const request = buildCombinationReaderRequest(input);
+    const instruction = request.systemInstruction.parts[0]!.text;
+    const payload = request.contents[0]!.parts[0]!.text;
+    expect(COMBINATION_READER_PROMPT_VERSION).toBe("combination_reader_v4");
+    expect(payload).toContain('"promptVersion": "combination_reader_v4"');
+    expect(payload).toContain('"requiredMemberVoices": 2');
+    expect(instruction).toContain("EXACT CONTIGUOUS SPAN");
+    expect(instruction).toContain("never translate");
+    expect(instruction).toContain('Do not\n  begin with "we want"');
+  });
 });
 
 describe("reading integrity, enforced on our side", () => {
@@ -276,7 +352,147 @@ describe("reading integrity, enforced on our side", () => {
     const result = await reader.read(input);
     expect(result.state).toBe("forming");
     if (result.state !== "forming") return;
-    expect(result.whatsMissing).toContain("two members");
+    expect(result.whatsMissing).toContain("shared top of mind");
+    expect(result.whatsMissing).not.toMatch(/proposed|traced|validator|model/i);
+  });
+
+  it("derives quote ownership from the source instead of trusting member labels", async () => {
+    const spoofedSecondMember = {
+      ...revealed,
+      quotes: [
+        { savedBy: "member A", signalId: "sig-a", quote: "the bench they put in the window" },
+        {
+          savedBy: "member B",
+          signalId: "sig-a",
+          quote: "the making was visible from the street",
+        },
+      ],
+    };
+    const reader = new GeminiCombinationReader({
+      apiKey: "k",
+      fetchFn: stubFetch(spoofedSecondMember),
+    });
+    const result = await reader.read(input);
+    expect(result.state).toBe("forming");
+    if (result.state !== "forming") return;
+    expect(result.whatsMissing).toContain("shared top of mind");
+  });
+
+  it("allows two members' shaping takes to ground a provisional first read", async () => {
+    const collaborativeInput: CombinationReaderInput = {
+      ...input,
+      notes: [],
+      roomContributions: [
+        {
+          id: "take-a",
+          userId: A,
+          memberLabel: "member A",
+          kind: "feels_true",
+          body: "The visible making is central.",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+        {
+          id: "take-b",
+          userId: B,
+          memberLabel: "member B",
+          kind: "change",
+          body: "I would name how a room guides people without signs.",
+          createdAt: new Date("2026-07-01T00:01:00.000Z"),
+        },
+      ],
+    };
+    const reader = new GeminiCombinationReader({ apiKey: "k", fetchFn: stubFetch(revealed) });
+
+    const result = await reader.read(collaborativeInput);
+    expect(result.state).toBe("revealed");
+  });
+
+  it("does not let one member's take establish a room-wide first read", async () => {
+    const oneTake: CombinationReaderInput = {
+      ...input,
+      notes: [],
+      roomContributions: [
+        {
+          id: "take-a",
+          userId: A,
+          memberLabel: "member A",
+          kind: "feels_true",
+          body: "The visible making is central.",
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+      ],
+    };
+    const reader = new GeminiCombinationReader({ apiKey: "k", fetchFn: stubFetch(revealed) });
+
+    expect((await reader.read(oneTake)).state).toBe("forming");
+  });
+
+  it("requires half of a five-member room to ground a no-note first read", async () => {
+    const take = (
+      id: string,
+      userId: string,
+      memberLabel: string,
+      body: string,
+    ): NonNullable<CombinationReaderInput["roomContributions"]>[number] => ({
+      id,
+      userId,
+      memberLabel,
+      kind: "feels_true",
+      body,
+      createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    });
+    const fiveMemberInput: CombinationReaderInput = {
+      ...input,
+      memberLabels: ["member A", "member B", "member C", "member D", "member E"],
+      notes: [],
+      evidence: [
+        ...input.evidence,
+        evidence({
+          signalId: "sig-c",
+          userId: C,
+          memberLabel: "member C",
+          text: "participation feels natural when unfinished work stays open",
+        }),
+      ],
+      roomContributions: [
+        take("take-a", A, "member A", "The visible making is central."),
+        take("take-b", B, "member B", "The room guides people without signs."),
+      ],
+    };
+    const revealedAcrossHalf = {
+      ...revealed,
+      quotes: [
+        ...revealed.quotes,
+        {
+          savedBy: "member C",
+          signalId: "sig-c",
+          quote: "participation feels natural",
+        },
+      ],
+    };
+    const reader = new GeminiCombinationReader({
+      apiKey: "k",
+      fetchFn: stubFetch(revealedAcrossHalf),
+    });
+
+    expect((await reader.read(fiveMemberInput)).state).toBe("forming");
+    expect((await reader.read({
+      ...fiveMemberInput,
+      roomContributions: [
+        ...fiveMemberInput.roomContributions!,
+        take("take-c", C, "member C", "It makes participation feel natural."),
+      ],
+    })).state).toBe("revealed");
+  });
+
+  it("does not let a two-person note establish a five-member room's first draft", async () => {
+    const reader = new GeminiCombinationReader({ apiKey: "k", fetchFn: stubFetch(revealed) });
+    const result = await reader.read({
+      ...input,
+      memberLabels: ["member A", "member B", "member C", "member D", "member E"],
+    });
+
+    expect(result.state).toBe("forming");
   });
 
   it("falls back to forming when quotes were invented", async () => {
@@ -288,7 +504,11 @@ describe("reading integrity, enforced on our side", () => {
       ],
     };
     const reader = new GeminiCombinationReader({ apiKey: "k", fetchFn: stubFetch(invented) });
-    expect((await reader.read(input)).state).toBe("forming");
+    const result = await reader.read(input);
+    expect(result.state).toBe("forming");
+    if (result.state !== "forming") return;
+    expect(result.whatsMissing).toContain("shared top of mind");
+    expect(result.whatsMissing).not.toMatch(/proposed|traced|validator|model/i);
   });
 
   it("falls back to forming when the ambition quotes a save", async () => {
@@ -300,7 +520,8 @@ describe("reading integrity, enforced on our side", () => {
     const result = await reader.read(input);
     expect(result.state).toBe("forming");
     if (result.state !== "forming") return;
-    expect(result.whatsMissing).toContain("verbatim");
+    expect(result.whatsMissing).toContain("shared top of mind");
+    expect(result.whatsMissing).not.toContain("verbatim");
   });
 
   it("falls back to forming when the ambition restates a note", async () => {
@@ -309,7 +530,8 @@ describe("reading integrity, enforced on our side", () => {
     const result = await reader.read(input);
     expect(result.state).toBe("forming");
     if (result.state !== "forming") return;
-    expect(result.whatsMissing).toContain("restated");
+    expect(result.whatsMissing).toContain("shared top of mind");
+    expect(result.whatsMissing).not.toContain("restated");
   });
 
   it("passes through an honest forming answer", async () => {

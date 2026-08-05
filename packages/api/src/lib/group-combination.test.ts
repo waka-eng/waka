@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  planGroupReadingLifecycle,
+  shouldRegenerateGroupReading,
+  shouldCarryFormationContributions,
+} from "./group-combination-reading.js";
+import {
   buildMemberLabels,
   buildUserPrompt,
   type WowJudgeInput,
@@ -107,5 +112,174 @@ describe("the task the judge is given", () => {
     const group = JSON.parse(buildUserPrompt({ ...base, memberLabelsBySignalId: { t1: "member A", c1: "member B" } }));
     expect(group.input.trigger.savedBy).toBe("member A");
     expect(group.input.candidates[0].savedBy).toBe("member B");
+  });
+});
+
+describe("room reading regeneration", () => {
+  it("regenerates after a prompt upgrade without waiting for new contributors", () => {
+    expect(
+      shouldRegenerateGroupReading({
+        memberCount: 6,
+        directionContributorCount: 0,
+        newInspirationContributorCount: 0,
+        currentState: "revealed",
+        evidenceContributorCount: 2,
+        membershipChanged: false,
+        promptVersionChanged: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps the collective-input gate for an ordinary unchanged room", () => {
+    expect(
+      shouldRegenerateGroupReading({
+        memberCount: 5,
+        directionContributorCount: 2,
+        newInspirationContributorCount: 0,
+        currentState: "revealed",
+        evidenceContributorCount: 2,
+        membershipChanged: false,
+        promptVersionChanged: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldRegenerateGroupReading({
+        memberCount: 5,
+        directionContributorCount: 3,
+        newInspirationContributorCount: 0,
+        currentState: "revealed",
+        evidenceContributorCount: 2,
+        membershipChanged: false,
+        promptVersionChanged: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("lets a forming room try again when shared evidence reaches half the room", () => {
+    expect(
+      shouldRegenerateGroupReading({
+        memberCount: 5,
+        directionContributorCount: 0,
+        newInspirationContributorCount: 0,
+        currentState: "forming",
+        evidenceContributorCount: 3,
+        membershipChanged: false,
+        promptVersionChanged: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not reread a forming room below the room-sized evidence threshold", () => {
+    expect(
+      shouldRegenerateGroupReading({
+        memberCount: 5,
+        directionContributorCount: 0,
+        newInspirationContributorCount: 0,
+        currentState: "forming",
+        evidenceContributorCount: 2,
+        membershipChanged: false,
+        promptVersionChanged: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps inspiration and shaping participation as separate qualifying routes", () => {
+    const base = {
+      memberCount: 6,
+      currentState: "revealed" as const,
+      evidenceContributorCount: 6,
+      membershipChanged: false,
+      promptVersionChanged: false,
+    };
+    expect(shouldRegenerateGroupReading({
+      ...base,
+      directionContributorCount: 2,
+      newInspirationContributorCount: 1,
+    })).toBe(false);
+    expect(shouldRegenerateGroupReading({
+      ...base,
+      directionContributorCount: 3,
+      newInspirationContributorCount: 0,
+    })).toBe(true);
+    expect(shouldRegenerateGroupReading({
+      ...base,
+      directionContributorCount: 0,
+      newInspirationContributorCount: 3,
+    })).toBe(true);
+  });
+});
+
+describe("room reading lifecycle", () => {
+  it("replaces a forming placeholder with the first revealed reading", () => {
+    expect(
+      planGroupReadingLifecycle({
+        currentState: "forming",
+        nextState: "revealed",
+        membershipChanged: false,
+      }),
+    ).toEqual({
+      retireCurrent: true,
+      nextLifecycleStatus: "active",
+      returnCurrent: false,
+    });
+  });
+
+  it("keeps a revealed current when a same-membership pass is only forming", () => {
+    expect(
+      planGroupReadingLifecycle({
+        currentState: "revealed",
+        nextState: "forming",
+        membershipChanged: false,
+      }),
+    ).toEqual({
+      retireCurrent: false,
+      nextLifecycleStatus: "superseded",
+      returnCurrent: true,
+    });
+  });
+
+  it("allows a forming result to replace stale provenance after membership changes", () => {
+    expect(
+      planGroupReadingLifecycle({
+        currentState: "revealed",
+        nextState: "forming",
+        membershipChanged: true,
+      }),
+    ).toEqual({
+      retireCurrent: true,
+      nextLifecycleStatus: "active",
+      returnCurrent: false,
+    });
+  });
+
+  it("continues to propose changed revealed readings beside a revealed current", () => {
+    expect(
+      planGroupReadingLifecycle({
+        currentState: "revealed",
+        nextState: "revealed",
+        membershipChanged: false,
+      }),
+    ).toEqual({
+      retireCurrent: false,
+      nextLifecycleStatus: "proposed",
+      returnCurrent: false,
+    });
+  });
+
+  it("keeps the member takes that shaped the first grounded version", () => {
+    expect(
+      shouldCarryFormationContributions({
+        currentState: "forming",
+        nextState: "revealed",
+        nextLifecycleStatus: "active",
+      }),
+    ).toBe(true);
+    expect(
+      shouldCarryFormationContributions({
+        currentState: "revealed",
+        nextState: "revealed",
+        nextLifecycleStatus: "proposed",
+      }),
+    ).toBe(false);
   });
 });

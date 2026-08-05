@@ -29,7 +29,14 @@ const groupSummary: GroupSummary = {
 
 function mountWith(deps: Parameters<typeof createGroupsRoutes>[0]) {
   const app = new Hono();
-  app.route("/api/groups", createGroupsRoutes({ authMiddleware: authMiddleware(), ...deps }));
+  app.route(
+    "/api/groups",
+    createGroupsRoutes({
+      authMiddleware: authMiddleware(),
+      enqueueRoomReading: vi.fn(async () => undefined),
+      ...deps,
+    }),
+  );
   return app;
 }
 
@@ -210,6 +217,250 @@ describe("POST /api/groups/:groupId/top-of-mind/refresh", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("room reading generation", () => {
+  const status = {
+    phase: "processing" as const,
+    message: "Reading the room.",
+    memberCount: 2,
+    sharedSignalCount: 5,
+    noteCount: 0,
+    job: {
+      id: "00000000-0000-4000-8000-000000000201",
+      type: "group_reading_refresh" as const,
+      status: "pending" as const,
+      lastError: null,
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    },
+  };
+
+  it("ensures an idempotent background pass when status is read", async () => {
+    const getReadingStatus = vi.fn(async () => status);
+    const app = mountWith({ getReadingStatus });
+
+    const response = await app.request(`/api/groups/${groupId}/reading/status`);
+
+    expect(response.status).toBe(200);
+    expect(getReadingStatus).toHaveBeenCalledWith({
+      requestedByUserId: user.id,
+      groupId,
+      preferredLocale: "en-US",
+    });
+    await expect(response.json()).resolves.toEqual({ status });
+  });
+
+  it("uses the lightweight status path while the client polls", async () => {
+    const getReadingStatus = vi.fn(async () => status);
+    const app = mountWith({ getReadingStatus });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/reading/status?ensure=0`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(getReadingStatus).toHaveBeenCalledWith({
+      requestedByUserId: user.id,
+      groupId,
+      preferredLocale: "en-US",
+      ensure: false,
+    });
+  });
+
+  it("queues a manual complete-room pass and returns immediately", async () => {
+    const getReadingStatus = vi.fn(async () => status);
+    const app = mountWith({ getReadingStatus });
+
+    const response = await app.request(`/api/groups/${groupId}/reading/refresh`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(202);
+    expect(getReadingStatus).toHaveBeenCalledWith({
+      requestedByUserId: user.id,
+      groupId,
+      preferredLocale: "en-US",
+      force: true,
+    });
+    await expect(response.json()).resolves.toEqual({ status });
+  });
+
+  it("does not reveal a room to a non-member", async () => {
+    const app = mountWith({ getReadingStatus: vi.fn(async () => null) });
+
+    const response = await app.request(`/api/groups/${groupId}/reading/status`);
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("collaborative room direction", () => {
+  const direction = {
+    current: null,
+    proposal: null,
+    history: [],
+    contributions: [],
+    responses: [],
+    memberCount: 2,
+    sharedInspirationCount: 5,
+    sharedContributorCount: 2,
+    newInspirationCount: 5,
+    newContributorCount: 2,
+    contributorCount: 0,
+    requiredContributors: 2,
+    requiredResponses: 2,
+    viewerResponse: null,
+  };
+
+  it("returns the current direction, collaboration and version history together", async () => {
+    const getDirection = vi.fn(async () => direction);
+    const app = mountWith({ getDatabase: () => ({}) as any, getDirection });
+
+    const response = await app.request(`/api/groups/${groupId}/direction`);
+
+    expect(response.status).toBe(200);
+    expect(getDirection).toHaveBeenCalledWith({}, {
+      userId: user.id,
+      groupId,
+      preferredLocale: "en-US",
+    });
+    await expect(response.json()).resolves.toEqual({ direction });
+  });
+
+  it("adds an attributed shaping note and queues a reread", async () => {
+    const contribution = {
+      id: "00000000-0000-4000-8000-000000000301",
+      readingId: "00000000-0000-4000-8000-000000000302",
+      userId: user.id,
+      memberName: "Ada",
+      kind: "missing" as const,
+      body: "Shared experimentation is missing.",
+      createdAt: "2026-08-04T00:00:00.000Z",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    };
+    const addDirectionContribution = vi.fn(async () => ({
+      ok: true as const,
+      contribution,
+      contributorCount: 2,
+      requiredContributors: 2,
+      updateReady: true,
+    }));
+    const enqueueRoomReading = vi.fn(async () => undefined);
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      addDirectionContribution,
+      enqueueRoomReading,
+    });
+
+    const response = await app.request(`/api/groups/${groupId}/direction/contributions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "missing", body: "Shared experimentation is missing." }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(addDirectionContribution).toHaveBeenCalledWith({}, {
+      userId: user.id,
+      groupId,
+      preferredLocale: "en-US",
+      kind: "missing",
+      body: "Shared experimentation is missing.",
+    });
+    expect(enqueueRoomReading).toHaveBeenCalledWith(groupId, "material_changed");
+    await expect(response.json()).resolves.toEqual({
+      contribution,
+      contributorCount: 2,
+      requiredContributors: 2,
+      updateReady: true,
+    });
+  });
+
+  it("saves a take without queuing a reread before half the room participates", async () => {
+    const contribution = {
+      id: "00000000-0000-4000-8000-000000000303",
+      readingId: "00000000-0000-4000-8000-000000000302",
+      userId: user.id,
+      memberName: "Ada",
+      kind: "take" as const,
+      body: "The open table feels central.",
+      createdAt: "2026-08-04T00:00:00.000Z",
+      updatedAt: "2026-08-04T00:00:00.000Z",
+    };
+    const enqueueRoomReading = vi.fn(async () => undefined);
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      addDirectionContribution: vi.fn(async () => ({
+        ok: true as const,
+        contribution,
+        contributorCount: 2,
+        requiredContributors: 3,
+        updateReady: false,
+      })),
+      enqueueRoomReading,
+    });
+
+    const response = await app.request(`/api/groups/${groupId}/direction/contributions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "take", body: "The open table feels central." }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(enqueueRoomReading).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toMatchObject({
+      contributorCount: 2,
+      requiredContributors: 3,
+      updateReady: false,
+    });
+  });
+
+  it("does not accept blank or unknown contribution prompts", async () => {
+    const addDirectionContribution = vi.fn();
+    const app = mountWith({ addDirectionContribution });
+    const response = await app.request(`/api/groups/${groupId}/direction/contributions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "vote", body: "" }),
+    });
+    expect(response.status).toBe(400);
+    expect(addDirectionContribution).not.toHaveBeenCalled();
+  });
+
+  it("records a member's proposal response and returns the settled snapshot", async () => {
+    const proposalId = "00000000-0000-4000-8000-000000000303";
+    const respondToDirectionProposal = vi.fn(async () => ({
+      ok: true as const,
+      decision: "pending" as const,
+    }));
+    const getDirection = vi.fn(async () => ({ ...direction, viewerResponse: "accept" as const }));
+    const app = mountWith({
+      getDatabase: () => ({}) as any,
+      respondToDirectionProposal,
+      getDirection,
+    });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/direction/proposals/${proposalId}/respond`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ value: "accept" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(respondToDirectionProposal).toHaveBeenCalledWith({}, {
+      userId: user.id,
+      groupId,
+      proposalId,
+      preferredLocale: "en-US",
+      value: "accept",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      decision: "pending",
+      direction: { viewerResponse: "accept" },
+    });
   });
 });
 
