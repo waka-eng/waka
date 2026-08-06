@@ -2624,7 +2624,7 @@ export default function SurfacePage(): JSX.Element {
               ) : null}
               <button
                 type="button"
-                className="sf-direction-open"
+                className="sf-control sf-control--primary sf-direction-open"
                 onClick={() => {
                   if (members.length < 2) {
                     void copyRoomInvite();
@@ -2818,9 +2818,6 @@ export default function SurfacePage(): JSX.Element {
           {room ? (
             <div className="sf-direction-workspace">
               <main className="sf-direction-main">
-                <button type="button" className="sf-back" onClick={toWall}>
-                  ← the wall
-                </button>
                 <div className="sf-direction-titleline">
                   <div>
                     <span className="sf-label">SHARED TOP OF MIND</span>
@@ -3155,9 +3152,6 @@ export default function SurfacePage(): JSX.Element {
         <section className={`sf-layer sf-layer--reading${state === "reading" ? " on" : ""}`}>
           {openReading ? (
             <div className="sf-column">
-              <button type="button" className="sf-back" onClick={toWall}>
-                ← the wall
-              </button>
               <p className="sf-claim">{openReading.text}</p>
               <div className="sf-label">
                 made from {openEvidence.length} inspiration
@@ -3425,9 +3419,6 @@ export default function SurfacePage(): JSX.Element {
         {/* ----------------------------------------------------------- ASK */}
         <section className={`sf-layer sf-layer--ask${state === "ask" ? " on" : ""}`}>
           <div className="sf-column">
-            <button type="button" className="sf-back" onClick={toWall}>
-              ← the wall
-            </button>
             <p className="sf-question">What were you circling?</p>
             <input
               ref={askInputRef}
@@ -3501,9 +3492,6 @@ export default function SurfacePage(): JSX.Element {
         {/* -------------------------------------------------------- CAPTURE */}
       <section className={`sf-layer sf-layer--capture${state === "capture" ? " on" : ""}`}>
         <div className="sf-column">
-          <button type="button" className="sf-back" onClick={toWall}>
-            ← the wall
-          </button>
           <textarea
             ref={draftRef}
             className="sf-draft"

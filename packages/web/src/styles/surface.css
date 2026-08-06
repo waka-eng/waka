@@ -96,7 +96,13 @@
   --sf-reading: clamp(17px, 1.4vw, 21px); /* a reading on its sheet */
   --sf-lead: 16px;                        /* a save's own words; what you type */
   --sf-body: 14px;                        /* running text, lists, results */
-  --sf-nav: 15px;                         /* the three doors into the surface */
+  /*
+     The doors into the surface. Fluid: 15px at phone widths — measured, the
+     four-verb row overflows a 375px screen at anything larger — opening to
+     17px once there is room, because at 15px the app's primary navigation
+     read as metadata.
+  */
+  --sf-nav: clamp(15px, 10px + 1.2vw, 17px);
   --sf-ui: 13px;                          /* every control and verb */
   --sf-meta: 11.5px;                      /* dates, counts, labels — nothing else */
 
@@ -1203,6 +1209,14 @@
 }
 .sf-rooms-menu summary { list-style: none; cursor: pointer; transition: color 0.15s var(--sf-ease); }
 .sf-rooms-menu summary::-webkit-details-marker { display: none; }
+/*
+   Chromium treats a clicked <summary> as keyboard-focused, so the global
+   :focus-visible ring — accent blue — appeared under the open panel on every
+   mouse open. Once the menu is open, the open state IS the focus signal (ink,
+   underline, a panel on screen); a closed menu reached by Tab still gets the
+   ring.
+*/
+.sf-rooms-menu[open] > summary { outline: none; }
 .sf-rooms-menu[open] summary, .sf-rooms-menu summary:hover { color: var(--sf-ink); }
 
 .sf-rooms-panel {
@@ -1254,7 +1268,9 @@
   display: flex;
   align-items: baseline;
   gap: 14px;
-  padding: 9px 10px;
+  /* Menu options are chosen, not read past: a 44px-class target, not a 13px
+     line you have to aim at. */
+  padding: 12px;
   border-radius: 3px;
   transition: background 0.13s var(--sf-ease);
 }
@@ -1266,7 +1282,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--sf-serif);
-  font-size: var(--sf-body);
+  font-size: 17px;
   font-weight: 300;
   font-variation-settings: "opsz" 32;
   color: var(--sf-ink-3);
@@ -1282,22 +1298,17 @@
 .sf-room-row:hover { background: color-mix(in srgb, var(--sf-ink) 5%, transparent); }
 .sf-room-row:hover span { color: var(--sf-ink-2); }
 
-/* The one you are standing in: full ink, and the only mark is a rule down its
-   leading edge in the accent — the same colour that means "this exact one"
-   everywhere else here. */
-.sf-room-row.on { position: relative; }
-.sf-room-row.on span { color: var(--sf-ink); }
+/*
+   The one you are standing in.
 
-.sf-room-row.on::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--sf-mark);
-}
+   This used to be a 2px accent rule down the row's leading edge — which, on a
+   white dropdown, did not read as "current room". It read as a stray blue
+   line, and was reported as exactly that. The row now says it the way the rest
+   of the surface says "you are here": full ink, a hair more weight, and the
+   same quiet fill the hover state uses, held.
+*/
+.sf-room-row.on { background: color-mix(in srgb, var(--sf-ink) 5%, transparent); }
+.sf-room-row.on span { color: var(--sf-ink); font-weight: 420; }
 
 .sf-room-new {
   display: flex;
@@ -1735,14 +1746,16 @@
   font-size: 8px;
 }
 
-.sf-direction-open {
-  margin-left: 2px;
-  padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--sf-mark) 32%, var(--sf-rule));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--sf-mark) 5%, transparent);
-  color: var(--sf-ink-2) !important;
-}
+/*
+   The strip's one action, wearing the same filled pill as `keep`.
+
+   It used to be a ghost: a 5%-tint outline chip whose ink was FORCED to the
+   surrounding caption colour with !important, so the only door into the
+   shared top of mind was styled to match the metadata around it. If a row
+   has exactly one thing you can do, that thing gets the primary treatment —
+   the rule the composer already follows.
+*/
+.sf-direction-open { margin-left: 2px; }
 
 .sf-direction-open:disabled {
   opacity: 0.45;
