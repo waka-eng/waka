@@ -1,7 +1,17 @@
 # Getting the running app to the prototype
 
-Status: in progress 2026-08-03. Prototype:
+Status: Phases 0–3 done. Phases 4–7 unverified — the surface was rewritten
+rather than migrated phase by phase, so some later phases may be partly or
+wholly present without having been checked against their own description.
+**Audit before working any of them.** Last reviewed 2026-08-05. Prototype:
 `claude.ai/code/artifact/a2a67c87-75df-4c11-a127-17997745549b`
+
+> One known regression, recorded 2026-08-05: Phase 2's `body:has(...)` stopgap
+> survives in `system.css:458-459`, but it selects `.nc-stage--top-of-mind-wall`,
+> `.memory-contents-item--expanded` and `.reference-capture-modal` — classes
+> belonging to the deleted UI. It therefore matches nothing on the Surface, so
+> the wall no longer recedes-and-dims behind an open reading; it is replaced.
+> That is the opposite of what the phase was for.
 
 ## Why localhost looked nothing like it
 
@@ -55,15 +65,13 @@ are still in the room; the readings are still behind what you are reading.
 *Currently driven by `body:has(...)`, which is a stopgap — it reads the DOM to
 infer state. Phase 3 replaces it with the state machine.*
 
-### Phase 3 — One state machine — **next**
-Extend `homeMode` to the seven states and fold in `captureFocused`,
-`historyOpen`, the room panel's open flag and `selectedSavedSignalId`. Put
-`data-state` on one container. Every `:has()` stopgap becomes an attribute
-selector.
-
-*Risk: `homeMode` appears in ~14 effects. Each needs checking, because a state
-that used to be binary now has five more values and `!== "memoryDrawer"`
-guards will silently start firing in states they never saw.*
+### Phase 3 — One state machine ✅ done
+The state machine landed, and not as an extension of `homeMode` — `Home.tsx`
+was deleted outright and `Surface.tsx` written in its place. State is derived
+from the URL by `lib/surface-route.ts` (`wall · reading · save · ask · capture
+· direction`) and applied as `data-state` on one container
+(`Surface.tsx:2213`). Browser Back and Forward restore where a member was,
+which the original plan did not ask for.
 
 ### Phase 4 — The head that never moves
 Room name and cast lift out of `RoomTitle` into the surface's own head, so

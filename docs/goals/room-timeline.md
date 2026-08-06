@@ -1,7 +1,28 @@
 # Goal: the room remembers becoming itself
 
-Status: Phases 0 and 1 shipped (2026-08-01). Phase 2 — the UI — not started.
-Branch: `goal/room-timeline`
+Status: Phases 0 and 1 shipped (2026-08-01). **Phase 2 is largely built, not
+"not started"** — corrected 2026-08-05. Phase 3 not started.
+Branch: `goal/room-timeline` (merged to `dev` in PR #222)
+
+What Phase 2 actually has: the horizontal rail with snap-to-mark stops
+(`Surface.tsx:3443`, `.sf-time-stop` in `surface.css:817`), travel state that
+re-forms the wall in place, per-moment board prefetch, and
+`prefers-reduced-motion` handling in the surface stylesheet.
+
+What its gate still fails on, verified 2026-08-05:
+
+- **Notes do not stay still across a scrub.** Layout, colour and drag offset
+  are keyed to the array index (`NOTE_LAYOUTS[i % 5]`, `drags[i]`), and the
+  wall re-sorts on every change to `readings`. Scrubbing therefore recolours,
+  re-tilts and resizes notes that persisted across the boundary — the gate says
+  *"nothing moves except what changed"* in as many words.
+- **Join marks are not hinges.** Every stop renders the same `sf-time-stop`
+  class, so a join is visually identical to a refresh. This is the phase's
+  thesis and it has no distinct mark.
+- **"This note became that one" is unanimated, because it is unrecorded.**
+  `replacedByNoteId` has exactly one write in the API — the literal `null` at
+  `group-top-of-mind-synthesis.ts:784` — although the retirement step in
+  `group-top-of-mind.ts:1020-1028` knows both sides of the pair.
 Follows: ambition-reading (2026-08-01), the readings + divergence layer (PR1–4, 2026-08-01)
 Decided by founder, 2026-08-01: keep everything · full history for newcomers · departures stay marked · scrubber before dial
 

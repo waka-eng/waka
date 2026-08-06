@@ -16,35 +16,47 @@ Use this product vocabulary for new code:
 
 The post-it metaphor is important: top-of-mind notes should feel provisional, replaceable, and easy to correct.
 
-## Ralph
+## How work is chosen
 
-This repo uses the `snarktank/ralph` loop format, with a local `codex` tool mode added:
+Work comes from **goals** in [`docs/goals/`](docs/goals/), run by
+[`.claude/commands/goal.md`](.claude/commands/goal.md).
 
-- `prd.json` is the source of story state.
-- `progress.txt` is append-only memory between iterations.
-- `scripts/ralph/ralph.sh` runs one fresh AI instance per iteration.
-- Each iteration should complete exactly one highest-priority story with `passes: false`.
+A goal is not a task list. It is a body of work with **gates** — points where a
+measurement decides whether the next phase is worth doing, or whether the
+honest answer is to stop. Halting at a gate with a recorded number is a
+success. Sailing past one because continuing was easier is a failure, however
+much code it produced.
 
-Run with:
+`progress.txt` is append-only memory across sessions; the goal command writes
+to it when a goal completes.
 
-```bash
-./scripts/ralph/ralph.sh --tool codex 10
-```
-
-or:
-
-```bash
-./scripts/ralph/ralph.sh --tool claude 10
-```
+> The `snarktank/ralph` loop that preceded this is retired and lives in
+> [`docs/archive/ralph/`](docs/archive/ralph/). **`prd.json` is not a queue.**
+> Its two remaining `passes: false` stories shipped months ago, so treating it
+> as state means re-implementing working features. See that directory's README.
 
 ## Verification
 
 Prefer targeted checks:
 
 - API/schema: `pnpm --filter @waka/api typecheck`
-- API tests: `pnpm --filter @waka/api test -- <pattern>`
+- API tests: `pnpm --filter @waka/api test:unit` — 46 files, ~4s, no database.
+  Add a single file with
+  `pnpm --filter @waka/api exec vitest run --config vitest.unit.config.ts <path>`.
 - Web: `pnpm --filter @waka/web typecheck`
-- Web tests: `pnpm --filter @waka/web test -- <pattern>`
+- Web tests: `pnpm --filter @waka/web test`
+- Web bundle: `pnpm --filter @waka/web build`
 - Local demo: `pnpm dev:local`
 
+> `pnpm --filter @waka/api test` runs the full suite, which needs a live
+> Postgres and exits non-zero without one. `test:unit` is the one to reach for
+> by default.
+>
+> `vitest.unit.config.ts` is a hand-maintained **allowlist** of file paths. A
+> new test file does not run until it is added there — a test that never runs
+> looks exactly like a test that passes.
+
 Frontend stories require browser verification before they are marked complete.
+Note that the harnesses in `tools/e2e/` predate the one-surface rewrite and no
+longer get past their first post-login selector, so this currently means
+verifying by hand.
