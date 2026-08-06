@@ -26,6 +26,7 @@ import {
   type ContextNodeType,
 } from "./context-node-types.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
+import { stripSignalPacketScaffold } from "./signal-packets.js";
 import {
   judgeMeaningRelationshipsForInspiration,
   type JudgeMeaningRelationshipsForInspirationParams,
@@ -107,14 +108,60 @@ function shortText(value: string, maxLength: number): string {
   return `${(lastSpace > 40 ? clipped.slice(0, lastSpace) : normalized.slice(0, maxLength)).trim()}...`;
 }
 
-function includesAny(value: string, needles: string[]): boolean {
-  return needles.some((needle) => value.includes(needle));
+/**
+ * A needle names a word, not a run of letters.
+ *
+ * `String.includes` fired "ai" on *said*, *email*, *chair*, *detailed* and
+ * *raised*; "city" on *capacity* and *simplicity*; "place" on *replace* and
+ * *workplace*; "fast" on *breakfast*; "style" on *lifestyle*; "room" on
+ * *bedroom*. Each one promoted a durable claim about a person's values out of a
+ * coincidence of spelling — and a graph node, once written, outranks the real
+ * ones forever by evidence count.
+ *
+ * So ASCII needles match on word boundaries. A trailing `*` asks for the old
+ * prefix behaviour, for the stems where that was the point: "accelerat*" still
+ * reaches accelerating, "build*" still reaches builds and building.
+ *
+ * Hangul needles stay substring matches. `\b` is defined against
+ * `[A-Za-z0-9_]`, so it never asserts beside a Hangul syllable, and Korean does
+ * not put spaces where the boundary rule expects them.
+ */
+const needleMatchers = new Map<string, RegExp | null>();
+
+function needleMatcher(needle: string): RegExp | null {
+  const cached = needleMatchers.get(needle);
+  if (cached !== undefined) return cached;
+  let matcher: RegExp | null = null;
+  // Printable ASCII only; anything else (Hangul) falls back to substring.
+  if (/^[\x20-\x7E]+$/.test(needle)) {
+    const stem = needle.endsWith("*");
+    const core = stem ? needle.slice(0, -1) : needle;
+    const escaped = core.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    matcher = new RegExp(`\\b${escaped}${stem ? "" : "\\b"}`, "u");
+  }
+  needleMatchers.set(needle, matcher);
+  return matcher;
 }
 
+function includesAny(value: string, needles: string[]): boolean {
+  return needles.some((needle) => {
+    const matcher = needleMatcher(needle);
+    return matcher ? matcher.test(value) : value.includes(needle);
+  });
+}
+
+/**
+ * The words a packet actually contains.
+ *
+ * `packet.packetText` carries the person's sparks, their reflections and the
+ * page excerpt — but it also carries the section markers stamped into every
+ * packet. Including those made the life/why bucket unconditional. Strip them
+ * and keep the content; see `stripSignalPacketScaffold`.
+ */
 function packetText(row: PacketRow): string {
   return [
     row.packet.sparkText,
-    row.packet.packetText,
+    stripSignalPacketScaffold(row.packet.packetText),
     row.inspiration.cluster ?? "",
   ]
     .filter(Boolean)
@@ -140,7 +187,14 @@ function baseConfidence(row: PacketRow, relationshipConfidence = 0): number {
   return clampInt(Math.max(58 + sparkBoost, relationshipConfidence), 45, 95);
 }
 
-function buildMeaningSignals(
+/**
+ * Exported for tests. This is the whole keyword ontology in one pure function,
+ * and the only way to assert the thing that matters about it: that a save with
+ * none of these words in it promotes NOTHING. Reaching it through
+ * `persistMeaningGraphForInspiration` would need a database and a judge to
+ * prove a property of a string match.
+ */
+export function buildMeaningSignals(
   row: PacketRow,
   options: { relationshipKind?: MeaningRelationshipKind; relationshipConfidence?: number } = {},
 ): MeaningSignal[] {
@@ -176,7 +230,7 @@ function buildMeaningSignals(
     });
   }
 
-  if (includesAny(text, ["ai", "agent", "prototype", "build", "builder", "building", "tools", "만들"])) {
+  if (includesAny(text, ["ai", "agent*", "prototype*", "build*", "tool*", "만들"])) {
     addSignal(signals, {
       ...common,
       type: "open_question",
@@ -195,7 +249,7 @@ function buildMeaningSignals(
     });
   }
 
-  if (includesAny(text, ["who", "people", "community", "builder", "founder", "lonely", "alone", "together", "hacker house", "누구", "사람", "외로"])) {
+  if (includesAny(text, ["who", "people", "communit*", "builder*", "founder*", "lonely", "alone", "together", "hacker house", "누구", "사람", "외로"])) {
     addSignal(signals, {
       ...common,
       type: "hypothesis",
@@ -214,7 +268,7 @@ function buildMeaningSignals(
     });
   }
 
-  if (includesAny(text, ["room", "space", "place", "city", "cities", "environment", "community", "hacker house", "where", "어디", "공간", "환경"])) {
+  if (includesAny(text, ["room*", "space*", "place*", "city", "cities", "environment*", "communit*", "hacker house", "where", "어디", "공간", "환경"])) {
     addSignal(signals, {
       ...common,
       type: "environment",
@@ -224,7 +278,7 @@ function buildMeaningSignals(
     });
   }
 
-  if (includesAny(text, ["aesthetic", "aesthetics", "beautiful", "design", "taste", "visual", "style", "분위기", "미감", "아름", "디자인"])) {
+  if (includesAny(text, ["aesthetic*", "beautiful", "design*", "taste", "visual*", "style", "분위기", "미감", "아름", "디자인"])) {
     addSignal(signals, {
       ...common,
       type: "aesthetic",
@@ -236,7 +290,7 @@ function buildMeaningSignals(
     });
   }
 
-  if (includesAny(text, ["why", "meaning", "matter", "death", "life", "last day", "가치", "왜", "삶", "죽"])) {
+  if (includesAny(text, ["why", "meaning*", "matter*", "death", "life", "lives", "last day", "가치", "왜", "삶", "죽"])) {
     addSignal(signals, {
       ...common,
       type: "open_question",
@@ -258,7 +312,7 @@ function buildMeaningSignals(
     });
   }
 
-  if (includesAny(text, ["faster", "fast", "accelerat", "lonely", "security", "blocking ai", "productivity", "빨라", "외로"])) {
+  if (includesAny(text, ["faster", "fast", "accelerat*", "lonely", "security", "blocking ai", "productivit*", "빨라", "외로"])) {
     addSignal(signals, {
       ...common,
       type: "tension",

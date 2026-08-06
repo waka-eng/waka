@@ -26,6 +26,7 @@ export default defineConfig({
       "src/lib/model-provider.test.ts",
       "src/lib/inspiration-embeddings.test.ts",
       "src/lib/signal-packets.test.ts",
+      "src/lib/meaning-graph-keywords.test.ts",
       "src/lib/signal-enrichment.test.ts",
       "src/lib/salience.test.ts",
       "src/lib/combination-reading.test.ts",
