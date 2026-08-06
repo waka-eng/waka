@@ -24,6 +24,7 @@ import {
   signals,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { isTransientModelError } from "./gemini-http.js";
 import {
   ensureInspirationEmbedding,
   GeminiEmbeddingHttpClient,
@@ -129,15 +130,14 @@ export interface GroupSynthesisResult {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-function isTransientModelError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /\b(503|429|500|502|504)\b/.test(msg) || /unavailable|overloaded|rate.?limit/i.test(msg);
-}
-
 /**
- * Judge a group trigger, retrying a few times on transient model errors (503
- * overloaded / 429 rate limit) with backoff so a brief provider blip does not
- * wipe out an entire synthesis pass.
+ * Judge a group trigger, retrying a few times on transient model errors
+ * (timeouts, dead sockets, 503 overloaded, 429 rate limit) with backoff so a
+ * brief provider blip does not wipe out an entire synthesis pass.
+ *
+ * `isTransientModelError` lives in `gemini-http.ts` beside the code that
+ * formats provider failures, because deciding whether a failure is worth
+ * retrying means reading fields that module produces.
  */
 async function judgeGroupWithRetry(
   params: Parameters<typeof judgeGroupWowMoment>[0],
