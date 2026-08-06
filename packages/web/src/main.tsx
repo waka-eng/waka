@@ -120,6 +120,12 @@ ReactDOM.createRoot(root).render(
             <Route path="/inspirations/:signalId" />
             <Route path="/readings/:readingId" />
             <Route path="/rooms/:roomId" />
+            {/*
+              Legacy. Capture is no longer nested under a room — a save belongs
+              to the person who made it, not to the wall they were looking at —
+              but this stays routable so a tab or bookmark from before the
+              change still opens the composer instead of dying.
+            */}
             <Route path="/rooms/:roomId/capture" />
             <Route path="/rooms/:roomId/inspirations" />
             <Route path="/rooms/:roomId/inspirations/:signalId" />

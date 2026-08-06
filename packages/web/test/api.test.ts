@@ -608,6 +608,30 @@ describe("inspiration signal compatibility", () => {
     });
   });
 
+  /**
+   * A save is the capturing user's, and no room's.
+   *
+   * The composer can be opened while standing in a room, and used to be
+   * reached at `/rooms/:id/capture`, which read as capturing INTO that room.
+   * It never did: the request carries no room, `createInspirationSchema` has
+   * no field for one, and the row is written with the session's own user id.
+   * This pins the request shape so a future "helpful" addition of a room id
+   * has to break a test that says why it must not.
+   */
+  it("sends no room or group with a save, whatever room the composer was opened from", async () => {
+    stubFetch(Response.json({ inspiration: signalLayerInspiration }, { status: 201 }));
+
+    await createInspiration({ text: "saved while looking at a room's wall" });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+
+    expect(Object.keys(body)).toEqual(["text"]);
+    for (const key of ["roomId", "groupId", "room", "group"]) {
+      expect(body).not.toHaveProperty(key);
+    }
+  });
+
   it("keeps fetchInspirations on the existing route while exposing signal-facing scores", async () => {
     stubFetch(Response.json({ inspirations: [signalLayerInspiration] }));
 

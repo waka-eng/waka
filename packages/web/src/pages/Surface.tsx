@@ -97,6 +97,7 @@ import {
 import {
   buildSurfacePath,
   parseSurfacePath,
+  resolveSurfaceRoom,
   type SurfaceRoomId,
   type SurfaceView,
 } from "../lib/surface-route";
@@ -491,17 +492,31 @@ export default function SurfacePage(): JSX.Element {
     [location.pathname],
   );
   const state = surfaceRoute.view;
-  const room = surfaceRoute.roomId;
+  /*
+    Which room you are standing in.
+
+    `/capture` carries no room in its path, because a save has no room -- see
+    `buildSurfacePath`. But the composer opens in front of a wall that is still
+    there, and that wall keeps its name, its cast and its status poll while you
+    type. So for capture, and only for capture, the room arrives in history
+    state: enough to know where you are and where closing puts you back, with
+    nothing in the URL claiming the save lands there.
+
+    Legacy `/rooms/:id/capture` still resolves through `surfaceRoute.roomId`,
+    so an open tab from before this change keeps its room too.
+  */
+  const room = resolveSurfaceRoom(surfaceRoute, location.state);
   const routeEntityId = surfaceRoute.entityId;
   const navigateSurface = useCallback(
     (view: SurfaceView, options: SurfaceNavigationOptions = {}) => {
+      const roomId = options.roomId === undefined ? room : options.roomId;
       navigate(
-        buildSurfacePath({
-          view,
-          roomId: options.roomId === undefined ? room : options.roomId,
-          entityId: options.entityId ?? null,
-        }),
-        { replace: options.replace ?? false },
+        buildSurfacePath({ view, roomId, entityId: options.entityId ?? null }),
+        {
+          replace: options.replace ?? false,
+          // Only capture needs this: every other view keeps its room in the path.
+          ...(view === "capture" && roomId ? { state: { room: roomId } } : {}),
+        },
       );
     },
     [navigate, room],
@@ -1245,13 +1260,20 @@ export default function SurfacePage(): JSX.Element {
       } catch {
         /* private mode */
       }
+      /*
+        "Kept and shared with this room" was not true. Sharing is one flag on
+        the signal -- `shared_to_groups` -- and every room you are in reads it.
+        Saying "this room" while standing in one described a per-room choice
+        the product does not offer, and contradicted the toggle three lines
+        above it, which correctly says "your rooms".
+      */
       setKept(
         !shareToGroups
           ? "Kept privately. Your rooms will not read this one."
           : links.length > 0
             ? "Kept and shared. The page behind that link is being read."
             : room
-              ? "Kept and shared with this room. It will join the next read."
+              ? "Kept. It joins the next read in every room you are in."
               : "Kept. It sits with what you have been circling.",
       );
       if (room) {
