@@ -339,6 +339,32 @@ function buildIdempotencyKey(
   return `top_of_mind_context_node:v2:${userId}:${nodeId}:${fingerprint}`;
 }
 
+/**
+ * The subset of these keys that already has a note.
+ *
+ * Deliberately unfiltered by lifecycle: the unique index on
+ * `idempotency_key` is global, and `persistTopOfMindRevision` returns
+ * `keep_existing` on any match. Matching what persistence will do is the whole
+ * point — a key that is going to be rejected at write time should not be paid
+ * for at synthesis time.
+ */
+async function loadExistingContextNoteKeys(
+  db: WakaDb,
+  input: { userId: string; candidateKeys: string[] },
+): Promise<Set<string>> {
+  if (input.candidateKeys.length === 0) return new Set<string>();
+  const rows = await db
+    .select({ idempotencyKey: wowMoments.idempotencyKey })
+    .from(wowMoments)
+    .where(
+      and(
+        eq(wowMoments.userId, input.userId),
+        inArray(wowMoments.idempotencyKey, input.candidateKeys),
+      ),
+    );
+  return new Set(rows.map((row) => row.idempotencyKey));
+}
+
 function groupEvidenceByNodeId(
   evidence: TopOfMindRefreshEvidenceInput[],
 ): Map<string, TopOfMindRefreshEvidenceInput[]> {
@@ -524,7 +550,39 @@ export async function refreshTopOfMindNotesFromContextGraph(
         )
         .orderBy(desc(meaningEvidence.weight), desc(meaningEvidence.createdAt))
         .limit(240));
-  const existingIdempotencyKeys = new Set<string>();
+  /**
+   * Which of the notes this pass could produce are already on the wall.
+   *
+   * This was `new Set<string>()` with nothing ever writing to it, so the
+   * `!existing.has(key)` filter in `rankTopOfMindRefreshCandidates` was a
+   * permanent no-op: every pass re-synthesized notes it already had, spending
+   * up to five sequential 25s-bounded Gemini calls per save, and
+   * `persistTopOfMindRevision` then returned `keep_existing` for each
+   * unchanged fingerprint and threw the text away.
+   *
+   * It regressed in 06568c2, which put the evidence fingerprint into the key.
+   * The loader it replaced precomputed keys from node ids alone, which the new
+   * shape makes impossible — a key is not knowable until its candidate's
+   * evidence has been chosen.
+   *
+   * So probe first. Ranking is pure and does no I/O, so running it once to
+   * learn the keys, asking the database, and ranking again is one extra query
+   * and no extra model call. Doing it in this order also means an
+   * already-persisted note does not consume one of the `limit` slots, which
+   * filtering the ranked output afterwards would get wrong.
+   */
+  const probedKeys = rankTopOfMindRefreshCandidates({
+    userId: input.userId,
+    preferredLocale,
+    nodes,
+    evidence,
+    limit: MAX_REFRESH_LIMIT,
+    now: input.now,
+  }).map((candidate) => candidate.idempotencyKey);
+  const existingIdempotencyKeys = await loadExistingContextNoteKeys(db, {
+    userId: input.userId,
+    candidateKeys: probedKeys,
+  });
 
   const modelProvider =
     input.modelProvider ?? (await getDefaultModelProvider());
