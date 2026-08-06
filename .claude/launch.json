@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "local",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:local"],
+      "port": 3010
+    },
+    {
       "name": "web",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@waka/web", "dev"],

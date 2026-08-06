@@ -4,6 +4,7 @@ import {
   SHARING_MEANING,
   SHARING_NOTE,
   confirmGoingPublicMessage,
+  roomDirectionCtaCopy,
   canLoadFullSignal,
   markQuote,
   roomDirectionEvidenceCopy,
@@ -341,6 +342,66 @@ describe("the confirmation shown before a save is made public", () => {
   it("never widens public beyond the rooms", () => {
     for (const overclaim of ["anyone", "everyone", "the internet", "the web"]) {
       expect(message.toLowerCase()).not.toContain(overclaim);
+    }
+  });
+});
+
+/**
+ * A button names its destination in that destination's own words.
+ *
+ * "open shared read" failed that: the page it opens is labelled SHARED TOP OF
+ * MIND under the heading "What we're finding together", and the noun "read"
+ * appears nowhere on it. Three names for one surface were live at once —
+ * "shared read" on the button, "shared top of mind" on the page and every
+ * aria-label, "direction" in the URL and the API. Only one was ever shown to a
+ * person, so that is the one these assert.
+ */
+describe("the button that opens a room's shared top of mind", () => {
+  const cta = (over: Partial<Parameters<typeof roomDirectionCtaCopy>[0]> = {}) =>
+    roomDirectionCtaCopy({
+      memberCount: 4,
+      hasProposal: false,
+      hasCurrent: true,
+      inviteCopied: false,
+      ...over,
+    });
+
+  it("names the page it opens, in the words that page uses", () => {
+    expect(cta()).toBe("open the shared top of mind");
+  });
+
+  it("never calls it a 'read', which is a noun the destination never uses", () => {
+    const everyState = [
+      cta(),
+      cta({ hasCurrent: false }),
+      cta({ hasProposal: true }),
+      cta({ memberCount: 1 }),
+      cta({ memberCount: 1, inviteCopied: true }),
+    ];
+    for (const label of everyState) {
+      expect(label).not.toContain("shared read");
+    }
+  });
+
+  it("offers the invite instead of an empty page when the room is one person", () => {
+    // Opening a shared reading of one person is not a thing that exists.
+    expect(cta({ memberCount: 1 })).toBe("invite someone");
+    expect(cta({ memberCount: 1, inviteCopied: true })).toBe("invite link copied");
+  });
+
+  it("puts a waiting decision ahead of ordinary browsing", () => {
+    expect(cta({ hasProposal: true })).toBe("review the proposed version");
+    // Even when a current version exists, the decision is the more useful door.
+    expect(cta({ hasProposal: true, hasCurrent: true })).toBe("review the proposed version");
+  });
+
+  it("says the read has not happened yet rather than offering to open nothing", () => {
+    expect(cta({ hasCurrent: false })).toBe("see the first read");
+  });
+
+  it("always says what it does — never a bare verb with no object", () => {
+    for (const label of [cta(), cta({ hasCurrent: false }), cta({ hasProposal: true })]) {
+      expect(label.split(" ").length).toBeGreaterThan(2);
     }
   });
 });

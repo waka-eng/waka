@@ -477,6 +477,37 @@ export function roomFirstReadPresentation(input: {
   };
 }
 
+/**
+ * The word on the button that opens a room's shared top of mind.
+ *
+ * It said "open shared read", and "read" as a noun appears nowhere the button
+ * goes: the page it opens is labelled SHARED TOP OF MIND under the heading
+ * "What we're finding together". A button whose word does not exist at its
+ * destination makes people click to find out what it meant, which is the
+ * definition of an unclear one.
+ *
+ * The rule applied here and below: **name the destination in the destination's
+ * own words.** Three names for this surface were live at once — "shared read"
+ * on the button, "shared top of mind" on the page and in every aria-label,
+ * "direction" in the URL and the API. Only one of them was ever shown to a
+ * person, so that is the one that wins.
+ */
+export function roomDirectionCtaCopy(input: {
+  memberCount: number;
+  hasProposal: boolean;
+  hasCurrent: boolean;
+  inviteCopied: boolean;
+}): string {
+  // A room of one cannot read anything together yet, so the button does the
+  // only useful thing instead of opening an empty page.
+  if (input.memberCount < 2) {
+    return input.inviteCopied ? "invite link copied" : "invite someone";
+  }
+  if (input.hasProposal) return "review the proposed version";
+  if (input.hasCurrent) return "open the shared top of mind";
+  return "see the first read";
+}
+
 export function roomDirectionEvidenceCopy(
   evidence: Array<{ signalId: string; userId: string }>,
   memberCount: number,
@@ -2427,7 +2458,7 @@ export default function SurfacePage(): JSX.Element {
           </p>
           <div className="sf-invite-acts">
             <button type="button" className="sf-accept" onClick={() => void acceptInvite()}>
-              join it
+              join this room
             </button>
             <button type="button" className="sf-quiet" onClick={declineInvite}>
               not now
@@ -2563,15 +2594,12 @@ export default function SurfacePage(): JSX.Element {
                   window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 60);
                 }}
               >
-                {members.length < 2
-                  ? copied
-                    ? "invite link copied"
-                    : "invite someone"
-                  : direction?.proposal
-                    ? "review next version"
-                    : direction?.current
-                      ? "open shared read"
-                      : "view first read"}
+                {roomDirectionCtaCopy({
+                  memberCount: members.length,
+                  hasProposal: Boolean(direction?.proposal),
+                  hasCurrent: Boolean(direction?.current),
+                  inviteCopied: copied,
+                })}
               </button>
             </div>
           </section>
@@ -2774,7 +2802,7 @@ export default function SurfacePage(): JSX.Element {
                       className="sf-quiet"
                       onClick={() => setSelectedDirectionVersion(null)}
                     >
-                      ← current top of mind
+                      ← back to the current version
                     </button>
                     <span className="sf-label">
                       VERSION {openDirectionVersion.versionNumber} · {" "}
@@ -2854,7 +2882,7 @@ export default function SurfacePage(): JSX.Element {
                             disabled={rereading}
                             onClick={() => void reread()}
                           >
-                            {rereading ? "trying again…" : "try the room read again"}
+                            {rereading ? "trying again…" : "read the room again"}
                           </button>
                         ) : null}
                       </article>
@@ -2889,7 +2917,7 @@ export default function SurfacePage(): JSX.Element {
                             disabled={directionReviewing}
                             onClick={() => void reviewDirection("accept")}
                           >
-                            make this next
+                            adopt this version
                           </button>
                           <button
                             type="button"
@@ -2898,7 +2926,7 @@ export default function SurfacePage(): JSX.Element {
                             disabled={directionReviewing}
                             onClick={() => void reviewDirection("keep_current")}
                           >
-                            keep current version
+                            keep the current one
                           </button>
                           <button type="button" className="sf-quiet" onClick={() => shapeDirection()}>
                             add another take
@@ -3171,7 +3199,7 @@ export default function SurfacePage(): JSX.Element {
                 className="sf-back"
                 onClick={() => navigateSurface("ask", { replace: true })}
               >
-                ← what you asked
+                ← what you have kept
               </button>
               <div className="sf-savemeta">
                 kept {new Date(openSave.capturedAt).toLocaleDateString()}
@@ -3236,7 +3264,7 @@ export default function SurfacePage(): JSX.Element {
                         onClick={() => void saveAnswer()}
                         disabled={!answer.trim() || answering}
                       >
-                        {answering ? "keeping…" : "keep this"}
+                        {answering ? "keeping…" : "keep this answer"}
                       </button>
                       <button type="button" className="sf-quiet" onClick={() => setQuestion(null)}>
                         not now
@@ -3665,15 +3693,22 @@ export default function SurfacePage(): JSX.Element {
                 />
                 {roomInput.trim() ? (
                   <span className="sf-room-new-acts">
+                    {/*
+                      One field, two readings of it — the comment above says a
+                      room name and an invite code can look identical, which is
+                      exactly why "make" and "join" were not enough. Each button
+                      now says which reading it takes, so the choice is legible
+                      before the click rather than discovered after it.
+                    */}
                     <button type="submit" disabled={roomBusy}>
-                      {roomBusy ? "…" : "make"}
+                      {roomBusy ? "…" : "make a room"}
                     </button>
                     <button
                       type="button"
                       disabled={roomBusy}
                       onClick={() => void makeOrJoinRoom("join")}
                     >
-                      join
+                      join with code
                     </button>
                   </span>
                 ) : null}
