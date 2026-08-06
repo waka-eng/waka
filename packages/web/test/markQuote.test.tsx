@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   SHARING_MEANING,
   SHARING_NOTE,
+  confirmGoingPublicMessage,
   canLoadFullSignal,
   markQuote,
   roomDirectionEvidenceCopy,
@@ -286,5 +287,60 @@ describe("sharing note", () => {
     expect(SHARING_NOTE.private.toLowerCase()).toContain("no room");
     expect(SHARING_MEANING.public).toContain("room");
     expect(SHARING_NOTE.public).toContain("room");
+  });
+});
+
+/**
+ * Going private is recoverable in every respect but one: it does not unmake a
+ * reading a room already produced. That asymmetry is why the confirmation is
+ * on the way in rather than the way out, and why the caveat has to be stated
+ * rather than implied by "private".
+ */
+describe("the caveat on turning a save private", () => {
+  it("says what going private stops, and what it cannot undo", () => {
+    expect(SHARING_NOTE.goingPrivate).toContain("stops it being read");
+    expect(SHARING_NOTE.goingPrivate).toContain("quoted");
+    expect(SHARING_NOTE.goingPrivate).toContain("shown as evidence");
+    // The part people would otherwise assume.
+    expect(SHARING_NOTE.goingPrivate).toContain("already made from it stays");
+  });
+
+  it("does not promise the reading is retired or withdrawn", () => {
+    for (const wrong of ["deleted", "removed from", "retired", "undone", "erased"]) {
+      expect(SHARING_NOTE.goingPrivate.toLowerCase()).not.toContain(wrong);
+    }
+  });
+});
+
+describe("the confirmation shown before a save is made public", () => {
+  const message = confirmGoingPublicMessage();
+
+  it("asks the question first", () => {
+    expect(message.startsWith("Make this public?")).toBe(true);
+  });
+
+  it("says who gains access and what they would see", () => {
+    expect(message).toContain("Every room you are in can read it");
+    expect(message).toContain("short excerpt");
+    expect(message).toContain("your name");
+  });
+
+  it("carries the caveat about turning it back", () => {
+    // The whole reason this prompt exists: public is the step that cannot be
+    // fully taken back.
+    expect(message).toContain("Making it private again later");
+    expect(message).toContain("stays on that room's wall");
+  });
+
+  it("reads as prose in a dialog, not as one wall of text", () => {
+    const paragraphs = message.split("\n\n");
+    expect(paragraphs).toHaveLength(3);
+    for (const paragraph of paragraphs) expect(paragraph.trim().length).toBeGreaterThan(0);
+  });
+
+  it("never widens public beyond the rooms", () => {
+    for (const overclaim of ["anyone", "everyone", "the internet", "the web"]) {
+      expect(message.toLowerCase()).not.toContain(overclaim);
+    }
   });
 });

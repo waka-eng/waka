@@ -529,6 +529,22 @@ export const SHARING_NOTE = {
     "Private — no room can read it. It never joins the pool a room's reading is made from, and it cannot be quoted.",
   both:
     "Either way the save stays yours, and either way it still shapes your own Top of Mind.",
+  /**
+   * The one thing turning it back cannot do.
+   *
+   * Making a save private stops it being pooled, quoted or read again, and it
+   * disappears from the evidence of readings that already cited it. What it
+   * cannot do is unmake the reading itself: a room's conclusion is a record of
+   * what that room understood at a time, and it stays on the wall and in the
+   * timeline. Retiring it would rewrite the room's history to match one
+   * member's later preference.
+   *
+   * Which is why this belongs on the way IN. Going private is recoverable in
+   * every respect except the one nobody expects; going public is the step that
+   * cannot be fully taken back, so that is where it is said.
+   */
+  goingPrivate:
+    "Making it private later stops it being read, quoted, or shown as evidence — but a reading a room already made from it stays on that room's wall.",
 } as const;
 
 /**
@@ -563,9 +579,34 @@ function SharingExplainer({
       </summary>
       <p>{SHARING_NOTE.public}</p>
       <p>{SHARING_NOTE.private}</p>
+      <p>{SHARING_NOTE.goingPrivate}</p>
       <p className="sf-sharing-note-both">{SHARING_NOTE.both}</p>
     </details>
   );
+}
+
+/**
+ * The one confirmation in this flow, on the one step that cannot be undone.
+ *
+ * Going private is recoverable: the save leaves the pool, stops being quoted,
+ * and disappears from the evidence of readings that cited it. Going public is
+ * not fully recoverable — once a room has read something, turning the save
+ * private afterwards does not unmake the reading. So the question is asked
+ * here, once, in the direction that carries the risk.
+ *
+ * Not asked for a composer draft. Nothing has been shared with anything until
+ * the save exists, and a confirmation for a decision with no consequence yet
+ * is the kind people learn to dismiss without reading — which is how the one
+ * that matters gets dismissed too.
+ */
+export function confirmGoingPublicMessage(): string {
+  return [
+    "Make this public?",
+    "",
+    SHARING_NOTE.public.replace(/^Public — /, "").replace(/^every/, "Every"),
+    "",
+    SHARING_NOTE.goingPrivate.replace(/^Making it private later/, "Making it private again later"),
+  ].join("\n");
 }
 
 /** Every URL in what you typed. These become link attachments, which is what
@@ -1875,6 +1916,8 @@ export default function SurfacePage(): JSX.Element {
   const toggleShared = useCallback(
     async (signal: ApiSavedSignalSearchResult) => {
       const next = !signal.shared;
+      // Exposing is the direction that cannot be fully taken back.
+      if (next && !window.confirm(confirmGoingPublicMessage())) return;
       const apply = (shared: boolean) => {
         setResults((current) =>
           current.map((r) => (r.id === signal.id ? { ...r, shared } : r)),
@@ -3278,6 +3321,7 @@ export default function SurfacePage(): JSX.Element {
                   } Click to make it ${openSaveShared ? "private" : "public"}.`}
                   onClick={() => {
                     const next = !openSaveShared;
+                    if (next && !window.confirm(confirmGoingPublicMessage())) return;
                     void setInspirationSharing(openSave.id, next)
                       .then(() => {
                         setOpenSaveShared(next);

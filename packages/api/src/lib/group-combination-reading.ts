@@ -262,6 +262,39 @@ function toSurface(row: {
   };
 }
 
+/**
+ * The same surface, minus quotes whose save has since gone private.
+ *
+ * `memberQuotes` is written into the reading row at generation time and served
+ * verbatim, so a member who made a save private afterwards kept having their
+ * words shown in the room — the setting stopped the save feeding FUTURE
+ * readings and left the sentence already published in place. The board read
+ * (`group-top-of-mind.ts`) and the direction read (`group-direction.ts`) both
+ * re-check sharing on the way out; this path was the one that did not.
+ *
+ * Deliberately a filter on read rather than a rewrite of the stored row. The
+ * reading is an immutable record of what the room concluded and when, and
+ * editing history to match a later preference would make every stored reading
+ * untrustworthy. What changes is what we are willing to show.
+ */
+async function withLiveQuotesOnly(
+  db: WakaDb,
+  surface: GroupCombinationReadingSurface,
+): Promise<GroupCombinationReadingSurface> {
+  const signalIds = [...new Set(surface.quotes.map((q) => q.signalId))];
+  if (signalIds.length === 0) return surface;
+
+  const live = await db
+    .select({ id: signals.id })
+    .from(signals)
+    .where(and(inArray(signals.id, signalIds), eq(signals.sharedToGroups, true)));
+
+  const shared = new Set(live.map((row) => row.id));
+  if (shared.size === signalIds.length) return surface;
+
+  return { ...surface, quotes: surface.quotes.filter((q) => shared.has(q.signalId)) };
+}
+
 const READING_COLUMNS = {
   id: combinationReadings.id,
   state: combinationReadings.state,
@@ -505,7 +538,7 @@ export async function getGroupCombinationReading(
     .orderBy(desc(combinationReadings.createdAt))
     .limit(1);
 
-  return { reading: row ? toSurface(row) : null };
+  return { reading: row ? await withLiveQuotesOnly(db, toSurface(row)) : null };
 }
 
 /**
@@ -567,7 +600,7 @@ export async function refreshGroupCombinationReading(
       .set({ reconfirmedCount: current.reconfirmedCount + 1, updatedAt: new Date() })
       .where(eq(combinationReadings.id, current.id))
       .returning(READING_COLUMNS);
-    return toSurface(reconfirmed ?? current);
+    return withLiveQuotesOnly(db, toSurface(reconfirmed ?? current));
   }
 
   /** A rejected or already-visible proposal for this exact input must not be
@@ -592,7 +625,7 @@ export async function refreshGroupCombinationReading(
     )
     .orderBy(desc(combinationReadings.createdAt))
     .limit(1);
-  if (current && alreadyGenerated) return toSurface(current);
+  if (current && alreadyGenerated) return withLiveQuotesOnly(db, toSurface(current));
 
   /**
    * A collective direction should not twitch because one person posted several
@@ -628,7 +661,7 @@ export async function refreshGroupCombinationReading(
         promptVersionChanged,
       })
     ) {
-      return toSurface(current);
+      return withLiveQuotesOnly(db, toSurface(current));
     }
   }
 
@@ -690,7 +723,7 @@ export async function refreshGroupCombinationReading(
       })
       .where(eq(combinationReadings.id, current.id))
       .returning(READING_COLUMNS);
-    return toSurface(reconfirmed ?? current);
+    return withLiveQuotesOnly(db, toSurface(reconfirmed ?? current));
   }
 
   /**
@@ -778,7 +811,7 @@ export async function refreshGroupCombinationReading(
         .where(eq(combinationReadings.id, current.id));
     }
     return lifecycle.returnCurrent && current
-      ? toSurface(current)
-      : toSurface(inserted);
+      ? await withLiveQuotesOnly(db, toSurface(current))
+      : await withLiveQuotesOnly(db, toSurface(inserted));
   });
 }
