@@ -583,9 +583,19 @@
    answers the question people actually have, which is not "what is the state"
    but "what would someone else see".
    ------------------------------------------------------------------------ */
+/*
+   Set at --sf-meta (11.5px) — the token whose own comment reads "dates,
+   counts, labels — nothing else". This is the only place the product explains
+   who can read what you keep, which is not a label, and 11.5px is the size a
+   reader's eye is trained to skip.
+
+   --sf-ui (13px) is the control tier, which is what this is: the sentence
+   attached to a control, explaining what the control does.
+*/
 .sf-sharing-note {
   margin-top: 11px;
-  font-size: var(--sf-meta);
+  font-size: var(--sf-ui);
+  line-height: 1.55;
   color: var(--sf-ink-3);
 }
 
