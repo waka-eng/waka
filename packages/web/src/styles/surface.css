@@ -1754,8 +1754,16 @@
    shared top of mind was styled to match the metadata around it. If a row
    has exactly one thing you can do, that thing gets the primary treatment —
    the rule the composer already follows.
+
+   And it sits on the right edge, not mid-sentence. It used to trail a
+   four-clause meta line wherever the prose happened to end; metadata left,
+   action right is how every other row on this surface is laid out
+   (.sf-result, .sf-save-foot), and the strip now follows the same grain.
 */
-.sf-direction-open { margin-left: 2px; }
+.sf-direction-open { margin-left: auto; }
+
+/* What the faces cannot say: how old, and what has arrived since. */
+.sf-room-intent-meta { color: var(--sf-ink-3); white-space: nowrap; }
 
 .sf-direction-open:disabled {
   opacity: 0.45;

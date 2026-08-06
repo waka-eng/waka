@@ -5,6 +5,7 @@ import {
   SHARING_NOTE,
   confirmGoingPublicMessage,
   roomDirectionCtaCopy,
+  roomIntentMetaCopy,
   canLoadFullSignal,
   markQuote,
   roomDirectionEvidenceCopy,
@@ -402,6 +403,73 @@ describe("the button that opens a room's shared top of mind", () => {
   it("always says what it does — never a bare verb with no object", () => {
     for (const label of [cta(), cta({ hasCurrent: false }), cta({ hasProposal: true })]) {
       expect(label.split(" ").length).toBeGreaterThan(2);
+    }
+  });
+});
+
+/**
+ * The strip's meta line replaced a four-clause sentence — pool size, a
+ * traces-to count the faces beside it already show, a version date, a new-save
+ * count. What survives is only what the faces cannot say.
+ */
+describe("the room strip's meta line", () => {
+  it("says how old the version is, and nothing the faces already show", () => {
+    const line = roomIntentMetaCopy({
+      hasCurrent: true,
+      when: "yesterday",
+      newInspirationCount: 0,
+      sharedContributorCount: 2,
+      memberCount: 6,
+    });
+    expect(line).toBe("from yesterday");
+    expect(line).not.toContain("traces");
+    expect(line).not.toContain("members");
+    expect(line).not.toContain("shared inspiration");
+  });
+
+  it("adds arrivals since the reading, because that is the actionable part", () => {
+    expect(
+      roomIntentMetaCopy({
+        hasCurrent: true,
+        when: "3 days ago",
+        newInspirationCount: 3,
+        sharedContributorCount: 2,
+        memberCount: 6,
+      }),
+    ).toBe("from 3 days ago · 3 new saves since");
+    expect(
+      roomIntentMetaCopy({
+        hasCurrent: true,
+        when: "today",
+        newInspirationCount: 1,
+        sharedContributorCount: 2,
+        memberCount: 6,
+      }),
+    ).toBe("from today · 1 new save since");
+  });
+
+  it("falls back to the progress fact before a first version exists", () => {
+    // No version yet means no faces to point at, so the line carries the one
+    // number that moves: who has brought material.
+    expect(
+      roomIntentMetaCopy({
+        hasCurrent: false,
+        when: "",
+        newInspirationCount: 0,
+        sharedContributorCount: 2,
+        memberCount: 6,
+      }),
+    ).toBe("2 of 6 members brought material");
+  });
+
+  it("stays one glance long in every state", () => {
+    for (const line of [
+      roomIntentMetaCopy({ hasCurrent: true, when: "yesterday", newInspirationCount: 12, sharedContributorCount: 5, memberCount: 6 }),
+      roomIntentMetaCopy({ hasCurrent: false, when: "", newInspirationCount: 0, sharedContributorCount: 5, memberCount: 6 }),
+    ]) {
+      expect(line.length).toBeLessThanOrEqual(45);
+      // One separator at most — the old line had three.
+      expect(line.split("·").length).toBeLessThanOrEqual(2);
     }
   });
 });

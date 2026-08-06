@@ -508,6 +508,38 @@ export function roomDirectionCtaCopy(input: {
   return "see the first read";
 }
 
+/**
+ * The one quiet line under a room strip's claim.
+ *
+ * It used to be a four-clause sentence — "64 shared inspirations in the room ·
+ * this version traces to 2 of 6 members · version from yesterday · 3 new
+ * inspirations since this reading" — most of which narrated things already on
+ * screen or better said elsewhere. The faces beside this line ARE who the
+ * version traces to; the pool size lives on the detail page with the rest of
+ * the evidence story. What earns the glance: how old this version is, and
+ * whether saves have arrived since it was read.
+ *
+ * Before a first version exists there are no faces to point at, so the line
+ * carries the one progress fact instead: who has brought material.
+ */
+export function roomIntentMetaCopy(input: {
+  hasCurrent: boolean;
+  /** `whenShort` output for the current version, e.g. "yesterday". */
+  when: string;
+  newInspirationCount: number;
+  sharedContributorCount: number;
+  memberCount: number;
+}): string {
+  if (!input.hasCurrent) {
+    return `${input.sharedContributorCount} of ${input.memberCount} members brought material`;
+  }
+  const fresh =
+    input.newInspirationCount > 0
+      ? ` · ${input.newInspirationCount} new save${input.newInspirationCount === 1 ? "" : "s"} since`
+      : "";
+  return `from ${input.when}${fresh}`;
+}
+
 export function roomDirectionEvidenceCopy(
   evidence: Array<{ signalId: string; userId: string }>,
   memberCount: number,
@@ -2590,17 +2622,11 @@ export default function SurfacePage(): JSX.Element {
                   : firstReadPresentation.title)}
             </p>
             <div className="sf-room-intent-foot">
-              <span>
-                {direction
-                  ? `${direction.sharedInspirationCount} shared inspiration${direction.sharedInspirationCount === 1 ? "" : "s"} in the room · ${hasRevealedDirection && direction.current
-                      ? `this version traces to ${direction.current.contributorCount} of ${direction.memberCount} members`
-                      : `${direction.sharedContributorCount} of ${direction.memberCount} members brought material`}`
-                  : ""}
-                {direction?.current ? ` · version from ${whenShort(direction.current.createdAt)}` : ""}
-                {direction?.current && direction.newInspirationCount
-                  ? ` · ${direction.newInspirationCount} new inspiration${direction.newInspirationCount === 1 ? "" : "s"} since this reading`
-                  : ""}
-              </span>
+              {/*
+                Faces first — WHO this version traces to, shown rather than
+                counted. The line that follows only says what the faces
+                cannot: how old the version is, and what has arrived since.
+              */}
               {direction?.current?.evidence.length ? (
                 <span
                   className="sf-direction-faces"
@@ -2620,6 +2646,17 @@ export default function SurfacePage(): JSX.Element {
                       {contributorInitials(name)}
                     </span>
                   ))}
+                </span>
+              ) : null}
+              {direction ? (
+                <span className="sf-room-intent-meta">
+                  {roomIntentMetaCopy({
+                    hasCurrent: Boolean(direction.current),
+                    when: direction.current ? whenShort(direction.current.createdAt) : "",
+                    newInspirationCount: direction.newInspirationCount,
+                    sharedContributorCount: direction.sharedContributorCount,
+                    memberCount: direction.memberCount,
+                  })}
                 </span>
               ) : null}
               <button
