@@ -559,15 +559,60 @@
 .sf-result-open span { font-size: var(--sf-meta); color: var(--sf-ink-3); }
 
 /*
-   Quiet until you look for it. This is a setting you audit down a column —
-   the eye should be able to run the right edge and find the private ones —
-   so it stays out of the reading order until hovered or focused.
+   A setting you audit down a column. The eye runs the right edge and finds
+   the private ones by their dot and their colour, without reading a word.
 */
 .sf-result-share {
   flex: none;
   align-self: center;
-  padding: 4px 0;
+  margin: 8px 0;
 }
+
+/* ---------------------------------------------------------------------------
+   WHAT THE SETTING ACTUALLY DOES
+
+   Collapsed by default: someone scanning their archive is not asking this
+   question, and a permanent paragraph above a list is a paragraph people
+   learn to skip. Open it once and it answers the only two questions that
+   matter — who sees it, and what do they see of it.
+   ------------------------------------------------------------------------ */
+.sf-sharing-note {
+  margin-top: 14px;
+  font-size: var(--sf-meta);
+  color: var(--sf-ink-3);
+}
+
+.sf-sharing-note > summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--sf-ink-2);
+  transition: color 0.15s var(--sf-ease);
+  /* Replace the disclosure triangle with one that matches the type. */
+  list-style: none;
+}
+
+.sf-sharing-note > summary::-webkit-details-marker { display: none; }
+
+.sf-sharing-note > summary::before {
+  content: "＋";
+  font-size: 0.92em;
+  line-height: 1;
+  transition: transform 0.18s var(--sf-ease);
+}
+
+.sf-sharing-note[open] > summary::before { content: "−"; }
+.sf-sharing-note > summary:hover { color: var(--sf-ink); }
+
+.sf-sharing-note p {
+  max-width: 34rem;
+  margin: 9px 0 0;
+  line-height: 1.6;
+}
+
+.sf-sharing-note-both { color: var(--sf-ink-2); }
 
 .sf-room:hover,
 .sf-room.on { color: var(--sf-ink); }
@@ -681,8 +726,125 @@
   color: var(--sf-ink-3);
 }
 
-.sf-draft-foot button { color: var(--sf-ink); }
-.sf-draft-foot button:disabled { color: var(--sf-ink-4); cursor: default; }
+/* Scoped to bare buttons on purpose: `.sf-control` below carries its own
+   colour per state, and a descendant selector here would outrank the class
+   and flatten all of them back to one ink. */
+.sf-draft-foot button:not(.sf-control) { color: var(--sf-ink); }
+.sf-draft-foot button:not(.sf-control):disabled {
+  color: var(--sf-ink-4);
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------------
+   CONTROLS YOU CAN SEE ARE CONTROLS
+
+   `.sf button` strips background, border and padding, which is right for the
+   verbs on the wall — there, the word IS the surface. In the composer it went
+   too far: keep, attach and public sat in a row as three bare words, visually
+   identical to the ⌘↵ hint beside them, and nothing said which of the four
+   could be pressed. People do not hover to find out whether a word is a
+   button.
+
+   So: a hairline, real padding, a rounded edge. Not a chunky form control —
+   the composer is still not a form — but enough of an edge to say "this is a
+   thing, and the thing is pressable". The one true commit action gets filled,
+   because there should be no question which word finishes the save.
+   ------------------------------------------------------------------------ */
+.sf .sf-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* 32px min target. Not 44: these sit in a dense row on a surface whose
+     whole idea is quiet, and the row itself has generous spacing around it. */
+  min-height: 32px;
+  padding: 0 13px;
+  /*
+     0.48, measured 3.21:1 against the paper.
+
+     --sf-ink-4 was the instinctive choice and it is 1.40:1 — WCAG 1.4.11 asks
+     3:1 of the visual information that identifies a control, and here the
+     border IS that information. A hairline you cannot see is the same
+     affordance problem in a new colour, so this one is dark enough to read as
+     an edge and no darker.
+  */
+  border: 1px solid rgba(23, 22, 19, 0.48);
+  border-radius: 999px;
+  /* A hint of fill so the chip reads as an object, not a ring. The label
+     measures 4.85:1 on it. */
+  background: rgba(23, 22, 19, 0.045);
+  color: var(--sf-ink-2);
+  white-space: nowrap;
+  transition:
+    color 0.15s var(--sf-ease),
+    border-color 0.15s var(--sf-ease),
+    background 0.15s var(--sf-ease);
+}
+
+.sf .sf-control:hover {
+  color: var(--sf-ink);
+  border-color: var(--sf-ink);
+  background: rgba(23, 22, 19, 0.075);
+}
+
+.sf .sf-control:active { transform: translateY(0.5px); }
+
+/* The save. Filled, because finishing is the one act in here that commits
+   something, and it should not have to be found. */
+.sf .sf-control--primary {
+  background: var(--sf-ink);
+  border-color: var(--sf-ink);
+  color: var(--sf-paper);
+  font-weight: 500;
+}
+
+.sf .sf-control--primary:hover {
+  background: var(--sf-mark);
+  border-color: var(--sf-mark);
+  color: var(--sf-mark-ink);
+}
+
+.sf .sf-control--primary:disabled {
+  background: none;
+  border-color: var(--sf-ink-4);
+  color: var(--sf-ink-4);
+  cursor: default;
+  transform: none;
+}
+
+/* A toggle carries its state twice: in the word, and in a dot you can read
+   down a column without stopping to read. */
+.sf .sf-control-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  transition: background 0.15s var(--sf-ease);
+}
+
+.sf .sf-control--toggle { color: var(--sf-ink-2); }
+.sf .sf-control--toggle:hover { color: var(--sf-ink); }
+
+/* Private is the deliberate state, so it is the one that gets the colour.
+   Public is the default and stays quiet — colouring the default would make
+   every ordinary save shout. Border measured 3.30:1, label 9.36:1. */
+.sf .sf-control--toggle.private {
+  color: var(--sf-mark);
+  border-color: color-mix(in srgb, var(--sf-mark) 55%, transparent);
+  background: color-mix(in srgb, var(--sf-mark) 5%, transparent);
+}
+
+.sf .sf-control--toggle.private:hover {
+  border-color: var(--sf-mark);
+  background: color-mix(in srgb, var(--sf-mark) 10%, transparent);
+}
+
+/* What the current setting means, under the controls rather than in a
+   tooltip nobody on a phone can open. */
+.sf-draft-note {
+  margin: 11px 0 0;
+  font-size: var(--sf-meta);
+  color: var(--sf-ink-3);
+}
 
 /* The beat nobody built: the gap between saving and being read is hours, and
    a product that says nothing in it is where trust is lost cheapest. */
@@ -2519,14 +2681,8 @@
 .sf-rate button:hover { color: var(--sf-ink); }
 .sf-rate button.on { color: var(--sf-mark); }
 
-/* Shared with your rooms, or private. One word, and it names the state it is
-   IN rather than the state it would switch to — a toggle that describes its
-   own opposite is how people end up making a save public by accident. */
-.sf-share {
-  font-size: var(--sf-meta);
-  color: var(--sf-ink-3);
-  transition: color 0.15s var(--sf-ease);
-}
-
-.sf-share:hover { color: var(--sf-ink); }
-.sf-share.private { color: var(--sf-mark); }
+/* `.sf-share` lived here. All three of its uses — composer, save detail and
+   the archive row — are `.sf-control--toggle` now, which keeps the rule it
+   was built on (name the state you are IN, never the one you would switch
+   to; a toggle that describes its own opposite is how a save gets made
+   public by accident) and adds the edge that says it can be pressed. */

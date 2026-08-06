@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   SHARING_MEANING,
+  SHARING_NOTE,
   canLoadFullSignal,
   markQuote,
   roomDirectionEvidenceCopy,
@@ -241,5 +242,49 @@ describe("sharing copy", () => {
       expect(meaning.length).toBeLessThanOrEqual(72);
       expect(meaning.endsWith(".")).toBe(true);
     }
+  });
+});
+
+/**
+ * The archive note is the one place the product explains a privacy setting at
+ * length, so every claim in it has to match what the room code does. These
+ * assertions are the check that it still does — if a future change makes rooms
+ * show more than an excerpt, or stops attributing it, this fails.
+ */
+describe("sharing note", () => {
+  it("answers who sees it and what they see of it", () => {
+    // Rooms serve truncatePreview output (PREVIEW_LENGTH = 180) with ownerName
+    // attached — never the full text, per canLoadFullSignal.
+    expect(SHARING_NOTE.public).toContain("excerpt");
+    expect(SHARING_NOTE.public).toContain("your name");
+    expect(SHARING_NOTE.public).toContain("every room you are in");
+  });
+
+  it("says private stays out of the pool a reading is made from", () => {
+    expect(SHARING_NOTE.private).toContain("no room can read it");
+    expect(SHARING_NOTE.private).toContain("cannot be quoted");
+  });
+
+  it("does not promise private hides a save from the owner's own readings", () => {
+    // The decision on record: private gates rooms, not the solo pipeline.
+    expect(SHARING_NOTE.both).toContain("your own Top of Mind");
+    expect(SHARING_NOTE.both).toContain("stays yours");
+  });
+
+  it("never claims the save reaches the public internet", () => {
+    // A public PROFILE is a separate setting. "Public" here is rooms only.
+    for (const line of [SHARING_NOTE.public, SHARING_NOTE.private, SHARING_NOTE.both]) {
+      for (const overclaim of ["anyone", "everyone", "the internet", "the web", "publicly"]) {
+        expect(line.toLowerCase()).not.toContain(overclaim);
+      }
+    }
+  });
+
+  it("agrees with the short hint beside the control", () => {
+    // Two surfaces, one promise. They may differ in length, never in meaning.
+    expect(SHARING_MEANING.private).toContain("No room");
+    expect(SHARING_NOTE.private.toLowerCase()).toContain("no room");
+    expect(SHARING_MEANING.public).toContain("room");
+    expect(SHARING_NOTE.public).toContain("room");
   });
 });

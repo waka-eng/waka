@@ -495,6 +495,33 @@ export const SHARING_MEANING = {
   private: "No room can read this. It still shapes your own Top of Mind.",
 } as const;
 
+/**
+ * The same setting, said properly, where there is room to say it.
+ *
+ * `SHARING_MEANING` is the one-liner beside the control. This is for the
+ * archive, where someone is deciding rather than typing — and where the honest
+ * questions are "who actually sees it" and "what do they see of it".
+ *
+ * Every claim here is checked against what the room code does, because a
+ * privacy explanation that is approximately right is worse than none:
+ *   - members see `truncatePreview` output, PREVIEW_LENGTH = 180 chars
+ *     (`group-top-of-mind.ts`), never the full text — `canLoadFullSignal`
+ *     returns false for another member's evidence;
+ *   - the excerpt is served with `ownerName` attached, so it is attributed;
+ *   - private saves are excluded at the query layer in every group path, so
+ *     they never enter the pool a reading is made from;
+ *   - neither setting touches the solo pipeline, which has no sharing gate.
+ */
+export const SHARING_NOTE = {
+  heading: "Who can read what you keep",
+  public:
+    "Public — every room you are in can read it. A room may quote a short excerpt, with your name, as evidence for what it reads in you together.",
+  private:
+    "Private — no room can read it. It never joins the pool a room's reading is made from, and it cannot be quoted.",
+  both:
+    "Either way the save stays yours, and either way it still shapes your own Top of Mind.",
+} as const;
+
 /** Every URL in what you typed. These become link attachments, which is what
  *  makes the page behind them readable to the judge at all. */
 function urlsIn(text: string): string[] {
@@ -3196,9 +3223,13 @@ export default function SurfacePage(): JSX.Element {
                 <span>kept {new Date(openSave.capturedAt).toLocaleDateString()}</span>
                 <button
                   type="button"
-                  className={`sf-share${openSaveShared ? "" : " private"}`}
+                  className={`sf-control sf-control--toggle${
+                    openSaveShared ? "" : " private"
+                  }`}
                   aria-pressed={!openSaveShared}
-                  title={SHARING_MEANING[openSaveShared ? "public" : "private"]}
+                  aria-label={`${openSaveShared ? "Public" : "Private"}. ${
+                    SHARING_MEANING[openSaveShared ? "public" : "private"]
+                  } Click to make it ${openSaveShared ? "private" : "public"}.`}
                   onClick={() => {
                     const next = !openSaveShared;
                     void setInspirationSharing(openSave.id, next)
@@ -3215,12 +3246,17 @@ export default function SurfacePage(): JSX.Element {
                       });
                   }}
                 >
+                  <span className="sf-control-dot" aria-hidden="true" />
                   {openSaveShared ? "public" : "private"}
                 </button>
                 <button type="button" className="sf-remove" onClick={() => dropSave(openSave)}>
                   delete this inspiration
                 </button>
               </div>
+              {/* The consequence, at the point of change, same as the composer. */}
+              <p className="sf-draft-note">
+                {SHARING_MEANING[openSaveShared ? "public" : "private"]}
+              </p>
             </div>
           ) : null}
         </section>
@@ -3247,6 +3283,20 @@ export default function SurfacePage(): JSX.Element {
             <div className="sf-label">
               {query.trim() ? `${results.length} of what you have kept` : "most recent"}
             </div>
+            {/*
+              Said once, above the column it governs.
+
+              The archive is where someone answers "what have I left public?",
+              so it is the one place the full consequence belongs — including
+              the part people actually want to know, which is not the toggle's
+              state but what another person in the room would see.
+            */}
+            <details className="sf-sharing-note">
+              <summary>{SHARING_NOTE.heading}</summary>
+              <p>{SHARING_NOTE.public}</p>
+              <p>{SHARING_NOTE.private}</p>
+              <p className="sf-sharing-note-both">{SHARING_NOTE.both}</p>
+            </details>
             <div className="sf-results">
               {searching ? <p className="sf-empty">looking…</p> : null}
               {!searching && query.trim() && results.length === 0 ? (
@@ -3270,14 +3320,16 @@ export default function SurfacePage(): JSX.Element {
                   </button>
                   <button
                     type="button"
-                    className={`sf-share sf-result-share${signal.shared ? "" : " private"}`}
+                    className={`sf-control sf-control--toggle sf-result-share${
+                      signal.shared ? "" : " private"
+                    }`}
                     aria-pressed={!signal.shared}
                     aria-label={`${signal.shared ? "Public" : "Private"}. ${
                       SHARING_MEANING[signal.shared ? "public" : "private"]
-                    }`}
-                    title={SHARING_MEANING[signal.shared ? "public" : "private"]}
+                    } Click to make it ${signal.shared ? "private" : "public"}.`}
                     onClick={() => void toggleShared(signal)}
                   >
+                    <span className="sf-control-dot" aria-hidden="true" />
                     {signal.shared ? "public" : "private"}
                   </button>
                 </div>
@@ -3327,12 +3379,17 @@ export default function SurfacePage(): JSX.Element {
           <div className="sf-draft-foot">
             <button
               type="button"
+              className="sf-control sf-control--primary"
               onClick={() => void keep()}
               disabled={(!draft.trim() && files.length === 0) || keeping}
             >
               {keeping ? "keeping…" : "keep"}
             </button>
-            <button type="button" className="sf-quiet" onClick={() => fileInput.current?.click()}>
+            <button
+              type="button"
+              className="sf-control"
+              onClick={() => fileInput.current?.click()}
+            >
               attach
             </button>
             <input
@@ -3349,15 +3406,27 @@ export default function SurfacePage(): JSX.Element {
                 rather than which state it would switch to. */}
             <button
               type="button"
-              className={`sf-share${shareToGroups ? "" : " private"}`}
+              className={`sf-control sf-control--toggle${shareToGroups ? "" : " private"}`}
               onClick={() => setShareToGroups((on) => !on)}
               aria-pressed={!shareToGroups}
-              title={SHARING_MEANING[shareToGroups ? "public" : "private"]}
             >
+              <span className="sf-control-dot" aria-hidden="true" />
               {shareToGroups ? "public" : "private"}
             </button>
             <span className="sf-shortcut">⌘↵</span>
           </div>
+          {/*
+            The consequence, in the open.
+
+            This was a `title`, which is a tooltip: invisible on every touch
+            device, and invisible on a desktop until you already suspect there
+            is something to find. A sharing setting is exactly the thing nobody
+            hovers to investigate, so it says what it does, and changes when
+            you change it.
+          */}
+          <p className="sf-draft-note">
+            {SHARING_MEANING[shareToGroups ? "public" : "private"]}
+          </p>
           {kept ? <p className="sf-kept">{kept}</p> : null}
         </div>
         </section>
