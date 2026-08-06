@@ -272,7 +272,6 @@ export async function updateAuthPreferences(
   );
 }
 
-
 export interface UpdateAuthProfileRequest {
   name: string;
   preferredLocale: SupportedLocale;
@@ -387,6 +386,8 @@ export interface ApiInspiration {
   category: number | null;
   importanceScore: number;
   wowScore: number;
+  /** Whether this inspiration feeds the user's Group Top of Mind boards (US-052). */
+  sharedToGroups?: boolean;
   cluster: ClusterKind | null;
   classifiedAt: string | null;
   createdAt: string;
@@ -468,10 +469,20 @@ export interface CreateInspirationRequest {
   }>;
   /** Optional Reflect Deeper Q/A saved with the inspiration to avoid a partial post-save gap. */
   reflections?: CreateReflectionRequest[];
+  /**
+   * How long the composer was open before this save, in milliseconds. The
+   * pulse-speed proxy: a fast save is a reaction, a slow one a composition.
+   * Optional everywhere — a save must never depend on having timed it.
+   */
+  captureElapsedMs?: number;
+  /** Whether this inspiration feeds the user's Group Top of Mind boards. Defaults to shared. */
+  shareToGroups?: boolean;
 }
 
 export interface UpdateInspirationRequest {
-  text: string;
+  text?: string;
+  /** Flip whether this inspiration feeds the user's Group Top of Mind boards. */
+  shareToGroups?: boolean;
 }
 
 export type ApiInspirationSparkSource =
@@ -583,74 +594,6 @@ export async function recordInspirationRevisit(
     { eventType },
     "Failed to record signal revisit",
   );
-}
-
-export async function fetchInspirationSparks(
-  inspirationId: string,
-): Promise<ApiInspirationSpark[]> {
-  const body = await getJson<{ sparks: ApiInspirationSpark[] }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    "Failed to load signal highlights",
-  );
-  return Array.isArray(body.sparks) ? body.sparks : [];
-}
-
-export async function createInspirationSpark(
-  inspirationId: string,
-  input: {
-    text: string;
-    source?: ApiInspirationSparkSource;
-    startOffset?: number;
-    endOffset?: number;
-    confidence?: number;
-    isPrimary?: boolean;
-    note?: string;
-  },
-): Promise<ApiInspirationSpark> {
-  const body = await postJson<{ spark: ApiInspirationSpark }>(
-    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/sparks`),
-    input,
-    "Failed to save spark",
-  );
-  return body.spark;
-}
-
-export async function deleteInspirationSpark(
-  inspirationId: string,
-  sparkId: string,
-): Promise<void> {
-  const path = apiPath(
-    `/inspirations/${encodeURIComponent(inspirationId)}/sparks/${encodeURIComponent(sparkId)}`,
-  );
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while removing highlight",
-    });
-  }
-
-  if (res.ok) return;
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-  const errorBody = (body ?? {}) as { error?: string };
-  throw new ApiError({
-    status: res.status,
-    message:
-      errorBody.error ??
-      `Failed to remove highlight (HTTP ${res.status}). Please try again.`,
-  });
 }
 
 export async function fetchInspirationScoreBreakdown(
@@ -844,6 +787,10 @@ export interface ApiTopOfMindEvidencePreview {
   role: string;
   reason: string;
   textPreview: string;
+  /** The words that carried the reading, when the judge named them provably. */
+  quote?: string | null;
+  /** Whose words they were: the person's, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   kind: string | null;
   createdAt: string;
   resonanceScore: number;
@@ -861,6 +808,195 @@ export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
   evidencePreviews: ApiTopOfMindEvidencePreview[];
   relatedSignals: ApiTopOfMindRelatedSignalReference[];
 };
+
+export type ApiTopOfMindGenerationPhase =
+  | "empty"
+  | "processing"
+  | "needs_more_context"
+  | "ready"
+  | "failed";
+
+export interface ApiTopOfMindGenerationStatus {
+  phase: ApiTopOfMindGenerationPhase;
+  message: string;
+  signalCount: number;
+  contextNodeCount: number;
+  evidenceCount: number;
+  noteCount: number;
+  job: {
+    id: string;
+    type: "process_inspiration" | "meaning_graph_rebuild";
+    status: "pending" | "running" | "succeeded" | "failed";
+    lastError: string | null;
+    updatedAt: string;
+  } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Group Top of Mind boards (US-052)
+// ---------------------------------------------------------------------------
+
+export interface ApiGroupSummary {
+  id: string;
+  name: string;
+  role: string;
+  joinCode: string;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface ApiGroupMemberSummary {
+  userId: string;
+  name: string;
+  role: string;
+}
+
+export type ApiGroupEvidencePreview = ApiTopOfMindEvidencePreview & {
+  authorUserId: string;
+  authorName: string;
+};
+
+export type ApiGroupRelatedSignalReference = ApiTopOfMindRelatedSignalReference & {
+  authorUserId: string;
+  authorName: string;
+};
+
+export type ApiGroupTopOfMindNote = Omit<
+  ApiTopOfMindNoteSurface,
+  "evidencePreviews" | "relatedSignals"
+> & {
+  evidencePreviews: ApiGroupEvidencePreview[];
+  relatedSignals: ApiGroupRelatedSignalReference[];
+  authorUserId: string;
+  authorName: string;
+};
+
+export interface ApiGroupTopOfMind {
+  group: ApiGroupSummary;
+  members: ApiGroupMemberSummary[];
+  notes: ApiGroupTopOfMindNote[];
+}
+
+/**
+ * A refresh response. Getting the same board back is ambiguous — it can mean
+ * "looked, found nothing new" or "declined to look" — so the server says which.
+ */
+export interface ApiGroupTopOfMindRefresh extends ApiGroupTopOfMind {
+  refreshed: boolean;
+  /** ISO timestamp the next run becomes possible, or null if it can run now. */
+  nextEligibleAt: string | null;
+}
+
+export interface ApiGroupCombinationReading {
+  id: string;
+  state: "revealed" | "forming";
+  ambition: string | null;
+  facets: Array<{ dimension: string; text: string }>;
+  awayFrom: string | null;
+  tension: string | null;
+  nextQuestion: string | null;
+  whatsMissing: string | null;
+  quotes: Array<{ userId: string; signalId: string; quote: string }>;
+  reconfirmedCount: number;
+  evidenceSpanStart: string | null;
+  evidenceSpanEnd: string | null;
+  updatedAt: string;
+  createdAt: string;
+  changeSummary: string | null;
+}
+
+export type ApiGroupDirectionContributionKind =
+  | "take"
+  | "feels_true"
+  | "missing"
+  | "change";
+
+export type ApiGroupDirectionResponseValue = "accept" | "keep_current";
+
+export interface ApiGroupDirectionEvidence {
+  signalId: string;
+  userId: string;
+  memberName: string;
+  quote: string;
+  textPreview: string;
+}
+
+export interface ApiGroupDirectionReading {
+  id: string;
+  versionNumber: number;
+  state: "revealed" | "forming";
+  ambition: string | null;
+  facets: Array<{ dimension: string; text: string }>;
+  awayFrom: string | null;
+  tension: string | null;
+  nextQuestion: string | null;
+  whatsMissing: string | null;
+  changeSummary: string | null;
+  evidence: ApiGroupDirectionEvidence[];
+  contributorCount: number;
+  reconfirmedCount: number;
+  evidenceSpanStart: string | null;
+  evidenceSpanEnd: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiGroupDirectionContribution {
+  id: string;
+  readingId: string;
+  userId: string;
+  memberName: string;
+  kind: ApiGroupDirectionContributionKind;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiGroupDirectionResponse {
+  userId: string;
+  memberName: string;
+  value: ApiGroupDirectionResponseValue;
+  updatedAt: string;
+}
+
+export interface ApiGroupDirection {
+  current: ApiGroupDirectionReading | null;
+  proposal: ApiGroupDirectionReading | null;
+  history: ApiGroupDirectionReading[];
+  contributions: ApiGroupDirectionContribution[];
+  responses: ApiGroupDirectionResponse[];
+  memberCount: number;
+  sharedInspirationCount: number;
+  sharedContributorCount: number;
+  newInspirationCount: number;
+  newContributorCount: number;
+  contributorCount: number;
+  requiredContributors: number;
+  requiredResponses: number;
+  viewerResponse: ApiGroupDirectionResponseValue | null;
+}
+
+export type ApiGroupReadingGenerationPhase =
+  | "processing"
+  | "ready"
+  | "needs_people"
+  | "needs_more_context"
+  | "failed";
+
+export interface ApiGroupReadingGenerationStatus {
+  phase: ApiGroupReadingGenerationPhase;
+  message: string;
+  memberCount: number;
+  sharedSignalCount: number;
+  noteCount: number;
+  job: {
+    id: string;
+    type: "group_reading_refresh";
+    status: "pending" | "running" | "succeeded" | "failed";
+    lastError: string | null;
+    updatedAt: string;
+  } | null;
+}
 
 export interface ApiTopOfMindCompatibilityMoment {
   id: string;
@@ -897,6 +1033,98 @@ export interface UpdateTopOfMindNoteRequest {
 
 export interface UpdateTopOfMindNoteResponse {
   topOfMindNote: ApiTopOfMindNoteSurface;
+}
+
+export interface ApiGroupRoomParticipant {
+  id: string;
+  userId: string | null;
+  displayName: string;
+  invitedEmail: string | null;
+  role: string;
+  status: string;
+}
+
+export interface ApiGroupRoomSignalPreview {
+  id: string;
+  signalId: string;
+  userId: string;
+  textPreview: string;
+  shareRaw: boolean;
+  createdAt: string;
+}
+
+export interface ApiGroupRoomPrompt {
+  id: string;
+  roomId: string;
+  promptText: string;
+  rationale: string;
+  actionLabel: string;
+  sourceTopOfMindNoteId: string | null;
+  evidencePreviews: Array<Record<string, unknown>>;
+  createdAt: string;
+}
+
+export interface ApiGroupConversationRoom {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  endedAt: string | null;
+  participants: ApiGroupRoomParticipant[];
+  selectedSignals: ApiGroupRoomSignalPreview[];
+  prompts: ApiGroupRoomPrompt[];
+  postConversation: {
+    feedbackCount: number;
+    latestNote: string | null;
+    nextAction: string;
+  };
+}
+
+export interface ApiGroupRoomFeedback {
+  id: string;
+  roomId: string;
+  promptId: string | null;
+  reaction: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface ListGroupRoomsResponse {
+  rooms: ApiGroupConversationRoom[];
+}
+
+export interface CreateGroupRoomRequest {
+  name?: string;
+  participantEmails?: string[];
+}
+
+export interface CreateGroupRoomResponse {
+  room: ApiGroupConversationRoom;
+}
+
+export interface CreateDiscussionTopicRequest {
+  roomId?: string;
+  title?: string;
+  sourceTopOfMindNoteId?: string;
+  signalIds?: string[];
+}
+
+export interface CreateDiscussionTopicResponse {
+  room: ApiGroupConversationRoom;
+  prompt: ApiGroupRoomPrompt;
+}
+
+export interface CreateGroupRoomFeedbackRequest {
+  promptId?: string;
+  reaction?: "useful" | "unresolved" | "next_topic" | "action";
+  note?: string;
+}
+
+export interface CreateGroupRoomFeedbackResponse {
+  room: ApiGroupConversationRoom;
+  feedback: ApiGroupRoomFeedback;
 }
 
 export type ApiPublicTopOfMindEvidencePreview = Omit<
@@ -999,13 +1227,32 @@ export type SavedSignalArchiveFilter =
 export type SavedSignalArchiveSort = "recent" | "resonance" | "revisited";
 
 export interface ApiSavedSignalSearchResult {
+  /**
+   * When this save is standing in for evidence, the words that carried the
+   * reading — so the drawer can say "these were the words" rather than showing
+   * a truncation that looks identical either way.
+   */
+  quote?: string | null;
+  /** Whose words they were: the person's own, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
   id: string;
   userId: string;
   textPreview: string;
   kind: string | null;
   capturedAt: string;
   updatedAt: string;
+  /**
+   * Public: every room you are in can read this save. Private: none of them
+   * can, and it never reaches a room's reading. Either way it stays yours and
+   * still shapes your own Top of Mind.
+   */
+  shared: boolean;
   resonanceScore: number;
+  /**
+   * Client-only: on a Group Top of Mind evidence drawer, the member who saved
+   * this inspiration. Unset for the viewer's own saved signals.
+   */
+  ownerName?: string;
   signalScores: ApiSignalScores;
   highlightedSnippets: Array<{
     id: string;
@@ -1017,6 +1264,8 @@ export interface ApiSavedSignalSearchResult {
   matchingSnippets: string[];
   relatedContextTerms: string[];
   relatedTopOfMindNoteTitles: string[];
+  /** Group boards this save fed: where else it led, and in whose company. */
+  relatedGroupNotes: Array<{ groupId: string; groupName: string; noteTitle: string }>;
   attachmentSummary: Array<{
     id: string;
     type: AttachmentType;
@@ -1274,6 +1523,383 @@ export async function updateTopOfMindNote(
   return body.topOfMindNote;
 }
 
+export async function setTopOfMindNotePinned(
+  noteId: string,
+  pinned: boolean,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await patchJson<UpdateTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/pin`),
+    { pinned },
+    pinned ? "Failed to hold that note" : "Failed to release that note",
+  );
+  return body.topOfMindNote;
+}
+
+export async function dismissTopOfMindNote(noteId: string): Promise<void> {
+  await postJson(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/dismiss`),
+    {},
+    "Failed to take that note down",
+  );
+}
+
+export async function restoreTopOfMindNote(
+  noteId: string,
+): Promise<ApiTopOfMindNoteSurface> {
+  const body = await postJson<UpdateTopOfMindNoteResponse>(
+    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/restore`),
+    {},
+    "Failed to put that note back",
+  );
+  return body.topOfMindNote;
+}
+
+export async function fetchTopOfMindStatus(): Promise<ApiTopOfMindGenerationStatus> {
+  const body = await getJson<{ status: ApiTopOfMindGenerationStatus }>(
+    apiPath("/top-of-mind/status"),
+    "Failed to load top-of-mind status",
+  );
+  return body.status;
+}
+
+export async function refreshTopOfMind(): Promise<{ job: ApiMeaningGraphRebuildJob }> {
+  return postJson(
+    apiPath("/top-of-mind/refresh"),
+    {},
+    "Failed to start a new top-of-mind reading",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Group Top of Mind boards (US-052)
+// ---------------------------------------------------------------------------
+
+/** Flip whether a saved inspiration feeds the user's Group Top of Mind boards. */
+export async function setInspirationSharing(
+  id: string,
+  shareToGroups: boolean,
+): Promise<ApiInspiration> {
+  const body = await patchJson<UpdateInspirationResponse>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    { shareToGroups },
+    "Failed to update sharing",
+  );
+  return body.inspiration;
+}
+
+/** GET /groups — the boards the signed-in user belongs to. */
+export async function fetchGroups(): Promise<ApiGroupSummary[]> {
+  const body = await getJson<{ groups: ApiGroupSummary[] }>(
+    apiPath("/groups"),
+    "Failed to load groups",
+  );
+  return Array.isArray(body.groups) ? body.groups : [];
+}
+
+/** POST /groups — create a board; caller becomes owner. */
+export async function createGroup(name: string): Promise<ApiGroupSummary> {
+  const body = await postJson<{ group: ApiGroupSummary }>(
+    apiPath("/groups"),
+    { name },
+    "Failed to create group",
+  );
+  return body.group;
+}
+
+/** POST /groups/join — join a board by its shareable code. */
+export async function joinGroup(
+  joinCode: string,
+): Promise<{ group: ApiGroupSummary; alreadyMember: boolean }> {
+  const body = await postJson<{ group: ApiGroupSummary; alreadyMember: boolean }>(
+    apiPath("/groups/join"),
+    { joinCode },
+    "Failed to join group",
+  );
+  return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
+}
+
+/** POST /groups/:id/leave */
+export async function leaveGroup(groupId: string): Promise<{ ok: boolean }> {
+  const body = await postJson<{ ok: boolean }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/leave`),
+    {},
+    "Failed to leave group",
+  );
+  return { ok: Boolean(body.ok) };
+}
+
+/**
+ * DELETE /groups/:id — the owner deletes the room outright.
+ *
+ * Distinct from leaving: this removes the board for everyone in it, along with
+ * every note their collections produced together. Members' own saved signals
+ * are untouched.
+ */
+export async function deleteGroup(groupId: string): Promise<void> {
+  const path = apiPath(`/groups/${encodeURIComponent(groupId)}`);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while deleting the room",
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON response — fall through to the status-based message.
+  }
+  const errorBody = (body ?? {}) as { error?: string };
+  throw new ApiError({
+    status: res.status,
+    message: errorBody.error ?? "Failed to delete the room",
+  });
+}
+
+/** PATCH /groups/:id — rename the room. Owner only. */
+export async function renameGroup(groupId: string, name: string): Promise<void> {
+  await requestJson(
+    apiPath(`/groups/${encodeURIComponent(groupId)}`),
+    "PATCH",
+    { name },
+    "Failed to rename the room",
+  );
+}
+
+/** DELETE /groups/:id/members/:memberId — owner removes someone. */
+export async function removeGroupMember(
+  groupId: string,
+  memberUserId: string,
+): Promise<void> {
+  await requestJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberUserId)}`,
+    ),
+    "DELETE",
+    undefined,
+    "Failed to remove that member",
+  );
+}
+
+/**
+ * Shared shape for the room's owner-only mutations: send, accept any 2xx, and
+ * surface the server's own message when it refuses. Written once because the
+ * three of them differ only in verb and wording.
+ */
+async function requestJson(
+  path: string,
+  method: "PATCH" | "DELETE",
+  body: unknown,
+  fallbackMessage: string,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: "include",
+      headers: body
+        ? { Accept: "application/json", "Content-Type": "application/json" }
+        : { Accept: "application/json" },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  } catch {
+    throw new ApiError({ status: 0, message: "Network unreachable" });
+  }
+  if (res.ok) return;
+
+  let parsed: unknown = null;
+  try {
+    parsed = await res.json();
+  } catch {
+    // Non-JSON error body — fall back to the caller's message.
+  }
+  throw new ApiError({
+    status: res.status,
+    message: (parsed as { error?: string } | null)?.error ?? fallbackMessage,
+  });
+}
+
+/** GET /groups/:id/top-of-mind — synthesized group board. */
+export async function fetchGroupTopOfMind(
+  groupId: string,
+  limit?: number,
+): Promise<ApiGroupTopOfMind> {
+  const query = typeof limit === "number" ? `?limit=${limit}` : "";
+  return getJson<ApiGroupTopOfMind>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${query}`),
+    "Failed to load group top of mind",
+  );
+}
+
+/** POST /groups/:id/top-of-mind/refresh — regenerate the group board. */
+export async function refreshGroupTopOfMind(
+  groupId: string,
+): Promise<ApiGroupTopOfMindRefresh> {
+  return postJson<ApiGroupTopOfMindRefresh>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
+    {},
+    "Failed to refresh group top of mind",
+  );
+}
+
+export async function fetchGroupCombinationReading(
+  groupId: string,
+): Promise<ApiGroupCombinationReading | null> {
+  const body = await getJson<{ reading: ApiGroupCombinationReading | null }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/reading`),
+    "Failed to load the room's shared top of mind",
+  );
+  return body.reading;
+}
+
+export async function fetchGroupReadingStatus(
+  groupId: string,
+  options: { ensure?: boolean } = {},
+): Promise<ApiGroupReadingGenerationStatus> {
+  const query = options.ensure === false ? "?ensure=0" : "";
+  const body = await getJson<{ status: ApiGroupReadingGenerationStatus }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/reading/status${query}`),
+    "Failed to load this room's reading status",
+  );
+  return body.status;
+}
+
+export async function requestGroupReadingRefresh(
+  groupId: string,
+): Promise<ApiGroupReadingGenerationStatus> {
+  const body = await postJson<{ status: ApiGroupReadingGenerationStatus }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/reading/refresh`),
+    {},
+    "Failed to start this room's reread",
+  );
+  return body.status;
+}
+
+export async function fetchGroupDirection(groupId: string): Promise<ApiGroupDirection> {
+  const body = await getJson<{ direction: ApiGroupDirection }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/direction`),
+    "Failed to load this room's shared top of mind",
+  );
+  return body.direction;
+}
+
+export async function addGroupDirectionContribution(
+  groupId: string,
+  input: { kind: ApiGroupDirectionContributionKind; body: string },
+): Promise<{
+  contribution: ApiGroupDirectionContribution;
+  contributorCount: number;
+  requiredContributors: number;
+  updateReady: boolean;
+}> {
+  return postJson(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/direction/contributions`),
+    input,
+    "Failed to add your thought",
+  );
+}
+
+export async function respondToGroupDirectionProposal(
+  groupId: string,
+  proposalId: string,
+  value: ApiGroupDirectionResponseValue,
+): Promise<{
+  decision: "adopted" | "kept_current" | "pending";
+  direction: ApiGroupDirection;
+}> {
+  return postJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/direction/proposals/${encodeURIComponent(proposalId)}/respond`,
+    ),
+    { value },
+    "Failed to save your response",
+  );
+}
+
+/** A note, as it stood at some moment on the room's timeline. */
+export interface ApiTimelineNote {
+  id: string;
+  title: string;
+  why: string;
+  /**
+   * Stable across revisions of the same reading. The rail keys its animation
+   * on this: a note that survives a scrubbed boundary must stay perfectly
+   * still, and only identity can tell "unchanged" from "replaced by something
+   * that reads similarly".
+   */
+  idempotencyKey: string;
+  createdAt: string;
+  replacedAt: string | null;
+  /** Whose saves this reading rests on — a past card keeps its faces. */
+  evidence: ApiTimelineEvidence[];
+}
+
+export interface ApiTimelineEvidence {
+  signalId: string;
+  ownerUserId: string;
+  ownerName: string;
+  textPreview: string;
+  reason: string;
+}
+
+export type ApiTimelineEvent =
+  | { kind: "formed"; at: string }
+  | { kind: "note_written"; at: string; noteId: string; title: string }
+  | { kind: "note_replaced"; at: string; noteId: string; title: string }
+  | {
+      kind: "member";
+      at: string;
+      event: "joined" | "left" | "removed";
+      userId: string;
+      name: string;
+    };
+
+export interface ApiRoomTimeline {
+  groupId: string;
+  formedAt: string;
+  events: ApiTimelineEvent[];
+}
+
+export interface ApiRoomTimelineResponse {
+  /**
+   * Null when a past board was asked for.
+   *
+   * A caller travelling already holds the room's life; rebuilding it on every
+   * scrub only to be discarded is what made the wall lag the rail.
+   */
+  timeline: ApiRoomTimeline | null;
+  board: { at: string; notes: ApiTimelineNote[] } | null;
+}
+
+/**
+ * GET /groups/:id/timeline — everything the room did, and the board as it
+ * stood at `at`.
+ *
+ * `at` omitted means now, which must equal today's wall exactly — that
+ * equivalence is what makes the rail's resting position honest rather than a
+ * second rendering of the same idea.
+ */
+export async function fetchRoomTimeline(
+  groupId: string,
+  at?: string,
+): Promise<ApiRoomTimelineResponse> {
+  const query = at ? `?at=${encodeURIComponent(at)}` : "";
+  return getJson<ApiRoomTimelineResponse>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/timeline${query}`),
+    "Failed to load the room's timeline",
+  );
+}
+
 export async function fetchPublicProfile(
   handle: string,
   options: FetchTopOfMindNotesOptions = {},
@@ -1297,6 +1923,28 @@ export async function fetchPublicProfile(
   return body;
 }
 
+/**
+ * Fill in list fields an older API may not send.
+ *
+ * The saved-signals list is rendered from these arrays directly, so a field
+ * added on the server but absent from a response — a web bundle deployed ahead
+ * of the API, or a stale dev server — took the whole drawer down with a
+ * TypeError rather than simply showing one less thing. Defaulting here means
+ * every caller can trust the declared shape.
+ */
+function normalizeSavedSignal<T extends ApiSavedSignalSearchResult>(signal: T): T {
+  return {
+    ...signal,
+    relatedTopOfMindNoteTitles: signal.relatedTopOfMindNoteTitles ?? [],
+    relatedGroupNotes: signal.relatedGroupNotes ?? [],
+    highlightedSnippets: signal.highlightedSnippets ?? [],
+    matchingSnippets: signal.matchingSnippets ?? [],
+    relatedContextTerms: signal.relatedContextTerms ?? [],
+    attachmentSummary: signal.attachmentSummary ?? [],
+    relevanceReasons: signal.relevanceReasons ?? [],
+  };
+}
+
 export async function fetchSavedSignals(
   options: FetchSavedSignalsOptions = {},
 ): Promise<ApiSavedSignalSearchResult[]> {
@@ -1318,7 +1966,7 @@ export async function fetchSavedSignals(
     });
   }
 
-  return body.signals;
+  return body.signals.map(normalizeSavedSignal);
 }
 
 export async function fetchSavedSignalDetail(
@@ -1336,7 +1984,66 @@ export async function fetchSavedSignalDetail(
     });
   }
 
-  return body.signal;
+  return normalizeSavedSignal(body.signal);
+}
+
+/** One co-cited save — what your signal sat next to inside a reading. */
+export interface ApiSignalReadingNeighbor {
+  signalId: string;
+  textPreview: string;
+  ownerUserId: string;
+  ownerName: string;
+  ownerAvatarUrl: string | null;
+  isMine: boolean;
+}
+
+export type ApiSignalReadingContext =
+  | { scope: "alone" }
+  | { scope: "group"; groupId: string; groupName: string };
+
+/**
+ * How differently a room reads this save from the way its owner does. Only
+ * ever present on a group reading — "alone" is the side being compared
+ * against, so it has nothing to differ from.
+ */
+export interface ApiSignalReadingDivergence {
+  /** 0 = the room reads it the way you do; 100 = a different ambition. */
+  score: number;
+  /** The judge's one sentence naming the difference. */
+  rationale: string;
+}
+
+/**
+ * One Top of Mind note that cited a signal — read alone or beside a room.
+ * Solo readings are the owner's own; group readings are shared with the room
+ * (the API only returns rooms the caller currently belongs to).
+ */
+export interface ApiSignalReading {
+  context: ApiSignalReadingContext;
+  note: {
+    id: string;
+    title: string;
+    kind: string;
+    beliefStatement: string | null;
+    why: string;
+    createdAt: string;
+  };
+  myRole: { role: string; reason: string };
+  /** The words in THIS save that carried THIS reading. */
+  quote: string | null;
+  /** Whose words they were — the person's own, or the page they linked. */
+  quoteSource?: "own" | "enrichment" | null;
+  neighbors: ApiSignalReadingNeighbor[];
+}
+
+export async function fetchSignalReadings(
+  signalId: string,
+): Promise<ApiSignalReading[]> {
+  const body = await getJson<{ readings: ApiSignalReading[] }>(
+    apiPath(`/inspirations/${encodeURIComponent(signalId)}/readings`),
+    "Failed to load inspiration readings",
+  );
+  return Array.isArray(body.readings) ? body.readings : [];
 }
 
 export async function createFeedback(
@@ -1356,50 +2063,6 @@ export async function createFeedback(
   }
 
   return body.feedback;
-}
-
-export async function fetchBackgroundJobs(
-  options: FetchBackgroundJobsOptions = {},
-): Promise<ApiBackgroundJob[]> {
-  const params = new URLSearchParams();
-  if (options.type) params.set("type", options.type);
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-  const path = apiPath(`/admin/background-jobs${query ? `?${query}` : ""}`);
-
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while loading background jobs",
-    });
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-
-  if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to load background jobs (HTTP ${res.status}). Please try again.`,
-    });
-  }
-
-  const payload = (body ?? {}) as Partial<ListBackgroundJobsResponse>;
-  return Array.isArray(payload.jobs) ? payload.jobs : [];
 }
 
 export type ApiMeaningGraphMemoryState =
@@ -1711,14 +2374,6 @@ export interface ApiTopOfMind {
     meaningNoteCount: number;
     relationshipEdgeCount: number;
   };
-}
-
-export async function fetchTopOfMind(): Promise<ApiTopOfMind> {
-  const body = await getJson<{ topOfMind: ApiTopOfMind }>(
-    apiPath("/top-of-mind"),
-    "Failed to load top of mind",
-  );
-  return body.topOfMind;
 }
 
 // ---------------------------------------------------------------------------

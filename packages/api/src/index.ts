@@ -18,6 +18,7 @@ import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.
 import { decisionMemoRoutes } from "./routes/decision-memo.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { guidedReflectionRoutes } from "./routes/guided-reflection.js";
+import { groupsRoutes } from "./routes/groups.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalArchiveRoutes } from "./routes/signals.js";
@@ -74,6 +75,10 @@ app.route("/api/decision-memo", decisionMemoRoutes);
 
 // User feedback teaches the graph-backed signal and top-of-mind loop.
 app.route("/api/feedback", feedbackRoutes);
+
+// Group Top of Mind boards: pool members' shared inspirations into a shared,
+// synthesized board, and the room's collaboratively shaped direction.
+app.route("/api/groups", groupsRoutes);
 
 // Attachments routes (presigned uploads, ...) live under /api/attachments.
 // The router applies `requireAuth` at the mount point, so no anonymous

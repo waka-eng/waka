@@ -9,7 +9,11 @@ import {
   wowMoments,
   type WowKind,
 } from "../db/index.js";
-import { findWowMomentCandidates } from "./wow-candidates.js";
+import {
+  findGroupWowMomentCandidates,
+  findWowMomentCandidates,
+  type CandidateReachMode,
+} from "./wow-candidates.js";
 import { getDb } from "./db.js";
 
 import {
@@ -17,10 +21,12 @@ import {
   normalizeSupportedLocale,
   type SupportedLocale,
 } from "./locales.js";
+import { memberLetter } from "./member-labels.js";
 import { getDefaultModelProvider } from "./model-provider.js";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -80,6 +86,14 @@ const MAX_RAW_GEMINI_PREVIEW_CHARS = 360;
 const MAX_REPAIR_INPUT_CHARS = 2000;
 const MAX_SOURCE_ROLE_CHARS = 64;
 const MAX_SOURCE_REASON_CHARS = 180;
+/**
+ * How long a quoted span may be.
+ *
+ * Long enough for a sentence, short enough that quoting cannot become
+ * reproducing: a highlight that swallows a paragraph has stopped pointing at
+ * anything.
+ */
+const MAX_SOURCE_QUOTE_CHARS = 220;
 const MAX_OUTPUT_TOKENS = 3072;
 const MAX_REPAIR_OUTPUT_TOKENS = 1024;
 const MAX_BELIEF_STATEMENT_REPAIR_OUTPUT_TOKENS = 512;
@@ -189,6 +203,17 @@ export interface WowSourceEvidence {
   inspirationId: string;
   role: string;
   reason: string;
+  /**
+   * The run of words in that save which carried the reading.
+   *
+   * Absent when the judge did not name one, or named one that is not actually
+   * in the save. A missing highlight is honest; a wrong one attributes words to
+   * someone who never wrote them, which is worse than saying nothing.
+   *
+   * Optional rather than nullable so a judgment that predates this — or a test
+   * fixture that does not care — is still a valid judgment.
+   */
+  quote?: string | null;
 }
 
 export interface WowJudgePromptInspiration {
@@ -204,10 +229,28 @@ export interface WowJudgePromptCandidate extends WowJudgePromptInspiration {
   scores: { runtimeCandidateScore: number };
 }
 
+/**
+ * Stable, anonymous label for whose signal this is, on a group judgment.
+ *
+ * Anonymous on purpose: the judge should reason about the juxtaposition of two
+ * collections, not about who it imagines these people to be. Absent entirely on
+ * the personal path, where every signal has the same owner and saying so would
+ * be noise.
+ */
+export type MemberLabel = string;
+
 export interface WowJudgeInput {
   trigger: WowJudgePromptInspiration;
   candidates: WowJudgePromptCandidate[];
   locale?: SupportedLocale;
+  /**
+   * Signal id -> anonymous member label, for group judgments only.
+   *
+   * Without this the judge sees a bigger pool and nothing else, so it can say
+   * what a group has in common and cannot say what their combination makes
+   * visible — which is the question a room exists to ask.
+   */
+  memberLabelsBySignalId?: Record<string, MemberLabel>;
 }
 
 export interface WowJudgeClient {
@@ -285,7 +328,7 @@ or "I am done with" unless they sound natural and non-template-like.
 Natural Korean equivalents may stay softer, such as "...일지도 모릅니다",
 "...듯합니다", "...수 있습니다".
 Do not put signal ids or partial ids in why or beliefStatement; ids belong only in
-relatedInspirationIds and sourceEvidence.inspirationId. For true outputs, choose the tight 3 to 5 signals total pattern: trigger first, then two to four strongest/most necessary related candidate ids in returned order. Do not synthesize broad multi-source patterns archive summaries. For each related signal in true outputs, include sourceEvidence with a product-facing role label and concise why-it-matters reason grounded in that source. Good role labels: "The atmosphere", "The philosophy", "The practice", "The tension", "The repeated signal"; not primary/supporting/contrast/related, scores, IDs, dates, or classifier jargon. Do not repeat phrases. Prefer false over over-claiming.
+relatedInspirationIds and sourceEvidence.inspirationId. For true outputs, choose the tight 3 to 5 signals total pattern: trigger first, then two to four strongest/most necessary related candidate ids in returned order. Do not synthesize broad multi-source patterns archive summaries. For each related signal in true outputs, include sourceEvidence with a product-facing role label and concise why-it-matters reason grounded in that source. Where one run of words in that signal carries the reading, copy it verbatim into quote - character for character from that signal's own text, never paraphrased and never stitched from separate places. Omit quote rather than approximate it. Good role labels: "The atmosphere", "The philosophy", "The practice", "The tension", "The repeated signal"; not primary/supporting/contrast/related, scores, IDs, dates, or classifier jargon. Do not repeat phrases. Prefer false over over-claiming.
 For false judgments, choose the most specific reason and keep debugSummary compact
 (<= 120 characters). False judgments must not include why. Do not include secrets
 or quote long user text.
@@ -317,9 +360,13 @@ function trimForPrompt(text: string): string {
     : trimmed;
 }
 
-function serializeInspirationForPrompt(inspiration: WowJudgePromptInspiration) {
+function serializeInspirationForPrompt(
+  inspiration: WowJudgePromptInspiration,
+  memberLabel?: MemberLabel,
+) {
   return {
     id: inspiration.id,
+    ...(memberLabel ? { savedBy: memberLabel } : {}),
     kind: inspiration.kind,
     category: inspiration.category,
     cluster: inspiration.cluster,
@@ -470,22 +517,28 @@ function buildWowJudgeValidExamples(allowedIds: string[]) {
 }
 
 function buildWowJudgeInputPayload(input: WowJudgeInput) {
+  const labels = input.memberLabelsBySignalId;
   return {
-    trigger: serializeInspirationForPrompt(input.trigger),
+    trigger: serializeInspirationForPrompt(input.trigger, labels?.[input.trigger.id]),
     candidates: input.candidates.map((candidate, index) => ({
       rank: index + 1,
       runtimeCandidateScore: candidate.scores.runtimeCandidateScore,
-      ...serializeInspirationForPrompt(candidate),
+      ...serializeInspirationForPrompt(candidate, labels?.[candidate.id]),
     })),
   };
 }
 
-function buildUserPrompt(input: WowJudgeInput): string {
+export function buildUserPrompt(input: WowJudgeInput): string {
   const allowedIds = allowedRelatedInspirationIds(input);
   const locale = normalizeSupportedLocale(input.locale);
   const payload = {
     contractVersion: WOW_JUDGE_CONTRACT_VERSION,
-    task: "Judge whether the trigger signal plus the provided candidate signals form one grounded top-of-mind note. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, or unsafe to claim.",
+    // When signals carry a `savedBy` label the pool spans several people, and
+    // the question changes: not what they have in common, which is the
+    // obvious reading, but what only their combination makes visible.
+    task: input.memberLabelsBySignalId
+      ? "These signals were saved by different people, each tagged with who saved it. Judge whether they form one grounded top-of-mind note that becomes visible ONLY because these particular collections sit next to each other. Shared themes are the obvious reading and are not what you are for. Ground the note in signals from at least two different members, prefer a revealing juxtaposition over a comfortable overlap, and do not restate what one member's signals already say alone. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, derivable from a single member, or unsafe to claim."
+      : "Judge whether the trigger signal plus the provided candidate signals form one grounded top-of-mind note. Return false when the relationship is generic, duplicate, weak, insufficiently surprising, unsupported by at least three unique allowed ids, or unsafe to claim.",
     locale: buildLocaleContract(locale),
     allowedIds,
     input: buildWowJudgeInputPayload(input),
@@ -585,9 +638,27 @@ export function buildWowJudgmentRequest(
                       type: "STRING",
                       description: "Concise source-grounded reason.",
                     },
+                    /**
+                     * The words in THAT signal which carried the reading.
+                     *
+                     * The prompt asked for this and the parser accepted it,
+                     * but the response schema did not declare it — and Gemini
+                     * is called in structured-output mode, so the model was
+                     * physically unable to return the field however clearly it
+                     * was asked. 39 citations came back with zero quotes.
+                     *
+                     * Not in `required`: a reading whose evidence has no single
+                     * quotable run is still a good reading, and forcing the
+                     * field would buy invented spans.
+                     */
+                    quote: {
+                      type: "STRING",
+                      description:
+                        "Verbatim span copied from that signal's own text, character for character. Never paraphrased, never stitched from separate places. Omit rather than approximate.",
+                    },
                   },
                   required: ["inspirationId", "role", "reason"],
-                  propertyOrdering: ["inspirationId", "role", "reason"],
+                  propertyOrdering: ["inspirationId", "role", "reason", "quote"],
                 },
               },
             },
@@ -834,18 +905,20 @@ export function normalizeWowSourceEvidence(
   relatedInspirationIds: string[],
 ): WowSourceEvidence[] {
   const sourceRows = Array.isArray(sourceEvidence) ? sourceEvidence : [];
-  const rowsById = new Map<string, { role?: unknown; reason?: unknown }>();
+  const rowsById = new Map<string, { role?: unknown; reason?: unknown; quote?: unknown }>();
   for (const row of sourceRows) {
     if (typeof row !== "object" || row === null) continue;
     const payload = row as {
       inspirationId?: unknown;
       role?: unknown;
       reason?: unknown;
+      quote?: unknown;
     };
     if (typeof payload.inspirationId !== "string") continue;
     rowsById.set(payload.inspirationId, {
       role: payload.role,
       reason: payload.reason,
+      quote: payload.quote,
     });
   }
 
@@ -855,6 +928,9 @@ export function normalizeWowSourceEvidence(
       inspirationId,
       role: normalizeSourceRoleLabel(row?.role),
       reason: normalizeSourceReason(row?.reason),
+      quote: typeof row?.quote === "string" && row.quote.trim().length > 0
+        ? sanitizeSourceEvidenceText(row.quote, MAX_SOURCE_QUOTE_CHARS)
+        : null,
     };
   });
 }
@@ -884,6 +960,22 @@ const sourceEvidenceSchema = z
             (value) => !isUnsafeSourceReason(value),
             "sourceEvidence reason must be product-facing",
           ),
+        /**
+         * Optional on purpose: a judgment that names no span is still a good
+         * judgment, and refusing one for lacking a highlight would trade a
+         * reading for a decoration.
+         *
+         * `nullish`, not `optional`: the normalizer emits null for "no span",
+         * and `optional` accepts only undefined — so a judgment that reached
+         * this schema carrying an explicit null failed the whole object under
+         * `strict()` and came back false. A missing quote must never be able
+         * to cost a reading.
+         */
+        quote: z
+          .string()
+          .transform((value) => sanitizeSourceEvidenceText(value, MAX_SOURCE_QUOTE_CHARS))
+          .pipe(z.string().max(MAX_SOURCE_QUOTE_CHARS))
+          .nullish(),
       })
       .strict(),
   )
@@ -1677,7 +1769,7 @@ export class GeminiWowJudgeClient implements WowJudgeClient {
     apiKey: string,
     request: GenerateContentRequest,
   ): Promise<unknown | null> {
-    const response = await this.fetchFn(buildWowGenerateContentUrl(), {
+    const response = await fetchModelWithTimeout(this.fetchFn, buildWowGenerateContentUrl(), {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),
       body: JSON.stringify(request),
@@ -2250,6 +2342,117 @@ export async function judgeWowMomentForInspiration(
     return defaultFalseJudgment(
       "unclear_pattern",
       "Gemini referenced signal ids outside retrieved candidates.",
+      { parseFailureStage: "unsafe_related_ids" },
+    );
+  }
+  if (!judgment.isWowMoment) return judgment;
+
+  const cappedJudgment = capTrueJudgmentSources(
+    judgment,
+    params.triggerInspirationId,
+  );
+  return hasEnoughSourceLinks(cappedJudgment.relatedInspirationIds)
+    ? cappedJudgment
+    : tooFewSourceLinksFalseJudgment();
+}
+
+export interface JudgeGroupWowMomentParams {
+  /** How the evidence around the trigger is chosen. Default is the shipped one. */
+  reachMode?: CandidateReachMode;
+  db?: WakaDb;
+  /** Every member of the group whose shared signals may join the pool. */
+  memberUserIds: string[];
+  /** Which member owns the trigger inspiration. */
+  triggerUserId: string;
+  triggerInspirationId: string;
+  limit?: number;
+  client?: WowJudgeClient;
+  locale?: SupportedLocale;
+}
+
+/**
+ * Judge a group Top of Mind note over the POOLED shared inspirations of all
+ * members. Identical contract to {@link judgeWowMomentForInspiration}, but the
+ * candidate pool spans members, so the resulting note can be grounded in
+ * inspirations owned by different people. The judge only ever references ids
+ * from the provided pool (`relatedIdsAreSafe`), so cross-member evidence is safe.
+ */
+/**
+ * Anonymous, stable labels for the members whose signals are in this pool.
+ *
+ * Sorted by user id so the same group always yields the same letters, and
+ * anonymous so the model reasons about the juxtaposition rather than about who
+ * it believes these people are.
+ */
+/**
+ * A, B, … Z, AA, AB, … — spreadsheet-column style, so the labels stay distinct
+ * past 26 members.
+ *
+ * Wrapping at 26 gave two people the same letter, which quietly breaks the one
+ * thing a group note rests on: the judge is asked to ground a reading in at
+ * least two different members, and two members it cannot tell apart read as
+ * one. Group size is unbounded (anyone with the code joins), so the 27th member
+ * is a real case, not a hypothetical.
+ */
+export function buildMemberLabels(
+  retrieved: Awaited<ReturnType<typeof findGroupWowMomentCandidates>>,
+  memberUserIds: string[],
+): Record<string, MemberLabel> {
+  const labelByUser = new Map<string, MemberLabel>();
+  [...new Set(memberUserIds)].sort().forEach((userId, index) => {
+    labelByUser.set(userId, `member ${memberLetter(index)}`);
+  });
+
+  const labels: Record<string, MemberLabel> = {};
+  const assign = (signalId: string, userId: string | undefined) => {
+    const label = userId ? labelByUser.get(userId) : undefined;
+    if (label) labels[signalId] = label;
+  };
+  if (retrieved.trigger) assign(retrieved.trigger.id, retrieved.trigger.userId);
+  for (const candidate of retrieved.candidates) {
+    assign(candidate.inspiration.id, candidate.inspiration.userId);
+  }
+  return labels;
+}
+
+export async function judgeGroupWowMoment(
+  params: JudgeGroupWowMomentParams,
+): Promise<WowMomentJudgment> {
+  const db = params.db ?? getDb();
+  const retrieved = await findGroupWowMomentCandidates({
+    db,
+    memberUserIds: params.memberUserIds,
+    triggerUserId: params.triggerUserId,
+    triggerInspirationId: params.triggerInspirationId,
+    limit: params.limit,
+    reachMode: params.reachMode,
+  });
+  const locale = normalizeSupportedLocale(params.locale);
+  // Reflection text loads under the trigger owner; cross-member candidates
+  // simply contribute without their (optional) reflection enrichment.
+  const input = await toPromptInput(retrieved, db, params.triggerUserId, locale);
+  if (!input) {
+    return defaultFalseJudgment(
+      "not_enough_candidates",
+      "No trigger/candidate set was available for group top-of-mind judgment.",
+    );
+  }
+
+  // Ownership survives into the prompt here, and only here. Without it the
+  // judge sees a larger pool and nothing else, so it can name what a group has
+  // in common but not what their particular combination makes visible.
+  const withLabels: WowJudgeInput = {
+    ...input,
+    memberLabelsBySignalId: buildMemberLabels(retrieved, params.memberUserIds),
+  };
+
+  const client =
+    params.client ?? (await getDefaultModelProvider()).topOfMindNoteJudge;
+  const judgment = await client.judgeWowMoment(withLabels);
+  if (!relatedIdsAreSafe(judgment, input)) {
+    return defaultFalseJudgment(
+      "unclear_pattern",
+      "Gemini referenced signal ids outside the pooled group candidates.",
       { parseFailureStage: "unsafe_related_ids" },
     );
   }

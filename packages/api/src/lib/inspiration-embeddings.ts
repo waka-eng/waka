@@ -26,6 +26,7 @@ import { getDb } from "./db.js";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -39,6 +40,11 @@ export interface CanonicalInspirationEmbeddingInput {
   text: string;
   kind: string | null;
   category: number | null;
+  /**
+   * Fetched page text for URL saves (title/description), when we have it.
+   * See `signal-enrichment.ts`.
+   */
+  enrichment?: string | null;
   reflections?: Array<Pick<Reflection, "question" | "answer" | "skipped" | "createdAt">>;
 }
 
@@ -72,12 +78,25 @@ export function buildCanonicalInspirationEmbeddingInput(
       return [`reflection_${index + 1}_question:`, question, `reflection_${index + 1}_answer:`, answer].join("\n");
     });
 
+  /**
+   * Enrichment joins the input ONLY when present, rather than as an always-on
+   * `enrichment:none` line under a bumped version. The distinction is the
+   * regeneration blast radius: this way an un-enriched row's input stays
+   * byte-identical to what it hashed before enrichment existed, so nothing
+   * regenerates until a row actually gains enrichment — at which point its
+   * hash changes and `ensureInspirationEmbedding` regenerates exactly that
+   * one. A version bump would have re-embedded every signal ever saved to say
+   * "none" about most of them.
+   */
+  const enrichment = normalizeTextForEmbedding(inspiration.enrichment ?? "");
+
   return [
     "waka.inspiration_embedding_input.v2",
     `kind:${kind}`,
     `category:${category}`,
     "text:",
     text,
+    ...(enrichment.length > 0 ? ["enrichment:", enrichment] : []),
     "reflections:",
     reflectionLines.length > 0 ? reflectionLines.join("\n") : "none",
   ].join("\n");
@@ -152,7 +171,7 @@ export class GeminiEmbeddingHttpClient implements GeminiEmbeddingClient {
 
   async embed(input: string): Promise<number[]> {
     const apiKey = getGeminiApiKey();
-    const response = await fetch(buildEmbedContentUrl(this.model), {
+    const response = await fetchModelWithTimeout(fetch, buildEmbedContentUrl(this.model), {
       method: "POST",
       headers: buildGeminiJsonHeaders(apiKey),
       body: JSON.stringify({
@@ -418,4 +437,71 @@ export async function ensureInspirationEmbedding(
 
     return { status, embedding: stored, generated: true, inputHash };
   });
+}
+
+/**
+ * Re-embed a signal whose content changed after capture.
+ *
+ * Capture already does the right thing: `generateAutoWowMomentForInspiration`
+ * enriches, then embeds, so a new save's first vector is its audible one.
+ * Nothing did the same for the changes that come *after* — and four of the
+ * five inputs to a canonical embedding can still move: text, kind, category,
+ * reflections, enrichment.
+ *
+ * The consequence measured on a real board: 19 of 63 shared signals held a
+ * vector that no longer matched the row it described. The pipeline reads
+ * vectors, never rows, so those signals were being matched as an older version
+ * of themselves. Worst of all it punished effort — writing a reflection is the
+ * most deliberate thing a person can do to a save, and it silently made that
+ * save's vector wrong, so it connected to less than it had before.
+ *
+ * Best-effort by design, and never a gate on the write that triggered it. The
+ * user's reflection is saved whatever the embedding provider is doing; the
+ * same stance `auto-wow-generation` takes toward enrichment. `ensureInspiration
+ * Embedding` compares hashes first, so a change that does not affect the
+ * canonical input costs one query and no provider call.
+ *
+ * Not queued because there is no job type for it and re-using
+ * `process_inspiration` would drag a judge pass — many model calls — behind
+ * every edit of a reflection. If the added latency ever matters, the upgrade
+ * is its own job type, not a bigger existing one.
+ *
+ * **Awaited, and bounded.** It runs in the request because the API is deployed
+ * as Lambda, where work left unawaited after the response is simply killed —
+ * fire-and-forget would mean the refresh usually never happened. So the write
+ * does wait on it, and a slow provider would otherwise hold a user's reflection
+ * open for as long as it liked. The timeout is what keeps a bad day for the
+ * embedding service from becoming a bad day for saving your own words.
+ */
+const REFRESH_TIMEOUT_MS = 4000;
+export async function refreshEmbeddingAfterChange(
+  params: EnsureInspirationEmbeddingParams & { reason: "edited" | "reflected" },
+): Promise<void> {
+  try {
+    const result = await Promise.race([
+      ensureInspirationEmbedding(params),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`embedding refresh exceeded ${REFRESH_TIMEOUT_MS}ms`)),
+          REFRESH_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    if (result.generated) {
+      console.log("[embeddings] refreshed after change", {
+        inspirationId: params.inspirationId,
+        reason: params.reason,
+        status: result.status,
+      });
+    }
+  } catch (err) {
+    // Never silent: a vector that failed to refresh is a signal that will be
+    // read as its older self until something touches it again, and that is
+    // invisible from every surface.
+    console.warn("[embeddings] refresh after change failed", {
+      inspirationId: params.inspirationId,
+      reason: params.reason,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }

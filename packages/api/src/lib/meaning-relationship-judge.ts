@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   buildGeminiJsonHeaders,
   buildGeminiModelEndpoint,
+  fetchModelWithTimeout,
   formatSafeGeminiError,
   safeGeminiErrorDetails,
 } from "./gemini-http.js";
@@ -434,7 +435,7 @@ export class GeminiMeaningRelationshipJudgeClient
       );
     }
 
-    const response = await this.fetchFn(buildGeminiModelEndpoint(this.model, "generateContent"), {
+    const response = await fetchModelWithTimeout(this.fetchFn, buildGeminiModelEndpoint(this.model, "generateContent"), {
       method: "POST",
       headers: buildGeminiJsonHeaders(this.apiKey ?? getGeminiApiKey()),
       body: JSON.stringify(requestBody(input)),

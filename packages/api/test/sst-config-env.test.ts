@@ -27,16 +27,28 @@ describe("SST API admin route environment flags", () => {
 });
 
 describe("SST background job recovery schedule", () => {
-  it("runs the production BackgroundJobDrain backstop every 12 hours", () => {
+  it("runs the durable BackgroundJobDrain worker every minute", () => {
     const backgroundJobDrain = sstConfig.match(
       /new sst\.aws\.Cron\("BackgroundJobDrain", \{(?<body>[\s\S]*?)\n    \}\);/,
     );
 
     expect(backgroundJobDrain?.groups?.body).toEqual(
-      expect.stringContaining('schedule: "rate(12 hours)"'),
+      expect.stringContaining('schedule: "rate(1 minute)"'),
     );
     expect(backgroundJobDrain?.groups?.body).toEqual(
-      expect.stringContaining('enabled: $app.stage === "production"'),
+      expect.stringContaining("enabled: true"),
+    );
+  });
+});
+
+describe("SST interactive reading timeout", () => {
+  it("allows a bounded group reading pass to finish", () => {
+    const apiFunction = sstConfig.match(
+      /new sst\.aws\.Function\("Api", \{(?<body>[\s\S]*?)\n    \}\);/,
+    );
+
+    expect(apiFunction?.groups?.body).toEqual(
+      expect.stringContaining('timeout: "60 seconds"'),
     );
   });
 });

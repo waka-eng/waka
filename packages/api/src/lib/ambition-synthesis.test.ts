@@ -299,6 +299,35 @@ describe("bounded ambition synthesis", () => {
     expect(result.candidates[0]?.title).toBe(longSpecific.firstPersonPostItCandidate);
   });
 
+  it("accepts a grounded first-person desire as a provisional post-it", async () => {
+    const firstPersonDesire: AmbitionSynthesisOutput = {
+      firstPersonPostItCandidate:
+        "I want a physical workshop where neighbors test meaningful projects together instead of polishing alone.",
+      memoryState: "active",
+      environmentDirection:
+        "A neighborhood room with generous peers and unfinished work in public reinforces this ambition.",
+      rejectedEnvironment:
+        "Private work and polished presentations without participation quietly kill it.",
+      evidenceRationale:
+        "The signals repeatedly connect practical building, visible drafts, and people helping one another move.",
+      confidence: 91,
+      rejectedAlternativeInterpretation:
+        "The shallow read is a taste for workshops, but the deeper read is a need for community-shaped work.",
+    };
+
+    const result = await runBoundedAmbitionSynthesisLoop({
+      userId,
+      trigger: "weekly_refresh",
+      candidates: candidates(),
+      synthesize: vi.fn().mockResolvedValue(firstPersonDesire),
+    });
+
+    expect(result).toMatchObject({ synthesized: 1, failed: 0 });
+    expect(result.candidates[0]?.title).toBe(
+      firstPersonDesire.firstPersonPostItCandidate,
+    );
+  });
+
   it("surfaces invalid synthesis as failure and excludes the candidate", async () => {
     const generic: AmbitionSynthesisOutput = {
       firstPersonPostItCandidate: "I want startups.",
@@ -328,6 +357,7 @@ describe("bounded ambition synthesis", () => {
     expect(result.failures[0]).toMatchObject({
       contextNodeId: "public-building-room",
       reason: "invalid_output",
+      validationReason: "post_it_length",
     });
   });
 

@@ -5,6 +5,10 @@ import { z } from "zod";
 import {
   attachments,
   feedback,
+  groupMembers,
+  groupTopOfMindNoteSignals,
+  groupTopOfMindNotes,
+  groups,
   inspirationSparks,
   inspirations,
   meaningEvidence,
@@ -72,6 +76,14 @@ export interface SavedSignalSearchResult {
   kind: string | null;
   capturedAt: string;
   updatedAt: string;
+  /**
+   * Whether the rooms this person is in may read this save.
+   *
+   * On the list so the archive can show and change it in place. Without it the
+   * only way to find out was to open a save one at a time, which made a
+   * privacy setting something you could not audit.
+   */
+  shared: boolean;
   resonanceScore: number;
   signalScores: Record<string, number>;
   highlightedSnippets: Array<{
@@ -84,6 +96,8 @@ export interface SavedSignalSearchResult {
   matchingSnippets: string[];
   relatedContextTerms: string[];
   relatedTopOfMindNoteTitles: string[];
+  /** Group boards this signal fed, newest first: where else it led. */
+  relatedGroupNotes: Array<{ groupId: string; groupName: string; noteTitle: string }>;
   attachmentSummary: Array<{
     id: string;
     type: "link" | "image" | "file";
@@ -181,6 +195,7 @@ type BaseSignalRow = {
   wowScore: number;
   cluster: any;
   classifiedAt: Date | null;
+  sharedToGroups: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -197,6 +212,7 @@ async function fetchArchiveRows(db: WakaDb, userId: string, limit: number) {
       wowScore: inspirations.wowScore,
       cluster: inspirations.cluster,
       classifiedAt: inspirations.classifiedAt,
+      sharedToGroups: inspirations.sharedToGroups,
       createdAt: inspirations.createdAt,
       updatedAt: inspirations.updatedAt,
     })
@@ -213,11 +229,13 @@ async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: stri
       sparksBySignal: new Map<string, any[]>(),
       contextBySignal: new Map<string, any[]>(),
       topNotesBySignal: new Map<string, any[]>(),
+      groupNotesBySignal: new Map<string, any[]>(),
       attachmentsBySignal: new Map<string, any[]>(),
     };
   }
 
-  const [sparkRows, contextRows, topNoteRows, attachmentRows] = await Promise.all([
+  const [sparkRows, contextRows, topNoteRows, groupNoteRows, attachmentRows] =
+    await Promise.all([
     db
       .select({
         id: inspirationSparks.id,
@@ -254,6 +272,40 @@ async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: stri
       .from(wowMomentInspirations)
       .innerJoin(wowMoments, and(eq(wowMoments.id, wowMomentInspirations.wowMomentId), eq(wowMoments.userId, userId)))
       .where(and(eq(wowMomentInspirations.userId, userId), inArray(wowMomentInspirations.inspirationId, signalIds))),
+    /**
+     * Which group boards this signal fed, and what they made of it.
+     *
+     * The same fact as the solo query beside it, on the other side of the
+     * product's claim: a save can produce one reading alone and another
+     * beside other people. Scoped to rooms the viewer is still in, and to
+     * readings those rooms currently hold, so a departed room or a retired
+     * note stops being claimed.
+     */
+    db
+      .select({
+        inspirationId: groupTopOfMindNoteSignals.signalId,
+        id: groupTopOfMindNotes.id,
+        title: groupTopOfMindNotes.title,
+        groupId: groups.id,
+        groupName: groups.name,
+      })
+      .from(groupTopOfMindNoteSignals)
+      .innerJoin(
+        groupTopOfMindNotes,
+        eq(groupTopOfMindNoteSignals.groupTopOfMindNoteId, groupTopOfMindNotes.id),
+      )
+      .innerJoin(groups, eq(groupTopOfMindNotes.groupId, groups.id))
+      .innerJoin(
+        groupMembers,
+        and(eq(groupMembers.groupId, groups.id), eq(groupMembers.userId, userId)),
+      )
+      .where(
+        and(
+          inArray(groupTopOfMindNoteSignals.signalId, signalIds),
+          eq(groupTopOfMindNoteSignals.ownerUserId, userId),
+          eq(groupTopOfMindNotes.lifecycleStatus, "active"),
+        ),
+      ),
     db
       .select({
         id: attachments.id,
@@ -284,6 +336,7 @@ async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: stri
     sparksBySignal: group(sparkRows),
     contextBySignal: group(contextRows),
     topNotesBySignal: group(topNoteRows),
+    groupNotesBySignal: group(groupNoteRows),
     attachmentsBySignal: group(attachmentRows),
   };
 }
@@ -306,6 +359,13 @@ function serializeSearchResult(
   const attachmentRows = maps.attachmentsBySignal.get(row.id) ?? [];
   const contextTerms = [...new Set(context.map((node) => node.label))].slice(0, 6);
   const topNoteTitles = [...new Set(topNotes.map((note) => note.title))].slice(0, 4);
+  const groupNotes = (maps.groupNotesBySignal.get(row.id) ?? [])
+    .map((note: any) => ({
+      groupId: note.groupId as string,
+      groupName: note.groupName as string,
+      noteTitle: note.title as string,
+    }))
+    .slice(0, 4);
   const haystack = [
     row.text,
     ...sparks.map((spark) => spark.text),
@@ -327,6 +387,7 @@ function serializeSearchResult(
     kind: row.kind,
     capturedAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    shared: row.sharedToGroups,
     resonanceScore: signal.signalScores.resonance,
     signalScores: signal.signalScores,
     highlightedSnippets: sparks.slice(0, 4).map((spark) => ({
@@ -339,6 +400,7 @@ function serializeSearchResult(
     matchingSnippets: matchSnippet(haystack, query),
     relatedContextTerms: contextTerms,
     relatedTopOfMindNoteTitles: topNoteTitles,
+    relatedGroupNotes: groupNotes,
     attachmentSummary: attachmentRows.slice(0, 3).map((attachment) => ({
       id: attachment.id,
       type: attachment.type,
@@ -362,13 +424,22 @@ function passesFilter(result: SavedSignalSearchResult, filter: SignalArchiveFilt
   if (filter === "people_places") {
     return result.relatedContextTerms.some((term) => /person|people|place|room|environment/i.test(term));
   }
-  return result.relatedTopOfMindNoteTitles.length > 0;
+  return (
+    result.relatedTopOfMindNoteTitles.length > 0 ||
+    result.relatedGroupNotes.length > 0
+  );
 }
 
 function sortResults(results: SavedSignalSearchResult[], sort: SignalArchiveSort): SavedSignalSearchResult[] {
   return [...results].sort((a, b) => {
     if (sort === "resonance") return b.resonanceScore - a.resonanceScore;
-    if (sort === "revisited") return b.relatedTopOfMindNoteTitles.length - a.relatedTopOfMindNoteTitles.length;
+    if (sort === "revisited") {
+      return (
+        b.relatedTopOfMindNoteTitles.length +
+        b.relatedGroupNotes.length -
+        (a.relatedTopOfMindNoteTitles.length + a.relatedGroupNotes.length)
+      );
+    }
     return new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime();
   });
 }
@@ -389,6 +460,7 @@ export async function listSavedSignals(
           ...result.highlightedSnippets.map((snippet) => snippet.text),
           ...result.relatedContextTerms,
           ...result.relatedTopOfMindNoteTitles,
+          ...result.relatedGroupNotes.map((note) => `${note.groupName} ${note.noteTitle}`),
         ];
         if (!includesQuery(values, query)) return false;
       }
@@ -412,6 +484,7 @@ export async function getSavedSignal(
       wowScore: inspirations.wowScore,
       cluster: inspirations.cluster,
       classifiedAt: inspirations.classifiedAt,
+      sharedToGroups: inspirations.sharedToGroups,
       createdAt: inspirations.createdAt,
       updatedAt: inspirations.updatedAt,
     })

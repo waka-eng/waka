@@ -1,4 +1,54 @@
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 25_000;
+
+export class ModelRequestTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Model request timed out after ${timeoutMs}ms`);
+    this.name = "ModelRequestTimeoutError";
+  }
+}
+
+export function getModelRequestTimeoutMs(): number {
+  const parsed = Number.parseInt(process.env.WAKA_MODEL_TIMEOUT_MS ?? "", 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_MODEL_REQUEST_TIMEOUT_MS;
+  return Math.max(1_000, Math.min(parsed, 120_000));
+}
+
+/**
+ * Bound every provider round-trip. Abort is not enough on its own because an
+ * injected or non-conforming fetch implementation may ignore the signal, so
+ * the explicit race guarantees the worker gets control back and can retry.
+ */
+export async function fetchModelWithTimeout(
+  fetchFn: typeof fetch,
+  input: Parameters<typeof fetch>[0],
+  init: RequestInit = {},
+  timeoutMs = getModelRequestTimeoutMs(),
+): Promise<Response> {
+  const controller = new AbortController();
+  const upstreamSignal = init.signal;
+  const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+  if (upstreamSignal?.aborted) abortFromUpstream();
+  else upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new ModelRequestTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      fetchFn(input, { ...init, signal: controller.signal }),
+      timeout,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+  }
+}
 
 export function buildGeminiModelEndpoint(model: string, method: "generateContent" | "embedContent"): string {
   return `${GEMINI_BASE_URL}/models/${encodeURIComponent(model)}:${method}`;
@@ -56,4 +106,91 @@ export async function safeGeminiErrorDetails(response: Response): Promise<SafeGe
 export function formatSafeGeminiError(prefix: string, details: SafeGeminiErrorDetails): string {
   const code = details.providerCode ? ` providerCode=${details.providerCode}` : "";
   return `${prefix}: HTTP ${details.status} ${details.statusText}${code}`;
+}
+
+/** Statuses where trying again is the right answer rather than giving up. */
+const TRANSIENT_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+/**
+ * Node network-layer codes that mean "the call never landed", not "the call
+ * was refused on its merits".
+ */
+const TRANSIENT_NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "EPIPE",
+  "ENETUNREACH",
+  "ENETDOWN",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+]);
+
+function causeCode(err: unknown, depth = 0): string | null {
+  if (depth > 4 || err === null || typeof err !== "object") return null;
+  const code = (err as { code?: unknown }).code;
+  if (typeof code === "string") return code;
+  return causeCode((err as { cause?: unknown }).cause, depth + 1);
+}
+
+/**
+ * The status a model error is carrying, when it has one.
+ *
+ * Every provider HTTP failure in this repo is raised through
+ * `formatSafeGeminiError`, so `HTTP <status>` is a format we produce rather
+ * than a string we hope for. Parsing it is therefore reading our own field,
+ * not sniffing prose — and it is anchored to `HTTP ` precisely so a status-
+ * shaped number appearing anywhere else in a message cannot be mistaken for
+ * one.
+ */
+export function modelErrorHttpStatus(err: unknown): number | null {
+  const message = err instanceof Error ? err.message : String(err);
+  const match = /\bHTTP (\d{3})\b/.exec(message);
+  return match ? Number.parseInt(match[1]!, 10) : null;
+}
+
+/**
+ * Is this failure worth another attempt?
+ *
+ * This used to be a regex over the message: `/\b(503|429|500|502|504)\b/`.
+ * It got the two most common real failures exactly backwards.
+ * `"Model request timed out after 25000ms"` does not match — the `500` inside
+ * `25000` has no word boundary — and `TypeError: fetch failed`, which is what
+ * undici raises when the socket dies, contains no number at all. So under
+ * provider overload, the precise condition the retry was written for, nothing
+ * retried: the judge threw on attempt one, the pass logged a warning and moved
+ * on, the job was marked SUCCEEDED, and the room quietly got a thinner board
+ * with nothing surfaced to anyone.
+ *
+ * Types first, then our own error format. A deliberate abort is not transient
+ * — someone asked for it to stop.
+ */
+export function isTransientModelError(err: unknown): boolean {
+  if (err instanceof ModelRequestTimeoutError) return true;
+
+  // An upstream cancellation is a decision, not a blip.
+  if (err instanceof Error && err.name === "AbortError") return false;
+
+  const code = causeCode(err);
+  if (code && TRANSIENT_NETWORK_CODES.has(code)) return true;
+
+  // undici surfaces a dead connection as `TypeError: fetch failed`, with the
+  // real reason on `cause` — which the code check above has already read.
+  if (err instanceof TypeError && /fetch failed|network/i.test(err.message)) return true;
+
+  const status = modelErrorHttpStatus(err);
+  if (status !== null) return TRANSIENT_HTTP_STATUSES.has(status);
+
+  /**
+   * Last resort, and deliberately kept from the version this replaced: a
+   * provider failure that reached us as prose with no status and no code. The
+   * checks above cover everything this repo raises, so this only catches what
+   * some future call site throws by hand — and narrowing retries silently is
+   * the one change that would reintroduce the bug being fixed.
+   */
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b(unavailable|overloaded)\b|rate.?limit/i.test(message);
 }

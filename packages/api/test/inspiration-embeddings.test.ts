@@ -74,11 +74,13 @@ describe("inspiration embedding canonical input", () => {
     expect(a).toBe(b);
     expect(a).toBe(
       [
-        "waka.inspiration_embedding_input.v1",
+        "waka.inspiration_embedding_input.v2",
         "kind:note",
         "category:7",
         "text:",
         "First line\nSecond line\nThird line",
+        "reflections:",
+        "none",
       ].join("\n"),
     );
     expect(hashEmbeddingInput(a)).toBe(hashEmbeddingInput(b));

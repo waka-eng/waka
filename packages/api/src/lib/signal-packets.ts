@@ -118,6 +118,49 @@ function hashPacketInput(input: unknown): string {
     .digest("hex");
 }
 
+/**
+ * The section markers `buildSignalPacket` writes into every packet.
+ *
+ * They are scaffolding for a model reading a packet — they tell a spark from an
+ * excerpt — and they are not content. Anything that matches a packet on its
+ * WORDS has to drop them first, because they are the same on every packet ever
+ * built: `WHY_IT_MATTERS` lowercases to a string containing both "why" and
+ * "matter", so a keyword bucket looking for either fired on 100% of saves, in
+ * every language, regardless of what the person actually wrote.
+ *
+ * Kept here rather than in the reader so the markers and the stripper cannot
+ * drift apart. Change the packet format and this list is in the same diff.
+ */
+export const SIGNAL_PACKET_SECTION_MARKERS = [
+  "waka.signal_packet.v1",
+  "WHAT_HIT",
+  "WHY_IT_MATTERS",
+  "REFLECTIONS",
+  "CONTEXT_EXCERPT",
+] as const;
+
+/**
+ * A packet with its scaffolding removed, for readers that match on words.
+ *
+ * Drops the section markers, the `cluster=` line (the cluster is available as a
+ * field and does not need to arrive as prose) and the literal `none`
+ * placeholders. What survives is what the person and the page actually said.
+ */
+export function stripSignalPacketScaffold(packetText: string): string {
+  const markers: readonly string[] = SIGNAL_PACKET_SECTION_MARKERS;
+  return packetText
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      if (trimmed.length === 0) return false;
+      if (markers.includes(trimmed)) return false;
+      if (trimmed === "none") return false;
+      if (trimmed.startsWith("cluster=")) return false;
+      return true;
+    })
+    .join("\n");
+}
+
 function orderSparks(sparks: PacketSpark[]): PacketSpark[] {
   return [...sparks].sort((a, b) => {
     if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;

@@ -267,5 +267,6 @@
   "profileDeleting": "Deleting…",
   "profileDeleteError": "Failed to delete account.",
   "profileSignOutError": "Failed to sign out.",
-  "profileBackHome": "Back home"
+  "profileBackHome": "Back home",
+  "quoteFromLinkedPage": "from the page you linked"
 }

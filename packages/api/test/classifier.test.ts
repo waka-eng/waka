@@ -71,11 +71,9 @@ import {
 import { eq } from "drizzle-orm";
 
 import {
-  backgroundJobs,
   type Cluster,
   clusterEnumValues,
   inspirations,
-  wowMoments,
 } from "../src/db/index.js";
 import { getDb } from "../src/lib/db.js";
 import { handler, runClassificationJob } from "../src/queue/classifier.js";
@@ -330,113 +328,102 @@ describe("classifier handler — message processing", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Bucket 1b — Async automatic WOW handoff
+// Bucket 1b — Durable context pipeline handoff
 // ---------------------------------------------------------------------------
 
-describe("classifier job — automatic WOW handoff", () => {
-  it("attempts automatic WOW generation after a created inspiration is classified", async () => {
+describe("classifier job — context pipeline handoff", () => {
+  it("runs embedding → packet → graph → top-of-mind after classification", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
 
     const insp = await createInspirationFixture(getDb(), fixture.user.id, {
       text: "classification can unlock a wow attempt",
     });
-    const generateAutoWowMoment = vi.fn(async () => ({
-      status: "not_wow" as const,
-      generated: false,
-      embeddingStatus: "unchanged" as const,
-      judgment: {
-        isWowMoment: false as const,
-        reason: "generic_similarity" as const,
-        debugSummary: "Only a generic topical overlap was found.",
-        rawGeminiPreview: "No WOW here: just generic overlap.",
-      },
+    const ensureEnrichment = vi.fn(async () => "no_url" as const);
+    const ensureEmbedding = vi.fn(async () => ({ status: "unchanged" } as any));
+    const generateSignalPacket = vi.fn(async () => ({}));
+    const persistMeaningGraph = vi.fn(async () => ({}));
+    const refreshTopOfMind = vi.fn(async () => ({
+      synthesis: { failed: 0, synthesized: 1 },
     }));
-
-    gemini.queueResponse(geminiLabel("bridge"));
-
-    const [job] = await getDb()
-      .insert(backgroundJobs)
-      .values({
-        userId: fixture.user.id,
-        type: "process_inspiration",
-        payload: { inspirationId: insp.id },
-      })
-      .returning({ id: backgroundJobs.id });
+    const modelProvider = {
+      classifySignalText: vi.fn(async () => ({
+        cluster: "bridge" as const,
+        finishReason: "STOP",
+        blockReason: null,
+      })),
+      contextGraphRelationshipJudge: {},
+      generateSignalPacket,
+    } as any;
 
     await runClassificationJob(insp.id, {
-      generateAutoWowMoment,
-      backgroundJobId: job!.id,
+      modelProvider,
+      ensureEnrichment,
+      ensureEmbedding,
+      persistMeaningGraph: persistMeaningGraph as any,
+      refreshTopOfMind: refreshTopOfMind as any,
     });
 
-    expect(generateAutoWowMoment).toHaveBeenCalledWith({
-      db: getDb(),
-      userId: fixture.user.id,
-      inspirationId: insp.id,
-    });
-
-    const [storedJob] = await getDb()
-      .select()
-      .from(backgroundJobs)
-      .where(eq(backgroundJobs.id, job!.id))
-      .limit(1);
-    expect(storedJob?.payload).toMatchObject({
-      inspirationId: insp.id,
-      autoWowGeneration: {
-        status: "not_wow",
-        generated: false,
-        judgment: {
-          isWowMoment: false,
-          reason: "generic_similarity",
-          debugSummary: "Only a generic topical overlap was found.",
-          rawGeminiPreview: "No WOW here: just generic overlap.",
-        },
-      },
-    });
-    const persistedWowRows = await getDb()
-      .select({ id: wowMoments.id })
-      .from(wowMoments)
-      .where(eq(wowMoments.userId, fixture.user.id));
-    expect(persistedWowRows).toHaveLength(0);
+    expect(ensureEmbedding).toHaveBeenCalledTimes(1);
+    expect(generateSignalPacket).toHaveBeenCalledTimes(1);
+    expect(persistMeaningGraph).toHaveBeenCalledTimes(1);
+    expect(refreshTopOfMind).toHaveBeenCalledTimes(1);
+    expect((await loadRow(insp.id))?.cluster).toBe("bridge");
   });
 
-  it("does not let automatic WOW provider failures fail the classification job", async () => {
+  it("surfaces a post-classification provider failure so the durable job retries", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
 
     const insp = await createInspirationFixture(getDb(), fixture.user.id, {
       text: "classification success should remain successful",
     });
-    const generateAutoWowMoment = vi.fn(async () => {
-      throw new Error("runtime provider failure");
-    });
-
-    gemini.queueResponse(geminiLabel("loop"));
+    const modelProvider = {
+      classifySignalText: vi.fn(async () => ({
+        cluster: "loop" as const,
+        finishReason: "STOP",
+        blockReason: null,
+      })),
+      contextGraphRelationshipJudge: {},
+      generateSignalPacket: vi.fn(async () => {
+        throw new Error("runtime provider failure");
+      }),
+    } as any;
 
     await expect(
-      runClassificationJob(insp.id, { generateAutoWowMoment }),
-    ).resolves.toBeUndefined();
+      runClassificationJob(insp.id, {
+        modelProvider,
+        ensureEnrichment: vi.fn(async () => "no_url" as const),
+        ensureEmbedding: vi.fn(async () => ({ status: "unchanged" } as any)),
+      }),
+    ).rejects.toThrow("runtime provider failure");
 
     const after = await loadRow(insp.id);
     expect(after?.cluster).toBe("loop");
-    expect(generateAutoWowMoment).toHaveBeenCalledTimes(1);
   });
 
-  it("preserves transient classification retry semantics and skips automatic WOW", async () => {
+  it("preserves transient classification retry semantics and skips context hooks", async () => {
     const fixture = await createUserFixture(getDb());
     cleanup.trackUser(fixture.user.id);
 
     const insp = await createInspirationFixture(getDb(), fixture.user.id, {
       text: "retry before wow",
     });
-    const generateAutoWowMoment = vi.fn();
-
-    gemini.queueResponse(geminiHttpError(503, "service unavailable"));
+    const generateSignalPacket = vi.fn();
+    const ensureEmbedding = vi.fn();
+    const modelProvider = {
+      classifySignalText: vi.fn(async () => {
+        throw new Error("503 service unavailable");
+      }),
+      contextGraphRelationshipJudge: {},
+      generateSignalPacket,
+    } as any;
 
     await expect(
-      runClassificationJob(insp.id, { generateAutoWowMoment }),
+      runClassificationJob(insp.id, { modelProvider, ensureEmbedding }),
     ).rejects.toThrow();
-    expect(generateAutoWowMoment).not.toHaveBeenCalled();
+    expect(ensureEmbedding).not.toHaveBeenCalled();
+    expect(generateSignalPacket).not.toHaveBeenCalled();
   });
 });
 

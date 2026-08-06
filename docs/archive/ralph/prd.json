@@ -1,0 +1,1049 @@
+{
+  "project": "WAKA",
+  "branchName": "ralph/ambition-mirror-context-graph",
+  "description": "Pivot WAKA from inspiration capture into an ambition mirror powered by a personal context graph. Keep the post-it Top of Mind metaphor, aggressively migrate naming, keep graph inspection internal, and add a first self-improving loop through user feedback.",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Document domain rename map and migration strategy",
+      "description": "As a developer, I need a concrete domain migration plan so every later Ralph iteration uses signal/context/top-of-mind language consistently.",
+      "acceptanceCriteria": [
+        "Add a docs plan that maps existing inspiration, meaning, and WOW concepts to signal, context graph, and top-of-mind concepts",
+        "Define which old tables/routes/components are renamed, wrapped, or left internal",
+        "State that admin graph inspection remains internal and should not become the primary user-facing graph UI",
+        "Include a phased compatibility note for existing data and tests",
+        "Run a markdown/file sanity check by reviewing the new doc"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-002",
+      "title": "Introduce signal domain types without changing behavior",
+      "description": "As a developer, I need signal-oriented API and shared types so the new product vocabulary can land before destructive route/schema migration.",
+      "acceptanceCriteria": [
+        "Add signal-facing TypeScript types that map to the current inspiration persistence shape",
+        "Expose score names for resonance, recurrence, agency, identity signal, and decision relevance even if some initially derive from existing score fields",
+        "Keep existing inspiration routes working",
+        "Add targeted API or web tests proving existing capture/list behavior still works through the new type layer",
+        "Run relevant API and web typechecks"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Add context graph node categories",
+      "description": "As a developer, I need typed context graph nodes so graph output can represent ambition-relevant structure instead of generic meaning only.",
+      "acceptanceCriteria": [
+        "Add or migrate graph node type support for theme, value, person, environment, aesthetic, tension, project, open_question, and hypothesis",
+        "Preserve existing meaning graph data through a deterministic default type where needed",
+        "Update graph writer types and tests to understand the allowed node categories",
+        "Keep the admin graph route internal and functional",
+        "Run API typecheck and targeted graph writer/admin graph tests"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Rename meaning packet concept to signal packet in code paths",
+      "description": "As a developer, I need per-signal interpretation logic to use signal packet naming so future model prompts focus on why a signal matters to the user's ambitions.",
+      "acceptanceCriteria": [
+        "Introduce signal packet naming in library/API code while preserving or migrating existing meaning packet storage",
+        "Update prompts or deterministic packet text headers away from generic meaning language where tests allow",
+        "Keep old data readable",
+        "Update tests that assert packet creation or packet text",
+        "Run API typecheck and targeted packet tests"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Create Top of Mind note model from WOW moments",
+      "description": "As a user, I want graph-backed post-it reflections to feel provisional and replaceable rather than permanent WOW artifacts.",
+      "acceptanceCriteria": [
+        "Introduce top-of-mind note types and serializers mapped from or migrated from current WOW moment persistence",
+        "Support note types pattern, tension, question, hypothesis, and action",
+        "Expose confidence, status, related signal ids, and related context node ids where available",
+        "Keep existing WOW routes working until UI route migration is complete",
+        "Run API typecheck and targeted WOW/top-of-mind tests"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Add top-of-mind API route",
+      "description": "As the web app, I need a `/api/top-of-mind` route that returns the current post-it reflection surface without exposing internal graph admin APIs.",
+      "acceptanceCriteria": [
+        "Add authenticated `/api/top-of-mind` list/detail endpoints or an equivalent route matching existing API style",
+        "Return active top-of-mind notes with evidence previews and related signal references",
+        "Do not expose raw admin graph internals",
+        "Add route tests for tenant scoping and serialization",
+        "Run API typecheck and targeted route tests"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Add user feedback persistence for graph-backed notes",
+      "description": "As a user, I want to validate or correct generated notes so WAKA can improve its personal context graph over time.",
+      "acceptanceCriteria": [
+        "Add feedback persistence for targets signal, context_node, top_of_mind_note, and hypothesis",
+        "Support feedback values true, partly, not_true, important, and not_important",
+        "Support optional emotion labels admire, envy, want, fear, curious, and aesthetic_only",
+        "Add authenticated feedback create/list API behavior with tenant scoping",
+        "Run migration checks, API typecheck, and targeted feedback tests"
+      ],
+      "priority": 7,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Apply feedback to context graph weights",
+      "description": "As WAKA, I need user validation to strengthen, weaken, or qualify graph claims so the reflection loop genuinely improves.",
+      "acceptanceCriteria": [
+        "Add deterministic feedback application logic that updates top-of-mind note status and related context node confidence or weight",
+        "True/important feedback strengthens related claims; not_true/not_important weakens or marks stale; partly preserves the note and asks for correction when available",
+        "Store provenance that the update came from user feedback",
+        "Add unit tests for each feedback value",
+        "Run API typecheck and targeted feedback/graph tests"
+      ],
+      "priority": 8,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Refresh Top of Mind notes from context graph",
+      "description": "As WAKA, I need a bounded job that regenerates provisional post-it notes from recent, recurring, high-agency, or unresolved graph patterns.",
+      "acceptanceCriteria": [
+        "Add a refresh job or service that selects candidate context nodes and evidence to produce active top-of-mind notes",
+        "Prioritize recurrence, agency, unresolved tensions, and recent evidence",
+        "Avoid duplicating active notes for the same underlying graph claim",
+        "Add deterministic tests for ranking and deduplication",
+        "Run API typecheck and targeted top-of-mind refresh tests"
+      ],
+      "priority": 9,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Update home surface to Top of Mind first",
+      "description": "As a returning user, I want the home page to foreground provisional Top of Mind post-its while keeping capture one click away.",
+      "acceptanceCriteria": [
+        "Show capture-first behavior for low-data users and top-of-mind-first behavior when enough signals exist",
+        "Rename visible WOW/inspiration language toward top-of-mind, signal, resonance, and reflection language",
+        "Keep the existing post-it visual metaphor",
+        "Add or update component tests for low-data and returning-user states",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 10,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-011",
+      "title": "Add evidence drawer for Top of Mind notes",
+      "description": "As a user, I need to inspect why WAKA believes a reflection so generated notes feel trustworthy instead of like AI fortune-telling.",
+      "acceptanceCriteria": [
+        "Each top-of-mind note can reveal evidence signals and related context nodes",
+        "Evidence copy is concise and avoids exposing internal admin graph fields",
+        "The drawer or panel works on mobile and desktop without overlapping content",
+        "Add component tests for evidence rendering and empty evidence states",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 11,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-012",
+      "title": "Add feedback controls to Top of Mind notes",
+      "description": "As a user, I want lightweight controls like true, partly, not true, important, and not important so I can train WAKA without organizing notes manually.",
+      "acceptanceCriteria": [
+        "Add compact feedback controls to each active top-of-mind note",
+        "Submitting feedback updates note state optimistically and persists through the API",
+        "Support optional correction text without forcing the user to write",
+        "Add web tests for submit success and failure states",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 12,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-013",
+      "title": "Rename capture UI toward signal and resonance",
+      "description": "As a user, I want capture copy that matches the ambition mirror direction without making the product feel heavy or permanent.",
+      "acceptanceCriteria": [
+        "Update visible capture copy from inspiration/WOW framing toward signal, resonance, and what hit",
+        "Keep input friction low and manual capture fast",
+        "Do not require tagging or structured journaling",
+        "Update affected tests and snapshots",
+        "Run web typecheck, targeted tests, and browser verification"
+      ],
+      "priority": 13,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-014",
+      "title": "Abstract model provider from Gemini-specific names",
+      "description": "As a developer, I need model calls abstracted so signal interpretation, context graph updates, and top-of-mind generation are not hardwired to Gemini naming.",
+      "acceptanceCriteria": [
+        "Introduce a model provider interface for classification, packet generation, graph writing, and note generation",
+        "Keep Gemini as the current implementation",
+        "Avoid leaking provider-specific names into product-domain services",
+        "Update tests/mocks around the interface",
+        "Run API typecheck and targeted model pipeline tests"
+      ],
+      "priority": 14,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-014A",
+      "title": "Make capture feel safe, autosaved, and highlightable",
+      "description": "As a user, I want capture to feel like private note-taking in a safe zone, with autosaved drafts and an easy way to mark the parts that mattered most.",
+      "acceptanceCriteria": [
+        "Reduce capture text size and visual pressure so long notes feel natural to write",
+        "Autosave capture drafts locally and never clear text until server save succeeds",
+        "Add a way to highlight selected text as the part that hit most",
+        "Persist highlighted snippets or structured highlight metadata with the signal, or explicitly store them as signal metadata if a dedicated table is too large for this story",
+        "After capture, ask one lightweight resonance question such as want, admire, envy, feels like me, bothers me, or not sure",
+        "Show a brief post-capture confirmation that reflects what WAKA noticed without sounding final",
+        "Run web typecheck, targeted capture tests, and browser verification"
+      ],
+      "priority": 15,
+      "passes": true,
+      "notes": "Capture should feel like a safe private scratchpad, not a high-pressure form. The user should not worry that a long personal note will disappear accidentally. Highlights are high-confidence resonance evidence for the context graph."
+    },
+    {
+      "id": "US-014B",
+      "title": "Create shareable Top of Mind value-prop page",
+      "description": "As a user, I want a shareable Top of Mind page that explains what WAKA does while also showing my current provisional top-of-mind notes to other people.",
+      "acceptanceCriteria": [
+        "Create or update the shareable Top of Mind page so it can explain the product and show the user’s current top-of-mind notes in one link",
+        "Replace placeholder narrative with stronger value-prop copy that explains: most inspiration disappears, WAKA catches what almost slipped away, and saved signals slowly form a picture of who the user wants to think with, where they want to be, and what they might be here to build",
+        "Make clear that the page is not manually written by the user; it is generated from things they saved and changes as new signals arrive",
+        "Clarify what the bottom post-it notes represent: provisional graph-backed reflections, tensions, questions, and action hints, not permanent identity claims",
+        "Keep the tone poetic but understandable enough that sharing the link explains why WAKA exists",
+        "Remove WOW terminology from this page entirely",
+        "Run web typecheck, targeted page/component tests, and browser verification"
+      ],
+      "priority": 16,
+      "passes": true,
+      "notes": "Draft copy direction: Yun’s Top of Mind. Most inspiration disappears. This person caught it before it vanished. Slowly, the things they saved began to take shape: who they want to think with, where they want to be, what they might be here to build. They did not write all of this; they saved what almost slipped away, and the rest emerged. Not final. Changes as new signals arrive. This page was made from the things they saved. It changes every week. © WAKA, 2026, for minds that wander."
+    },
+    {
+      "id": "US-015",
+      "title": "Add first decision memo scaffold for what to build",
+      "description": "As a user, I want WAKA to turn my context graph into a lightweight decision memo for what to build next.",
+      "acceptanceCriteria": [
+        "Add a backend or frontend scaffold for a what-to-build decision memo using existing context graph and top-of-mind evidence",
+        "Memo includes what the user seems drawn to, strongest evidence, tensions, and one testable next action",
+        "Keep this behind an internal or low-prominence route if the rest of the product is not ready",
+        "Add targeted tests for memo assembly with fixture graph data",
+        "Run relevant typechecks and tests"
+      ],
+      "priority": 18,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-014C",
+      "title": "Create saved signal search and deep-dive experience",
+      "description": "As a user, I want to search and deeply inspect the things I saved so the archive becomes a living context surface, not a flat list of old notes.",
+      "acceptanceCriteria": [
+        "Create or upgrade a saved-signal archive surface with prominent search, filter, and sort controls for saved signals",
+        "Support deep-dive inspection of a saved signal with raw text, highlighted snippets, attachments or links, resonance feedback, signal packet interpretation, related context nodes, and related top-of-mind notes where available",
+        "Make search useful for both exact text and meaning-oriented exploration by surfacing matching snippets and related graph terms; if semantic search is too large for this story, design the UI/API boundaries so it can be added without replacing the surface",
+        "Add quick filters for signal type, high-resonance or highlighted signals, unresolved questions/tensions, and recently revisited items where data exists",
+        "Let users continue the loop from the deep dive by adding a reflection, marking what still matters, or correcting the interpretation",
+        "Avoid second-brain filing behavior: do not require manual folders or tags before the archive is useful",
+        "Remove WOW terminology from the archive and deep-dive experience entirely",
+        "Run API/web typechecks, targeted archive/search tests, and browser verification"
+      ],
+      "priority": 17,
+      "passes": true,
+      "notes": "Brainstorm direction: search should answer both \"where is that thing I saved?\" and \"what pattern was this part of?\" The deep dive should show the raw saved note, the exact part that hit, WAKA's current interpretation, graph links, top-of-mind notes it influenced, and lightweight correction actions. Good modes: All signals, Highlighted, Tensions, Questions, People/places, Recently resurfaced. Results should show matching snippets, resonance markers, and why this result is relevant."
+    },
+    {
+      "id": "US-016",
+      "title": "Remove WOW terminology from product-facing surfaces",
+      "description": "As a developer, I need WOW terminology removed from product-facing UI, docs, prompts, API clients, and new domain services because WAKA is now an ambition mirror centered on top-of-mind notes and personal context.",
+      "acceptanceCriteria": [
+        "Audit remaining user-facing inspiration, WOW, and meaning strings",
+        "Remove WOW terminology from visible UI copy, README/product docs, model prompts, API client names, and new top-of-mind/context services",
+        "Keep legacy database table or column names such as wow_moments and wow_score only when changing them would require a larger persistence migration",
+        "Any retained legacy WOW names must be isolated behind top-of-mind, resonance, or context adapters and documented as legacy compatibility only",
+        "Do not expose /api/wow-moments as the preferred product route; new user-facing code must use /api/top-of-mind",
+        "Run API and web typechecks plus the highest-value targeted regression tests",
+        "Update progress.txt Codebase Patterns with final naming conventions"
+      ],
+      "priority": 19,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "US-017",
+      "title": "Make capture a low-friction self-understanding moment",
+      "description": "As a user, I want capture to feel valuable in the moment, not like required data entry for AI, by helping me quickly notice why a signal amused, moved, bothered, or pulled me before the feeling disappears.",
+      "acceptanceCriteria": [
+        "Reframe capture as a micro self-understanding loop: save the signal, mark what hit, optionally name why it hit, and receive a lightweight reflection without waiting for a later Top of Mind surface",
+        "Add low-friction emotion, resonance, or stakes controls using compact emoji/icon chips or similarly lightweight interactions rather than long forms",
+        "Support ambition-relevant reasons for saving such as amused me, I want this, I admire this, I envy this, feels like me, bothers me, makes me curious, high-stakes, and not sure",
+        "Let users skip every explicit input beyond the raw save without guilt, blocking, or degraded confirmation",
+        "Make the interaction feel fun and safe, not like tagging, journaling homework, a mood tracker, or engagement bait",
+        "Use progressive disclosure: show one simple prompt first, then offer an optional deeper question such as why did this amuse me or what part do I want more of",
+        "Persist emotion/reason/stakes metadata with the signal using the existing safest persistence path or a dedicated structure if already available",
+        "Use human-provided capture metadata in post-capture confirmation and make it available to signal packet/context graph interpretation as stronger evidence than model inference alone",
+        "Keep capture friction minimal on mobile and desktop, including keyboard-only and touch-friendly paths",
+        "Remove any WOW terminology from this capture flow",
+        "Run web typecheck, targeted capture tests, and browser verification"
+      ],
+      "priority": 20,
+      "passes": true,
+      "notes": "Product rationale: in a world where AI can sense passively, asking humans for explicit input must be worth it immediately. The human-only value is not just emotion labeling; it is the user noticing why this signal mattered while the feeling is still alive. Capture should become a tiny revelation loop: this amused me, this made me envious, this feels like a life I want, this bothers me, this is high-stakes. Good interaction directions: one-tap chips, quick highlight plus reason, optional micro-question, press-and-hold intensity, or a tiny palette after selection. The goal is to reduce churn by making explicit input feel rewarding, clarifying, and uniquely human, not like feeding the AI."
+    },
+    {
+      "id": "US-018",
+      "title": "Rebuild Top of Mind as ambition mirror statements",
+      "description": "As a user, I want Top of Mind post-its to help me discover my ambition and internal frequency, not summarize the things I saved or label context graph nodes.",
+      "acceptanceCriteria": [
+        "Change the Top of Mind generation architecture so every active note is grounded in an ambition dimension such as place, people, work, taste, tension, identity, rejection, or next experiment",
+        "Generate post-it titles as ambient-signal mirror statements about desired environments, desired peer groups, work direction, operating standards, rejected contexts, or emerging self-image",
+        "Do not use raw context node labels, saved-signal summaries, tags, or generic phrases such as \"You keep circling X\" as the main post-it text",
+        "Each Top of Mind note must expose why this may matter for ambition and 2-5 supporting saved signals or explicit evidence previews where available",
+        "Add deterministic tests that fail if a generated Top of Mind title is only a graph label, a saved content summary, or a shallow theme label",
+        "Update Home and share-page copy/rendering only as needed so the visible post-its read like ambition mirror statements on first load, not archive summaries",
+        "Ensure user feedback remains connected to the note and can validate or correct the ambition dimension, not just the underlying graph node",
+        "Run API and web typechecks, targeted Top of Mind generation tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
+      ],
+      "priority": 21,
+      "passes": true,
+      "notes": "Product rationale: Paul Graham's cities essay points at ambient ambition signals: some rooms say you should be richer, smarter, braver, more tasteful, faster, freer, or more original. WAKA should help users infer which ambient signals they are already responding to. A useful post-it should read like: \"You seem pulled toward places where ambitious people make things in public,\" \"You may be trying to leave environments that reward consensus over aliveness,\" or \"You seem to want peers who act before permission arrives.\" It should not read like: \"founder cities,\" \"rituals keep returning,\" or \"You keep circling founder cities.\""
+    },
+    {
+      "id": "US-019",
+      "title": "Update internal context dashboard for ambition graph debugging",
+      "description": "As an internal operator, I need the context dashboard to make ambition graph quality readable and navigable, including restoring individual node dragging.",
+      "acceptanceCriteria": [
+        "Keep the context dashboard internal/admin-only and do not turn the graph inspector into the primary user-facing product UI",
+        "Show ambition dimension or derived ambition role for context nodes where available, including place, people, work, taste, tension, identity, rejection, and next experiment",
+        "Add practical filters/search for node type, ambition dimension, confidence/weight, active versus stale status, and text labels",
+        "Improve the selected-node detail panel so it clearly shows supporting saved signals, related Top of Mind notes, related feedback, and why the node may matter for ambition",
+        "Restore individual node dragging in the graph; dragging one node must not move the entire connected component unless a group-drag mode is explicitly selected",
+        "Make the dashboard readable on common desktop widths without dense overlapping text or hard-to-scan panels",
+        "Add targeted tests or browser verification that selecting/filtering nodes works and that individual node drag behavior is restored",
+        "Run web typecheck and any targeted context-dashboard tests"
+      ],
+      "priority": 22,
+      "passes": true,
+      "notes": "This is internal tooling for judging whether WAKA is learning ambition. The dashboard should help debug how saved signals become context nodes, ambition dimensions, Top of Mind notes, and feedback-adjusted confidence. Current pain points: hard to read/navigate, and graph nodes that used to be individually draggable now appear to drag only as connected groups."
+    },
+    {
+      "id": "US-020",
+      "title": "Rebuild All Signals as an in-place inspiration revisit experience",
+      "description": "As a user, I want the All Signals tab to feel like gently revisiting what I once loved inside the Top of Mind experience, not navigating to a complicated archive page.",
+      "acceptanceCriteria": [
+        "Clicking the Home All Signals tab must stay within the Top of Mind shell instead of navigating to a completely separate page",
+        "Replace the dense archive/search-page feel with an in-place surface whose visual language matches the Top of Mind post-it world",
+        "Make deep diving past inspirations feel calm, personal, and therapeutic: revisiting what once hit, what still feels alive, what changed, and what it may reveal about ambition",
+        "Reduce navigation complexity by using a simple browse-and-revisit flow before advanced search/filter controls; advanced controls should be secondary or progressively disclosed",
+        "Avoid the current narrow-sidebar deep dive pattern and avoid an admin-dashboard feel",
+        "Show the raw saved inspiration prominently, with highlighted parts, original context, gentle reflection prompts, related Top of Mind notes, and one lightweight way to mark whether it still matters",
+        "Keep any full `/signals` route only as an optional compatibility/deep link if needed; the primary product path from Home must be in-place",
+        "Add targeted Home/All Signals tests proving the tab does not route away and that the revisit/deep-dive surface renders in the Home experience",
+        "Run web typecheck, targeted tests, and browser verification for the exact Home All Signals path on desktop and mobile"
+      ],
+      "priority": 23,
+      "passes": true,
+      "notes": "Product correction: the current `/signals` archive is too complicated and feels like a search/admin surface. The user wants past inspirations to feel like therapy: a soft return to what they once loved, with enough structure to notice whether the signal still matters and how it connects to ambition. All Signals should share the Top of Mind look and feel, stay in the same product world, and make deep dive emotionally legible before it becomes searchable."
+    },
+    {
+      "id": "US-021",
+      "title": "Generate internal-frequency ambient signals for Top of Mind",
+      "description": "As a user, I want Top of Mind to help me identify the ambient signals I am trying to live near, so I can understand which cities, rooms, peers, and environments match my ambition.",
+      "acceptanceCriteria": [
+        "Add an explicit internal-frequency or ambient-signal layer above individual context nodes; Top of Mind must infer what kind of surrounding signal the user seems to be seeking, not only rephrase one graph node",
+        "Each primary Top of Mind post-it must answer one of these questions: what kind of city/room would make me more alive, what kind of people should I think with, what standard should feel normal around me, what environment am I rejecting, or what version of myself am I trying to become",
+        "Generate user-facing copy in the form of ambient signals such as \"You may be looking for places that quietly tell you to be braver\" or \"You seem to want peers who make fast, public building feel normal\"",
+        "Avoid generic ambition wrappers and label interpolation patterns such as \"rooms where X can become normal\", \"work that turns X visible\", or any sentence that still reads like a graph-label summary",
+        "Use multiple saved signals or multiple context nodes where possible so a Top of Mind note reflects a frequency pattern rather than a single extracted theme",
+        "Expose the ambient signal, matched environment, anti-environment, and evidence rationale in the Top of Mind API or note surface without leaking admin graph internals",
+        "Update Home and share-page rendering so the first-read value is the internal-frequency insight, with evidence available second",
+        "Add deterministic tests that fail when a generated note can be reduced to a single context label or does not mention an ambient signal, environment, peer group, standard, rejection, or self-image",
+        "Run API and web typechecks, targeted Top of Mind generation/API tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
+      ],
+      "priority": 24,
+      "passes": true,
+      "notes": "Product correction after US-018: ambition dimensions and mirror-style templates are not enough. Paul Graham's cities frame is about ambient external signals: a city tells you to be richer, smarter, more ambitious, more tasteful, freer, braver, or more original. WAKA should infer the user's internal frequency so they can match it to cities, rooms, peers, and work environments. The post-it should not merely say what the saved things are about; it should say what kind of surrounding signal the user seems to need."
+    },
+    {
+      "id": "US-022",
+      "title": "Make Top of Mind read like first-person jotting",
+      "description": "As a user, I want generated Top of Mind post-its to sound like provisional notes I might have jotted to myself, not like an external AI describing me.",
+      "acceptanceCriteria": [
+        "Change primary Top of Mind titles and first-read Home/share copy to first-person note-to-self language with direct, credible phrasing such as \"I need rooms where...\", \"I want people who...\", or \"I am done with environments that...\"",
+        "Avoid second-person or third-person framing in the main post-it text, including \"you seem\", \"you may\", \"this person\", and \"WAKA thinks\" unless it appears in secondary explanatory copy",
+        "Keep the tone scratchpad-like and replaceable without using weak hedges such as \"I think\", \"maybe\", \"might\", \"probably\", \"seems\", or \"kind of\" in primary post-it text",
+        "Preserve the internal-frequency / ambient-signal goal from US-021: first-person notes must still point at cities, rooms, peers, standards, anti-environments, or emerging self-image",
+        "Keep evidence and provenance available as secondary support so the product remains generated from saved signals rather than pretending the user literally typed the note",
+        "Update Top of Mind generation, legacy note serialization, Home rendering, share-page rendering, and tests as needed so existing/generated notes use the first-person voice",
+        "Add deterministic tests that fail if primary Top of Mind titles begin with or prominently use \"You\", \"Your\", \"This person\", \"WAKA\", raw graph labels, or weak hedges such as \"I think\", \"maybe\", \"might\", \"probably\", or \"seems\"",
+        "Run API and web typechecks, targeted Top of Mind generation/API tests, targeted Home/share tests, and browser verification of the exact Home Top of Mind path"
+      ],
+      "priority": 25,
+      "passes": true,
+      "notes": "Product correction after US-021: even good ambient-signal notes can feel wrong if WAKA speaks about the user from the outside. The post-it metaphor works better if the text feels like the user's own direct jotting: \"I need a city that makes brave work feel normal\" or \"I want peers who make building in public less weird.\" Keep the page honest that WAKA generated the notes from saved signals, but make the post-it itself feel first-person, credible, and replaceable without hedging language."
+    },
+    {
+      "id": "US-023",
+      "title": "Reset product architecture around reflective ambition mirror",
+      "description": "As a user, I want WAKA to feel like a private reflective room for understanding what I am becoming, not a productivity dashboard or second-brain archive.",
+      "acceptanceCriteria": [
+        "Audit the current primary user-facing flows and identify/remove or demote surfaces that feel like productivity dashboards, archive management, generic AI insights, graph UI, or separate app sections that break the reflective world",
+        "Define the core product spaces in code and copy as Capture, Five Top of Mind post-its, Signal Revisit/Memory Drawer, Share, and Internal Debug",
+        "Keep the five post-it Top of Mind metaphor as the primary home object because post-its are ephemeral, replaceable, human, and aligned with personal context as the moat while software is ephemeral",
+        "Preserve existing useful data and APIs where practical, but allow aggressive UI, naming, route, and component restructuring if it improves the end-to-end reflective experience",
+        "Ensure product-facing copy frames WAKA as preserving what moved the user and reflecting what it may mean, not remembering everything or organizing knowledge",
+        "Keep admin/graph/debug concepts internal and out of the primary user experience",
+        "Document the new experience architecture in progress.txt so later loops do not regress into dashboard/archive/productivity patterns",
+        "Run web typecheck and targeted smoke tests for the Home route"
+      ],
+      "priority": 26,
+      "passes": true,
+      "notes": "Product reset: WAKA should feel like a private place where what moved the user becomes a living map of who they are becoming. The hierarchy should be blank-page capture for what I feel now, five post-its for what keeps mattering, memory drawer for what I saved, and internal graph only as invisible machinery."
+    },
+    {
+      "id": "US-024",
+      "title": "Rebuild capture as private reflection ritual",
+      "description": "As a user coming out of a high-emotion, high-stakes, or ambiguous moment, I want capture to feel safe, quick, and immediately self-revealing instead of like manual data entry for AI.",
+      "acceptanceCriteria": [
+        "Redesign the capture entry experience around a blank-page/private-weather feeling with the primary prompt \"What almost slipped away?\"",
+        "Keep capture one click away from the main experience and avoid adding a top-level capture tab or heavy form flow",
+        "Support messy text, links, images/files where already supported, and add or preserve a low-friction path for quickly saving before reflection",
+        "Make autosave/private safety visible near the writing area and never clear unsaved content until persistence succeeds",
+        "Keep highlighting \"what hit\" as a first-class action for long pasted text or quotes",
+        "Replace or refine resonance chips into emotionally precise human pulls such as I want this, I miss this, I envy this, this hurt, this scared me, this feels like me, this is not me anymore, I want people like this, I want to build toward this, I want to live near this, and I don't know yet",
+        "After save, show a tiny non-final mirror that gives immediate value, with actions to keep, adjust, or just save without interpretation",
+        "Ensure capture metadata and user-written micro-reflections persist as privileged evidence for downstream signal packets and ambition synthesis",
+        "Run targeted capture tests, web typecheck, and browser verification on desktop and mobile capture"
+      ],
+      "priority": 27,
+      "passes": true,
+      "notes": "The friction of explicit human input should become the product's value. AI can summarize what happened; WAKA should preserve what it meant to the user. Capture should feel like a quiet ritual, not a form."
+    },
+    {
+      "id": "US-025",
+      "title": "Make five ephemeral Top of Mind post-its the core surface",
+      "description": "As a user, I want exactly five replaceable Top of Mind post-its that show the current shape of my ambition, not summaries of saved content.",
+      "acceptanceCriteria": [
+        "Home should center exactly five Top of Mind post-it slots when enough context exists; low-data states should still point users into capture without becoming a dashboard",
+        "Each post-it must be first-person, direct, credible, and scratchpad-like without weak hedges or external diagnosis",
+        "Each post-it must represent a memory movement or ambition direction, not a topic summary, graph label, or saved-content summary",
+        "Add visible memory-state labels such as keeps returning, newly forming, came back, fading, tension, or needs testing",
+        "Post-it details should make replaceability explicit through copy such as not final, changed by new signals, replaced, or still here",
+        "Include light evidence affordances without making the first-read surface feel analytical or admin-like",
+        "Feedback should allow true, partly, not this, and rewrite in my words so the user shapes the post-it rather than merely rating AI",
+        "Update Home and share rendering, API surfaces if needed, and tests so regressions to summary-like Top of Mind fail",
+        "Run API/web typechecks, targeted Top of Mind tests, and browser verification of the Home path"
+      ],
+      "priority": 28,
+      "passes": true,
+      "notes": "Five post-its are the main product object. They should feel temporary, important, movable, and replaceable: the current five things sitting on the front of the user's mind."
+    },
+    {
+      "id": "US-026",
+      "title": "Add memory movement model for personal context",
+      "description": "As a user, I want WAKA to evolve like memory by reinforcing, forgetting, reactivating, and surfacing contradictions as new signals arrive.",
+      "acceptanceCriteria": [
+        "Introduce a persisted or derivable memory-state layer for context patterns with states including emerging, active, fading, dormant, reactivated, contradicted, and needs_testing",
+        "Track or derive first_seen_at, last_seen_at, reinforcement_count, recent_reinforcement_count, current_weight, confidence, decay, and supporting signal ids for memory patterns",
+        "New signals should be evaluated as reinforcing an existing pattern, creating a new emerging pattern, reactivating an old pattern, contradicting an active pattern, or contributing to decay by omission over time",
+        "Decay should reduce dominance of old unrepeated patterns without deleting historical context",
+        "Reactivation should make an old pattern meaningful again when new evidence returns after dormancy",
+        "Contradictions should be preserved as live tensions rather than averaged into bland balanced statements",
+        "Top of Mind selection should prioritize meaningful memory movement, not only highest-weight graph nodes",
+        "Add deterministic tests for reinforcement, decay, reactivation, contradiction, and Top of Mind selection from memory movement",
+        "Run API typecheck and targeted memory-model tests"
+      ],
+      "priority": 29,
+      "passes": true,
+      "notes": "This is the core self-evolving loop. Personal context should behave more like memory than a static graph: what returns matters more, what stops returning fades, what comes back after dormancy becomes meaningful, and contradictions reveal live ambition tensions."
+    },
+    {
+      "id": "US-027",
+      "title": "Build bounded ambition synthesis loop",
+      "description": "As a user, I want WAKA to synthesize ambition only when there is enough evidence, so insights feel specific and earned rather than token-heavy generic AI output.",
+      "acceptanceCriteria": [
+        "Create an event-triggered ambition synthesis path that runs only for qualified clusters, memory movements, explicit deep dives, weekly refreshes, strong user feedback, corrections, or contradictions",
+        "Keep cheap deterministic graph/memory updates continuous and reserve model-heavy divergent synthesis for bounded evidence sets",
+        "Synthesis input must include selected saved signals, highlights, emotional pull metadata, user micro-reflections, prior feedback, rewrites, memory state, and rejected/competing interpretations where available",
+        "Synthesis output must include a first-person post-it candidate, memory state, what environment it points toward, what it rejects, evidence rationale, confidence, and a rejected alternative interpretation",
+        "User correction and rewrite should update future synthesis behavior and not just the visible text",
+        "Prevent generic outputs by testing against shallow categories such as startups, comedy, cities, AI, inspiration, or productivity unless the output states the user's personal edge",
+        "Add token-budget safeguards, bounded input limits, idempotency, and fallback deterministic generation when synthesis is unavailable",
+        "Run API typecheck and targeted synthesis tests with mocked model/provider behavior"
+      ],
+      "priority": 30,
+      "passes": true,
+      "notes": "Do not build an always-on token furnace. Build Ambition Synthesis as a gated, evidence-bounded loop that produces what deterministic ranking cannot: the personal edge connecting what moved the user."
+    },
+    {
+      "id": "US-028",
+      "title": "Rebuild post-it deep dive as peel-open reflection",
+      "description": "As a user, I want opening a Top of Mind post-it to feel like peeling it open into a calm reflective space, not inspecting a narrow sidebar or admin panel.",
+      "acceptanceCriteria": [
+        "Replace any narrow-sidebar post-it detail pattern with a full-screen or large focused reflection surface that visually grows from the selected post-it",
+        "The opened post-it should preserve the first-person note as the emotional anchor",
+        "Show what this note points toward, what it rejects, what changed recently, memory state, and why it is currently on top of mind",
+        "Show 2-5 supporting saved moments with highlights and enough original context to feel emotionally grounded",
+        "Show rejected alternative interpretation where available so the user can see why WAKA chose this read instead of a shallow one",
+        "Provide true, partly, not this, and rewrite in my words controls, with rewrite treated as a first-class learning signal",
+        "Keep the visual language paper/post-it based and avoid cards-inside-cards, dense tables, or graph/admin terminology",
+        "Add targeted Home deep-dive tests and browser verification on desktop and mobile"
+      ],
+      "priority": 31,
+      "passes": true,
+      "notes": "Deep diving should feel like reflective self-understanding. The user is not opening a database record; they are opening the current note their saved life has written back to them."
+    },
+    {
+      "id": "US-029",
+      "title": "Rebuild saved signals as memory drawer",
+      "description": "As a user, I want revisiting saved signals to feel like returning to moments that once moved me, not searching an archive.",
+      "acceptanceCriteria": [
+        "Rename or reframe All Signals toward a softer memory-drawer concept while preserving compatibility routes if needed",
+        "Organize the primary revisit experience by emotional/memory sections such as still alive, changed shape, forgotten but returning, from an older version of me, keeps coming back, and tensions",
+        "Search and filters should be available but secondary or progressively disclosed, not the main posture of the page",
+        "Opening a saved signal should use a calm full-width reflective surface rather than a narrow sidebar",
+        "The signal detail should show original content, highlighted part, emotional pull at capture time, what it may mean now, related Top of Mind post-its, and prompts like what did this mean then, what does it mean now, and is this still me",
+        "Provide still alive, changed shape, not anymore, and optional what changed feedback, feeding the memory movement model",
+        "Keep the visual language consistent with the Top of Mind post-it world and avoid archive/admin/dashboard styling",
+        "Add targeted tests for in-place navigation, memory sections, signal detail, and feedback persistence",
+        "Run web typecheck and browser verification on desktop and mobile"
+      ],
+      "priority": 32,
+      "passes": true,
+      "notes": "Saved signals are not files. They are the drawer beneath the desk: the moments, quotes, images, and fragments the five post-its emerged from."
+    },
+    {
+      "id": "US-030",
+      "title": "Rebuild share page around living Top of Mind value prop",
+      "description": "As a user, I want to share one link that both explains WAKA and shows my current living Top of Mind without feeling like a marketing page.",
+      "acceptanceCriteria": [
+        "Share page should foreground the user's five current post-its and explain that they emerged from saved signals, corrections, returns, and things that changed shape",
+        "Copy should clearly communicate the value prop: most inspiration disappears; WAKA catches what moved the user and turns it into a changing map of what they may want to build, who they want around them, and where they may need to be",
+        "Avoid claiming the user literally wrote generated post-its; provenance should be honest but poetic",
+        "Use the post-it metaphor and ephemeral/change language prominently: not final, changes with new signals, personal context is alive",
+        "Do not create a separate generic landing page; the share page itself should explain the product through the user's current Top of Mind",
+        "Make privacy boundaries clear and do not expose raw saved signals unless an explicit sharing model exists",
+        "Update tests for share rendering and no raw private signal leakage",
+        "Run web typecheck and browser verification of the share page"
+      ],
+      "priority": 33,
+      "passes": true,
+      "notes": "The share page should sell the product by showing the user's living Top of Mind. It should feel like: these post-its were not directly written by the user; they came from what the user saved, corrected, returned to, and outgrew."
+    },
+    {
+      "id": "US-031",
+      "title": "Update internal debug for memory and synthesis quality",
+      "description": "As an internal operator, I need to debug whether WAKA is truly learning ambition through memory movement and synthesis rather than producing nice-sounding summaries.",
+      "acceptanceCriteria": [
+        "Keep this dashboard internal/admin-only",
+        "Show memory states, reinforcement, decay, reactivation, contradiction, feedback, rewrites, and supporting signals for each active pattern",
+        "For each Top of Mind post-it, show why it exists now, what changed recently, what evidence supports it, what alternative interpretation was rejected, and what feedback has shaped it",
+        "Add quality indicators that help detect shallow summaries, raw graph labels, generic ambition wrappers, and unsupported synthesis",
+        "Allow filtering by memory state, ambition dimension, confidence, stale/fading status, contradicted status, and recent user correction",
+        "Preserve or restore graph navigation only as internal diagnostic context; do not make graph inspection part of the user-facing experience",
+        "Add targeted internal-dashboard tests or browser verification",
+        "Run web/API typechecks and targeted admin tests"
+      ],
+      "priority": 34,
+      "passes": true,
+      "notes": "Internal debug should serve product truth: is WAKA learning what actually moves the user, or just generating aesthetic summaries? This should help inspect the memory loop and ambition synthesis loop without leaking machinery into the user experience."
+    },
+    {
+      "id": "US-032",
+      "title": "Generate Top of Mind in post-it thought language",
+      "description": "As a user, I want Top of Mind post-its to sound like compressed private thoughts I might quickly jot down, not forced first-person AI insight sentences.",
+      "acceptanceCriteria": [
+        "Replace the primary Top of Mind voice rule from forced first-person sentence starts to post-it thought language: fragments, questions, imperatives, tensions, and shorthand are allowed",
+        "Primary post-it text should usually be concise, preferably 3-9 words and no more than 12 words unless the evidence genuinely requires it",
+        "Avoid forced starts such as \"I need\", \"I want\", and \"I am done with\" in generated primary post-it text unless they sound natural and are not template-like",
+        "Continue banning outside diagnostic voice such as \"you seem\", \"you may\", \"this person\", \"WAKA thinks\", and generic AI framing",
+        "Generated post-its must still point at ambition context such as people, place, work, taste, rejection, identity, tension, or next experiment",
+        "Replace deterministic fallback templates with natural sticky-note phrasing such as \"people who make courage normal\", \"public before perfect\", \"consensus rooms make me go quiet\", \"sharper taste as the default\", or \"test it in public\"",
+        "Remove visible top metadata from post-it cards such as \"no. 01\", \"keeps returning\", or other status labels; keep any memory movement metadata inside the opened detail view or internal debug only",
+        "Do not render empty or weak Top of Mind slots at all; show only meaningful post-its that have earned the surface",
+        "Update generation, serialization/normalization, Home rendering, tests, and internal quality checks so summary-like, overly polished, or template-like post-it text fails",
+        "Run API/web typechecks, targeted Top of Mind generation tests, targeted Home tests, and browser verification of the Home Top of Mind path"
+      ],
+      "priority": 35,
+      "passes": true,
+      "notes": "Product correction: first-person notes like \"I need rooms where...\" and \"I want peers who...\" sound unnatural when forced. Top of Mind should read like a sticky note from the user's inner weather: \"people who make courage normal\", \"not another impressive path\", \"softness without losing intensity\", \"what does this envy know?\", \"make the thing before explaining it\". The post-it should feel compressed, specific, replaceable, and ambition-relevant without sounding like a generated affirmation."
+    },
+    {
+      "id": "US-033",
+      "title": "Add Memory Drawer relationship constellation",
+      "description": "As a user, I want the Memory Drawer to show how saved inspirations are secretly talking to each other, with distinct visual forms for notes, links, images, and other signal types.",
+      "acceptanceCriteria": [
+        "Add a Memory Drawer constellation mode or section that visually connects related saved signals instead of presenting only a linear list/search experience",
+        "Represent different saved signal input types with distinct paper-like visual treatments: typed notes as small handwritten scraps, links as quote/link cards with source/hostname, images as photo-like tiles, mixed/file signals as layered scraps",
+        "Use existing signal kind, attachments, highlighted snippets, and saved-signal detail data to decide each visual treatment; do not make every inspiration look like the same card",
+        "Draw soft relationship lines or arrows between related signals using existing meaning edges, related context terms, related Top of Mind notes, or bounded relationship synthesis where available",
+        "Relationship labels must use post-it thought language, not graph/admin language; examples include \"same room, different mask\", \"this came back later\", \"the envy points here\", \"old self arguing with new self\", or \"both want the same people\"",
+        "Clicking a relationship should open a calm explanation of why those memories are connected, including the two or more source inspirations, highlighted parts, and the relationship label",
+        "Allow lightweight user feedback on a relationship: true, not connected, better label; corrections should feed relationship quality or future synthesis where possible",
+        "Keep the constellation emotionally readable and sparse on desktop and mobile; avoid dense network graph aesthetics, node jargon, force-directed admin visuals, overlapping text, or tiny unreadable labels",
+        "Keep search/list as secondary support inside Memory Drawer, not the primary emotional posture",
+        "Add targeted web tests proving typed note, link, image, and mixed signal visuals render differently, relationship labels render without graph terminology, and relationship feedback can be submitted",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification of the Memory Drawer constellation on desktop and mobile"
+      ],
+      "priority": 36,
+      "passes": true,
+      "notes": "Product direction: Memory Drawer should become a constellation of saved moments, like a quote card connected by a soft arrow to a post-it that names the relationship. This is not an admin graph. It should feel like the user's saved notes, links, images, and screenshots are starting to speak to each other. Different input types should look materially different so a typed thought, a link, and an image are emotionally legible at a glance."
+    },
+    {
+      "id": "US-034",
+      "title": "Make post-it thought language interpretable",
+      "description": "As a user, I want Top of Mind post-its to stay natural and quick-jotted without becoming overly short slogans that no longer explain my ambition.",
+      "acceptanceCriteria": [
+        "Update Top of Mind generation and fallback rules so post-it thought language is compressed but interpretable, not short at all costs",
+        "Primary post-it text should usually be 6-14 words; allow shorter only when the phrase is still concretely meaningful",
+        "Avoid ultra-short slogan outputs such as \"public before perfect\", \"taste as default\", \"test it outside\", or \"courage normal\" when they do not carry enough personal meaning",
+        "Each post-it should include or imply a concrete ambition object such as people, room, city, work, path, taste, life, self, standard, or experiment",
+        "Each post-it should imply a reason, contrast, or tension, not only a vibe or abstract value",
+        "Keep the post-it voice natural: fragments, imperatives, questions, and tensions are allowed, but avoid forced starts like \"I want\", \"I need\", and \"I am done with\" unless genuinely natural",
+        "Keep banning outside diagnostic voice such as \"you seem\", \"you may\", \"this person\", \"WAKA thinks\", and generic AI summary language",
+        "Replace deterministic examples with more interpretable phrases such as \"make the thing before explaining it\", \"people who make courage feel normal\", \"a room where unfinished ambition is allowed\", \"stop mistaking safety for clarity\", \"not another impressive path that feels dead\", or \"find people who make building feel less lonely\"",
+        "Update tests so slogan-like, too-short, or vague post-its fail while natural 6-14 word private notes pass",
+        "Run API/web typechecks, targeted Top of Mind generation tests, targeted Home tests, and browser verification of the Home Top of Mind path"
+      ],
+      "priority": 37,
+      "passes": true,
+      "notes": "Product correction after US-032: the app overcorrected from forced first-person sentences into phrases that can be too short to be useful. The target is not slogans. A good post-it should be short enough to feel quickly jotted, but complete enough to help the user recognize themself."
+    },
+    {
+      "id": "US-035",
+      "title": "Rebuild Memory Drawer with canvas and chronological card modes",
+      "description": "As a user, I want the Memory Drawer to let me either revisit saved inspirations as a simple chronological card stack or explore how those inspirations connect on a low-fidelity relationship canvas.",
+      "acceptanceCriteria": [
+        "Replace the current Memory Drawer layout with two clear modes: a chronological card mode and a relationship canvas mode",
+        "Provide an obvious, lightweight mode switcher for List and Graph/Canvas without navigating away from the Top of Mind experience",
+        "List mode should show saved inspirations as clean bounded cards ordered by when they were added, newest first by default",
+        "List mode should preserve the same card visual language as canvas mode, but arranged in a calm readable stream for scanning what was saved over time",
+        "Canvas mode should show a board experience where each saved inspiration is its own bounded card",
+        "Every inspiration card must have a max visual size and truncate long text after a few lines, with a clear way to open the full memory without expanding the entire board",
+        "Cards should feel lower-fidelity than Top of Mind post-its: small scraps, clipped notes, quote cards, link slips, image tiles, or layered paper depending on the saved signal type",
+        "Differentiate user-typed notes, links, images, mixed/file saves, and highlighted excerpts using existing saved signal fields and attachments where available",
+        "In Canvas mode, show relationships directly with soft arrows, lines, or nearby connector labels between inspiration cards; the board should make the user see why saved moments belong near each other",
+        "Relationship labels must be sparse, human, and optional; avoid graph terms, model terms, confidence scores, node jargon, cluster names, and category headings",
+        "Remove memory movement as a user-facing categorization method from the Memory Drawer, including labels, filters, sections, or explanatory copy",
+        "Remove dense sidebars, narrow detail panes, multi-column admin panels, and search-first navigation from both Memory Drawer modes",
+        "Search may remain as a small supporting control in either mode, but it must not become the primary structure of the experience",
+        "Opening a card should show only the full saved inspiration, its user note/highlights if present, and the few relationship explanations needed to understand why it is connected",
+        "The canvas should remain emotionally readable on desktop and mobile: no overlapping text, no tiny nodes, no force-directed graph behavior, and no unreadable relationship tangles",
+        "Add targeted Home/Memory Drawer tests proving List and Canvas modes switch correctly, chronological ordering is respected, cards are bounded/truncated, signal types render differently, relationship connectors render, and memory movement copy does not render",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification of both Memory Drawer modes on desktop and mobile"
+      ],
+      "priority": 38,
+      "passes": true,
+      "notes": "Product correction after seeing the Memory Drawer result: the current version gives the user too much to parse and too little to feel. The target has two modes. List mode is the clean chronological way to revisit what was saved in the order it entered WAKA. Canvas mode is the lower-fidelity evidence board where small bounded inspiration cards connect to each other. Top of Mind is polished post-its for current ambition; Memory Drawer is the evidence underneath. No memory movement taxonomy should be visible here."
+    },
+    {
+      "id": "US-036",
+      "title": "Generate meaningful action checklist post-it from Top of Mind evidence",
+      "description": "As a user, I want WAKA to turn my current Top of Mind into a small draggable action post-it with concrete real-world experiments that actually help me learn about my ambition.",
+      "acceptanceCriteria": [
+        "Replace the current shallow actionForThoughtCard title/dimension template fallback with a grounded action generation layer that uses Top of Mind note evidence, saved signal previews, highlights, ambient signal, matched environment, anti-environment, evidence rationale, and ambition dimension",
+        "Generated actions must be concrete, small, and real-world rather than reflective homework; valid actions include messaging a specific kind of person, visiting or testing a type of room/city/environment, making or sharing a rough artifact, removing one environmental pull, or running a career/build experiment",
+        "Reject generic actions such as \"do one tiny test\", \"explore this more\", \"reflect on this\", \"journal about this\", \"learn more\", \"think about\", \"research\", or actions that simply repeat the post-it title",
+        "Each action must be visibly connected to one Top of Mind post-it or its supporting evidence, but the action text should stand alone and feel useful without exposing admin graph language",
+        "Action text should be specific enough that the user can do it within 24-72 hours; avoid broad life advice, vague self-improvement language, and corporate productivity phrasing",
+        "Show at most five active actions globally on the Top of Mind page; do not render weak, empty, duplicate, or low-confidence action slots",
+        "Make the action checklist its own draggable paper object on the Top of Mind wall, using the same drag behavior as the Top of Mind post-its",
+        "Users must be able to mark an action done or remove it from the active list; completed and removed actions should disappear from the visible active checklist",
+        "Add deterministic API/unit or web tests that fail when action generation returns generic/template actions or actions disconnected from evidence",
+        "Add Home tests proving the action checklist renders only meaningful actions, supports done/remove, is draggable, and no longer uses the old shallow template outputs",
+        "Run API/web typechecks, targeted action generation tests, targeted Home tests, and browser verification of the Top of Mind action post-it on desktop and mobile"
+      ],
+      "priority": 39,
+      "passes": true,
+      "notes": "Product correction: the current action checklist is a placeholder UI built from actionForThoughtCard(card), so the actions can feel weird and generic. This must become a real ambition-learning loop: actions are not productivity tasks, they are small real-world experiments that create new personal context. They should feel like the next thing a reflective person would actually try after noticing a pattern in their saved inspirations."
+    },
+    {
+      "id": "US-037",
+      "title": "Build true action recommender learning loop",
+      "description": "As a user, I want WAKA's action post-it to recommend personally grounded real-world experiments from my evolving personal context, not frontend templates dressed up as recommendations.",
+      "acceptanceCriteria": [
+        "Move action recommendation out of Home.tsx template helpers into a dedicated recommender layer that can run from backend/API or shared domain code and be tested independently",
+        "Model each recommended action as structured data with id, text, sourceTopOfMindId, sourceSignalIds, evidence snippets, action kind, whyNow rationale, confidence, createdAt, status, and dismissed/completed timestamps where appropriate",
+        "Generate recommendations from current Top of Mind notes plus supporting saved inspirations, highlights, user-written resonance notes, repeated motifs, recently reactivated memories, and rejected/anti-environment signals",
+        "Rank actions by personal-context usefulness: actions should help the user learn about people, place, work, taste, identity, rejection, or next experiment rather than optimize productivity",
+        "Require every recommendation to name a concrete 24-72 hour real-world move such as message a specific kind of person, enter a specific type of room, make and show a rough artifact, remove an environmental pull, test a career/build hunch, or revisit a saved inspiration with a concrete external action",
+        "Reject actions that are generic, self-help flavored, template-shaped, broad life advice, reflective homework, corporate productivity language, or merely a paraphrase of the Top of Mind post-it",
+        "Use completion/removal feedback as learning signals: completed actions should strengthen the source pattern only after a follow-up captured signal or explicit user note; removed actions should reduce similar future suggestions",
+        "Persist action state locally or through the API so done/removed actions do not reappear after refresh and can be used by the recommender on the next run",
+        "Show only the top five active high-confidence recommendations on the draggable action post-it; hide low-confidence slots entirely",
+        "Keep the action post-it draggable with the same paper interaction affordance as Top of Mind notes",
+        "Add unit tests for the recommender ranking/filtering that fail on generic template outputs and disconnected evidence",
+        "Add API or integration tests proving completed/removed actions affect future recommendations",
+        "Add Home tests proving persisted active actions render, completed/removed actions disappear after refresh, and the action post-it remains draggable",
+        "Run API/web typechecks, recommender tests, Home tests, and browser verification on localhost desktop and mobile"
+      ],
+      "priority": 40,
+      "passes": true,
+      "notes": "Product correction after US-036: the current implementation still generates actions in the frontend from deterministic phrase templates. The target is a real self-improving personal-context action loop. Actions are not a to-do list. They are small experiments that create new evidence about the user's ambition and feed back into future Top of Mind and action recommendations."
+    },
+    {
+      "id": "US-038",
+      "title": "Make the main wall the only primary navigation surface",
+      "description": "As a user, I want the app to open as a calm personal museum wall that helps me feel curious and understood, not as a dashboard with tabs, dates, and sections.",
+      "acceptanceCriteria": [
+        "Remove the persistent top bar, mode tabs, date display, and dashboard-like navigation from the primary Home experience",
+        "Do not render the product name as a prominent interface label on the primary wall",
+        "Make the Top of Mind wall the default and only primary surface: Top of Mind post-its, action checklist post-it, meaningful generated stickers, capture button, and a drawer-entry object",
+        "The wall should feel like a personal museum: calm, intimate, composed, and curious, with post-its and objects as the navigation",
+        "Use the reference implementation cues from Yan Liu and Studio Dunbar for object-led navigation: absolute-positioned board objects, cursor-grab draggable artifacts, subdued paper materials, and tactile decorative details rather than tab chrome",
+        "Replace the Memory Drawer tab with a physical-feeling drawer/folder entry on the wall that opens the drawer in-place",
+        "Move Korean/English switching out of the removed top bar into a small secondary control such as a quiet footer mark or settings object without making it visually dominant",
+        "Keep capture accessible from the bottom-center wall affordance and do not introduce a separate Capture tab",
+        "Top of Mind evidence should not be rawly exposed on the public wall; post-it deep dive may link into the private drawer evidence instead",
+        "Ensure the wall still works on mobile without overlapping post-its, stickers, action checklist, drawer entry, or capture affordance",
+        "Update Home tests so the old top tabs/date/product-name header do not render and the drawer can be entered from the wall object",
+        "Run web typecheck, targeted Home tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 41,
+      "passes": true,
+      "notes": "Product correction: the first five seconds should feel calm, curious, and understood. The surface is a personal museum; deeper drawer views become more diary-like. Navigation should happen through objects, not app tabs. Reference code cues inspected: Yan Liu's Next bundle uses mac-folder assets, selected/onClick category states, absolute-positioned bulletin artifacts, cursor-grab and active:cursor-grabbing; Studio Dunbar's shipped CSS uses rough-edge/tactile desktop-window materials that can inform paper texture and object styling without copying a desktop clone."
+    },
+    {
+      "id": "US-039",
+      "title": "Rebuild Memory Drawer as proposed inspiration groupings",
+      "description": "As a user, I want to enter a private drawer where my inspirations are easy to revisit, search, and compare through WAKA-proposed groupings and my own groupings, without losing the raw saved thing.",
+      "acceptanceCriteria": [
+        "Replace the default Memory Drawer list/canvas landing with a drawer-desk view of visual group objects inspired by file/folder navigation, without requiring the visible word \"folders\"",
+        "Use the reference implementation cues from Yan Liu's shipped page bundle: mac-folder/front-back folder assets, folder category icons, selected/onClick state changes, absolute board positioning, and draggable bulletin objects as the interaction model for visual group objects",
+        "Use the reference implementation cues from Weird Folders: file/folder object grid, selected object, preview/details affordances, tactile surface/card tokens, and object-first navigation rather than dashboard panels",
+        "Generate proposed groupings from personal context patterns, highlights, source types, recurrence, tensions, recent saves, and Top of Mind evidence rather than hardcoding productivity categories",
+        "Allow the user to create their own grouping, rename a proposed grouping, and keep or dismiss proposed groupings",
+        "Grouping names must feel like good summaries of the inspirations inside, not clinical labels; examples include \"rooms i keep wanting\", \"people i want near me\", \"work i keep circling\", \"places pulling me\", \"things i am done with\", \"highlighted by me\", or \"recently saved\"",
+        "Each grouping may include a quiet one-sentence explanation of why these inspirations belong together, but the original inspiration content must remain the focus",
+        "Clicking a grouping opens an in-place contents view with bounded inspiration cards, not a narrow sidebar, dense graph, or admin search panel",
+        "Grouping contents must support at least two browse orders: newest first and strongest relevance to the grouping",
+        "Always provide a clean chronological path for viewing all inspirations in the order they were saved, because users need to search and revisit specific things quickly",
+        "Cards must visually distinguish typed notes, links, images, highlights, and mixed saves using existing saved signal and attachment fields",
+        "Search should be a small supporting command inside the drawer, not the primary structure",
+        "Add tests proving groupings are generated from inspiration data, user-created groupings can exist, grouping explanations render quietly, chronological all-inspirations view remains available, and old list/canvas landing copy does not render",
+        "Run web typecheck, targeted Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 42,
+      "passes": true,
+      "notes": "Reference code pointers: Yan Liu page bundle at /_next/static/chunks/app/page-c5a178a9a1cf7d72.js exposes mac-folder, folder-icon, selected/onClick category behavior, absolute board objects, cursor-grab, active:cursor-grabbing, zIndex, and draggable bulletin artifacts. Weird Folders source exposes folder, grid, selected, preview, details, collection, cursor/touch/select object vocabulary. Karpathy's LLM wiki pattern is relevant only as a layered model: raw inspirations stay immutable, while the generated organization layer compounds above them."
+    },
+    {
+      "id": "US-040",
+      "title": "Add draggable inspiration windows for comparison",
+      "description": "As a user, I want to open inspirations from the drawer and drag them around like diary cards so I can compare what moved me across time.",
+      "acceptanceCriteria": [
+        "Clicking an inspiration card opens the full inspiration as a draggable window/card on top of the drawer workspace",
+        "Use the reference implementation cues from Wes Dieleman's shipped bundle: window state, focus, zIndex ordering, drag, resize if needed, close, minimize, desktop file/window concepts, and keyboard/search affordances",
+        "Multiple inspiration windows can remain open at once for comparison",
+        "Open windows support focus, close, minimize/collapse, and z-index ordering so the active memory comes forward",
+        "Open windows are approximately 90% original saved inspiration and 10% WAKA context; the raw saved thing should feel private, mostly untouched, and prevalent",
+        "Open windows show the full saved content, source/link/image where available, user note, highlights, and capture/reflection context",
+        "WAKA context inside a single open inspiration must stay contained and gentle: why it may belong here, related groupings, and actions if requested, not a large interpretation panel",
+        "Users can add and remove highlights directly in the full inspiration text without highlights drifting out of alignment",
+        "When two or more inspirations are open, WAKA may show sparse relationship hints between them such as \"same room, later version\", \"both point at who to build around\", or \"old envy became clearer\"",
+        "Relationship hints must be optional, sparse, and dismissible; do not force graph labels, node names, confidence scores, or dense connector webs",
+        "Window positions should persist during the drawer session and reset cleanly when leaving the drawer",
+        "Keyboard and mobile alternatives must exist for opening, focusing, and closing windows when drag is not practical",
+        "Add tests for opening multiple windows, focus/z-index, close/minimize behavior, highlight add/remove, and relationship hints only appearing when multiple related memories are open",
+        "Run web typecheck, targeted Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 43,
+      "passes": true,
+      "notes": "Reference code pointer: Wes Dieleman's Next chunk /_next/static/chunks/2f1bfa57a26af57b.js exposes repeated window, zIndex, resize, drag, close, minimize, focus, desktop, file, search, and terminal app-window mechanics. WAKA should use that interaction model for emotional comparison, not for a literal desktop clone."
+    },
+    {
+      "id": "US-041",
+      "title": "Add inspiration flow mode inside folders",
+      "description": "As a user, I want an immersive way to scroll through inspirations inside a folder one at a time, so revisiting saved signals feels reflective instead of like scanning a database.",
+      "acceptanceCriteria": [
+        "Inside an opened folder, provide a Flow mode that lets users move through inspiration cards one at a time with large readable content and minimal surrounding UI",
+        "Use the reference implementation cues from Obys: explicit Vertical/Horizontal/Grid mode structure, fixed/absolute layers, transform/translate movement, stable aspect-ratio cards, clip-path reveals, pointer-events control, and no leftover content below the active mode",
+        "Flow mode should preserve context: folder name, position in the folder, and why this memory is included should be visible but quiet",
+        "Support vertical scrolling by default and a horizontal/filmstrip treatment only if it remains readable and stable on mobile",
+        "Use stable aspect ratios, clipping, and transform-based transitions so images, links, long text, and highlight cards do not cause layout jumps",
+        "Allow opening any Flow item into the draggable comparison workspace",
+        "Do not show anything below the canvas/flow workspace that makes the mode feel like a broken page with leftover content",
+        "Add tests proving Flow mode renders stable cards, can move between inspirations, opens items into comparison windows, and does not render unrelated drawer content below it",
+        "Run web typecheck, targeted Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 44,
+      "passes": true,
+      "notes": "Reference code pointer: Obys CSS at /css/d.css?mod9hgsf exposes position:fixed/absolute layering, transform/translate transitions, clip-path, aspect-ratio, will-change, pointer-events, and repeated ho-wo project layers plus explicit Vertical, Horizontal, and Grid modes. WAKA should adapt this into a calmer memory flow inside groupings."
+    },
+    {
+      "id": "US-042",
+      "title": "Replace Top of Mind feedback buttons with physical edit and pull-down gestures",
+      "description": "As a user, I want correcting a Top of Mind post-it to feel like changing or removing a note on my wall, not rating an AI answer.",
+      "acceptanceCriteria": [
+        "Remove visible Top of Mind reaction buttons such as yes/no/not me/true/partly from the main wall and opened post-it experience",
+        "Provide a way to edit or rewrite a Top of Mind post-it in-place using the user's own wording",
+        "Provide a way to pull down/remove a Top of Mind post-it from the wall when it does not feel like the user",
+        "Persist edits and removals as feedback signals for future Top of Mind generation without exposing feedback mechanics in the UI copy",
+        "When a post-it is removed, do not immediately replace it with a weak slot; show fewer post-its until a meaningful one earns the wall",
+        "Keep Top of Mind voice focused on quiet truths about what is alive now or what the user is outgrowing",
+        "Update tests so old feedback button labels do not render, edited post-its persist, removed post-its disappear, and weak replacements are not shown",
+        "Run web/API typechecks, targeted Top of Mind feedback tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 45,
+      "passes": true,
+      "notes": "Vision correction: Top of Mind is WAKA's opinionated surface, but feedback should match the post-it wall metaphor. A user should correct it or pull it down, not rate it like a chatbot."
+    },
+    {
+      "id": "US-043",
+      "title": "Make capture branch between quick safe save and reflective save",
+      "description": "As a user, I want to capture an inspiration with almost no friction when I need safety, or pause to understand why it moved me when I want reflection.",
+      "acceptanceCriteria": [
+        "Capture must clearly support two paths after text/link/image entry: quick save and reflect deeper",
+        "Quick save should give immediate reassuring feedback that the inspiration is safe and will be used as an ingredient for future understanding",
+        "Reflect deeper should invite one small self-understanding step about why this mattered without making the user feel analyzed or forced",
+        "The user must be able to save messy, embarrassing, half-formed, high-emotion, or high-stakes inspirations without needing to organize them",
+        "After save, offer an optional path to continue reflecting now or return later from the drawer",
+        "Do not use clinical or internal language such as signal, graph, node, memory movement, resonance, or analysis in the capture UI",
+        "Update tests for quick save, reflective save, saved confirmation copy, optional deeper reflection, and absence of internal language",
+        "Run web/API typechecks, targeted capture tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 46,
+      "passes": true,
+      "notes": "Capture should solve the friction problem by making friction optional. The first emotional payoff is relief that the inspiration will not disappear; the second optional payoff is curiosity about why it moved the user."
+    },
+    {
+      "id": "US-044",
+      "title": "Add action completion follow-up loop",
+      "description": "As a user, I want checking off an action to turn into a small reflection about what happened, so the action creates new personal context instead of becoming a dead task.",
+      "acceptanceCriteria": [
+        "When a user checks off an action, ask a concise follow-up such as \"what happened?\" or \"what did this show you?\"",
+        "The follow-up should be optional but easy to answer immediately",
+        "Persist the follow-up as a new inspiration or action outcome linked to the completed action and its source Top of Mind/inspirations",
+        "Completed action outcomes should feed future Top of Mind and action recommendations as stronger evidence only when the user provided an outcome or related captured inspiration",
+        "The action checklist should keep command-like, specific, external actions rather than vague invitations or reflective homework",
+        "Actions may be generated from the main wall or from a drawer deep-dive when the user is looking at a specific grouping or inspiration",
+        "Update recommender tests so completed action outcomes influence future recommendations and empty completions do not over-strengthen a pattern",
+        "Run API/web typechecks, targeted action loop tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 47,
+      "passes": true,
+      "notes": "Actions are WAKA's coaching edge. They should be straightforward commands, and the result of doing them should become new personal context."
+    },
+    {
+      "id": "US-045",
+      "title": "Apply user-facing language constraints across the product",
+      "description": "As a user, I want the interface to feel intimate and human, without internal AI, graph, or productivity language breaking the spell.",
+      "acceptanceCriteria": [
+        "Use \"inspirations\" for saved things in user-facing copy; avoid \"signals\", \"memories\", \"nodes\", \"graph\", \"resonance\", \"memory movement\", \"analysis\", and \"AI\" unless hidden in internal/admin surfaces",
+        "Do not render the product name as a prominent interface label on the main wall or drawer chrome",
+        "Top of Mind copy should feel like quiet truths emerging from saved inspirations, not summaries any inspiration could have produced",
+        "Drawer copy should emphasize revisiting, searching, comparing, and keeping inspirations from disappearing, not productivity or knowledge-base management",
+        "WAKA may be bold when organizing inspirations into groupings or Top of Mind, but must be gentle and contained when showing one raw inspiration",
+        "Add text-regression tests or targeted UI tests that fail if banned internal terms return to user-facing Home, drawer, capture, Top of Mind, and action surfaces",
+        "Run web/API typechecks, targeted copy tests, and browser verification of the main user journey"
+      ],
+      "priority": 48,
+      "passes": true,
+      "notes": "Core product sentence: this helps me see what I keep caring about before I can explain it, and helps me revisit/search the inspirations that mattered so they do not disappear."
+    },
+    {
+      "id": "US-046",
+      "title": "Simplify drawer workspace and restore action checklist",
+      "description": "As a user, I want the main wall and drawer to feel minimal, clean, and intuitive, with the action checklist still visible on the wall and the drawer opening as a quiet white workspace instead of a complicated multi-section page.",
+      "acceptanceCriteria": [
+        "Restore the action checklist post-it on the main wall when meaningful actions exist; it must not disappear as a side effect of the drawer/navigation rebuild",
+        "The action checklist should remain visually draggable like the Top of Mind post-its and should not require entering the drawer to see it",
+        "Opening the drawer from the wall must stay in-place on the same route and should feel like entering a clean white drawer workspace, not navigating to a new page",
+        "The drawer should not require scrolling down past unrelated sections to understand what to do; the first drawer viewport should contain the primary interaction",
+        "Remove or collapse redundant drawer sections, mode descriptions, instructional copy, and stacked panels that make the experience feel complicated",
+        "Reduce the drawer to one simple mental model: choose a proposed grouping or all inspirations, then see clean inspiration cards in that workspace",
+        "Inspiration cards should be redesigned to be more minimal and clean: white or very light paper, bounded max size, clear source/type cue, short excerpt, quiet timestamp/source, and no heavy borders or dense metadata",
+        "Do not show both folder/grouping navigation and a long card list in separate vertical sections at the same time if it creates scroll confusion; use a single workspace with a focused selected state",
+        "Keep WAKA's opinionated divergent groupings, but present them as quiet entry objects rather than a busy folder wall",
+        "If a grouping is selected, show only that grouping's cards and a small way back to all groupings; avoid sidebars, admin panels, dense graph/canvas labels, and leftover content below the workspace",
+        "Search should be a small optional control and must not add another large section",
+        "Add tests proving the action checklist renders on the wall with meaningful actions, the drawer opens in-place, the first drawer viewport has one primary workspace, inspiration cards use the minimal card treatment, and old stacked drawer sections do not render",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 49,
+      "passes": true,
+      "notes": "Correction after US-038 through US-045: the result over-added structure and regressed the action checklist. The drawer should become simpler, cleaner, and whiter. The experience should be wall -> drawer workspace -> grouping/all inspirations -> minimal cards, not a new page, not a scroll stack, and not several competing sections."
+    },
+    {
+      "id": "US-047",
+      "title": "Simplify opened post-it and make capture highlights proximity-based",
+      "description": "As a user, I want opening a Top of Mind post-it and capturing an inspiration to stay calm, focused, and physically intuitive, without raw evidence blocks, detached highlight controls, or awkward save/reflect buttons.",
+      "acceptanceCriteria": [
+        "Simplify the opened Top of Mind post-it so it shows the post-it text, one short explanatory paragraph, and a quiet link/action to view supporting inspirations in the private drawer",
+        "Do not render raw saved inspiration cards directly inside the opened Top of Mind post-it; evidence should be accessed through the drawer, not exposed in the post-it surface",
+        "Remove bulky sections, repeated headings, feedback button groups, and dense evidence panels from the opened post-it experience",
+        "Keep opened post-it correction physical and simple: edit/rewrite the post-it or pull it down/remove it, not yes/no rating buttons",
+        "In capture, text highlighting must be proximity-based: after selecting text, show an inline floating control near the selection to add the highlight and optionally answer why that part mattered",
+        "Do not place add-highlight controls at the bottom of the capture panel when the selection happens elsewhere",
+        "Existing highlights should render directly on the text; hovering or focusing a highlight should show nearby controls to expand/edit the note or remove that highlight in place",
+        "Remove separate detached highlight lists such as a standalone highlighted-text area and a separate clear button when the same actions can happen on the highlighted text itself",
+        "The highlight note/reflection prompt should happen near the selected highlight, not in a distant panel",
+        "Expanding the inspiration capture composer should create a dedicated full-page or full-screen note-taking environment, so it feels safe to write without losing text",
+        "The expanded capture environment should preserve all draft text, attachments, selections, and highlights when opened/closed",
+        "Replace awkward equal-weight \"reflect deeper\" and \"save now\" button treatment with a calmer two-path design: primary quick safe save and secondary optional reflection, with copy and layout that feel like a safe drawer rather than a form",
+        "After quick save, show reassuring confirmation that the inspiration is safe and can be revisited later; after optional reflection, keep the user in the same safe note-taking context",
+        "Add tests proving opened post-its no longer render raw inspiration evidence, drawer evidence link/action exists, highlight controls appear near selected text, existing highlights expose nearby edit/remove controls, detached highlight lists are gone, expanded capture fills the page, and drafts/highlights persist across expand/collapse",
+        "Run web typecheck, targeted Home/capture tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 50,
+      "passes": true,
+      "notes": "Correction after US-038 through US-045: the opened post-it and capture experiences still feel overbuilt and detached. Opened post-it should be minimal and link into the private drawer for evidence. Capture should feel like safe note-taking, with highlight actions physically near the text being highlighted."
+    },
+    {
+      "id": "US-048",
+      "title": "Make drawer open as an anchored glass stack",
+      "description": "As a user, I want clicking the drawer object to open a small glassy stack directly from the wall, like a Mac downloads stack, so I can drill into groupings and inspirations without feeling like I left the wall.",
+      "acceptanceCriteria": [
+        "Replace the full-screen drawer overlay with an anchored drawer stack/popover that opens from the wall drawer object itself",
+        "The wall, post-its, and action checklist must remain visible behind the drawer stack with a subtle glass or translucent layer separating the drawer from the wall",
+        "Opening the drawer must not navigate, replace the canvas, scroll to a new page-like section, or make the user feel transferred to a separate surface",
+        "The first drawer stack view should show only the clean entry objects: proposed groupings, all inspirations, and an optional small search control",
+        "Clicking a grouping should replace the stack contents in-place with that grouping's inspiration cards, instead of opening a separate page area below or beside it",
+        "Clicking back should replace the stack contents with the previous stack level, preserving a simple drill-down path",
+        "Clicking an actual inspiration should open its readable detail within the same anchored glass stack or as a small card layered from it, not as a full-page route or unrelated panel",
+        "The stack should have stable dimensions, internal scrolling only when needed, and no page-level vertical scroll created by the drawer",
+        "On mobile, the anchored stack may become a bottom sheet, but it should still feel like it emerged from the drawer object and should not become a separate page",
+        "Remove leftover drawer workspace language and large headers such as \"Choose a pile, or open everything\" if they make the stack feel like a page",
+        "Add tests proving the drawer object remains on the wall, the stack opens anchored to it, groupings replace stack contents in-place, inspiration detail opens inside the stack, and no full-screen drawer overlay/page replacement renders",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 51,
+      "passes": true,
+      "notes": "Product correction: even the simplified white overlay still feels too page-like. The target is closer to macOS Downloads stack behavior: object on wall -> glass stack opens from that object -> drill into grouping -> drill into inspiration -> back, all while the wall remains the context."
+    },
+    {
+      "id": "US-049",
+      "title": "Simplify drawer stack visual language",
+      "description": "As a user, I want the drawer and inspiration cards to feel neutral, minimal, and quiet, closer to simple white quote cards than colorful UI widgets.",
+      "acceptanceCriteria": [
+        "Redesign the drawer stack to use a minimal neutral visual language: white or off-white cards, black/charcoal text, subtle shadows, no bright yellow inspiration cards, no loud highlights, and no busy decorative controls",
+        "Remove the top-left circle/dot controls from the drawer stack if they are purely decorative or make the drawer feel like complex app chrome",
+        "Avoid putting multiple button groups inside the drawer stack; keep controls sparse and text-based only where necessary",
+        "The first drawer stack view should feel like a simple set of neutral cards or slips, not a colorful folder dashboard",
+        "After clicking a specific grouping, the inside view should remain calm: one quiet back affordance, the grouping title, and clean inspiration cards with minimal metadata",
+        "Remove or hide noisy chips such as highlighted/type badges/yellow labels unless the information is essential for understanding the inspiration",
+        "Inspiration cards should look closer to the provided reference: simple white rectangular quote/content cards with centered or well-composed text, restrained spacing, and only subtle source/date context",
+        "Different inspiration types may still be distinguishable, but through subtle layout differences rather than loud color blocks or labels",
+        "Long inspiration text should be truncated cleanly without dense metadata, and opening the card should show the full text in the same neutral style",
+        "Maintain the anchored stack drill-down behavior from US-048; do not reintroduce page navigation, full-screen drawer overlays, or scroll-heavy stacked sections",
+        "Add tests proving decorative circle controls do not render, yellow/loud inspiration card classes are not used in the drawer stack, grouping contents render with minimal controls, and inspiration cards use the neutral card treatment",
+        "Run web typecheck, targeted Home/Memory Drawer tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 52,
+      "passes": true,
+      "notes": "Visual correction after seeing the anchored stack: it still feels too UI-heavy. Use the provided reference image as the tone: a simple white card with quiet typography and subtle presence. The drawer should feel like opening calm evidence cards, not operating a colorful folder dashboard."
+    },
+    {
+      "id": "US-050",
+      "title": "Make text selection create inline highlight reactions",
+      "description": "As a user, I want highlighting text to immediately show a small contextual control near my selection, so I can mark why that exact text mattered without leaving the text.",
+      "acceptanceCriteria": [
+        "When a user selects text inside capture or an opened inspiration, show a small floating popover near the selected text, preferably above the selection when space allows",
+        "The popover should include a direct highlight action and a few compact reaction choices for why the selection mattered, such as pulled me, envy, taste, reject, person, place, work, or my own note",
+        "The popover must be positioned from the actual selection bounding rectangle, not fixed to the bottom or a separate panel",
+        "Clicking a reaction should apply the highlight inline to the selected text and associate that reaction/note with the highlight",
+        "The user should be able to add a short custom note from the same popover without moving to another section",
+        "Existing highlights should render directly on the text; hovering or focusing a highlight should show a nearby popover with edit reaction, expand note, and remove controls",
+        "Remove detached highlight lists, separate highlighted-text sections, and distant clear buttons from the capture and inspiration detail experiences",
+        "The highlight popover should remain visually quiet: neutral background, small shadow, compact text buttons, no loud badges or colorful chips",
+        "The experience must work in the expanded full-page capture environment and in opened inspiration details on desktop and mobile",
+        "Add tests proving text selection opens a nearby popover, reaction click creates an inline highlight, custom note can be added from the popover, existing highlight hover/focus exposes nearby edit/remove controls, and no detached highlight list renders",
+        "Run web typecheck, targeted capture/highlight tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 53,
+      "passes": true,
+      "notes": "Product correction: the user wants the literal selection UX where selecting text summons nearby highlight/reaction controls. Highlighting should feel like marking a sentence in place, not managing highlights elsewhere. SUPERSEDED 2026-06-01 (design decision): capture was deliberately simplified to highlight-only. Selecting text now summons a single inline 'highlight' control and supports MULTIPLE in-place highlights; the reaction/emotion chip grid and the in-popover 'why this mattered' note were intentionally removed to keep capture low-friction. The reaction-choice and custom-note-in-popover criteria of this story are retired and should NOT be treated as a regression. Emotional-pull metadata is no longer collected at capture time by design."
+    },
+    {
+      "id": "US-051",
+      "title": "Create group Top of Mind conversation rooms",
+      "description": "As a user, I want to combine my saved signals with a small group's saved signals so WAKA can turn everyone's current Top of Mind into a live conversation surface and lightweight post-conversation feedback.",
+      "acceptanceCriteria": [
+        "Add a group conversation room concept where two or more invited users can opt into mixing selected saved signals and current top-of-mind notes for that room only",
+        "The same user's saved signals should be able to produce different shared prompts depending on the room membership, so a close-friends room and a work-peers room can surface clearly different discussion directions",
+        "Each participant must be able to add or select signals before the room session without needing heavy tagging, long setup, or manual organization",
+        "Generate a small set of group Top of Mind conversation prompts from overlapping themes, productive tensions, repeated people/place/work signals, and surprising differences between participants",
+        "Include a contextual action for a saved signal or top-of-mind note such as \"turn this into a discussion topic\" that creates or suggests a room prompt",
+        "During the room, keep the interface focused on conversation: prompts, lightweight note capture, and optional per-prompt reactions, not a dense graph or admin-style evidence panel",
+        "After the conversation ends, automatically create a concise feedback surface showing what themes strengthened, what felt unresolved, and which new personal or group top-of-mind notes were created",
+        "The post-conversation feedback should make the next use case obvious: users should leave with a reason to save more signals because those signals improved the quality of the group discussion",
+        "Support at least one actionable outcome from the conversation, such as a follow-up question, next discussion topic, tiny challenge, or one-week action, while allowing the action to simply be another conversation",
+        "Respect privacy boundaries: do not expose another user's raw saved signals unless they explicitly shared them into the room; generated group prompts should cite only safe previews or participant-approved evidence",
+        "Add API and web tests proving room creation, participant scoping, room-specific prompt generation, post-conversation feedback creation, and private signal redaction",
+        "Run API typecheck, web typecheck, targeted room tests, and browser verification on desktop and mobile"
+      ],
+      "priority": 54,
+      "passes": true,
+      "notes": "Derived from the 2026-06-29 product conversation: the same inspiration should produce a different result when mixed with different people; each person saves inspirations, WAKA uses them as Top of Mind for conversation, then the conversation itself creates feedback and more reasons to save. This is also the bridge from personal Top of Mind into a public/opening 'jabsori' style format. Friction must stay extremely low: before the conversation, save or select signals; during the conversation, talk; after the conversation, WAKA immediately reflects back useful themes, unresolved questions, and possible actions."
+    },
+    {
+      "id": "US-052",
+      "title": "Add Group Top of Mind boards with per-inspiration sharing",
+      "description": "As a user, I want to see my own Top of Mind board plus one or more Group Top of Mind boards, create and join groups by link, and decide per inspiration whether it feeds my groups or stays private, so a small group's saved inspirations can synthesize into a shared Top of Mind.",
+      "acceptanceCriteria": [
+        "Add a board switcher to the Top of Mind experience with a 'Mine' board (the existing personal wall) and one board per group the user belongs to; switching boards loads that board's Top of Mind using the same post-it visual language",
+        "Let a user create a new group by name; the creator becomes the owner and receives a shareable join link/code",
+        "Let a user join an existing group by pasting or opening a join link/code; joining is idempotent and adds the user as a member",
+        "Introduce a clean groups and group_members data model separate from the US-051 group_conversation_rooms tables, which are left in place but not part of this experience",
+        "Add a per-inspiration share control that defaults to shared-with-my-groups and can be flipped to private at capture time and later; private inspirations must never feed any group board or expose their evidence",
+        "Generate each Group Top of Mind board as a synthesis of the POOL of all members' shared inspirations, not a side-by-side of each member's own board: keep only synthesized notes backed by at least one shared signal, redact evidence previews for non-shared signals, and dedupe near-duplicate notes across members so a shared pattern becomes one group post-it",
+        "Enforce membership on every group-scoped read so a non-member cannot fetch a group's board or notes",
+        "Document the deferred cross-member signal-level generation path (running the wow-judge over a pooled multi-user candidate set) behind the same /api/groups/:id/top-of-mind surface so the client does not change when it lands",
+        "Add API tests for group create/join/leave/list, tenant + membership scoping, shared-by-default behavior, private redaction, and cross-member dedup synthesis",
+        "Add web tests proving the board switcher renders Mine plus groups, switching fetches the group board, create/join flows exist, and the capture share toggle defaults to shared",
+        "Run API and web typechecks, targeted group tests, and browser verification of the board switcher and a group board on localhost:3030"
+      ],
+      "priority": 55,
+      "passes": false,
+      "notes": "Product correction after US-051: the group experience is not chat rooms; it is BOARDS. The user wants to see boards of (1) their own Top of Mind and (2) group Top of Mind (can be multiple), create new groups, join by link, and for each inspiration choose whether it is part of group Top of Mind or kept private, shared by default. v1 synthesis is deterministic pooling of members' notes filtered to shared-signal evidence plus cross-member dedup, which works locally without a live model; genuine cross-member generation from a pooled candidate set lands in US-053. See docs/goals/group-top-of-mind.md."
+    },
+    {
+      "id": "US-053",
+      "title": "Genuinely synthesize Group Top of Mind from pooled member inspirations",
+      "description": "As a group member, I want the Group Top of Mind board to be newly synthesized from everyone's shared inspirations following the same Top of Mind generation flow, not just each person's existing Top of Mind notes added together, and I want each supporting inspiration tagged with whose it is.",
+      "acceptanceCriteria": [
+        "Generate Group Top of Mind notes from the POOL of all members' shared inspirations by reusing the existing embeddings -> similar-candidate retrieval -> model judge -> note pipeline with a candidate pool that spans members, so a single group note can be grounded in inspirations from more than one member",
+        "Do not build the group board by concatenating or merely deduping each member's already-generated personal Top of Mind notes; the group board must be a fresh synthesis over the shared signal pool",
+        "Exclude private inspirations from the candidate pool and from all evidence at the query layer; a private inspiration must never enter group synthesis or appear on a group board",
+        "Tag every supporting inspiration on a group note with the member who saved it, and expose that ownership in the group Top of Mind API and in the evidence view on the board",
+        "Persist group notes and their owner-tagged evidence in group-scoped tables (separate from the single-user top_of_mind_notes tables, whose composite user FKs cannot store another member's signal) so the board loads fast and stays stable between refreshes",
+        "Provide a refresh path that regenerates the group board from the current shared pool, and best-effort generate on board load when the group board is empty so the experience works without a manual step",
+        "Dedupe near-duplicate group notes and bound the number shown, consistent with the personal Top of Mind surface",
+        "Reuse the existing model provider and judge contract rather than introducing a parallel generation path; be idempotent so re-running synthesis does not create duplicate group notes",
+        "Add API tests for pooled multi-user candidate retrieval with private-signal exclusion, group judge validation that related ids stay within the pool, owner-tagged evidence persistence, and dedupe/idempotency; add web tests for evidence owner tags rendering on a group board",
+        "Run API and web typechecks, targeted synthesis tests, and live verification of a synthesized group board on localhost:3030"
+      ],
+      "priority": 56,
+      "passes": false,
+      "notes": "Extends US-052 per direct product direction on 2026-07-07: the group Top of Mind must be a genuine synthesis of everyone's pooled shared inspirations (same generation flow as personal Top of Mind), not a merge of individual boards, and evidence inspirations must be attributed to their owner. See docs/goals/group-top-of-mind-synthesis.md. Reuses wow-candidates/wow-judge internals via a group-scoped candidate pool and new group_top_of_mind_notes + group_top_of_mind_note_signals tables with per-evidence owner_user_id."
+    }
+  ]
+}

@@ -54,14 +54,17 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
           alignItems: "center",
           justifyContent: "center",
           minHeight: "100vh",
-          // Tokenized to match the prototype's parchment/ink palette. Using
-          // raw `system-ui` + `#666` would have flashed a system-default
-          // splash that diverges from index.html's serif-italic editorial
-          // voice on the first frame after page load.
-          fontFamily: "var(--font-serif)",
-          fontStyle: "italic",
-          fontSize: 16,
-          color: "var(--muted)",
+          // The splash is the first frame of the product and it was set in
+          // serif italic on parchment -- an editorial flourish for a moment
+          // that should be furniture. Sans, small, quiet, on the same white
+          // the surface uses, so the app does not appear to change clothes
+          // between the splash and the first paint.
+          background: "#fcfcfb",
+          fontFamily:
+            '"Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+          fontSize: 13,
+          letterSpacing: 0,
+          color: "rgba(23, 22, 19, 0.4)",
         }}
       >
         {t(locale, "loadingAuth")}

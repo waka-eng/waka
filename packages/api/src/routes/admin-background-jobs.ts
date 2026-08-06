@@ -16,6 +16,7 @@ import {
   type BackgroundJob,
   type BackgroundJobStatus,
   type BackgroundJobType,
+  type GroupReadingRefreshPayload,
   inspirations,
   type ProcessInspirationPayload,
   wowMomentInspirations,
@@ -132,6 +133,15 @@ function summarizePayload(job: BackgroundJob): Record<string, unknown> {
   if (job.type === "process_inspiration") {
     const payload = job.payload as ProcessInspirationPayload;
     return { inspirationId: payload.inspirationId };
+  }
+  if (job.type === "group_reading_refresh") {
+    const payload = job.payload as GroupReadingRefreshPayload;
+    return {
+      groupId: payload.groupId,
+      reason: payload.reason,
+      preferredLocale: payload.preferredLocale,
+      materialFingerprint: payload.materialFingerprint,
+    };
   }
   return {};
 }

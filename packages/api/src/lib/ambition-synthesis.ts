@@ -106,7 +106,22 @@ export interface AmbitionSynthesisFailure {
   reason: AmbitionSynthesisFailureReason;
   code: AmbitionSynthesisFailureCode;
   errorName?: SafeExceptionName;
+  validationReason?: AmbitionSynthesisValidationFailureReason;
 }
+
+export type AmbitionSynthesisValidationFailureReason =
+  | "post_it_length"
+  | "slogan_like"
+  | "missing_concrete_object"
+  | "missing_tension"
+  | "outside_voice"
+  | "theatrical_template"
+  | "weak_hedge"
+  | "shallow_category"
+  | "missing_rejected_alternative"
+  | "missing_personal_edge"
+  | "wrong_locale"
+  | "duplicate_title";
 
 const MAX_SYNTHESIS_CANDIDATES = 5;
 const MAX_SIGNALS_PER_SYNTHESIS = 5;
@@ -119,12 +134,12 @@ const SHALLOW_CATEGORY_PATTERN =
 const PERSONAL_EDGE_PATTERN =
   /\b(because|so I can|rooms?|places?|peers?|people|work|standards?|taste|surroundings?|environment|reject|done with|aliveness|public|braver|build|courage|normalizes?|private planning|visible|self-image|test|consensus)\b/i;
 const OUTSIDE_VOICE_PATTERN = /^(you|your|this person|waka)\b/i;
-const FORCED_TEMPLATE_PATTERN = /^(i need|i want|i am|i'm|i refuse|i am done with)\b/i;
+const THEATRICAL_TEMPLATE_PATTERN = /^(i refuse|i am done with)\b/i;
 const WEAK_HEDGE_PATTERN = /\b(i think|maybe|might|probably|seems|kind of)\b/i;
 const SLOGAN_LIKE_POST_IT_PATTERN =
   /^(public before perfect|taste as default|test it outside|test it in public|courage normal|places that make courage normal|people who make courage normal|sharper taste as the default)$/i;
 const CONCRETE_AMBITION_OBJECT_PATTERN =
-  /\b(people|peers|rooms?|places?|city|cities|work|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b/i;
+  /\b(people|peers|rooms?|places?|city|cities|work|workshops?|studios?|projects?|build|building|thing|path|taste|life|self|standards?|experiments?|questions?|environment)\b/i;
 const INTERPRETABLE_POST_IT_PATTERN =
   /\b(before|after|without|instead|than|where|who|because|until|against|not|less|more|cost|allowed|dead|normal|braver|lonely|clarity)\b/i;
 const HANGUL_PATTERN = /[\u3131-\u318E\uAC00-\uD7A3]/u;
@@ -363,6 +378,26 @@ export function shouldRunAmbitionSynthesis(input: {
 export function isSpecificAmbitionSynthesisOutput(
   output: AmbitionSynthesisOutput,
 ): boolean {
+  return ambitionSynthesisValidationFailureReason(output, "en-US") === null;
+}
+
+export function ambitionSynthesisValidationFailureReason(
+  output: AmbitionSynthesisOutput,
+  preferredLocale: SupportedLocale,
+): AmbitionSynthesisValidationFailureReason | null {
+  if (preferredLocale === "ko-KR") {
+    const userFacingFields = [
+      output.firstPersonPostItCandidate,
+      output.environmentDirection,
+      output.rejectedEnvironment,
+      output.evidenceRationale,
+      output.rejectedAlternativeInterpretation,
+    ];
+    return userFacingFields.every((field) => HANGUL_PATTERN.test(field))
+      ? null
+      : "wrong_locale";
+  }
+
   const candidateText = normalizeWhitespace(output.firstPersonPostItCandidate);
   const text = [
     candidateText,
@@ -371,37 +406,43 @@ export function isSpecificAmbitionSynthesisOutput(
     output.evidenceRationale,
   ].join(" ");
   const wordCount = candidateText.split(/\s+/).filter(Boolean).length;
-  if (wordCount < 5 || wordCount > MAX_POST_IT_WORDS || candidateText.length > MAX_POST_IT_CHARS) return false;
-  if (SLOGAN_LIKE_POST_IT_PATTERN.test(candidateText)) return false;
-  if (!CONCRETE_AMBITION_OBJECT_PATTERN.test(candidateText)) return false;
-  if (!INTERPRETABLE_POST_IT_PATTERN.test(candidateText)) return false;
-  if (OUTSIDE_VOICE_PATTERN.test(candidateText)) return false;
-  if (FORCED_TEMPLATE_PATTERN.test(candidateText)) return false;
-  if (WEAK_HEDGE_PATTERN.test(candidateText)) return false;
+  if (
+    wordCount < 5 ||
+    wordCount > MAX_POST_IT_WORDS ||
+    candidateText.length > MAX_POST_IT_CHARS
+  ) {
+    return "post_it_length";
+  }
+  if (SLOGAN_LIKE_POST_IT_PATTERN.test(candidateText)) return "slogan_like";
+  if (!CONCRETE_AMBITION_OBJECT_PATTERN.test(candidateText)) {
+    return "missing_concrete_object";
+  }
+  if (!INTERPRETABLE_POST_IT_PATTERN.test(candidateText)) {
+    return "missing_tension";
+  }
+  if (OUTSIDE_VOICE_PATTERN.test(candidateText)) return "outside_voice";
+  if (THEATRICAL_TEMPLATE_PATTERN.test(candidateText)) {
+    return "theatrical_template";
+  }
+  if (WEAK_HEDGE_PATTERN.test(candidateText)) return "weak_hedge";
   if (
     SHALLOW_CATEGORY_PATTERN.test(candidateText) &&
     !PERSONAL_EDGE_PATTERN.test(text)
   ) {
-    return false;
+    return "shallow_category";
   }
-  if (output.rejectedAlternativeInterpretation.trim().length === 0) return false;
-  return PERSONAL_EDGE_PATTERN.test(text);
+  if (output.rejectedAlternativeInterpretation.trim().length === 0) {
+    return "missing_rejected_alternative";
+  }
+  if (!PERSONAL_EDGE_PATTERN.test(text)) return "missing_personal_edge";
+  return null;
 }
 
 export function isLocaleSafeAmbitionSynthesisOutput(
   output: AmbitionSynthesisOutput,
   preferredLocale: SupportedLocale,
 ): boolean {
-  if (preferredLocale !== "ko-KR") return isSpecificAmbitionSynthesisOutput(output);
-
-  const userFacingFields = [
-    output.firstPersonPostItCandidate,
-    output.environmentDirection,
-    output.rejectedEnvironment,
-    output.evidenceRationale,
-    output.rejectedAlternativeInterpretation,
-  ];
-  return userFacingFields.every((field) => HANGUL_PATTERN.test(field));
+  return ambitionSynthesisValidationFailureReason(output, preferredLocale) === null;
 }
 
 export function applyAmbitionSynthesisOutput(
@@ -465,6 +506,7 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
     candidate: TopOfMindRefreshCandidate,
     reason: AmbitionSynthesisFailure["reason"],
     error?: unknown,
+    validationReason?: AmbitionSynthesisValidationFailureReason,
   ): void {
     failed += 1;
     const code = failureCode(reason);
@@ -475,6 +517,7 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
       reason,
       code,
       ...(errorName ? { errorName } : {}),
+      ...(validationReason ? { validationReason } : {}),
     };
 
     failures.push({
@@ -517,10 +560,14 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
       continue;
     }
 
-    if (output && isLocaleSafeAmbitionSynthesisOutput(output, synthesisInput.preferredLocale)) {
+    const validationReason = ambitionSynthesisValidationFailureReason(
+      output,
+      synthesisInput.preferredLocale,
+    );
+    if (!validationReason) {
       const titleKey = normalizeSynthesizedTitleKey(output.firstPersonPostItCandidate);
       if (titleKey.length === 0 || acceptedTitleKeys.has(titleKey)) {
-        recordFailure(candidate, "invalid_output");
+        recordFailure(candidate, "invalid_output", undefined, "duplicate_title");
         continue;
       }
 
@@ -530,7 +577,7 @@ export async function runBoundedAmbitionSynthesisLoop(input: {
       continue;
     }
 
-    recordFailure(candidate, "invalid_output");
+    recordFailure(candidate, "invalid_output", undefined, validationReason);
   }
 
   return {

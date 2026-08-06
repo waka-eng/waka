@@ -78,6 +78,7 @@ function createVaultBackedApp(input: {
       getVault: () => input.vault,
       authMiddleware: authAs(input.fixture),
       enqueueClassificationJob: async () => {},
+      enqueueGroupReadingJobs: async () => {},
     }),
   );
   return app;

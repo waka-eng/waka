@@ -5,13 +5,16 @@ import { z } from "zod";
 
 import {
   inspirations,
+  backgroundJobs,
   feedback,
   meaningEvidence,
+  meaningNodes,
   type WowKind,
   wowMomentInspirations,
   wowMoments,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { enqueueMeaningGraphRebuild } from "../lib/queue.js";
 import {
   planFeedbackApplication,
   readAppliedTopOfMindStatus,
@@ -73,6 +76,10 @@ const updateTopOfMindNoteSchema = z
   })
   .strict();
 
+const pinTopOfMindNoteSchema = z
+  .object({ pinned: z.boolean() })
+  .strict();
+
 type WakaDb = ReturnType<typeof getDb>;
 
 type TopOfMindWowMomentRow = {
@@ -131,6 +138,20 @@ export interface TopOfMindEvidencePreview {
   role: string;
   reason: string;
   textPreview: string;
+  /**
+   * The run of words in the save that carried this reading, when the judge
+   * named one and it was really there. Null far more often than not, and that
+   * is the point: a missing highlight is honest.
+   */
+  quote?: string | null;
+  /**
+   * Who was speaking — the person, or the page they linked.
+   *
+   * A save's readable text has two authors, and attributing an article's
+   * argument to a member who only saved the link would be a claim about them
+   * that nobody made.
+   */
+  quoteSource?: "own" | "enrichment" | null;
   kind: string | null;
   createdAt: string;
   resonanceScore: number;
@@ -175,6 +196,11 @@ export interface TopOfMindRouteDependencies {
       preferredLocale?: SupportedLocale;
     },
   ) => Promise<TopOfMindNoteSurface | null>;
+  setPinned?: typeof setTopOfMindNotePinnedForUser;
+  dismissNote?: typeof dismissTopOfMindNoteForUser;
+  restoreNote?: typeof restoreTopOfMindNoteForUser;
+  getStatus?: typeof getTopOfMindGenerationStatusForUser;
+  requestRefresh?: (userId: string) => ReturnType<typeof enqueueMeaningGraphRebuild>;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
 
@@ -269,6 +295,7 @@ function serializeTopOfMindSurface(
           ...surfacedNote,
           title: correctionText,
           ambientSignal: correctionText,
+          body: correctionText,
         }
       : surfacedNote;
 
@@ -391,9 +418,15 @@ async function fetchLatestTopOfMindFeedbackSnapshots(
     ) {
       snapshot.isPinned = row.value === "important";
     }
+    const interaction =
+      row.metadata && typeof row.metadata === "object"
+        ? (row.metadata as { interaction?: { kind?: unknown } }).interaction
+        : undefined;
     const status =
-      topOfMindStatusFromFeedbackValue(row.value) ??
-      readAppliedTopOfMindStatus(row.metadata);
+      interaction?.kind === "pin"
+        ? "active"
+        : topOfMindStatusFromFeedbackValue(row.value) ??
+          readAppliedTopOfMindStatus(row.metadata);
     if (!snapshot.status && status) snapshot.status = status;
     const correctionText =
       row.value === "partly" ? row.correctionText?.trim() : "";
@@ -406,9 +439,19 @@ async function fetchLatestTopOfMindFeedbackSnapshots(
   return snapshots;
 }
 
+/**
+ * @param sharedOnly drop saves the owner has marked private.
+ *
+ * Default false, because the owner reading their own wall should see every
+ * save that shaped it — that is the point of the evidence list. It is set true
+ * for the unauthenticated public profile, where `inspirations.text` was
+ * previously selected with no sharing predicate at all: a save whose toggle
+ * read "private" had a 180-character excerpt of itself published to anyone
+ * with the handle.
+ */
 async function fetchRelatedSignalRows(
   db: WakaDb,
-  input: { userId: string; momentIds: string[] },
+  input: { userId: string; momentIds: string[]; sharedOnly?: boolean },
 ): Promise<TopOfMindRelatedSignalRow[]> {
   if (input.momentIds.length === 0) return [];
 
@@ -434,6 +477,7 @@ async function fetchRelatedSignalRows(
         inArray(wowMomentInspirations.wowMomentId, input.momentIds),
         eq(wowMomentInspirations.userId, input.userId),
         eq(inspirations.userId, input.userId),
+        ...(input.sharedOnly ? [eq(inspirations.sharedToGroups, true)] : []),
       ),
     )
     .orderBy(
@@ -456,7 +500,22 @@ function groupRelatedRowsByMomentId(
 
 export async function listTopOfMindNotesForUser(
   db: WakaDb,
-  input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
+  input: {
+    userId: string;
+    limit: number;
+    preferredLocale?: SupportedLocale;
+    /**
+     * Who is going to read this.
+     *
+     * `owner` (the default) shows every save that shaped a note, including the
+     * ones kept private — the owner is who the evidence list is for. `public`
+     * is for the unauthenticated profile, where a save marked private must not
+     * appear at all. The note itself still stands; only the private evidence
+     * behind it goes, which is the same boundary rooms already draw in
+     * `signal-readings.ts`.
+     */
+    audience?: "owner" | "public";
+  },
 ): Promise<TopOfMindNoteSurface[]> {
   const fetchLimit = Math.min(
     MAX_TOP_OF_MIND_LIMIT,
@@ -505,6 +564,7 @@ export async function listTopOfMindNotesForUser(
   const relatedRows = await fetchRelatedSignalRows(db, {
     userId: input.userId,
     momentIds: moments.map((moment) => moment.id),
+    sharedOnly: input.audience === "public",
   });
   const relatedContextNodeIds = await fetchRelatedContextNodeIdsByMomentId(db, {
     userId: input.userId,
@@ -685,6 +745,291 @@ export async function updateTopOfMindNoteForUser(
   return isVisibleTopOfMindStatus(note.status) ? note : null;
 }
 
+async function topOfMindMomentExists(
+  db: WakaDb,
+  input: { userId: string; noteId: string },
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: wowMoments.id })
+    .from(wowMoments)
+    .where(
+      and(
+        eq(wowMoments.userId, input.userId),
+        eq(wowMoments.id, input.noteId),
+        eq(wowMoments.lifecycleStatus, "active"),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+function topOfMindInteractionMetadata(
+  input: {
+    userId: string;
+    noteId: string;
+    status: TopOfMindNoteStatus;
+    kind: "pin" | "dismiss" | "restore";
+    pinned?: boolean;
+  },
+  now: Date,
+) {
+  return {
+    interaction: {
+      kind: input.kind,
+      ...(typeof input.pinned === "boolean" ? { pinned: input.pinned } : {}),
+    },
+    appliedFeedback: {
+      source: "user_feedback",
+      topOfMindNoteStatus: input.status,
+      nodeStatus: "active",
+      weightDelta: 0,
+      confidenceDelta: 0,
+      correctionRequested: false,
+      appliedAt: now.toISOString(),
+      targetType: "top_of_mind_note",
+      targetId: input.noteId,
+      contextNodeIds: [],
+      noteConfidenceDelta: 0,
+    },
+  };
+}
+
+async function recordTopOfMindInteraction(
+  db: WakaDb,
+  input: {
+    userId: string;
+    noteId: string;
+    value: "true" | "not_true" | "important" | "not_important";
+    status: TopOfMindNoteStatus;
+    kind: "pin" | "dismiss" | "restore";
+    pinned?: boolean;
+  },
+): Promise<boolean> {
+  if (!(await topOfMindMomentExists(db, input))) return false;
+  const now = new Date();
+  await db.insert(feedback).values({
+    userId: input.userId,
+    targetType: "top_of_mind_note",
+    targetId: input.noteId,
+    value: input.value,
+    source: "user",
+    metadata: topOfMindInteractionMetadata(input, now),
+    updatedAt: now,
+  });
+  return true;
+}
+
+export async function setTopOfMindNotePinnedForUser(
+  db: WakaDb,
+  input: {
+    userId: string;
+    noteId: string;
+    pinned: boolean;
+    preferredLocale?: SupportedLocale;
+  },
+): Promise<TopOfMindNoteSurface | null> {
+  const recorded = await recordTopOfMindInteraction(db, {
+    ...input,
+    value: input.pinned ? "important" : "not_important",
+    status: "active",
+    kind: "pin",
+  });
+  if (!recorded) return null;
+  return getTopOfMindNoteForUser(db, input);
+}
+
+export async function dismissTopOfMindNoteForUser(
+  db: WakaDb,
+  input: { userId: string; noteId: string },
+): Promise<boolean> {
+  return recordTopOfMindInteraction(db, {
+    ...input,
+    value: "not_true",
+    status: "stale",
+    kind: "dismiss",
+  });
+}
+
+export async function restoreTopOfMindNoteForUser(
+  db: WakaDb,
+  input: {
+    userId: string;
+    noteId: string;
+    preferredLocale?: SupportedLocale;
+  },
+): Promise<TopOfMindNoteSurface | null> {
+  const recorded = await recordTopOfMindInteraction(db, {
+    ...input,
+    value: "true",
+    status: "active",
+    kind: "restore",
+  });
+  if (!recorded) return null;
+  return getTopOfMindNoteForUser(db, input);
+}
+
+export type TopOfMindGenerationPhase =
+  | "empty"
+  | "processing"
+  | "needs_more_context"
+  | "ready"
+  | "failed";
+
+export interface TopOfMindGenerationStatus {
+  phase: TopOfMindGenerationPhase;
+  message: string;
+  signalCount: number;
+  contextNodeCount: number;
+  evidenceCount: number;
+  noteCount: number;
+  job: {
+    id: string;
+    type: "process_inspiration" | "meaning_graph_rebuild";
+    status: "pending" | "running" | "succeeded" | "failed";
+    lastError: string | null;
+    updatedAt: string;
+  } | null;
+}
+
+function numericCount(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export async function getTopOfMindGenerationStatusForUser(
+  db: WakaDb,
+  userId: string,
+): Promise<TopOfMindGenerationStatus> {
+  const [signalRows, nodeRows, evidenceRows, activeNoteRows, jobRows] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(inspirations).where(eq(inspirations.userId, userId)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(meaningNodes)
+      .where(and(eq(meaningNodes.userId, userId), eq(meaningNodes.status, "active"))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(meaningEvidence)
+      .where(eq(meaningEvidence.userId, userId)),
+    db
+      .select({ id: wowMoments.id })
+      .from(wowMoments)
+      .where(and(eq(wowMoments.userId, userId), eq(wowMoments.lifecycleStatus, "active"))),
+    db
+      .select({
+        id: backgroundJobs.id,
+        type: backgroundJobs.type,
+        status: backgroundJobs.status,
+        lastError: backgroundJobs.lastError,
+        updatedAt: backgroundJobs.updatedAt,
+      })
+      .from(backgroundJobs)
+      // A room job belongs to the member who caused it, but it says nothing
+      // about that member's solo context graph. Without this filter, opening a
+      // room could make the solo wall claim it was processing (or failed).
+      .where(
+        and(
+          eq(backgroundJobs.userId, userId),
+          inArray(backgroundJobs.type, [
+            "process_inspiration",
+            "meaning_graph_rebuild",
+          ]),
+        ),
+      )
+      .orderBy(desc(backgroundJobs.updatedAt))
+      .limit(1),
+  ]);
+
+  const signalCount = numericCount(signalRows[0]?.count);
+  const contextNodeCount = numericCount(nodeRows[0]?.count);
+  const evidenceCount = numericCount(evidenceRows[0]?.count);
+  const noteFeedback = await fetchLatestTopOfMindFeedbackSnapshots(db, {
+    userId,
+    noteIds: activeNoteRows.map((note) => note.id),
+  });
+  // Lifecycle alone is not visibility: dismissals are durable feedback
+  // overlays so the underlying generated note remains available for undo.
+  // Counting raw active rows made an all-dismissed wall claim notes were ready.
+  const noteCount = activeNoteRows.filter((note) =>
+    isVisibleTopOfMindStatus(noteFeedback.get(note.id)?.status ?? "active"),
+  ).length;
+  const latestJob = jobRows[0] ?? null;
+  const job = latestJob
+    ? {
+        ...latestJob,
+        type:
+          latestJob.type === "meaning_graph_rebuild"
+            ? ("meaning_graph_rebuild" as const)
+            : ("process_inspiration" as const),
+        updatedAt:
+          latestJob.updatedAt instanceof Date
+            ? latestJob.updatedAt.toISOString()
+            : String(latestJob.updatedAt),
+      }
+    : null;
+
+  if (latestJob?.status === "pending" || latestJob?.status === "running") {
+    return {
+      phase: "processing",
+      message: "Reading your inspirations into context. New notes will appear here when they hold.",
+      signalCount,
+      contextNodeCount,
+      evidenceCount,
+      noteCount,
+      job,
+    };
+  }
+  if (latestJob?.status === "failed") {
+    return {
+      phase: "failed",
+      message:
+        noteCount > 0
+          ? "Your current notes are still here, but the last reread did not finish. Try again."
+          : "The last reading did not finish. Try reading your top of mind again.",
+      signalCount,
+      contextNodeCount,
+      evidenceCount,
+      noteCount,
+      job,
+    };
+  }
+  if (noteCount > 0) {
+    return {
+      phase: "ready",
+      message: "Your current notes are ready.",
+      signalCount,
+      contextNodeCount,
+      evidenceCount,
+      noteCount,
+      job,
+    };
+  }
+  if (signalCount === 0) {
+    return {
+      phase: "empty",
+      message: "Capture a few inspirations. Your top of mind forms from patterns across them.",
+      signalCount,
+      contextNodeCount,
+      evidenceCount,
+      noteCount,
+      job,
+    };
+  }
+  return {
+    phase: "needs_more_context",
+    message:
+      signalCount < 3
+        ? "Keep capturing. A note needs repeated evidence before it appears."
+        : "Nothing holds strongly enough yet. Add more context or ask WAKA to read again.",
+    signalCount,
+    contextNodeCount,
+    evidenceCount,
+    noteCount,
+    job,
+  };
+}
+
 export function createTopOfMindRoutes(
   deps: TopOfMindRouteDependencies = {},
 ): Hono<AuthEnv> {
@@ -694,6 +1039,11 @@ export function createTopOfMindRoutes(
   const listNotes = deps.listNotes ?? listTopOfMindNotesForUser;
   const getNote = deps.getNote ?? getTopOfMindNoteForUser;
   const updateNote = deps.updateNote ?? updateTopOfMindNoteForUser;
+  const setPinned = deps.setPinned ?? setTopOfMindNotePinnedForUser;
+  const dismissNote = deps.dismissNote ?? dismissTopOfMindNoteForUser;
+  const restoreNote = deps.restoreNote ?? restoreTopOfMindNoteForUser;
+  const getStatus = deps.getStatus ?? getTopOfMindGenerationStatusForUser;
+  const requestRefresh = deps.requestRefresh ?? enqueueMeaningGraphRebuild;
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
@@ -722,6 +1072,17 @@ export function createTopOfMindRoutes(
       topOfMindNotes,
       topOfMind,
     });
+  });
+
+  routes.get("/status", async (c) => {
+    const user = c.get("user");
+    return c.json({ status: await getStatus(getDatabase(), user.id) });
+  });
+
+  routes.post("/refresh", async (c) => {
+    const user = c.get("user");
+    const result = await requestRefresh(user.id);
+    return c.json({ job: result.job }, 202);
   });
 
   routes.get("/:noteId", async (c) => {
@@ -793,6 +1154,53 @@ export function createTopOfMindRoutes(
       return c.json({ error: "Top-of-mind note not found" }, 404);
     }
 
+    return c.json({ topOfMindNote });
+  });
+
+  routes.patch("/:noteId/pin", async (c) => {
+    const user = c.get("user");
+    const parsedParams = topOfMindNoteParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid top-of-mind note id" }, 400);
+    let rawBody: unknown;
+    try {
+      rawBody = await c.req.json();
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+    const parsedBody = pinTopOfMindNoteSchema.safeParse(rawBody);
+    if (!parsedBody.success) return c.json({ error: "Invalid pin update" }, 400);
+    const topOfMindNote = await setPinned(getDatabase(), {
+      userId: user.id,
+      noteId: parsedParams.data.noteId,
+      pinned: parsedBody.data.pinned,
+      preferredLocale: user.preferredLocale,
+    });
+    if (!topOfMindNote) return c.json({ error: "Top-of-mind note not found" }, 404);
+    return c.json({ topOfMindNote });
+  });
+
+  routes.post("/:noteId/dismiss", async (c) => {
+    const user = c.get("user");
+    const parsedParams = topOfMindNoteParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid top-of-mind note id" }, 400);
+    const dismissed = await dismissNote(getDatabase(), {
+      userId: user.id,
+      noteId: parsedParams.data.noteId,
+    });
+    if (!dismissed) return c.json({ error: "Top-of-mind note not found" }, 404);
+    return c.json({ ok: true });
+  });
+
+  routes.post("/:noteId/restore", async (c) => {
+    const user = c.get("user");
+    const parsedParams = topOfMindNoteParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid top-of-mind note id" }, 400);
+    const topOfMindNote = await restoreNote(getDatabase(), {
+      userId: user.id,
+      noteId: parsedParams.data.noteId,
+      preferredLocale: user.preferredLocale,
+    });
+    if (!topOfMindNote) return c.json({ error: "Top-of-mind note not found" }, 404);
     return c.json({ topOfMindNote });
   });
 

@@ -12,7 +12,7 @@ import {
   useAuth,
   type AuthContextValue,
 } from "../src/lib/auth-context";
-import LoginPage from "../src/pages/Login";
+import LoginPage, { SignupForm } from "../src/pages/Login";
 
 vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
@@ -112,6 +112,7 @@ async function renderAuthRoutes({
 }: RenderAuthRoutesOptions): Promise<HTMLDivElement> {
   const container = document.createElement("div");
   document.body.append(container);
+  window.history.pushState({}, "", initialPath);
   const root = createRoot(container);
   mountedRoot = root;
   mountedContainer = container;
@@ -227,6 +228,88 @@ describe("auth boundary", () => {
     expect(container.querySelector("#login-tabpanel")?.getAttribute("aria-labelledby")).toBe("login-tab-login");
     expect(container.querySelector<HTMLButtonElement>("#login-tab-login")?.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(container.querySelector("#login-tab-login"));
+  });
+
+  it("updates all signup shell copy when the pre-submit language selector changes", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+
+    const container = await renderAuthRoutes({ initialPath: "/login" });
+    const signupTab = container.querySelector<HTMLButtonElement>("#login-tab-signup");
+
+    await act(async () => {
+      signupTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("Begin your archive.");
+    expect(container.textContent).toContain("Continue with Google");
+
+    const languageSelect = container.querySelector<HTMLSelectElement>("select.field-input");
+    expect(languageSelect).not.toBeNull();
+    await act(async () => {
+      languageSelect!.value = "ko-KR";
+      languageSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("내 아카이브 시작하기.");
+    expect(container.textContent).toContain("마음을 움직인 것을 저장하고 돌아보세요.");
+    expect(container.querySelector("#login-tab-login")?.textContent).toBe("로그인");
+    expect(container.querySelector("#login-tab-signup")?.textContent).toBe("계정 만들기");
+    expect(container.textContent).toContain("Google로 계속");
+    expect(container.textContent).toContain("이미 계정이 있나요?");
+    expect(container.textContent).not.toContain("Begin your archive.");
+    expect(container.textContent).not.toContain("Create an account to save and reflect on what moves you.");
+    expect(container.textContent).not.toContain("Continue with Google");
+    expect(container.textContent).not.toContain("SIGN IN");
+    expect(container.textContent).not.toContain("CREATE ACCOUNT");
+    expect(container.textContent).not.toContain("Already have an account?");
+  });
+
+  it("updates the OAuth error banner when the pre-submit signup language changes", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+
+    const container = await renderAuthRoutes({ initialPath: "/login?error=missing_code" });
+
+    expect(container.textContent).toContain("Google did not return a sign-in code. Try the Google button again.");
+
+    const signupTab = container.querySelector<HTMLButtonElement>("#login-tab-signup");
+    await act(async () => {
+      signupTab?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    const languageSelect = container.querySelector<HTMLSelectElement>("select.field-input");
+    expect(languageSelect).not.toBeNull();
+    await act(async () => {
+      languageSelect!.value = "ko-KR";
+      languageSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(container.textContent).toContain("Google에서 로그인 코드를 받지 못했습니다. 다시 시도하세요.");
+    expect(container.textContent).not.toContain("Google did not return a sign-in code. Try the Google button again.");
+  });
+
+  it("keeps standalone SignupForm language selection backed by stored locale", async () => {
+    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+
+    const container = await renderAuthRoutes({
+      initialPath: "/login",
+      loginElement: createElement(SignupForm),
+    });
+
+    const languageSelect = container.querySelector<HTMLSelectElement>("select.field-input");
+    expect(languageSelect).not.toBeNull();
+    await act(async () => {
+      languageSelect!.value = "ko-KR";
+      languageSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flushReactWork();
+
+    expect(window.localStorage.getItem("waka.ui.locale")).toBe("ko-KR");
+    expect(container.textContent).toContain("계정 만들기");
+    expect(container.textContent).not.toContain("Create account");
   });
 
   it("clears a cached user and routes home visitors to login when /auth/me returns no user", async () => {

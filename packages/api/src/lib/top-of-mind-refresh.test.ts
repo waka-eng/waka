@@ -85,39 +85,48 @@ class QueryStub<T> implements PromiseLike<T> {
   }
 }
 
-function refreshDbStub(preferredLocale = "en-US") {
+/** The graph claim every `refreshDbStub` test is built on. */
+const STUB_NODES = [
+  node({
+    id: "public-building-room",
+    type: "environment",
+    label: "cities where public building is normal",
+    description: "Signals keep returning to places where ambition feels social.",
+    weight: 160,
+    confidence: 72,
+    evidenceCount: 3,
+  }),
+];
+
+const STUB_EVIDENCE = [
+  evidence({
+    meaningNodeId: "public-building-room",
+    inspirationId: "signal-1",
+  }),
+  evidence({
+    meaningNodeId: "public-building-room",
+    inspirationId: "signal-2",
+    sparkText: "friends who make shipping less weird",
+  }),
+  evidence({
+    meaningNodeId: "public-building-room",
+    inspirationId: "signal-3",
+    sparkText: "third room signal",
+  }),
+];
+
+/**
+ * @param existingKeys idempotency keys the database already holds a note for,
+ *   served to the `loadExistingContextNoteKeys` probe.
+ */
+function refreshDbStub(preferredLocale = "en-US", existingKeys: string[] = []) {
   const insertedWowMoments: unknown[] = [];
   const insertedEvidenceLinks: unknown[] = [];
   const selectResults = [
     [{ preferredLocale }],
-    [
-      node({
-        id: "public-building-room",
-        type: "environment",
-        label: "cities where public building is normal",
-        description:
-          "Signals keep returning to places where ambition feels social.",
-        weight: 160,
-        confidence: 72,
-        evidenceCount: 3,
-      }),
-    ],
-    [
-      evidence({
-        meaningNodeId: "public-building-room",
-        inspirationId: "signal-1",
-      }),
-      evidence({
-        meaningNodeId: "public-building-room",
-        inspirationId: "signal-2",
-        sparkText: "friends who make shipping less weird",
-      }),
-      evidence({
-        meaningNodeId: "public-building-room",
-        inspirationId: "signal-3",
-        sparkText: "third room signal",
-      }),
-    ],
+    STUB_NODES,
+    STUB_EVIDENCE,
+    existingKeys.map((idempotencyKey) => ({ idempotencyKey })),
     [],
     [],
   ];
@@ -556,6 +565,60 @@ describe("refreshTopOfMindNotesFromContextGraph", () => {
       reason: "null_output",
     });
     expect(insertedWowMoments).toEqual([]);
+  });
+
+  /**
+   * The regression this guards: `existingIdempotencyKeys` was built as an empty
+   * Set that nothing ever wrote to, so the filter in
+   * `rankTopOfMindRefreshCandidates` was inert and every pass re-synthesized
+   * notes the wall already had — up to five sequential Gemini calls per save,
+   * each discarded by `keep_existing` at write time.
+   *
+   * A stub that returns no rows cannot catch that, because an inert filter and
+   * a working one behave identically when nothing exists yet.
+   */
+  it("does not buy synthesis for a note the wall already has", async () => {
+    const alreadyPersisted = rankTopOfMindRefreshCandidates({
+      userId,
+      nodes: STUB_NODES,
+      evidence: STUB_EVIDENCE,
+      now,
+    })[0]!.idempotencyKey;
+
+    const { db, insertedWowMoments } = refreshDbStub("en-US", [alreadyPersisted]);
+    const synthesizeAmbition = vi.fn().mockResolvedValue(null);
+    const result = await refreshTopOfMindNotesFromContextGraph(db as never, {
+      userId,
+      now,
+      modelProvider: {
+        generateTopOfMindNotes: async (input: TopOfMindNoteGenerationInput) =>
+          rankTopOfMindRefreshCandidates(input),
+        synthesizeAmbition,
+      } as never,
+    });
+
+    expect(synthesizeAmbition).not.toHaveBeenCalled();
+    expect(result.synthesis).toMatchObject({ attempted: 0, synthesized: 0, failed: 0 });
+    expect(result.generated).toBe(0);
+    expect(insertedWowMoments).toEqual([]);
+  });
+
+  it("still synthesizes when the existing keys belong to other claims", async () => {
+    const { db } = refreshDbStub("en-US", [
+      "top_of_mind_context_node:v2:someone-else:another-node:deadbeef",
+    ]);
+    const synthesizeAmbition = vi.fn().mockResolvedValue(null);
+    await refreshTopOfMindNotesFromContextGraph(db as never, {
+      userId,
+      now,
+      modelProvider: {
+        generateTopOfMindNotes: async (input: TopOfMindNoteGenerationInput) =>
+          rankTopOfMindRefreshCandidates(input),
+        synthesizeAmbition,
+      } as never,
+    });
+
+    expect(synthesizeAmbition).toHaveBeenCalledTimes(1);
   });
 
   it("persists successfully synthesized refresh candidates", async () => {

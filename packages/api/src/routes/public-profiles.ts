@@ -87,7 +87,12 @@ export interface PublicProfileRouteDependencies {
   ) => Promise<PublicProfileOwner | null>;
   listNotes?: (
     db: WakaDb,
-    input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
+    input: {
+      userId: string;
+      limit: number;
+      preferredLocale?: SupportedLocale;
+      audience?: "owner" | "public";
+    },
   ) => Promise<TopOfMindNoteSurface[]>;
 }
 
@@ -185,6 +190,12 @@ export function createPublicProfileRoutes(
           userId: profile.id,
           limit: parsedQuery.data.limit ?? DEFAULT_PUBLIC_TOP_OF_MIND_LIMIT,
           preferredLocale: profile.preferredLocale,
+          /*
+            Nobody is authenticated here. A save its owner marked private must
+            not appear in this response in any form — its text was previously
+            published as an evidence excerpt with no sharing predicate at all.
+          */
+          audience: "public",
         })
       : [];
 

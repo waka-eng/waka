@@ -58,18 +58,22 @@ describe("GeminiEmbeddingHttpClient", () => {
 
     expect(result).toHaveLength(768);
     expect(GEMINI_EMBEDDING_MODEL).toBe("gemini-embedding-001");
-    expect(fetchMock).toHaveBeenCalledWith(buildEmbedContentUrl("gemini-embedding-001"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": "test-key",
-      },
-      body: JSON.stringify({
-        model: "models/gemini-embedding-001",
-        content: { parts: [{ text: "find a pattern" }] },
-        taskType: "RETRIEVAL_DOCUMENT",
-        outputDimensionality: 768,
+    expect(fetchMock).toHaveBeenCalledWith(
+      buildEmbedContentUrl("gemini-embedding-001"),
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": "test-key",
+        },
+        body: JSON.stringify({
+          model: "models/gemini-embedding-001",
+          content: { parts: [{ text: "find a pattern" }] },
+          taskType: "RETRIEVAL_DOCUMENT",
+          outputDimensionality: 768,
+        }),
+        signal: expect.any(AbortSignal),
       }),
-    });
+    );
   });
 });

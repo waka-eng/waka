@@ -52,6 +52,7 @@ import {
   type SignalSpark,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { refreshEmbeddingAfterChange } from "../lib/inspiration-embeddings.js";
 import {
   calculateDisplayedInspirationScore,
   calculateInspirationScoreBreakdown,
@@ -59,9 +60,13 @@ import {
   persistSingleLocalInspirationScoreById,
 } from "../lib/inspiration-scores.js";
 import { persistSignalPacketForSignal } from "../lib/signal-packets.js";
+import { listReadingsForSignal } from "../lib/signal-readings.js";
 import { pulseSignalActivation } from "../lib/signal-activation.js";
 import { type AuthEnv, requireAuth } from "../lib/middleware.js";
-import { enqueueClassification } from "../lib/queue.js";
+import {
+  enqueueClassification,
+  enqueueGroupReadingRefreshesForUser,
+} from "../lib/queue.js";
 import { withSignalLayer } from "../lib/signals.js";
 import {
   deleteSignalDocument,
@@ -130,6 +135,9 @@ const createInspirationSchema = z.object({
     .min(0, "Category must be non-negative")
     .max(2_147_483_647, "Category is too large")
     .optional(),
+  // Whether this inspiration feeds the user's Group Top of Mind boards.
+  // Shared by default (US-052); set false to keep it private.
+  shareToGroups: z.boolean().optional(),
   selectedText: z
     .string()
     .trim()
@@ -138,6 +146,18 @@ const createInspirationSchema = z.object({
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   selectionStart: z.number().int().min(0).optional(),
   selectionEnd: z.number().int().min(0).optional(),
+  /**
+   * Composer-open -> save duration reported by the client. Optional by
+   * design: capture must never fail because timing was unavailable, and an
+   * older client that omits it stays fully supported. Capped at an hour —
+   * anything longer is a composer left open, not a reaction.
+   */
+  captureElapsedMs: z
+    .number()
+    .int("captureElapsedMs must be an integer")
+    .min(0, "captureElapsedMs must be non-negative")
+    .max(3_600_000, "captureElapsedMs is too large")
+    .optional(),
   sparks: z
     .array(
       z.object({
@@ -183,8 +203,10 @@ export interface InspirationsRouteDependencies {
   getVault?: () => VaultStore;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
   enqueueClassificationJob?: typeof enqueueClassification;
+  enqueueGroupReadingJobs?: typeof enqueueGroupReadingRefreshesForUser;
   persistScores?: typeof persistLocalInspirationScores;
   persistSingleScore?: typeof persistSingleLocalInspirationScoreById;
+  listSignalReadings?: typeof listReadingsForSignal;
 }
 
 type InspirationResponseRow = {
@@ -267,8 +289,21 @@ function withDisplayedWowScore<T extends InspirationResponseRow>(
   };
 }
 
+/**
+ * `capture_saved` is written server-side by the create route and is not a
+ * revisit, so the client-facing route refuses it: accepting it would let a
+ * caller forge pulse-speed rows for a signal it did not just create.
+ */
+const clientRevisitEventTypeValues = inspirationRevisitEventTypeValues.filter(
+  (value): value is Exclude<InspirationRevisitEventType, "capture_saved"> =>
+    value !== "capture_saved",
+) as [
+  Exclude<InspirationRevisitEventType, "capture_saved">,
+  ...Exclude<InspirationRevisitEventType, "capture_saved">[],
+];
+
 const revisitEventSchema = z.object({
-  eventType: z.enum(inspirationRevisitEventTypeValues),
+  eventType: z.enum(clientRevisitEventTypeValues),
 });
 
 async function recordRevisitEvent(input: {
@@ -347,8 +382,11 @@ export function createInspirationsRoutes(
   const getDatabase = deps.getDatabase ?? getDb;
   const getVault = deps.getVault ?? getRuntimeVault;
   const enqueueClassificationJob = deps.enqueueClassificationJob ?? enqueueClassification;
+  const enqueueGroupReadingJobs =
+    deps.enqueueGroupReadingJobs ?? enqueueGroupReadingRefreshesForUser;
   const persistScores = deps.persistScores ?? persistLocalInspirationScores;
   const persistSingleScore = deps.persistSingleScore ?? persistSingleLocalInspirationScoreById;
+  const listSignalReadings = deps.listSignalReadings ?? listReadingsForSignal;
 
   // Every route under this router requires a valid session. Mounting the
   // middleware once at the router level (rather than per-handler) ensures we
@@ -406,6 +444,10 @@ routes.post("/", async (c) => {
     category: parsed.data.category ?? null,
     importanceScore: 0,
     wowScore: 0,
+    sharedToGroups: parsed.data.shareToGroups ?? true,
+    captureElapsedMs: parsed.data.captureElapsedMs ?? null,
+    enrichment: null,
+    enrichedAt: null,
     cluster: null,
     classifiedAt: null,
     createdAt: now,
@@ -453,6 +495,7 @@ routes.post("/", async (c) => {
         text: parsed.data.text,
         kind: parsed.data.kind ?? null,
         category: parsed.data.category ?? null,
+        sharedToGroups: parsed.data.shareToGroups ?? true,
         createdAt: now,
         updatedAt: now,
       })
@@ -464,6 +507,7 @@ routes.post("/", async (c) => {
         category: inspirations.category,
         importanceScore: inspirations.importanceScore,
         wowScore: inspirations.wowScore,
+        sharedToGroups: inspirations.sharedToGroups,
         cluster: inspirations.cluster,
         classifiedAt: inspirations.classifiedAt,
         createdAt: inspirations.createdAt,
@@ -524,6 +568,29 @@ routes.post("/", async (c) => {
   });
 
   const { inserted, insertedReflections } = persisted;
+
+  // Pulse-speed row. Deliberately outside the transaction and best-effort:
+  // the save is already durable, and losing a timing row must never turn a
+  // successful capture into an error. Written directly rather than through
+  // `recordRevisitEvent` because that helper refreshes scores and pulses
+  // activation — both wrong for a signal created microseconds ago, whose
+  // score is computed just below and whose neighbours are charged by the
+  // capture path itself.
+  if (parsed.data.captureElapsedMs !== undefined) {
+    try {
+      await db.insert(inspirationRevisitEvents).values({
+        userId: user.id,
+        inspirationId: signalId,
+        eventType: "capture_saved",
+        elapsedMs: parsed.data.captureElapsedMs,
+      });
+    } catch (err) {
+      console.warn("[inspirations] failed to record capture pulse:", {
+        inspirationId: signalId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   const createdScores = await persistScores(db, inserted);
   const scoredInserted = { ...inserted, ...createdScores };
@@ -1029,16 +1096,22 @@ const updateInspirationSchema = z
         z.null(),
       ])
       .optional(),
+    // Flip an inspiration between feeding the user's Group Top of Mind boards
+    // (true) and private (false). US-052.
+    shareToGroups: z.boolean().optional(),
   })
   // Reject a payload that names no editable field — without this guard we'd
   // silently bump `updated_at` for a no-op, which is misleading for any
   // caller that sorts by it.
   .refine(
     (v) =>
-      v.text !== undefined || v.kind !== undefined || v.category !== undefined,
+      v.text !== undefined ||
+      v.kind !== undefined ||
+      v.category !== undefined ||
+      v.shareToGroups !== undefined,
     {
       message:
-        "At least one of text, kind, or category must be provided",
+        "At least one of text, kind, category, or shareToGroups must be provided",
       path: ["text"],
     },
   );
@@ -1116,11 +1189,14 @@ routes.patch("/:id", async (c) => {
     text?: string;
     kind?: string | null;
     category?: number | null;
+    sharedToGroups?: boolean;
     updatedAt: Date;
   } = { updatedAt: new Date() };
   if (parsed.data.text !== undefined) patch.text = parsed.data.text;
   if (parsed.data.kind !== undefined) patch.kind = parsed.data.kind;
   if (parsed.data.category !== undefined) patch.category = parsed.data.category;
+  if (parsed.data.shareToGroups !== undefined)
+    patch.sharedToGroups = parsed.data.shareToGroups;
 
   // 4. Single UPDATE with the tenant-scope predicate baked in. `.returning()`
   //    hands back zero rows when the id is missing or owned by another user
@@ -1143,6 +1219,7 @@ routes.patch("/:id", async (c) => {
       category: inspirations.category,
       importanceScore: inspirations.importanceScore,
       wowScore: inspirations.wowScore,
+      sharedToGroups: inspirations.sharedToGroups,
       cluster: inspirations.cluster,
       classifiedAt: inspirations.classifiedAt,
       createdAt: inspirations.createdAt,
@@ -1169,6 +1246,16 @@ routes.patch("/:id", async (c) => {
     });
   }
 
+  // The text just changed, so the vector describing it no longer does. Cheap
+  // when the edit did not touch the canonical input — the hash is compared
+  // before any provider call — and never a gate on the edit itself.
+  await refreshEmbeddingAfterChange({
+    db,
+    userId: user.id,
+    inspirationId: updated.id,
+    reason: "edited",
+  });
+
   const updatedScores = await persistScores(db, updated);
   const scoredUpdated = { ...updated, ...updatedScores };
   await materializeSignalDocument({
@@ -1176,6 +1263,16 @@ routes.patch("/:id", async (c) => {
     vault: getVault(),
     userId: user.id,
     signalId: scoredUpdated.id,
+  });
+
+  // The vector and row are both current now. Queue each affected room from the
+  // new material fingerprint; this is idempotent across rapid edits and across
+  // the classifier's own post-processing trigger.
+  await enqueueGroupReadingJobs(user.id).catch((err) => {
+    console.warn("[inspirations] room reread could not be queued after update", {
+      inspirationId: updated.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
   });
 
   return c.json({ inspiration: withDisplayedWowScore(scoredUpdated) }, 200);
@@ -1336,6 +1433,16 @@ routes.post("/:id/reflections", async (c) => {
     });
   }
 
+  // A reflection joins the canonical embedding input, so the save now means
+  // something the stored vector has never seen. Refreshed before the judge is
+  // asked to look again, or the pass reasons about the pre-reflection save.
+  await refreshEmbeddingAfterChange({
+    db,
+    userId: user.id,
+    inspirationId: parent.id,
+    reason: "reflected",
+  });
+
   try {
     await enqueueClassificationJob(parent.id, user.id, {
       idempotencyScope: `reflection:${inserted.id}`,
@@ -1475,6 +1582,54 @@ routes.get("/:id/reflections", async (c) => {
     .orderBy(asc(reflections.createdAt), asc(reflections.id));
 
   return c.json({ reflections: rows }, 200);
+});
+
+/**
+ * GET /api/inspirations/:id/readings
+ *
+ * Every active Top of Mind note that cited this signal — the owner's solo
+ * reading(s) plus one per room the owner currently belongs to. This is the
+ * juxtaposition surface: the same save, read alone and read beside other
+ * hearts, side by side.
+ *
+ * Visibility: owner-only, like every route on this router. Solo readings are
+ * the caller's own; group readings are limited to current memberships inside
+ * `listReadingsForSignal` itself (the `group_members` join), so nothing here
+ * depends on the route remembering to filter.
+ */
+routes.get("/:id/readings", async (c) => {
+  const idCheck = z.string().uuid().safeParse(c.req.param("id"));
+  if (!idCheck.success) {
+    return c.json({ error: "Invalid inspiration id" }, 400);
+  }
+
+  const user = c.get("user");
+  const db = getDatabase();
+
+  // Confirm the signal exists AND belongs to the caller — 404 (not 403) on
+  // miss or cross-tenant, same as the sibling routes, so this endpoint
+  // cannot be used to enumerate ids or to read another user's readings.
+  const [parent] = await db
+    .select({ id: inspirations.id })
+    .from(inspirations)
+    .where(
+      and(
+        eq(inspirations.id, idCheck.data),
+        eq(inspirations.userId, user.id),
+      ),
+    )
+    .limit(1);
+
+  if (!parent) {
+    return c.json({ error: "Inspiration not found" }, 404);
+  }
+
+  const readings = await listSignalReadings(db, {
+    userId: user.id,
+    signalId: idCheck.data,
+  });
+
+  return c.json({ readings }, 200);
 });
 
 // DELETE /api/inspirations/:id/reflections/:reflectionId
@@ -1722,6 +1877,13 @@ routes.delete("/:id", async (c) => {
     // for consistency with the not-owned path.
     return c.json({ error: "Inspiration not found" }, 404);
   }
+
+  await enqueueGroupReadingJobs(user.id).catch((err) => {
+    console.warn("[inspirations] room reread could not be queued after delete", {
+      inspirationId: idCheck.data,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // 6. 200 with a confirmation payload. Body shape is `{ id }` so the SPA
   //    can match the optimistic remove against the server's confirmation

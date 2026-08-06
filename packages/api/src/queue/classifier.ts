@@ -17,9 +17,9 @@
  *   4. UPDATE the row's `cluster` + `classified_at` (+ `updated_at`) when a
  *      validated label comes back, guarded by `WHERE cluster IS NULL` for
  *      idempotency under at-least-once worker execution.
- *   5. Best-effort automatic top-of-mind generation after classification reaches a
- *      success/permanent-skip outcome. top-of-mind provider/runtime failures are
- *      swallowed here and must not alter classification retry semantics.
+ *   5. Persist a signal packet, update the context graph, and refresh
+ *      provisional top-of-mind notes. Provider/runtime failures reach the
+ *      durable queue so retry and failure state stay visible.
  *
  * Error & retry semantics (the contract)
  * --------------------------------------
@@ -57,14 +57,16 @@
 
 import { and, eq, isNull } from "drizzle-orm";
 
-import { backgroundJobs, type Inspiration, inspirations } from "../db/index.js";
-import { generateAutoWowMomentForInspiration } from "../lib/auto-wow-generation.js";
+import { type Inspiration, inspirations } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { ensureInspirationEmbedding } from "../lib/inspiration-embeddings.js";
+import { persistMeaningGraphForInspiration } from "../lib/meaning-graph-writer.js";
 import {
   getDefaultModelProvider,
   type ModelProvider,
 } from "../lib/model-provider.js";
-import { spreadCaptureActivation } from "../lib/signal-activation.js";
+import { refreshTopOfMindNotesFromContextGraph } from "../lib/top-of-mind-refresh.js";
+import { ensureSignalEnrichment } from "../lib/signal-enrichment.js";
 
 // ---------------------------------------------------------------------------
 // Legacy Lambda/SQS-shaped event types (minimal subset)
@@ -106,11 +108,15 @@ interface ClassificationJob {
 }
 
 export interface ClassificationJobDependencies {
-  generateAutoWowMoment?: typeof generateAutoWowMomentForInspiration;
-  spreadActivation?: typeof spreadCaptureActivation;
+  ensureEmbedding?: typeof ensureInspirationEmbedding;
+  ensureEnrichment?: typeof ensureSignalEnrichment;
+  persistMeaningGraph?: typeof persistMeaningGraphForInspiration;
+  refreshTopOfMind?: typeof refreshTopOfMindNotesFromContextGraph;
   modelProvider?: ModelProvider;
   userId?: string;
   backgroundJobId?: string;
+  /** Legacy SQS compatibility tests exercise classification only. */
+  skipPostClassificationHooks?: boolean;
 }
 
 /**
@@ -210,7 +216,7 @@ export async function runClassificationJob(
       inspirationId,
       cluster: row.cluster,
     });
-    await runPostClassificationHooks(row, deps);
+    if (!deps.skipPostClassificationHooks) await runPostClassificationHooks(row, deps);
     return;
   }
 
@@ -223,7 +229,7 @@ export async function runClassificationJob(
       finishReason: result.finishReason,
       blockReason: result.blockReason,
     });
-    await runPostClassificationHooks(row, deps);
+    if (!deps.skipPostClassificationHooks) await runPostClassificationHooks(row, deps);
     return;
   }
 
@@ -249,7 +255,7 @@ export async function runClassificationJob(
     console.log("[classifier] update skipped, row already classified", {
       inspirationId: row.id,
     });
-    await runPostClassificationHooks(row, deps);
+    if (!deps.skipPostClassificationHooks) await runPostClassificationHooks(row, deps);
     return;
   }
 
@@ -260,132 +266,55 @@ export async function runClassificationJob(
     finishReason: result.finishReason,
   });
 
-  await runPostClassificationHooks(row, deps);
+  if (!deps.skipPostClassificationHooks) await runPostClassificationHooks(row, deps);
 }
 
 /**
- * Best-effort tail of every classification pass: try the immediate pairwise
- * judgment (auto WOW), then spread activation to the capture's semantic
- * neighbors — the accumulation half of the spark engine. Both are fire-and-
- * forget: failures never affect classification retry semantics.
+ * Every classified signal now follows one product path: enrichment → shared
+ * semantic embedding → signal packet → context graph → provisional
+ * top-of-mind notes. The embedding remains the substrate used by rooms; it no
+ * longer forks solo generation back through the legacy pairwise WOW path.
+ * A failure is allowed to reach the durable worker so it can retry instead of
+ * marking generation successful while the user sees an empty wall.
  */
 async function runPostClassificationHooks(
   row: Inspiration,
   deps: ClassificationJobDependencies,
 ): Promise<void> {
-  await attemptAutoWowGeneration(row, deps);
-  await attemptActivationSpread(row, deps);
-}
-
-/**
- * Spreading activation: the new capture warms related old signals; when an
- * accumulated cluster of individually weak signals crosses its threshold,
- * the warmest of them is re-judged through the same generation seam. This
- * is how "signals that matter little alone" get their second look.
- */
-async function attemptActivationSpread(
-  row: Inspiration,
-  deps: ClassificationJobDependencies,
-): Promise<void> {
-  const spreadActivation = deps.spreadActivation ?? spreadCaptureActivation;
-  const generateAutoWowMoment =
-    deps.generateAutoWowMoment ?? generateAutoWowMomentForInspiration;
-
-  try {
-    const result = await spreadActivation(getDb(), {
-      userId: row.userId,
-      inspirationId: row.id,
-      generateForInspiration: (inspirationId) =>
-        generateAutoWowMoment({ db: getDb(), userId: row.userId, inspirationId }),
-    });
-    if (result?.fired) {
-      console.log("[classifier] convergence fired from accumulated activation", {
-        triggerInspirationId: row.id,
-        rejudgedInspirationId: result.rejudgedInspirationId,
-        potential: result.evaluation.potential,
-        threshold: result.evaluation.threshold,
-        contributors: result.evaluation.contributorCount,
-      });
-    }
-  } catch (err) {
-    console.warn("[classifier] activation spread threw", {
-      inspirationId: row.id,
-      userId: row.userId,
-      errorName: err instanceof Error ? err.name : typeof err,
-    });
+  const db = getDb();
+  const modelProvider = deps.modelProvider ?? (await getDefaultModelProvider());
+  await (deps.ensureEnrichment ?? ensureSignalEnrichment)(db, {
+    userId: row.userId,
+    signalId: row.id,
+  });
+  const embedding = await (deps.ensureEmbedding ?? ensureInspirationEmbedding)({
+    db,
+    userId: row.userId,
+    inspirationId: row.id,
+  });
+  if (embedding.status === "missing_inspiration") return;
+  if (embedding.status === "stale_source") {
+    throw new Error("Signal changed while its semantic embedding was being prepared");
   }
-}
-
-async function attemptAutoWowGeneration(
-  row: Inspiration,
-  deps: ClassificationJobDependencies,
-): Promise<void> {
-  const generateAutoWowMoment =
-    deps.generateAutoWowMoment ?? generateAutoWowMomentForInspiration;
-
-  try {
-    const result = await generateAutoWowMoment({
-      db: getDb(),
-      userId: row.userId,
-      inspirationId: row.id,
-    });
-
-    await recordAutoWowGenerationResult(deps.backgroundJobId, row.id, result);
-
-    if (result.status === "unavailable") {
-      console.warn("[classifier] automatic top-of-mind generation unavailable", {
-        inspirationId: row.id,
-        userId: row.userId,
-      });
-    }
-  } catch (err) {
-    console.warn("[classifier] automatic top-of-mind generation threw", {
-      inspirationId: row.id,
-      userId: row.userId,
-      errorName: err instanceof Error ? err.name : typeof err,
-    });
+  await modelProvider.generateSignalPacket({
+    db,
+    userId: row.userId,
+    signalId: row.id,
+  });
+  await (deps.persistMeaningGraph ?? persistMeaningGraphForInspiration)({
+    db,
+    userId: row.userId,
+    triggerInspirationId: row.id,
+    client: modelProvider.contextGraphRelationshipJudge,
+  });
+  const refresh = await (deps.refreshTopOfMind ?? refreshTopOfMindNotesFromContextGraph)(db, {
+    userId: row.userId,
+    modelProvider,
+    synthesisTrigger: "qualified_cluster",
+  });
+  if (refresh.synthesis.failed > 0 && refresh.synthesis.synthesized === 0) {
+    throw new Error("Top-of-mind synthesis did not complete");
   }
-}
-
-async function recordAutoWowGenerationResult(
-  backgroundJobId: string | undefined,
-  inspirationId: string,
-  result: Awaited<ReturnType<typeof generateAutoWowMomentForInspiration>>,
-): Promise<void> {
-  if (!backgroundJobId) return;
-
-  const falseJudgment = result.status === "not_wow" ? result.judgment : null;
-  const summary = {
-    status: result.status,
-    generated: result.generated,
-    ...(falseJudgment
-      ? {
-          judgment: {
-            isWowMoment: false as const,
-            reason: falseJudgment.reason,
-            debugSummary: falseJudgment.debugSummary,
-            ...(falseJudgment.rawGeminiPreview
-              ? { rawGeminiPreview: falseJudgment.rawGeminiPreview }
-              : {}),
-            ...(falseJudgment.parseFailureStage
-              ? { parseFailureStage: falseJudgment.parseFailureStage }
-              : {}),
-            ...(falseJudgment.finishReason ? { finishReason: falseJudgment.finishReason } : {}),
-            ...(falseJudgment.schemaIssueSummary
-              ? { schemaIssueSummary: falseJudgment.schemaIssueSummary }
-              : {}),
-          },
-        }
-      : {}),
-  };
-
-  await getDb()
-    .update(backgroundJobs)
-    .set({
-      payload: { inspirationId, autoWowGeneration: summary },
-      updatedAt: new Date(),
-    } as Partial<typeof backgroundJobs.$inferInsert>)
-    .where(eq(backgroundJobs.id, backgroundJobId));
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +351,12 @@ export const handler = async (
     }
 
     try {
-      await runClassificationJob(job.inspirationId);
+      // This export is retained only for the legacy SQS contract tests; SST's
+      // live worker calls `runClassificationJob` directly and therefore runs
+      // the complete embedding → packet → graph pipeline.
+      await runClassificationJob(job.inspirationId, {
+        skipPostClassificationHooks: true,
+      });
     } catch (err) {
       // Transient DB / Gemini / network failure. Current DB-backed workers
       // record retry/backoff state in `background_jobs`; this compatibility
