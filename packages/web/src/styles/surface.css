@@ -33,7 +33,17 @@
   --sf-paper: #fcfcfb;
   --sf-ink: #171613;
   --sf-ink-2: rgba(23, 22, 19, 0.62);
-  --sf-ink-3: rgba(23, 22, 19, 0.4);
+  /*
+     0.4 measured 2.55:1 on the paper — below AA, and it is not decoration.
+     This is the ink on `.sf-empty`: the only text on screen during first run,
+     during every wait for a reading, and on "This room needs another person."
+     The quietest thing the product says was the least legible.
+
+     0.6 measures 4.69:1. Deliberately not higher: --sf-ink-2 is 5.01:1, and
+     pushing this to 0.68 (6.17:1) would make the tertiary ink darker than the
+     secondary and collapse the hierarchy the three tokens exist to express.
+  */
+  --sf-ink-3: rgba(23, 22, 19, 0.6);
   --sf-ink-4: rgba(23, 22, 19, 0.16);
   --sf-rule: rgba(23, 22, 19, 0.11);
 

@@ -24,25 +24,45 @@
  * the shared page layout primitives.
  */
 
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { RequireAuth } from "./components/RequireAuth";
 import { AuthProvider } from "./lib/auth-context";
-import AdminHomePage from "./pages/AdminHome";
-import AdminWowStatusPage from "./pages/AdminWowStatus";
 import SurfacePage from "./pages/Surface";
 import LoginPage from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
-import MeaningGraphPage from "./pages/MeaningGraph";
 import "./styles/global.css";
+
+/*
+  The admin pages load on demand.
+
+  MeaningGraph pulls in reactflow and d3-force, which were 73% of a single
+  500kB bundle — shipped to every visitor of a route none of them can open,
+  since all three are behind `requireAuth requireAdmin`. Splitting them out
+  takes the surface's own chunk from 156kB to 40kB gzip and lifts reactflow's
+  stylesheet out of the render-blocking CSS.
+
+  These are the only lazy routes on purpose. Everything else here is on the
+  path a signed-in person actually walks, where a second request would cost
+  more than the bytes it saved.
+*/
+const AdminHomePage = lazy(() => import("./pages/AdminHome"));
+const AdminWowStatusPage = lazy(() => import("./pages/AdminWowStatus"));
+const MeaningGraphPage = lazy(() => import("./pages/MeaningGraph"));
 // Loaded after global.css and deliberately wins. See the header of that file
 // for what it supersedes and why it is separable rather than merged.
 import "./styles/system.css";
 import "./styles/surface.css";
+
+/* These routes are internal and admin-gated, so the wait says what it is
+   rather than pretending to be the page that is arriving. */
+function AdminLoading() {
+  return <div style={{ padding: "2rem", opacity: 0.6 }}>Loading…</div>;
+}
 
 function ProtectedSurface() {
   return (
@@ -110,7 +130,9 @@ ReactDOM.createRoot(root).render(
             path="/admin"
             element={
               <RequireAuth requireAdmin>
-                <AdminHomePage />
+                <Suspense fallback={<AdminLoading />}>
+                  <AdminHomePage />
+                </Suspense>
               </RequireAuth>
             }
           />
@@ -118,7 +140,9 @@ ReactDOM.createRoot(root).render(
             path="/admin/wow-status"
             element={
               <RequireAuth requireAdmin>
-                <AdminWowStatusPage />
+                <Suspense fallback={<AdminLoading />}>
+                  <AdminWowStatusPage />
+                </Suspense>
               </RequireAuth>
             }
           />
@@ -126,7 +150,9 @@ ReactDOM.createRoot(root).render(
             path="/admin/meaning-graph"
             element={
               <RequireAuth requireAdmin>
-                <MeaningGraphPage />
+                <Suspense fallback={<AdminLoading />}>
+                  <MeaningGraphPage />
+                </Suspense>
               </RequireAuth>
             }
           />
