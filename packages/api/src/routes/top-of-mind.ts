@@ -439,9 +439,19 @@ async function fetchLatestTopOfMindFeedbackSnapshots(
   return snapshots;
 }
 
+/**
+ * @param sharedOnly drop saves the owner has marked private.
+ *
+ * Default false, because the owner reading their own wall should see every
+ * save that shaped it — that is the point of the evidence list. It is set true
+ * for the unauthenticated public profile, where `inspirations.text` was
+ * previously selected with no sharing predicate at all: a save whose toggle
+ * read "private" had a 180-character excerpt of itself published to anyone
+ * with the handle.
+ */
 async function fetchRelatedSignalRows(
   db: WakaDb,
-  input: { userId: string; momentIds: string[] },
+  input: { userId: string; momentIds: string[]; sharedOnly?: boolean },
 ): Promise<TopOfMindRelatedSignalRow[]> {
   if (input.momentIds.length === 0) return [];
 
@@ -467,6 +477,7 @@ async function fetchRelatedSignalRows(
         inArray(wowMomentInspirations.wowMomentId, input.momentIds),
         eq(wowMomentInspirations.userId, input.userId),
         eq(inspirations.userId, input.userId),
+        ...(input.sharedOnly ? [eq(inspirations.sharedToGroups, true)] : []),
       ),
     )
     .orderBy(
@@ -493,6 +504,17 @@ export async function listTopOfMindNotesForUser(
     userId: string;
     limit: number;
     preferredLocale?: SupportedLocale;
+    /**
+     * Who is going to read this.
+     *
+     * `owner` (the default) shows every save that shaped a note, including the
+     * ones kept private — the owner is who the evidence list is for. `public`
+     * is for the unauthenticated profile, where a save marked private must not
+     * appear at all. The note itself still stands; only the private evidence
+     * behind it goes, which is the same boundary rooms already draw in
+     * `signal-readings.ts`.
+     */
+    audience?: "owner" | "public";
   },
 ): Promise<TopOfMindNoteSurface[]> {
   const fetchLimit = Math.min(
@@ -542,6 +564,7 @@ export async function listTopOfMindNotesForUser(
   const relatedRows = await fetchRelatedSignalRows(db, {
     userId: input.userId,
     momentIds: moments.map((moment) => moment.id),
+    sharedOnly: input.audience === "public",
   });
   const relatedContextNodeIds = await fetchRelatedContextNodeIdsByMomentId(db, {
     userId: input.userId,

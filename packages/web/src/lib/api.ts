@@ -1241,6 +1241,12 @@ export interface ApiSavedSignalSearchResult {
   kind: string | null;
   capturedAt: string;
   updatedAt: string;
+  /**
+   * Public: every room you are in can read this save. Private: none of them
+   * can, and it never reaches a room's reading. Either way it stays yours and
+   * still shapes your own Top of Mind.
+   */
+  shared: boolean;
   resonanceScore: number;
   /**
    * Client-only: on a Group Top of Mind evidence drawer, the member who saved

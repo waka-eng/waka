@@ -76,6 +76,14 @@ export interface SavedSignalSearchResult {
   kind: string | null;
   capturedAt: string;
   updatedAt: string;
+  /**
+   * Whether the rooms this person is in may read this save.
+   *
+   * On the list so the archive can show and change it in place. Without it the
+   * only way to find out was to open a save one at a time, which made a
+   * privacy setting something you could not audit.
+   */
+  shared: boolean;
   resonanceScore: number;
   signalScores: Record<string, number>;
   highlightedSnippets: Array<{
@@ -187,6 +195,7 @@ type BaseSignalRow = {
   wowScore: number;
   cluster: any;
   classifiedAt: Date | null;
+  sharedToGroups: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -203,6 +212,7 @@ async function fetchArchiveRows(db: WakaDb, userId: string, limit: number) {
       wowScore: inspirations.wowScore,
       cluster: inspirations.cluster,
       classifiedAt: inspirations.classifiedAt,
+      sharedToGroups: inspirations.sharedToGroups,
       createdAt: inspirations.createdAt,
       updatedAt: inspirations.updatedAt,
     })
@@ -377,6 +387,7 @@ function serializeSearchResult(
     kind: row.kind,
     capturedAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    shared: row.sharedToGroups,
     resonanceScore: signal.signalScores.resonance,
     signalScores: signal.signalScores,
     highlightedSnippets: sparks.slice(0, 4).map((spark) => ({
@@ -473,6 +484,7 @@ export async function getSavedSignal(
       wowScore: inspirations.wowScore,
       cluster: inspirations.cluster,
       classifiedAt: inspirations.classifiedAt,
+      sharedToGroups: inspirations.sharedToGroups,
       createdAt: inspirations.createdAt,
       updatedAt: inspirations.updatedAt,
     })

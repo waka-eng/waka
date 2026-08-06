@@ -532,17 +532,42 @@
 
 .sf-results { margin-top: 26px; }
 
+/*
+   A row holds two targets: the words, which open the save, and one word on the
+   right saying who can read it. The row itself is no longer a button — the
+   sharing control is one, and a button cannot live inside a button.
+*/
 .sf-result {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
   width: 100%;
-  padding: 13px 0;
   border-top: 1px solid var(--sf-rule);
+}
+
+.sf-result-open {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 13px 0;
+  text-align: left;
   transition: opacity 0.15s var(--sf-ease);
 }
 
-.sf-result:hover { opacity: 0.62; }
-.sf-result p { margin: 0 0 3px; line-height: 1.5; }
-.sf-result span { font-size: var(--sf-meta); color: var(--sf-ink-3); }
+.sf-result-open:hover { opacity: 0.62; }
+.sf-result-open p { margin: 0 0 3px; line-height: 1.5; }
+.sf-result-open span { font-size: var(--sf-meta); color: var(--sf-ink-3); }
+
+/*
+   Quiet until you look for it. This is a setting you audit down a column —
+   the eye should be able to run the right edge and find the private ones —
+   so it stays out of the reading order until hovered or focused.
+*/
+.sf-result-share {
+  flex: none;
+  align-self: center;
+  padding: 4px 0;
+}
 
 .sf-room:hover,
 .sf-room.on { color: var(--sf-ink); }

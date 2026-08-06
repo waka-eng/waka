@@ -477,6 +477,24 @@ export function roomDirectionEvidenceCopy(
   return `${inspirationCount} inspiration${inspirationCount === 1 ? "" : "s"} behind this draft · ${representedCount} of ${memberCount} member${memberCount === 1 ? "" : "s"} represented`;
 }
 
+/**
+ * What the two words mean, written once.
+ *
+ * The label used to be the sentence -- "your rooms can read this" / "private to
+ * you" -- which made the control long, made the two states hard to compare at a
+ * glance, and could not be reused in a list. The state is one word; the
+ * consequence is a hint.
+ *
+ * "Public" is scoped on purpose. It means the rooms you are in, NOT the
+ * internet: a public profile is a separate setting you turn on yourself. Saying
+ * "anyone" here would promise something the flag does not do, and saying
+ * nothing would let people assume it.
+ */
+export const SHARING_MEANING = {
+  public: "Any room you join can read this. It stays yours.",
+  private: "No room can read this. It still shapes your own Top of Mind.",
+} as const;
+
 /** Every URL in what you typed. These become link attachments, which is what
  *  makes the page behind them readable to the judge at all. */
 function urlsIn(text: string): string[] {
@@ -1099,10 +1117,20 @@ export default function SurfacePage(): JSX.Element {
     setOpenSave(signal);
     setSaveDraft(null);
     setSaveRating(null);
-    // The list row does not carry the flag; the detail does, under the older
-    // spelling. Assume shared until the fetch says otherwise, because shared
-    // is the server default.
-    setOpenSaveShared(true);
+    /*
+      Start from what the row already knows.
+
+      This used to be a flat `true`, on the reasoning that the list did not
+      carry the flag and the detail would correct it. The detail never did:
+      it was read as `detail.sharedToGroups`, a field this response has never
+      contained, so the correction never fired and every save — private ones
+      included — displayed as public for as long as it was open. Someone
+      checking what they had left public was told "public" either way.
+
+      The list carries `shared` now, so the first paint is already right and
+      there is no window in which the toggle misreports a privacy setting.
+    */
+    setOpenSaveShared(signal.shared);
     setBecame([]);
     setReflections([]);
     setQuestion(null);
@@ -1130,8 +1158,7 @@ export default function SurfacePage(): JSX.Element {
         ...current,
         [signal.id]: detail.rawText ?? detail.textPreview ?? "",
       }));
-      const shared = (detail as { sharedToGroups?: boolean }).sharedToGroups;
-      if (typeof shared === "boolean") setOpenSaveShared(shared);
+      if (typeof detail.shared === "boolean") setOpenSaveShared(detail.shared);
       setOpenSaveAttachments(
         (detail.attachments ?? [])
           .map((a) => a.type)
@@ -1269,7 +1296,7 @@ export default function SurfacePage(): JSX.Element {
       */
       setKept(
         !shareToGroups
-          ? "Kept privately. Your rooms will not read this one."
+          ? "Kept, private. No room will read this one."
           : links.length > 0
             ? "Kept and shared. The page behind that link is being read."
             : room
@@ -1760,6 +1787,45 @@ export default function SurfacePage(): JSX.Element {
       );
     }
   }, [navigateSurface]);
+
+  /*
+    Public or private, from the list.
+
+    Changing this used to mean opening saves one at a time, which made a
+    privacy setting something you could not audit -- to answer "what have I
+    left public?" you had to open everything. It belongs where the archive is.
+
+    Optimistic, and it reverts on failure: the toggle is the only feedback,
+    so a flip that silently did not persist would be a lie about a privacy
+    setting, which is the worst kind to tell.
+  */
+  const toggleShared = useCallback(
+    async (signal: ApiSavedSignalSearchResult) => {
+      const next = !signal.shared;
+      const apply = (shared: boolean) => {
+        setResults((current) =>
+          current.map((r) => (r.id === signal.id ? { ...r, shared } : r)),
+        );
+        // The detail view may be open on this same save.
+        setOpenSave((current) =>
+          current && current.id === signal.id ? { ...current, shared } : current,
+        );
+        setOpenSaveShared((current) => (openSave?.id === signal.id ? shared : current));
+      };
+
+      apply(next);
+      try {
+        await setInspirationSharing(signal.id, next);
+        setSurfaceNotice(null);
+      } catch (error) {
+        apply(signal.shared);
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "That sharing preference was not saved.",
+        );
+      }
+    },
+    [openSave?.id],
+  );
 
   const dropReflection = useCallback(async (reflection: ApiReflection) => {
     try {
@@ -3131,6 +3197,8 @@ export default function SurfacePage(): JSX.Element {
                 <button
                   type="button"
                   className={`sf-share${openSaveShared ? "" : " private"}`}
+                  aria-pressed={!openSaveShared}
+                  title={SHARING_MEANING[openSaveShared ? "public" : "private"]}
                   onClick={() => {
                     const next = !openSaveShared;
                     void setInspirationSharing(openSave.id, next)
@@ -3147,7 +3215,7 @@ export default function SurfacePage(): JSX.Element {
                       });
                   }}
                 >
-                  {openSaveShared ? "your rooms can read this" : "private to you"}
+                  {openSaveShared ? "public" : "private"}
                 </button>
                 <button type="button" className="sf-remove" onClick={() => dropSave(openSave)}>
                   delete this inspiration
@@ -3185,15 +3253,34 @@ export default function SurfacePage(): JSX.Element {
                 <p className="sf-empty">Nothing you have kept matches that.</p>
               ) : null}
               {results.map((signal) => (
-                <button
-                  type="button"
-                  key={signal.id}
-                  className="sf-result"
-                  onClick={() => enterSave(signal)}
-                >
-                  <p>{signal.textPreview}</p>
-                  <span>{new Date(signal.capturedAt).toLocaleDateString()}</span>
-                </button>
+                /*
+                  A row, not a button: the sharing control is a button of its
+                  own and cannot be nested inside one. The text is the target
+                  for opening the save; the word on the right is the target for
+                  changing who can read it.
+                */
+                <div key={signal.id} className="sf-result">
+                  <button
+                    type="button"
+                    className="sf-result-open"
+                    onClick={() => enterSave(signal)}
+                  >
+                    <p>{signal.textPreview}</p>
+                    <span>{new Date(signal.capturedAt).toLocaleDateString()}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`sf-share sf-result-share${signal.shared ? "" : " private"}`}
+                    aria-pressed={!signal.shared}
+                    aria-label={`${signal.shared ? "Public" : "Private"}. ${
+                      SHARING_MEANING[signal.shared ? "public" : "private"]
+                    }`}
+                    title={SHARING_MEANING[signal.shared ? "public" : "private"]}
+                    onClick={() => void toggleShared(signal)}
+                  >
+                    {signal.shared ? "public" : "private"}
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -3258,15 +3345,16 @@ export default function SurfacePage(): JSX.Element {
                 event.target.value = "";
               }}
             />
-            {/* Shared by default. One word, and it says which state it is in
+            {/* Public by default. One word, and it says which state it is in
                 rather than which state it would switch to. */}
             <button
               type="button"
               className={`sf-share${shareToGroups ? "" : " private"}`}
               onClick={() => setShareToGroups((on) => !on)}
               aria-pressed={!shareToGroups}
+              title={SHARING_MEANING[shareToGroups ? "public" : "private"]}
             >
-              {shareToGroups ? "your rooms can read this" : "private to you"}
+              {shareToGroups ? "public" : "private"}
             </button>
             <span className="sf-shortcut">⌘↵</span>
           </div>

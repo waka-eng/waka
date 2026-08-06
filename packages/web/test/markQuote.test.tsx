@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  SHARING_MEANING,
   canLoadFullSignal,
   markQuote,
   roomDirectionEvidenceCopy,
@@ -207,5 +208,38 @@ describe("room proposal review copy", () => {
     expect(roomProposalReviewCopy(2, 6, 4)).toBe(
       "2 of 6 members responded · 4 matching choices decide",
     );
+  });
+});
+
+/**
+ * There are two states and they are named by one word each. The hint carries
+ * the meaning, and the meaning has a boundary that matters: "public" is the
+ * rooms you are in, never the internet. A public PROFILE is a separate setting
+ * the person turns on themselves, so this copy must not imply it.
+ */
+describe("sharing copy", () => {
+  it("scopes public to rooms, and never to anyone", () => {
+    expect(SHARING_MEANING.public).toBe("Any room you join can read this. It stays yours.");
+    for (const overclaim of ["anyone", "everyone", "the internet", "the web", "public profile"]) {
+      expect(SHARING_MEANING.public.toLowerCase()).not.toContain(overclaim);
+    }
+  });
+
+  it("says private stops rooms without claiming it stops your own readings", () => {
+    // The decision on record: private excludes a save from rooms, and it still
+    // shapes the owner's own Top of Mind. Copy that implied otherwise would be
+    // a promise the pipeline does not keep.
+    expect(SHARING_MEANING.private).toBe(
+      "No room can read this. It still shapes your own Top of Mind.",
+    );
+    expect(SHARING_MEANING.private).toContain("No room");
+    expect(SHARING_MEANING.private).toContain("your own Top of Mind");
+  });
+
+  it("keeps both meanings short enough to sit under a one-word control", () => {
+    for (const meaning of Object.values(SHARING_MEANING)) {
+      expect(meaning.length).toBeLessThanOrEqual(72);
+      expect(meaning.endsWith(".")).toBe(true);
+    }
   });
 });

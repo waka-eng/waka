@@ -96,6 +96,8 @@ describe("GET /api/public/profiles/:handle", () => {
       userId: profile.id,
       limit: 3,
       preferredLocale: "en-US",
+      // Nobody is authenticated here, so saves kept private must not be read.
+      audience: "public",
     });
     const body = await response.json() as any;
     expect(body.profile).toEqual({
