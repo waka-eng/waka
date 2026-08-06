@@ -6,6 +6,7 @@ import {
   confirmGoingPublicMessage,
   roomDirectionCtaCopy,
   roomIntentMetaCopy,
+  roomArrivalSignature,
   canLoadFullSignal,
   markQuote,
   roomDirectionEvidenceCopy,
@@ -471,5 +472,63 @@ describe("the room strip's meta line", () => {
       // One separator at most — the old line had three.
       expect(line.split("·").length).toBeLessThanOrEqual(2);
     }
+  });
+});
+
+/**
+ * An open room wall polls a cheap status endpoint every 30s to notice work
+ * somebody else started. This signature is what decides whether that tick is
+ * free or pays for a board and a direction — so it has to move when the room
+ * moved, and hold absolutely still when it did not.
+ */
+describe("noticing that a room moved without you", () => {
+  const status = (over = {}) => ({
+    phase: "ready" as const,
+    message: "",
+    memberCount: 6,
+    sharedSignalCount: 64,
+    noteCount: 5,
+    job: {
+      id: "job-1",
+      type: "group_reading_refresh" as const,
+      status: "succeeded" as const,
+      lastError: null,
+      updatedAt: "2026-08-06T10:00:00.000Z",
+    },
+    ...over,
+  });
+
+  it("holds still when nothing changed, so an idle tab costs one small request", () => {
+    expect(roomArrivalSignature(status())).toBe(roomArrivalSignature(status()));
+  });
+
+  it("moves when a reread produced a new job", () => {
+    expect(roomArrivalSignature(status())).not.toBe(
+      roomArrivalSignature(status({ job: { ...status().job, id: "job-2" } })),
+    );
+  });
+
+  it("moves when a running job finishes", () => {
+    // pending -> running -> succeeded each land a different board state.
+    const running = status({ phase: "processing" as const, job: { ...status().job, status: "running" as const } });
+    expect(roomArrivalSignature(running)).not.toBe(roomArrivalSignature(status()));
+  });
+
+  it("moves when the board gained or lost a note", () => {
+    expect(roomArrivalSignature(status())).not.toBe(
+      roomArrivalSignature(status({ noteCount: 6 })),
+    );
+  });
+
+  it("moves when the same job is retried and its timestamp advances", () => {
+    expect(roomArrivalSignature(status())).not.toBe(
+      roomArrivalSignature(status({ job: { ...status().job, updatedAt: "2026-08-06T11:00:00.000Z" } })),
+    );
+  });
+
+  it("survives a room that has never been read", () => {
+    // No job yet is a legitimate state, not a crash.
+    expect(() => roomArrivalSignature(status({ job: null }))).not.toThrow();
+    expect(roomArrivalSignature(status({ job: null }))).not.toBe(roomArrivalSignature(status()));
   });
 });

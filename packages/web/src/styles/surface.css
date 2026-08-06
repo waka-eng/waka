@@ -1698,10 +1698,56 @@
   color: var(--sf-ink-2);
 }
 
+/*
+   Now that a proposal can land WHILE you are looking at the wall, this is an
+   arrival, not a caption. It used to be bare accent text at label size beside
+   a grey caption of the same size — legible if you were already reading that
+   line, invisible if you were not, and identical whether it had just appeared
+   or been sitting there for a day.
+
+   A tinted pill and a dot: enough to catch a glance that was pointed at the
+   post-its, not enough to compete with them. It fades in rather than snapping,
+   because something that materialises silently in the corner of a page reads
+   as a rendering glitch.
+*/
 .sf-direction-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sf-mark) 11%, transparent);
   color: var(--sf-mark) !important;
   font-size: var(--sf-meta) !important;
+  font-weight: 500;
   white-space: nowrap;
+  /*
+     No fill-mode on purpose. `both` holds the element at the keyframe's `from`
+     — opacity 0 — whenever the animation has not run, which happens whenever
+     the badge is mounted hidden. A notice about a decision waiting on you is
+     the last thing that should be able to render invisible, so its resting
+     state is simply visible and the animation is decoration on top.
+  */
+  opacity: 1;
+  animation: sf-arrive 0.36s var(--sf-ease);
+}
+
+.sf-direction-new::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@keyframes sf-arrive {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* It arrived either way; only the announcement of it moves. */
+@media (prefers-reduced-motion: reduce) {
+  .sf-direction-new { animation: none; }
 }
 
 .sf-room-facets {

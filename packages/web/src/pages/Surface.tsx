@@ -672,6 +672,39 @@ export function confirmGoingPublicMessage(): string {
   ].join("\n");
 }
 
+/**
+ * How often an open room wall checks whether the room moved without you.
+ *
+ * 30s, not the 2s the generation poll uses. That one is a progress bar for
+ * work you just started and knows to stop; this one runs for as long as a room
+ * wall is open, so its cost is paid by every idle tab. A proposal that lands
+ * half a minute late is still a proposal that landed; one that never lands
+ * until you reload is a room that looks finished when it is not.
+ */
+const ARRIVAL_POLL_MS = 30_000;
+
+/**
+ * What "the room has moved" looks like from the status endpoint.
+ *
+ * The cheap read that says whether the expensive reads are worth doing: a
+ * reread produces a new job row and a changed note count, and both are in the
+ * status payload. Comparing this string is what keeps an idle tab from
+ * refetching a board and a direction every thirty seconds forever.
+ */
+export function roomArrivalSignature(status: ApiGroupReadingGenerationStatus): string {
+  return [
+    status.phase,
+    status.noteCount,
+    status.job?.id ?? "",
+    status.job?.status ?? "",
+    status.job?.updatedAt ?? "",
+  ].join("|");
+}
+
+function sameReadingIds(a: Reading[], b: Reading[]): boolean {
+  return a.length === b.length && a.every((reading, i) => reading.id === b[i]?.id);
+}
+
 /** Every URL in what you typed. These become link attachments, which is what
  *  makes the page behind them readable to the judge at all. */
 function urlsIn(text: string): string[] {
@@ -734,6 +767,8 @@ export default function SurfacePage(): JSX.Element {
     useState<string | null>(null);
   const directionInputRef = useRef<HTMLTextAreaElement>(null);
   const previousRoom = useRef(room);
+  /* The last room state this client has already reflected. See ARRIVAL_POLL_MS. */
+  const arrivalSignature = useRef<string | null>(null);
 
   const [openReading, setOpenReading] = useState<Reading | null>(null);
   /*
@@ -1114,6 +1149,81 @@ export default function SurfacePage(): JSX.Element {
     return () => {
       cancelled = true;
       window.clearInterval(poll);
+    };
+  }, [room, roomGenerationStatus?.phase]);
+
+  /*
+    A room moves whether or not you are the one moving it.
+
+    The poll above only runs for the person who STARTED a reread — it is gated
+    on `phase === "processing"`, and nobody else's client ever set that. So a
+    member sitting on the room's wall when someone else's take crossed the
+    threshold kept looking at a stale strip until they reloaded: the badge
+    never appeared, the verb never changed to "review the proposed version",
+    and the decision waiting on them was invisible. A shared surface that only
+    updates for whoever touched it last is not shared.
+
+    Cheap read first. The status endpoint says whether a new job exists and how
+    many notes there are; only when that signature moves do we pay for the
+    board and the direction. An idle tab costs one small request every 30s and
+    nothing else.
+
+    Hidden tabs do not poll, and a tab coming back to the foreground checks
+    immediately rather than waiting out the interval — coming back to a room is
+    exactly when you most expect it to be current.
+  */
+  useEffect(() => {
+    // The 2s poll owns the processing window; this is for everything after it.
+    if (!room || roomGenerationStatus?.phase === "processing") return undefined;
+
+    let cancelled = false;
+    // Re-baseline on every room change so arriving somewhere new is never
+    // mistaken for that room having just moved.
+    arrivalSignature.current = null;
+
+    const check = async () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      try {
+        const status = await fetchGroupReadingStatus(room, { ensure: false });
+        if (cancelled) return;
+        const next = roomArrivalSignature(status);
+        if (arrivalSignature.current === null) {
+          arrivalSignature.current = next;
+          return;
+        }
+        if (next === arrivalSignature.current) return;
+        arrivalSignature.current = next;
+
+        const [board, nextDirection] = await Promise.all([
+          fetchGroupTopOfMind(room),
+          fetchGroupDirection(room),
+        ]);
+        if (cancelled) return;
+        setMembers(board.members ?? []);
+        setDirection(nextDirection);
+        setRoomGenerationStatus(status);
+        /*
+          Only disturb the wall when the notes themselves changed. Layout,
+          colour and any post-it you dragged are keyed to position, so
+          replacing an identical list would reshuffle someone's arrangement to
+          show them nothing new.
+        */
+        const mapped = board.notes.map(readingFromGroupNote);
+        setReadings((current) => (sameReadingIds(current, mapped) ? current : mapped));
+      } catch {
+        /* Ambient. A failed background check is not worth a notice. */
+      }
+    };
+
+    const timer = window.setInterval(() => void check(), ARRIVAL_POLL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void check();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [room, roomGenerationStatus?.phase]);
 
