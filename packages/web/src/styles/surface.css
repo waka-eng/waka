@@ -571,44 +571,51 @@
 /* ---------------------------------------------------------------------------
    WHAT THE SETTING ACTUALLY DOES
 
-   Collapsed by default: someone scanning their archive is not asking this
-   question, and a permanent paragraph above a list is a paragraph people
-   learn to skip. Open it once and it answers the only two questions that
-   matter — who sees it, and what do they see of it.
+   The summary line is always visible, because the previous version put this
+   behind a closed disclosure in one place and the answer was effectively
+   missing. What is visible says what the current setting does; opening it
+   answers the question people actually have, which is not "what is the state"
+   but "what would someone else see".
    ------------------------------------------------------------------------ */
 .sf-sharing-note {
-  margin-top: 14px;
+  margin-top: 11px;
   font-size: var(--sf-meta);
   color: var(--sf-ink-3);
 }
 
 .sf-sharing-note > summary {
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   min-height: 32px;
-  color: var(--sf-ink-2);
+  color: var(--sf-ink-3);
   transition: color 0.15s var(--sf-ease);
-  /* Replace the disclosure triangle with one that matches the type. */
   list-style: none;
 }
 
 .sf-sharing-note > summary::-webkit-details-marker { display: none; }
-
-.sf-sharing-note > summary::before {
-  content: "＋";
-  font-size: 0.92em;
-  line-height: 1;
-  transition: transform 0.18s var(--sf-ease);
-}
-
-.sf-sharing-note[open] > summary::before { content: "−"; }
 .sf-sharing-note > summary:hover { color: var(--sf-ink); }
+
+/*
+   Deliberately does NOT rotate on open.
+
+   The first version turned it 180° as a disclosure cue, which stands an "i" on
+   its head — and an upside-down "i" in a circle is an exclamation mark. The
+   one line explaining a privacy setting then looked like a warning about one.
+   The content appearing is disclosure enough.
+*/
+.sf-sharing-note-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.75;
+}
 
 .sf-sharing-note p {
   max-width: 34rem;
-  margin: 9px 0 0;
+  margin: 8px 0 0;
+  padding-left: 22px;
   line-height: 1.6;
 }
 
@@ -811,14 +818,22 @@
   transform: none;
 }
 
-/* A toggle carries its state twice: in the word, and in a dot you can read
-   down a column without stopping to read. */
-.sf .sf-control-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  transition: background 0.15s var(--sf-ease);
+/*
+   The icon is what tells three pills apart at a glance.
+
+   Outlined chips of the same size, in the same row, read as the same button
+   however different their words are — you have to stop and read to know which
+   is which, and the whole point of the shape was to be recognisable without
+   reading. A check, a paperclip and a lock are not confusable.
+
+   1.15em rather than a fixed px so the glyph tracks the label at any type
+   scale, and stroke 1.75 to sit with the interface weight rather than shout.
+*/
+.sf .sf-control-icon {
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  stroke-width: 1.75;
 }
 
 .sf .sf-control--toggle { color: var(--sf-ink-2); }
@@ -838,13 +853,6 @@
   background: color-mix(in srgb, var(--sf-mark) 10%, transparent);
 }
 
-/* What the current setting means, under the controls rather than in a
-   tooltip nobody on a phone can open. */
-.sf-draft-note {
-  margin: 11px 0 0;
-  font-size: var(--sf-meta);
-  color: var(--sf-ink-3);
-}
 
 /* The beat nobody built: the gap between saving and being read is hours, and
    a product that says nothing in it is where trust is lost cheapest. */

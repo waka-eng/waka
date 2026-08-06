@@ -33,6 +33,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+/*
+  Four icons, imported one at a time so the bundler takes four and not the set.
+
+  `Users` rather than `Globe` for public, deliberately. A globe means the
+  internet, and this flag does not reach the internet — it reaches the rooms
+  you are in. The copy is careful about that distinction, and an icon that
+  contradicted it would be believed over the words.
+*/
+import { Check, Info, Lock, Paperclip, Users } from "lucide-react";
 
 import { contributorColor, contributorInitials } from "../components/faces";
 import { useAuth } from "../lib/auth-context";
@@ -521,6 +530,43 @@ export const SHARING_NOTE = {
   both:
     "Either way the save stays yours, and either way it still shapes your own Top of Mind.",
 } as const;
+
+/**
+ * The sharing setting, explained wherever it can be changed.
+ *
+ * It used to live in one place — collapsed, above the archive list — which is
+ * the same as not existing for anyone who was in the composer deciding. The
+ * question "what does public actually mean here" is asked at the moment of
+ * choosing, so the answer follows the control to all three places it appears.
+ *
+ * `summary` is the always-visible line. Given a save's state it says what THAT
+ * save does; on the archive, which governs a whole column, it asks the question
+ * instead. Opening it gives the full consequence either way.
+ */
+function SharingExplainer({
+  shared,
+  open,
+}: {
+  shared?: boolean;
+  open?: boolean;
+}): JSX.Element {
+  const summary =
+    shared === undefined
+      ? SHARING_NOTE.heading
+      : SHARING_MEANING[shared ? "public" : "private"];
+
+  return (
+    <details className="sf-sharing-note" open={open}>
+      <summary>
+        <Info className="sf-sharing-note-icon" aria-hidden="true" />
+        <span>{summary}</span>
+      </summary>
+      <p>{SHARING_NOTE.public}</p>
+      <p>{SHARING_NOTE.private}</p>
+      <p className="sf-sharing-note-both">{SHARING_NOTE.both}</p>
+    </details>
+  );
+}
 
 /** Every URL in what you typed. These become link attachments, which is what
  *  makes the page behind them readable to the judge at all. */
@@ -3246,7 +3292,11 @@ export default function SurfacePage(): JSX.Element {
                       });
                   }}
                 >
-                  <span className="sf-control-dot" aria-hidden="true" />
+                  {openSaveShared ? (
+                    <Users className="sf-control-icon" aria-hidden="true" />
+                  ) : (
+                    <Lock className="sf-control-icon" aria-hidden="true" />
+                  )}
                   {openSaveShared ? "public" : "private"}
                 </button>
                 <button type="button" className="sf-remove" onClick={() => dropSave(openSave)}>
@@ -3254,9 +3304,7 @@ export default function SurfacePage(): JSX.Element {
                 </button>
               </div>
               {/* The consequence, at the point of change, same as the composer. */}
-              <p className="sf-draft-note">
-                {SHARING_MEANING[openSaveShared ? "public" : "private"]}
-              </p>
+              <SharingExplainer shared={openSaveShared} />
             </div>
           ) : null}
         </section>
@@ -3291,12 +3339,7 @@ export default function SurfacePage(): JSX.Element {
               the part people actually want to know, which is not the toggle's
               state but what another person in the room would see.
             */}
-            <details className="sf-sharing-note">
-              <summary>{SHARING_NOTE.heading}</summary>
-              <p>{SHARING_NOTE.public}</p>
-              <p>{SHARING_NOTE.private}</p>
-              <p className="sf-sharing-note-both">{SHARING_NOTE.both}</p>
-            </details>
+            <SharingExplainer open />
             <div className="sf-results">
               {searching ? <p className="sf-empty">looking…</p> : null}
               {!searching && query.trim() && results.length === 0 ? (
@@ -3329,7 +3372,11 @@ export default function SurfacePage(): JSX.Element {
                     } Click to make it ${signal.shared ? "private" : "public"}.`}
                     onClick={() => void toggleShared(signal)}
                   >
-                    <span className="sf-control-dot" aria-hidden="true" />
+                    {signal.shared ? (
+                      <Users className="sf-control-icon" aria-hidden="true" />
+                    ) : (
+                      <Lock className="sf-control-icon" aria-hidden="true" />
+                    )}
                     {signal.shared ? "public" : "private"}
                   </button>
                 </div>
@@ -3383,6 +3430,7 @@ export default function SurfacePage(): JSX.Element {
               onClick={() => void keep()}
               disabled={(!draft.trim() && files.length === 0) || keeping}
             >
+              <Check className="sf-control-icon" aria-hidden="true" />
               {keeping ? "keeping…" : "keep"}
             </button>
             <button
@@ -3390,6 +3438,7 @@ export default function SurfacePage(): JSX.Element {
               className="sf-control"
               onClick={() => fileInput.current?.click()}
             >
+              <Paperclip className="sf-control-icon" aria-hidden="true" />
               attach
             </button>
             <input
@@ -3410,23 +3459,24 @@ export default function SurfacePage(): JSX.Element {
               onClick={() => setShareToGroups((on) => !on)}
               aria-pressed={!shareToGroups}
             >
-              <span className="sf-control-dot" aria-hidden="true" />
+              {shareToGroups ? (
+                <Users className="sf-control-icon" aria-hidden="true" />
+              ) : (
+                <Lock className="sf-control-icon" aria-hidden="true" />
+              )}
               {shareToGroups ? "public" : "private"}
             </button>
             <span className="sf-shortcut">⌘↵</span>
           </div>
           {/*
-            The consequence, in the open.
+            The consequence, in the open, at the moment of choosing.
 
-            This was a `title`, which is a tooltip: invisible on every touch
-            device, and invisible on a desktop until you already suspect there
-            is something to find. A sharing setting is exactly the thing nobody
-            hovers to investigate, so it says what it does, and changes when
-            you change it.
+            This was a `title` — a tooltip, invisible on every touch device and
+            invisible on desktop until you already suspect there is something to
+            find. A sharing setting is exactly the thing nobody hovers to
+            investigate.
           */}
-          <p className="sf-draft-note">
-            {SHARING_MEANING[shareToGroups ? "public" : "private"]}
-          </p>
+          <SharingExplainer shared={shareToGroups} />
           {kept ? <p className="sf-kept">{kept}</p> : null}
         </div>
         </section>
