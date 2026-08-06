@@ -1,12 +1,11 @@
 /**
  * The group authorization boundary, against a real database.
  *
- * `groups.test.ts` and `group-rooms.test.ts` stub the service layer, so their
- * "returns 404 when the caller is not a member" cases assert that a route
- * forwards a `null` a mock just returned. That verifies routing. It does not
- * verify that a non-member is actually turned away, because the functions that
- * decide it — `loadGroupWithMembers`, `assertRoomMembership`,
- * `fetchOwnedSignalPreviews` — never run.
+ * `groups.test.ts` stubs the service layer, so its "returns 404 when the caller
+ * is not a member" cases assert that a route forwards a `null` a mock just
+ * returned. That verifies routing. It does not verify that a non-member is
+ * actually turned away, because the function that decides it —
+ * `loadGroupWithMembers` — never runs.
  *
  * These do run them. Every case here is two real users and real rows: the only
  * shape in which "B cannot read A's group" means anything.
@@ -38,12 +37,6 @@ import {
   getGroupCombinationReading,
   refreshGroupCombinationReading,
 } from "../lib/group-combination-reading.js";
-import {
-  addSignalsToGroupRoom,
-  createGroupRoomFeedback,
-  createGroupRoomForUser,
-  listGroupRoomsForUser,
-} from "./group-rooms.js";
 
 let harness: TestDatabase;
 
@@ -288,80 +281,6 @@ describe("synthesis trigger selection", () => {
     expect(triggers.some((t) => t.id === bobSignal)).toBe(true);
     // And still bounded rather than reading everything Alice ever saved.
     expect(triggers.length).toBeLessThanOrEqual(24);
-  });
-});
-
-describe("group room membership", () => {
-  it("lists only the caller's rooms", async () => {
-    const { alice, bob } = await twoUsers();
-    await createGroupRoomForUser(db(), { userId: alice.id, name: "alice's room" });
-
-    await expect(
-      listGroupRoomsForUser(db(), { userId: bob.id, limit: 5 }),
-    ).resolves.toEqual([]);
-    await expect(
-      listGroupRoomsForUser(db(), { userId: alice.id, limit: 5 }),
-    ).resolves.toHaveLength(1);
-  });
-
-  it("refuses to add a signal the caller does not own", async () => {
-    const { alice, bob } = await twoUsers();
-    const room = await createGroupRoomForUser(db(), { userId: alice.id, name: "room" });
-    const bobsSignal = await saveSignal(bob.id, "not alice's to share");
-
-    await expect(
-      addSignalsToGroupRoom(db(), {
-        userId: alice.id,
-        roomId: room.id,
-        signalIds: [bobsSignal],
-      }),
-    ).resolves.toBeNull();
-  });
-
-  it("refuses to touch a room the caller is not in", async () => {
-    const { alice, bob } = await twoUsers();
-    const room = await createGroupRoomForUser(db(), { userId: alice.id, name: "room" });
-    const bobsSignal = await saveSignal(bob.id, "bob's own signal");
-
-    await expect(
-      addSignalsToGroupRoom(db(), {
-        userId: bob.id,
-        roomId: room.id,
-        signalIds: [bobsSignal],
-      }),
-    ).resolves.toBeNull();
-    await expect(
-      createGroupRoomFeedback(db(), { userId: bob.id, roomId: room.id, reaction: "useful" }),
-    ).resolves.toBeNull();
-  });
-
-  it("honors shareRaw when deciding how much of a signal the room reads", async () => {
-    const { alice } = await twoUsers();
-    const room = await createGroupRoomForUser(db(), { userId: alice.id, name: "room" });
-    const long = "x".repeat(400);
-    const rawId = await saveSignal(alice.id, long);
-    const previewId = await saveSignal(alice.id, long);
-
-    await addSignalsToGroupRoom(db(), {
-      userId: alice.id,
-      roomId: room.id,
-      signalIds: [rawId],
-      shareRaw: true,
-    });
-    const after = await addSignalsToGroupRoom(db(), {
-      userId: alice.id,
-      roomId: room.id,
-      signalIds: [previewId],
-      shareRaw: false,
-    });
-
-    const raw = after!.selectedSignals.find((s) => s.signalId === rawId);
-    const preview = after!.selectedSignals.find((s) => s.signalId === previewId);
-
-    // The flag was previously inert: both branches truncated, so declining to
-    // share raw text shared exactly as much as agreeing to.
-    expect(raw!.textPreview).toHaveLength(400);
-    expect(preview!.textPreview.length).toBeLessThanOrEqual(140);
   });
 });
 

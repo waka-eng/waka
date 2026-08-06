@@ -1,3 +1,29 @@
+/**
+ * Chat-oriented discussion rooms — RETIRED SURFACE, LIVE TABLES.
+ *
+ * `routes/group-rooms.ts` served these under `/api/group-rooms`: rooms with
+ * participants, generated prompts and reactions. No client ever called it —
+ * the product's room is `/api/groups`, whose board and direction are built
+ * from pooled signals rather than from a conversation. The route and its tests
+ * were deleted rather than left to rot as a second, half-true idea of a room.
+ *
+ * These table definitions stay ON PURPOSE. Two reasons, and neither is inertia:
+ *
+ * 1. **Deleting them would generate a migration that drops them.** `drizzle-kit
+ *    generate` diffs this schema against the database, so removing these
+ *    declarations emits `DROP TABLE` against whatever rows production holds.
+ *    An unused table costs nothing; an unrecoverable one costs everything.
+ *
+ * 2. **`lib/account-erasure.ts` still reads and clears them.** Erasure must
+ *    account for every table a user's rows can reach, including retired ones.
+ *    A table the erasure path cannot see is a table that outlives the account
+ *    it belonged to.
+ *
+ * So: do not "clean up" this file by deleting it. Dropping these tables is a
+ * deliberate data decision that needs its own migration and its own reckoning
+ * with the erasure path — not a side effect of tidying dead code.
+ */
+
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
