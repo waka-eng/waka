@@ -2264,6 +2264,34 @@ export default function SurfacePage(): JSX.Element {
     });
   }, []);
 
+  /*
+    Going to a wall — yours, or a room's.
+
+    Written out twice before, once for your own wall and once per room, with
+    five pieces of state to clear in the same order both times. Extracted
+    because your own wall is about to stop being an item in the rooms menu,
+    and two copies of a reset is how one of them ends up showing the previous
+    room's cast under the next room's name.
+
+    Same wall, different state (capture -> wall) is not a switch: clearing the
+    room's members and direction there would blank the header and re-fetch
+    everything to arrive back where you already were.
+  */
+  const goToWall = useCallback(
+    (roomId: SurfaceRoomId) => {
+      if (roomId !== room) {
+        setLoading(true);
+        setMembers([]);
+        setDirection(null);
+        setRoomGenerationStatus(null);
+        setLastRead(null);
+      }
+      navigateSurface("wall", { roomId });
+      closeMenus();
+    },
+    [closeMenus, navigateSurface, room],
+  );
+
   const roomName = room ? (rooms.find((r) => r.id === room)?.name ?? "room") : "your top of mind";
   const activeRoom = room ? (rooms.find((r) => r.id === room) ?? null) : null;
   const hasRevealedDirection =
@@ -2524,7 +2552,20 @@ export default function SurfacePage(): JSX.Element {
             </svg>
           </button>
         </p>
-        {room && state !== "direction" ? (
+        {/*
+          The room's shared top of mind belongs to the room's wall.
+
+          This rendered in every state except `direction`, so the living draft
+          followed you into capture, into your inspirations, into a save you had
+          opened — surfaces that are yours alone and have nothing to do with
+          what a room is finding. A persistent strip about other people sitting
+          above a private archive is not context, it is noise, and it made the
+          room feel inescapable rather than present.
+
+          The wall is where the room's reading lives; everywhere else the head
+          still names the room, which is enough to know where you are.
+        */}
+        {room && state === "wall" ? (
           <section
             className="sf-room-intent"
             data-state={direction?.current?.state ?? "forming"}
@@ -3624,6 +3665,27 @@ export default function SurfacePage(): JSX.Element {
               : `${savedCount}${savedCount >= SAVED_CEILING ? "+" : ""} inspirations`}
           </button>
           {/*
+            Your own top of mind is not a room, and is no longer filed as one.
+
+            It used to be the first row inside the `rooms` menu, which cost two
+            clicks to reach the surface that is most yours, and said — by where
+            it sat — that your own wall is one of your rooms. It is the thing
+            the other walls are made from. One word, one click, always in the
+            bar.
+          */}
+          <button
+            type="button"
+            className={`sf-primary-verb${room === null && state === "wall" ? " on" : ""}`}
+            aria-pressed={room === null && state === "wall"}
+            /* The header names it in full when you arrive. Spelling it out here
+               too pushes this four-word row past a 375px screen, and the bar
+               already has a mobile problem without adding one. */
+            aria-label="your top of mind"
+            onClick={() => goToWall(null)}
+          >
+            yours
+          </button>
+          {/*
             Rooms live in the bar, not on the wall.
 
             Switching rooms was a full-screen state you travelled to, which
@@ -3634,36 +3696,12 @@ export default function SurfacePage(): JSX.Element {
           <details className="sf-rooms-menu">
             <summary className="sf-primary-verb">rooms</summary>
             <div className="sf-rooms-panel">
-              <button
-                type="button"
-                className={`sf-room-row${room === null ? " on" : ""}`}
-                onClick={() => {
-                  setLoading(true);
-                  setMembers([]);
-                  setDirection(null);
-                  setRoomGenerationStatus(null);
-                  setLastRead(null);
-                  navigateSurface("wall", { roomId: null });
-                  closeMenus();
-                }}
-              >
-                <span>your top of mind</span>
-                <small>alone</small>
-              </button>
               {rooms.map((r) => (
                 <button
                   key={r.id}
                   type="button"
                   className={`sf-room-row${room === r.id ? " on" : ""}`}
-                  onClick={() => {
-                    setLoading(true);
-                    setMembers([]);
-                    setDirection(null);
-                    setRoomGenerationStatus(null);
-                    setLastRead(null);
-                    navigateSurface("wall", { roomId: r.id });
-                    closeMenus();
-                  }}
+                  onClick={() => goToWall(r.id)}
                 >
                   <span>{r.name}</span>
                   <small>
