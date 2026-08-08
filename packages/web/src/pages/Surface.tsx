@@ -44,6 +44,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Check, Info, Lock, Paperclip, Users } from "lucide-react";
 
 import { contributorColor, contributorInitials } from "../components/faces";
+import { OrbitBoard } from "../components/OrbitBoard";
 import { useAuth } from "../lib/auth-context";
 import {
   readStoredLocale,
@@ -351,6 +352,9 @@ function showsDebug(): boolean {
    the old wall is deleted keeps it, instead of losing the one thing a product
    about keeping things must never lose. */
 const DRAFT_KEY = "waka.captureDraft.v1";
+
+/** Whether the wall renders as the orbit board (goal/two-modes prototype). */
+const ORBIT_WALL_KEY = "waka.orbitWall.v1";
 
 export function roomShapingProgressCopy(
   contributorCount: number,
@@ -901,6 +905,32 @@ export default function SurfacePage(): JSX.Element {
     wall that is yours to decide -- the machine puts them up in no order, and
     where they end up is what you made of them.
   */
+  /*
+    The orbit board (goal/two-modes, slice 1) — the same wall data rendered as
+    a ring around the room's adopted ambition. Internal-only while it is being
+    judged: the switch shows under the same rule as the Debug pill, and the
+    choice sticks so the founder can live in one rendering for days. Flipping
+    it changes nothing about the data; both renderings read `wall`.
+  */
+  const [orbitWall, setOrbitWall] = useState(() => {
+    try {
+      return window.localStorage.getItem(ORBIT_WALL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleOrbitWall = useCallback(() => {
+    setOrbitWall((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(ORBIT_WALL_KEY, next ? "1" : "0");
+      } catch {
+        /* the preference just won't stick */
+      }
+      return next;
+    });
+  }, []);
+
   const [drags, setDrags] = useState<Record<number, { x: number; y: number }>>({});
   const [dragging, setDragging] = useState<number | null>(null);
   const dragFrom = useRef<{ i: number; x: number; y: number; baseX: number; baseY: number } | null>(
@@ -2800,6 +2830,16 @@ export default function SurfacePage(): JSX.Element {
         ) : null}
         {/* ---------------------------------------------------------- WALL */}
         <section className={`sf-layer sf-layer--wall${state === "wall" ? " on" : ""}`}>
+          {showsDebug() ? (
+            <button
+              type="button"
+              className="sf-orbit-toggle"
+              onClick={toggleOrbitWall}
+              aria-pressed={orbitWall}
+            >
+              {orbitWall ? "flat wall" : "orbit"}
+            </button>
+          ) : null}
           {loading ? null : readings.length === 0 ? (
             <p className="sf-empty">
               {!room && generationStatus
@@ -2810,6 +2850,34 @@ export default function SurfacePage(): JSX.Element {
                   ? "This room needs another person before it can make a shared reading. Use the + by your face to invite someone."
                   : "Nothing here holds yet. That is about the material, not about anyone in the room."}
             </p>
+          ) : orbitWall ? (
+            <OrbitBoard
+              notes={wall.map((reading) => ({
+                id: reading.id,
+                text: reading.text,
+                hands: reading.hands,
+                evidenceCount: reading.evidence.length,
+                isPinned: reading.isPinned,
+              }))}
+              center={
+                room
+                  ? {
+                      label: roomName,
+                      ambition: direction?.current?.ambition ?? null,
+                      meta: direction?.current
+                        ? `current · v${direction.current.versionNumber}`
+                        : null,
+                    }
+                  : {
+                      /* Your wall is a room of one; its adopted ambition
+                         arrives with the goal's Phase 0. Forming is honest,
+                         not a placeholder for a bug. */
+                      label: roomName,
+                      ambition: null,
+                      meta: null,
+                    }
+              }
+            />
           ) : (
             <div className="sf-wall">
               {wall.map((reading, i) => {

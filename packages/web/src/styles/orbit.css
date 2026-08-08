@@ -1,0 +1,170 @@
+/*
+ * The orbit board — quiet paper in motion.
+ *
+ * Deliberately NOT surface.css's skin: no paper tint rotation, no tilt, no
+ * shadow. Flat, barely-there tiles; ink and paper; the only color on the
+ * board is a member's hue on the faces a note wears. This file is the
+ * two-modes design language's first landing in the product, kept separate so
+ * the old wall survives untouched until the founder retires it on purpose.
+ */
+
+/* The internal switch between the flat wall and the orbit — shows under the
+   same rule as the Debug pill, styled to be findable and ignorable. */
+.sf-orbit-toggle {
+  all: unset;
+  cursor: pointer;
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: #858585;
+  border: 1px solid #cacac9;
+}
+.sf-orbit-toggle:hover {
+  color: #131313;
+}
+
+.ob {
+  position: relative;
+  height: min(72vh, 660px);
+  overflow: hidden;
+  cursor: grab;
+  --ob-ink: #131313;
+  --ob-paper: #f7f7f6;
+  --ob-muted: #858585;
+  --ob-line: #cacac9;
+}
+.ob.ob--dragging {
+  cursor: grabbing;
+}
+
+/* ---------- center: the room's one ambition ---------- */
+.ob-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  max-width: 30rem;
+  z-index: 500;
+  pointer-events: none;
+}
+.ob-center--receded {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.ob-center-label {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ob-muted);
+  margin-bottom: 14px;
+}
+.ob-center-ambition {
+  font-size: clamp(20px, 2.6vw, 30px);
+  line-height: 1.22;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ob-ink);
+}
+.ob-center-forming {
+  font-size: 15px;
+  color: var(--ob-muted);
+}
+.ob-center-meta {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--ob-muted);
+}
+
+/* ---------- the notes ----------
+   Direct children of .ob — no positioned wrapper (see OrbitBoard.tsx header:
+   a wrapper's stacking context traps every tile under the veil). */
+.ob-note {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 172px;
+  min-height: 112px;
+  padding: 14px 14px 12px;
+  background: #fcfcfb;
+  border: 1px solid var(--ob-line);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  will-change: transform, opacity, filter;
+  cursor: pointer;
+}
+.ob-note-text {
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--ob-ink);
+}
+.ob-note-foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+}
+.ob-note-held {
+  margin-left: auto;
+  font-size: 9.5px;
+  color: var(--ob-muted);
+}
+.ob-note--expanded {
+  width: 300px;
+  cursor: default;
+}
+.ob-note--expanded .ob-note-text {
+  font-size: 17px;
+  line-height: 1.4;
+}
+.ob-note-grounding {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ob-line);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ob-muted);
+}
+
+/* ---------- ambient glyphs: inspiration comes from anywhere ---------- */
+.ob-glyph {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: var(--ob-muted);
+  pointer-events: none;
+  will-change: transform, opacity;
+  z-index: 40;
+  user-select: none;
+}
+
+/* ---------- the veil behind an opened note ---------- */
+.ob-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--ob-paper);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease;
+  z-index: 900;
+}
+.ob-veil.on {
+  opacity: 0.82;
+  pointer-events: auto;
+}
+
+.ob-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--ob-muted);
+  z-index: 600;
+  margin: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
