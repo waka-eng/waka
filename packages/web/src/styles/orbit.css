@@ -24,6 +24,35 @@
   color: #131313;
 }
 
+/* ---------- orbit takes the whole screen ----------
+   Nothing around the ring: the header and the foot rail step away, the wall
+   layer loses its padding, and the ring gets the viewport. The mock had
+   nothing else on screen, and the founder confirmed that IS the mode —
+   the orbit is a place, not a widget in the page. */
+.sf[data-orbit="true"] .sf-head,
+.sf[data-orbit="true"] .sf-foot {
+  display: none;
+}
+.sf[data-orbit="true"] .sf-body {
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+.sf[data-orbit="true"] .sf-layer--wall {
+  padding: 0;
+}
+.sf[data-orbit="true"] .ob {
+  height: 100dvh;
+}
+.sf[data-orbit="true"] .sf-orbit-toggle {
+  position: fixed;
+  top: 18px;
+  right: 20px;
+  z-index: 1100;
+  margin: 0;
+  background: var(--ob-paper, #f7f7f6);
+}
+
 .ob {
   position: relative;
   height: min(72vh, 660px);

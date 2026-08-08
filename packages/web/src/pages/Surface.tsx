@@ -2648,6 +2648,10 @@ export default function SurfacePage(): JSX.Element {
       data-state={state}
       data-busy={busy ? "true" : "false"}
       data-dropping={dropping ? "true" : "false"}
+      /* The orbit owns the whole screen: header and foot rail step away while
+         it is on, the way the mock had nothing around the ring. The toggle
+         stays to bring the flat wall (and its chrome) back. */
+      data-orbit={orbitWall && state === "wall" ? "true" : undefined}
     >
       {offeredCode ? (
         <div className="sf-invite-offer" role="dialog" aria-label="an invitation">
