@@ -42,10 +42,6 @@ export interface OrbitBoardCenter {
   meta: string | null;
 }
 
-/* Inspiration can come from anywhere — sources drift in the same space the
-   readings orbit in. Ink only: on the board, color belongs to people. */
-const GLYPHS = ["✳", "✂", "♪", "✎", "⌗", "↗", "◍", "⌇"] as const;
-
 /* slow + subtle — the founder's picks from the B1 mock, baked in. */
 const IDLE_SPEED = (Math.PI * 2) / 95; // rad/s
 const MIN_OPACITY = 0.42;
@@ -74,7 +70,6 @@ export function OrbitBoard(props: {
   const { notes, center } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLElement>());
-  const glyphRefs = useRef<(HTMLElement | null)[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedRef = useRef<string | null>(null);
   expandedRef.current = expandedId;
@@ -218,18 +213,6 @@ export function OrbitBoard(props: {
         );
       }
 
-      glyphRefs.current.forEach((el, i) => {
-        if (!el) return;
-        const base = ((i + 0.5) / GLYPHS.length) * Math.PI * 2;
-        const radMul = 0.72 + (i % 3) * 0.22;
-        const rate = 0.75 + (i % 3) * 0.18;
-        const th = base + rotation * rate;
-        const s = (Math.cos(th) + 1) / 2;
-        const breath = Math.sin(t * (0.6 + i * 0.07) + i) * 6;
-        const wobble = Math.sin(t * 0.4 + i) * ((i % 2 ? 1 : -1) * (6 + i * 2));
-        el.style.transform = `translate(-50%,-50%) translate3d(${(Math.sin(th) * rx * radMul).toFixed(1)}px,${(Math.cos(th) * ry * radMul * 1.35 + breath).toFixed(1)}px,0) scale(${lerp(0.7, 1, s).toFixed(3)}) rotate(${wobble.toFixed(1)}deg)`;
-        el.style.opacity = (lerp(0.07, 0.28, Math.pow(s, 1.3)) * (expanded ? 0.3 : 1)).toFixed(3);
-      });
     };
     frame = requestAnimationFrame(tick);
 
@@ -310,19 +293,6 @@ export function OrbitBoard(props: {
         );
       })}
 
-      {GLYPHS.map((glyph, i) => (
-        <span
-          key={glyph}
-          ref={(el) => {
-            glyphRefs.current[i] = el;
-          }}
-          className="ob-glyph"
-          style={{ fontSize: `${15 + (i % 4) * 4}px` }}
-          aria-hidden="true"
-        >
-          {glyph}
-        </span>
-      ))}
 
       <p className="ob-hint">drag to spin · click a note to read · click away to put it back</p>
     </div>

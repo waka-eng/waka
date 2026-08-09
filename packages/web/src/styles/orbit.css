@@ -113,9 +113,11 @@
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 172px;
-  min-height: 112px;
-  padding: 14px 14px 12px;
+  /* Landscape paper: wider than tall, the founder's call — a sentence reads
+     as a line or two, not a column. */
+  width: 236px;
+  min-height: 84px;
+  padding: 13px 15px 11px;
   background: #fcfcfb;
   border: 1px solid var(--ob-line);
   display: flex;
@@ -142,7 +144,7 @@
   color: var(--ob-muted);
 }
 .ob-note--expanded {
-  width: 300px;
+  width: 380px;
   cursor: default;
 }
 .ob-note--expanded .ob-note-text {
@@ -156,18 +158,6 @@
   font-size: 11px;
   line-height: 1.5;
   color: var(--ob-muted);
-}
-
-/* ---------- ambient glyphs: inspiration comes from anywhere ---------- */
-.ob-glyph {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  color: var(--ob-muted);
-  pointer-events: none;
-  will-change: transform, opacity;
-  z-index: 40;
-  user-select: none;
 }
 
 /* ---------- the veil behind an opened note ---------- */
