@@ -255,18 +255,17 @@ export function OrbitBoard(props: {
           };
 
           /*
-            The ring parts to let you read. The orbit's whole point is to
-            circle the statement — so sheets MAY cross it at rest. But the
-            cursor arriving on the text is reading intent, and any sheet
-            over the words steps aside: it ghosts out and drifts outward,
-            front crossers fully, back crossers half (they only murmur
-            behind the letters). It returns the moment you leave.
+            The ring parts to let you read — in two layers. A sheet over
+            the words is ALWAYS half-ghosted: the statement stays legible
+            through it even at rest. The cursor arriving on the text is
+            reading intent, and takes the crosser to near-nothing while
+            drifting it aside. It returns the moment you leave.
           */
-          if (part > 0.01) {
-            const wx = Math.max(0, 1 - Math.abs(target.x) / 320);
-            const wy = Math.max(0, 1 - Math.abs(target.y) / 170);
-            const over = wx * wy * (z > 0 ? 1 : 0.55);
-            target.op *= 1 - part * over * 0.93;
+          {
+            const wx = Math.max(0, 1 - Math.abs(target.x) / 360);
+            const wy = Math.max(0, 1 - Math.abs(target.y) / 190);
+            const over = wx * wy * (z > 0 ? 1 : 0.6);
+            target.op *= 1 - over * (0.55 + part * 0.42);
             target.x += Math.sign(target.x || 1) * part * over * 46;
             target.y += Math.sign(target.y || 1) * part * over * 26;
           }

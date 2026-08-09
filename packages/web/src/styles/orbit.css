@@ -33,6 +33,12 @@
 .sf[data-orbit="true"] .sf-foot {
   display: none;
 }
+/* One ground, one tone. The page, the orbit and the veil are the same
+   paper — no bands, no boxes-on-gray. */
+.sf[data-orbit="true"] {
+  background: #f7f7f6;
+  min-height: 100dvh;
+}
 .sf[data-orbit="true"] .sf-body {
   padding: 0;
   margin: 0;
@@ -58,6 +64,7 @@
   height: min(72vh, 660px);
   overflow: hidden;
   cursor: grab;
+  background: #f7f7f6;
   /* The room has depth: notes are planes in this perspective, and their z
      position — not a scale trick — does the shrinking and the parallax.
      Must match PERSPECTIVE in OrbitBoard.tsx. */
@@ -155,8 +162,12 @@
   color: var(--ob-muted);
 }
 .ob-note--expanded {
-  width: 300px;
+  width: 340px;
   cursor: default;
+  /* The held note is not a card on a veil — it dissolves into the page.
+     The sentence, a hairline, the hands: paper on paper, no box. */
+  background: transparent;
+  border-color: transparent;
 }
 .ob-note--expanded .ob-note-text {
   font-size: 15px;
