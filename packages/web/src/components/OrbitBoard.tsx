@@ -120,14 +120,9 @@ export function OrbitBoard(props: {
     const measure = () => {
       const rect = container.getBoundingClientRect();
       rx = Math.min(rect.width * 0.36, 560);
-      /* The ambition owns the top of the page; the field owns the rest.
-         The ring's center sits below the statement and its vertical spread
-         stays inside the lower zone — protection by construction, no
-         dodging, no fading tricks. The circling itself is the only claim
-         of derivation the board makes. */
-      ry = Math.min(rect.height * 0.17, 120);
+      ry = Math.min(rect.height * 0.26, 190);
       rz = Math.min(rect.height * 0.5, 340);
-      fieldY = rect.height * 0.17;
+      fieldY = 0;
     };
     measure();
     const resize = new ResizeObserver(measure);
@@ -147,12 +142,25 @@ export function OrbitBoard(props: {
     let mouseY = 0;
     let driftX = 0;
     let driftY = 0;
+    /* Reading intent: the cursor moving onto the statement means someone is
+       trying to READ. The ring parts for them — see the loop. */
+    let readTarget = 0;
+    let part = 0;
     const onHover = (event: PointerEvent) => {
       const rect = container.getBoundingClientRect();
       mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouseY = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+      const px = event.clientX - rect.left - rect.width / 2;
+      const py = event.clientY - rect.top - rect.height / 2;
+      readTarget = Math.abs(px) < 270 && Math.abs(py) < 130 ? 1 : 0;
+    };
+    const onLeave = () => {
+      mouseX = 0;
+      mouseY = 0;
+      readTarget = 0;
     };
     container.addEventListener("pointermove", onHover);
+    container.addEventListener("pointerleave", onLeave);
 
     const onDown = (event: PointerEvent) => {
       if (expandedRef.current) return;
@@ -212,6 +220,7 @@ export function OrbitBoard(props: {
       /* The camera's lean arrives slowly, and rests when a note is held. */
       driftX = lerp(driftX, expanded ? 0 : mouseX, 0.06);
       driftY = lerp(driftY, expanded ? 0 : mouseY, 0.06);
+      part = lerp(part, expanded ? 0 : readTarget, 0.09);
 
       for (const [id, motion] of motions.current) {
         const el = tileRefs.current.get(id);
@@ -244,6 +253,23 @@ export function OrbitBoard(props: {
             op: lerp(MIN_OPACITY, 1, eased) * (expanded ? 0.12 : 1),
             bl: lerp(MAX_BLUR, 0, eased),
           };
+
+          /*
+            The ring parts to let you read. The orbit's whole point is to
+            circle the statement — so sheets MAY cross it at rest. But the
+            cursor arriving on the text is reading intent, and any sheet
+            over the words steps aside: it ghosts out and drifts outward,
+            front crossers fully, back crossers half (they only murmur
+            behind the letters). It returns the moment you leave.
+          */
+          if (part > 0.01) {
+            const wx = Math.max(0, 1 - Math.abs(target.x) / 320);
+            const wy = Math.max(0, 1 - Math.abs(target.y) / 170);
+            const over = wx * wy * (z > 0 ? 1 : 0.55);
+            target.op *= 1 - part * over * 0.93;
+            target.x += Math.sign(target.x || 1) * part * over * 46;
+            target.y += Math.sign(target.y || 1) * part * over * 26;
+          }
         }
 
         const cur = motion.cur ?? (motion.cur = { ...target });
@@ -261,6 +287,7 @@ export function OrbitBoard(props: {
 
         el.style.transform = `translate(-50%,-50%) translate3d(${cur.x.toFixed(1)}px,${cur.y.toFixed(1)}px,${cur.z.toFixed(1)}px) rotateX(${cur.rx.toFixed(2)}deg) rotateY(${cur.ry.toFixed(2)}deg)`;
         el.style.opacity = cur.op.toFixed(3);
+        el.style.pointerEvents = cur.op < 0.15 ? "none" : "";
         el.style.filter = cur.bl > 0.15 ? `blur(${cur.bl.toFixed(1)}px)` : "none";
         /* Interleaves with the center (500) and the veil (900): back tiles
            slip behind the ambition, the expanded note rides above the veil. */
@@ -278,6 +305,7 @@ export function OrbitBoard(props: {
       container.removeEventListener("pointerdown", onDown);
       container.removeEventListener("click", onClickCapture, true);
       container.removeEventListener("pointermove", onHover);
+      container.removeEventListener("pointerleave", onLeave);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

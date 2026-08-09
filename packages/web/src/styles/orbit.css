@@ -76,13 +76,14 @@
 .ob-center {
   position: absolute;
   left: 50%;
-  /* The statement owns the top of the page; the field orbits beneath it.
-     Above every sheet (but under the veil), so it is never covered. */
-  top: clamp(40px, 11%, 110px);
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translate(-50%, -50%);
   text-align: center;
-  max-width: 34rem;
-  z-index: 800;
+  max-width: 30rem;
+  /* Mid-stack on purpose: the ring truly orbits the statement, so front
+     sheets pass over it at rest. Reading is protected by the parting
+     (OrbitBoard.tsx), not by layering. */
+  z-index: 500;
   pointer-events: none;
 }
 .ob-center--receded {
