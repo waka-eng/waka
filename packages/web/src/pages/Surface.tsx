@@ -2881,14 +2881,6 @@ export default function SurfacePage(): JSX.Element {
                       meta: null,
                     }
               }
-              onOpenAmbition={
-                room && direction?.current
-                  ? () => {
-                      setSelectedDirectionVersion(null);
-                      navigateSurface("direction");
-                    }
-                  : undefined
-              }
             />
           ) : (
             <div className="sf-wall">
