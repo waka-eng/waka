@@ -61,6 +61,7 @@ import "./styles/surface.css";
    purpose: the quiet-paper language is deliberately not the current wall's,
    and the old wall stays intact until it is retired on purpose. */
 import "./styles/orbit.css";
+import "./styles/ambition.css";
 
 /* These routes are internal and admin-gated, so the wait says what it is
    rather than pretending to be the page that is arriving. */

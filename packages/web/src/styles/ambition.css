@@ -1,0 +1,225 @@
+/*
+ * The ambition document — one column, one tone, one action.
+ *
+ * The reduced re-skin of the direction space (two-modes slice B1). Same
+ * ink/paper language as the orbit: the statement is the only large object;
+ * the margin is visually subordinate; everything explanatory folds away.
+ */
+
+.ad {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: clamp(24px, 6vh, 64px) 20px 48px;
+  --ad-ink: #131313;
+  --ad-paper: #f7f7f6;
+  --ad-muted: #858585;
+  --ad-line: #cacac9;
+}
+
+/* ---------- ① the statement ---------- */
+.ad-statement {
+  font-size: clamp(24px, 3.4vw, 36px);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ad-ink);
+  margin: 0;
+}
+.ad-meta {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+.ad-forming {
+  font-size: 17px;
+  color: var(--ad-muted);
+  margin: 0;
+}
+
+/* ---------- ② the voices ---------- */
+.ad-margin {
+  margin-top: 40px;
+  border-top: 1px solid var(--ad-line);
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ad-voice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ad-voice-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
+}
+.ad-voice-name {
+  color: var(--ad-muted);
+  flex: none;
+}
+.ad-voice-body {
+  color: var(--ad-ink);
+}
+.ad-composer {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.ad-composer input {
+  flex: 1;
+  border: 0;
+  border-bottom: 1px solid var(--ad-line);
+  background: transparent;
+  padding: 6px 2px;
+  font-size: 13px;
+  color: var(--ad-ink);
+  outline: none;
+}
+.ad-composer input:focus {
+  border-bottom-color: var(--ad-ink);
+}
+.ad-composer input::placeholder {
+  color: var(--ad-muted);
+}
+.ad-composer button {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ad-ink);
+  border: 1px solid var(--ad-line);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* ---------- ③ the one action ---------- */
+.ad-ask {
+  margin-top: 44px;
+  text-align: center;
+}
+.ad-ask button {
+  all: unset;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ad-ink);
+  border: 1px solid var(--ad-ink);
+  padding: 10px 22px;
+}
+.ad-ask button:disabled {
+  cursor: default;
+  color: var(--ad-muted);
+  border-color: var(--ad-line);
+}
+.ad-ask-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+
+.ad-decision {
+  margin-top: 44px;
+  border: 1px solid var(--ad-line);
+  padding: 20px 22px 18px;
+}
+.ad-decision-label {
+  margin: 0 0 10px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+}
+.ad-candidate {
+  margin: 0;
+  font-size: clamp(17px, 2.2vw, 22px);
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--ad-ink);
+}
+.ad-change {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ad-muted);
+}
+.ad-decision-acts {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+.ad-decision-acts button {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--ad-line);
+  color: var(--ad-ink);
+}
+.ad-decision-acts button.on,
+.ad-decision-acts button:hover {
+  border-color: var(--ad-ink);
+}
+.ad-decision-acts button:disabled {
+  cursor: default;
+  color: var(--ad-muted);
+}
+
+/* ---------- the foot ---------- */
+.ad-foot {
+  margin-top: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ad-muted);
+}
+.ad-foot summary {
+  cursor: pointer;
+  width: max-content;
+}
+.ad-foot summary:hover {
+  color: var(--ad-ink);
+}
+.ad-history {
+  margin: 10px 0 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ad-history li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  line-height: 1.45;
+}
+.ad-history-v {
+  flex: none;
+  color: var(--ad-ink);
+}
+.ad-history-when {
+  flex: none;
+}
+.ad-evidence {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ad-evidence li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.5;
+}
+.ad-evidence-quote {
+  color: var(--ad-ink);
+}

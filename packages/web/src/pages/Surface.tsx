@@ -45,6 +45,7 @@ import { Check, Info, Lock, Paperclip, Users } from "lucide-react";
 
 import { contributorColor, contributorInitials } from "../components/faces";
 import { OrbitBoard } from "../components/OrbitBoard";
+import { AmbitionDocument } from "../components/AmbitionDocument";
 import { useAuth } from "../lib/auth-context";
 import {
   readStoredLocale,
@@ -355,6 +356,9 @@ const DRAFT_KEY = "waka.captureDraft.v1";
 
 /** Whether the wall renders as the orbit board (goal/two-modes prototype). */
 const ORBIT_WALL_KEY = "waka.orbitWall.v1";
+
+/** Whether the direction page renders as the reduced ambition document. */
+const AMBITION_DOC_KEY = "waka.ambitionDoc.v1";
 
 export function roomShapingProgressCopy(
   contributorCount: number,
@@ -924,6 +928,28 @@ export default function SurfacePage(): JSX.Element {
       const next = !current;
       try {
         window.localStorage.setItem(ORBIT_WALL_KEY, next ? "1" : "0");
+      } catch {
+        /* the preference just won't stick */
+      }
+      return next;
+    });
+  }, []);
+
+  /* The reduced ambition document (two-modes slice B1), judged the same way
+     the orbit is: an internal switch on the direction page, old design intact
+     until it is retired on purpose. */
+  const [ambitionDoc, setAmbitionDoc] = useState(() => {
+    try {
+      return window.localStorage.getItem(AMBITION_DOC_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleAmbitionDoc = useCallback(() => {
+    setAmbitionDoc((currentValue) => {
+      const next = !currentValue;
+      try {
+        window.localStorage.setItem(AMBITION_DOC_KEY, next ? "1" : "0");
       } catch {
         /* the preference just won't stick */
       }
@@ -3038,7 +3064,30 @@ export default function SurfacePage(): JSX.Element {
           className={`sf-layer sf-layer--direction${state === "direction" ? " on" : ""}`}
           aria-label="shape this room's ambition"
         >
-          {room ? (
+          {room && showsDebug() ? (
+            <button
+              type="button"
+              className="sf-orbit-toggle"
+              onClick={toggleAmbitionDoc}
+              aria-pressed={ambitionDoc}
+            >
+              {ambitionDoc ? "old design" : "document"}
+            </button>
+          ) : null}
+          {room && ambitionDoc ? (
+            <AmbitionDocument
+              direction={direction}
+              draft={directionDraft}
+              saving={directionSaving}
+              reviewing={directionReviewing}
+              asking={rereading}
+              onDraft={setDirectionDraft}
+              onSubmitVoice={() => void saveDirectionContribution()}
+              onReview={(value) => void reviewDirection(value)}
+              onAskNewVersion={() => void reread()}
+            />
+          ) : null}
+          {room && !ambitionDoc ? (
             <div className="sf-direction-workspace">
               <main className="sf-direction-main">
                 <div className="sf-direction-titleline">
