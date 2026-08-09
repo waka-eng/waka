@@ -64,9 +64,22 @@ interface TileMotion {
   base: number;
   breathRate: number;
   breathPhase: number;
-  /** This sheet's vertical scatter in the field, decided once. */
+  /** This sheet's small vertical scatter inside its halo band. */
   yOff: number;
+  /** Position in the arrival stagger. */
+  idx: number;
+  /** Convergence-on-arrival progress; 1 once the sheet has settled. */
+  introDone: boolean;
   cur: { x: number; y: number; z: number; rx: number; ry: number; op: number; bl: number } | null;
+}
+
+/** The kernel: the ambition compressed to one quiet line for mode 1. */
+export function kernelText(ambition: string, max = 64): string {
+  const line = ambition.replace(/\s+/g, " ").trim();
+  if (line.length <= max) return line;
+  const cut = line.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${cut.slice(0, space > 40 ? space : max)}…`;
 }
 
 export function groundingCopy(evidenceCount: number, hands: string[]): string {
@@ -78,9 +91,12 @@ export function groundingCopy(evidenceCount: number, hands: string[]): string {
 export function OrbitBoard(props: {
   notes: OrbitBoardNote[];
   center: OrbitBoardCenter;
+  /** Opens mode 2 — the ambition's own page. Absent while solo has none. */
+  onOpenAmbition?: () => void;
 }) {
-  const { notes, center } = props;
+  const { notes, center, onOpenAmbition } = props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const centerRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLElement>());
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedRef = useRef<string | null>(null);
@@ -96,12 +112,15 @@ export function OrbitBoard(props: {
       const base = (i / Math.max(notes.length, 1)) * Math.PI * 2;
       if (existing) {
         existing.base = base;
+        existing.idx = i;
       } else {
         motions.current.set(n.id, {
           base,
           breathRate: 0.9 + Math.random() * 0.5,
           breathPhase: Math.random() * Math.PI * 2,
-          yOff: (Math.random() - 0.5) * 2 * 0.55,
+          yOff: (Math.random() - 0.5) * 2,
+          idx: i,
+          introDone: false,
           cur: null,
         });
       }
@@ -187,14 +206,31 @@ export function OrbitBoard(props: {
 
     let prev = performance.now();
     let frame = 0;
+    /* Convergence on arrival: sheets swing in past the kernel once, then
+       settle into the halo — the derivation shown as a moment, not a
+       permanent diagram. */
+    const born = performance.now();
+    /*
+      Two attention states. At rest the kernel is the page and the ring
+      recedes — dimmer, tighter, slower. The moment a hand is on it
+      (dragging, or the throw still coasting) the board comes forward and
+      the kernel steps back. `browse` eases between them so the change
+      reads as attention shifting, not a mode switching.
+    */
+    let browse = 0;
+    let lastActive = 0;
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
       const dt = Math.min((now - prev) / 1000, 0.05);
       prev = now;
       const expanded = expandedRef.current;
 
+      if (dragging || Math.abs(vel) > 0.01) lastActive = now;
+      const browseTarget = !expanded && now - lastActive < 1500 ? 1 : 0;
+      browse = lerp(browse, browseTarget, 0.07);
+
       if (!dragging && !expanded) {
-        rotation += IDLE_SPEED * dt; // the room's resting pulse
+        rotation += IDLE_SPEED * lerp(0.55, 1, browse) * dt; // resting pulse
         rotation += vel * dt; // inertia from the last throw
         vel *= Math.pow(0.94, dt * 60);
         if (Math.abs(vel) < 0.002) vel = 0;
@@ -205,6 +241,14 @@ export function OrbitBoard(props: {
       /* The camera's lean arrives slowly, and rests when a note is held. */
       driftX = lerp(driftX, expanded ? 0 : mouseX, 0.06);
       driftY = lerp(driftY, expanded ? 0 : mouseY, 0.06);
+
+      /* The kernel and the ring trade attention. */
+      const centerEl = centerRef.current;
+      if (centerEl) {
+        centerEl.style.opacity = expanded ? "0" : (1 - browse * 0.6).toFixed(3);
+      }
+      const radM = lerp(0.94, 1, browse);
+      const opM = lerp(0.78, 1, browse);
 
       for (const [id, motion] of motions.current) {
         const el = tileRefs.current.get(id);
@@ -219,7 +263,7 @@ export function OrbitBoard(props: {
         if (isEx) {
           target = { x: 0, y: breath * 0.5, z: 250, rx: 0, ry: 0, op: 1, bl: 0 };
         } else {
-          const z = Math.cos(th) * rz;
+          const z = Math.cos(th) * rz * radM;
           /* Parallax: nearer sheets lean further with the cursor, which is
              what makes the depth legible even before anything spins. */
           const lean = 1 + z / rz;
@@ -229,14 +273,50 @@ export function OrbitBoard(props: {
              toward one vanishing direction together. Per-sheet random
              tilts were tried here and read as subtle chaos, not depth. */
           target = {
-            x: Math.sin(th) * rx + driftX * DRIFT_X * lean,
-            y: motion.yOff * ry + breath + driftY * DRIFT_Y * lean,
+            x: Math.sin(th) * rx * radM + driftX * DRIFT_X * lean,
+            /* The halo: front sheets pass BELOW the kernel, back sheets
+               above and behind it. The ring encircles the text and never
+               crosses it — reading and orbiting stop competing. The small
+               yOff scatters sheets inside their band, never into the
+               center's. */
+            y: Math.cos(th) * ry + motion.yOff * 26 + breath + driftY * DRIFT_Y * lean,
             z,
             rx: driftY * 7,
             ry: -driftX * 10,
-            op: lerp(MIN_OPACITY, 1, eased) * (expanded ? 0.12 : 1),
+            op: lerp(MIN_OPACITY, 1, eased) * opM * (expanded ? 0.12 : 1),
             bl: lerp(MAX_BLUR, 0, eased),
           };
+        }
+
+        /* Arrival: swing in from outside, past the kernel, out to the seat. */
+        if (!motion.introDone && !isEx) {
+          const p = Math.min(Math.max((now - born - motion.idx * 110) / 1100, 0), 1);
+          if (p >= 1) {
+            motion.introDone = true;
+          } else {
+            const e = 1 - Math.pow(1 - p, 3);
+            const sx = Math.sin(th) * rx * 2.3;
+            const sy = Math.cos(th) * ry * 2.6;
+            const inv = 1 - e;
+            /* Quadratic bezier: outside → near the kernel → the seat. */
+            const bx = inv * inv * sx + e * e * target.x;
+            const by = inv * inv * sy + e * e * target.y;
+            motion.cur = {
+              x: bx,
+              y: by,
+              z: target.z * e,
+              rx: 0,
+              ry: 0,
+              op: target.op * p,
+              bl: target.bl,
+            };
+            const c0 = motion.cur;
+            el.style.transform = `translate(-50%,-50%) translate3d(${c0.x.toFixed(1)}px,${c0.y.toFixed(1)}px,${c0.z.toFixed(1)}px)`;
+            el.style.opacity = c0.op.toFixed(3);
+            el.style.filter = "none";
+            el.style.zIndex = String(Math.round(eased * 400) + (Math.cos(th) > 0 ? 600 : 0));
+            continue;
+          }
         }
 
         const cur = motion.cur ?? (motion.cur = { ...target });
@@ -294,10 +374,26 @@ export function OrbitBoard(props: {
         aria-hidden="true"
       />
 
-      <div className={`ob-center${expandedId ? " ob-center--receded" : ""}`}>
+      {/*
+        The kernel. Mode 1 centers one quiet line of the ambition, not the
+        full statement — the board is this page's subject, and the full
+        ambition has a page of its own, one tap away. Occlusion stops being
+        a fight the moment the center is small.
+      */}
+      <div ref={centerRef} className="ob-center">
         <div className="ob-center-label">{center.label}</div>
         {center.ambition ? (
-          <div className="ob-center-ambition">{center.ambition}</div>
+          <button
+            type="button"
+            className="ob-kernel"
+            onClick={onOpenAmbition}
+            disabled={!onOpenAmbition}
+            title={center.ambition}
+          >
+            <span className="ob-kernel-mark" aria-hidden="true">✳</span>
+            {kernelText(center.ambition)}
+            {onOpenAmbition ? <span className="ob-kernel-go" aria-hidden="true">→</span> : null}
+          </button>
         ) : (
           <div className="ob-center-forming">forming — no ambition adopted yet</div>
         )}
