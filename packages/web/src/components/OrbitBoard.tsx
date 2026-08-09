@@ -124,7 +124,7 @@ export function OrbitBoard(props: {
       const rect = container.getBoundingClientRect();
       rx = Math.min(rect.width * 0.36, 560);
       ry = Math.min(rect.height * 0.26, 190);
-      rz = Math.min(rect.height * 0.6, 430);
+      rz = Math.min(rect.height * 0.5, 340);
     };
     measure();
     const resize = new ResizeObserver(measure);

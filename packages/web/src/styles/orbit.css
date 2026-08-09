@@ -119,10 +119,13 @@
   left: 50%;
   top: 50%;
   /* Landscape paper: wider than tall, the founder's call — a sentence reads
-     as a line or two, not a column. */
-  width: 236px;
-  min-height: 84px;
-  padding: 13px 15px 11px;
+     as a line or two, not a column. Sized small because the perspective
+     enlarges the near side of the ring: a front-of-ring sheet at z≈+430
+     projects ~1.5×, so the sheet the 2D orbit showed at 236px is drawn at
+     ~170px here and arrives at the same size on screen. */
+  width: 168px;
+  min-height: 62px;
+  padding: 10px 12px 9px;
   background: #fcfcfb;
   border: 1px solid var(--ob-line);
   display: flex;
@@ -132,7 +135,7 @@
   cursor: pointer;
 }
 .ob-note-text {
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.35;
   font-weight: 500;
   color: var(--ob-ink);
@@ -149,11 +152,11 @@
   color: var(--ob-muted);
 }
 .ob-note--expanded {
-  width: 380px;
+  width: 300px;
   cursor: default;
 }
 .ob-note--expanded .ob-note-text {
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.4;
 }
 .ob-note-grounding {
