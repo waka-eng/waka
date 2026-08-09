@@ -155,7 +155,7 @@ describe("room direction evidence copy", () => {
       { signalId: "signal-b", userId: "member-b" },
     ], 5);
 
-    expect(copy).toBe("2 inspirations behind this draft · 2 of 5 members represented");
+    expect(copy).toBe("2 pulses behind this draft · 2 of 5 members represented");
     expect(copy).not.toMatch(/contributed|shaped|approved/i);
   });
 });
@@ -235,10 +235,10 @@ describe("sharing copy", () => {
     // shapes the owner's own Top of Mind. Copy that implied otherwise would be
     // a promise the pipeline does not keep.
     expect(SHARING_MEANING.private).toBe(
-      "No room can read this. It still shapes your own Top of Mind.",
+      "No room can read this. It still shapes your own pulls.",
     );
     expect(SHARING_MEANING.private).toContain("No room");
-    expect(SHARING_MEANING.private).toContain("your own Top of Mind");
+    expect(SHARING_MEANING.private).toContain("your own pulls");
   });
 
   it("keeps both meanings short enough to sit under a one-word control", () => {
@@ -271,7 +271,7 @@ describe("sharing note", () => {
 
   it("does not promise private hides a save from the owner's own readings", () => {
     // The decision on record: private gates rooms, not the solo pipeline.
-    expect(SHARING_NOTE.both).toContain("your own Top of Mind");
+    expect(SHARING_NOTE.both).toContain("your own pulls");
     expect(SHARING_NOTE.both).toContain("stays yours");
   });
 
@@ -352,13 +352,13 @@ describe("the confirmation shown before a save is made public", () => {
  * A button names its destination in that destination's own words.
  *
  * "open shared read" failed that: the page it opens is labelled SHARED TOP OF
- * MIND under the heading "What we're finding together", and the noun "read"
+ * AMBITION under the heading "What we're finding together", and the noun "read"
  * appears nowhere on it. Three names for one surface were live at once —
  * "shared read" on the button, "shared top of mind" on the page and every
  * aria-label, "direction" in the URL and the API. Only one was ever shown to a
  * person, so that is the one these assert.
  */
-describe("the button that opens a room's shared top of mind", () => {
+describe("the button that opens a room's ambition", () => {
   const cta = (over: Partial<Parameters<typeof roomDirectionCtaCopy>[0]> = {}) =>
     roomDirectionCtaCopy({
       memberCount: 4,
@@ -369,7 +369,7 @@ describe("the button that opens a room's shared top of mind", () => {
     });
 
   it("names the page it opens, in the words that page uses", () => {
-    expect(cta()).toBe("open the shared top of mind");
+    expect(cta()).toBe("open the ambition");
   });
 
   it("never calls it a 'read', which is a noun the destination never uses", () => {
@@ -398,7 +398,7 @@ describe("the button that opens a room's shared top of mind", () => {
   });
 
   it("says the read has not happened yet rather than offering to open nothing", () => {
-    expect(cta({ hasCurrent: false })).toBe("see the first read");
+    expect(cta({ hasCurrent: false })).toBe("see the first ambition");
   });
 
   it("always says what it does — never a bare verb with no object", () => {

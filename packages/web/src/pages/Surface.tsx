@@ -482,17 +482,17 @@ export function roomFirstReadPresentation(input: {
 }
 
 /**
- * The word on the button that opens a room's shared top of mind.
+ * The word on the button that opens a room's ambition.
  *
  * It said "open shared read", and "read" as a noun appears nowhere the button
- * goes: the page it opens is labelled SHARED TOP OF MIND under the heading
+ * goes: the page it opens is labelled THE AMBITION under the heading
  * "What we're finding together". A button whose word does not exist at its
  * destination makes people click to find out what it meant, which is the
  * definition of an unclear one.
  *
  * The rule applied here and below: **name the destination in the destination's
  * own words.** Three names for this surface were live at once — "shared read"
- * on the button, "shared top of mind" on the page and in every aria-label,
+ * on the button, "the ambition" on the page and in every aria-label,
  * "direction" in the URL and the API. Only one of them was ever shown to a
  * person, so that is the one that wins.
  */
@@ -508,8 +508,8 @@ export function roomDirectionCtaCopy(input: {
     return input.inviteCopied ? "invite link copied" : "invite someone";
   }
   if (input.hasProposal) return "review the proposed version";
-  if (input.hasCurrent) return "open the shared top of mind";
-  return "see the first read";
+  if (input.hasCurrent) return "open the ambition";
+  return "see the first ambition";
 }
 
 /**
@@ -550,7 +550,7 @@ export function roomDirectionEvidenceCopy(
 ): string {
   const inspirationCount = new Set(evidence.map((item) => item.signalId)).size;
   const representedCount = new Set(evidence.map((item) => item.userId)).size;
-  return `${inspirationCount} inspiration${inspirationCount === 1 ? "" : "s"} behind this draft · ${representedCount} of ${memberCount} member${memberCount === 1 ? "" : "s"} represented`;
+  return `${inspirationCount} pulse${inspirationCount === 1 ? "" : "s"} behind this draft · ${representedCount} of ${memberCount} member${memberCount === 1 ? "" : "s"} represented`;
 }
 
 /**
@@ -568,7 +568,7 @@ export function roomDirectionEvidenceCopy(
  */
 export const SHARING_MEANING = {
   public: "Any room you join can read this. It stays yours.",
-  private: "No room can read this. It still shapes your own Top of Mind.",
+  private: "No room can read this. It still shapes your own pulls.",
 } as const;
 
 /**
@@ -595,7 +595,7 @@ export const SHARING_NOTE = {
   private:
     "Private — no room can read it. It never joins the pool a room's reading is made from, and it cannot be quoted.",
   both:
-    "Either way the save stays yours, and either way it still shapes your own Top of Mind.",
+    "Either way the pulse stays yours, and either way it still shapes your own pulls.",
   /**
    * The one thing turning it back cannot do.
    *
@@ -1052,7 +1052,7 @@ export default function SurfacePage(): JSX.Element {
                 setSurfaceNotice(
                   error instanceof Error
                     ? error.message
-                    : "This room's shared top of mind could not be loaded.",
+                    : "This room's ambition could not be loaded.",
                 );
               }
               return null;
@@ -1307,7 +1307,7 @@ export default function SurfacePage(): JSX.Element {
       .catch((error) => {
         if (!cancelled) {
           setSurfaceNotice(
-            error instanceof Error ? error.message : "Your inspiration count is unavailable.",
+            error instanceof Error ? error.message : "Your pulse count is unavailable.",
           );
         }
       });
@@ -1421,7 +1421,7 @@ export default function SurfacePage(): JSX.Element {
         )
         .catch((error) => {
           setSurfaceNotice(
-            error instanceof Error ? error.message : "That inspiration could not be opened.",
+            error instanceof Error ? error.message : "That pulse could not be opened.",
           );
         });
     });
@@ -1491,7 +1491,7 @@ export default function SurfacePage(): JSX.Element {
         .then(applyDetail)
         .catch((error) => {
           setSurfaceNotice(
-            error instanceof Error ? error.message : "That inspiration could not be loaded.",
+            error instanceof Error ? error.message : "That pulse could not be loaded.",
           );
         });
     }
@@ -1533,7 +1533,7 @@ export default function SurfacePage(): JSX.Element {
       .catch((error) => {
         if (cancelled) return;
         setSurfaceNotice(
-          error instanceof Error ? error.message : "That inspiration could not be loaded.",
+          error instanceof Error ? error.message : "That pulse could not be loaded.",
         );
         navigateSurface("ask", { replace: true });
       });
@@ -2087,7 +2087,7 @@ export default function SurfacePage(): JSX.Element {
   const dropSave = useCallback(async (signal: ApiSavedSignalSearchResult) => {
     if (
       !window.confirm(
-        "Delete this inspiration? Readings already made from it stay, but it cannot be brought back.",
+        "Delete this pulse? Pulls already made from it stay, but it cannot be brought back.",
       )
     ) {
       return;
@@ -2100,7 +2100,7 @@ export default function SurfacePage(): JSX.Element {
       setSurfaceNotice(null);
     } catch (error) {
       setSurfaceNotice(
-        error instanceof Error ? error.message : "That inspiration was not deleted.",
+        error instanceof Error ? error.message : "That pulse was not deleted.",
       );
     }
   }, [navigateSurface]);
@@ -2303,8 +2303,8 @@ export default function SurfacePage(): JSX.Element {
         setDirection(result.direction);
         setSelectedDirectionVersion(null);
         setSurfaceNotice(null);
-        if (result.decision === "adopted") setLastRead("the room adopted a new top of mind");
-        if (result.decision === "kept_current") setLastRead("the room kept its current top of mind");
+        if (result.decision === "adopted") setLastRead("the room adopted a new ambition");
+        if (result.decision === "kept_current") setLastRead("the room kept its current ambition");
       } catch (error) {
         setSurfaceNotice(
           error instanceof Error ? error.message : "That response was not saved.",
@@ -2464,7 +2464,7 @@ export default function SurfacePage(): JSX.Element {
     [closeMenus, navigateSurface, room],
   );
 
-  const roomName = room ? (rooms.find((r) => r.id === room)?.name ?? "room") : "your top of mind";
+  const roomName = room ? (rooms.find((r) => r.id === room)?.name ?? "room") : "your wall";
   const activeRoom = room ? (rooms.find((r) => r.id === room) ?? null) : null;
   const hasRevealedDirection =
     direction?.current?.state === "revealed" && Boolean(direction.current.ambition);
@@ -2745,11 +2745,11 @@ export default function SurfacePage(): JSX.Element {
           <section
             className="sf-room-intent"
             data-state={direction?.current?.state ?? "forming"}
-            aria-label="shared top of mind"
+            aria-label="the ambition"
           >
             <div className="sf-room-intent-head">
               <small>
-                shared top of mind · {hasRevealedDirection
+                ambition · {hasRevealedDirection
                   ? "living draft"
                   : roomIsReading || !direction?.current
                     ? "first read in progress"
@@ -2851,7 +2851,7 @@ export default function SurfacePage(): JSX.Element {
                 : roomGenerationStatus
                   ? roomGenerationStatus.message
                   : room && members.length < 2
-                  ? "This room needs another person before it can make a shared reading. Use the + by your face to invite someone."
+                  ? "This room needs another person before it can reveal shared pulls. Use the + by your face to invite someone."
                   : "Nothing here holds yet. That is about the material, not about anyone in the room."}
             </p>
           ) : orbitWall ? (
@@ -2935,8 +2935,8 @@ export default function SurfacePage(): JSX.Element {
                       readOnly={reading.scope === "group"}
                       aria-label={
                         reading.scope === "solo"
-                          ? "this reading — edit to correct it"
-                          : "shared room reading"
+                          ? "this pull — edit to correct it"
+                          : "a shared pull"
                       }
                       onPointerDown={(event) => event.stopPropagation()}
                       onChange={(event) => rewrite(reading, event.target.value)}
@@ -3036,14 +3036,14 @@ export default function SurfacePage(): JSX.Element {
         {/* ------------------------------------------- SHARED TOP OF MIND */}
         <section
           className={`sf-layer sf-layer--direction${state === "direction" ? " on" : ""}`}
-          aria-label="shape this room's shared top of mind"
+          aria-label="shape this room's ambition"
         >
           {room ? (
             <div className="sf-direction-workspace">
               <main className="sf-direction-main">
                 <div className="sf-direction-titleline">
                   <div>
-                    <span className="sf-label">SHARED TOP OF MIND</span>
+                    <span className="sf-label">THE AMBITION</span>
                     <h2>What we’re finding together</h2>
                     <p className="sf-direction-titleline-note">
                       Shared inspirations are the evidence. Member takes guide the next read; the room decides each new version.
@@ -3051,7 +3051,7 @@ export default function SurfacePage(): JSX.Element {
                   </div>
                   {direction?.current && direction.newInspirationCount ? (
                     <span>
-                      {direction.newInspirationCount} new inspiration{direction.newInspirationCount === 1 ? "" : "s"} from {direction.newContributorCount} member{direction.newContributorCount === 1 ? "" : "s"}
+                      {direction.newInspirationCount} new pulse{direction.newInspirationCount === 1 ? "" : "s"} from {direction.newContributorCount} member{direction.newContributorCount === 1 ? "" : "s"}
                     </span>
                   ) : null}
                 </div>
@@ -3077,7 +3077,7 @@ export default function SurfacePage(): JSX.Element {
                     {openDirectionVersion.changeSummary ? (
                       <p className="sf-direction-change">{openDirectionVersion.changeSummary}</p>
                     ) : (
-                      <p className="sf-direction-change">The room’s first shared top of mind.</p>
+                      <p className="sf-direction-change">The room’s first ambition.</p>
                     )}
                     {openDirectionVersion.evidence.length ? (
                       <div className="sf-direction-evidence">
@@ -3118,10 +3118,10 @@ export default function SurfacePage(): JSX.Element {
                         {!loading ? (
                           <div className="sf-direction-material-count">
                             <b>{sharedInspirationCount}</b>
-                            <span>shared inspiration{sharedInspirationCount === 1 ? "" : "s"}</span>
+                            <span>shared pulse{sharedInspirationCount === 1 ? "" : "s"}</span>
                             <b>{sharedContributorCount}/{members.length}</b>
                             <span>
-                              members brought inspiration
+                              members brought pulses
                               {direction && sharedContributorCount < direction.requiredContributors
                                 ? ` · ${direction.requiredContributors - sharedContributorCount} more needed`
                                 : ""}
@@ -3360,7 +3360,7 @@ export default function SurfacePage(): JSX.Element {
                             onClick={() => setSelectedDirectionVersion(version.id)}
                           >
                             <span>version {version.versionNumber} · {whenShort(version.createdAt)}</span>
-                            <p>{version.changeSummary ?? (version.versionNumber === 1 ? "First shared top of mind" : version.ambition)}</p>
+                            <p>{version.changeSummary ?? (version.versionNumber === 1 ? "First ambition" : version.ambition)}</p>
                           </button>
                         ))}
                     </div>
@@ -3377,7 +3377,7 @@ export default function SurfacePage(): JSX.Element {
             <div className="sf-column">
               <p className="sf-claim">{openReading.text}</p>
               <div className="sf-label">
-                made from {openEvidence.length} inspiration
+                made from {openEvidence.length} pulse
                 {openEvidence.length === 1 ? "" : "s"}
                 {openReading.scope === "group" ? " shared in this room" : " you saved"}
               </div>
@@ -3630,7 +3630,7 @@ export default function SurfacePage(): JSX.Element {
                   {openSaveShared ? "public" : "private"}
                 </button>
                 <button type="button" className="sf-remove" onClick={() => dropSave(openSave)}>
-                  delete this inspiration
+                  delete this pulse
                 </button>
               </div>
               {/* The consequence, at the point of change, same as the composer. */}

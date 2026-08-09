@@ -69,15 +69,15 @@ interface TileMotion {
 }
 
 export function groundingCopy(evidenceCount: number, hands: string[]): string {
-  const saves = `grounded in ${evidenceCount} ${evidenceCount === 1 ? "save" : "saves"}`;
-  if (hands.length === 0) return saves;
-  return `${saves} · ${hands.join(", ")}`;
+  const pulses = `grounded in ${evidenceCount} ${evidenceCount === 1 ? "pulse" : "pulses"}`;
+  if (hands.length === 0) return pulses;
+  return `${pulses} · ${hands.join(", ")}`;
 }
 
 export function OrbitBoard(props: {
   notes: OrbitBoardNote[];
   center: OrbitBoardCenter;
-  /** Takes the member to the shared top of mind's own space. */
+  /** Takes the member to the ambition's own space. */
   onOpenAmbition?: () => void;
 }) {
   const { notes, center, onOpenAmbition } = props;
@@ -338,7 +338,7 @@ export function OrbitBoard(props: {
         )}
         {center.ambition && onOpenAmbition ? (
           <button type="button" className="ob-open" onClick={onOpenAmbition}>
-            Open the shared top of mind
+            Open the ambition
           </button>
         ) : null}
       </div>
