@@ -264,27 +264,6 @@ updates more frequent; bounded by the existing one-open-proposal rule.
 
 ## Log
 
-### 2026-08-09 — the orbit prototype, and four design rulings
-
-Slice 1 built on this branch: the wall renders as the orbit behind the
-internal Debug-pill toggle, read-only expand, no new dependencies (CSS
-perspective, not three.js). Founder rulings while judging it live, which
-refine the design bar's mode 1 paragraph:
-
-- **The kernel.** Mode 1 centers ONE quiet line of the ambition (✳ + first
-  words + →, a door to mode 2) — never the full statement. The board is the
-  page's subject; the ambition has its own page.
-- **The halo.** The ring passes below and behind the kernel, never across
-  it. Reading and orbiting must not compete.
-- **Two attentions.** At rest the kernel is the page and the ring recedes;
-  a hand on the board (drag, coasting throw) brings it forward and the
-  kernel steps back. Eased, not switched.
-- **Convergence on arrival.** Sheets swing in past the kernel once and
-  settle — derivation shown as a moment, not a permanent diagram.
-- Also ruled: sheets are landscape; ambient source-glyphs rejected as noise;
-  per-sheet random 3D tilts rejected ("subtle chaos") — every sheet hangs
-  parallel and the skew belongs to the camera.
-
 ### 2026-08-08 — proposed
 
 Decisions locked with the founder (see decision line at top). Repo read
