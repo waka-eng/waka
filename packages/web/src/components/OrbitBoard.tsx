@@ -390,9 +390,7 @@ export function OrbitBoard(props: {
             disabled={!onOpenAmbition}
             title={center.ambition}
           >
-            <span className="ob-kernel-mark" aria-hidden="true">✳</span>
             {kernelText(center.ambition)}
-            {onOpenAmbition ? <span className="ob-kernel-go" aria-hidden="true">→</span> : null}
           </button>
         ) : (
           <div className="ob-center-forming">forming — no ambition adopted yet</div>

@@ -96,28 +96,22 @@
   all: unset;
   pointer-events: auto;
   cursor: pointer;
-  font-size: 15px;
-  line-height: 1.35;
-  font-weight: 650;
-  letter-spacing: -0.005em;
+  /* One line, but not a small one — the kernel is still the room's want. */
+  font-size: clamp(18px, 2.3vw, 26px);
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--ob-ink);
 }
 .ob-kernel:disabled {
   cursor: default;
 }
-.ob-kernel-mark {
-  margin-right: 7px;
-  color: var(--ob-muted);
-  font-weight: 400;
-}
-.ob-kernel-go {
-  margin-left: 7px;
-  color: var(--ob-muted);
-  transition: transform 0.2s ease;
-  display: inline-block;
-}
-.ob-kernel:hover .ob-kernel-go {
-  transform: translateX(3px);
+/* No icons on the door. The line itself is the way in, and says so only
+   when asked. */
+.ob-kernel:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
 }
 .ob-center-forming {
   font-size: 13px;
