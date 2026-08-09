@@ -2868,9 +2868,6 @@ export default function SurfacePage(): JSX.Element {
                   ? {
                       label: roomName,
                       ambition: direction?.current?.ambition ?? null,
-                      meta: direction?.current
-                        ? `current · v${direction.current.versionNumber}`
-                        : null,
                     }
                   : {
                       /* Your wall is a room of one; its adopted ambition
@@ -2878,8 +2875,15 @@ export default function SurfacePage(): JSX.Element {
                          not a placeholder for a bug. */
                       label: roomName,
                       ambition: null,
-                      meta: null,
                     }
+              }
+              onOpenAmbition={
+                room
+                  ? () => {
+                      setSelectedDirectionVersion(null);
+                      navigateSurface("direction");
+                    }
+                  : undefined
               }
             />
           ) : (

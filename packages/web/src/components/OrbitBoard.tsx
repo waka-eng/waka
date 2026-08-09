@@ -39,7 +39,6 @@ export interface OrbitBoardCenter {
   label: string;
   /** The adopted ambition — null renders the honest forming state. */
   ambition: string | null;
-  meta: string | null;
 }
 
 /* slow + subtle — the founder's picks from the B1 mock, baked in. */
@@ -78,8 +77,10 @@ export function groundingCopy(evidenceCount: number, hands: string[]): string {
 export function OrbitBoard(props: {
   notes: OrbitBoardNote[];
   center: OrbitBoardCenter;
+  /** Takes the member to the shared top of mind's own space. */
+  onOpenAmbition?: () => void;
 }) {
-  const { notes, center } = props;
+  const { notes, center, onOpenAmbition } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLElement>());
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -255,17 +256,17 @@ export function OrbitBoard(props: {
           };
 
           /*
-            The ring parts to let you read — in two layers. A sheet over
-            the words is ALWAYS half-ghosted: the statement stays legible
-            through it even at rest. The cursor arriving on the text is
-            reading intent, and takes the crosser to near-nothing while
-            drifting it aside. It returns the moment you leave.
+            The ring parts to let you read — on intent only. At rest every
+            sheet keeps its full presence, crossers included; the cursor
+            arriving on the statement is reading intent, and any sheet
+            over the words ghosts to near-nothing and drifts aside. It
+            returns the moment you leave.
           */
-          {
+          if (part > 0.01) {
             const wx = Math.max(0, 1 - Math.abs(target.x) / 360);
             const wy = Math.max(0, 1 - Math.abs(target.y) / 190);
             const over = wx * wy * (z > 0 ? 1 : 0.6);
-            target.op *= 1 - over * (0.55 + part * 0.42);
+            target.op *= 1 - part * over * 0.95;
             target.x += Math.sign(target.x || 1) * part * over * 46;
             target.y += Math.sign(target.y || 1) * part * over * 26;
           }
@@ -335,7 +336,11 @@ export function OrbitBoard(props: {
         ) : (
           <div className="ob-center-forming">forming — no ambition adopted yet</div>
         )}
-        {center.meta ? <div className="ob-center-meta">{center.meta}</div> : null}
+        {center.ambition && onOpenAmbition ? (
+          <button type="button" className="ob-open" onClick={onOpenAmbition}>
+            Open the shared top of mind
+          </button>
+        ) : null}
       </div>
 
       {notes.map((note) => {
@@ -378,7 +383,6 @@ export function OrbitBoard(props: {
       })}
 
 
-      <p className="ob-hint">drag to spin · click a note to read · click away to put it back</p>
     </div>
   );
 }

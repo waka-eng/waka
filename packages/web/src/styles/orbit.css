@@ -115,10 +115,18 @@
   font-size: 15px;
   color: var(--ob-muted);
 }
-.ob-center-meta {
-  margin-top: 14px;
-  font-size: 11px;
+.ob-open {
+  all: unset;
+  pointer-events: auto;
+  cursor: pointer;
+  margin-top: 16px;
+  font-size: 12px;
   color: var(--ob-muted);
+}
+.ob-open:hover {
+  color: var(--ob-ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 /* ---------- the notes ----------
@@ -197,15 +205,3 @@
   pointer-events: auto;
 }
 
-.ob-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%);
-  font-size: 11px;
-  color: var(--ob-muted);
-  z-index: 600;
-  margin: 0;
-  pointer-events: none;
-  white-space: nowrap;
-}
