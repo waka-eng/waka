@@ -46,7 +46,17 @@ export interface OrbitBoardCenter {
 const IDLE_SPEED = (Math.PI * 2) / 95; // rad/s
 const MIN_OPACITY = 0.42;
 const MAX_BLUR = 2.5;
-const MIN_SCALE = 0.72;
+
+/*
+  Real depth, not a scale trick. The ring lives in the container's
+  `perspective`: a note's z position does the shrinking and the parallax,
+  and each sheet carries its own small fixed tilt so the field reads as
+  papers hanging in a space rather than cards on a turntable — the
+  bleibtgleich look, with CSS projection instead of three.js.
+*/
+/* (the projection itself is .ob's `perspective: 1200px` in orbit.css) */
+const DRIFT_X = 26; // how far the cursor leans the camera, px at z=0
+const DRIFT_Y = 16;
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
@@ -54,7 +64,11 @@ interface TileMotion {
   base: number;
   breathRate: number;
   breathPhase: number;
-  cur: { x: number; y: number; sc: number; op: number; bl: number } | null;
+  /** This sheet's own hang: fixed tilt and vertical scatter, decided once. */
+  tiltX: number;
+  tiltY: number;
+  yOff: number;
+  cur: { x: number; y: number; z: number; rx: number; ry: number; op: number; bl: number } | null;
 }
 
 export function groundingCopy(evidenceCount: number, hands: string[]): string {
@@ -89,6 +103,9 @@ export function OrbitBoard(props: {
           base,
           breathRate: 0.9 + Math.random() * 0.5,
           breathPhase: Math.random() * Math.PI * 2,
+          tiltX: (Math.random() - 0.5) * 14,
+          tiltY: (Math.random() - 0.5) * 26,
+          yOff: (Math.random() - 0.5) * 2 * 0.55,
           cur: null,
         });
       }
@@ -102,10 +119,12 @@ export function OrbitBoard(props: {
 
     let rx = 0;
     let ry = 0;
+    let rz = 0;
     const measure = () => {
       const rect = container.getBoundingClientRect();
-      rx = Math.min(rect.width * 0.4, 620);
-      ry = Math.min(rect.height * 0.3, 215);
+      rx = Math.min(rect.width * 0.36, 560);
+      ry = Math.min(rect.height * 0.26, 190);
+      rz = Math.min(rect.height * 0.6, 430);
     };
     measure();
     const resize = new ResizeObserver(measure);
@@ -117,6 +136,20 @@ export function OrbitBoard(props: {
     let lastX = 0;
     let lastT = 0;
     let movedRun = 0;
+
+    /* The camera leans toward the cursor — bleibtgleich's drift. Raw mouse
+       in [-1, 1], smoothed in the loop so it arrives like weight, not a
+       cursor-follower. */
+    let mouseX = 0;
+    let mouseY = 0;
+    let driftX = 0;
+    let driftY = 0;
+    const onHover = (event: PointerEvent) => {
+      const rect = container.getBoundingClientRect();
+      mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouseY = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+    };
+    container.addEventListener("pointermove", onHover);
 
     const onDown = (event: PointerEvent) => {
       if (expandedRef.current) return;
@@ -173,6 +206,10 @@ export function OrbitBoard(props: {
 
       const t = now / 1000;
 
+      /* The camera's lean arrives slowly, and rests when a note is held. */
+      driftX = lerp(driftX, expanded ? 0 : mouseX, 0.06);
+      driftY = lerp(driftY, expanded ? 0 : mouseY, 0.06);
+
       for (const [id, motion] of motions.current) {
         const el = tileRefs.current.get(id);
         if (!el) continue;
@@ -181,16 +218,27 @@ export function OrbitBoard(props: {
         const s = (Math.cos(th) + 1) / 2; // 1 = front, 0 = back
         const eased = Math.pow(s, 1.3);
         const breath = Math.sin(t * motion.breathRate + motion.breathPhase) * 4;
+        /* The sheet's hang sways a few degrees on its own breath. */
+        const sway = Math.sin(t * motion.breathRate * 0.6 + motion.breathPhase) * 3;
 
-        const target = isEx
-          ? { x: 0, y: breath * 0.5, sc: 1, op: 1, bl: 0 }
-          : {
-              x: Math.sin(th) * rx,
-              y: Math.cos(th) * ry + breath,
-              sc: lerp(MIN_SCALE, 1, eased),
-              op: lerp(MIN_OPACITY, 1, eased) * (expanded ? 0.12 : 1),
-              bl: lerp(MAX_BLUR, 0, eased),
-            };
+        let target;
+        if (isEx) {
+          target = { x: 0, y: breath * 0.5, z: 250, rx: 0, ry: 0, op: 1, bl: 0 };
+        } else {
+          const z = Math.cos(th) * rz;
+          /* Parallax: nearer sheets lean further with the cursor, which is
+             what makes the depth legible even before anything spins. */
+          const lean = 1 + z / rz;
+          target = {
+            x: Math.sin(th) * rx + driftX * DRIFT_X * lean,
+            y: motion.yOff * ry + breath + driftY * DRIFT_Y * lean,
+            z,
+            rx: motion.tiltX + sway * 0.6,
+            ry: motion.tiltY + sway,
+            op: lerp(MIN_OPACITY, 1, eased) * (expanded ? 0.12 : 1),
+            bl: lerp(MAX_BLUR, 0, eased),
+          };
+        }
 
         const cur = motion.cur ?? (motion.cur = { ...target });
         const k = isEx || expanded ? 0.14 : 0.45;
@@ -199,11 +247,13 @@ export function OrbitBoard(props: {
         const kOp = isEx ? 0.38 : k;
         cur.x = lerp(cur.x, target.x, k);
         cur.y = lerp(cur.y, target.y, k);
-        cur.sc = lerp(cur.sc, target.sc, k);
+        cur.z = lerp(cur.z, target.z, k);
+        cur.rx = lerp(cur.rx, target.rx, k);
+        cur.ry = lerp(cur.ry, target.ry, k);
         cur.op = lerp(cur.op, target.op, kOp);
         cur.bl = lerp(cur.bl, target.bl, kOp);
 
-        el.style.transform = `translate(-50%,-50%) translate3d(${cur.x.toFixed(1)}px,${cur.y.toFixed(1)}px,0) scale(${cur.sc.toFixed(3)})`;
+        el.style.transform = `translate(-50%,-50%) translate3d(${cur.x.toFixed(1)}px,${cur.y.toFixed(1)}px,${cur.z.toFixed(1)}px) rotateX(${cur.rx.toFixed(2)}deg) rotateY(${cur.ry.toFixed(2)}deg)`;
         el.style.opacity = cur.op.toFixed(3);
         el.style.filter = cur.bl > 0.15 ? `blur(${cur.bl.toFixed(1)}px)` : "none";
         /* Interleaves with the center (500) and the veil (900): back tiles
@@ -221,6 +271,7 @@ export function OrbitBoard(props: {
       resize.disconnect();
       container.removeEventListener("pointerdown", onDown);
       container.removeEventListener("click", onClickCapture, true);
+      container.removeEventListener("pointermove", onHover);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);

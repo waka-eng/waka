@@ -58,6 +58,11 @@
   height: min(72vh, 660px);
   overflow: hidden;
   cursor: grab;
+  /* The room has depth: notes are planes in this perspective, and their z
+     position — not a scale trick — does the shrinking and the parallax.
+     Must match PERSPECTIVE in OrbitBoard.tsx. */
+  perspective: 1200px;
+  perspective-origin: 50% 50%;
   --ob-ink: #131313;
   --ob-paper: #f7f7f6;
   --ob-muted: #858585;
