@@ -64,9 +64,7 @@ interface TileMotion {
   base: number;
   breathRate: number;
   breathPhase: number;
-  /** This sheet's own hang: fixed tilt and vertical scatter, decided once. */
-  tiltX: number;
-  tiltY: number;
+  /** This sheet's vertical scatter in the field, decided once. */
   yOff: number;
   cur: { x: number; y: number; z: number; rx: number; ry: number; op: number; bl: number } | null;
 }
@@ -103,8 +101,6 @@ export function OrbitBoard(props: {
           base,
           breathRate: 0.9 + Math.random() * 0.5,
           breathPhase: Math.random() * Math.PI * 2,
-          tiltX: (Math.random() - 0.5) * 14,
-          tiltY: (Math.random() - 0.5) * 26,
           yOff: (Math.random() - 0.5) * 2 * 0.55,
           cur: null,
         });
@@ -218,8 +214,6 @@ export function OrbitBoard(props: {
         const s = (Math.cos(th) + 1) / 2; // 1 = front, 0 = back
         const eased = Math.pow(s, 1.3);
         const breath = Math.sin(t * motion.breathRate + motion.breathPhase) * 4;
-        /* The sheet's hang sways a few degrees on its own breath. */
-        const sway = Math.sin(t * motion.breathRate * 0.6 + motion.breathPhase) * 3;
 
         let target;
         if (isEx) {
@@ -229,12 +223,17 @@ export function OrbitBoard(props: {
           /* Parallax: nearer sheets lean further with the cursor, which is
              what makes the depth legible even before anything spins. */
           const lean = 1 + z / rz;
+          /* Every sheet hangs parallel; the skew is the CAMERA's. This is
+             the bleibtgleich construction — their planes never rotate
+             individually, the camera sits off-axis and all sheets skew
+             toward one vanishing direction together. Per-sheet random
+             tilts were tried here and read as subtle chaos, not depth. */
           target = {
             x: Math.sin(th) * rx + driftX * DRIFT_X * lean,
             y: motion.yOff * ry + breath + driftY * DRIFT_Y * lean,
             z,
-            rx: motion.tiltX + sway * 0.6,
-            ry: motion.tiltY + sway,
+            rx: driftY * 7,
+            ry: -driftX * 10,
             op: lerp(MIN_OPACITY, 1, eased) * (expanded ? 0.12 : 1),
             bl: lerp(MAX_BLUR, 0, eased),
           };
