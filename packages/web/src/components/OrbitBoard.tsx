@@ -116,11 +116,18 @@ export function OrbitBoard(props: {
     let rx = 0;
     let ry = 0;
     let rz = 0;
+    let fieldY = 0;
     const measure = () => {
       const rect = container.getBoundingClientRect();
       rx = Math.min(rect.width * 0.36, 560);
-      ry = Math.min(rect.height * 0.26, 190);
+      /* The ambition owns the top of the page; the field owns the rest.
+         The ring's center sits below the statement and its vertical spread
+         stays inside the lower zone — protection by construction, no
+         dodging, no fading tricks. The circling itself is the only claim
+         of derivation the board makes. */
+      ry = Math.min(rect.height * 0.17, 120);
       rz = Math.min(rect.height * 0.5, 340);
+      fieldY = rect.height * 0.17;
     };
     measure();
     const resize = new ResizeObserver(measure);
@@ -217,7 +224,7 @@ export function OrbitBoard(props: {
 
         let target;
         if (isEx) {
-          target = { x: 0, y: breath * 0.5, z: 250, rx: 0, ry: 0, op: 1, bl: 0 };
+          target = { x: 0, y: fieldY * 0.6 + breath * 0.5, z: 250, rx: 0, ry: 0, op: 1, bl: 0 };
         } else {
           const z = Math.cos(th) * rz;
           /* Parallax: nearer sheets lean further with the cursor, which is
@@ -230,7 +237,7 @@ export function OrbitBoard(props: {
              tilts were tried here and read as subtle chaos, not depth. */
           target = {
             x: Math.sin(th) * rx + driftX * DRIFT_X * lean,
-            y: motion.yOff * ry + breath + driftY * DRIFT_Y * lean,
+            y: fieldY + motion.yOff * ry + breath + driftY * DRIFT_Y * lean,
             z,
             rx: driftY * 7,
             ry: -driftX * 10,
