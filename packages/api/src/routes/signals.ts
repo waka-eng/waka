@@ -14,6 +14,7 @@ import {
   meaningEvidence,
   meaningNodes,
   meaningPackets,
+  reflections,
   wowMomentInspirations,
   wowMoments,
 } from "../db/index.js";
@@ -34,6 +35,7 @@ const signalArchiveQuerySchema = z
     filter: z
       .enum([
         "all",
+        "held",
         "highlighted",
         "high_resonance",
         "tensions",
@@ -77,13 +79,24 @@ export interface SavedSignalSearchResult {
   capturedAt: string;
   updatedAt: string;
   /**
-   * Whether the rooms this person is in may read this save.
+   * Whether this save speaks in the rooms this person is in. True is out
+   * loud — every room they are in can read it. False is held — only their
+   * own room reads it, and it still shapes their own pulls.
    *
    * On the list so the archive can show and change it in place. Without it the
    * only way to find out was to open a save one at a time, which made a
    * privacy setting something you could not audit.
    */
   shared: boolean;
+  /**
+   * The second beat, counted. `answered` is reflections carrying the person's
+   * own words; `skipped` is questions deliberately passed. The archive marks
+   * saves where the first is nonzero; the sit-with ritual queues saves where
+   * both are zero. Counts rather than rows, because the list never renders
+   * the exchanges themselves.
+   */
+  answeredReflectionCount: number;
+  skippedReflectionCount: number;
   resonanceScore: number;
   signalScores: Record<string, number>;
   highlightedSnippets: Array<{
@@ -231,10 +244,11 @@ async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: stri
       topNotesBySignal: new Map<string, any[]>(),
       groupNotesBySignal: new Map<string, any[]>(),
       attachmentsBySignal: new Map<string, any[]>(),
+      reflectionsBySignal: new Map<string, any[]>(),
     };
   }
 
-  const [sparkRows, contextRows, topNoteRows, groupNoteRows, attachmentRows] =
+  const [sparkRows, contextRows, topNoteRows, groupNoteRows, attachmentRows, reflectionRows] =
     await Promise.all([
     db
       .select({
@@ -320,6 +334,19 @@ async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: stri
       })
       .from(attachments)
       .where(inArray(attachments.inspirationId, signalIds)),
+    /**
+     * Whether the second beat happened, per save. Answer text itself never
+     * leaves the owner's detail view — the list only needs to know that an
+     * exchange exists, so this carries the two booleans and nothing spoken.
+     */
+    db
+      .select({
+        inspirationId: reflections.inspirationId,
+        answer: reflections.answer,
+        skipped: reflections.skipped,
+      })
+      .from(reflections)
+      .where(and(eq(reflections.userId, userId), inArray(reflections.inspirationId, signalIds))),
   ]);
 
   const group = <T extends { inspirationId: string }>(rows: T[]) => {
@@ -338,6 +365,7 @@ async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: stri
     topNotesBySignal: group(topNoteRows),
     groupNotesBySignal: group(groupNoteRows),
     attachmentsBySignal: group(attachmentRows),
+    reflectionsBySignal: group(reflectionRows),
   };
 }
 
@@ -357,6 +385,7 @@ function serializeSearchResult(
   const context = maps.contextBySignal.get(row.id) ?? [];
   const topNotes = maps.topNotesBySignal.get(row.id) ?? [];
   const attachmentRows = maps.attachmentsBySignal.get(row.id) ?? [];
+  const reflectionRows = maps.reflectionsBySignal.get(row.id) ?? [];
   const contextTerms = [...new Set(context.map((node) => node.label))].slice(0, 6);
   const topNoteTitles = [...new Set(topNotes.map((note) => note.title))].slice(0, 4);
   const groupNotes = (maps.groupNotesBySignal.get(row.id) ?? [])
@@ -388,6 +417,8 @@ function serializeSearchResult(
     capturedAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     shared: row.sharedToGroups,
+    answeredReflectionCount: reflectionRows.filter((r) => r.answer !== null).length,
+    skippedReflectionCount: reflectionRows.filter((r) => r.skipped).length,
     resonanceScore: signal.signalScores.resonance,
     signalScores: signal.signalScores,
     highlightedSnippets: sparks.slice(0, 4).map((spark) => ({
@@ -413,6 +444,9 @@ function serializeSearchResult(
 
 function passesFilter(result: SavedSignalSearchResult, filter: SignalArchiveFilter): boolean {
   if (filter === "all") return true;
+  // The lens for "what have I kept to myself" — the audit the archive exists
+  // to answer, as a filter rather than an eye run down the right edge.
+  if (filter === "held") return !result.shared;
   if (filter === "highlighted") return result.highlightedSnippets.length > 0;
   if (filter === "high_resonance") return result.resonanceScore >= 70;
   if (filter === "tensions") {

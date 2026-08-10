@@ -121,6 +121,10 @@ ReactDOM.createRoot(root).render(
           <Route element={<ProtectedSurface />}>
             <Route path="/" />
             <Route path="/capture" />
+            {/* Solo like capture: sitting with today's saves belongs to the
+                person, so the path carries no room. Declared here or the
+                public-profile route reads "sit" as a handle. */}
+            <Route path="/sit" />
             <Route path="/inspirations" />
             <Route path="/inspirations/:signalId" />
             <Route path="/readings/:readingId" />

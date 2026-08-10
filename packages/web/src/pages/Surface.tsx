@@ -41,7 +41,7 @@ import { useLocation, useNavigate } from "react-router-dom";
   you are in. The copy is careful about that distinction, and an icon that
   contradicted it would be believed over the words.
 */
-import { Check, Info, Lock, Paperclip, Users } from "lucide-react";
+import { Check, Hand, Info, Paperclip, Users } from "lucide-react";
 
 import { contributorColor, contributorInitials } from "../components/faces";
 import { OrbitBoard } from "../components/OrbitBoard";
@@ -560,19 +560,26 @@ export function roomDirectionEvidenceCopy(
 /**
  * What the two words mean, written once.
  *
- * The label used to be the sentence -- "your rooms can read this" / "private to
- * you" -- which made the control long, made the two states hard to compare at a
- * glance, and could not be reused in a list. The state is one word; the
- * consequence is a hint.
+ * The words were "public" and "private", and both lied a little. "Public"
+ * imports the internet-scale meaning — anyone — when the flag means the rooms
+ * you already chose to join. "Private" sounds inert, when a held save still
+ * works for you: your own room reads it and it still shapes your own pulls.
+ * So the pair is now the product's own physics: a signal speaks OUT LOUD in
+ * your rooms, or it is HELD — kept beside your own heart, audible to no one
+ * else.
  *
- * "Public" is scoped on purpose. It means the rooms you are in, NOT the
- * internet: a public profile is a separate setting you turn on yourself. Saying
- * "anyone" here would promise something the flag does not do, and saying
- * nothing would let people assume it.
+ * Out loud is the default and the default is unmarked; "held" is the
+ * exception, and the exception is the word that gets ink. Joining a room is
+ * the consent; holding a save is the per-save veto.
+ *
+ * "Out loud" is scoped on purpose. It means the rooms you are in, NOT the
+ * internet: a public profile is a separate setting you turn on yourself.
+ * Saying "anyone" here would promise something the flag does not do, and
+ * saying nothing would let people assume it.
  */
 export const SHARING_MEANING = {
-  public: "Any room you join can read this. It stays yours.",
-  private: "No room can read this. It still shapes your own pulls.",
+  outLoud: "Any room you join can read this. It stays yours.",
+  held: "Only your own room reads this. It still shapes your own pulls.",
 } as const;
 
 /**
@@ -594,28 +601,28 @@ export const SHARING_MEANING = {
  */
 export const SHARING_NOTE = {
   heading: "Who can read what you keep",
-  public:
-    "Public — every room you are in can read it. A room may quote a short excerpt, with your name, as evidence for what it reads in you together.",
-  private:
-    "Private — no room can read it. It never joins the pool a room's reading is made from, and it cannot be quoted.",
+  outLoud:
+    "Out loud — every room you are in can read it. A room may quote a short excerpt, with your name, as evidence for what it reads in you together.",
+  held:
+    "Held — only your own room reads it. It never joins the pool a room's reading is made from, and it cannot be quoted.",
   both:
     "Either way the pulse stays yours, and either way it still shapes your own pulls.",
   /**
-   * The one thing turning it back cannot do.
+   * The rule, named: rooms can't unhear.
    *
-   * Making a save private stops it being pooled, quoted or read again, and it
+   * Holding a save stops it being pooled, quoted or read again, and it
    * disappears from the evidence of readings that already cited it. What it
    * cannot do is unmake the reading itself: a room's conclusion is a record of
    * what that room understood at a time, and it stays on the wall and in the
    * timeline. Retiring it would rewrite the room's history to match one
    * member's later preference.
    *
-   * Which is why this belongs on the way IN. Going private is recoverable in
-   * every respect except the one nobody expects; going public is the step that
-   * cannot be fully taken back, so that is where it is said.
+   * Which is why this belongs on the way IN. Holding is recoverable in every
+   * respect except the one nobody expects; letting a save speak is the step
+   * that cannot be fully taken back, so that is where it is said.
    */
-  goingPrivate:
-    "Making it private later stops it being read, quoted, or shown as evidence — but a reading a room already made from it stays on that room's wall.",
+  cantUnhear:
+    "Rooms can't unhear. Holding it later stops it being read, quoted, or shown as evidence — but a reading a room already made from it stays on that room's wall.",
 } as const;
 
 /**
@@ -640,7 +647,7 @@ function SharingExplainer({
   const summary =
     shared === undefined
       ? SHARING_NOTE.heading
-      : SHARING_MEANING[shared ? "public" : "private"];
+      : SHARING_MEANING[shared ? "outLoud" : "held"];
 
   return (
     <details className="sf-sharing-note" open={open}>
@@ -648,35 +655,67 @@ function SharingExplainer({
         <Info className="sf-sharing-note-icon" aria-hidden="true" />
         <span>{summary}</span>
       </summary>
-      <p>{SHARING_NOTE.public}</p>
-      <p>{SHARING_NOTE.private}</p>
-      <p>{SHARING_NOTE.goingPrivate}</p>
+      <p>{SHARING_NOTE.outLoud}</p>
+      <p>{SHARING_NOTE.held}</p>
+      <p>{SHARING_NOTE.cantUnhear}</p>
       <p className="sf-sharing-note-both">{SHARING_NOTE.both}</p>
     </details>
   );
 }
 
 /**
- * The one confirmation in this flow, on the one step that cannot be undone.
+ * The confirmation on the step that cannot be fully undone.
  *
- * Going private is recoverable: the save leaves the pool, stops being quoted,
- * and disappears from the evidence of readings that cited it. Going public is
- * not fully recoverable — once a room has read something, turning the save
- * private afterwards does not unmake the reading. So the question is asked
- * here, once, in the direction that carries the risk.
+ * Holding is recoverable: the save leaves the pool, stops being quoted, and
+ * disappears from the evidence of readings that cited it. Letting it speak is
+ * not fully recoverable — once a room has read something, holding the save
+ * afterwards does not unmake the reading. So the question is asked here, in
+ * the direction that carries the risk.
  *
  * Not asked for a composer draft. Nothing has been shared with anything until
  * the save exists, and a confirmation for a decision with no consequence yet
  * is the kind people learn to dismiss without reading — which is how the one
  * that matters gets dismissed too.
  */
-export function confirmGoingPublicMessage(): string {
+export function confirmLettingSpeakMessage(): string {
   return [
-    "Make this public?",
+    // The stranger test governs the headline: a plain question that says
+    // exactly what pressing OK does. The system's words come after, as
+    // explanation rather than as the ask.
+    "Let every room you are in read this?",
     "",
-    SHARING_NOTE.public.replace(/^Public — /, "").replace(/^every/, "Every"),
+    SHARING_NOTE.outLoud.replace(/^Out loud — /, "").replace(/^every/, "Every"),
     "",
-    SHARING_NOTE.goingPrivate.replace(/^Making it private later/, "Making it private again later"),
+    SHARING_NOTE.cantUnhear.replace(
+      /^Rooms can't unhear\. Holding it later/,
+      "Rooms can't unhear: keeping it to yourself again later",
+    ),
+  ].join("\n");
+}
+
+/**
+ * The consequence of holding, said with this save's own numbers.
+ *
+ * Holding asks nothing when nothing has read the save — it is the recoverable
+ * direction, and a confirmation with no consequence teaches people to dismiss
+ * the one that has some. But holding a save that rooms have already read is
+ * the moment the rule stops being abstract, so the dialog carries the two
+ * concrete facts: what stops now, and the readings that stay standing because
+ * rooms can't unhear. Generic copy here would bury the only fact that
+ * matters — that THIS save already shaped something.
+ */
+export function confirmHoldingMessage(groupReadingCount: number): string {
+  const already =
+    groupReadingCount === 1
+      ? "the 1 reading rooms already made from it stays"
+      : `the ${groupReadingCount} readings rooms already made from it stay`;
+  return [
+    // Plain headline, same rule as letting it speak.
+    "Stop rooms from reading this?",
+    "",
+    "Rooms stop reading it now. Nothing new will quote it or show it as evidence, and it withdraws from the evidence of readings that cite it.",
+    "",
+    `Rooms can't unhear: ${already} on their walls.`,
   ].join("\n");
 }
 
@@ -1017,15 +1056,35 @@ export default function SurfacePage(): JSX.Element {
   });
   const [files, setFiles] = useState<File[]>([]);
   /*
-    Shared with your rooms, or private.
+    Out loud in your rooms, or held.
 
-    Default is shared — that is the server's default and the product's whole
-    point. But a save you do not want read beside anyone else's has to be
-    possible, and this was the one privacy control in the old capture cell.
-    Without it every inspiration you keep is readable by every room you are in,
-    with no way to say otherwise.
+    Out loud is the server's default and the product's whole point, so the
+    composer never demands the choice — it offers one quiet escape hatch. But
+    a save you do not want read beside anyone else's has to be possible.
+    Without it every inspiration you keep is readable by every room you are
+    in, with no way to say otherwise.
   */
   const [shareToGroups, setShareToGroups] = useState(true);
+  /*
+    The save that just landed, kept in reach for the beat after keeping.
+
+    Two things are cheapest to say in that beat and expensive to say later:
+    "hold this one" (the escape hatch, one tap, before any room has plausibly
+    read it) and "why this?" (the heart reacted; the why is freshest now).
+    Both are invitations on the confirmation line, never gates on the save —
+    the save completed before either word appears.
+  */
+  const [justKept, setJustKept] = useState<{
+    id: string;
+    text: string;
+    kind: "note" | "link" | "mixed";
+  } | null>(null);
+  const [justKeptHeld, setJustKeptHeld] = useState(false);
+  const [toastQuestion, setToastQuestion] = useState<string | null>(null);
+  const [toastAnswer, setToastAnswer] = useState("");
+  const [toastAsking, setToastAsking] = useState(false);
+  const [toastAnswering, setToastAnswering] = useState(false);
+  const [toastAnswered, setToastAnswered] = useState(false);
   /*
     How long the composer was open before you kept it.
 
@@ -1045,7 +1104,40 @@ export default function SurfacePage(): JSX.Element {
   const [results, setResults] = useState<ApiSavedSignalSearchResult[]>([]);
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
+  /*
+    The archive rows behind the count.
+
+    The count effect always fetched every recent save and kept only the
+    number. The rows themselves answer a question the number cannot — which
+    of today's saves have no second beat yet — so they are kept now instead
+    of thrown away. Same request, one more reader.
+  */
+  const [archive, setArchive] = useState<ApiSavedSignalSearchResult[]>([]);
+  /*
+    Which of your saves the archive shows. "all" is the column as it was;
+    "held" is the audit — everything kept to yourself, as a lens rather than
+    an eye run down the right edge.
+  */
+  const [lens, setLens] = useState<"all" | "held">("all");
   const askInputRef = useRef<HTMLInputElement>(null);
+
+  /*
+    Sitting with today's saves.
+
+    The heart reacts before the brain has processed why — that is what a save
+    IS here. The sit is where the why gets asked for: one save at a time, one
+    question under it, answer or pass. A pass is recorded as a deliberate
+    skip so the same save is not asked about tomorrow; a ritual that renags
+    is a chore list.
+  */
+  const [sitQueue, setSitQueue] = useState<ApiSavedSignalSearchResult[]>([]);
+  const [sitIndex, setSitIndex] = useState(0);
+  const [sitQuestion, setSitQuestion] = useState<string | null>(null);
+  const [sitAnswer, setSitAnswer] = useState("");
+  const [sitAsking, setSitAsking] = useState(false);
+  const [sitAnswering, setSitAnswering] = useState(false);
+  const [sitDone, setSitDone] = useState<{ answered: number; passed: number } | null>(null);
+  const sitTallies = useRef({ answered: 0, passed: 0 });
 
   /* --- the room's wall ---------------------------------------------- */
   useEffect(() => {
@@ -1330,7 +1422,9 @@ export default function SurfacePage(): JSX.Element {
     let cancelled = false;
     void fetchSavedSignals({ limit: SAVED_CEILING })
       .then((all) => {
-        if (!cancelled) setSavedCount(all.length);
+        if (cancelled) return;
+        setSavedCount(all.length);
+        setArchive(all);
       })
       .catch((error) => {
         if (!cancelled) {
@@ -1371,7 +1465,13 @@ export default function SurfacePage(): JSX.Element {
     let cancelled = false;
     setSearching(true);
     const timer = window.setTimeout(() => {
-      void fetchSavedSignals(q ? { q, limit: 20 } : { limit: 20 })
+      void fetchSavedSignals({
+        ...(q ? { q } : {}),
+        limit: 20,
+        // The held lens is a server-side filter: the recent twenty out-loud
+        // saves and the recent twenty held ones are different rows.
+        ...(lens === "held" ? { filter: "held" as const } : {}),
+      })
         .then((next) => {
           if (!cancelled) setResults(next);
         })
@@ -1391,7 +1491,7 @@ export default function SurfacePage(): JSX.Element {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, state]);
+  }, [query, state, lens]);
 
   /* --- opening things ------------------------------------------------ */
 
@@ -1633,19 +1733,27 @@ export default function SurfacePage(): JSX.Element {
         /* private mode */
       }
       /*
-        "Kept and shared with this room" was not true. Sharing is one flag on
+        "Kept and shared with this room" was not true. Speaking is one flag on
         the signal -- `shared_to_groups` -- and every room you are in reads it.
         Saying "this room" while standing in one described a per-room choice
-        the product does not offer, and contradicted the toggle three lines
-        above it, which correctly says "your rooms".
+        the product does not offer.
       */
+      setJustKept({
+        id: made.id,
+        text,
+        kind: files.length > 0 ? "mixed" : links.length > 0 ? "link" : "note",
+      });
+      setJustKeptHeld(!shareToGroups);
+      setToastQuestion(null);
+      setToastAnswer("");
+      setToastAnswered(false);
       setKept(
         !shareToGroups
-          ? "Kept, private. No room will read this one."
+          ? "Kept, held. Only your own room reads this one."
           : links.length > 0
-            ? "Kept and shared. The page behind that link is being read."
+            ? "Kept out loud. The page behind that link is being read."
             : room
-              ? "Kept. It joins the next read in every room you are in."
+              ? "Kept out loud. It joins the next read in every room you are in."
               : "Kept. It sits with what you have been circling.",
       );
       if (room) {
@@ -1766,12 +1874,229 @@ export default function SurfacePage(): JSX.Element {
     }
   }, [answer, answering, openSave, question]);
 
+  /*
+    The beat after keeping: hold it, or say why.
+
+    Both act on the save that just landed, from the confirmation line. Holding
+    here is one tap inside the hours-long gap before any room has plausibly
+    read it — the cheapest moment the escape hatch will ever have. The
+    question is the same machine-asks exchange as the save view, offered while
+    the reaction is still warm. Neither is a gate: the save completed before
+    either word appeared.
+  */
+  const holdJustKept = useCallback(async () => {
+    if (!justKept || justKeptHeld) return;
+    setJustKeptHeld(true);
+    try {
+      await setInspirationSharing(justKept.id, false);
+      setKept("Held. Only your own room reads this one.");
+      setSurfaceNotice(null);
+    } catch (error) {
+      setJustKeptHeld(false);
+      setSurfaceNotice(
+        error instanceof Error ? error.message : "That save was not held.",
+      );
+    }
+  }, [justKept, justKeptHeld]);
+
+  const askWhyThis = useCallback(async () => {
+    if (!justKept || toastAsking) return;
+    setToastAsking(true);
+    try {
+      const generated = await generateGuidedReflectionQuestion({
+        locale,
+        inspiration: { text: justKept.text, kind: justKept.kind as never },
+        priorAnswers: [],
+      });
+      setToastQuestion(generated.question);
+    } catch {
+      // The machine had nothing sharper to ask; the plainest version still
+      // opens the door, and the ritual of asking never returns nothing.
+      setToastQuestion("What caught you?");
+    } finally {
+      setToastAsking(false);
+    }
+  }, [justKept, locale, toastAsking]);
+
+  const keepToastAnswer = useCallback(async () => {
+    if (!justKept || !toastQuestion || !toastAnswer.trim() || toastAnswering) return;
+    setToastAnswering(true);
+    try {
+      await createReflection(justKept.id, {
+        question: toastQuestion,
+        answer: toastAnswer.trim(),
+      });
+      setToastAnswered(true);
+      setToastQuestion(null);
+      setToastAnswer("");
+      // The sit invitation counts saves with no second beat; this one has its
+      // beat now, and should stop being counted before any refetch says so.
+      setArchive((rows) =>
+        rows.map((s) =>
+          s.id === justKept.id
+            ? { ...s, answeredReflectionCount: s.answeredReflectionCount + 1 }
+            : s,
+        ),
+      );
+    } catch {
+      /* leave the draft in the box rather than losing what was typed */
+    } finally {
+      setToastAnswering(false);
+    }
+  }, [justKept, toastAnswer, toastAnswering, toastQuestion]);
+
+  /*
+    Today's saves with no second beat yet.
+
+    Answered or deliberately passed both count as sat with — a pass is an
+    answer about the question, and asking again tomorrow would turn a ritual
+    into a chore list. "Today" is the calendar day, not a rolling window: the
+    invitation never ages into a backlog.
+  */
+  const sittable = useMemo(() => {
+    const today = new Date().toDateString();
+    return archive.filter(
+      (s) =>
+        s.answeredReflectionCount === 0 &&
+        s.skippedReflectionCount === 0 &&
+        new Date(s.capturedAt).toDateString() === today,
+    );
+  }, [archive]);
+
+  const enterSit = useCallback(() => {
+    if (sittable.length === 0) return;
+    sitTallies.current = { answered: 0, passed: 0 };
+    setSitQueue(sittable);
+    setSitIndex(0);
+    setSitQuestion(null);
+    setSitAnswer("");
+    setSitDone(null);
+    navigateSurface("sit");
+  }, [navigateSurface, sittable]);
+
+  /*
+    One question per save, generated on arrival. The save is shown whole and
+    the question sits under it — the machine asks, you answer, same exchange
+    as the save view, walked instead of navigated.
+  */
+  useEffect(() => {
+    if (state !== "sit" || sitDone) return undefined;
+    const current = sitQueue[sitIndex];
+    if (!current) return undefined;
+    let cancelled = false;
+    setSitAsking(true);
+    setSitQuestion(null);
+    void generateGuidedReflectionQuestion({
+      locale,
+      inspiration: { text: current.textPreview, kind: (current.kind ?? "note") as never },
+      priorAnswers: [],
+    })
+      .then((generated) => {
+        if (!cancelled) setSitQuestion(generated.question);
+      })
+      .catch(() => {
+        if (!cancelled) setSitQuestion("What caught you?");
+      })
+      .finally(() => {
+        if (!cancelled) setSitAsking(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, sitDone, sitIndex, sitQueue, state]);
+
+  /*
+    Functional on purpose: an advance can land from an await that started a
+    render ago, and an advance computed from a stale index once walked past
+    the end of the queue without ever arriving. The index only ever moves
+    forward one; "done" is derived from where it stands, below.
+  */
+  const advanceSit = useCallback(() => {
+    setSitAnswer("");
+    setSitQuestion(null);
+    setSitIndex((i) => i + 1);
+  }, []);
+
+  useEffect(() => {
+    if (state !== "sit" || sitDone) return;
+    if (sitQueue.length > 0 && sitIndex >= sitQueue.length) {
+      setSitDone({ ...sitTallies.current });
+    }
+  }, [sitDone, sitIndex, sitQueue.length, state]);
+
+  const answerSit = useCallback(async () => {
+    const current = sitQueue[sitIndex];
+    if (!current || !sitQuestion || !sitAnswer.trim() || sitAnswering) return;
+    setSitAnswering(true);
+    try {
+      await createReflection(current.id, {
+        question: sitQuestion,
+        answer: sitAnswer.trim(),
+      });
+      sitTallies.current.answered += 1;
+      setArchive((rows) =>
+        rows.map((s) =>
+          s.id === current.id
+            ? { ...s, answeredReflectionCount: s.answeredReflectionCount + 1 }
+            : s,
+        ),
+      );
+      advanceSit();
+    } catch {
+      /* leave the words in the box; the save is not at risk either way */
+    } finally {
+      setSitAnswering(false);
+    }
+  }, [advanceSit, sitAnswer, sitAnswering, sitIndex, sitQueue, sitQuestion]);
+
+  /*
+    A pass is recorded, not just navigated past — the skipped row is what
+    stops the same save being asked about tomorrow. Fire-and-forget: a failed
+    record must never hold the walk.
+  */
+  const passSit = useCallback(() => {
+    const current = sitQueue[sitIndex];
+    if (!current) return;
+    if (sitQuestion) {
+      void createReflection(current.id, { question: sitQuestion, skipped: true }).catch(
+        () => undefined,
+      );
+    }
+    sitTallies.current.passed += 1;
+    setArchive((rows) =>
+      rows.map((s) =>
+        s.id === current.id
+          ? { ...s, skippedReflectionCount: s.skippedReflectionCount + 1 }
+          : s,
+      ),
+    );
+    advanceSit();
+  }, [advanceSit, sitIndex, sitQueue, sitQuestion]);
+
+  /*
+    The rooms that already read the open save. Holding stops the future, not
+    these — they are the count the hold confirmation speaks, and the line
+    beside the control that makes "rooms can't unhear" concrete.
+  */
+  const groupBecame = useMemo(
+    () => became.filter((r) => r.context.scope === "group"),
+    [became],
+  );
+  const becameRoomCount = useMemo(
+    () =>
+      new Set(
+        groupBecame.map((r) => (r.context.scope === "group" ? r.context.groupId : "")),
+      ).size,
+    [groupBecame],
+  );
+
   const toWall = useCallback(() => {
     navigateSurface("wall", { replace: true });
     setOpenReading(null);
     setOpenEvidence([]);
     setOpenSave(null);
     setKept(null);
+    setJustKept(null);
   }, [navigateSurface]);
 
   // Escape always means "back to the wall". One surface, one way out.
@@ -2134,21 +2459,22 @@ export default function SurfacePage(): JSX.Element {
   }, [navigateSurface]);
 
   /*
-    Public or private, from the list.
+    Hold or release, from the list.
 
     Changing this used to mean opening saves one at a time, which made a
     privacy setting something you could not audit -- to answer "what have I
-    left public?" you had to open everything. It belongs where the archive is.
+    kept to myself?" you had to open everything. It belongs where the archive
+    is.
 
-    Optimistic, and it reverts on failure: the toggle is the only feedback,
+    Optimistic, and it reverts on failure: the control is the only feedback,
     so a flip that silently did not persist would be a lie about a privacy
     setting, which is the worst kind to tell.
   */
   const toggleShared = useCallback(
     async (signal: ApiSavedSignalSearchResult) => {
       const next = !signal.shared;
-      // Exposing is the direction that cannot be fully taken back.
-      if (next && !window.confirm(confirmGoingPublicMessage())) return;
+      // Letting it speak is the direction that cannot be fully taken back.
+      if (next && !window.confirm(confirmLettingSpeakMessage())) return;
       const apply = (shared: boolean) => {
         setResults((current) =>
           current.map((r) => (r.id === signal.id ? { ...r, shared } : r)),
@@ -3065,6 +3391,99 @@ export default function SurfacePage(): JSX.Element {
               })}
             </div>
           )}
+          {/*
+            The invitation to the second beat.
+
+            Solo wall only — reflection is a thing you do beside your own
+            heart, not in front of a room. One quiet line when today's saves
+            have no why yet; nothing at all otherwise. No counter ages, no
+            badge reddens: an invitation, never a debt.
+          */}
+          {!room && sittable.length > 0 ? (
+            <button type="button" className="sf-sit-invite" onClick={enterSit}>
+              {sittable.length === 1
+                ? "Today's pulse has no why yet. Sit with it?"
+                : `Today's ${sittable.length} pulses have no why yet. Sit with them?`}
+            </button>
+          ) : null}
+        </section>
+
+        {/* ------------------------------------------------------------ SIT */}
+        {/*
+          The second beat, walked.
+
+          A heartbeat is two sounds. The save was the first — the heart
+          reacted before the brain had processed why. This is the second: the
+          same beat completing, one save at a time, one question under it.
+          Answer or pass; a pass is an answer about the question, recorded so
+          tomorrow does not ask again. The machine asks, you answer — and only
+          the effect of what you say ever reaches a room.
+        */}
+        <section
+          className={`sf-layer sf-layer--sit${state === "sit" ? " on" : ""}`}
+          aria-label="sit with today's saves"
+        >
+          <div className="sf-column">
+            <button type="button" className="sf-back" onClick={toWall}>
+              ← the wall
+            </button>
+            {sitDone ? (
+              <div className="sf-sit-close">
+                <p className="sf-sit-text">That was all of today&rsquo;s.</p>
+                <p className="sf-kept">
+                  {sitDone.answered > 0 && sitDone.passed > 0
+                    ? `${sitDone.answered} answered, ${sitDone.passed} passed.`
+                    : sitDone.answered > 0
+                      ? `${sitDone.answered} answered.`
+                      : "Passed on all of them. A pass is an answer too."}
+                </p>
+              </div>
+            ) : sitQueue[sitIndex] ? (
+              <>
+                <div className="sf-savemeta">
+                  {sitIndex + 1} of {sitQueue.length}
+                </div>
+                <p className="sf-sit-text">{sitQueue[sitIndex]!.textPreview}</p>
+                <div className="sf-reflect-live">
+                  {/* Model output, labeled by what it is; the machine
+                      goes unnamed. */}
+                  <div className="sf-label">A QUESTION FROM THIS PULSE</div>
+                  <p className="sf-reflect-q">{sitAsking ? "…" : sitQuestion}</p>
+                  <textarea
+                    className="sf-reflect-field"
+                    value={sitAnswer}
+                    placeholder="…"
+                    onChange={(event) => setSitAnswer(event.target.value)}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        void answerSit();
+                      }
+                    }}
+                    aria-label={sitQuestion ?? "your answer"}
+                  />
+                  <div className="sf-reflect-foot">
+                    <button
+                      type="button"
+                      onClick={() => void answerSit()}
+                      disabled={!sitAnswer.trim() || sitAnswering || !sitQuestion}
+                    >
+                      {sitAnswering ? "keeping…" : "keep this answer"}
+                    </button>
+                    {/* Passing while an answer is in flight would advance the
+                        walk twice for one save. */}
+                    <button
+                      type="button"
+                      className="sf-quiet"
+                      onClick={passSit}
+                      disabled={sitAnswering}
+                    >
+                      pass
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
         </section>
 
         {/* ------------------------------------------- SHARED TOP OF MIND */}
@@ -3542,7 +3961,13 @@ export default function SurfacePage(): JSX.Element {
                 person's has decided who the record belongs to.
               */}
               <div className="sf-reflect">
-                {reflections.map((r) => (
+                {/*
+                  Passed questions stay out of the transcript. A skipped row
+                  is bookkeeping — it stops the sit asking twice — and a
+                  machine question floating with no answer under it reads as
+                  the product talking to itself.
+                */}
+                {reflections.filter((r) => r.answer || !r.skipped).map((r) => (
                   <div key={r.id} className="sf-reflect-past">
                     <p className="sf-reflect-q">{r.question}</p>
                     {r.answer ? <p className="sf-reflect-a">{r.answer}</p> : null}
@@ -3559,6 +3984,9 @@ export default function SurfacePage(): JSX.Element {
                 ))}
                 {question ? (
                   <div className="sf-reflect-live">
+                    {/* Model output, labeled by what it is; the machine
+                        goes unnamed. */}
+                    <div className="sf-label">A QUESTION FROM THIS PULSE</div>
                     <p className="sf-reflect-q">{question}</p>
                     <textarea
                       className="sf-reflect-field"
@@ -3653,18 +4081,39 @@ export default function SurfacePage(): JSX.Element {
               </div>
               <div className="sf-save-foot">
                 <span>kept {new Date(openSave.capturedAt).toLocaleDateString()}</span>
+                {/*
+                  What this save has already done, beside the control that
+                  would stop it doing more. The count makes "rooms can't
+                  unhear" concrete before the dialog has to say it — absent
+                  entirely when no room has read it, rather than a zero.
+                */}
+                {openSaveShared && groupBecame.length > 0 ? (
+                  <span className="sf-provenance">
+                    read in {becameRoomCount} {becameRoomCount === 1 ? "room" : "rooms"}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className={`sf-control sf-control--toggle${
-                    openSaveShared ? "" : " private"
+                    openSaveShared ? "" : " held"
                   }`}
                   aria-pressed={!openSaveShared}
-                  aria-label={`${openSaveShared ? "Public" : "Private"}. ${
-                    SHARING_MEANING[openSaveShared ? "public" : "private"]
-                  } Click to make it ${openSaveShared ? "private" : "public"}.`}
+                  aria-label={`${openSaveShared ? "Out loud" : "Held"}. ${
+                    SHARING_MEANING[openSaveShared ? "outLoud" : "held"]
+                  } Click to ${openSaveShared ? "hold it" : "let it speak"}.`}
                   onClick={() => {
                     const next = !openSaveShared;
-                    if (next && !window.confirm(confirmGoingPublicMessage())) return;
+                    if (next && !window.confirm(confirmLettingSpeakMessage())) return;
+                    // Holding asks nothing — unless rooms have already read
+                    // this save, in which case the one fact worth a dialog is
+                    // the readings that stay standing.
+                    if (
+                      !next &&
+                      groupBecame.length > 0 &&
+                      !window.confirm(confirmHoldingMessage(groupBecame.length))
+                    ) {
+                      return;
+                    }
                     void setInspirationSharing(openSave.id, next)
                       .then(() => {
                         setOpenSaveShared(next);
@@ -3682,9 +4131,9 @@ export default function SurfacePage(): JSX.Element {
                   {openSaveShared ? (
                     <Users className="sf-control-icon" aria-hidden="true" />
                   ) : (
-                    <Lock className="sf-control-icon" aria-hidden="true" />
+                    <Hand className="sf-control-icon" aria-hidden="true" />
                   )}
-                  {openSaveShared ? "public" : "private"}
+                  {openSaveShared ? "out loud" : "held"}
                 </button>
                 <button type="button" className="sf-remove" onClick={() => dropSave(openSave)}>
                   delete this pulse
@@ -3712,22 +4161,56 @@ export default function SurfacePage(): JSX.Element {
               than an empty page waiting to be typed into. Asking is the fast
               path once you know what you want; before that, seeing is.
             */}
-            <div className="sf-label">
-              {query.trim() ? `${results.length} of what you have kept` : "most recent"}
-            </div>
             {/*
               Said once, above the column it governs.
 
-              The archive is where someone answers "what have I left public?",
-              so it is the one place the full consequence belongs — including
-              the part people actually want to know, which is not the toggle's
-              state but what another person in the room would see.
+              The archive is where someone answers "what have I left out
+              loud?", so it is the one place the full consequence belongs —
+              including the part people actually want to know, which is not
+              the control's state but what another person in the room would
+              see.
             */}
             <SharingExplainer open />
+            {/*
+              Two lenses, one column. "everything" is the archive as it was;
+              "held" answers the audit question this page exists for — what
+              have I kept to myself — as a lens rather than an eye run down
+              the right edge.
+            */}
+            <div className="sf-lens" role="group" aria-label="which of your pulses to show">
+              <button
+                type="button"
+                className={lens === "all" ? "on" : ""}
+                onClick={() => setLens("all")}
+              >
+                everything
+              </button>
+              <button
+                type="button"
+                className={lens === "held" ? "on" : ""}
+                onClick={() => setLens("held")}
+              >
+                held
+              </button>
+            </div>
+            {/* Directly above the rows it counts, under the controls that
+                change what those rows are. */}
+            <div className="sf-label">
+              {query.trim()
+                ? `${results.length} of what you have kept`
+                : lens === "held"
+                  ? "kept to yourself"
+                  : "most recent"}
+            </div>
             <div className="sf-results">
               {searching ? <p className="sf-empty">looking…</p> : null}
               {!searching && query.trim() && results.length === 0 ? (
                 <p className="sf-empty">Nothing you have kept matches that.</p>
+              ) : null}
+              {!searching && !query.trim() && lens === "held" && results.length === 0 ? (
+                <p className="sf-empty">
+                  Nothing is held. Everything you keep speaks in your rooms.
+                </p>
               ) : null}
               {results.map((signal) => (
                 /*
@@ -3735,6 +4218,11 @@ export default function SurfacePage(): JSX.Element {
                   own and cannot be nested inside one. The text is the target
                   for opening the save; the word on the right is the target for
                   changing who can read it.
+
+                  The default state is unmarked — an out-loud row offers
+                  "hold" only when reached for, while a held one carries its
+                  word all the time. The audit down the right edge still
+                  works: the held ones are the only ones with ink.
                 */
                 <div key={signal.id} className="sf-result">
                   <button
@@ -3743,25 +4231,28 @@ export default function SurfacePage(): JSX.Element {
                     onClick={() => enterSave(signal)}
                   >
                     <p>{signal.textPreview}</p>
-                    <span>{new Date(signal.capturedAt).toLocaleDateString()}</span>
+                    <span>
+                      {new Date(signal.capturedAt).toLocaleDateString()}
+                      {/* The second beat, marked. Texture, not a todo: an
+                          unreflected save is still a save. */}
+                      {signal.answeredReflectionCount > 0 ? (
+                        <span className="sf-beat" title="you have sat with this one" />
+                      ) : null}
+                    </span>
                   </button>
                   <button
                     type="button"
                     className={`sf-control sf-control--toggle sf-result-share${
-                      signal.shared ? "" : " private"
+                      signal.shared ? " sf-result-share--quiet" : " held"
                     }`}
                     aria-pressed={!signal.shared}
-                    aria-label={`${signal.shared ? "Public" : "Private"}. ${
-                      SHARING_MEANING[signal.shared ? "public" : "private"]
-                    } Click to make it ${signal.shared ? "private" : "public"}.`}
+                    aria-label={`${signal.shared ? "Out loud" : "Held"}. ${
+                      SHARING_MEANING[signal.shared ? "outLoud" : "held"]
+                    } Click to ${signal.shared ? "hold it" : "let it speak"}.`}
                     onClick={() => void toggleShared(signal)}
                   >
-                    {signal.shared ? (
-                      <Users className="sf-control-icon" aria-hidden="true" />
-                    ) : (
-                      <Lock className="sf-control-icon" aria-hidden="true" />
-                    )}
-                    {signal.shared ? "public" : "private"}
+                    <Hand className="sf-control-icon" aria-hidden="true" />
+                    {signal.shared ? "keep to yourself" : "held"}
                   </button>
                 </div>
               ))}
@@ -3779,7 +4270,10 @@ export default function SurfacePage(): JSX.Element {
             placeholder="What caught you?"
             onChange={(event) => {
               setDraft(event.target.value);
+              // Typing again means moving on: the confirmation line and the
+              // just-kept invitations belong to the save before this one.
               setKept(null);
+              setJustKept(null);
             }}
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void keep();
@@ -3832,20 +4326,25 @@ export default function SurfacePage(): JSX.Element {
                 event.target.value = "";
               }}
             />
-            {/* Public by default. One word, and it says which state it is in
-                rather than which state it would switch to. */}
+            {/* Out loud by default, and the default demands nothing: this is
+                the one escape hatch, not a decision in the way of the save.
+                One word, and it says which state it is in rather than which
+                state it would switch to. */}
             <button
               type="button"
-              className={`sf-control sf-control--toggle${shareToGroups ? "" : " private"}`}
+              className={`sf-control sf-control--toggle${shareToGroups ? "" : " held"}`}
               onClick={() => setShareToGroups((on) => !on)}
               aria-pressed={!shareToGroups}
+              aria-label={`${shareToGroups ? "Out loud" : "Held"}. ${
+                SHARING_MEANING[shareToGroups ? "outLoud" : "held"]
+              } Click to keep this one ${shareToGroups ? "held" : "out loud"}.`}
             >
               {shareToGroups ? (
                 <Users className="sf-control-icon" aria-hidden="true" />
               ) : (
-                <Lock className="sf-control-icon" aria-hidden="true" />
+                <Hand className="sf-control-icon" aria-hidden="true" />
               )}
-              {shareToGroups ? "public" : "private"}
+              {shareToGroups ? "out loud" : "held"}
             </button>
             <span className="sf-shortcut">⌘↵</span>
           </div>
@@ -3859,6 +4358,81 @@ export default function SurfacePage(): JSX.Element {
           */}
           <SharingExplainer shared={shareToGroups} />
           {kept ? <p className="sf-kept">{kept}</p> : null}
+          {/*
+            The beat after keeping: two invitations on the confirmation line.
+
+            "hold this one" is the escape hatch at its cheapest — one tap,
+            before any room has plausibly read it. "why this?" opens the one
+            exchange that runs machine-asks-you-answer, while the reaction is
+            still warm. Both optional, both gone the moment you start typing
+            the next save. Neither was a condition of keeping.
+          */}
+          {kept && justKept ? (
+            <div className="sf-toast">
+              {!justKeptHeld ? (
+                <button
+                  type="button"
+                  className="sf-toast-act"
+                  onClick={() => void holdJustKept()}
+                  aria-label={`Keep this save to yourself. ${SHARING_MEANING.held}`}
+                >
+                  <Hand className="sf-control-icon" aria-hidden="true" />
+                  keep this one to yourself
+                </button>
+              ) : null}
+              {!toastAnswered && !toastQuestion ? (
+                <button
+                  type="button"
+                  className="sf-toast-act"
+                  onClick={() => void askWhyThis()}
+                  disabled={toastAsking}
+                >
+                  {toastAsking ? "thinking…" : "say why this caught you"}
+                </button>
+              ) : null}
+              {toastQuestion ? (
+                <div className="sf-reflect-live">
+                  {/* Model output, labeled by what it is — the machine
+                      goes unnamed, and an unlabeled machine question reads
+                      as the product talking. */}
+                  <div className="sf-label">A QUESTION FROM THIS PULSE</div>
+                  <p className="sf-reflect-q">{toastQuestion}</p>
+                  <textarea
+                    className="sf-reflect-field"
+                    value={toastAnswer}
+                    placeholder="…"
+                    autoFocus
+                    onChange={(event) => setToastAnswer(event.target.value)}
+                    onKeyDown={(event) => {
+                      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                        void keepToastAnswer();
+                      }
+                    }}
+                    aria-label={toastQuestion}
+                  />
+                  <div className="sf-reflect-foot">
+                    <button
+                      type="button"
+                      onClick={() => void keepToastAnswer()}
+                      disabled={!toastAnswer.trim() || toastAnswering}
+                    >
+                      {toastAnswering ? "keeping…" : "keep this answer"}
+                    </button>
+                    <button
+                      type="button"
+                      className="sf-quiet"
+                      onClick={() => setToastQuestion(null)}
+                    >
+                      not now
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {toastAnswered ? (
+                <p className="sf-kept">Your answer is saved with it.</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         </section>
       </div>

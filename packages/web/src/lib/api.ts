@@ -1253,6 +1253,7 @@ export interface FetchTopOfMindNotesOptions {
 
 export type SavedSignalArchiveFilter =
   | "all"
+  | "held"
   | "highlighted"
   | "high_resonance"
   | "tensions"
@@ -1278,11 +1279,18 @@ export interface ApiSavedSignalSearchResult {
   capturedAt: string;
   updatedAt: string;
   /**
-   * Public: every room you are in can read this save. Private: none of them
-   * can, and it never reaches a room's reading. Either way it stays yours and
-   * still shapes your own Top of Mind.
+   * True is out loud: every room you are in can read this save. False is
+   * held: only your own room reads it, and it never reaches a room's
+   * reading. Either way it stays yours and still shapes your own pulls.
    */
   shared: boolean;
+  /**
+   * The second beat, counted. `answered` reflections carry the person's own
+   * words; `skipped` are questions deliberately passed. The archive marks
+   * saves with answers; the sit-with ritual queues saves where both are zero.
+   */
+  answeredReflectionCount: number;
+  skippedReflectionCount: number;
   resonanceScore: number;
   /**
    * Client-only: on a Group Top of Mind evidence drawer, the member who saved
@@ -2008,6 +2016,8 @@ function normalizeSavedSignal<T extends ApiSavedSignalSearchResult>(signal: T): 
     relatedContextTerms: signal.relatedContextTerms ?? [],
     attachmentSummary: signal.attachmentSummary ?? [],
     relevanceReasons: signal.relevanceReasons ?? [],
+    answeredReflectionCount: signal.answeredReflectionCount ?? 0,
+    skippedReflectionCount: signal.skippedReflectionCount ?? 0,
   };
 }
 

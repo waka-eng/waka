@@ -4,6 +4,7 @@ export type SurfaceView =
   | "save"
   | "ask"
   | "capture"
+  | "sit"
   | "direction";
 
 export type SurfaceRoomId = string | null;
@@ -49,6 +50,14 @@ export function parseSurfacePath(pathname: string): SurfaceRoute {
   */
   if (rest.length === 1 && rest[0] === "capture") {
     return { view: "capture", roomId, entityId: null };
+  }
+  /*
+    Sitting with today's saves is a solo act — reflection happens beside your
+    own heart, not in front of a room — so the path never carries a room and
+    a room-nested variant is not read either.
+  */
+  if (!roomId && rest.length === 1 && rest[0] === "sit") {
+    return { view: "sit", roomId: null, entityId: null };
   }
   if (rest.length === 1 && rest[0] === "inspirations") {
     return { view: "ask", roomId, entityId: null };
@@ -117,6 +126,10 @@ export function buildSurfacePath(input: SurfaceRoute): string {
     */
     case "capture":
       return "/capture";
+    // Solo like capture, and for the same reason: the act belongs to the
+    // person, whatever room they were standing in when they reached for it.
+    case "sit":
+      return "/sit";
     case "ask":
       return `${base}/inspirations`;
     case "save":
