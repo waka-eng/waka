@@ -384,28 +384,27 @@ export function OrbitBoard(props: {
         )}
         {placesOpen && places ? (
           /*
-            Chapters, not a dropdown. The list takes the ambition's place at
-            the ambition's scale — where you are in ink, everywhere else
-            faded to the same size. One view holds one thing.
+            The label doesn't move and doesn't repeat: the room you are in
+            keeps standing where it always stands, and the OTHER places
+            unfold beneath it in the same spaced small-caps voice. The
+            ambition steps back while you choose; the ring murmurs.
           */
           <div className="ob-chapters" role="menu" aria-label="go to another room">
-            {places.map((place) => {
-              const here = (place.id ?? null) === (currentPlaceId ?? null);
-              return (
+            {places
+              .filter((place) => (place.id ?? null) !== (currentPlaceId ?? null))
+              .map((place) => (
                 <button
                   key={place.id ?? "your-wall"}
                   type="button"
                   role="menuitem"
-                  className={here ? "here" : ""}
                   onClick={() => {
                     setPlacesOpen(false);
-                    if (!here) onSwitchPlace?.(place.id);
+                    onSwitchPlace?.(place.id);
                   }}
                 >
                   {place.name}
                 </button>
-              );
-            })}
+              ))}
           </div>
         ) : (
           <>

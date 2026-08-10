@@ -132,7 +132,9 @@
 .ob-chapters {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
+  margin-top: -4px;
+  margin-bottom: 10px;
   animation: ob-chapters-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes ob-chapters-in {
@@ -143,23 +145,18 @@
   all: unset;
   pointer-events: auto;
   cursor: pointer;
-  /* The ambition's own scale — equal for every chapter; presence, not
-     size, says where you stand. */
-  font-size: clamp(20px, 2.6vw, 30px);
-  line-height: 1.2;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  color: var(--ob-ink);
-  opacity: 0.3;
-  text-wrap: balance;
+  /* The label's own voice — the other places speak exactly as the room's
+     name does, a shade quieter. */
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ob-muted);
+  opacity: 0.55;
   transition: opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ob-chapters button:hover {
-  opacity: 0.65;
-}
-.ob-chapters button.here {
   opacity: 1;
-  cursor: default;
+  color: var(--ob-ink);
 }
 
 .ob-center-label {
