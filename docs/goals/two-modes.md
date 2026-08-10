@@ -262,6 +262,39 @@ runs; board evidence adds prompt tokens, not calls. Publish is a read path.
 The only new recurring cost is proposal-refresh tempo if the window makes
 updates more frequent; bounded by the existing one-open-proposal rule.
 
+## The ambition report (mode 2's page) — decided 2026-08-09
+
+The page answers two questions and permits three acts. Vocabulary is
+pulse/pull/ambition throughout.
+
+**Read it.** The statement large; beneath it the faces who pressed it and the
+one-tap **press** — one act, both meanings: *"holds for me — this is me
+too."* An unpressed face is itself the quiet, visible signal that the
+ambition doesn't speak for someone yet. The tension line renders when
+present (combining ≠ agreeing).
+
+**How it formed — progressive disclosure, the things themselves, never
+counts.** FORMED FROM lists the *pulls* (first layer, always visible); each
+pull unfolds into *its* pulses — owner face, quote, date; tapping a pulse
+opens the save. One level per gesture. Beneath: a quiet **"carried most by
+●●"** faces line (no tier labels — "load-bearing" is banned vocabulary; the
+grades come from ambition-reading Phase 2 and the line simply doesn't render
+until they exist), the honest absence line for unrepresented members, the
+span ("formed June 12 – Aug 3"), the pulse profile ("mostly quickened
+pulses"), and freshness ("14 new pulses since") as the natural bridge to
+asking WAKA.
+
+**Act on it.** The margin as built, plus **stand-behind**: pressing someone's
+take adds your face to it — one-sided, agreement only; disagreement is
+writing your own take. Which takes gathered hearts is proposer evidence.
+The one-action rule stays: ask WAKA / adopt-or-keep.
+
+Build slices: **B2a** read-only provenance (expose groundedNotes on the
+reading — small API read; render lineage/span/profile/carried-by). **B2b**
+the acts (press + stand-behind: two small tables, endpoints, faces
+rendering; proposer prompt gains both signals). Threads (replies) and
+attach-a-pull remain with B2b or later.
+
 ## Log
 
 ### 2026-08-09 — the orbit prototype, and four design rulings
