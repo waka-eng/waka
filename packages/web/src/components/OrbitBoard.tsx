@@ -382,13 +382,25 @@ export function OrbitBoard(props: {
         ) : (
           <div className="ob-center-label">{center.label}</div>
         )}
+        {/*
+          The ambition never leaves the layout — while choosing it only
+          fades, so the block keeps its height and the label keeps its
+          exact place on screen. The other rooms float in the ambition's
+          faded spot, in the label's own voice.
+        */}
+        {center.ambition ? (
+          /* Keyed by its words: travelling to another chapter replays
+             the arrival; re-renders of the same ambition do not. */
+          <div key={center.ambition} className="ob-center-ambition">{center.ambition}</div>
+        ) : (
+          <div className="ob-center-forming">forming — no ambition adopted yet</div>
+        )}
+        {center.ambition && onOpenAmbition ? (
+          <button type="button" className="ob-open" onClick={onOpenAmbition} tabIndex={placesOpen ? -1 : 0}>
+            Open the ambition
+          </button>
+        ) : null}
         {placesOpen && places ? (
-          /*
-            The label doesn't move and doesn't repeat: the room you are in
-            keeps standing where it always stands, and the OTHER places
-            unfold beneath it in the same spaced small-caps voice. The
-            ambition steps back while you choose; the ring murmurs.
-          */
           <div className="ob-chapters" role="menu" aria-label="go to another room">
             {places
               .filter((place) => (place.id ?? null) !== (currentPlaceId ?? null))
@@ -406,22 +418,7 @@ export function OrbitBoard(props: {
                 </button>
               ))}
           </div>
-        ) : (
-          <>
-            {center.ambition ? (
-              /* Keyed by its words: travelling to another chapter replays
-                 the arrival; re-renders of the same ambition do not. */
-              <div key={center.ambition} className="ob-center-ambition">{center.ambition}</div>
-            ) : (
-              <div className="ob-center-forming">forming — no ambition adopted yet</div>
-            )}
-            {center.ambition && onOpenAmbition ? (
-              <button type="button" className="ob-open" onClick={onOpenAmbition}>
-                Open the ambition
-              </button>
-            ) : null}
-          </>
-        )}
+        ) : null}
       </div>
 
       {notes.map((note) => {

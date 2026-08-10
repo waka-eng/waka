@@ -129,12 +129,23 @@
   /* While the list is open it must sit above any crossing sheet. */
   z-index: 850;
 }
+.ob-center--switching .ob-center-ambition,
+.ob-center--switching .ob-center-forming,
+.ob-center--switching .ob-open {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
 .ob-chapters {
+  /* Floats in the faded ambition's space so nothing above it moves. */
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
   display: flex;
   flex-direction: column;
   gap: 9px;
-  margin-top: -4px;
-  margin-bottom: 10px;
   animation: ob-chapters-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes ob-chapters-in {
