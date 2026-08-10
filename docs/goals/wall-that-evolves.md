@@ -18,10 +18,11 @@ wall that never meaningfully changes is a camera pointed at a still life.
 
 ## Where things actually stand
 
-- **History is being destroyed right now.** The work that stops it is written
-  and tested and sitting on an unmerged branch. Every refresh in production
-  still deletes what the wall used to say. This is the only thing on this list
-  whose cost is permanent.
+- **History is no longer being destroyed** (correction 2026-08-10): Step 1
+  shipped — the room-remembers work is in dev and in production `main`
+  (`room-timeline.ts`, note lifecycle, join/leave records; promoted
+  2026-08-06). The paragraph below is kept as written for the record, but
+  Step 1 is done.
 - **The wall is whatever came first.** Notes are made one at a time and posted
   immediately, stopping at six. Nothing ever looks at six notes together.
 - **Most refreshes redo work for nothing.** The only guard on a pass is a
