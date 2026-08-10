@@ -16,6 +16,62 @@
   --ad-line: #cacac9;
 }
 
+/* ---------- depth 0: the poster ---------- */
+.ad-hero {
+  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ad--open .ad-hero {
+  opacity: 0.5;
+}
+
+.ad-urgent {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  margin-top: 32px;
+  padding: 9px 14px;
+  border: 1px solid var(--ad-ink);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ad-ink);
+  width: max-content;
+}
+.ad-urgent:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.ad-doors {
+  display: flex;
+  gap: 24px;
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ad-line);
+}
+.ad-doors button {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ad-muted);
+}
+.ad-doors button:hover,
+.ad-doors button[aria-expanded="true"] {
+  color: var(--ad-ink);
+}
+.ad-doors button:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+
+.ad-section {
+  margin-top: 24px;
+  animation: ad-unfold 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ad-history-block {
+  margin-top: 28px;
+}
+
 /* ---------- ① the statement ---------- */
 .ad-statement {
   font-size: clamp(24px, 3.4vw, 36px);
@@ -77,7 +133,7 @@
 
 /* ---------- ①b how it formed: the lineage ---------- */
 .ad-formed {
-  margin-top: 36px;
+  margin-top: 0;
 }
 .ad-formed-label {
   margin: 0 0 12px;
@@ -153,9 +209,7 @@
 
 /* ---------- ② the voices ---------- */
 .ad-margin {
-  margin-top: 40px;
-  border-top: 1px solid var(--ad-line);
-  padding-top: 20px;
+  margin-top: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -256,7 +310,7 @@
 
 /* ---------- ③ the one action ---------- */
 .ad-ask {
-  margin-top: 44px;
+  margin-top: 32px;
   text-align: center;
 }
 .ad-ask button {
@@ -280,7 +334,7 @@
 }
 
 .ad-decision {
-  margin-top: 44px;
+  margin-top: 32px;
   border: 1px solid var(--ad-line);
   padding: 20px 22px 18px;
 }
@@ -327,22 +381,7 @@
   color: var(--ad-muted);
 }
 
-/* ---------- the foot ---------- */
-.ad-foot {
-  margin-top: 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  font-size: 12px;
-  color: var(--ad-muted);
-}
-.ad-foot summary {
-  cursor: pointer;
-  width: max-content;
-}
-.ad-foot summary:hover {
-  color: var(--ad-ink);
-}
+/* ---------- history + legacy evidence (inside the formed section) ---------- */
 .ad-history {
   margin: 10px 0 0;
   padding: 0 0 0 2px;

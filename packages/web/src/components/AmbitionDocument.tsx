@@ -1,22 +1,23 @@
 /**
- * The ambition's own space, reduced: one screen, three layers, one action.
+ * The ambition's own space: one page, three depths.
  *
- * 1. THE STATEMENT — the adopted ambition, large and alone. No page title,
- *    no explainer: the door you came through already named this place.
- * 2. THE VOICES — the margin. Attributed lines under the statement, oldest
- *    first, a member's hue on each. One composer: "say how this sits with
- *    you…". Nobody edits the wording — the room steers, WAKA writes.
- * 3. THE ONE ACTION — state-dependent, never plural. No open proposal:
- *    ask WAKA for a new version (the half-the-room rule lives inside the
- *    disabled state, not as a progress meter). Proposal open: the page
- *    becomes the decision — candidate beside current, adopt or keep.
+ * DEPTH 0 — the poster. The statement, one meta line (version + mode), and
+ * the page's one primary act: the press, which is publish consent. Two quiet
+ * doors beneath. Nothing else — this frame is the future public page,
+ * rehearsing. When a draft is waiting, the room's one urgent decision
+ * surfaces as a third line, because a pending decision outranks browsing.
  *
- * Everything else folds into two quiet doors at the foot: past versions,
- * and the pulses the current version is grounded in.
+ * DEPTH 1a — "how this formed": the lineage (pulls → their pulses), the
+ * span/profile sentence, past versions. Provenance on demand.
  *
- * This is a re-skin of the existing direction machinery (contributions,
- * one-open-proposal, accept/keep-current responses) — slice B1 of the
- * two-modes goal. It adds no API surface; threads and attach-a-pull are B2.
+ * DEPTH 1b — "takes": the working room. The unsettled prompt, the voices
+ * with stand-behind, the composer, and the draft action — the act lives
+ * beside the material it is written from. Opening one door closes the
+ * other: one view holds one thing.
+ *
+ * A re-skin of the existing direction machinery (contributions,
+ * one-open-proposal, accept/keep-current responses) plus the acts layer
+ * (press, stand-behind). Nobody edits the wording — the room steers.
  */
 
 import { useEffect, useState } from "react";
@@ -122,6 +123,8 @@ export function askCopy(input: {
   };
 }
 
+type OpenSection = "formed" | "takes" | null;
+
 export function AmbitionDocument(props: {
   direction: ApiGroupDirection | null;
   draft: string;
@@ -135,6 +138,8 @@ export function AmbitionDocument(props: {
 }) {
   const { direction, draft, saving, reviewing, asking } = props;
   const [openPullId, setOpenPullId] = useState<string | null>(null);
+  /* One door open at a time — one view holds one thing. */
+  const [openSection, setOpenSection] = useState<OpenSection>(null);
   /*
     The acts live here, not in Surface: this component knows which room it
     stands in from the URL and who is looking from the session, and keeps a
@@ -158,7 +163,7 @@ export function AmbitionDocument(props: {
 
   const current = direction?.current ?? null;
   const proposal = direction?.proposal ?? null;
-  /* Oldest first: the margin reads as the room's conversation, not a feed. */
+  /* Oldest first: the takes read as the room's conversation, not a feed. */
   const voices = [...(direction?.contributions ?? [])].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
@@ -170,291 +175,172 @@ export function AmbitionDocument(props: {
     asking,
   });
 
-  return (
-    <div className="ad">
-      {/* ① the statement */}
-      {current ? (
-        <>
-          <p className="ad-statement">{current.ambition}</p>
-          <p className="ad-meta">
-            v{current.versionNumber} · adopted {settledOn(current.createdAt)} ·{" "}
-            {publicConsent({
-              agreedCount: (press?.affirmations ?? current.affirmations).length,
-              requiredResponses: direction?.requiredResponses ?? 0,
-            }).modeLabel}
-          </p>
-          {(() => {
-            const affirmations = press?.affirmations ?? current.affirmations;
-            const viewerAffirmed = press?.viewerAffirmed ?? direction?.viewerAffirmed ?? false;
-            return (
-              <div className="ad-press">
-                {affirmations.length > 0 ? (
-                  <span className="sf-faces">
-                    {affirmations.map((face) => (
-                      <span
-                        key={face.userId}
-                        className="sf-face"
-                        style={{ background: contributorColor(face.memberName) }}
-                        title={`${face.memberName} said go public`}
-                      >
-                        {contributorInitials(face.memberName)}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-                {roomId ? (
-                  <button
-                    type="button"
-                    disabled={actBusy}
-                    aria-pressed={viewerAffirmed}
-                    onClick={() => {
-                      if (!roomId || actBusy) return;
-                      setActBusy(true);
-                      setGroupDirectionAffirmation(roomId, current.id, !viewerAffirmed)
-                        .then((result) => setPress(result))
-                        .catch(() => undefined)
-                        .finally(() => setActBusy(false));
-                    }}
-                  >
-                    {viewerAffirmed ? "You said go public — undo" : "Good to go public"}
-                  </button>
-                ) : null}
-                <span className="ad-press-why">
-                  {publicConsent({
-                    agreedCount: affirmations.length,
-                    requiredResponses: direction?.requiredResponses ?? 0,
-                  }).cleared
-                    ? "most of the room agreed — the public page is next"
-                    : "goes public once most of the room says so"}
-                </span>
-              </div>
-            );
-          })()}
+  const affirmations = press?.affirmations ?? current?.affirmations ?? [];
+  const viewerAffirmed = press?.viewerAffirmed ?? direction?.viewerAffirmed ?? false;
+  const consent = publicConsent({
+    agreedCount: affirmations.length,
+    requiredResponses: direction?.requiredResponses ?? 0,
+  });
 
-        </>
-      ) : (
-        <p className="ad-forming">
-          Still forming — the room's first ambition arrives once enough hearts
-          have shaped it.
-        </p>
-      )}
-
-      {/* ①b — how it formed: the lineage, one disclosure level per layer.
-          The pulls are always visible (the things themselves, never counts);
-          each unfolds into its own pulses; a pulse links to nothing yet —
-          the save view is a later door. */}
-      {current &&
+  const hasFormed = Boolean(
+    current &&
       (current.groundedNotes.length > 0 ||
         formedSpanCopy(current.evidenceSpanStart, current.evidenceSpanEnd) ||
-        pulseProfileCopy(current.pulseProfile)) ? (
-        <div className="ad-formed">
-          <p className="ad-formed-label">formed from</p>
-          {current.groundedNotes.map((pull) => {
-            const open = openPullId === pull.id;
-            const hands = Array.from(new Set(pull.pulses.map((pulse) => pulse.memberName)));
-            return (
-              <div key={pull.id} className="ad-pull">
-                <button
-                  type="button"
-                  className="ad-pull-line"
-                  aria-expanded={open}
-                  onClick={() => setOpenPullId(open ? null : pull.id)}
-                >
-                  <span className="ad-pull-mark" aria-hidden="true">{open ? "▾" : "▸"}</span>
-                  <span className="ad-pull-text">{pull.text}</span>
-                  <span className="sf-faces">
-                    {hands.map((name) => (
-                      <span
-                        key={name}
-                        className="sf-face"
-                        style={{ background: contributorColor(name) }}
-                      >
-                        {contributorInitials(name)}
-                      </span>
-                    ))}
-                  </span>
-                </button>
-                {open ? (
-                  <ul className="ad-pulses">
-                    {pull.pulses.map((pulse) => (
-                      <li key={`${pull.id}-${pulse.signalId}`}>
-                        <span
-                          className="ad-voice-dot"
-                          style={{ background: contributorColor(pulse.memberName) }}
-                          title={pulse.memberName}
-                        />
-                        <span className="ad-pulse-quote">“{pulse.textPreview}”</span>
-                        <span className="ad-pulse-when">{dayOf(pulse.createdAt)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            );
-          })}
-          {(() => {
-            const span = formedSpanCopy(current.evidenceSpanStart, current.evidenceSpanEnd);
-            const profile = pulseProfileCopy(current.pulseProfile);
-            const line = [span, profile].filter(Boolean).join(" · ");
-            return line ? <p className="ad-formed-meta">{line}</p> : null;
-          })()}
-        </div>
-      ) : null}
+        pulseProfileCopy(current.pulseProfile) ||
+        (current.evidence?.length ?? 0) > 0 ||
+        (direction?.history?.length ?? 0) > 0),
+  );
 
-      {/* ② the voices */}
-      <div className="ad-margin">
-        {voices.map((voice) => {
-          const supporters = supportsByTake[voice.id] ?? voice.supporters;
-          const standing = Boolean(user && supporters.some((face) => face.userId === user.id));
-          const own = user?.id === voice.userId;
-          return (
-            <div key={voice.id} className="ad-voice">
-              <span
-                className="ad-voice-dot"
-                style={{ background: contributorColor(voice.memberName) }}
-                title={voice.memberName}
-              />
-              <span className="ad-voice-name">{voice.memberName}</span>
-              <span className="ad-voice-body">{voice.body}</span>
-              {supporters.length > 0 ? (
-                <span className="sf-faces ad-voice-supporters" title="standing behind this">
-                  {supporters.map((face) => (
+  const toggle = (section: Exclude<OpenSection, null>) =>
+    setOpenSection((open) => (open === section ? null : section));
+
+  return (
+    <div className={`ad${openSection ? " ad--open" : ""}`}>
+      {/* -------------------------------------------- depth 0: the poster */}
+      <div className="ad-hero">
+        {current ? (
+          <>
+            <p className="ad-statement">{current.ambition}</p>
+            <p className="ad-meta">
+              v{current.versionNumber} · adopted {settledOn(current.createdAt)} ·{" "}
+              {consent.modeLabel}
+            </p>
+            <div className="ad-press">
+              {affirmations.length > 0 ? (
+                <span className="sf-faces">
+                  {affirmations.map((face) => (
                     <span
                       key={face.userId}
                       className="sf-face"
                       style={{ background: contributorColor(face.memberName) }}
+                      title={`${face.memberName} said go public`}
                     >
                       {contributorInitials(face.memberName)}
                     </span>
                   ))}
                 </span>
               ) : null}
-              {!own && roomId ? (
+              {roomId ? (
                 <button
                   type="button"
-                  className="ad-voice-act"
-                  title="add your face to this take — the next draft leans on what the room stands behind"
                   disabled={actBusy}
+                  aria-pressed={viewerAffirmed}
                   onClick={() => {
-                    if (!roomId || actBusy) return;
+                    if (!roomId || actBusy || !current) return;
                     setActBusy(true);
-                    setGroupDirectionTakeSupport(roomId, voice.id, !standing)
-                      .then((result) =>
-                        setSupportsByTake((currentMap) => ({
-                          ...currentMap,
-                          [voice.id]: result.supporters,
-                        })),
-                      )
+                    setGroupDirectionAffirmation(roomId, current.id, !viewerAffirmed)
+                      .then((result) => setPress(result))
                       .catch(() => undefined)
                       .finally(() => setActBusy(false));
                   }}
                 >
-                  {standing ? "step back" : "stand behind"}
+                  {viewerAffirmed ? "You said go public — undo" : "Good to go public"}
                 </button>
               ) : null}
+              {/* Feedforward until the first face; after that, the faces
+                  and the mode in the meta line say it. */}
+              {affirmations.length === 0 ? (
+                <span className="ad-press-why">goes public once most of the room says so</span>
+              ) : consent.cleared ? (
+                <span className="ad-press-why">most of the room agreed — the public page is next</span>
+              ) : null}
             </div>
-          );
-        })}
-        {current?.tension ? (
-          <div className="ad-unsettled">
-            <span className="ad-unsettled-label">not settled in this room yet</span>
-            {current.tension}
-          </div>
-        ) : null}
-        <p className="ad-margin-why">
-          Takes written here shape the next draft
-          {current?.tension ? " — the unsettled line above is a good place to start" : ""}.
-        </p>
-        <form
-          className="ad-composer"
-          onSubmit={(event) => {
-            event.preventDefault();
-            props.onSubmitVoice();
-          }}
-        >
-          <input
-            type="text"
-            value={draft}
-            placeholder="Add your take — what should change, or what's right as is"
-            aria-label="add your take on this ambition"
-            onChange={(event) => props.onDraft(event.target.value)}
-            disabled={saving}
-          />
-          {draft.trim() ? (
-            <button type="submit" disabled={saving}>
-              {saving ? "…" : "add your take"}
-            </button>
-          ) : null}
-        </form>
+          </>
+        ) : (
+          <p className="ad-forming">
+            Still forming — the room's first ambition arrives once enough hearts
+            have shaped it.
+          </p>
+        )}
       </div>
 
-      {/* ③ the one action */}
-      {proposal ? (
-        <div className="ad-decision" role="group" aria-label="a new draft for the room to decide">
-          <p className="ad-decision-label">a new draft for the room to decide</p>
-          <p className="ad-candidate">{proposal.ambition}</p>
-          {proposal.changeSummary ? (
-            <p className="ad-change">{proposal.changeSummary}</p>
+      {/* A pending decision outranks browsing: the one urgent line. */}
+      {proposal && openSection !== "takes" ? (
+        <button type="button" className="ad-urgent" onClick={() => setOpenSection("takes")}>
+          a new draft is waiting for the room — decide
+        </button>
+      ) : null}
+
+      {/* the two doors */}
+      {current ? (
+        <div className="ad-doors">
+          {hasFormed ? (
+            <button
+              type="button"
+              aria-expanded={openSection === "formed"}
+              onClick={() => toggle("formed")}
+            >
+              {openSection === "formed" ? "close" : "how this formed"}
+            </button>
           ) : null}
-          <div className="ad-decision-acts">
-            <button
-              type="button"
-              className={direction?.viewerResponse === "accept" ? "on" : ""}
-              disabled={reviewing}
-              onClick={() => props.onReview("accept")}
-            >
-              adopt this draft
-            </button>
-            <button
-              type="button"
-              className={direction?.viewerResponse === "keep_current" ? "on" : ""}
-              disabled={reviewing}
-              onClick={() => props.onReview("keep_current")}
-            >
-              keep the current one
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="ad-ask">
           <button
             type="button"
-            disabled={!ask.ready}
-            onClick={props.onAskNewVersion}
+            aria-expanded={openSection === "takes"}
+            onClick={() => toggle("takes")}
           >
-            {ask.label}
+            {openSection === "takes"
+              ? "close"
+              : `takes${voices.length > 0 ? ` (${voices.length})` : ""}`}
           </button>
-          {ask.note ? <p className="ad-ask-note">{ask.note}</p> : null}
         </div>
-      )}
+      ) : null}
 
-      {/* the foot: two quiet doors */}
-      <div className="ad-foot">
-        {direction?.history?.length ? (
-          <details>
-            <summary>past versions</summary>
-            <ol className="ad-history">
-              {direction.history.map((version) => (
-                <li key={version.id}>
-                  <span className="ad-history-v">v{version.versionNumber}</span>
-                  <span className="ad-history-when">{settledOn(version.createdAt)}</span>
-                  <span className="ad-history-what">
-                    {version.changeSummary ??
-                      (version.versionNumber === 1 ? "First ambition" : version.ambition)}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          </details>
-        ) : null}
-        {current?.evidence?.length && current.groundedNotes.length === 0 ? (
-          /* Older readings may predate grounded-note linkage; the flat
-             quotes remain their only lineage. */
-          <details>
-            <summary>
-              grounded in {current.evidence.length} pulse
-              {current.evidence.length === 1 ? "" : "s"}
-            </summary>
+      {/* --------------------------------- depth 1a: how this formed */}
+      {openSection === "formed" && current ? (
+        <div className="ad-section">
+          {current.groundedNotes.length > 0 ? (
+            <div className="ad-formed">
+              <p className="ad-formed-label">formed from</p>
+              {current.groundedNotes.map((pull) => {
+                const open = openPullId === pull.id;
+                const hands = Array.from(
+                  new Set(pull.pulses.map((pulse) => pulse.memberName)),
+                );
+                return (
+                  <div key={pull.id} className="ad-pull">
+                    <button
+                      type="button"
+                      className="ad-pull-line"
+                      aria-expanded={open}
+                      onClick={() => setOpenPullId(open ? null : pull.id)}
+                    >
+                      <span className="ad-pull-mark" aria-hidden="true">{open ? "▾" : "▸"}</span>
+                      <span className="ad-pull-text">{pull.text}</span>
+                      <span className="sf-faces">
+                        {hands.map((name) => (
+                          <span
+                            key={name}
+                            className="sf-face"
+                            style={{ background: contributorColor(name) }}
+                          >
+                            {contributorInitials(name)}
+                          </span>
+                        ))}
+                      </span>
+                    </button>
+                    {open ? (
+                      <ul className="ad-pulses">
+                        {pull.pulses.map((pulse) => (
+                          <li key={`${pull.id}-${pulse.signalId}`}>
+                            <span
+                              className="ad-voice-dot"
+                              style={{ background: contributorColor(pulse.memberName) }}
+                              title={pulse.memberName}
+                            />
+                            <span className="ad-pulse-quote">“{pulse.textPreview}”</span>
+                            <span className="ad-pulse-when">{dayOf(pulse.createdAt)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+          {current.evidence?.length && current.groundedNotes.length === 0 ? (
+            /* Older readings may predate grounded-note linkage; the flat
+               quotes remain their only lineage. */
             <ul className="ad-evidence">
               {current.evidence.map((item) => (
                 <li key={`${item.signalId}-${item.quote}`}>
@@ -468,9 +354,161 @@ export function AmbitionDocument(props: {
                 </li>
               ))}
             </ul>
-          </details>
-        ) : null}
-      </div>
+          ) : null}
+          {(() => {
+            const span = formedSpanCopy(current.evidenceSpanStart, current.evidenceSpanEnd);
+            const profile = pulseProfileCopy(current.pulseProfile);
+            const line = [span, profile].filter(Boolean).join(" · ");
+            return line ? <p className="ad-formed-meta">{line}</p> : null;
+          })()}
+          {direction?.history?.length ? (
+            <div className="ad-history-block">
+              <p className="ad-formed-label">past versions</p>
+              <ol className="ad-history">
+                {direction.history.map((version) => (
+                  <li key={version.id}>
+                    <span className="ad-history-v">v{version.versionNumber}</span>
+                    <span className="ad-history-when">{settledOn(version.createdAt)}</span>
+                    <span className="ad-history-what">
+                      {version.changeSummary ??
+                        (version.versionNumber === 1 ? "First ambition" : version.ambition)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* --------------------------------------- depth 1b: the takes */}
+      {openSection === "takes" ? (
+        <div className="ad-section">
+          {current?.tension ? (
+            <div className="ad-unsettled">
+              <span className="ad-unsettled-label">not settled in this room yet</span>
+              {current.tension}
+            </div>
+          ) : null}
+          <div className="ad-margin">
+            {voices.map((voice) => {
+              const supporters = supportsByTake[voice.id] ?? voice.supporters;
+              const standing = Boolean(
+                user && supporters.some((face) => face.userId === user.id),
+              );
+              const own = user?.id === voice.userId;
+              return (
+                <div key={voice.id} className="ad-voice">
+                  <span
+                    className="ad-voice-dot"
+                    style={{ background: contributorColor(voice.memberName) }}
+                    title={voice.memberName}
+                  />
+                  <span className="ad-voice-name">{voice.memberName}</span>
+                  <span className="ad-voice-body">{voice.body}</span>
+                  {supporters.length > 0 ? (
+                    <span className="sf-faces ad-voice-supporters" title="standing behind this">
+                      {supporters.map((face) => (
+                        <span
+                          key={face.userId}
+                          className="sf-face"
+                          style={{ background: contributorColor(face.memberName) }}
+                        >
+                          {contributorInitials(face.memberName)}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
+                  {!own && roomId ? (
+                    <button
+                      type="button"
+                      className="ad-voice-act"
+                      title="add your face to this take — the next draft leans on what the room stands behind"
+                      disabled={actBusy}
+                      onClick={() => {
+                        if (!roomId || actBusy) return;
+                        setActBusy(true);
+                        setGroupDirectionTakeSupport(roomId, voice.id, !standing)
+                          .then((result) =>
+                            setSupportsByTake((currentMap) => ({
+                              ...currentMap,
+                              [voice.id]: result.supporters,
+                            })),
+                          )
+                          .catch(() => undefined)
+                          .finally(() => setActBusy(false));
+                      }}
+                    >
+                      {standing ? "step back" : "stand behind"}
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+            <p className="ad-margin-why">
+              Takes written here shape the next draft
+              {current?.tension ? " — the unsettled line above is a good place to start" : ""}.
+            </p>
+            <form
+              className="ad-composer"
+              onSubmit={(event) => {
+                event.preventDefault();
+                props.onSubmitVoice();
+              }}
+            >
+              <input
+                type="text"
+                value={draft}
+                placeholder="Add your take — what should change, or what's right as is"
+                aria-label="add your take on this ambition"
+                onChange={(event) => props.onDraft(event.target.value)}
+                disabled={saving}
+              />
+              {draft.trim() ? (
+                <button type="submit" disabled={saving}>
+                  {saving ? "…" : "add your take"}
+                </button>
+              ) : null}
+            </form>
+          </div>
+
+          {/* the draft action lives beside the material it is written from */}
+          {proposal ? (
+            <div className="ad-decision" role="group" aria-label="a new draft for the room to decide">
+              <p className="ad-decision-label">a new draft for the room to decide</p>
+              <p className="ad-candidate">{proposal.ambition}</p>
+              {proposal.changeSummary ? (
+                <p className="ad-change">{proposal.changeSummary}</p>
+              ) : null}
+              <div className="ad-decision-acts">
+                <button
+                  type="button"
+                  className={direction?.viewerResponse === "accept" ? "on" : ""}
+                  disabled={reviewing}
+                  onClick={() => props.onReview("accept")}
+                >
+                  adopt this draft
+                </button>
+                <button
+                  type="button"
+                  className={direction?.viewerResponse === "keep_current" ? "on" : ""}
+                  disabled={reviewing}
+                  onClick={() => props.onReview("keep_current")}
+                >
+                  keep the current one
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="ad-ask">
+              <button type="button" disabled={!ask.ready} onClick={props.onAskNewVersion}>
+                {ask.label}
+              </button>
+              {ask.note ? <p className="ad-ask-note">{ask.note}</p> : null}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
