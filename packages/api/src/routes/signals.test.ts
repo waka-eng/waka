@@ -25,6 +25,8 @@ describe("GET /api/signals", () => {
         capturedAt: "2026-05-30T12:00:00.000Z",
         updatedAt: "2026-05-30T12:00:00.000Z",
         shared: true,
+        answeredReflectionCount: 0,
+        skippedReflectionCount: 0,
         resonanceScore: 84,
         signalScores: {
           resonance: 84,
@@ -96,6 +98,8 @@ describe("GET /api/signals", () => {
       capturedAt: "2026-05-30T12:00:00.000Z",
       updatedAt: "2026-05-30T12:00:00.000Z",
       shared: true,
+      answeredReflectionCount: 1,
+      skippedReflectionCount: 0,
       resonanceScore: 84,
       signalScores: {
         resonance: 84,

@@ -11,9 +11,15 @@ import { and, asc, desc, eq, gt, inArray, notInArray, sql } from "drizzle-orm";
 import {
   combinationReadings,
   combinations,
+  groupDirectionAffirmations,
   groupDirectionContributions,
   groupDirectionResponses,
+  groupDirectionTakeSupports,
+  groupTopOfMindNoteSignals,
+  groupTopOfMindNotes,
   signals,
+  users,
+  type CombinationPulseProfile,
   type CombinationReadingFacet,
   type GroupDirectionContributionKind,
   type GroupDirectionResponseValue,
@@ -22,6 +28,34 @@ import { loadGroupWithMembers, truncatePreview } from "./group-top-of-mind.js";
 import { requiredDirectionContributors } from "./group-direction-policy.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
+
+/** One pulse beneath a grounded pull: whose, its words, and when it happened. */
+export interface GroupDirectionGroundedPulse {
+  signalId: string;
+  userId: string;
+  memberName: string;
+  quote: string | null;
+  textPreview: string;
+  createdAt: string;
+}
+
+/**
+ * A pull the ambition dissolved, carrying its own pulses — the report's
+ * "how this formed" lineage, one disclosure level per layer. Privacy filters
+ * match the board's: a pulse that went private or whose owner left drops out,
+ * and a pull with no surviving pulses drops with it.
+ */
+export interface GroupDirectionGroundedNote {
+  id: string;
+  text: string;
+  pulses: GroupDirectionGroundedPulse[];
+}
+
+/** A face on something: who pressed, or who stands behind a take. */
+export interface GroupDirectionFace {
+  userId: string;
+  memberName: string;
+}
 
 export interface GroupDirectionEvidence {
   signalId: string;
@@ -47,6 +81,12 @@ export interface GroupDirectionReading {
   reconfirmedCount: number;
   evidenceSpanStart: string | null;
   evidenceSpanEnd: string | null;
+  /** Reaction vs composition mix of the grounding pulses, when recorded. */
+  pulseProfile: CombinationPulseProfile | null;
+  /** Filled for the current reading only — the report's lineage. */
+  groundedNotes: GroupDirectionGroundedNote[];
+  /** The press: "holds for me — this is me too." Current reading only. */
+  affirmations: GroupDirectionFace[];
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +98,8 @@ export interface GroupDirectionContributionSurface {
   memberName: string;
   kind: GroupDirectionContributionKind;
   body: string;
+  /** Who stands behind this take — one-sided, agreement only. */
+  supporters: GroupDirectionFace[];
   createdAt: string;
   updatedAt: string;
 }
@@ -85,6 +127,7 @@ export interface GroupDirectionSnapshot {
   requiredContributors: number;
   requiredResponses: number;
   viewerResponse: GroupDirectionResponseValue | null;
+  viewerAffirmed: boolean;
 }
 
 const DIRECTION_READING_COLUMNS = {
@@ -103,6 +146,8 @@ const DIRECTION_READING_COLUMNS = {
   evidenceSpanStart: combinationReadings.evidenceSpanStart,
   evidenceSpanEnd: combinationReadings.evidenceSpanEnd,
   changeSummary: combinationReadings.changeSummary,
+  groundedNoteIds: combinationReadings.groundedNoteIds,
+  pulseProfile: combinationReadings.pulseProfile,
   previousReadingId: combinationReadings.previousReadingId,
   lifecycleStatus: combinationReadings.lifecycleStatus,
   createdAt: combinationReadings.createdAt,
@@ -125,6 +170,8 @@ type DirectionReadingRow = {
   evidenceSpanStart: Date | null;
   evidenceSpanEnd: Date | null;
   changeSummary: string | null;
+  groundedNoteIds: string[];
+  pulseProfile: CombinationPulseProfile | null;
   previousReadingId: string | null;
   lifecycleStatus: string;
   createdAt: Date;
@@ -184,9 +231,90 @@ function readingSurface(
     reconfirmedCount: row.reconfirmedCount,
     evidenceSpanStart: row.evidenceSpanStart?.toISOString() ?? null,
     evidenceSpanEnd: row.evidenceSpanEnd?.toISOString() ?? null,
+    pulseProfile: row.pulseProfile ?? null,
+    groundedNotes: [],
+    affirmations: [],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/**
+ * The current reading's lineage: the pulls it dissolved, each with its own
+ * pulses. Read-only; order follows the reading's own grounded-note order.
+ */
+async function loadGroundedNotes(
+  db: WakaDb,
+  input: {
+    groupId: string;
+    groundedNoteIds: string[];
+    currentMemberIds: Set<string>;
+  },
+): Promise<GroupDirectionGroundedNote[]> {
+  if (input.groundedNoteIds.length === 0) return [];
+  const noteRows = await db
+    .select({
+      id: groupTopOfMindNotes.id,
+      title: groupTopOfMindNotes.title,
+      why: groupTopOfMindNotes.why,
+    })
+    .from(groupTopOfMindNotes)
+    .where(
+      and(
+        eq(groupTopOfMindNotes.groupId, input.groupId),
+        inArray(groupTopOfMindNotes.id, input.groundedNoteIds),
+      ),
+    );
+  if (noteRows.length === 0) return [];
+
+  const pulseRows = await db
+    .select({
+      noteId: groupTopOfMindNoteSignals.groupTopOfMindNoteId,
+      signalId: groupTopOfMindNoteSignals.signalId,
+      ownerUserId: groupTopOfMindNoteSignals.ownerUserId,
+      ownerName: users.name,
+      quote: groupTopOfMindNoteSignals.quote,
+      sortOrder: groupTopOfMindNoteSignals.sortOrder,
+      signalText: signals.text,
+      signalShared: signals.sharedToGroups,
+      signalCreatedAt: signals.createdAt,
+    })
+    .from(groupTopOfMindNoteSignals)
+    .innerJoin(signals, eq(groupTopOfMindNoteSignals.signalId, signals.id))
+    .innerJoin(users, eq(groupTopOfMindNoteSignals.ownerUserId, users.id))
+    .where(
+      inArray(
+        groupTopOfMindNoteSignals.groupTopOfMindNoteId,
+        noteRows.map((note) => note.id),
+      ),
+    )
+    .orderBy(asc(groupTopOfMindNoteSignals.sortOrder));
+
+  const pulsesByNote = new Map<string, GroupDirectionGroundedPulse[]>();
+  for (const row of pulseRows) {
+    // Same privacy stance as the board: a pulse that went private, or whose
+    // owner has left the room, is not part of what the room may read.
+    if (!row.signalShared) continue;
+    if (!input.currentMemberIds.has(row.ownerUserId)) continue;
+    const bucket = pulsesByNote.get(row.noteId) ?? [];
+    bucket.push({
+      signalId: row.signalId,
+      userId: row.ownerUserId,
+      memberName: row.ownerName,
+      quote: row.quote ?? null,
+      textPreview: truncatePreview(row.quote ?? row.signalText),
+      createdAt: row.signalCreatedAt.toISOString(),
+    });
+    pulsesByNote.set(row.noteId, bucket);
+  }
+
+  const noteById = new Map(noteRows.map((note) => [note.id, note]));
+  return input.groundedNoteIds.flatMap((id) => {
+    const note = noteById.get(id);
+    const pulses = pulsesByNote.get(id) ?? [];
+    if (!note || pulses.length === 0) return [];
+    return [{ id: note.id, text: note.why?.trim() || note.title, pulses }];
+  });
 }
 
 export async function getGroupDirection(
@@ -301,6 +429,13 @@ export async function getGroupDirection(
         sharedSignalById,
       )
     : null;
+  if (current && currentRow) {
+    current.groundedNotes = await loadGroundedNotes(db, {
+      groupId: input.groupId,
+      groundedNoteIds: currentRow.groundedNoteIds ?? [],
+      currentMemberIds: new Set(memberIds),
+    });
+  }
   const proposal = proposalRow
     ? readingSurface(
         proposalRow,
@@ -341,16 +476,62 @@ export async function getGroupDirection(
           .where(contributionWhere),
       ])
     : [[], [{ count: 0 }]];
+  /* Who stands behind each take, and who pressed the current version —
+     current members only, like every face on this surface. */
+  const supportRows = contributionRows.length > 0
+    ? await db
+        .select({
+          contributionId: groupDirectionTakeSupports.contributionId,
+          userId: groupDirectionTakeSupports.userId,
+        })
+        .from(groupDirectionTakeSupports)
+        .where(
+          inArray(
+            groupDirectionTakeSupports.contributionId,
+            contributionRows.map((row) => row.id),
+          ),
+        )
+        .orderBy(asc(groupDirectionTakeSupports.createdAt))
+    : [];
+  const supportersByContribution = new Map<string, GroupDirectionFace[]>();
+  for (const row of supportRows) {
+    const memberName = memberNameById.get(row.userId);
+    if (!memberName) continue;
+    const bucket = supportersByContribution.get(row.contributionId) ?? [];
+    bucket.push({ userId: row.userId, memberName });
+    supportersByContribution.set(row.contributionId, bucket);
+  }
+
   const contributions = contributionRows.flatMap((row) => {
     const memberName = memberNameById.get(row.userId);
     if (!memberName) return [];
     return [{
       ...row,
       memberName,
+      supporters: supportersByContribution.get(row.id) ?? [],
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     }];
   });
+
+  const affirmationRows = currentRow
+    ? await db
+        .select({ userId: groupDirectionAffirmations.userId })
+        .from(groupDirectionAffirmations)
+        .where(
+          and(
+            eq(groupDirectionAffirmations.groupId, input.groupId),
+            eq(groupDirectionAffirmations.readingId, currentRow.id),
+          ),
+        )
+        .orderBy(asc(groupDirectionAffirmations.createdAt))
+    : [];
+  if (current) {
+    current.affirmations = affirmationRows.flatMap((row) => {
+      const memberName = memberNameById.get(row.userId);
+      return memberName ? [{ userId: row.userId, memberName }] : [];
+    });
+  }
 
   const responseRows = proposalRow
     ? await db
@@ -379,6 +560,10 @@ export async function getGroupDirection(
     }];
   });
 
+  const viewerAffirmed = Boolean(
+    current?.affirmations.some((face) => face.userId === input.userId),
+  );
+
   return {
     current,
     proposal,
@@ -395,6 +580,135 @@ export async function getGroupDirection(
     requiredResponses: requiredDirectionResponses(loaded.members.length),
     viewerResponse:
       responses.find((response) => response.userId === input.userId)?.value ?? null,
+    viewerAffirmed,
+  };
+}
+
+/**
+ * The press, set or taken back. Idempotent both ways: pressing twice keeps
+ * one face, taking back an absent press changes nothing. The reading must be
+ * the group's own — any reading id outside this room answers not_found.
+ */
+export async function setDirectionAffirmation(
+  db: WakaDb,
+  input: { userId: string; groupId: string; readingId: string; value: boolean },
+): Promise<
+  | { ok: true; affirmations: GroupDirectionFace[]; viewerAffirmed: boolean }
+  | { ok: false; reason: "not_found" }
+> {
+  const loaded = await loadGroupWithMembers(db, input);
+  if (!loaded) return { ok: false, reason: "not_found" };
+  const readingRows = await db
+    .select({ id: combinationReadings.id })
+    .from(combinationReadings)
+    .innerJoin(combinations, eq(combinationReadings.combinationId, combinations.id))
+    .where(
+      and(
+        eq(combinationReadings.id, input.readingId),
+        eq(combinations.groupId, input.groupId),
+      ),
+    )
+    .limit(1);
+  if (readingRows.length === 0) return { ok: false, reason: "not_found" };
+
+  if (input.value) {
+    await db
+      .insert(groupDirectionAffirmations)
+      .values({
+        groupId: input.groupId,
+        readingId: input.readingId,
+        userId: input.userId,
+      })
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(groupDirectionAffirmations)
+      .where(
+        and(
+          eq(groupDirectionAffirmations.readingId, input.readingId),
+          eq(groupDirectionAffirmations.userId, input.userId),
+        ),
+      );
+  }
+
+  const memberNameById = new Map(
+    loaded.members.map((member) => [member.userId, member.name]),
+  );
+  const rows = await db
+    .select({ userId: groupDirectionAffirmations.userId })
+    .from(groupDirectionAffirmations)
+    .where(eq(groupDirectionAffirmations.readingId, input.readingId))
+    .orderBy(asc(groupDirectionAffirmations.createdAt));
+  const affirmations = rows.flatMap((row) => {
+    const memberName = memberNameById.get(row.userId);
+    return memberName ? [{ userId: row.userId, memberName }] : [];
+  });
+  return {
+    ok: true,
+    affirmations,
+    viewerAffirmed: affirmations.some((face) => face.userId === input.userId),
+  };
+}
+
+/**
+ * Standing behind a take, or stepping back. One-sided by design — there is
+ * no negative mark to place on another person's words in a small room.
+ */
+export async function setTakeSupport(
+  db: WakaDb,
+  input: { userId: string; groupId: string; contributionId: string; value: boolean },
+): Promise<
+  | { ok: true; supporters: GroupDirectionFace[] }
+  | { ok: false; reason: "not_found" }
+> {
+  const loaded = await loadGroupWithMembers(db, input);
+  if (!loaded) return { ok: false, reason: "not_found" };
+  const contributionRows = await db
+    .select({ id: groupDirectionContributions.id })
+    .from(groupDirectionContributions)
+    .where(
+      and(
+        eq(groupDirectionContributions.id, input.contributionId),
+        eq(groupDirectionContributions.groupId, input.groupId),
+      ),
+    )
+    .limit(1);
+  if (contributionRows.length === 0) return { ok: false, reason: "not_found" };
+
+  if (input.value) {
+    await db
+      .insert(groupDirectionTakeSupports)
+      .values({
+        groupId: input.groupId,
+        contributionId: input.contributionId,
+        userId: input.userId,
+      })
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(groupDirectionTakeSupports)
+      .where(
+        and(
+          eq(groupDirectionTakeSupports.contributionId, input.contributionId),
+          eq(groupDirectionTakeSupports.userId, input.userId),
+        ),
+      );
+  }
+
+  const memberNameById = new Map(
+    loaded.members.map((member) => [member.userId, member.name]),
+  );
+  const rows = await db
+    .select({ userId: groupDirectionTakeSupports.userId })
+    .from(groupDirectionTakeSupports)
+    .where(eq(groupDirectionTakeSupports.contributionId, input.contributionId))
+    .orderBy(asc(groupDirectionTakeSupports.createdAt));
+  return {
+    ok: true,
+    supporters: rows.flatMap((row) => {
+      const memberName = memberNameById.get(row.userId);
+      return memberName ? [{ userId: row.userId, memberName }] : [];
+    }),
   };
 }
 
@@ -482,6 +796,7 @@ export async function addGroupDirectionContribution(
       memberName,
       kind: row.kind,
       body: row.body,
+      supporters: [],
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     },

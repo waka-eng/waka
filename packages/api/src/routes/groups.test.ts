@@ -311,6 +311,7 @@ describe("collaborative room direction", () => {
     requiredContributors: 2,
     requiredResponses: 2,
     viewerResponse: null,
+    viewerAffirmed: false,
   };
 
   it("returns the current direction, collaboration and version history together", async () => {
@@ -335,6 +336,7 @@ describe("collaborative room direction", () => {
       userId: user.id,
       memberName: "Ada",
       kind: "missing" as const,
+      supporters: [],
       body: "Shared experimentation is missing.",
       createdAt: "2026-08-04T00:00:00.000Z",
       updatedAt: "2026-08-04T00:00:00.000Z",
@@ -383,6 +385,7 @@ describe("collaborative room direction", () => {
       userId: user.id,
       memberName: "Ada",
       kind: "take" as const,
+      supporters: [],
       body: "The open table feels central.",
       createdAt: "2026-08-04T00:00:00.000Z",
       updatedAt: "2026-08-04T00:00:00.000Z",

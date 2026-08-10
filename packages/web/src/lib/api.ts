@@ -913,6 +913,34 @@ export type ApiGroupDirectionContributionKind =
 
 export type ApiGroupDirectionResponseValue = "accept" | "keep_current";
 
+export interface ApiGroupDirectionGroundedPulse {
+  signalId: string;
+  userId: string;
+  memberName: string;
+  quote: string | null;
+  textPreview: string;
+  createdAt: string;
+}
+
+/** A pull the ambition dissolved, carrying its own pulses. */
+export interface ApiGroupDirectionGroundedNote {
+  id: string;
+  text: string;
+  pulses: ApiGroupDirectionGroundedPulse[];
+}
+
+export interface ApiGroupDirectionPulseProfile {
+  reactionCount: number;
+  compositionCount: number;
+  unknownCount: number;
+  medianElapsedMs: number | null;
+}
+
+export interface ApiGroupDirectionFace {
+  userId: string;
+  memberName: string;
+}
+
 export interface ApiGroupDirectionEvidence {
   signalId: string;
   userId: string;
@@ -937,6 +965,11 @@ export interface ApiGroupDirectionReading {
   reconfirmedCount: number;
   evidenceSpanStart: string | null;
   evidenceSpanEnd: string | null;
+  pulseProfile: ApiGroupDirectionPulseProfile | null;
+  /** Filled for the current reading only — the report's lineage. */
+  groundedNotes: ApiGroupDirectionGroundedNote[];
+  /** The press: "holds for me — this is me too." Current reading only. */
+  affirmations: ApiGroupDirectionFace[];
   createdAt: string;
   updatedAt: string;
 }
@@ -948,6 +981,8 @@ export interface ApiGroupDirectionContribution {
   memberName: string;
   kind: ApiGroupDirectionContributionKind;
   body: string;
+  /** Who stands behind this take — one-sided, agreement only. */
+  supporters: ApiGroupDirectionFace[];
   createdAt: string;
   updatedAt: string;
 }
@@ -974,6 +1009,7 @@ export interface ApiGroupDirection {
   requiredContributors: number;
   requiredResponses: number;
   viewerResponse: ApiGroupDirectionResponseValue | null;
+  viewerAffirmed: boolean;
 }
 
 export type ApiGroupReadingGenerationPhase =
@@ -1217,6 +1253,7 @@ export interface FetchTopOfMindNotesOptions {
 
 export type SavedSignalArchiveFilter =
   | "all"
+  | "held"
   | "highlighted"
   | "high_resonance"
   | "tensions"
@@ -1242,11 +1279,18 @@ export interface ApiSavedSignalSearchResult {
   capturedAt: string;
   updatedAt: string;
   /**
-   * Public: every room you are in can read this save. Private: none of them
-   * can, and it never reaches a room's reading. Either way it stays yours and
-   * still shapes your own Top of Mind.
+   * True is out loud: every room you are in can read this save. False is
+   * held: only your own room reads it, and it never reaches a room's
+   * reading. Either way it stays yours and still shapes your own pulls.
    */
   shared: boolean;
+  /**
+   * The second beat, counted. `answered` reflections carry the person's own
+   * words; `skipped` are questions deliberately passed. The archive marks
+   * saves with answers; the sit-with ritual queues saves where both are zero.
+   */
+  answeredReflectionCount: number;
+  skippedReflectionCount: number;
   resonanceScore: number;
   /**
    * Client-only: on a Group Top of Mind evidence drawer, the member who saved
@@ -1809,6 +1853,36 @@ export async function addGroupDirectionContribution(
   );
 }
 
+/** The press on the current version — set it, or take it back. */
+export async function setGroupDirectionAffirmation(
+  groupId: string,
+  readingId: string,
+  value: boolean,
+): Promise<{ affirmations: ApiGroupDirectionFace[]; viewerAffirmed: boolean }> {
+  return postJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/direction/readings/${encodeURIComponent(readingId)}/affirmation`,
+    ),
+    { value },
+    "That press was not saved",
+  );
+}
+
+/** Stand behind a take, or step back. */
+export async function setGroupDirectionTakeSupport(
+  groupId: string,
+  contributionId: string,
+  value: boolean,
+): Promise<{ supporters: ApiGroupDirectionFace[] }> {
+  return postJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/direction/contributions/${encodeURIComponent(contributionId)}/support`,
+    ),
+    { value },
+    "That was not saved",
+  );
+}
+
 export async function respondToGroupDirectionProposal(
   groupId: string,
   proposalId: string,
@@ -1942,6 +2016,8 @@ function normalizeSavedSignal<T extends ApiSavedSignalSearchResult>(signal: T): 
     relatedContextTerms: signal.relatedContextTerms ?? [],
     attachmentSummary: signal.attachmentSummary ?? [],
     relevanceReasons: signal.relevanceReasons ?? [],
+    answeredReflectionCount: signal.answeredReflectionCount ?? 0,
+    skippedReflectionCount: signal.skippedReflectionCount ?? 0,
   };
 }
 

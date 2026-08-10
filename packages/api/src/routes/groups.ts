@@ -26,6 +26,8 @@ import {
 } from "../lib/group-combination-reading.js";
 import {
   addGroupDirectionContribution,
+  setDirectionAffirmation,
+  setTakeSupport,
   getGroupDirection,
   respondToGroupDirectionProposal,
 } from "../lib/group-direction.js";
@@ -107,6 +109,18 @@ const directionProposalParamsSchema = z
   })
   .strict();
 
+const directionActSchema = z.object({ value: z.boolean() });
+
+const directionReadingParamsSchema = z.object({
+  groupId: z.string().uuid(),
+  readingId: z.string().uuid(),
+});
+
+const directionContributionParamsSchema = z.object({
+  groupId: z.string().uuid(),
+  contributionId: z.string().uuid(),
+});
+
 const directionResponseSchema = z
   .object({ value: z.enum(groupDirectionResponseValues) })
   .strict();
@@ -125,6 +139,8 @@ export interface GroupsRouteDependencies {
   getReading?: typeof getGroupCombinationReading;
   getDirection?: typeof getGroupDirection;
   addDirectionContribution?: typeof addGroupDirectionContribution;
+  setAffirmation?: typeof setDirectionAffirmation;
+  setSupport?: typeof setTakeSupport;
   respondToDirectionProposal?: typeof respondToGroupDirectionProposal;
   getReadingStatus?: typeof getGroupReadingGenerationStatus;
   enqueueRoomReading?: typeof enqueueGroupReadingRefreshForGroup;
@@ -151,6 +167,8 @@ export function createGroupsRoutes(
   const loadDirection = deps.getDirection ?? getGroupDirection;
   const addDirectionNote =
     deps.addDirectionContribution ?? addGroupDirectionContribution;
+  const setAffirmationFn = deps.setAffirmation ?? setDirectionAffirmation;
+  const setSupportFn = deps.setSupport ?? setTakeSupport;
   const respondToDirection =
     deps.respondToDirectionProposal ?? respondToGroupDirectionProposal;
   const getReadingStatus = deps.getReadingStatus ?? getGroupReadingGenerationStatus;
@@ -468,6 +486,49 @@ export function createGroupsRoutes(
     });
     if (!direction) return c.json({ error: "Group not found" }, 404);
     return c.json({ direction });
+  });
+
+  /**
+   * POST /api/groups/:groupId/direction/readings/:readingId/affirmation —
+   * the press: "holds for me — this is me too". Revocable; idempotent.
+   */
+  routes.post("/:groupId/direction/readings/:readingId/affirmation", async (c) => {
+    const parsedParams = directionReadingParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid ids" }, 400);
+    const parsedBody = directionActSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsedBody.success) return c.json({ error: "Invalid act" }, 400);
+    const user = c.get("user");
+    const result = await setAffirmationFn(getDatabase(), {
+      userId: user.id,
+      groupId: parsedParams.data.groupId,
+      readingId: parsedParams.data.readingId,
+      value: parsedBody.data.value,
+    });
+    if (!result.ok) return c.json({ error: "Not found" }, 404);
+    return c.json({
+      affirmations: result.affirmations,
+      viewerAffirmed: result.viewerAffirmed,
+    });
+  });
+
+  /**
+   * POST /api/groups/:groupId/direction/contributions/:contributionId/support —
+   * stand behind a take, or step back. One-sided, agreement only.
+   */
+  routes.post("/:groupId/direction/contributions/:contributionId/support", async (c) => {
+    const parsedParams = directionContributionParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid ids" }, 400);
+    const parsedBody = directionActSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsedBody.success) return c.json({ error: "Invalid act" }, 400);
+    const user = c.get("user");
+    const result = await setSupportFn(getDatabase(), {
+      userId: user.id,
+      groupId: parsedParams.data.groupId,
+      contributionId: parsedParams.data.contributionId,
+      value: parsedBody.data.value,
+    });
+    if (!result.ok) return c.json({ error: "Not found" }, 404);
+    return c.json({ supporters: result.supporters });
   });
 
   /** POST /api/groups/:groupId/direction/contributions — one attributed room note. */

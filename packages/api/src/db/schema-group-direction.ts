@@ -130,6 +130,75 @@ export const groupDirectionResponsesRelations = relations(
   }),
 );
 
+/**
+ * The press: "holds for me — this is me too." One act, both meanings —
+ * approval of the wording and the claim that it represents this member. One
+ * per member per reading, revocable; an unpressed face is itself the quiet,
+ * visible signal that the ambition doesn't speak for someone yet.
+ */
+export const groupDirectionAffirmations = pgTable(
+  "group_direction_affirmations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    readingId: uuid("reading_id")
+      .notNull()
+      .references(() => combinationReadings.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    memberAffirmationUnique: uniqueIndex("group_direction_affirmations_member_unique_idx").on(
+      table.readingId,
+      table.userId,
+    ),
+    groupReadingIdx: index("group_direction_affirmations_group_reading_idx").on(
+      table.groupId,
+      table.readingId,
+    ),
+  }),
+);
+
+/**
+ * Standing behind a take — one-sided, agreement only. Disagreement is
+ * expressed by writing your own take, never by a mark on someone else's.
+ * Which takes gathered hearts is evidence the proposer reads.
+ */
+export const groupDirectionTakeSupports = pgTable(
+  "group_direction_take_supports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    contributionId: uuid("contribution_id")
+      .notNull()
+      .references(() => groupDirectionContributions.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    memberSupportUnique: uniqueIndex("group_direction_take_supports_member_unique_idx").on(
+      table.contributionId,
+      table.userId,
+    ),
+    groupContributionIdx: index("group_direction_take_supports_group_contribution_idx").on(
+      table.groupId,
+      table.contributionId,
+    ),
+  }),
+);
+
 export type GroupDirectionContribution =
   typeof groupDirectionContributions.$inferSelect;
 export type GroupDirectionResponse = typeof groupDirectionResponses.$inferSelect;
+export type GroupDirectionAffirmation =
+  typeof groupDirectionAffirmations.$inferSelect;
+export type GroupDirectionTakeSupport =
+  typeof groupDirectionTakeSupports.$inferSelect;

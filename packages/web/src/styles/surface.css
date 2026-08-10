@@ -855,16 +855,17 @@
 .sf .sf-control--toggle { color: var(--sf-ink-2); }
 .sf .sf-control--toggle:hover { color: var(--sf-ink); }
 
-/* Private is the deliberate state, so it is the one that gets the colour.
-   Public is the default and stays quiet — colouring the default would make
-   every ordinary save shout. Border measured 3.30:1, label 9.36:1. */
-.sf .sf-control--toggle.private {
+/* Held is the deliberate state, so it is the one that gets the colour.
+   Out loud is the default and stays quiet — colouring the default would make
+   every ordinary save shout, and the audit depends on held being the only
+   ink on the edge. Border measured 3.30:1, label 9.36:1. */
+.sf .sf-control--toggle.held {
   color: var(--sf-mark);
   border-color: color-mix(in srgb, var(--sf-mark) 55%, transparent);
   background: color-mix(in srgb, var(--sf-mark) 5%, transparent);
 }
 
-.sf .sf-control--toggle.private:hover {
+.sf .sf-control--toggle.held:hover {
   border-color: var(--sf-mark);
   background: color-mix(in srgb, var(--sf-mark) 10%, transparent);
 }
@@ -2771,3 +2772,120 @@
    was built on (name the state you are IN, never the one you would switch
    to; a toggle that describes its own opposite is how a save gets made
    public by accident) and adds the edge that says it can be pressed. */
+
+/* ---------------------------------------------------------------------------
+   THE BEAT AFTER KEEPING
+
+   Two invitations on the confirmation line — hold, and why. Styled as quiet
+   words, not chrome: the save already happened, and nothing here is allowed
+   to look like a step that was required.
+   ------------------------------------------------------------------------ */
+.sf-toast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  margin-top: 10px;
+}
+
+.sf-toast-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--sf-ui);
+  color: var(--sf-ink-3);
+  transition: color 0.15s var(--sf-ease);
+}
+
+.sf-toast-act:hover { color: var(--sf-ink); }
+.sf-toast-act:disabled { color: var(--sf-ink-4); cursor: default; }
+
+.sf-toast .sf-reflect-live,
+.sf-toast .sf-kept { width: 100%; }
+.sf-toast .sf-kept { margin: 2px 0 0; }
+
+/* Two lenses over one column. Same grain as the rate row: plain words, the
+   chosen one in the mark's ink. */
+.sf-lens {
+  display: flex;
+  gap: 18px;
+  margin-top: 16px;
+  font-size: var(--sf-ui);
+  color: var(--sf-ink-3);
+}
+
+.sf-lens button { transition: color 0.15s var(--sf-ease); }
+.sf-lens button:hover { color: var(--sf-ink); }
+.sf-lens button.on { color: var(--sf-mark); }
+
+/* The second beat, marked: a small filled pulse beside the date on saves
+   that have been sat with. Texture, not a todo — the unmarked state is not
+   a debt, so nothing marks it. */
+.sf-beat {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 7px;
+  border-radius: 50%;
+  background: var(--sf-mark);
+  vertical-align: 1px;
+}
+
+/* The default is unmarked: an out-loud row's "hold" appears when the row is
+   reached for — and always on touch, where there is no reaching short of
+   pressing. Held rows keep their ink all the time; the audit depends on
+   held being the only word on the edge. */
+.sf-result-share--quiet {
+  opacity: 0;
+  transition: opacity 0.15s var(--sf-ease);
+}
+
+.sf-result:hover .sf-result-share--quiet,
+.sf-result:focus-within .sf-result-share--quiet { opacity: 1; }
+
+@media (hover: none) {
+  .sf-result-share--quiet { opacity: 1; }
+}
+
+/* What the save has already done, beside the control that would stop it
+   doing more. Meta tier: a fact, not a warning. */
+.sf-provenance {
+  font-size: var(--sf-meta);
+  color: var(--sf-ink-3);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   SIT — THE SECOND BEAT
+
+   A heartbeat is two sounds, and the save was only the first. One save at a
+   time, set large enough to be re-met rather than skimmed, one question
+   under it. The invitation is a line on the wall, never a badge.
+   ------------------------------------------------------------------------ */
+.sf-sit-invite {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  font-size: var(--sf-ui);
+  color: var(--sf-ink-3);
+  white-space: nowrap;
+  transition: color 0.15s var(--sf-ease);
+}
+
+.sf-sit-invite:hover { color: var(--sf-ink); }
+
+.sf-sit-text {
+  margin: 18px 0 6px;
+  font-family: var(--sf-serif);
+  font-size: var(--sf-claim);
+  font-weight: 300;
+  font-variation-settings: "opsz" 60;
+  line-height: 1.22;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  color: var(--sf-ink);
+}
+
+.sf-sit-close .sf-sit-text { color: var(--sf-ink-2); }

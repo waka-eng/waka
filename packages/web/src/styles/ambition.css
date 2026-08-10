@@ -1,0 +1,432 @@
+/*
+ * The ambition document — one column, one tone, one action.
+ *
+ * The reduced re-skin of the direction space (two-modes slice B1). Same
+ * ink/paper language as the orbit: the statement is the only large object;
+ * the margin is visually subordinate; everything explanatory folds away.
+ */
+
+.ad {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: clamp(40px, 12vh, 112px) 24px 64px;
+  --ad-ink: #131313;
+  --ad-paper: #f7f7f6;
+  --ad-muted: #858585;
+  --ad-line: #cacac9;
+}
+
+/* ---------- depth 0: the poster ---------- */
+.ad-hero {
+  transition:
+    opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: left top;
+}
+.ad--open .ad-hero {
+  opacity: 0.45;
+  transform: scale(0.985);
+}
+
+.ad-urgent {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  margin-top: 32px;
+  padding: 8px 16px;
+  border: 1px solid var(--ad-ink);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ad-ink);
+  width: max-content;
+}
+.ad-urgent:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.ad-doors {
+  display: flex;
+  gap: 32px;
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ad-line);
+}
+.ad-doors button {
+  all: unset;
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+}
+.ad-doors button:hover,
+.ad-doors button[aria-expanded="true"] {
+  color: var(--ad-ink);
+}
+.ad-doors button:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+
+.ad-section {
+  margin-top: 32px;
+  animation: ad-unfold 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ad-history-block {
+  margin-top: 32px;
+}
+
+/* ---------- ① the statement ---------- */
+.ad-statement {
+  font-size: clamp(28px, 4.2vw, 48px);
+  line-height: 1.16;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ad-ink);
+  margin: 0;
+  text-wrap: balance;
+}
+.ad-meta {
+  margin: 16px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ad-muted);
+}
+.ad-forming {
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.4;
+  color: var(--ad-muted);
+  margin: 0;
+  text-wrap: balance;
+}
+
+/* the press: faces beneath the statement, one quiet act beside them */
+.ad-press {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+.ad-press button {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ad-ink);
+}
+.ad-press button:hover {
+  color: var(--ad-ink);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.ad-press button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ad-unsettled {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ad-ink);
+}
+.ad-unsettled-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+  margin-bottom: 4px;
+}
+
+/* ---------- ①b how it formed: the lineage ---------- */
+.ad-formed {
+  margin-top: 0;
+}
+.ad-formed-label {
+  margin: 0 0 16px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+}
+.ad-pull + .ad-pull {
+  margin-top: 8px;
+}
+.ad-pull-line {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ad-ink);
+}
+.ad-pull-line:hover .ad-pull-text {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+.ad-pull-mark {
+  flex: none;
+  font-size: 10px;
+  color: var(--ad-muted);
+}
+.ad-pull-text {
+  flex: 1;
+}
+.ad-pull-line .sf-faces {
+  align-self: center;
+}
+.ad-pulses {
+  margin: 8px 0 8px;
+  padding: 0 0 0 24px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: ad-unfold 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ad-unfold {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.ad-pulses li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ad-pulse-quote {
+  flex: 1;
+  color: var(--ad-ink);
+}
+.ad-pulse-when {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--ad-muted);
+}
+.ad-formed-meta {
+  margin: 24px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+
+/* ---------- ② the voices ---------- */
+.ad-margin {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ad-voice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ad-voice-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  align-self: center;
+}
+.ad-voice-name {
+  color: var(--ad-muted);
+  flex: none;
+}
+.ad-voice-body {
+  color: var(--ad-ink);
+}
+.ad-voice-supporters {
+  align-self: center;
+  margin-left: 2px;
+}
+.ad-voice-supporters .sf-face {
+  width: 15px;
+  height: 15px;
+  font-size: 7px;
+}
+.ad-voice-act {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  font-size: 10.5px;
+  color: var(--ad-muted);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.ad-voice:hover .ad-voice-act,
+.ad-voice-act:focus-visible {
+  opacity: 1;
+}
+.ad-voice-act:hover {
+  color: var(--ad-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (hover: none) {
+  .ad-voice-act {
+    opacity: 1;
+  }
+}
+
+.ad-press-why {
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+.ad-margin-why {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+.ad-composer {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.ad-composer input {
+  flex: 1;
+  border: 0;
+  border-bottom: 1px solid var(--ad-line);
+  background: transparent;
+  padding: 6px 2px;
+  font-size: 13px;
+  color: var(--ad-ink);
+  outline: none;
+}
+.ad-composer input:focus {
+  border-bottom-color: var(--ad-ink);
+}
+.ad-composer input::placeholder {
+  color: var(--ad-muted);
+}
+.ad-composer button {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ad-ink);
+  border: 1px solid var(--ad-line);
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* ---------- ③ the one action ---------- */
+.ad-ask {
+  margin-top: 32px;
+  text-align: center;
+}
+.ad-ask button {
+  all: unset;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ad-ink);
+  border: 1px solid var(--ad-ink);
+  padding: 12px 24px;
+}
+.ad-ask button:disabled {
+  cursor: default;
+  color: var(--ad-muted);
+  border-color: var(--ad-line);
+}
+.ad-ask-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+
+.ad-decision {
+  margin-top: 32px;
+  border: 1px solid var(--ad-line);
+  padding: 20px 22px 18px;
+}
+.ad-decision-label {
+  margin: 0 0 10px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+}
+.ad-candidate {
+  margin: 0;
+  font-size: clamp(17px, 2.2vw, 22px);
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--ad-ink);
+  text-wrap: balance;
+}
+.ad-change {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ad-muted);
+}
+.ad-decision-acts {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+.ad-decision-acts button {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 7px 14px;
+  border: 1px solid var(--ad-line);
+  color: var(--ad-ink);
+}
+.ad-decision-acts button.on,
+.ad-decision-acts button:hover {
+  border-color: var(--ad-ink);
+}
+.ad-decision-acts button:disabled {
+  cursor: default;
+  color: var(--ad-muted);
+}
+
+/* ---------- history + legacy evidence (inside the formed section) ---------- */
+.ad-history {
+  margin: 10px 0 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ad-history li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  line-height: 1.45;
+}
+.ad-history-v {
+  flex: none;
+  color: var(--ad-ink);
+}
+.ad-history-when {
+  flex: none;
+}
+.ad-evidence {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ad-evidence li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  line-height: 1.5;
+}
+.ad-evidence-quote {
+  color: var(--ad-ink);
+}
