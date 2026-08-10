@@ -69,22 +69,33 @@ export function pulseProfileCopy(profile: ApiGroupDirectionPulseProfile | null):
   return "part quickened pulse, part composition";
 }
 
-/** The disabled ask-button explains itself; nothing else counts anything. */
+/**
+ * The button explains itself in plain words — the stranger test. The
+ * freshness fact lives here too, beside the act it motivates, instead of
+ * as a floating line nobody could parse.
+ */
 export function askCopy(input: {
   contributorCount: number;
   requiredContributors: number;
+  newPulseCount: number;
   asking: boolean;
 }): { label: string; note: string | null; ready: boolean } {
-  if (input.asking) return { label: "WAKA is reading…", note: null, ready: false };
+  if (input.asking) return { label: "WAKA is rewriting…", note: null, ready: false };
   const missing = Math.max(0, input.requiredContributors - input.contributorCount);
   if (missing > 0) {
     return {
-      label: "Ask WAKA for a new version",
-      note: `needs ${missing} more voice${missing === 1 ? "" : "s"} first`,
+      label: "Ask WAKA to rewrite this ambition",
+      note: `${missing} more ${missing === 1 ? "person needs" : "people need"} to add a take first`,
       ready: false,
     };
   }
-  return { label: "Ask WAKA for a new version", note: null, ready: true };
+  const fresh =
+    input.newPulseCount > 0
+      ? input.newPulseCount === 1
+        ? "there is 1 new pulse to read"
+        : `there are ${input.newPulseCount} new pulses to read`
+      : null;
+  return { label: "Ask WAKA to rewrite this ambition", note: fresh, ready: true };
 }
 
 export function AmbitionDocument(props: {
@@ -131,6 +142,7 @@ export function AmbitionDocument(props: {
   const ask = askCopy({
     contributorCount: direction?.contributorCount ?? 0,
     requiredContributors: direction?.requiredContributors ?? 0,
+    newPulseCount: direction?.newInspirationCount ?? 0,
     asking,
   });
 
@@ -141,7 +153,7 @@ export function AmbitionDocument(props: {
         <>
           <p className="ad-statement">{current.ambition}</p>
           <p className="ad-meta">
-            v{current.versionNumber} · settled {settledOn(current.createdAt)}
+            v{current.versionNumber} · adopted {settledOn(current.createdAt)}
           </p>
           {(() => {
             const affirmations = press?.affirmations ?? current.affirmations;
@@ -155,7 +167,7 @@ export function AmbitionDocument(props: {
                         key={face.userId}
                         className="sf-face"
                         style={{ background: contributorColor(face.memberName) }}
-                        title={`holds for ${face.memberName}`}
+                        title={`speaks for ${face.memberName}`}
                       >
                         {contributorInitials(face.memberName)}
                       </span>
@@ -176,13 +188,18 @@ export function AmbitionDocument(props: {
                         .finally(() => setActBusy(false));
                     }}
                   >
-                    {viewerAffirmed ? "take it back" : "holds for me — this is me too"}
+                    {viewerAffirmed ? "You're behind this — undo" : "This speaks for me"}
                   </button>
                 ) : null}
               </div>
             );
           })()}
-          {current.tension ? <p className="ad-tension">{current.tension}</p> : null}
+          {current.tension ? (
+            <div className="ad-tension">
+              <span className="ad-tension-label">the tension it holds</span>
+              {current.tension}
+            </div>
+          ) : null}
         </>
       ) : (
         <p className="ad-forming">
@@ -250,12 +267,6 @@ export function AmbitionDocument(props: {
             const line = [span, profile].filter(Boolean).join(" · ");
             return line ? <p className="ad-formed-meta">{line}</p> : null;
           })()}
-          {direction?.newInspirationCount ? (
-            <p className="ad-formed-meta">
-              {direction.newInspirationCount} new pulse
-              {direction.newInspirationCount === 1 ? "" : "s"} since this settled
-            </p>
-          ) : null}
         </div>
       ) : null}
 
@@ -322,14 +333,14 @@ export function AmbitionDocument(props: {
           <input
             type="text"
             value={draft}
-            placeholder="say how this sits with you…"
-            aria-label="say how this ambition sits with you"
+            placeholder="Add your take — what should change, or what's right as is"
+            aria-label="add your take on this ambition"
             onChange={(event) => props.onDraft(event.target.value)}
             disabled={saving}
           />
           {draft.trim() ? (
             <button type="submit" disabled={saving}>
-              {saving ? "…" : "add your voice"}
+              {saving ? "…" : "add your take"}
             </button>
           ) : null}
         </form>

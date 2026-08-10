@@ -61,11 +61,17 @@
 }
 
 .ad-tension {
-  margin: 16px 0 0;
+  margin: 18px 0 0;
   font-size: 13px;
   line-height: 1.5;
   color: var(--ad-muted);
-  font-style: italic;
+}
+.ad-tension-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
 }
 
 /* ---------- ①b how it formed: the lineage ---------- */
