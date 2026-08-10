@@ -940,9 +940,11 @@ export default function SurfacePage(): JSX.Element {
      until it is retired on purpose. */
   const [ambitionDoc, setAmbitionDoc] = useState(() => {
     try {
-      return window.localStorage.getItem(AMBITION_DOC_KEY) === "1";
+      /* The document IS the direction page now; the old design stays one
+         click behind it until it is retired on purpose. */
+      return window.localStorage.getItem(AMBITION_DOC_KEY) !== "0";
     } catch {
-      return false;
+      return true;
     }
   });
   const toggleAmbitionDoc = useCallback(() => {
