@@ -2911,6 +2911,12 @@ export default function SurfacePage(): JSX.Element {
                     }
                   : undefined
               }
+              places={[
+                { id: null, name: "your wall" },
+                ...rooms.map((r) => ({ id: r.id, name: r.name })),
+              ]}
+              currentPlaceId={room}
+              onSwitchPlace={(id) => navigateSurface("wall", { roomId: id })}
             />
           ) : (
             <div className="sf-wall">

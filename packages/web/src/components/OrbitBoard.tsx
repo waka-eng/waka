@@ -25,6 +25,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
+
 import { contributorColor, contributorInitials } from "./faces";
 
 export interface OrbitBoardNote {
@@ -39,6 +40,12 @@ export interface OrbitBoardCenter {
   label: string;
   /** The adopted ambition — null renders the honest forming state. */
   ambition: string | null;
+}
+
+/** Somewhere a person can stand: a room, or their own wall (id null). */
+export interface OrbitBoardPlace {
+  id: string | null;
+  name: string;
 }
 
 /* slow + subtle — the founder's picks from the B1 mock, baked in. */
@@ -79,10 +86,34 @@ export function OrbitBoard(props: {
   center: OrbitBoardCenter;
   /** Takes the member to the ambition's own space. */
   onOpenAmbition?: () => void;
+  /** Everywhere this person can stand; the room label switches between them. */
+  places?: OrbitBoardPlace[];
+  currentPlaceId?: string | null;
+  onSwitchPlace?: (id: string | null) => void;
 }) {
-  const { notes, center, onOpenAmbition } = props;
+  const { notes, center, onOpenAmbition, places, currentPlaceId, onSwitchPlace } = props;
   const containerRef = useRef<HTMLDivElement>(null);
+  const centerRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLElement>());
+  const [placesOpen, setPlacesOpen] = useState(false);
+  const canSwitch = Boolean(onSwitchPlace && places && places.length > 1);
+
+  /* The unfolded list closes on any press outside the center, or Escape. */
+  useEffect(() => {
+    if (!placesOpen) return undefined;
+    const onAway = (event: PointerEvent) => {
+      if (!centerRef.current?.contains(event.target as Node)) setPlacesOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPlacesOpen(false);
+    };
+    window.addEventListener("pointerdown", onAway);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("pointerdown", onAway);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [placesOpen]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedRef = useRef<string | null>(null);
   expandedRef.current = expandedId;
@@ -329,8 +360,45 @@ export function OrbitBoard(props: {
         aria-hidden="true"
       />
 
-      <div className={`ob-center${expandedId ? " ob-center--receded" : ""}`}>
-        <div className="ob-center-label">{center.label}</div>
+      <div
+        ref={centerRef}
+        className={`ob-center${expandedId ? " ob-center--receded" : ""}${placesOpen ? " ob-center--switching" : ""}`}
+      >
+        {/* The thing that names the room is the thing that changes it. */}
+        {canSwitch ? (
+          <button
+            type="button"
+            className="ob-room"
+            aria-expanded={placesOpen}
+            onClick={() => setPlacesOpen((open) => !open)}
+          >
+            {center.label}
+            <span className="ob-room-caret" aria-hidden="true"> ▾</span>
+          </button>
+        ) : (
+          <div className="ob-center-label">{center.label}</div>
+        )}
+        {placesOpen && places ? (
+          <div className="ob-places" role="menu" aria-label="go to another room">
+            {places.map((place) => {
+              const here = (place.id ?? null) === (currentPlaceId ?? null);
+              return (
+                <button
+                  key={place.id ?? "your-wall"}
+                  type="button"
+                  role="menuitem"
+                  className={here ? "here" : ""}
+                  onClick={() => {
+                    setPlacesOpen(false);
+                    if (!here) onSwitchPlace?.(place.id);
+                  }}
+                >
+                  {place.name}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {center.ambition ? (
           <div className="ob-center-ambition">{center.ambition}</div>
         ) : (

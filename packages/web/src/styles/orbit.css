@@ -106,6 +106,49 @@
   opacity: 0;
   transition: opacity 0.3s ease;
 }
+.ob-room {
+  all: unset;
+  pointer-events: auto;
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ob-muted);
+  margin-bottom: 14px;
+  display: inline-block;
+}
+.ob-room:hover {
+  color: var(--ob-ink);
+}
+.ob-room-caret {
+  font-size: 9px;
+}
+.ob-center--switching {
+  /* While the list is open it must sit above any crossing sheet. */
+  z-index: 850;
+}
+.ob-places {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -6px 0 14px;
+}
+.ob-places button {
+  all: unset;
+  pointer-events: auto;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 0;
+  color: var(--ob-muted);
+}
+.ob-places button:hover {
+  color: var(--ob-ink);
+}
+.ob-places button.here {
+  color: var(--ob-ink);
+  cursor: default;
+}
+
 .ob-center-label {
   font-size: 11px;
   letter-spacing: 0.18em;
