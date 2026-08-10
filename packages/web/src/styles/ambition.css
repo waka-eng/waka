@@ -9,7 +9,7 @@
 .ad {
   max-width: 42rem;
   margin: 0 auto;
-  padding: clamp(24px, 6vh, 64px) 20px 48px;
+  padding: clamp(40px, 12vh, 112px) 24px 64px;
   --ad-ink: #131313;
   --ad-paper: #f7f7f6;
   --ad-muted: #858585;
@@ -18,10 +18,14 @@
 
 /* ---------- depth 0: the poster ---------- */
 .ad-hero {
-  transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    opacity 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: left top;
 }
 .ad--open .ad-hero {
-  opacity: 0.5;
+  opacity: 0.45;
+  transform: scale(0.985);
 }
 
 .ad-urgent {
@@ -29,7 +33,7 @@
   cursor: pointer;
   display: block;
   margin-top: 32px;
-  padding: 9px 14px;
+  padding: 8px 16px;
   border: 1px solid var(--ad-ink);
   font-size: 13px;
   font-weight: 600;
@@ -43,15 +47,17 @@
 
 .ad-doors {
   display: flex;
-  gap: 24px;
-  margin-top: 40px;
+  gap: 32px;
+  margin-top: 48px;
   padding-top: 16px;
   border-top: 1px solid var(--ad-line);
 }
 .ad-doors button {
   all: unset;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--ad-muted);
 }
 .ad-doors button:hover,
@@ -65,46 +71,50 @@
 }
 
 .ad-section {
-  margin-top: 24px;
+  margin-top: 32px;
   animation: ad-unfold 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ad-history-block {
-  margin-top: 28px;
+  margin-top: 32px;
 }
 
 /* ---------- ① the statement ---------- */
 .ad-statement {
-  font-size: clamp(24px, 3.4vw, 36px);
-  line-height: 1.22;
+  font-size: clamp(28px, 4.2vw, 48px);
+  line-height: 1.16;
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   color: var(--ad-ink);
   margin: 0;
   text-wrap: balance;
 }
 .ad-meta {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   font-size: 11px;
+  letter-spacing: 0.02em;
   color: var(--ad-muted);
 }
 .ad-forming {
-  font-size: 17px;
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.4;
   color: var(--ad-muted);
   margin: 0;
+  text-wrap: balance;
 }
 
 /* the press: faces beneath the statement, one quiet act beside them */
 .ad-press {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 14px;
+  gap: 12px;
+  margin-top: 24px;
 }
 .ad-press button {
   all: unset;
   cursor: pointer;
-  font-size: 12px;
-  color: var(--ad-muted);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ad-ink);
 }
 .ad-press button:hover {
   color: var(--ad-ink);
@@ -117,7 +127,7 @@
 }
 
 .ad-unsettled {
-  margin: 2px 0 6px;
+  margin: 0 0 8px;
   font-size: 13px;
   line-height: 1.55;
   color: var(--ad-ink);
@@ -136,7 +146,7 @@
   margin-top: 0;
 }
 .ad-formed-label {
-  margin: 0 0 12px;
+  margin: 0 0 16px;
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -173,8 +183,8 @@
   align-self: center;
 }
 .ad-pulses {
-  margin: 8px 0 4px;
-  padding: 0 0 0 21px;
+  margin: 8px 0 8px;
+  padding: 0 0 0 24px;
   list-style: none;
   display: flex;
   flex-direction: column;
@@ -202,7 +212,7 @@
   color: var(--ad-muted);
 }
 .ad-formed-meta {
-  margin: 14px 0 0;
+  margin: 24px 0 0;
   font-size: 11px;
   color: var(--ad-muted);
 }
@@ -320,7 +330,7 @@
   font-weight: 600;
   color: var(--ad-ink);
   border: 1px solid var(--ad-ink);
-  padding: 10px 22px;
+  padding: 12px 24px;
 }
 .ad-ask button:disabled {
   cursor: default;
