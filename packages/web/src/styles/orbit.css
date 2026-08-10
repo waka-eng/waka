@@ -43,12 +43,21 @@
   padding: 0;
   margin: 0;
   max-width: none;
+  /* .sf-body is min(1180px, 100%) with auto margins; killing the margin
+     without widening it pinned the whole orbit left of center. */
+  width: 100%;
 }
 .sf[data-orbit="true"] .sf-layer--wall {
   padding: 0;
 }
 .sf[data-orbit="true"] .ob {
-  height: 100dvh;
+  /* The orbit owns the viewport itself — fixed, both axes — rather than
+     inheriting whatever column and offset the page flow leaves it. All of
+     the orbit's pieces (notes, center, veil) live INSIDE .ob, so it being
+     a stacking context is fine; the trap is only a wrapper BETWEEN them. */
+  position: fixed;
+  inset: 0;
+  height: auto;
 }
 .sf[data-orbit="true"] .sf-orbit-toggle {
   position: fixed;
