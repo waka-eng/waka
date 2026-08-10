@@ -96,6 +96,8 @@ export function OrbitBoard(props: {
   const centerRef = useRef<HTMLDivElement>(null);
   const tileRefs = useRef(new Map<string, HTMLElement>());
   const [placesOpen, setPlacesOpen] = useState(false);
+  const placesOpenRef = useRef(false);
+  placesOpenRef.current = placesOpen;
   const canSwitch = Boolean(onSwitchPlace && places && places.length > 1);
 
   /* The unfolded list closes on any press outside the center, or Escape. */
@@ -239,6 +241,7 @@ export function OrbitBoard(props: {
       const dt = Math.min((now - prev) / 1000, 0.05);
       prev = now;
       const expanded = expandedRef.current;
+      const choosing = placesOpenRef.current;
 
       if (!dragging && !expanded) {
         rotation += IDLE_SPEED * dt; // the room's resting pulse
@@ -252,7 +255,7 @@ export function OrbitBoard(props: {
       /* The camera's lean arrives slowly, and rests when a note is held. */
       driftX = lerp(driftX, expanded ? 0 : mouseX, 0.06);
       driftY = lerp(driftY, expanded ? 0 : mouseY, 0.06);
-      part = lerp(part, expanded ? 0 : readTarget, 0.09);
+      part = lerp(part, expanded || choosing ? 0 : readTarget, 0.09);
 
       for (const [id, motion] of motions.current) {
         const el = tileRefs.current.get(id);
@@ -282,7 +285,9 @@ export function OrbitBoard(props: {
             z,
             rx: driftY * 7,
             ry: -driftX * 10,
-            op: lerp(MIN_OPACITY, 1, eased) * (expanded ? 0.12 : 1),
+            /* Behind the chapter chooser the ring recedes to a murmur —
+               still drifting, no longer speaking. */
+            op: lerp(MIN_OPACITY, 1, eased) * (expanded || choosing ? 0.12 : 1),
             bl: lerp(MAX_BLUR, 0, eased),
           };
 
@@ -379,7 +384,12 @@ export function OrbitBoard(props: {
           <div className="ob-center-label">{center.label}</div>
         )}
         {placesOpen && places ? (
-          <div className="ob-places" role="menu" aria-label="go to another room">
+          /*
+            Chapters, not a dropdown. The list takes the ambition's place at
+            the ambition's scale — where you are in ink, everywhere else
+            faded to the same size. One view holds one thing.
+          */
+          <div className="ob-chapters" role="menu" aria-label="go to another room">
             {places.map((place) => {
               const here = (place.id ?? null) === (currentPlaceId ?? null);
               return (
@@ -398,17 +408,20 @@ export function OrbitBoard(props: {
               );
             })}
           </div>
-        ) : null}
-        {center.ambition ? (
-          <div className="ob-center-ambition">{center.ambition}</div>
         ) : (
-          <div className="ob-center-forming">forming — no ambition adopted yet</div>
+          <>
+            {center.ambition ? (
+              <div className="ob-center-ambition">{center.ambition}</div>
+            ) : (
+              <div className="ob-center-forming">forming — no ambition adopted yet</div>
+            )}
+            {center.ambition && onOpenAmbition ? (
+              <button type="button" className="ob-open" onClick={onOpenAmbition}>
+                Open the ambition
+              </button>
+            ) : null}
+          </>
         )}
-        {center.ambition && onOpenAmbition ? (
-          <button type="button" className="ob-open" onClick={onOpenAmbition}>
-            Open the ambition
-          </button>
-        ) : null}
       </div>
 
       {notes.map((note) => {

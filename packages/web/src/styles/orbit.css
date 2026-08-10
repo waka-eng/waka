@@ -127,25 +127,34 @@
   /* While the list is open it must sit above any crossing sheet. */
   z-index: 850;
 }
-.ob-places {
+.ob-chapters {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: -6px 0 14px;
+  gap: 10px;
+  animation: ob-chapters-in 0.25s ease;
 }
-.ob-places button {
+@keyframes ob-chapters-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.ob-chapters button {
   all: unset;
   pointer-events: auto;
   cursor: pointer;
-  font-size: 12px;
-  padding: 3px 0;
-  color: var(--ob-muted);
-}
-.ob-places button:hover {
+  /* The ambition's own scale — equal for every chapter; presence, not
+     size, says where you stand. */
+  font-size: clamp(20px, 2.6vw, 30px);
+  line-height: 1.22;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--ob-ink);
+  opacity: 0.3;
 }
-.ob-places button.here {
-  color: var(--ob-ink);
+.ob-chapters button:hover {
+  opacity: 0.65;
+}
+.ob-chapters button.here {
+  opacity: 1;
   cursor: default;
 }
 
