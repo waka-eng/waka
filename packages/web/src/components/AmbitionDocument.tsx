@@ -129,7 +129,10 @@ export function AmbitionDocument(props: {
           The pulls are always visible (the things themselves, never counts);
           each unfolds into its own pulses; a pulse links to nothing yet —
           the save view is a later door. */}
-      {current && current.groundedNotes.length > 0 ? (
+      {current &&
+      (current.groundedNotes.length > 0 ||
+        formedSpanCopy(current.evidenceSpanStart, current.evidenceSpanEnd) ||
+        pulseProfileCopy(current.pulseProfile)) ? (
         <div className="ad-formed">
           <p className="ad-formed-label">formed from</p>
           {current.groundedNotes.map((pull) => {
