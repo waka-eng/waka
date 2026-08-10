@@ -378,7 +378,6 @@ export function OrbitBoard(props: {
             onClick={() => setPlacesOpen((open) => !open)}
           >
             {center.label}
-            <span className="ob-room-caret" aria-hidden="true"> ▾</span>
           </button>
         ) : (
           <div className="ob-center-label">{center.label}</div>

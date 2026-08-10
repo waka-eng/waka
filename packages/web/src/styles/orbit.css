@@ -117,11 +117,13 @@
   margin-bottom: 14px;
   display: inline-block;
 }
+/* No caret — the product's one clickability signal is the underline the
+   cursor earns, the same word "Open the ambition" already speaks. */
 .ob-room:hover {
   color: var(--ob-ink);
-}
-.ob-room-caret {
-  font-size: 9px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
 }
 .ob-center--switching {
   /* While the list is open it must sit above any crossing sheet. */
