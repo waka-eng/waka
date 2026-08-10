@@ -230,12 +230,7 @@ export function AmbitionDocument(props: {
               </div>
             );
           })()}
-          {current.tension ? (
-            <div className="ad-tension">
-              <span className="ad-tension-label">the tension it holds</span>
-              {current.tension}
-            </div>
-          ) : null}
+
         </>
       ) : (
         <p className="ad-forming">
@@ -360,7 +355,16 @@ export function AmbitionDocument(props: {
             </div>
           );
         })}
-        <p className="ad-margin-why">Takes written here shape the next draft.</p>
+        {current?.tension ? (
+          <div className="ad-unsettled">
+            <span className="ad-unsettled-label">not settled in this room yet</span>
+            {current.tension}
+          </div>
+        ) : null}
+        <p className="ad-margin-why">
+          Takes written here shape the next draft
+          {current?.tension ? " — the unsettled line above is a good place to start" : ""}.
+        </p>
         <form
           className="ad-composer"
           onSubmit={(event) => {

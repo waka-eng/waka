@@ -60,17 +60,18 @@
   opacity: 0.6;
 }
 
-.ad-tension {
-  margin: 18px 0 0;
+.ad-unsettled {
+  margin: 2px 0 6px;
   font-size: 13px;
-  line-height: 1.5;
-  color: var(--ad-muted);
+  line-height: 1.55;
+  color: var(--ad-ink);
 }
-.ad-tension-label {
+.ad-unsettled-label {
   display: block;
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  color: var(--ad-muted);
   margin-bottom: 4px;
 }
 
