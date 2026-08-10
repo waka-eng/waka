@@ -411,7 +411,9 @@ export function OrbitBoard(props: {
         ) : (
           <>
             {center.ambition ? (
-              <div className="ob-center-ambition">{center.ambition}</div>
+              /* Keyed by its words: travelling to another chapter replays
+                 the arrival; re-renders of the same ambition do not. */
+              <div key={center.ambition} className="ob-center-ambition">{center.ambition}</div>
             ) : (
               <div className="ob-center-forming">forming — no ambition adopted yet</div>
             )}

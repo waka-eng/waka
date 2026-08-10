@@ -131,10 +131,10 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: ob-chapters-in 0.25s ease;
+  animation: ob-chapters-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes ob-chapters-in {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
 .ob-chapters button {
@@ -144,11 +144,13 @@
   /* The ambition's own scale — equal for every chapter; presence, not
      size, says where you stand. */
   font-size: clamp(20px, 2.6vw, 30px);
-  line-height: 1.22;
+  line-height: 1.2;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--ob-ink);
   opacity: 0.3;
+  text-wrap: balance;
+  transition: opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ob-chapters button:hover {
   opacity: 0.65;
@@ -167,10 +169,18 @@
 }
 .ob-center-ambition {
   font-size: clamp(20px, 2.6vw, 30px);
-  line-height: 1.22;
+  line-height: 1.2;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--ob-ink);
+  /* No line ends on a hanging word — a statement wraps like a poster. */
+  text-wrap: balance;
+  /* A new chapter's ambition arrives; it doesn't just appear. */
+  animation: ob-arrive 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ob-arrive {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
 }
 .ob-center-forming {
   font-size: 15px;
@@ -258,7 +268,7 @@
   background: var(--ob-paper);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.35s ease;
+  transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 900;
 }
 .ob-veil.on {

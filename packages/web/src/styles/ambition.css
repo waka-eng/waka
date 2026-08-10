@@ -19,11 +19,12 @@
 /* ---------- ① the statement ---------- */
 .ad-statement {
   font-size: clamp(24px, 3.4vw, 36px);
-  line-height: 1.25;
+  line-height: 1.22;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--ad-ink);
   margin: 0;
+  text-wrap: balance;
 }
 .ad-meta {
   margin: 14px 0 0;
@@ -140,6 +141,7 @@
   line-height: 1.35;
   font-weight: 600;
   color: var(--ad-ink);
+  text-wrap: balance;
 }
 .ad-change {
   margin: 12px 0 0;
