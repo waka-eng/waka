@@ -80,22 +80,28 @@ export function askCopy(input: {
   newPulseCount: number;
   asking: boolean;
 }): { label: string; note: string | null; ready: boolean } {
-  if (input.asking) return { label: "WAKA is rewriting…", note: null, ready: false };
+  if (input.asking) return { label: "Writing a new draft…", note: null, ready: false };
   const missing = Math.max(0, input.requiredContributors - input.contributorCount);
   if (missing > 0) {
     return {
-      label: "Ask WAKA to rewrite this ambition",
-      note: `${missing} more ${missing === 1 ? "person needs" : "people need"} to add a take first`,
+      label: "Draft a new version",
+      note: `Drafts are written from takes — ${missing} more ${
+        missing === 1 ? "person needs" : "people need"
+      } to add one first.`,
       ready: false,
     };
   }
   const fresh =
     input.newPulseCount > 0
       ? input.newPulseCount === 1
-        ? "there is 1 new pulse to read"
-        : `there are ${input.newPulseCount} new pulses to read`
-      : null;
-  return { label: "Ask WAKA to rewrite this ambition", note: fresh, ready: true };
+        ? " and the 1 new pulse"
+        : ` and the ${input.newPulseCount} new pulses`
+      : "";
+  return {
+    label: "Draft a new version",
+    note: `A fresh draft is written from everyone's takes${fresh} — the room approves it before anything changes.`,
+    ready: true,
+  };
 }
 
 export function AmbitionDocument(props: {
@@ -190,6 +196,9 @@ export function AmbitionDocument(props: {
                   >
                     {viewerAffirmed ? "You're behind this — undo" : "This speaks for me"}
                   </button>
+                ) : null}
+                {affirmations.length === 0 && !viewerAffirmed ? (
+                  <span className="ad-press-why">press if this wording reads true for you</span>
                 ) : null}
               </div>
             );
@@ -302,6 +311,7 @@ export function AmbitionDocument(props: {
                 <button
                   type="button"
                   className="ad-voice-act"
+                  title="add your face to this take — the next draft leans on what the room stands behind"
                   disabled={actBusy}
                   onClick={() => {
                     if (!roomId || actBusy) return;
@@ -323,6 +333,7 @@ export function AmbitionDocument(props: {
             </div>
           );
         })}
+        <p className="ad-margin-why">Takes written here shape the next draft.</p>
         <form
           className="ad-composer"
           onSubmit={(event) => {
@@ -348,8 +359,8 @@ export function AmbitionDocument(props: {
 
       {/* ③ the one action */}
       {proposal ? (
-        <div className="ad-decision" role="group" aria-label="a possible next version">
-          <p className="ad-decision-label">a possible next version</p>
+        <div className="ad-decision" role="group" aria-label="a new draft for the room to decide">
+          <p className="ad-decision-label">a new draft for the room to decide</p>
           <p className="ad-candidate">{proposal.ambition}</p>
           {proposal.changeSummary ? (
             <p className="ad-change">{proposal.changeSummary}</p>
@@ -361,7 +372,7 @@ export function AmbitionDocument(props: {
               disabled={reviewing}
               onClick={() => props.onReview("accept")}
             >
-              adopt this version
+              adopt this draft
             </button>
             <button
               type="button"

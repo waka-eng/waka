@@ -213,6 +213,15 @@
   }
 }
 
+.ad-press-why {
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+.ad-margin-why {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
 .ad-composer {
   display: flex;
   gap: 10px;
