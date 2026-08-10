@@ -37,6 +37,90 @@
   margin: 0;
 }
 
+.ad-tension {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ad-muted);
+  font-style: italic;
+}
+
+/* ---------- ①b how it formed: the lineage ---------- */
+.ad-formed {
+  margin-top: 36px;
+}
+.ad-formed-label {
+  margin: 0 0 12px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ad-muted);
+}
+.ad-pull + .ad-pull {
+  margin-top: 8px;
+}
+.ad-pull-line {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ad-ink);
+}
+.ad-pull-line:hover .ad-pull-text {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+}
+.ad-pull-mark {
+  flex: none;
+  font-size: 10px;
+  color: var(--ad-muted);
+}
+.ad-pull-text {
+  flex: 1;
+}
+.ad-pull-line .sf-faces {
+  align-self: center;
+}
+.ad-pulses {
+  margin: 8px 0 4px;
+  padding: 0 0 0 21px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  animation: ad-unfold 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes ad-unfold {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.ad-pulses li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.ad-pulse-quote {
+  flex: 1;
+  color: var(--ad-ink);
+}
+.ad-pulse-when {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--ad-muted);
+}
+.ad-formed-meta {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: var(--ad-muted);
+}
+
 /* ---------- ② the voices ---------- */
 .ad-margin {
   margin-top: 40px;

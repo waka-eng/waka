@@ -913,6 +913,29 @@ export type ApiGroupDirectionContributionKind =
 
 export type ApiGroupDirectionResponseValue = "accept" | "keep_current";
 
+export interface ApiGroupDirectionGroundedPulse {
+  signalId: string;
+  userId: string;
+  memberName: string;
+  quote: string | null;
+  textPreview: string;
+  createdAt: string;
+}
+
+/** A pull the ambition dissolved, carrying its own pulses. */
+export interface ApiGroupDirectionGroundedNote {
+  id: string;
+  text: string;
+  pulses: ApiGroupDirectionGroundedPulse[];
+}
+
+export interface ApiGroupDirectionPulseProfile {
+  reactionCount: number;
+  compositionCount: number;
+  unknownCount: number;
+  medianElapsedMs: number | null;
+}
+
 export interface ApiGroupDirectionEvidence {
   signalId: string;
   userId: string;
@@ -937,6 +960,9 @@ export interface ApiGroupDirectionReading {
   reconfirmedCount: number;
   evidenceSpanStart: string | null;
   evidenceSpanEnd: string | null;
+  pulseProfile: ApiGroupDirectionPulseProfile | null;
+  /** Filled for the current reading only — the report's lineage. */
+  groundedNotes: ApiGroupDirectionGroundedNote[];
   createdAt: string;
   updatedAt: string;
 }

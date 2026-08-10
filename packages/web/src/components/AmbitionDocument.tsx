@@ -19,8 +19,11 @@
  * two-modes goal. It adds no API surface; threads and attach-a-pull are B2.
  */
 
+import { useState } from "react";
+
 import type {
   ApiGroupDirection,
+  ApiGroupDirectionPulseProfile,
   ApiGroupDirectionResponseValue,
 } from "../lib/api";
 import { contributorColor, contributorInitials } from "./faces";
@@ -29,6 +32,35 @@ function settledOn(iso: string): string {
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return "";
   return then.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+}
+
+function dayOf(iso: string): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return "";
+  return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** "formed from pulses between June 12 and August 3" — dates, never counts. */
+export function formedSpanCopy(start: string | null, end: string | null): string | null {
+  if (!start || !end) return null;
+  const from = settledOn(start);
+  const to = settledOn(end);
+  if (!from || !to) return null;
+  if (from === to) return `formed from pulses on ${from}`;
+  return `formed from pulses between ${from} and ${to}`;
+}
+
+/**
+ * The manifesto as data: how much of this was a quickened pulse versus a
+ * composed thought. Says nothing when the mix is unknown or unremarkable.
+ */
+export function pulseProfileCopy(profile: ApiGroupDirectionPulseProfile | null): string | null {
+  if (!profile) return null;
+  const known = profile.reactionCount + profile.compositionCount;
+  if (known === 0) return null;
+  if (profile.reactionCount >= known * 0.65) return "mostly quickened pulses — saved before thinking";
+  if (profile.compositionCount >= known * 0.65) return "mostly composed — written slowly, on purpose";
+  return "part quickened pulse, part composition";
 }
 
 /** The disabled ask-button explains itself; nothing else counts anything. */
@@ -61,6 +93,7 @@ export function AmbitionDocument(props: {
   onAskNewVersion: () => void;
 }) {
   const { direction, draft, saving, reviewing, asking } = props;
+  const [openPullId, setOpenPullId] = useState<string | null>(null);
   const current = direction?.current ?? null;
   const proposal = direction?.proposal ?? null;
   /* Oldest first: the margin reads as the room's conversation, not a feed. */
@@ -83,6 +116,7 @@ export function AmbitionDocument(props: {
           <p className="ad-meta">
             v{current.versionNumber} · settled {settledOn(current.createdAt)}
           </p>
+          {current.tension ? <p className="ad-tension">{current.tension}</p> : null}
         </>
       ) : (
         <p className="ad-forming">
@@ -90,6 +124,71 @@ export function AmbitionDocument(props: {
           have shaped it.
         </p>
       )}
+
+      {/* ①b — how it formed: the lineage, one disclosure level per layer.
+          The pulls are always visible (the things themselves, never counts);
+          each unfolds into its own pulses; a pulse links to nothing yet —
+          the save view is a later door. */}
+      {current && current.groundedNotes.length > 0 ? (
+        <div className="ad-formed">
+          <p className="ad-formed-label">formed from</p>
+          {current.groundedNotes.map((pull) => {
+            const open = openPullId === pull.id;
+            const hands = Array.from(new Set(pull.pulses.map((pulse) => pulse.memberName)));
+            return (
+              <div key={pull.id} className="ad-pull">
+                <button
+                  type="button"
+                  className="ad-pull-line"
+                  aria-expanded={open}
+                  onClick={() => setOpenPullId(open ? null : pull.id)}
+                >
+                  <span className="ad-pull-mark" aria-hidden="true">{open ? "▾" : "▸"}</span>
+                  <span className="ad-pull-text">{pull.text}</span>
+                  <span className="sf-faces">
+                    {hands.map((name) => (
+                      <span
+                        key={name}
+                        className="sf-face"
+                        style={{ background: contributorColor(name) }}
+                      >
+                        {contributorInitials(name)}
+                      </span>
+                    ))}
+                  </span>
+                </button>
+                {open ? (
+                  <ul className="ad-pulses">
+                    {pull.pulses.map((pulse) => (
+                      <li key={`${pull.id}-${pulse.signalId}`}>
+                        <span
+                          className="ad-voice-dot"
+                          style={{ background: contributorColor(pulse.memberName) }}
+                          title={pulse.memberName}
+                        />
+                        <span className="ad-pulse-quote">“{pulse.textPreview}”</span>
+                        <span className="ad-pulse-when">{dayOf(pulse.createdAt)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            );
+          })}
+          {(() => {
+            const span = formedSpanCopy(current.evidenceSpanStart, current.evidenceSpanEnd);
+            const profile = pulseProfileCopy(current.pulseProfile);
+            const line = [span, profile].filter(Boolean).join(" · ");
+            return line ? <p className="ad-formed-meta">{line}</p> : null;
+          })()}
+          {direction?.newInspirationCount ? (
+            <p className="ad-formed-meta">
+              {direction.newInspirationCount} new pulse
+              {direction.newInspirationCount === 1 ? "" : "s"} since this settled
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ② the voices */}
       <div className="ad-margin">
@@ -186,7 +285,9 @@ export function AmbitionDocument(props: {
             </ol>
           </details>
         ) : null}
-        {current?.evidence?.length ? (
+        {current?.evidence?.length && current.groundedNotes.length === 0 ? (
+          /* Older readings may predate grounded-note linkage; the flat
+             quotes remain their only lineage. */
           <details>
             <summary>
               grounded in {current.evidence.length} pulse

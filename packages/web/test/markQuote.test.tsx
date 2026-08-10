@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { formedSpanCopy, pulseProfileCopy } from "../src/components/AmbitionDocument";
+
 import {
   SHARING_MEANING,
   SHARING_NOTE,
@@ -530,5 +532,48 @@ describe("noticing that a room moved without you", () => {
     // No job yet is a legitimate state, not a crash.
     expect(() => roomArrivalSignature(status({ job: null }))).not.toThrow();
     expect(roomArrivalSignature(status({ job: null }))).not.toBe(roomArrivalSignature(status()));
+  });
+});
+
+/**
+ * The report's provenance lines: dates and mixes spoken as sentences,
+ * silent when the data can't carry them.
+ */
+describe("the formed-from lines", () => {
+  // Local noon survives the round-trip through ISO in every timezone, so the
+  // spoken dates are the same wherever the suite runs.
+  const noon = (y: number, m: number, d: number) => new Date(y, m, d, 12).toISOString();
+
+  it("names the span as dates, never counts", () => {
+    expect(formedSpanCopy(noon(2026, 5, 12), noon(2026, 7, 3))).toBe(
+      "formed from pulses between June 12 and August 3",
+    );
+  });
+
+  it("collapses a single-day span instead of repeating the date", () => {
+    expect(formedSpanCopy(noon(2026, 7, 3), noon(2026, 7, 3))).toBe(
+      "formed from pulses on August 3",
+    );
+  });
+
+  it("says nothing when either end is missing", () => {
+    expect(formedSpanCopy(null, noon(2026, 7, 3))).toBeNull();
+    expect(formedSpanCopy(noon(2026, 7, 3), null)).toBeNull();
+  });
+
+  it("reads the pulse mix as the manifesto, and stays silent when unknown", () => {
+    expect(
+      pulseProfileCopy({ reactionCount: 7, compositionCount: 2, unknownCount: 0, medianElapsedMs: 900 }),
+    ).toBe("mostly quickened pulses — saved before thinking");
+    expect(
+      pulseProfileCopy({ reactionCount: 1, compositionCount: 8, unknownCount: 0, medianElapsedMs: null }),
+    ).toBe("mostly composed — written slowly, on purpose");
+    expect(
+      pulseProfileCopy({ reactionCount: 3, compositionCount: 3, unknownCount: 1, medianElapsedMs: null }),
+    ).toBe("part quickened pulse, part composition");
+    expect(pulseProfileCopy(null)).toBeNull();
+    expect(
+      pulseProfileCopy({ reactionCount: 0, compositionCount: 0, unknownCount: 4, medianElapsedMs: null }),
+    ).toBeNull();
   });
 });
