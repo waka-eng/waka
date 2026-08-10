@@ -24,6 +24,11 @@ export const feedbackTargetEnumValues = [
   "context_node",
   "top_of_mind_note",
   "hypothesis",
+  // Correction reaches every reading surface (metabolism-game Step E). These
+  // two target the ROOM's synthesized output, so the ownership check is group
+  // membership, and application is record-only — see feedback-application.
+  "group_top_of_mind_note",
+  "combination_reading",
 ] as const;
 
 export type FeedbackTarget = (typeof feedbackTargetEnumValues)[number];

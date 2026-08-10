@@ -1,4 +1,4 @@
-import type { FeedbackEmotion, FeedbackValue } from "../db/index.js";
+import type { FeedbackEmotion, FeedbackTarget, FeedbackValue } from "../db/index.js";
 import type {
   TopOfMindRefreshCandidate,
   TopOfMindRefreshEvidenceInput,
@@ -19,7 +19,7 @@ export type AmbitionSynthesisTrigger =
   (typeof ambitionSynthesisTriggerValues)[number];
 
 export interface AmbitionSynthesisFeedbackInput {
-  targetType: "signal" | "context_node" | "top_of_mind_note" | "hypothesis";
+  targetType: FeedbackTarget;
   targetId: string;
   value: FeedbackValue;
   emotionLabel?: FeedbackEmotion | null;

@@ -107,6 +107,8 @@ type TopOfMindRelatedSignalRow = {
   inspirationKind: string | null;
   inspirationCreatedAt: Date;
   inspirationWowScore: number;
+  quote: string | null;
+  quoteSource: string | null;
 };
 
 type TopOfMindFeedbackSnapshot = {
@@ -315,7 +317,15 @@ function serializeTopOfMindSurface(
       signalId: row.inspirationId,
       role: source?.role ?? "Source signal",
       reason: source?.reason ?? "Why this signal matters",
-      textPreview: truncatePreview(row.inspirationText),
+      // The words that carried it, when the judge named them — the receipt.
+      // Otherwise the opening of the save, which is only ever whatever
+      // happened to be written first. (Group notes already did this; the
+      // solo wall printed "no exact words named" even when a quote existed.)
+      textPreview: row.quote
+        ? truncatePreview(row.quote)
+        : truncatePreview(row.inspirationText),
+      quote: row.quote ?? null,
+      quoteSource: (row.quoteSource as "own" | "enrichment" | null) ?? null,
       kind: row.inspirationKind,
       createdAt: row.inspirationCreatedAt.toISOString(),
       resonanceScore: row.inspirationWowScore,
@@ -466,6 +476,8 @@ async function fetchRelatedSignalRows(
       inspirationKind: inspirations.kind,
       inspirationCreatedAt: inspirations.createdAt,
       inspirationWowScore: inspirations.wowScore,
+      quote: wowMomentInspirations.quote,
+      quoteSource: wowMomentInspirations.quoteSource,
     })
     .from(wowMomentInspirations)
     .innerJoin(

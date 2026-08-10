@@ -360,6 +360,8 @@ describe("GET /api/top-of-mind", () => {
             reason: "This signal shows the recurring ritual.",
             textPreview:
               "Signal text with enough detail to explain the post-it.",
+            quote: null,
+            quoteSource: null,
             kind: "note",
             createdAt: "2026-05-29T10:00:00.000Z",
             resonanceScore: 64,

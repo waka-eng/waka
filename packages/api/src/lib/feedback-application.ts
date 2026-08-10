@@ -6,6 +6,7 @@ import {
   meaningNodes,
   wowMomentInspirations,
   wowMoments,
+  type FeedbackTarget,
   type FeedbackValue,
 } from "../db/index.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
@@ -16,7 +17,7 @@ import {
 
 export interface FeedbackApplicationTarget {
   userId: string;
-  targetType: "signal" | "context_node" | "top_of_mind_note" | "hypothesis";
+  targetType: FeedbackTarget;
   targetId: string;
   value: FeedbackValue;
   correctionText?: string | null;
@@ -65,7 +66,11 @@ function clampInt(value: number, min: number, max: number): number {
 export function feedbackMutatesContextNodes(
   targetType: FeedbackApplicationTarget["targetType"],
 ): boolean {
-  return targetType !== "top_of_mind_note";
+  return (
+    targetType !== "top_of_mind_note" &&
+    targetType !== "group_top_of_mind_note" &&
+    targetType !== "combination_reading"
+  );
 }
 
 export function planFeedbackApplication(input: {
@@ -133,6 +138,16 @@ async function findRelatedContextNodeIds(
 ): Promise<string[]> {
   if (input.targetType === "context_node" || input.targetType === "hypothesis") {
     return [input.targetId];
+  }
+
+  // Group-surface feedback records the viewer's read of the ROOM's output.
+  // There is no per-user meaning trail to walk — and the unfiltered fallback
+  // below would claim every node the user has — so relate nothing.
+  if (
+    input.targetType === "group_top_of_mind_note" ||
+    input.targetType === "combination_reading"
+  ) {
+    return [];
   }
 
   const filters = [eq(meaningEvidence.userId, input.userId)];

@@ -1,12 +1,16 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
+  combinationReadings,
+  combinations,
   feedback,
   feedbackEmotionEnumValues,
   feedbackTargetEnumValues,
   feedbackValueEnumValues,
+  groupMembers,
+  groupTopOfMindNotes,
   inspirations,
   meaningNodes,
   wowMoments,
@@ -154,6 +158,47 @@ async function targetBelongsToUser(
           eq(wowMoments.id, input.targetId),
         ),
       )
+      .limit(1);
+    return Boolean(row);
+  }
+
+  if (input.targetType === "group_top_of_mind_note") {
+    // Not ownership but membership: the wall belongs to the room, and any
+    // current member may record how a note reads to them.
+    const [row] = await db
+      .select({ id: groupTopOfMindNotes.id })
+      .from(groupTopOfMindNotes)
+      .innerJoin(
+        groupMembers,
+        and(
+          eq(groupMembers.groupId, groupTopOfMindNotes.groupId),
+          eq(groupMembers.userId, input.userId),
+        ),
+      )
+      .where(eq(groupTopOfMindNotes.id, input.targetId))
+      .limit(1);
+    return Boolean(row);
+  }
+
+  if (input.targetType === "combination_reading") {
+    // Membership through the reading's combination. A reading of an unscoped
+    // combination (no room yet) has no membership to check and takes no
+    // feedback until it does.
+    const [row] = await db
+      .select({ id: combinationReadings.id })
+      .from(combinationReadings)
+      .innerJoin(
+        combinations,
+        eq(combinationReadings.combinationId, combinations.id),
+      )
+      .innerJoin(
+        groupMembers,
+        and(
+          eq(groupMembers.groupId, combinations.groupId),
+          eq(groupMembers.userId, input.userId),
+        ),
+      )
+      .where(eq(combinationReadings.id, input.targetId))
       .limit(1);
     return Boolean(row);
   }
@@ -309,6 +354,48 @@ export function createFeedbackRoutes(
     }
 
     return c.json({ feedback: row }, 201);
+  });
+
+  // DELETE /api/feedback/:id — take back your own mark, one tap. Only the
+  // record-only targets are deletable: legacy targets applied graph weight
+  // changes when written, and removing the row would not unapply them.
+  routes.delete("/:id", async (c) => {
+    const parsedId = z.string().uuid().safeParse(c.req.param("id"));
+    if (!parsedId.success) {
+      return c.json({ error: "Invalid feedback id" }, 400);
+    }
+    const [row] = await getDatabase()
+      .delete(feedback)
+      .where(
+        and(
+          eq(feedback.userId, c.get("user").id),
+          eq(feedback.id, parsedId.data),
+          inArray(feedback.targetType, [
+            "group_top_of_mind_note",
+            "combination_reading",
+          ]),
+        ),
+      )
+      .returning({ id: feedback.id });
+    if (!row) {
+      return c.json({ error: "Feedback not found" }, 404);
+    }
+    return c.json({ ok: true });
+  });
+
+  // GET /api/feedback/stats — the cut-rate read: how often this person marks
+  // each surface's output wrong. The health metric's raw material.
+  routes.get("/stats", async (c) => {
+    const rows = await getDatabase()
+      .select({
+        targetType: feedback.targetType,
+        value: feedback.value,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(feedback)
+      .where(eq(feedback.userId, c.get("user").id))
+      .groupBy(feedback.targetType, feedback.value);
+    return c.json({ stats: rows });
   });
 
   routes.get("/", async (c) => {

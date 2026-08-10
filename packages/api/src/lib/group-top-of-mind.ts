@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 
 import {
+  feedback,
   groupMemberEvents,
   groupMembers,
   groups,
@@ -21,6 +22,7 @@ import {
   groupTopOfMindNotes,
   signals,
   users,
+  type FeedbackValue,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
@@ -637,6 +639,8 @@ interface GroupEvidenceRow {
 function serializeGroupNote(
   row: GroupNoteRow,
   evidence: GroupEvidenceRow[],
+  /** The viewing member's latest word on this note, if they gave one. */
+  viewerFeedbackValue: FeedbackValue | null,
 ): GroupTopOfMindNote {
   // Serialize in the note's OWN generation locale, not the viewer's — otherwise
   // a note generated in English blanks its title for a Korean viewer (and vice
@@ -700,7 +704,7 @@ function serializeGroupNote(
     title,
     ambientSignal,
     isPinned: false,
-    userFeedbackValue: null,
+    userFeedbackValue: viewerFeedbackValue,
     evidencePreviews,
     relatedSignals,
     authorUserId: primary?.ownerUserId ?? "",
@@ -719,6 +723,11 @@ async function readGroupNotes(
    * function can be called three times in one request.
    */
   currentMemberIds: Set<string>,
+  /**
+   * Whose eyes. Correction marks are per-viewer: the wall is the room's
+   * memory, but "this reads wrong to me" belongs to the member who said it.
+   */
+  viewerUserId: string,
 ): Promise<GroupTopOfMindNote[]> {
   const noteRows = await db
     .select({
@@ -790,8 +799,40 @@ async function readGroupNotes(
     evidenceByNote.set(row.noteId, bucket);
   }
 
+  // The viewer's latest word per note, newest row wins. A delete simply
+  // stops a row being the latest, so taking a mark back needs no state here.
+  const feedbackRows = await db
+    .select({
+      targetId: feedback.targetId,
+      value: feedback.value,
+    })
+    .from(feedback)
+    .where(
+      and(
+        eq(feedback.userId, viewerUserId),
+        eq(feedback.targetType, "group_top_of_mind_note"),
+        inArray(
+          feedback.targetId,
+          noteRows.map((n) => n.id),
+        ),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
+  const latestFeedbackByNote = new Map<string, FeedbackValue>();
+  for (const row of feedbackRows) {
+    if (!latestFeedbackByNote.has(row.targetId)) {
+      latestFeedbackByNote.set(row.targetId, row.value);
+    }
+  }
+
   const serialized = noteRows
-    .map((row) => serializeGroupNote(row, evidenceByNote.get(row.id) ?? []))
+    .map((row) =>
+      serializeGroupNote(
+        row,
+        evidenceByNote.get(row.id) ?? [],
+        latestFeedbackByNote.get(row.id) ?? null,
+      ),
+    )
     // A note whose every inspiration went private drops off the board entirely.
     .filter((note) => note.evidencePreviews.length > 0)
     // Group boards only show SHARED notes: evidence must span >= 2 members.
@@ -924,7 +965,7 @@ export async function listGroupTopOfMind(
   const { group, members } = loaded;
   const memberIds = new Set(members.map((member) => member.userId));
 
-  const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
+  const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds, input.userId);
   return { group, members, notes };
 }
 
@@ -955,7 +996,7 @@ export async function refreshGroupTopOfMind(
   // Declining is not a failure — but it is also not a refresh, so say so
   // rather than returning an unchanged board that looks like one.
   if (!(await claimSynthesisRun(db, input.groupId))) {
-    const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
+    const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds, input.userId);
     return {
       group: loaded.group,
       members: loaded.members,
@@ -1030,7 +1071,7 @@ export async function refreshGroupTopOfMind(
 
   await measureReadingDivergences(db, input.groupId);
 
-  const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds);
+  const notes = await readGroupNotes(db, input.groupId, input.limit, memberIds, input.userId);
   return {
     group: loaded.group,
     members: loaded.members,
