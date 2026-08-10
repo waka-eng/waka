@@ -936,6 +936,11 @@ export interface ApiGroupDirectionPulseProfile {
   medianElapsedMs: number | null;
 }
 
+export interface ApiGroupDirectionFace {
+  userId: string;
+  memberName: string;
+}
+
 export interface ApiGroupDirectionEvidence {
   signalId: string;
   userId: string;
@@ -963,6 +968,8 @@ export interface ApiGroupDirectionReading {
   pulseProfile: ApiGroupDirectionPulseProfile | null;
   /** Filled for the current reading only — the report's lineage. */
   groundedNotes: ApiGroupDirectionGroundedNote[];
+  /** The press: "holds for me — this is me too." Current reading only. */
+  affirmations: ApiGroupDirectionFace[];
   createdAt: string;
   updatedAt: string;
 }
@@ -974,6 +981,8 @@ export interface ApiGroupDirectionContribution {
   memberName: string;
   kind: ApiGroupDirectionContributionKind;
   body: string;
+  /** Who stands behind this take — one-sided, agreement only. */
+  supporters: ApiGroupDirectionFace[];
   createdAt: string;
   updatedAt: string;
 }
@@ -1000,6 +1009,7 @@ export interface ApiGroupDirection {
   requiredContributors: number;
   requiredResponses: number;
   viewerResponse: ApiGroupDirectionResponseValue | null;
+  viewerAffirmed: boolean;
 }
 
 export type ApiGroupReadingGenerationPhase =
@@ -1832,6 +1842,36 @@ export async function addGroupDirectionContribution(
     apiPath(`/groups/${encodeURIComponent(groupId)}/direction/contributions`),
     input,
     "Failed to add your thought",
+  );
+}
+
+/** The press on the current version — set it, or take it back. */
+export async function setGroupDirectionAffirmation(
+  groupId: string,
+  readingId: string,
+  value: boolean,
+): Promise<{ affirmations: ApiGroupDirectionFace[]; viewerAffirmed: boolean }> {
+  return postJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/direction/readings/${encodeURIComponent(readingId)}/affirmation`,
+    ),
+    { value },
+    "That press was not saved",
+  );
+}
+
+/** Stand behind a take, or step back. */
+export async function setGroupDirectionTakeSupport(
+  groupId: string,
+  contributionId: string,
+  value: boolean,
+): Promise<{ supporters: ApiGroupDirectionFace[] }> {
+  return postJson(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/direction/contributions/${encodeURIComponent(contributionId)}/support`,
+    ),
+    { value },
+    "That was not saved",
   );
 }
 

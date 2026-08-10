@@ -19,13 +19,19 @@
  * two-modes goal. It adds no API surface; threads and attach-a-pull are B2.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
-import type {
-  ApiGroupDirection,
-  ApiGroupDirectionPulseProfile,
-  ApiGroupDirectionResponseValue,
+import {
+  setGroupDirectionAffirmation,
+  setGroupDirectionTakeSupport,
+  type ApiGroupDirection,
+  type ApiGroupDirectionFace,
+  type ApiGroupDirectionPulseProfile,
+  type ApiGroupDirectionResponseValue,
 } from "../lib/api";
+import { useAuth } from "../lib/auth-context";
+import { parseSurfacePath } from "../lib/surface-route";
 import { contributorColor, contributorInitials } from "./faces";
 
 function settledOn(iso: string): string {
@@ -94,6 +100,27 @@ export function AmbitionDocument(props: {
 }) {
   const { direction, draft, saving, reviewing, asking } = props;
   const [openPullId, setOpenPullId] = useState<string | null>(null);
+  /*
+    The acts live here, not in Surface: this component knows which room it
+    stands in from the URL and who is looking from the session, and keeps a
+    thin overlay of act results over the direction it was handed — so
+    pressing never waits for a full refetch, and a fresh fetch resets the
+    overlay.
+  */
+  const { user } = useAuth();
+  const roomId = parseSurfacePath(useLocation().pathname).roomId;
+  const [press, setPress] = useState<
+    { affirmations: ApiGroupDirectionFace[]; viewerAffirmed: boolean } | null
+  >(null);
+  const [supportsByTake, setSupportsByTake] = useState<
+    Record<string, ApiGroupDirectionFace[]>
+  >({});
+  const [actBusy, setActBusy] = useState(false);
+  useEffect(() => {
+    setPress(null);
+    setSupportsByTake({});
+  }, [direction]);
+
   const current = direction?.current ?? null;
   const proposal = direction?.proposal ?? null;
   /* Oldest first: the margin reads as the room's conversation, not a feed. */
@@ -116,6 +143,45 @@ export function AmbitionDocument(props: {
           <p className="ad-meta">
             v{current.versionNumber} · settled {settledOn(current.createdAt)}
           </p>
+          {(() => {
+            const affirmations = press?.affirmations ?? current.affirmations;
+            const viewerAffirmed = press?.viewerAffirmed ?? direction?.viewerAffirmed ?? false;
+            return (
+              <div className="ad-press">
+                {affirmations.length > 0 ? (
+                  <span className="sf-faces">
+                    {affirmations.map((face) => (
+                      <span
+                        key={face.userId}
+                        className="sf-face"
+                        style={{ background: contributorColor(face.memberName) }}
+                        title={`holds for ${face.memberName}`}
+                      >
+                        {contributorInitials(face.memberName)}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+                {roomId ? (
+                  <button
+                    type="button"
+                    disabled={actBusy}
+                    aria-pressed={viewerAffirmed}
+                    onClick={() => {
+                      if (!roomId || actBusy) return;
+                      setActBusy(true);
+                      setGroupDirectionAffirmation(roomId, current.id, !viewerAffirmed)
+                        .then((result) => setPress(result))
+                        .catch(() => undefined)
+                        .finally(() => setActBusy(false));
+                    }}
+                  >
+                    {viewerAffirmed ? "take it back" : "holds for me — this is me too"}
+                  </button>
+                ) : null}
+              </div>
+            );
+          })()}
           {current.tension ? <p className="ad-tension">{current.tension}</p> : null}
         </>
       ) : (
@@ -195,17 +261,57 @@ export function AmbitionDocument(props: {
 
       {/* ② the voices */}
       <div className="ad-margin">
-        {voices.map((voice) => (
-          <div key={voice.id} className="ad-voice">
-            <span
-              className="ad-voice-dot"
-              style={{ background: contributorColor(voice.memberName) }}
-              title={voice.memberName}
-            />
-            <span className="ad-voice-name">{voice.memberName}</span>
-            <span className="ad-voice-body">{voice.body}</span>
-          </div>
-        ))}
+        {voices.map((voice) => {
+          const supporters = supportsByTake[voice.id] ?? voice.supporters;
+          const standing = Boolean(user && supporters.some((face) => face.userId === user.id));
+          const own = user?.id === voice.userId;
+          return (
+            <div key={voice.id} className="ad-voice">
+              <span
+                className="ad-voice-dot"
+                style={{ background: contributorColor(voice.memberName) }}
+                title={voice.memberName}
+              />
+              <span className="ad-voice-name">{voice.memberName}</span>
+              <span className="ad-voice-body">{voice.body}</span>
+              {supporters.length > 0 ? (
+                <span className="sf-faces ad-voice-supporters" title="standing behind this">
+                  {supporters.map((face) => (
+                    <span
+                      key={face.userId}
+                      className="sf-face"
+                      style={{ background: contributorColor(face.memberName) }}
+                    >
+                      {contributorInitials(face.memberName)}
+                    </span>
+                  ))}
+                </span>
+              ) : null}
+              {!own && roomId ? (
+                <button
+                  type="button"
+                  className="ad-voice-act"
+                  disabled={actBusy}
+                  onClick={() => {
+                    if (!roomId || actBusy) return;
+                    setActBusy(true);
+                    setGroupDirectionTakeSupport(roomId, voice.id, !standing)
+                      .then((result) =>
+                        setSupportsByTake((currentMap) => ({
+                          ...currentMap,
+                          [voice.id]: result.supporters,
+                        })),
+                      )
+                      .catch(() => undefined)
+                      .finally(() => setActBusy(false));
+                  }}
+                >
+                  {standing ? "step back" : "stand behind"}
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
         <form
           className="ad-composer"
           onSubmit={(event) => {
