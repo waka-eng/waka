@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formedSpanCopy, pulseProfileCopy } from "../src/components/AmbitionDocument";
+import { formedSpanCopy, publicConsent, pulseProfileCopy } from "../src/components/AmbitionDocument";
 
 import {
   SHARING_MEANING,
   SHARING_NOTE,
-  confirmGoingPublicMessage,
+  confirmHoldingMessage,
+  confirmLettingSpeakMessage,
   roomDirectionCtaCopy,
   roomIntentMetaCopy,
   roomArrivalSignature,
@@ -219,28 +220,29 @@ describe("room proposal review copy", () => {
 });
 
 /**
- * There are two states and they are named by one word each. The hint carries
- * the meaning, and the meaning has a boundary that matters: "public" is the
- * rooms you are in, never the internet. A public PROFILE is a separate setting
- * the person turns on themselves, so this copy must not imply it.
+ * There are two states and they are named by the product's own physics: a
+ * signal speaks OUT LOUD in your rooms, or it is HELD. The hint carries the
+ * meaning, and the meaning has a boundary that matters: "out loud" is the
+ * rooms you are in, never the internet. A public PROFILE is a separate
+ * setting the person turns on themselves, so this copy must not imply it.
  */
 describe("sharing copy", () => {
-  it("scopes public to rooms, and never to anyone", () => {
-    expect(SHARING_MEANING.public).toBe("Any room you join can read this. It stays yours.");
+  it("scopes out loud to rooms, and never to anyone", () => {
+    expect(SHARING_MEANING.outLoud).toBe("Any room you join can read this. It stays yours.");
     for (const overclaim of ["anyone", "everyone", "the internet", "the web", "public profile"]) {
-      expect(SHARING_MEANING.public.toLowerCase()).not.toContain(overclaim);
+      expect(SHARING_MEANING.outLoud.toLowerCase()).not.toContain(overclaim);
     }
   });
 
-  it("says private stops rooms without claiming it stops your own readings", () => {
-    // The decision on record: private excludes a save from rooms, and it still
-    // shapes the owner's own Top of Mind. Copy that implied otherwise would be
-    // a promise the pipeline does not keep.
-    expect(SHARING_MEANING.private).toBe(
-      "No room can read this. It still shapes your own pulls.",
+  it("says held stops shared rooms without claiming it stops the owner's own", () => {
+    // The decision on record: held excludes a save from rooms, and it still
+    // shapes the owner's own pulls. "Private" was retired for implying inert —
+    // a held save still works for its owner, and the copy has to say so.
+    expect(SHARING_MEANING.held).toBe(
+      "Only your own room reads this. It still shapes your own pulls.",
     );
-    expect(SHARING_MEANING.private).toContain("No room");
-    expect(SHARING_MEANING.private).toContain("your own pulls");
+    expect(SHARING_MEANING.held).toContain("your own room");
+    expect(SHARING_MEANING.held).toContain("your own pulls");
   });
 
   it("keeps both meanings short enough to sit under a one-word control", () => {
@@ -261,25 +263,25 @@ describe("sharing note", () => {
   it("answers who sees it and what they see of it", () => {
     // Rooms serve truncatePreview output (PREVIEW_LENGTH = 180) with ownerName
     // attached — never the full text, per canLoadFullSignal.
-    expect(SHARING_NOTE.public).toContain("excerpt");
-    expect(SHARING_NOTE.public).toContain("your name");
-    expect(SHARING_NOTE.public).toContain("every room you are in");
+    expect(SHARING_NOTE.outLoud).toContain("excerpt");
+    expect(SHARING_NOTE.outLoud).toContain("your name");
+    expect(SHARING_NOTE.outLoud).toContain("every room you are in");
   });
 
-  it("says private stays out of the pool a reading is made from", () => {
-    expect(SHARING_NOTE.private).toContain("no room can read it");
-    expect(SHARING_NOTE.private).toContain("cannot be quoted");
+  it("says held stays out of the pool a reading is made from", () => {
+    expect(SHARING_NOTE.held).toContain("only your own room reads it");
+    expect(SHARING_NOTE.held).toContain("cannot be quoted");
   });
 
-  it("does not promise private hides a save from the owner's own readings", () => {
-    // The decision on record: private gates rooms, not the solo pipeline.
+  it("does not promise held hides a save from the owner's own readings", () => {
+    // The decision on record: held gates rooms, not the solo pipeline.
     expect(SHARING_NOTE.both).toContain("your own pulls");
     expect(SHARING_NOTE.both).toContain("stays yours");
   });
 
   it("never claims the save reaches the public internet", () => {
-    // A public PROFILE is a separate setting. "Public" here is rooms only.
-    for (const line of [SHARING_NOTE.public, SHARING_NOTE.private, SHARING_NOTE.both]) {
+    // A public PROFILE is a separate setting. "Out loud" here is rooms only.
+    for (const line of [SHARING_NOTE.outLoud, SHARING_NOTE.held, SHARING_NOTE.both]) {
       for (const overclaim of ["anyone", "everyone", "the internet", "the web", "publicly"]) {
         expect(line.toLowerCase()).not.toContain(overclaim);
       }
@@ -288,40 +290,41 @@ describe("sharing note", () => {
 
   it("agrees with the short hint beside the control", () => {
     // Two surfaces, one promise. They may differ in length, never in meaning.
-    expect(SHARING_MEANING.private).toContain("No room");
-    expect(SHARING_NOTE.private.toLowerCase()).toContain("no room");
-    expect(SHARING_MEANING.public).toContain("room");
-    expect(SHARING_NOTE.public).toContain("room");
+    expect(SHARING_MEANING.held).toContain("your own room");
+    expect(SHARING_NOTE.held.toLowerCase()).toContain("your own room");
+    expect(SHARING_MEANING.outLoud).toContain("room");
+    expect(SHARING_NOTE.outLoud).toContain("room");
   });
 });
 
 /**
- * Going private is recoverable in every respect but one: it does not unmake a
- * reading a room already produced. That asymmetry is why the confirmation is
- * on the way in rather than the way out, and why the caveat has to be stated
- * rather than implied by "private".
+ * The rule, named: rooms can't unhear. Holding is recoverable in every
+ * respect but one — it does not unmake a reading a room already produced.
+ * That asymmetry is why the confirmation sits on letting a save speak, and
+ * why the caveat has to be stated rather than implied by "held".
  */
-describe("the caveat on turning a save private", () => {
-  it("says what going private stops, and what it cannot undo", () => {
-    expect(SHARING_NOTE.goingPrivate).toContain("stops it being read");
-    expect(SHARING_NOTE.goingPrivate).toContain("quoted");
-    expect(SHARING_NOTE.goingPrivate).toContain("shown as evidence");
+describe("rooms can't unhear", () => {
+  it("names the rule and says what holding stops", () => {
+    expect(SHARING_NOTE.cantUnhear.startsWith("Rooms can't unhear.")).toBe(true);
+    expect(SHARING_NOTE.cantUnhear).toContain("stops it being read");
+    expect(SHARING_NOTE.cantUnhear).toContain("quoted");
+    expect(SHARING_NOTE.cantUnhear).toContain("shown as evidence");
     // The part people would otherwise assume.
-    expect(SHARING_NOTE.goingPrivate).toContain("already made from it stays");
+    expect(SHARING_NOTE.cantUnhear).toContain("already made from it stays");
   });
 
   it("does not promise the reading is retired or withdrawn", () => {
     for (const wrong of ["deleted", "removed from", "retired", "undone", "erased"]) {
-      expect(SHARING_NOTE.goingPrivate.toLowerCase()).not.toContain(wrong);
+      expect(SHARING_NOTE.cantUnhear.toLowerCase()).not.toContain(wrong);
     }
   });
 });
 
-describe("the confirmation shown before a save is made public", () => {
-  const message = confirmGoingPublicMessage();
+describe("the confirmation shown before a save speaks", () => {
+  const message = confirmLettingSpeakMessage();
 
-  it("asks the question first", () => {
-    expect(message.startsWith("Make this public?")).toBe(true);
+  it("asks a plain question first — what pressing OK does, in ordinary words", () => {
+    expect(message.startsWith("Let every room you are in read this?")).toBe(true);
   });
 
   it("says who gains access and what they would see", () => {
@@ -330,10 +333,11 @@ describe("the confirmation shown before a save is made public", () => {
     expect(message).toContain("your name");
   });
 
-  it("carries the caveat about turning it back", () => {
-    // The whole reason this prompt exists: public is the step that cannot be
-    // fully taken back.
-    expect(message).toContain("Making it private again later");
+  it("carries the rule about keeping it back", () => {
+    // The whole reason this prompt exists: speaking is the step that cannot
+    // be fully taken back.
+    expect(message).toContain("Rooms can't unhear");
+    expect(message).toContain("keeping it to yourself again later");
     expect(message).toContain("stays on that room's wall");
   });
 
@@ -343,10 +347,44 @@ describe("the confirmation shown before a save is made public", () => {
     for (const paragraph of paragraphs) expect(paragraph.trim().length).toBeGreaterThan(0);
   });
 
-  it("never widens public beyond the rooms", () => {
+  it("never widens out loud beyond the rooms", () => {
     for (const overclaim of ["anyone", "everyone", "the internet", "the web"]) {
       expect(message.toLowerCase()).not.toContain(overclaim);
     }
+  });
+});
+
+/**
+ * Holding asks nothing — until rooms have already read the save. Then the
+ * dialog exists to say the two concrete things: what stops now, and the
+ * readings that stay standing because rooms can't unhear.
+ */
+describe("the confirmation shown before a read save is held", () => {
+  it("speaks this save's own numbers, in singular and plural", () => {
+    expect(confirmHoldingMessage(1)).toContain(
+      "the 1 reading rooms already made from it stays",
+    );
+    expect(confirmHoldingMessage(3)).toContain(
+      "the 3 readings rooms already made from it stay",
+    );
+  });
+
+  it("says what stops now and names the rule", () => {
+    const message = confirmHoldingMessage(2);
+    expect(message.startsWith("Stop rooms from reading this?")).toBe(true);
+    expect(message).toContain("Rooms stop reading it now");
+    expect(message).toContain("withdraws from the evidence");
+    expect(message).toContain("Rooms can't unhear");
+  });
+
+  it("does not promise the standing readings go anywhere", () => {
+    for (const wrong of ["deleted", "removed from the wall", "retired", "undone", "erased"]) {
+      expect(confirmHoldingMessage(2).toLowerCase()).not.toContain(wrong);
+    }
+  });
+
+  it("reads as prose in a dialog, not as one wall of text", () => {
+    expect(confirmHoldingMessage(2).split("\n\n")).toHaveLength(3);
   });
 });
 
@@ -575,5 +613,26 @@ describe("the formed-from lines", () => {
     expect(
       pulseProfileCopy({ reactionCount: 0, compositionCount: 0, unknownCount: 4, medianElapsedMs: null }),
     ).toBeNull();
+  });
+});
+
+/** Draft vs public: the press is publish consent; majority clears it. */
+describe("public consent on the key ambition", () => {
+  it("stays a room-only draft below the majority", () => {
+    expect(publicConsent({ agreedCount: 2, requiredResponses: 3 })).toEqual({
+      cleared: false,
+      modeLabel: "draft — room only",
+    });
+  });
+
+  it("clears to go public at the majority", () => {
+    expect(publicConsent({ agreedCount: 3, requiredResponses: 3 }).cleared).toBe(true);
+    expect(publicConsent({ agreedCount: 5, requiredResponses: 3 }).modeLabel).toBe(
+      "cleared to go public",
+    );
+  });
+
+  it("never clears when the room has no threshold yet", () => {
+    expect(publicConsent({ agreedCount: 4, requiredResponses: 0 }).cleared).toBe(false);
   });
 });

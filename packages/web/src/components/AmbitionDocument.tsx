@@ -70,6 +70,24 @@ export function pulseProfileCopy(profile: ApiGroupDirectionPulseProfile | null):
 }
 
 /**
+ * A key ambition has two modes: DRAFT (the room collaborates) and PUBLIC
+ * (unlocked when most of the room consents). The press is the consent act.
+ * "Cleared" is the honest in-between: the room said go, the public page
+ * arrives with the publish build.
+ */
+export function publicConsent(input: {
+  agreedCount: number;
+  requiredResponses: number;
+}): { cleared: boolean; modeLabel: string } {
+  const cleared =
+    input.requiredResponses > 0 && input.agreedCount >= input.requiredResponses;
+  return {
+    cleared,
+    modeLabel: cleared ? "cleared to go public" : "draft — room only",
+  };
+}
+
+/**
  * The button explains itself in plain words — the stranger test. The
  * freshness fact lives here too, beside the act it motivates, instead of
  * as a floating line nobody could parse.
@@ -159,7 +177,11 @@ export function AmbitionDocument(props: {
         <>
           <p className="ad-statement">{current.ambition}</p>
           <p className="ad-meta">
-            v{current.versionNumber} · adopted {settledOn(current.createdAt)}
+            v{current.versionNumber} · adopted {settledOn(current.createdAt)} ·{" "}
+            {publicConsent({
+              agreedCount: (press?.affirmations ?? current.affirmations).length,
+              requiredResponses: direction?.requiredResponses ?? 0,
+            }).modeLabel}
           </p>
           {(() => {
             const affirmations = press?.affirmations ?? current.affirmations;
@@ -173,7 +195,7 @@ export function AmbitionDocument(props: {
                         key={face.userId}
                         className="sf-face"
                         style={{ background: contributorColor(face.memberName) }}
-                        title={`speaks for ${face.memberName}`}
+                        title={`${face.memberName} said go public`}
                       >
                         {contributorInitials(face.memberName)}
                       </span>
@@ -194,12 +216,17 @@ export function AmbitionDocument(props: {
                         .finally(() => setActBusy(false));
                     }}
                   >
-                    {viewerAffirmed ? "You're behind this — undo" : "This speaks for me"}
+                    {viewerAffirmed ? "You said go public — undo" : "Good to go public"}
                   </button>
                 ) : null}
-                {affirmations.length === 0 && !viewerAffirmed ? (
-                  <span className="ad-press-why">press if this wording reads true for you</span>
-                ) : null}
+                <span className="ad-press-why">
+                  {publicConsent({
+                    agreedCount: affirmations.length,
+                    requiredResponses: direction?.requiredResponses ?? 0,
+                  }).cleared
+                    ? "most of the room agreed — the public page is next"
+                    : "goes public once most of the room says so"}
+                </span>
               </div>
             );
           })()}

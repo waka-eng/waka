@@ -268,10 +268,15 @@ The page answers two questions and permits three acts. Vocabulary is
 pulse/pull/ambition throughout.
 
 **Read it.** The statement large; beneath it the faces who pressed it and the
-one-tap **press** — one act, both meanings: *"holds for me — this is me
-too."* An unpressed face is itself the quiet, visible signal that the
-ambition doesn't speak for someone yet. The tension line renders when
-present (combining ≠ agreeing).
+one-tap **press**. Redefined by the founder 2026-08-09 (second ruling, replaces
+"holds for me — this is me too"): **the press is publish consent** — "Good to
+go public." A key ambition has two modes: **draft — room only** while
+collaboration runs, and **public** once MOST of the room has pressed (the
+majority ceremony Phase 4 always required — the press IS that ceremony).
+Until the public page ships, the cleared state says "cleared to go public"
+rather than claiming a URL that doesn't exist. An unpressed face remains the
+quiet, visible signal of someone not yet ready. The tension line renders when
+present, labeled (combining ≠ agreeing).
 
 **How it formed — progressive disclosure, the things themselves, never
 counts.** FORMED FROM lists the *pulls* (first layer, always visible); each
