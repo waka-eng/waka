@@ -56,6 +56,8 @@ import {
 import {
   createInspiration,
   createFeedback,
+  deleteFeedback,
+  fetchLatestFeedback,
   addGroupDirectionContribution,
   dismissTopOfMindNote,
   createGroup,
@@ -138,6 +140,12 @@ interface Reading {
   text: string;
   scope: "solo" | "group";
   isPinned: boolean;
+  /**
+   * Group scope only: this viewer's standing "this reads wrong to me" mark.
+   * The note stays on the wall — the room's memory is not one member's to
+   * erase — but the mark dims it for its author and feeds the next reading.
+   */
+  markedWrong: boolean;
   hands: string[];
   evidence: {
     id: string;
@@ -176,6 +184,7 @@ function readingFromGroupNote(note: ApiGroupTopOfMindNote): Reading {
     title: note.title?.trim() || null,
     scope: "group",
     isPinned: false,
+    markedWrong: note.userFeedbackValue === "not_true",
     // `body` is the sentence the judge wrote; `title` is its short label. The
     // sentence is what belongs on a post-it -- the label reads as a heading
     // for something that is not there.
@@ -201,6 +210,8 @@ function readingFromSoloNote(note: ApiTopOfMindNoteSurface): Reading {
     title: note.title?.trim() || null,
     scope: "solo",
     isPinned: note.isPinned,
+    // Solo notes correct through their own verbs (rewrite, take down).
+    markedWrong: false,
     text: note.body?.trim() || note.title || "",
     // Your own wall has no other hands on it, and stamping "you" on every
     // reading is noise.
@@ -919,6 +930,8 @@ export default function SurfacePage(): JSX.Element {
               text: note.why?.trim() || note.title,
               scope: "group" as const,
               isPinned: false,
+              // A past board is a record; records are not correctable.
+              markedWrong: false,
               hands: Array.from(new Set(note.evidence.map((e) => e.ownerName).filter(Boolean))),
               evidence: note.evidence.map((e) => ({
                 id: e.signalId,
@@ -2210,6 +2223,8 @@ export default function SurfacePage(): JSX.Element {
               text: note.why?.trim() || note.title,
               scope: "group" as const,
               isPinned: false,
+              // A past board is a record; records are not correctable.
+              markedWrong: false,
               hands: Array.from(new Set(note.evidence.map((e) => e.ownerName).filter(Boolean))),
               evidence: note.evidence.map((e) => ({
                 id: e.signalId,
@@ -2393,6 +2408,53 @@ export default function SurfacePage(): JSX.Element {
       .catch((error) => {
         setSurfaceNotice(
           error instanceof Error ? error.message : "That note could not be taken down.",
+        );
+      });
+  }, []);
+
+  /*
+    The other trust verb. A room's note is the ROOM's memory, so one member
+    marking it wrong removes nothing — it records "this reads wrong to me"
+    for the next reading, and the mark is the member's to take back.
+  */
+  const markWrong = useCallback((reading: Reading) => {
+    if (reading.scope !== "group") return;
+    const flip = (marked: boolean) => {
+      setReadings((current) =>
+        current.map((item) =>
+          item.id === reading.id ? { ...item, markedWrong: marked } : item,
+        ),
+      );
+      setOpenReading((current) =>
+        current && current.id === reading.id
+          ? { ...current, markedWrong: marked }
+          : current,
+      );
+      setSurfaceNotice(null);
+    };
+    if (reading.markedWrong) {
+      void fetchLatestFeedback({
+        targetType: "group_top_of_mind_note",
+        targetId: reading.id,
+      })
+        .then((row) => (row ? deleteFeedback(row.id) : undefined))
+        .then(() => flip(false))
+        .catch((error) => {
+          setSurfaceNotice(
+            error instanceof Error ? error.message : "That mark was not taken back.",
+          );
+        });
+      return;
+    }
+    void createFeedback({
+      targetType: "group_top_of_mind_note",
+      targetId: reading.id,
+      value: "not_true",
+    })
+      .then(() => flip(true))
+      .catch((error) => {
+        setSurfaceNotice(
+          error instanceof Error ? error.message : "That mark was not saved.",
         );
       });
   }, []);
@@ -3255,7 +3317,7 @@ export default function SurfacePage(): JSX.Element {
                 return (
                   <article
                     key={reading.id}
-                    className={`sf-postit${dragging === i ? " sf-postit--dragging" : ""}${reading.isPinned ? " sf-postit--held" : ""}`}
+                    className={`sf-postit${dragging === i ? " sf-postit--dragging" : ""}${reading.isPinned ? " sf-postit--held" : ""}${reading.markedWrong ? " sf-postit--marked-wrong" : ""}`}
                     style={{
                       ["--bg" as string]: paper.hue,
                       ["--ink" as string]: paper.ink,
@@ -3384,7 +3446,34 @@ export default function SurfacePage(): JSX.Element {
                           </svg>
                         </button>
                       </span>
-                      ) : null}
+                      ) : (
+                      <span className="sf-postit-acts">
+                        <button
+                          type="button"
+                          className={`sf-act${reading.markedWrong ? " on" : ""}`}
+                          title={
+                            reading.markedWrong
+                              ? "marked wrong — click to take it back"
+                              : "this reads wrong to me"
+                          }
+                          aria-label={
+                            reading.markedWrong ? "take back the mark" : "mark as wrong"
+                          }
+                          aria-pressed={reading.markedWrong}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            markWrong(reading);
+                          }}
+                        >
+                          {/* A slash through a circle: disagreement, not deletion. */}
+                          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                            <circle cx="12" cy="12" r="8" />
+                            <path d="M6.6 6.6 17.4 17.4" />
+                          </svg>
+                        </button>
+                      </span>
+                      )}
                     </footer>
                   </article>
                 );
@@ -3920,6 +4009,22 @@ export default function SurfacePage(): JSX.Element {
                   </article>
                 );
               })}
+              {openReading.scope === "group" ? (
+                /*
+                  The correction verb lives in this layer too: every wall
+                  variant funnels into it, so a reading is answerable
+                  wherever it was met.
+                */
+                <button
+                  type="button"
+                  className={`sf-wrong${openReading.markedWrong ? " on" : ""}`}
+                  onClick={() => markWrong(openReading)}
+                >
+                  {openReading.markedWrong
+                    ? "marked wrong — take it back"
+                    : "this reads wrong to me"}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -4039,6 +4144,14 @@ export default function SurfacePage(): JSX.Element {
                         {reading.context.scope === "alone" ? "alone" : reading.context.groupName}
                       </span>
                       <span className="sf-became-title">{reading.note.title}</span>
+                      {/* The receipts were fetched and thrown away: the role
+                          this save played, and the words that carried it. */}
+                      {reading.myRole?.reason ? (
+                        <span className="sf-became-why">{reading.myRole.reason}</span>
+                      ) : null}
+                      {reading.quote ? (
+                        <span className="sf-became-quote">“{reading.quote}”</span>
+                      ) : null}
                     </div>
                   ))}
                 </div>

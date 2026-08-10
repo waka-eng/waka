@@ -1202,7 +1202,9 @@ export type ApiFeedbackTarget =
   | "signal"
   | "context_node"
   | "top_of_mind_note"
-  | "hypothesis";
+  | "hypothesis"
+  | "group_top_of_mind_note"
+  | "combination_reading";
 export type ApiFeedbackValue =
   | "true"
   | "partly"
@@ -2139,6 +2141,56 @@ export async function createFeedback(
   }
 
   return body.feedback;
+}
+
+/**
+ * Take back a mark. Only the record-only targets (group notes, combination
+ * readings) are deletable — the server refuses the rest, because their
+ * feedback applied graph changes a delete would not unapply.
+ */
+export async function deleteFeedback(id: string): Promise<void> {
+  const path = apiPath(`/feedback/${encodeURIComponent(id)}`);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: "Network unreachable while removing feedback",
+    });
+  }
+  if (!res.ok) {
+    throw new ApiError({
+      status: res.status,
+      message: "Failed to remove feedback",
+    });
+  }
+}
+
+/**
+ * The viewer's latest mark on one target, or null. Used to find the row a
+ * one-tap unmark should delete.
+ */
+export async function fetchLatestFeedback(input: {
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+}): Promise<ApiFeedbackRecord | null> {
+  const query = new URLSearchParams({
+    targetType: input.targetType,
+    targetId: input.targetId,
+    limit: "1",
+  });
+  const body = await getJson<{ feedback: ApiFeedbackRecord[] }>(
+    apiPath(`/feedback?${query.toString()}`),
+    "Failed to load feedback",
+  );
+  return Array.isArray(body.feedback) && body.feedback[0]
+    ? body.feedback[0]
+    : null;
 }
 
 export type ApiMeaningGraphMemoryState =

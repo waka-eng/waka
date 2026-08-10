@@ -2889,3 +2889,44 @@
 }
 
 .sf-sit-close .sf-sit-text { color: var(--sf-ink-2); }
+
+/*
+  The wrong-mark: disagreement, not deletion. The note stays — the room's
+  memory is not one member's to erase — but it dims for the member who
+  marked it, and the mark feeds the next reading.
+*/
+.sf-postit--marked-wrong {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+/* The correction verb inside the reading layer — quiet, adjacent, plain. */
+.sf-wrong {
+  align-self: flex-start;
+  margin-top: 10px;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: color-mix(in oklab, currentColor 62%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.sf-wrong.on {
+  color: currentColor;
+}
+
+/* Receipts on the BECAME rows: the role a save played, and its words. */
+.sf-became-why {
+  display: block;
+  font-size: 12.5px;
+  opacity: 0.7;
+}
+.sf-became-quote {
+  display: block;
+  font-size: 12.5px;
+  font-style: italic;
+  opacity: 0.8;
+}

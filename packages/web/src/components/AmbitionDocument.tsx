@@ -24,6 +24,9 @@ import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import {
+  createFeedback,
+  deleteFeedback,
+  fetchLatestFeedback,
   setGroupDirectionAffirmation,
   setGroupDirectionTakeSupport,
   type ApiGroupDirection,
@@ -162,6 +165,67 @@ export function AmbitionDocument(props: {
   }, [direction]);
 
   const current = direction?.current ?? null;
+
+  /*
+    The individual trust verb, beside the collective ones. Affirm, take,
+    accept — every existing act agrees or proposes; none lets one member say
+    "this reading is wrong". The mark is personal, standing, and retractable;
+    the room's reading is untouched and the next one is informed.
+  */
+  const [wrongMark, setWrongMark] = useState<{ feedbackId: string } | null>(null);
+  const [wrongBusy, setWrongBusy] = useState(false);
+  const [wrongNotice, setWrongNotice] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setWrongMark(null);
+    setWrongNotice(null);
+    if (!current?.id) return;
+    void fetchLatestFeedback({
+      targetType: "combination_reading",
+      targetId: current.id,
+    })
+      .then((row) => {
+        if (!cancelled && row && row.value === "not_true") {
+          setWrongMark({ feedbackId: row.id });
+        }
+      })
+      .catch(() => {
+        /* A missing mark is indistinguishable from none; say nothing. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [current?.id]);
+
+  const toggleWrong = () => {
+    if (!current?.id || wrongBusy) return;
+    setWrongBusy(true);
+    setWrongNotice(null);
+    const finish = () => setWrongBusy(false);
+    if (wrongMark) {
+      void deleteFeedback(wrongMark.feedbackId)
+        .then(() => setWrongMark(null))
+        .catch((error) => {
+          setWrongNotice(
+            error instanceof Error ? error.message : "That mark was not taken back.",
+          );
+        })
+        .finally(finish);
+      return;
+    }
+    void createFeedback({
+      targetType: "combination_reading",
+      targetId: current.id,
+      value: "not_true",
+    })
+      .then((row) => setWrongMark({ feedbackId: row.id }))
+      .catch((error) => {
+        setWrongNotice(
+          error instanceof Error ? error.message : "That mark was not saved.",
+        );
+      })
+      .finally(finish);
+  };
   const proposal = direction?.proposal ?? null;
   /* Oldest first: the takes read as the room's conversation, not a feed. */
   const voices = [...(direction?.contributions ?? [])].sort((a, b) =>
@@ -361,6 +425,15 @@ export function AmbitionDocument(props: {
             const line = [span, profile].filter(Boolean).join(" · ");
             return line ? <p className="ad-formed-meta">{line}</p> : null;
           })()}
+          <button
+            type="button"
+            className={`sf-wrong${wrongMark ? " on" : ""}`}
+            disabled={wrongBusy}
+            onClick={toggleWrong}
+          >
+            {wrongMark ? "marked wrong — take it back" : "this reading is wrong"}
+          </button>
+          {wrongNotice ? <p className="ad-formed-meta">{wrongNotice}</p> : null}
           {direction?.history?.length ? (
             <div className="ad-history-block">
               <p className="ad-formed-label">past versions</p>
