@@ -46,6 +46,7 @@ export default defineConfig({
       "src/lib/wow-judge-model.test.ts",
       "src/lib/admin-auth.test.ts",
       "src/routes/admin-meaning-graph.test.ts",
+      "src/routes/auth-cli.test.ts",
       "src/routes/auth-google.test.ts",
       "src/routes/auth-profile.test.ts",
       "src/routes/feedback.test.ts",

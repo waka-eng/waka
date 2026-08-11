@@ -43,6 +43,7 @@ import {
   createSessionRow,
   revokeSessionByToken,
 } from "../lib/session.js";
+import { cliAuthRoutes } from "./auth-cli.js";
 import { googleAuthRoutes, handleGoogleCallback } from "./auth-google.js";
 
 // ---------------------------------------------------------------------------
@@ -182,6 +183,7 @@ function serializeAuthUser(user: {
 // Google OAuth client already has registered from kti-app.
 authRoutes.route("/google", googleAuthRoutes);
 authRoutes.get("/callback/google", handleGoogleCallback);
+authRoutes.route("/cli", cliAuthRoutes);
 
 /**
  * POST /api/auth/signup

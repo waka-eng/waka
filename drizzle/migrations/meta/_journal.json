@@ -330,6 +330,13 @@
       "when": 1785877200000,
       "tag": "0046_shared_direction_collaboration",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786419002506,
+      "tag": "0047_cli_login_codes",
+      "breakpoints": true
     }
   ]
 }
