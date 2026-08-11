@@ -19,6 +19,7 @@ export * from "./schema";
 export * from "./schema-attachments";
 export * from "./schema-reflections";
 export * from "./schema-sessions";
+export * from "./schema-cli-login-codes";
 export * from "./schema-wow-moments";
 export * from "./schema-embeddings";
 export * from "./schema-background-jobs";
