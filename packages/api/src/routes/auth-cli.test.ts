@@ -69,7 +69,7 @@ function makeDb(selectResults: unknown[][] = []) {
       })),
     })),
   }));
-  const insertValues = vi.fn(async () => undefined);
+  const insertValues = vi.fn(async (_values: unknown) => undefined);
   const insert = vi.fn(() => ({ values: insertValues }));
   const deleteWhere = vi.fn(async () => undefined);
   const del = vi.fn(() => ({ where: deleteWhere }));
@@ -178,7 +178,7 @@ describe("POST /api/auth/cli/exchange", () => {
     const res = await exchangeRequest("nonexistent-code");
 
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/invalid or already-used/i);
     expect(mockState.db.deleteWhere).not.toHaveBeenCalled();
     expect(mockState.signSessionToken).not.toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe("POST /api/auth/cli/exchange", () => {
     const res = await exchangeRequest("some-code");
 
     expect(res.status).toBe(400);
-    const body = await res.json();
+    const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/expired/i);
     expect(mockState.db.deleteWhere).toHaveBeenCalledTimes(1);
     expect(mockState.signSessionToken).not.toHaveBeenCalled();
@@ -216,7 +216,7 @@ describe("POST /api/auth/cli/exchange", () => {
     const res = await exchangeRequest("valid-code");
 
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as { token: string; user: { email: string } };
     expect(body.token).toBe("signed-session-token");
     expect(body.user).toEqual({ email: FAKE_USER.email });
     expect(mockState.db.deleteWhere).toHaveBeenCalledTimes(1);
@@ -249,7 +249,7 @@ describe("POST /api/auth/cli/exchange", () => {
 
     const second = await exchangeRequest("valid-code");
     expect(second.status).toBe(400);
-    const body = await second.json();
+    const body = (await second.json()) as { error: string };
     expect(body.error).toMatch(/invalid or already-used/i);
   });
 });
