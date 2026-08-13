@@ -58,6 +58,8 @@ export default defineConfig({
       "src/queue/classifier.test.ts",
       "src/vault/*.test.ts",
       "src/scoring/activation.test.ts",
+      "src/scoring/stability.test.ts",
+      "src/lib/node-dynamics.test.ts",
       "src/scoring/board-selection.test.ts",
       "src/scoring/algorithm-integrity.test.ts",
     ],
