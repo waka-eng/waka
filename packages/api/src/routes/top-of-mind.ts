@@ -57,6 +57,12 @@ const listTopOfMindQuerySchema = z
           ),
       )
       .optional(),
+    /**
+     * Which distillation lens to read. Omitted → "all", the pre-existing
+     * board. "app"/"agent" return only notes distilled from signals captured
+     * by that client kind (see `top_of_mind_notes.lens`).
+     */
+    lens: z.enum(["all", "app", "agent"]).optional(),
   })
   .strict();
 
@@ -177,7 +183,12 @@ export interface TopOfMindRouteDependencies {
   getTopOfMind?: (db: WakaDb, userId: string) => Promise<TopOfMindPreview>;
   listNotes?: (
     db: WakaDb,
-    input: { userId: string; limit: number; preferredLocale?: SupportedLocale },
+    input: {
+      userId: string;
+      limit: number;
+      preferredLocale?: SupportedLocale;
+      lens?: "all" | "app" | "agent";
+    },
   ) => Promise<TopOfMindNoteSurface[]>;
   getNote?: (
     db: WakaDb,
@@ -515,6 +526,12 @@ export async function listTopOfMindNotesForUser(
      * `signal-readings.ts`.
      */
     audience?: "owner" | "public";
+    /**
+     * Distillation lens to read; defaults to "all" so every existing caller
+     * (web board, public profile) keeps seeing exactly the notes it did
+     * before lens-scoped rows existed.
+     */
+    lens?: "all" | "app" | "agent";
   },
 ): Promise<TopOfMindNoteSurface[]> {
   const fetchLimit = Math.min(
@@ -552,6 +569,7 @@ export async function listTopOfMindNotesForUser(
       and(
         eq(wowMoments.userId, input.userId),
         eq(wowMoments.lifecycleStatus, "active"),
+        eq(wowMoments.lens, input.lens ?? "all"),
       ),
     )
     .orderBy(
@@ -1065,7 +1083,12 @@ export function createTopOfMindRoutes(
     const limit = parsedQuery.data.limit ?? DEFAULT_TOP_OF_MIND_LIMIT;
     const [topOfMind, topOfMindNotes] = await Promise.all([
       getTopOfMind(db, userId),
-      listNotes(db, { userId, limit, preferredLocale: user.preferredLocale }),
+      listNotes(db, {
+        userId,
+        limit,
+        preferredLocale: user.preferredLocale,
+        lens: parsedQuery.data.lens,
+      }),
     ]);
 
     return c.json({

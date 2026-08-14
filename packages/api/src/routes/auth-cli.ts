@@ -219,7 +219,7 @@ cliAuthRoutes.post("/exchange", async (c) => {
   // later (e.g. a future `waka-mcp logout`) will not touch the browser
   // session, and vice versa.
   const token = await signSessionToken({ userId: user.id, email: user.email });
-  await createSessionRow({ userId: user.id, token });
+  await createSessionRow({ userId: user.id, token, client: "cli" });
 
   return c.json({
     token,

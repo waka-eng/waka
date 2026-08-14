@@ -227,6 +227,7 @@ describe("POST /api/auth/cli/exchange", () => {
     expect(mockState.createSessionRow).toHaveBeenCalledWith({
       userId: FAKE_USER.id,
       token: "signed-session-token",
+      client: "cli",
     });
   });
 

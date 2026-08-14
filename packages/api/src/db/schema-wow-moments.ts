@@ -66,6 +66,15 @@ export const topOfMindNotes = pgTable(
     reflectionQuestion: text("reflection_question"),
     reflectionGuide: text("reflection_guide"),
     locale: text("locale").notNull().default("en-US"),
+    /**
+     * Which slice of the user's signals this note was distilled from: "all"
+     * (every signal — the pre-existing behaviour), "app" (only app-captured
+     * saves), or "agent" (only CLI/MCP-captured saves; see `signals.source`).
+     * Lens-scoped notes carry a `<lens>:` prefix inside `semanticKey` and
+     * `idempotencyKey`, so the existing uniqueness indexes already keep the
+     * lenses from colliding — this column exists for filtered reads.
+     */
+    lens: text("lens").notNull().default("all"),
     wowScore: integer("wow_score").notNull().default(0),
     semanticKey: text("semantic_key"),
     evidenceFingerprint: text("evidence_fingerprint"),
