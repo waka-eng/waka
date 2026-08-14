@@ -1,6 +1,12 @@
 # Goal: what survives the novelty — storage strength for context nodes
 
-Status: proposed 2026-08-10. Not started.
+Status: halted 2026-08-09 at the Phase 1 gate. After the writer-gap backfill
+made 28 d labels real, the recency null wins the only askable v1 horizon
+(AUC 1.00 vs E[R] 0.80; 90 d unobservable until data passes 2026-08-30), and
+the founder-approved return-label criterion v2 fails marginal at 7 d and
+outright at 14 d. Phase 0 shipped and gated green; the harness and backfill
+are committed; the archive is too young for the month-and-quarter question
+this goal exists to answer. See `## Log`.
 Branch: `goal/durable-interest`
 Follows: `brain-inspired-spark-engine.md` (S1+S2 shipped), `memory-movement.ts`,
 ambition-reading. Runs beside `two-modes.md` without collision: this goal
@@ -378,3 +384,263 @@ Held deliberately out of scope, in priority order, each a candidate goal:
 ## Log
 
 (append measurements here, per the goal command)
+
+### 2026-08-09 — Phase 0: pure math (gate PASS)
+
+`packages/api/src/scoring/stability.ts` + `stability.test.ts`, allowlisted in
+`vitest.unit.config.ts`. 32/32 tests green; `tsc --noEmit` clean. All events
+below graded at contentDepth 0.5 ⇒ q = 0.775.
+
+| trajectory | criterion | measured | verdict |
+| --- | --- | --- | --- |
+| 15 events @ 35 d | S ∈ [80, 110]; final 3 increments < 15% | S = 92.333; ×1.069, ×1.064, ×1.059 (6.9%/6.4%/5.9%) | pass |
+| same 15 in one week | S ≤ 12 (≤ +70% over S_INIT) | S = 8.579 (+22.6%); day-collapsed 15 → 7 events | pass |
+| 4 events, 14 mo silence, 3 events | comeback × ≥ 2.0; final ≥ 5× massed | ×2.782; final S = 92.751 = 10.81× massed | pass |
+| the comeback, calendar-locked | comeback × ≤ 1.6 | ×1.577 (uncapped ×2.782; cap binds at d = 0.25) | pass |
+
+The doc's parenthetical "~13× when spaced" measures at 13.19× (92.333 / 7).
+
+Suite note: `src/routes/admin-meaning-graph.test.ts` has 1 pre-existing
+failure on clean dev (f1feda0), verified by stash/rerun in this session —
+unrelated to this goal; 173/174 remaining tests pass.
+
+### 2026-08-09 — Phase 1: replay harness (gate FAIL — halted)
+
+`packages/api/scripts/replay-stability.ts`. Read-only SQL + pure math, zero
+model calls, deterministic (bootstrap PRNG seed 42). Baselines reconstructed
+as of each cut T through the production `deriveMemoryPattern` (node.weight =
+Σ evidence.weight ≤ T, confidence = max ≤ T — the writer's own aggregates;
+status transitions are unlogged, so contradiction never fires in
+reconstruction). Evidence events grade at flat contentDepth 0.5 ⇒ q = 0.775
+(depth is not persisted anywhere in the schema). E[R] uses the closed form
+in `meanRetrievabilityOverWindow`.
+
+Founder archive (yjchung9806@gmail.com): 95 evidence rows, 588 graded
+revisits, 18 nodes, span 2026-05-25 → 2026-08-10, 3 monthly cuts.
+Evidence by month: **2026-05 = 56, 2026-06 = 0, 2026-07 = 0, 2026-08 = 39.**
+
+| cut | eligible nodes (≥2 prior) | evidence in +28 d | evidence in +90 d |
+| --- | --- | --- | --- |
+| 2026-06-01 | 6 | 0 | 2 (censored) |
+| 2026-07-01 | 6 | 0 | 2 (censored) |
+| 2026-08-01 | 6 | 2 (censored) | 2 (censored) |
+
+Pooled, after right-censoring: **28 d → 12 node-cut pairs, 0 positive; 90 d
+→ 0 observable pairs.** AUC undefined for every predictor (recency,
+currentWeight, movementScore, meanSignalImp, S, E[R]) at both horizons —
+single-class labels. ΔAUC bootstrap: n/a.
+
+Other archives: agikeekim (35 rows, span Aug 4–7, 0 cuts), jqyu.lee (17
+rows, one day), korean.tech.initiative.dev (10 rows, one day), ljk950327
+(4 rows). No demo-seed archive with multi-month history exists (seed/test
+users hold ≤ 2 rows each).
+
+**Gate criterion:** E[R] or S beats both recency and currentWeight at both
+horizons on the founder archive, outside small-n noise. **Measured:** AUC
+undefined everywhere — the eval is structurally unrunnable on 11 weeks of
+bursty (backfill-May / dev-August) graph history. **Verdict: fail — halt.**
+The theory neither won nor lost; "survives the novelty" cannot be measured
+on an archive in which novelty has not had time to wear off. Phases 2–6 do
+not run.
+
+Why the criterion is wrong *for now* (not softened, per the goal command):
+the eval design assumes ≥ ~6 months of organically written evidence; the
+meaning-graph writer went live 2026-05-25 and evidence arrives in bursts
+tied to development, not capture rhythm.
+
+Resume conditions, in order of preference:
+1. **Wait and rerun** (no decisions needed): the harness is committed and
+   free. CORRECTED 2026-08-09 (the first entry misdated this): the earliest
+   cut is 2026-06-01, so the first uncensored 90 d window closes
+   **2026-08-30** — the harness gets its first defined 90 d read as soon as
+   evidence exists past that date. The Aug 1 cut's 28 d window closes
+   2026-08-29. A CI-clean verdict still wants 2–3 more months of organic
+   capture on top.
+
+Post-halt diagnosis (2026-08-09, follow-up queries): the June evidence hole
+is a **writer gap, not a capture gap** — founder signals by month are
+May 15 / Jun 8 / Jul 0 / Aug 1, revisits May 53 / Jun 270 / Jul 43 /
+Aug 223, and **6 of June's 8 signals were never cited by any evidence row**
+(uncited: May 2, Jun 6). Only July is true capture silence. Backfilling the
+6 missed June signals through the meaning-graph writer (evidence timestamps
+backdated to signal capture time) would give the Jun 1 cut real positive
+labels and make the 28 d AUC defined immediately.
+2. **Founder may re-scope the criterion** (explicitly a criteria change,
+   not made here): shorter horizons (7/14 d) with weekly cuts, and/or labels
+   that count graded returns (588 revisit events exist) rather than only
+   new-signal evidence. Either would make the question askable sooner at
+   the cost of measuring something weaker than "survives the novelty."
+3. Phase 0's module stays shipped, consumed by nothing, gated by its own
+   35 tests — no risk parked in the tree.
+
+### 2026-08-09 — FOUNDER OVERRIDE: surface swap authorized (criteria change, recorded)
+
+The founder reviewed the live-archive diagnostic (both boards side by
+side) and explicitly chose to replace the shipped ranking — "I hate what
+I see today." Phase 5's blind-judgment gate is brought forward as the
+governing criterion; the Phase 1 AUC gate stays recorded as failed and
+the harness remains the long-horizon arbiter as the archive ages. This is
+a founder criteria change, not a softened gate.
+
+The diagnostic also found the real disease: **twin nodes**. The writer
+inserted the judge's raw type into the (user, type, label) identity;
+`normalizeContextNodeType` had every mapping and was never called at the
+chokepoint. 12 founder nodes were 8 thoughts. Fixes shipped:
+- writer canonicalizes type at `addSignal` (identity chokepoint) and
+  clips labels on word boundaries via Intl.Segmenter (Korean labels were
+  hard-sliced mid-word); leading-punctuation fragments rejected.
+  Tests: `meaning-graph-writer-labels.test.ts` 4/4.
+- `scripts/merge-twin-nodes.ts`: merged **10 twin groups across all
+  users** (FKs discovered dynamically — caught two-modes'
+  personal_memory_claims/evidence); 0 duplicate-label groups remain;
+  2 garbled Korean labels rebuilt from their signals' own text.
+- Post-merge founder board: **8 distinct pulls**, merged histories
+  (top S 21.5 → 21.8 d).
+
+Expedition decision for Phases 2–5: land **compute-at-read** node
+dynamics (S/R/state/Importance replayed per request — milliseconds at
+this scale) instead of Phase 2's columns, because a migration on this
+dev-based branch risks journal conflict with two-modes' in-flight 0029+.
+Columns become a follow-up in a quiet migration window; the math is
+identical either way.
+
+### 2026-08-09 — writer-gap backfill + criterion v2 run (both gates FAIL — halt stands)
+
+Founder approved two unblocks: (a) backfill the writer gap, (b) add a
+return-label criterion v2 beside v1.
+
+**Backfill** (`scripts/backfill-missed-writer.ts`): 8 uncited founder
+signals (2 late-May, 6 June — packets existed, writer never ran) processed
+through the production `persistMeaningGraphForInspiration`; 8 judge calls,
+exactly the pre-stated estimate. New citations backdated to capture time;
+touched nodes' first/last-seen recomputed from evidence. All 34
+repaired-signal evidence rows verified dated at capture; 0 uncited signals
+remain. Post-repair archive: 131 evidence rows, 25 nodes, by month
+**May 71 / Jun 24 / Jul 0 (true capture silence) / Aug 36**. Disclosure:
+the self-healing pass also normalized ~4–5 rows the live app wrote on
+2026-08-09 against pre-August signals (same rule: citation re-dated to its
+signal's capture time); nothing deleted.
+
+**Harness run** (both criteria, founder archive, seed 42, zero model calls):
+
+criterion v1 — evidence labels, monthly cuts, gate horizons 28/90 d:
+
+| horizon | pairs | pos | recency | currentWeight | movementScore | meanSignalImp | S | E[R] |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 28 d | 21 | 5 (23.8%) | **1.0000** | 0.2000 | 0.5625 | 0.7375 | 0.3125 | 0.8000 |
+| 90 d | 0 | — | n/a | n/a | n/a | n/a | n/a | n/a |
+
+ΔAUC (champion ER28): vs currentWeight **+0.600 [+0.18, +0.90]** (wins);
+vs recency **−0.201 [−0.41, −0.02]** (loses, CI fully negative).
+**v1 verdict: fail** — the null wins the only askable horizon; 90 d
+remains unobservable until data exists past 2026-08-30.
+
+criterion v2 — return labels (graded revisit on a signal cited ≤ T),
+weekly cuts, horizons 7/14 d, censored by last activity:
+
+| horizon | pairs | pos | recency | currentWeight | movementScore | meanSignalImp | S | E[R] |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 7 d | 109 | 63 (57.8%) | 0.6453 | 0.5390 | 0.6042 | 0.5129 | 0.4268 | 0.6139 |
+| 14 d | 98 | 74 (75.5%) | 0.6351 | 0.6312 | 0.6363 | 0.4476 | 0.3136 | 0.4296 |
+
+ΔAUC (champion ER7): vs recency −0.032 [−0.146, +0.083]; vs currentWeight
++0.074 [−0.060, +0.216] — both straddle zero ⇒ **marginal ⇒ fail** per the
+goal command. At 14 d the champion loses outright: ER14 − recency
+−0.202 [−0.339, −0.061]; ER14 − currentWeight −0.199 [−0.339, −0.063].
+**v2 verdict: fail.**
+
+Reading, without softening: on this archive the new state does not beat
+the baselines anywhere it can be measured. Two structural notes recorded
+for the eventual re-run, not as excuses: (1) S *anti-correlates* with
+short-horizon returns (0.31–0.43) — newly-hot nodes have low proven
+stability and high revisit traffic, consistent with S and activation
+being different axes; v2's week-scale question is recency's home turf and
+was flagged as weaker when approved. (2) On an 11-week archive every
+node's demonstrated survival horizon is weeks — saturation gives S almost
+no dynamic range by design. The question S exists to answer ("next month
+and quarter", per The decision that matters) still has no data old enough
+to ask it. The goal stays halted; the harness reruns free as the archive
+ages — first 90 d read after 2026-08-30, meaningful spread in S wants
+fall/winter.
+
+### 2026-08-12 — re-landed on current dev (integration, no behavior change)
+
+Both this goal and `capture-feeds-the-graph` were authored on a 2026-06-22
+base (f1feda0) and sat unpushed while two-modes merged 182 commits into
+`dev` (PR #225). Re-landed by cherry-pick onto current dev as
+`goal/capture-feeds-the-graph-r2` and `goal/durable-interest-r2`.
+
+What the integration actually cost, recorded so the next re-land is cheaper:
+
+- **Conflicts were fewer than feared and all both-sides-additive.** The save
+  path now carries three enqueues side by side (classification → graph write
+  → group-reading refresh); dev's group-reading machinery is untouched.
+- **Two of this work's changes were superseded by dev and dev's version was
+  taken:** the drain cron is already `enabled: true` on all stages with a
+  14-minute timeout and limit 25 (broader than the dev-stage-only fix), and
+  the drain scheduler grew a delay mechanism this code now cooperates with.
+- **Two test stubs needed teaching about dev's new fanout** — classification
+  now triggers group-reading enqueues, so the stub db needed a thenable
+  select-chain. Scoped commits, no production change.
+- **`top-of-mind-refresh.ts` was restructured under two-modes**: the evidence
+  query was split out of its `Promise.all` and a new pre-probe step
+  (`rankTopOfMindRefreshCandidates`) computes idempotency keys before the
+  model call. Dev's version was taken wholesale and the pool-ordering
+  insertion re-applied on top; the probe now consumes `orderedNodes` too, so
+  the existing-note probe and the model's candidate set cannot diverge.
+- **Integration note for the migration window:** dev added
+  `group_reading_refresh` as a third `background_job_type` enum value via
+  migration — confirming the same window can carry this goal's
+  `write_meaning_graph` enum value and the `stability` columns.
+
+Verification after re-land: `tsc --noEmit` clean, **495/495 unit tests pass**
+(the pre-existing `admin-meaning-graph.test.ts` failure recorded on
+2026-08-09 is fixed on current dev). Nothing pushed — the founder's
+no-ship directive stands.
+
+### 2026-08-12 — pre-PR review: the surface swap is withdrawn
+
+A code review before opening the PR found that **the Phase 2–5 ranking swap
+never took effect**, and two defects in the repair scripts.
+
+**The swap was a no-op.** `top-of-mind-refresh.ts` and `top-of-mind-preview.ts`
+were ordering their node pool by `E[R] × lifecycle state` — and then handing
+that pool to `rankTopOfMindRefreshCandidates` / `rankTopOfMindPreview`, both of
+which immediately re-sort by their own score (`score → evidenceCount → weight`,
+and `nodeScore` respectively) and slice. The injected order survived only as a
+stable-sort tiebreaker on an exact three-way tie, i.e. never — while costing a
+full-archive `loadNodeDynamics` replay on paths that run after *every*
+classification and on *every* preview request.
+
+**It is withdrawn rather than repaired**, and the goal returns to halted:
+
+1. The Phase 1 prediction gate failed — recency beat `E[R]` at the only
+   measurable horizon. The swap survived only on a founder override.
+2. That override's premise turns out to have been the wrong target. The board
+   the founder rejected was bad because of **twin nodes** — 12 nodes that were
+   8 thoughts, each doubled — which the same session fixed. Re-measuring after
+   the merge, the new lens returned *the same top five items in a different
+   order*, with every node `emerging` at S 8–22 days. On an eleven-week
+   archive there are no survived gaps to rank by.
+3. Repairing it would therefore ship a behavior change to the surface the
+   founder looks at most, on code that has provably never executed its
+   intended path, for a reordering worth approximately nothing today.
+
+`stability.ts` and `node-dynamics.ts` stay — pure, tested, consumed by
+nothing. That is what a halted goal should look like, and re-wiring is ten
+lines whenever the harness can finally measure whether it helps (first
+uncensored 90-day read after 2026-08-30; meaningful S spread wants winter).
+
+**Two script defects, both fixed.** `backfill-missed-writer.ts` was
+backdating *every* evidence row a run produced — including rows citing the
+judge's comparison candidates, which belong to differently-dated saves — so
+the repair was inventing the provenance it claimed to restore; it now
+backdates only rows citing the trigger signal. Its "self-healing" pass was
+removed outright: the predicate was a date window rather than an identity, so
+with a live capture-path writer it would re-date correct evidence and
+silently falsify the input to the entire scoring model.
+
+`shortText`'s fallback fired whenever a word-boundary clip landed at ≤ 40 code
+points — a threshold inherited from the old ASCII-space heuristic — discarding
+a good clip and hard-cutting mid-word, which is the bug the function was
+written to fix. It now falls back only when the boundary clip is empty.
