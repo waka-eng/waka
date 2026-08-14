@@ -178,6 +178,19 @@ const createInspirationSchema = z.object({
     .array(reflectionInputSchema)
     .max(3, "Too many guided reflections for one inspiration")
     .optional(),
+  /**
+   * Explicit capture-provenance override. Only honored for CLI/MCP sessions
+   * (see the handler below) — a browser session always writes "app"
+   * regardless of this field, so a web request can never claim "agent".
+   *
+   * Session-kind alone (web vs cli) cannot distinguish two very different
+   * things a CLI/MCP client might be doing: relaying a human's own words
+   * because they asked ("이거 와카에 넣어줘" — this is the human's taste,
+   * "app") versus an agent autonomously logging its own operational lesson
+   * with no human in the loop ("agent"). Omitted -> defaults to "agent",
+   * the historical behavior for autonomous callers.
+   */
+  source: z.enum(["app", "agent"]).optional(),
 });
 
 export type CreateInspirationInput = z.infer<typeof createInspirationSchema>;
@@ -436,9 +449,12 @@ routes.post("/", async (c) => {
   const now = new Date();
   const signalId = randomUUID();
   const sparkInputs = normalizeSparkInputs(parsed.data);
-  // Provenance is derived from the session, not the body: a CLI/MCP-minted
-  // session writes "agent", every browser session writes "app".
-  const signalSource = user.sessionClient === "cli" ? "agent" : "app";
+  // Provenance defaults from the session ("agent" for CLI/MCP, "app" for
+  // browser) but a CLI session may explicitly downgrade to "app" via the
+  // body — see createInspirationSchema.source. A browser session can never
+  // claim "agent": the body's `source` is ignored outright for "web".
+  const signalSource =
+    user.sessionClient === "cli" ? (parsed.data.source ?? "agent") : "app";
   const draftSignal: Signal = {
     id: signalId,
     userId: user.id,
