@@ -337,6 +337,13 @@
       "when": 1786419002506,
       "tag": "0047_cli_login_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1786679729360,
+      "tag": "0048_signal_source_session_client_lens",
+      "breakpoints": true
     }
   ]
 }

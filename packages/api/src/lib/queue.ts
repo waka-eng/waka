@@ -819,6 +819,41 @@ export async function runGroupReadingRefreshJob(
   if (combinationError) throw combinationError;
 }
 
+/**
+ * Distill the lens-scoped boards ("app" and "agent") after the combined
+ * refresh. Only runs when the user has signals from BOTH client kinds — with
+ * a single source the "all" board already equals that lens, and two extra
+ * synthesis passes would buy nothing. Failures are logged, not thrown: lens
+ * boards are additive surfaces and must not fail the whole rebuild job.
+ */
+async function refreshLensScopedTopOfMindNotes(userId: string): Promise<void> {
+  const db = getDb();
+  const sourceRows = await db
+    .selectDistinct({ source: signals.source })
+    .from(signals)
+    .where(eq(signals.userId, userId));
+  const clientKinds = new Set(
+    sourceRows.map((row) => (row.source === "agent" ? "agent" : "app")),
+  );
+  if (clientKinds.size < 2) return;
+
+  for (const lens of ["app", "agent"] as const) {
+    try {
+      await refreshTopOfMindNotesFromContextGraph(db, {
+        userId,
+        lens,
+        synthesisTrigger: "weekly_refresh",
+      });
+    } catch (err) {
+      console.warn("[background-jobs] lens-scoped top-of-mind refresh failed", {
+        userId,
+        lens,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+}
+
 async function processBackgroundJob(job: BackgroundJob): Promise<void> {
   if (job.type === "process_inspiration") {
     const payload = parseProcessInspirationPayload(job.payload);
@@ -852,6 +887,7 @@ async function processBackgroundJob(job: BackgroundJob): Promise<void> {
     if (refresh.synthesis.failed > 0 && refresh.synthesis.synthesized === 0) {
       throw new Error("Top-of-mind synthesis did not complete");
     }
+    await refreshLensScopedTopOfMindNotes(job.userId);
     return;
   }
 

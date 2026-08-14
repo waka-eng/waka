@@ -57,6 +57,12 @@ export async function hashSessionToken(token: string): Promise<string> {
 export async function createSessionRow(input: {
   userId: string;
   token: string;
+  /**
+   * Client kind minting this session. Defaults to "web" (browser flows);
+   * the CLI loopback exchange passes "cli" so downstream writes can record
+   * unforgeable provenance (see `signals.source`).
+   */
+  client?: SessionClient;
 }): Promise<void> {
   const db = getDb();
   const tokenHash = await hashSessionToken(input.token);
@@ -66,6 +72,7 @@ export async function createSessionRow(input: {
     userId: input.userId,
     tokenHash,
     expiresAt,
+    client: input.client ?? "web",
   });
 }
 
@@ -74,6 +81,14 @@ export async function createSessionRow(input: {
  * subset of the user row we want to expose without leaking
  * password_hash, google_sub, etc.
  */
+/**
+ * Kind of client a session belongs to. "web" covers every browser flow
+ * (password + Google OAuth); "cli" is the waka-mcp loopback exchange.
+ * Stored on `sessions.client` and surfaced per-request so handlers can
+ * derive provenance without a second lookup.
+ */
+export type SessionClient = "web" | "cli";
+
 export interface AuthenticatedUser {
   id: string;
   email: string;
@@ -84,6 +99,8 @@ export interface AuthenticatedUser {
   publicHandle: string | null;
   publicProfileEnabled: boolean;
   publicTopOfMindEnabled: boolean;
+  /** Which client kind minted the session behind this request. */
+  sessionClient: SessionClient;
 }
 
 /**
@@ -109,6 +126,7 @@ export async function lookupSessionUser(
   const rows = await db
     .select({
       sessionId: sessions.id,
+      sessionClient: sessions.client,
       userId: users.id,
       email: users.email,
       name: users.name,
@@ -147,6 +165,9 @@ export async function lookupSessionUser(
     publicHandle: row.publicHandle,
     publicProfileEnabled: row.publicProfileEnabled,
     publicTopOfMindEnabled: row.publicTopOfMindEnabled,
+    // Anything unexpected in the column degrades to "web" — the safe,
+    // pre-existing meaning — rather than crashing the auth path.
+    sessionClient: row.sessionClient === "cli" ? "cli" : "web",
   };
 }
 

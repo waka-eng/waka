@@ -67,6 +67,14 @@ export const sessions = pgTable(
     // text so we don't have to deal with bytea encoding on the way in/out.
     tokenHash: text("token_hash").notNull(),
 
+    /**
+     * Which kind of client this session was minted for: "web" (browser
+     * cookie flow, Google OAuth included) or "cli" (waka-mcp loopback
+     * exchange). Recorded server-side at mint time — never client-supplied —
+     * so signal provenance derived from it cannot be forged by a caller.
+     */
+    client: text("client").notNull().default("web"),
+
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 
     createdAt: timestamp("created_at", { withTimezone: true })

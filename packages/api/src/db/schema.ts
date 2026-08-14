@@ -153,6 +153,15 @@ export const signals = pgTable(
 
     kind: text("kind"),
     category: integer("category"),
+
+    /**
+     * Who captured this signal: "app" (web/mobile UI) or "agent" (a CLI/MCP
+     * client such as waka-mcp). Derived server-side from the session's
+     * `sessions.client` at insert time — never accepted from the request
+     * body — so lens-scoped distillation (owner-taste vs agent) rests on
+     * provenance a caller cannot forge.
+     */
+    source: text("source").notNull().default("app"),
     /**
      * Persistent signal snapshots used by the WOW-moment pipeline. Later
      * workers update these only when constituent signals change; list/create

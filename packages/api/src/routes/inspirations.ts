@@ -436,12 +436,16 @@ routes.post("/", async (c) => {
   const now = new Date();
   const signalId = randomUUID();
   const sparkInputs = normalizeSparkInputs(parsed.data);
+  // Provenance is derived from the session, not the body: a CLI/MCP-minted
+  // session writes "agent", every browser session writes "app".
+  const signalSource = user.sessionClient === "cli" ? "agent" : "app";
   const draftSignal: Signal = {
     id: signalId,
     userId: user.id,
     text: parsed.data.text,
     kind: parsed.data.kind ?? null,
     category: parsed.data.category ?? null,
+    source: signalSource,
     importanceScore: 0,
     wowScore: 0,
     sharedToGroups: parsed.data.shareToGroups ?? true,
@@ -495,6 +499,7 @@ routes.post("/", async (c) => {
         text: parsed.data.text,
         kind: parsed.data.kind ?? null,
         category: parsed.data.category ?? null,
+        source: signalSource,
         sharedToGroups: parsed.data.shareToGroups ?? true,
         createdAt: now,
         updatedAt: now,
@@ -505,6 +510,7 @@ routes.post("/", async (c) => {
         text: inspirations.text,
         kind: inspirations.kind,
         category: inspirations.category,
+        source: inspirations.source,
         importanceScore: inspirations.importanceScore,
         wowScore: inspirations.wowScore,
         sharedToGroups: inspirations.sharedToGroups,

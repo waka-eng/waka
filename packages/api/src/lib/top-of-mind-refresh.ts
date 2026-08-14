@@ -471,6 +471,16 @@ async function loadPreferredLocale(
   return normalizeSupportedLocale(user?.preferredLocale);
 }
 
+/**
+ * Which slice of the user's signals a distillation pass reads.
+ *
+ * "all" is the pre-existing behaviour (every signal). "app" and "agent"
+ * narrow the evidence to signals with the matching `signals.source`, so an
+ * owner-taste profile and an agent-lessons profile can be distilled
+ * independently from the same store.
+ */
+export type TopOfMindLens = "all" | "app" | "agent";
+
 export async function refreshTopOfMindNotesFromContextGraph(
   db: WakaDb,
   input: {
@@ -480,8 +490,15 @@ export async function refreshTopOfMindNotesFromContextGraph(
     now?: Date;
     modelProvider?: ModelProvider;
     synthesisTrigger?: AmbitionSynthesisTrigger;
+    lens?: TopOfMindLens;
   },
 ): Promise<RefreshTopOfMindNotesResult> {
+  const lens = input.lens ?? "all";
+  // Lens-scoped notes live in the same table under the same uniqueness
+  // indexes, so their keys get a `<lens>:` prefix; the "all" lens keeps its
+  // historical unprefixed keys.
+  const lensKey = (key: string): string =>
+    lens === "all" ? key : `${lens}:${key}`;
   const preferredLocale =
     input.preferredLocale ?? (await loadPreferredLocale(db, input.userId));
   const nodes = await db
@@ -546,6 +563,9 @@ export async function refreshTopOfMindNotesFromContextGraph(
           and(
             eq(meaningEvidence.userId, input.userId),
             inArray(meaningEvidence.meaningNodeId, nodeIds),
+            // A scoped lens only reads evidence whose underlying signal was
+            // captured by that client kind; "all" keeps the full view.
+            ...(lens === "all" ? [] : [eq(inspirations.source, lens)]),
           ),
         )
         .orderBy(desc(meaningEvidence.weight), desc(meaningEvidence.createdAt))
@@ -579,10 +599,18 @@ export async function refreshTopOfMindNotesFromContextGraph(
     limit: MAX_REFRESH_LIMIT,
     now: input.now,
   }).map((candidate) => candidate.idempotencyKey);
-  const existingIdempotencyKeys = await loadExistingContextNoteKeys(db, {
+  // The database stores lens-prefixed keys, while ranking/synthesis work in
+  // unprefixed key space — probe with the stored form, hand back the bare one.
+  const existingStoredKeys = await loadExistingContextNoteKeys(db, {
     userId: input.userId,
-    candidateKeys: probedKeys,
+    candidateKeys: probedKeys.map(lensKey),
   });
+  const existingIdempotencyKeys =
+    lens === "all"
+      ? existingStoredKeys
+      : new Set(
+          [...existingStoredKeys].map((key) => key.slice(lens.length + 1)),
+        );
 
   const modelProvider =
     input.modelProvider ?? (await getDefaultModelProvider());
@@ -662,7 +690,9 @@ export async function refreshTopOfMindNotesFromContextGraph(
 
   const notes: RefreshTopOfMindNotesResult["notes"] = [];
   for (const candidate of candidates) {
-    const semanticKey = semanticFamilyKey("context_node", candidate.node.id);
+    const semanticKey = lensKey(
+      semanticFamilyKey("context_node", candidate.node.id),
+    );
     const candidateEvidenceIds = [
       ...new Set(candidate.evidence.map((row) => row.inspirationId)),
     ].sort();
@@ -681,7 +711,8 @@ export async function refreshTopOfMindNotesFromContextGraph(
             userId: input.userId,
             title: candidate.title,
             kind: candidate.kind,
-            idempotencyKey: candidate.idempotencyKey,
+            idempotencyKey: lensKey(candidate.idempotencyKey),
+            lens,
             why: candidate.why,
             beliefStatement: candidate.title,
             reflectionQuestion: candidate.reflectionQuestion,
