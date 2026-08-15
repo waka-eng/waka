@@ -201,7 +201,9 @@ exists citing ≥2 of the related inspirations as evidence, and statements
 are profile-specific — two profiles seeded with *different* content must
 produce zero identical statements (the canned-ontology regression test).
 One of the related captures is an image with no text and one is a bare
-link: both must still contribute evidence via their cached enrichment.
+link whose salient content appears only in the page body (not in its
+title or meta tags): both must still contribute evidence via their
+cached enrichment.
 Cascade tests: deleting all evidence retires an unlocked signal and
 preserves a locked one as unsupported. Lock test: regeneration never
 alters a locked statement (byte-equal before/after).
