@@ -59,14 +59,17 @@ import {
   type Reflection,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { reconcileSignalsAfterEvidenceLoss } from "../lib/signal-derivation.js";
+import {
+  acquireSignalDerivationLock,
+  reconcileSignalsAfterEvidenceLoss,
+} from "../lib/signal-derivation.js";
 import {
   type AuthEnv,
   profileAccessError,
   type ProfileOperation,
   requireAuth,
 } from "../lib/middleware.js";
-import { enqueueDeriveSignals } from "../lib/queue.js";
+import { enqueueDeriveSignals, enqueueTopOfMindRefresh } from "../lib/queue.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
 
@@ -955,41 +958,66 @@ export function createInspirationsRoutes(
 
     // Likewise: the evidence rows naming this capture are about to cascade
     // away, and afterwards there is no join left to find the signals that
-    // rested on it.
-    const citingRows = await db
-      .selectDistinct({ signalId: signalEvidence.signalId })
-      .from(signalEvidence)
-      .where(
-        and(
-          eq(signalEvidence.inspirationId, idCheck.data),
-          eq(signalEvidence.profileId, target.profileId),
-        ),
-      );
+    // rested on it. Collect, delete, and reconcile run in one transaction
+    // that holds the profile's derivation lock, so a derivation for this same
+    // capture cannot commit new evidence between the collect and the delete —
+    // which would let the FK cascade drop a signal's only support while
+    // reconcile, working from the pre-delete id list, never learns to retire
+    // it. A ghost pattern with zero evidence is exactly the state the cascade
+    // rule forbids.
+    const deleted = await db.transaction(async (tx) => {
+      await acquireSignalDerivationLock(tx, target.profileId);
 
-    const deleted = await db
-      .delete(inspirations)
-      .where(
-        and(
-          eq(inspirations.id, idCheck.data),
-          eq(inspirations.profileId, target.profileId),
-        ),
-      )
-      .returning({ id: inspirations.id });
+      const citingRows = await tx
+        .selectDistinct({ signalId: signalEvidence.signalId })
+        .from(signalEvidence)
+        .where(
+          and(
+            eq(signalEvidence.inspirationId, idCheck.data),
+            eq(signalEvidence.profileId, target.profileId),
+          ),
+        );
+
+      const removed = await tx
+        .delete(inspirations)
+        .where(
+          and(
+            eq(inspirations.id, idCheck.data),
+            eq(inspirations.profileId, target.profileId),
+          ),
+        )
+        .returning({ id: inspirations.id });
+
+      if (removed.length === 0) return removed;
+
+      await reconcileSignalsAfterEvidenceLoss(tx, {
+        profileId: target.profileId,
+        signalIds: citingRows.map((row) => row.signalId),
+      });
+      return removed;
+    });
 
     if (deleted.length === 0) {
       return c.json({ error: "Inspiration not found" }, 404);
     }
-
-    await reconcileSignalsAfterEvidenceLoss(db, {
-      profileId: target.profileId,
-      signalIds: citingRows.map((row) => row.signalId),
-    });
 
     await sweepAttachmentObjects(
       s3KeyRows
         .map((row) => row.s3Key)
         .filter((key): key is string => typeof key === "string" && key.length > 0),
       idCheck.data,
+    );
+
+    // The reconcile above may have retired signals the live artifact cites,
+    // so re-synthesise it. Best-effort: the delete has committed, and a
+    // failed enqueue means a stale board next refresh, not a lost delete.
+    void enqueueTopOfMindRefresh(target.profileId, "signals_changed").catch(
+      (err: unknown) => {
+        console.warn("[inspirations] refresh enqueue after delete failed", {
+          profileId: target.profileId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      },
     );
 
     return c.json({ id: deleted[0]!.id }, 200);

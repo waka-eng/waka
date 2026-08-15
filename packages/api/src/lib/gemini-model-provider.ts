@@ -7,13 +7,18 @@
  * accumulates logic is a provider you cannot swap.
  */
 
-import { extractSignalCandidates, synthesizeTopOfMind } from "../queue/gemini.js";
+import {
+  extractSignalCandidates,
+  judgeSignalMatch,
+  synthesizeTopOfMind,
+} from "../queue/gemini.js";
 import type { ModelProvider } from "./model-provider.js";
 
 export function createGeminiModelProvider(): ModelProvider {
   return {
     name: "gemini",
     extractSignalCandidates,
+    judgeSignalMatch,
     synthesizeTopOfMind,
   };
 }

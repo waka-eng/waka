@@ -70,6 +70,23 @@ export interface StatementEmbeddingClient {
 export const SIGNAL_MATCH_MIN_COSINE = 0.86;
 
 /**
+ * Between this and the match bar, distance alone cannot decide: statements
+ * this close are sometimes one pattern reworded and sometimes two patterns
+ * sharing a vocabulary. The band gets one judge call for the single nearest
+ * candidate. Below it, minting needs no permission — and above the match bar,
+ * attaching needs none.
+ */
+export const SIGNAL_MERGE_JUDGE_MIN_COSINE = 0.7;
+
+/** What match-or-mint does with a similarity, before any model is consulted. */
+export function classifyMatch(similarity: number | null): "attach" | "judge" | "mint" {
+  if (similarity === null) return "mint";
+  if (similarity >= SIGNAL_MATCH_MIN_COSINE) return "attach";
+  if (similarity >= SIGNAL_MERGE_JUDGE_MIN_COSINE) return "judge";
+  return "mint";
+}
+
+/**
  * Two candidates from the *same* capture this close are one pattern said
  * twice. Higher than the match bar because both came from one model call on
  * one input, so genuine distinctness needs more separation to be believable.
@@ -116,13 +133,32 @@ const MAX_REASON_LENGTH = 500;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
- * Confidence from evidence alone: how much of it there is, how far it spreads
- * in time, and how recently it last arrived. No model input — a number the
- * owner can be told the derivation of.
+ * Bonus when a pattern is corroborated by more than one kind of capturer —
+ * the person's own saves and an agent's observations agreeing is evidence
+ * neither could supply alone.
+ *
+ * A bonus rather than a weighted term, deliberately: most profiles are
+ * app-only, and a weight would cap every solo human below 100 forever.
+ * Corroboration adds; its absence must not subtract.
  */
-export function computeSignalConfidence(evidenceAt: Date[], now: Date): number {
-  if (evidenceAt.length === 0) return 0;
+export const CONFIDENCE_SOURCE_DIVERSITY_BONUS = 8;
 
+export interface ConfidenceEvidence {
+  createdAt: Date;
+  source: "app" | "agent";
+}
+
+/**
+ * Confidence from evidence alone: how much of it there is, how far it spreads
+ * in time, how recently it last arrived, and whether more than one kind of
+ * capturer supplied it. No model input — a number the owner can be told the
+ * derivation of.
+ */
+export function computeSignalConfidence(evidence: ConfidenceEvidence[], now: Date): number {
+  if (evidence.length === 0) return 0;
+
+  const evidenceAt = evidence.map((row) => row.createdAt);
+  const distinctSources = new Set(evidence.map((row) => row.source)).size;
   const times = evidenceAt.map((date) => date.getTime()).sort((a, b) => a - b);
   const first = times[0]!;
   const last = times[times.length - 1]!;
@@ -136,7 +172,8 @@ export function computeSignalConfidence(evidenceAt: Date[], now: Date): number {
   const score =
     CONFIDENCE_SUPPORT_WEIGHT * support +
     CONFIDENCE_SPREAD_WEIGHT * spread +
-    CONFIDENCE_RECENCY_WEIGHT * recency;
+    CONFIDENCE_RECENCY_WEIGHT * recency +
+    (distinctSources > 1 ? CONFIDENCE_SOURCE_DIVERSITY_BONUS : 0);
 
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -151,7 +188,10 @@ function clip(value: string, max: number): string {
  * same moment would otherwise each find no match and each mint the same new
  * signal, and nothing downstream would ever merge them.
  */
-async function acquireSignalDerivationLock(tx: WakaTx, profileId: string): Promise<void> {
+export async function acquireSignalDerivationLock(
+  tx: WakaTx,
+  profileId: string,
+): Promise<void> {
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${["waka.signal_derivation", profileId].join("\n")}, 0))`,
   );
@@ -351,6 +391,8 @@ export async function deriveSignalsForInspiration(
       inspirationId: inspiration.id,
       candidates: embedded,
       embeddingModel: embeddingClient.model,
+      provider,
+      preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
       now,
     });
   });
@@ -373,6 +415,8 @@ interface ApplyCandidatesInput {
   inspirationId: string;
   candidates: ResolvedCandidate[];
   embeddingModel: string;
+  provider: ModelProvider;
+  preferredLocale: ReturnType<typeof normalizeSupportedLocale>;
   now: Date;
 }
 
@@ -387,7 +431,29 @@ async function applyCandidates(
   const touched = new Set<string>();
 
   for (const candidate of input.candidates) {
-    const match = findBestMatch(candidate.embedding, targets);
+    const nearest = findBestMatch(candidate.embedding, targets);
+    let decision = classifyMatch(nearest?.similarity ?? null);
+
+    if (decision === "judge" && nearest) {
+      // One bounded model call, held under the per-profile derivation lock.
+      // Serializing a ~second of judgement is the price of the lock's whole
+      // point: two concurrent captures must not each mint the same pattern.
+      // A judge failure falls through to minting — the duplicate is the
+      // recoverable mistake, and the fallthrough is the same verdict the
+      // judge itself returns when uncertain.
+      try {
+        const judged = await input.provider.judgeSignalMatch({
+          preferredLocale: input.preferredLocale,
+          candidateStatement: candidate.statement,
+          existingStatement: nearest.target.statement,
+        });
+        decision = judged.samePattern ? "attach" : "mint";
+      } catch {
+        decision = "mint";
+      }
+    }
+
+    const match = decision === "attach" ? nearest : null;
 
     if (match) {
       await attachEvidence(tx, {
@@ -520,7 +586,7 @@ function findBestMatch(
 
   for (const target of targets) {
     const similarity = cosineSimilarity(embedding, target.embedding);
-    if (similarity === null || similarity < SIGNAL_MATCH_MIN_COSINE) continue;
+    if (similarity === null || similarity < SIGNAL_MERGE_JUDGE_MIN_COSINE) continue;
     if (!best || similarity > best.similarity) best = { target, similarity };
   }
 
@@ -631,12 +697,13 @@ async function refreshSignalLifecycle(
   if (!current) return false;
 
   const evidenceRows = await tx
-    .select({ createdAt: signalEvidence.createdAt })
+    .select({ createdAt: signalEvidence.createdAt, source: inspirations.source })
     .from(signalEvidence)
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(eq(signalEvidence.signalId, signalId));
 
   const evidenceAt = evidenceRows.map((row) => row.createdAt);
-  const confidence = computeSignalConfidence(evidenceAt, now);
+  const confidence = computeSignalConfidence(evidenceRows, now);
   const lastEvidenceAt = evidenceAt.reduce<Date | null>(
     (latest, date) => (latest === null || date > latest ? date : latest),
     null,
@@ -680,8 +747,55 @@ async function refreshSignalLifecycle(
  * Callers pass the signal ids collected *before* the delete, since afterwards
  * there is nothing left to join through.
  */
-export async function reconcileSignalsAfterEvidenceLoss(
+/**
+ * Bring a signal's stored vector back in line with its statement after a
+ * human edit. Match-or-mint compares captures against these vectors, so a
+ * signal whose owner rewrote it to mean something else must not keep matching
+ * the old meaning and accruing evidence for a pattern it no longer names.
+ *
+ * On an embedding failure the stale row is removed rather than left wrong: an
+ * absent vector means the signal is briefly not a match target, so a similar
+ * capture mints a visible near-duplicate the owner can merge — the recoverable
+ * mistake, the same one minting always prefers.
+ */
+export async function reembedSignalStatement(
   db: WakaDb,
+  input: { profileId: string; signalId: string; statement: string },
+  deps: { embeddingClient?: StatementEmbeddingClient } = {},
+): Promise<void> {
+  const client = deps.embeddingClient ?? new GeminiEmbeddingHttpClient();
+  try {
+    const embedding = await client.embed(input.statement);
+    await db
+      .insert(signalEmbeddings)
+      .values({
+        profileId: input.profileId,
+        signalId: input.signalId,
+        model: client.model,
+        dimensions: embedding.length,
+        inputHash: hashEmbeddingInput(input.statement),
+        embedding,
+      })
+      .onConflictDoUpdate({
+        target: [signalEmbeddings.signalId, signalEmbeddings.model],
+        set: {
+          dimensions: embedding.length,
+          inputHash: hashEmbeddingInput(input.statement),
+          embedding,
+          updatedAt: new Date(),
+        },
+      });
+  } catch (err) {
+    console.warn("[signals] re-embed after edit failed; dropping stale vector", {
+      signalId: input.signalId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    await db.delete(signalEmbeddings).where(eq(signalEmbeddings.signalId, input.signalId));
+  }
+}
+
+export async function reconcileSignalsAfterEvidenceLoss(
+  db: WakaDb | WakaTx,
   input: { profileId: string; signalIds: string[] },
 ): Promise<{ retired: string[]; unsupported: string[] }> {
   const retired: string[] = [];
@@ -703,8 +817,9 @@ export async function reconcileSignalsAfterEvidenceLoss(
     if (!signal || signal.status === "retired") continue;
 
     const remaining = await db
-      .select({ createdAt: signalEvidence.createdAt })
+      .select({ createdAt: signalEvidence.createdAt, source: inspirations.source })
       .from(signalEvidence)
+      .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
       .where(eq(signalEvidence.signalId, signalId));
 
     if (remaining.length > 0) {
@@ -713,7 +828,7 @@ export async function reconcileSignalsAfterEvidenceLoss(
       await db
         .update(signals)
         .set({
-          confidence: computeSignalConfidence(evidenceAt, now),
+          confidence: computeSignalConfidence(remaining, now),
           lastEvidenceAt: evidenceAt.reduce<Date | null>(
             (latest, date) => (latest === null || date > latest ? date : latest),
             null,
@@ -732,13 +847,17 @@ export async function reconcileSignalsAfterEvidenceLoss(
         .where(eq(signals.id, signalId));
       unsupported.push(signalId);
     } else {
+      // Retirement already says everything: `unsupported_at` is reserved for
+      // the locked survivor, where "your words stand, nothing supports them"
+      // is a distinct fact a reader needs. Setting it here too would make an
+      // ordinary retired row read as that special case.
       await db
         .update(signals)
         .set({
           status: "retired",
           confidence: 0,
           lastEvidenceAt: null,
-          unsupportedAt: now,
+          unsupportedAt: null,
           updatedAt: now,
         })
         .where(eq(signals.id, signalId));

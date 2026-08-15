@@ -49,6 +49,8 @@ import {
   safeGeminiErrorDetails,
 } from "../lib/gemini-http.js";
 import type {
+  SignalMatchJudgement,
+  SignalMatchJudgementInput,
   SignalCandidateExtractionInput,
   SignalCandidateExtractionResult,
   TopOfMindSynthesisInput,
@@ -430,6 +432,89 @@ export async function extractSignalCandidates(
   return parseSignalCandidates(payload);
 }
 
+
+// ---------------------------------------------------------------------------
+// Layer 2 — the merge judge
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately austere. The judge sees two statements and nothing else — no
+ * captures, no evidence, no history — because its one question is whether the
+ * sentences name the same durable pattern, and context invites it to decide
+ * whether the pattern is *true*, which is not its call.
+ */
+export const SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION = `
+You compare two statements from one person's memory system and answer a single
+question: do they name the SAME durable pattern about this person?
+
+Same pattern means a reader who held one would learn nothing new from the
+other — one is a rewording, a narrowing, or a broadening of the other.
+
+Different means each could gain evidence the other could not: they concern
+different objects, different tensions, or different directions of pull, however
+much vocabulary they share.
+
+When genuinely uncertain, answer false. Wrongly fusing two patterns is
+invisible afterwards; a duplicate stays visible and can be merged.
+`.trim();
+
+const signalMatchJudgementResponseSchema: ResponseSchema = {
+  type: "OBJECT",
+  properties: {
+    samePattern: { type: "BOOLEAN" },
+  },
+  required: ["samePattern"],
+};
+
+export function buildSignalMatchJudgementRequest(
+  input: SignalMatchJudgementInput,
+): GenerateContentRequest {
+  const prompt = [
+    "statement A:",
+    "<<<statement>>>",
+    input.candidateStatement,
+    "<<<end>>>",
+    "",
+    "statement B:",
+    "<<<statement>>>",
+    input.existingStatement,
+    "<<<end>>>",
+  ].join("\n");
+
+  return {
+    systemInstruction: { parts: [{ text: SIGNAL_MATCH_JUDGE_SYSTEM_INSTRUCTION }] },
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      // A comparison, not a composition; sampling would make the same pair
+      // merge on Tuesday and mint on Wednesday.
+      temperature: 0,
+      responseMimeType: "application/json",
+      responseSchema: signalMatchJudgementResponseSchema,
+    },
+  };
+}
+
+export function parseSignalMatchJudgement(payload: unknown): SignalMatchJudgement {
+  const same =
+    typeof payload === "object" &&
+    payload !== null &&
+    (payload as { samePattern?: unknown }).samePattern === true;
+  // Anything malformed lands on "different", for the same reason the prompt
+  // does: the recoverable mistake is the duplicate.
+  return { samePattern: same };
+}
+
+export async function judgeSignalMatch(
+  input: SignalMatchJudgementInput,
+): Promise<SignalMatchJudgement> {
+  const payload = await callGemini(
+    buildSignalMatchJudgementRequest(input),
+    "signal match judgement",
+  );
+  if (payload === null) return { samePattern: false };
+  return parseSignalMatchJudgement(payload);
+}
+
 // ---------------------------------------------------------------------------
 // Layer 3 — whole-artifact synthesis
 // ---------------------------------------------------------------------------
@@ -466,6 +551,12 @@ Locked entries were written or edited by the person. Reproduce each one
 exactly — same type, same body, same belief, same prompt, same cited ids,
 character for character. Build the rest of the artifact around them. Their
 text is theirs; you may not improve it.
+
+Verdicts the person gave on earlier output are their judgement of your work.
+An entry or claim they marked not_true must not come back in the same form:
+either it stays out, or what returns is visibly reshaped by their correction —
+their own words outrank your phrasing. A verdict of partly is an invitation to
+sharpen, not to repeat.
 
 If the current artifact still says what the signals say, set noChange to true
 and return the current entries unchanged. Saying so is a real answer; churning
@@ -547,6 +638,20 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
               citedSignalIds: entry.citedSignalIds,
             }),
           )
+          .join("\n"),
+      ),
+    );
+  }
+
+  if (input.recentFeedback.length > 0) {
+    sections.push(
+      fence(
+        "the person's verdicts on earlier output — newest first",
+        input.recentFeedback
+          .map((item) => {
+            const correction = item.correction ? ` | their words: ${item.correction}` : "";
+            return `${item.target} judged ${item.value}: ${item.about}${correction}`;
+          })
           .join("\n"),
       ),
     );

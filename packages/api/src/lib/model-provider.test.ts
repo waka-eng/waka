@@ -15,6 +15,7 @@ const signalId = "00000000-0000-4000-8000-000000000101";
 function fakeProvider(): ModelProvider {
   return {
     name: "test-provider",
+    judgeSignalMatch: vi.fn(async () => ({ samePattern: false })),
     extractSignalCandidates: vi.fn(),
     synthesizeTopOfMind: vi.fn(),
   };
@@ -52,6 +53,7 @@ const SYNTHESIS_INPUT: TopOfMindSynthesisInput = {
   ],
   lockedEntries: [],
   currentEntries: [],
+      recentFeedback: [],
 };
 
 function geminiResponse(payload: unknown): Response {

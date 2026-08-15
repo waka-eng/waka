@@ -169,7 +169,9 @@ describe("GET /api/signals", () => {
     });
   });
 
-  it("refuses a read across accounts", async () => {
+  it("answers a cross-account profile as not-found, not forbidden", async () => {
+    // A 403 here would confirm the id names a real profile in another account;
+    // the same body as a nonexistent id keeps that from being an oracle.
     const listSignals = vi.fn(async () => [summary]);
     const loadProfile = vi.fn(async () => ({
       id: humanProfileId,
@@ -188,7 +190,7 @@ describe("GET /api/signals", () => {
 
     const response = await app.request(`/api/signals?profile=${humanProfileId}`);
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
     expect(listSignals).not.toHaveBeenCalled();
   });
 });
@@ -244,18 +246,22 @@ describe("GET /api/signals/:signalId", () => {
 });
 
 describe("PATCH /api/signals/:signalId", () => {
-  it("edits the statement and reports the signal as locked", async () => {
+  it("edits the statement, re-embeds it, and schedules a refresh", async () => {
     const updateStatement = vi.fn(async () => ({
       ...detail,
       statement: "Quiet rooms are the condition, not the preference.",
       locked: true,
     }));
+    const reembed = vi.fn(async () => undefined);
+    const requestRefresh = vi.fn(async () => ({ jobId: "job-1", created: true }));
     const app = new Hono();
     app.route(
       "/api/signals",
       createSignalRoutes({
         getDatabase: () => ({}) as any,
         updateStatement,
+        reembed,
+        requestRefresh,
         authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
     );
@@ -277,6 +283,12 @@ describe("PATCH /api/signals/:signalId", () => {
     await expect(response.json()).resolves.toMatchObject({
       signal: { locked: true, statement: "Quiet rooms are the condition, not the preference." },
     });
+    expect(reembed).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      signalId,
+      statement: "Quiet rooms are the condition, not the preference.",
+    });
+    expect(requestRefresh).toHaveBeenCalledWith(humanProfileId, "signals_changed");
   });
 
   it("refuses an agent session editing the human profile's signals", async () => {

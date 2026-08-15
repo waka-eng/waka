@@ -104,7 +104,7 @@ function createApp() {
  * insert/delete. `.where()` resolves directly and also carries `.limit()` and
  * `.orderBy()`, so one mock serves every query shape in this file.
  */
-function makeDb(selectResults: unknown[][] = []) {
+function makeDb(selectResults: unknown[][] = [], deleteResults: unknown[][] = []) {
   const select = vi.fn(() => {
     const chain: any = {};
     chain.from = vi.fn(() => chain);
@@ -120,7 +120,13 @@ function makeDb(selectResults: unknown[][] = []) {
   });
   const insertValues = vi.fn(async (_values: unknown) => undefined);
   const insert = vi.fn(() => ({ values: insertValues }));
-  const deleteWhere = vi.fn(async () => undefined);
+  // delete().where() is awaitable (for the codes deleted without RETURNING)
+  // and also carries .returning() (the single-use exchange claim).
+  const deleteWhere = vi.fn(() => {
+    const result: any = Promise.resolve(undefined);
+    result.returning = vi.fn(async () => deleteResults.shift() ?? []);
+    return result;
+  });
   const del = vi.fn(() => ({ where: deleteWhere }));
   return { select, insert, insertValues, delete: del, deleteWhere };
 }
@@ -393,52 +399,59 @@ describe("POST /api/auth/cli/exchange", () => {
     });
   }
 
-  it("rejects an unknown or already-used code without touching sessions", async () => {
-    mockState.db = makeDb([[]]);
+  it("claims by delete-returning; an unknown code yields no row and mints nothing", async () => {
+    mockState.db = makeDb([], [[]]);
 
     const res = await exchangeRequest("nonexistent-code");
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/invalid or already-used/i);
-    expect(mockState.db.deleteWhere).not.toHaveBeenCalled();
+    // The claim runs (that is the single-use guarantee), but nothing follows it.
+    expect(mockState.db.deleteWhere).toHaveBeenCalledTimes(1);
     expect(mockState.signSessionToken).not.toHaveBeenCalled();
     expect(mockState.createSessionRow).not.toHaveBeenCalled();
   });
 
   it("deletes an expired code (single-use even on failure) and refuses to mint a session", async () => {
-    mockState.db = makeDb([
+    mockState.db = makeDb(
+      [],
       [
-        {
-          id: "code-row-1",
-          profileId: "profile-agent",
-          deviceLabel: null,
-          expiresAt: new Date(Date.now() - 1000),
-        },
+        [
+          {
+            id: "code-row-1",
+            profileId: "profile-agent",
+            deviceLabel: null,
+            expiresAt: new Date(Date.now() - 1000),
+          },
+        ],
       ],
-    ]);
+    );
 
     const res = await exchangeRequest("some-code");
 
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/expired/i);
+    // The row is gone even though it was expired: the claim consumed it.
     expect(mockState.db.deleteWhere).toHaveBeenCalledTimes(1);
     expect(mockState.signSessionToken).not.toHaveBeenCalled();
   });
 
   it("exchanges a valid code for a session bound to the code's profile", async () => {
-    mockState.db = makeDb([
+    mockState.db = makeDb(
+      [[{ id: "profile-agent", email: "user@example.com" }]],
       [
-        {
-          id: "code-row-2",
-          profileId: "profile-agent",
-          deviceLabel: "claude-code",
-          expiresAt: new Date(Date.now() + 60_000),
-        },
+        [
+          {
+            id: "code-row-2",
+            profileId: "profile-agent",
+            deviceLabel: "claude-code",
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        ],
       ],
-      [{ id: "profile-agent", email: "user@example.com" }],
-    ]);
+    );
 
     const res = await exchangeRequest("valid-code");
 
@@ -464,17 +477,19 @@ describe("POST /api/auth/cli/exchange", () => {
   });
 
   it("refuses a code whose profile is gone", async () => {
-    mockState.db = makeDb([
+    mockState.db = makeDb(
+      [[]],
       [
-        {
-          id: "code-row-3",
-          profileId: "profile-erased",
-          deviceLabel: null,
-          expiresAt: new Date(Date.now() + 60_000),
-        },
+        [
+          {
+            id: "code-row-3",
+            profileId: "profile-erased",
+            deviceLabel: null,
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        ],
       ],
-      [],
-    ]);
+    );
 
     const res = await exchangeRequest("valid-code");
 
@@ -485,18 +500,20 @@ describe("POST /api/auth/cli/exchange", () => {
   it("rejects a code reused a second time", async () => {
     // The first exchange succeeds; the second sees an empty result because
     // the row was already deleted by the first call.
-    mockState.db = makeDb([
+    mockState.db = makeDb(
+      [[{ id: "profile-human", email: "user@example.com" }]],
       [
-        {
-          id: "code-row-4",
-          profileId: "profile-human",
-          deviceLabel: null,
-          expiresAt: new Date(Date.now() + 60_000),
-        },
+        [
+          {
+            id: "code-row-4",
+            profileId: "profile-human",
+            deviceLabel: null,
+            expiresAt: new Date(Date.now() + 60_000),
+          },
+        ],
+        [],
       ],
-      [{ id: "profile-human", email: "user@example.com" }],
-      [],
-    ]);
+    );
 
     const first = await exchangeRequest("valid-code");
     expect(first.status).toBe(200);

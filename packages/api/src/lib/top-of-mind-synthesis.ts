@@ -38,6 +38,7 @@ import {
   topOfMinds,
   type TopOfMindEntryType,
   type TopOfMindRevisionReason,
+  feedback,
 } from "../db/index.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale } from "./locales.js";
@@ -45,6 +46,7 @@ import {
   getDefaultModelProvider,
   type ModelProvider,
   type TopOfMindSynthesisEntry,
+  type TopOfMindRecentFeedback,
 } from "./model-provider.js";
 import { acquireTopOfMindArtifactLock } from "./top-of-mind-family-lock.js";
 
@@ -66,6 +68,15 @@ export const SELECTION_CONFIDENCE_WEIGHT = 0.45;
 export const SELECTION_EVIDENCE_WEIGHT = 0.2;
 export const SELECTION_RECENCY_WEIGHT = 0.2;
 export const SELECTION_COMEBACK_WEIGHT = 0.15;
+
+/**
+ * Applied to a signal whose most recent verdict from its owner is "not_true".
+ * A multiplier rather than an exclusion: the person may be wrong, the pattern
+ * may return with new evidence, and a memory that silently drops whatever was
+ * disputed is a memory that cannot be argued with. Disputed signals fight
+ * uphill; they are not banished.
+ */
+export const SELECTION_DISPUTED_MULTIPLIER = 0.4;
 
 /** Evidence count at which the support term saturates. */
 export const SELECTION_EVIDENCE_SATURATION = 6;
@@ -171,6 +182,8 @@ export function computeSelectionScore(input: {
   evidenceCount: number;
   lastEvidenceAt: Date | null;
   comebackBonus: number;
+  /** True when the owner's latest verdict on this signal is "not_true". */
+  disputed?: boolean;
   now: Date;
 }): number {
   const support = Math.min(1, input.evidenceCount / SELECTION_EVIDENCE_SATURATION);
@@ -187,7 +200,9 @@ export function computeSelectionScore(input: {
     SELECTION_RECENCY_WEIGHT * recency * 100 +
     SELECTION_COMEBACK_WEIGHT * input.comebackBonus * 100;
 
-  return Math.max(0, Math.min(100, score));
+  const damped = input.disputed ? score * SELECTION_DISPUTED_MULTIPLIER : score;
+
+  return Math.max(0, Math.min(100, damped));
 }
 
 async function selectSignals(
@@ -237,6 +252,32 @@ async function selectSignals(
     else evidenceBySignal.set(row.signalId, [row.createdAt]);
   }
 
+  // The latest verdict per signal decides `disputed` — newest first, first
+  // write wins per target. A later "true" therefore lifts an older "not_true",
+  // which is what changing one's mind should do.
+  const verdictRows = await db
+    .select({
+      targetId: feedback.targetId,
+      value: feedback.value,
+    })
+    .from(feedback)
+    .where(
+      and(
+        eq(feedback.profileId, profileId),
+        eq(feedback.targetType, "signal"),
+        inArray(
+          feedback.targetId,
+          rows.map((row) => row.id),
+        ),
+      ),
+    )
+    .orderBy(desc(feedback.createdAt));
+
+  const latestVerdict = new Map<string, string>();
+  for (const row of verdictRows) {
+    if (!latestVerdict.has(row.targetId)) latestVerdict.set(row.targetId, row.value);
+  }
+
   return rows
     .map((row) => {
       const evidenceAt = evidenceBySignal.get(row.id) ?? [];
@@ -251,6 +292,7 @@ async function selectSignals(
           evidenceCount: evidenceAt.length,
           lastEvidenceAt: row.lastEvidenceAt,
           comebackBonus: computeComebackBonus(evidenceAt, now),
+          disputed: latestVerdict.get(row.id) === "not_true",
           now,
         }),
       };
@@ -473,6 +515,12 @@ export function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): b
   const after = next.filter((entry) => entry.dismissedAt === null);
   if (before.length !== after.length) return false;
 
+  // Citations compared as sets, not sequences: the carried order comes from a
+  // query with no ORDER BY and the generated order from the model, so the same
+  // citations arriving shuffled would otherwise read as a change and mislabel
+  // a genuine no-change pass as `regenerated`.
+  const sortedIds = (ids: string[]): string => [...ids].sort().join(",");
+
   return before.every((entry, index) => {
     const candidate = after[index]!;
     return (
@@ -480,7 +528,7 @@ export function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): b
       entry.body === candidate.body &&
       (entry.belief ?? null) === candidate.belief &&
       (entry.prompt ?? null) === candidate.prompt &&
-      entry.citedSignalIds.join(",") === candidate.citedSignalIds.join(",")
+      sortedIds(entry.citedSignalIds) === sortedIds(candidate.citedSignalIds)
     );
   });
 }
@@ -575,6 +623,66 @@ async function writeVersion(
 // The pass
 // ---------------------------------------------------------------------------
 
+/** Newest verdicts, with the text each one was about, bounded for the prompt. */
+const RECENT_FEEDBACK_LIMIT = 20;
+
+async function loadRecentFeedback(
+  db: WakaDb,
+  profileId: string,
+): Promise<TopOfMindRecentFeedback[]> {
+  const rows = await db
+    .select({
+      targetType: feedback.targetType,
+      targetId: feedback.targetId,
+      value: feedback.value,
+      correctionText: feedback.correctionText,
+    })
+    .from(feedback)
+    .where(eq(feedback.profileId, profileId))
+    .orderBy(desc(feedback.createdAt))
+    .limit(RECENT_FEEDBACK_LIMIT);
+  if (rows.length === 0) return [];
+
+  const signalIds = rows
+    .filter((row) => row.targetType === "signal")
+    .map((row) => row.targetId);
+  const entryIds = rows
+    .filter((row) => row.targetType === "top_of_mind_entry")
+    .map((row) => row.targetId);
+
+  const statements = signalIds.length
+    ? await db
+        .select({ id: signals.id, statement: signals.statement })
+        .from(signals)
+        .where(inArray(signals.id, signalIds))
+    : [];
+  const bodies = entryIds.length
+    ? await db
+        .select({ id: topOfMindEntries.id, body: topOfMindEntries.body })
+        .from(topOfMindEntries)
+        .where(inArray(topOfMindEntries.id, entryIds))
+    : [];
+
+  const aboutById = new Map<string, string>();
+  for (const row of statements) aboutById.set(row.id, row.statement);
+  for (const row of bodies) aboutById.set(row.id, row.body);
+
+  return rows.flatMap((row) => {
+    const about = aboutById.get(row.targetId);
+    // A verdict on something since deleted still shaped the person's history,
+    // but without its text the model would be reasoning about a blank.
+    if (!about) return [];
+    return [
+      {
+        target: row.targetType === "signal" ? ("signal" as const) : ("entry" as const),
+        about,
+        value: row.value,
+        correction: row.correctionText,
+      },
+    ];
+  });
+}
+
 export async function refreshTopOfMindForProfile(
   input: RefreshTopOfMindInput,
   deps: TopOfMindRefreshDependencies = {},
@@ -618,7 +726,9 @@ export async function refreshTopOfMindForProfile(
   let lockViolations = 0;
 
   if (selected.length > 0) {
+    const recentFeedback = await loadRecentFeedback(db, input.profileId);
     const synthesis = await provider.synthesizeTopOfMind({
+      recentFeedback,
       profileId: input.profileId,
       preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
       signals: selected.map((signal) => ({

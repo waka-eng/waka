@@ -96,6 +96,20 @@ export interface TopOfMindLockedEntry {
   citedSignalIds: string[];
 }
 
+/**
+ * A verdict the person gave on something WAKA previously generated. Sent to
+ * synthesis because a reader who says "this is not true" and is then shown
+ * the same sentence again has been told their judgement does not count.
+ */
+export interface TopOfMindRecentFeedback {
+  target: "signal" | "entry";
+  /** What the verdict was about, so the model can recognise it. */
+  about: string;
+  value: "true" | "partly" | "not_true";
+  /** The person's own words about what is wrong, when they gave any. */
+  correction: string | null;
+}
+
 export interface TopOfMindSynthesisInput {
   profileId: string;
   preferredLocale: SupportedLocale;
@@ -108,6 +122,8 @@ export interface TopOfMindSynthesisInput {
     body: string;
     citedSignalIds: string[];
   }>;
+  /** Newest first, bounded by the caller. */
+  recentFeedback: TopOfMindRecentFeedback[];
 }
 
 export interface TopOfMindSynthesisEntry {
@@ -131,11 +147,33 @@ export interface TopOfMindSynthesisResult {
 // Provider
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Layer 2 — the merge judge
+// ---------------------------------------------------------------------------
+
+/**
+ * Asked only inside the ambiguous cosine band, where distance alone cannot
+ * say whether two statements name one pattern. Everything above the band
+ * attaches and everything below mints without a call, so this costs at most
+ * one call per candidate and usually none.
+ */
+export interface SignalMatchJudgementInput {
+  preferredLocale: SupportedLocale;
+  candidateStatement: string;
+  existingStatement: string;
+}
+
+export interface SignalMatchJudgement {
+  /** True when both statements name the same durable pattern. */
+  samePattern: boolean;
+}
+
 export interface ModelProvider {
   readonly name: string;
   extractSignalCandidates(
     input: SignalCandidateExtractionInput,
   ): Promise<SignalCandidateExtractionResult>;
+  judgeSignalMatch(input: SignalMatchJudgementInput): Promise<SignalMatchJudgement>;
   synthesizeTopOfMind(
     input: TopOfMindSynthesisInput,
   ): Promise<TopOfMindSynthesisResult>;
