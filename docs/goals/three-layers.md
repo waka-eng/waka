@@ -827,6 +827,39 @@ Spend this phase: ~15 flash-lite/embedding calls. **Running total across
 Phases 3–6: ~90 calls**, inside the ≤450 budgeted across the three
 spending phases.
 
+### Phase 7 — MCP speaks the canon (2026-08-15)
+
+**Gate: PASSED — 8/8 live** against `pnpm dev:local`, verified twice
+(the agent's run and an independent one). waka-mcp commit `f9ce134` on
+branch `three-layers`.
+
+Tools renamed to the canon: `waka_add_inspiration`,
+`waka_list_inspirations`, `waka_list_signals` (now meaning layer 2),
+`waka_get_profile`, and a new `waka_list_profiles`. Login gained a
+device label and a `--profile` preselect; the CLI's own side is
+unchanged because the consent page is a browser concern.
+
+The live suite proves the agent story end to end: log in bound to an
+**agent** profile through the real loopback flow, capture into the human
+profile as `source: "app"`, capture into its own as `"agent"`, recall
+both layers in both profiles, read both artifacts — and be **refused**
+(403) when editing the human's signal. That last step carries a control:
+the same PATCH against its own profile answers 404, so the 403 proves
+authorization refused the crossing rather than the route lacking a
+handler. Offline suite: 32 tests, and it stays offline even with
+`WAKA_LIVE_BASE_URL` exported.
+
+**A tuning limitation worth recording rather than hiding.** Layer 3
+selects only `active` signals (≥3 evidence), and match-or-mint needs
+cosine ≥0.86 to treat two statements as one pattern. Five captures on a
+theme worded five different ways therefore mint five `emerging` signals
+and synthesize *nothing*. That is defensible — an artifact built on
+single observations would be noise — but it means a new account can save
+a handful of related thoughts and see no top of mind. Both numbers are
+named exports precisely so this is a one-file diff; it wants real
+archives to tune against, not a guess. Logged as follow-up, not fixed
+here.
+
 ### Phase 8 — the sweep (2026-08-15)
 
 **Gate: PASSED.** The grep gate over `packages/**`, `tools/**`,
