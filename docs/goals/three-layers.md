@@ -93,8 +93,9 @@ Starting proposal, for the owner to amend at the gate:
   `spreadCaptureActivation` (zero callers), the memory-movement event
   enum (`evaluateSignalMemoryMovement`, test-only), the aliased
   `signalScores` fields (three of five are copies), the `asks_for` edge
-  kind (never produced), spark auto-detection/confidence/analysis
-  columns, and `meaning_packets.input_fingerprint` (written, never read).
+  kind (never produced), the sparks concept entirely (`signal_sparks`
+  table and all spark code — removed from the canon 2026-08-15), and
+  `meaning_packets.input_fingerprint` (written, never read).
 - Park additionally: `scoring/stability.ts` + `lib/node-dynamics.ts`
   (dark code reachable only from dev scripts; parked with the two-clocks
   verdict), and the context-edge graph (cross-signal relations return at
@@ -109,7 +110,7 @@ model needs another pass; halt and revise the canon instead of building.
 Write the new Drizzle schema from the canon: `accounts`, `profiles`
 (account_id, `type: human | agent`, name; unique human per account),
 `sessions` (profile-bound), `cli_login_codes`, `inspirations` (+
-`attachments`, `inspiration_sparks`), `signals` + `signal_evidence` (M:N
+`attachments` with their enrichment block), `signals` + `signal_evidence` (M:N
 to inspirations; lock state; confidence), `signal_shares` (per-signal,
 per-group), `top_of_minds` (one live artifact per profile and per group;
 version chain) + `top_of_mind_entries` (typed, lockable, attributable),
@@ -154,8 +155,12 @@ today's `/api/signals` archive behavior) with **SQL-backed search**
 replacing the in-memory newest-200 filter — rebuilding the read path
 anyway is the moment to fix recall depth. Provenance: `source: app |
 agent` per the canon's two-fact rule (initiative vs. capturing session).
-Attachments ride along unchanged. Web: capture + archive surfaces speak
-the new routes.
+Attachment enrichment becomes both-modal: links keep the bounded
+deterministic fetch (title/description, upgraded to bounded page text);
+images get a one-time vision description (flash-lite, cached on the
+attachment, re-derived only when the attachment changes). Enrichment
+feeds extraction and embeddings and is never rendered as the human's
+words. Web: capture + archive surfaces speak the new routes.
 
 **Gate:** API tests for create/edit/delete/search incl. tenant isolation
 across profiles (profile A's session cannot read profile B's inspirations
@@ -167,8 +172,8 @@ beyond the 200 newest (seed 300, find #1). Web capture smoke passes.
 The generator, per new or edited inspiration (background job):
 
 1. **Extract** — one flash-lite call producing 0–3 candidate signal
-   statements in the user's own language, each grounded in cited spans;
-   a spark, when present, must be accounted for. This one call replaces
+   statements in the user's own language, each grounded in cited spans
+   of the text and its attachment enrichment. This one call replaces
    both the six-cluster classification (deleted) and the keyword-bucket
    ontology whose canned labels were the old middle layer's biggest
    fidelity gap.
@@ -195,6 +200,8 @@ unrelated organic inspirations; within the background cadence, ≥1 signal
 exists citing ≥2 of the related inspirations as evidence, and statements
 are profile-specific — two profiles seeded with *different* content must
 produce zero identical statements (the canned-ontology regression test).
+One of the related captures is an image with no text and one is a bare
+link: both must still contribute evidence via their cached enrichment.
 Cascade tests: deleting all evidence retires an unlocked signal and
 preserves a locked one as unsupported. Lock test: regeneration never
 alters a locked statement (byte-equal before/after).
