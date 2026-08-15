@@ -102,3 +102,34 @@ describe("computeSignalConfidence", () => {
     expect(maxed).toBeLessThanOrEqual(100);
   });
 });
+
+describe("decay is real: the same evidence scores lower as it ages", () => {
+  /**
+   * The bug this pins against: confidence used to be served from a snapshot
+   * written the moment evidence landed — recency term at its peak, frozen
+   * there forever. Reads now recompute with the current clock, so this
+   * property is what a user actually observes.
+   */
+  it("fades a signal that goes quiet, without any write", () => {
+    const evidence = [40, 27, 12, 0].map((daysAgo) => ({
+      createdAt: new Date(NOW.getTime() - daysAgo * DAY),
+      source: "app" as const,
+    }));
+
+    const atWrite = computeSignalConfidence(evidence, NOW);
+    const after45quiet = computeSignalConfidence(
+      evidence,
+      new Date(NOW.getTime() + 45 * DAY),
+    );
+    const after180quiet = computeSignalConfidence(
+      evidence,
+      new Date(NOW.getTime() + 180 * DAY),
+    );
+
+    expect(after45quiet).toBeLessThan(atWrite);
+    expect(after180quiet).toBeLessThan(after45quiet);
+    // Support and spread do not decay, so it floors instead of vanishing:
+    // dormant patterns stay reachable rather than deleted by arithmetic.
+    expect(after180quiet).toBeGreaterThan(0);
+  });
+});
