@@ -124,6 +124,13 @@ export interface TopOfMindSynthesisInput {
   }>;
   /** Newest first, bounded by the caller. */
   recentFeedback: TopOfMindRecentFeedback[];
+  /**
+   * True when the selection had to borrow still-forming (emerging) signals to
+   * say anything at all — the cold start. The synthesis writes more
+   * tentatively, because these patterns have been seen once or twice, not
+   * confirmed by return.
+   */
+  provisional: boolean;
 }
 
 export interface TopOfMindSynthesisEntry {

@@ -610,6 +610,17 @@ function buildTopOfMindSynthesisPrompt(input: TopOfMindSynthesisInput): string {
 
   sections.push(`Locale: ${input.preferredLocale}.`);
 
+  if (input.provisional) {
+    // The cold start: these patterns are drawn from one or two captures each,
+    // not confirmed by return. Say what is there without overclaiming it.
+    sections.push(
+      "These signals are still forming — seen once or twice, not yet confirmed " +
+        "by returning to them. Write the artifact tentatively: prefer questions " +
+        "and hypotheses over firm patterns, and do not assert a settled belief " +
+        "from thin evidence. A short, honest, provisional artifact is right here.",
+    );
+  }
+
   sections.push(
     fence(
       "signals",

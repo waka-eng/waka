@@ -205,15 +205,37 @@ export function computeSelectionScore(input: {
   return Math.max(0, Math.min(100, damped));
 }
 
+/**
+ * Below this many active signals, the selection reaches into `emerging` ones
+ * to reach a small artifact. It exists for the cold start: a signal needs
+ * three pieces of evidence to become active, and a new profile rarely says
+ * the same thing three ways in its first sitting, so an active-only selection
+ * leaves it staring at nothing. A handful of forming patterns *is* what
+ * currently matters to someone who just arrived — shown tentatively, and
+ * superseded the moment real patterns cross the bar.
+ *
+ * The floor is also the ceiling on how far emerging reaches: once a profile
+ * has this many active signals, emerging ones never appear, so an established
+ * artifact is never diluted with single-observation noise.
+ */
+export const TOP_OF_MIND_MIN_SIGNALS = 3;
+
+interface SelectionOutcome {
+  signals: SelectedSignal[];
+  /** True when the selection leaned on emerging signals to fill the floor. */
+  provisional: boolean;
+}
+
 async function selectSignals(
   db: WakaDb,
   profileId: string,
   now: Date,
-): Promise<SelectedSignal[]> {
+): Promise<SelectionOutcome> {
   const rows = await db
     .select({
       id: signals.id,
       statement: signals.statement,
+      status: signals.status,
       confidence: signals.confidence,
       lastEvidenceAt: signals.lastEvidenceAt,
     })
@@ -221,7 +243,7 @@ async function selectSignals(
     .where(
       and(
         eq(signals.profileId, profileId),
-        eq(signals.status, "active"),
+        inArray(signals.status, ["active", "emerging"]),
         // A locked statement with no support left is still the owner's text,
         // but it is not evidence of anything current, and the artifact is a
         // claim about what is current.
@@ -230,7 +252,7 @@ async function selectSignals(
     )
     .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt));
 
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { signals: [], provisional: false };
 
   const evidenceRows = await db
     .select({
@@ -278,12 +300,13 @@ async function selectSignals(
     if (!latestVerdict.has(row.targetId)) latestVerdict.set(row.targetId, row.value);
   }
 
-  return rows
+  const scored = rows
     .map((row) => {
       const evidenceAt = evidenceBySignal.get(row.id) ?? [];
       return {
         id: row.id,
         statement: row.statement,
+        status: row.status,
         confidence: row.confidence,
         evidenceCount: evidenceAt.length,
         lastEvidenceAt: row.lastEvidenceAt,
@@ -305,8 +328,43 @@ async function selectSignals(
       // Ids as the last tiebreak so two identically-scored signals never
       // swap places between two runs over identical data.
       return a.id < b.id ? -1 : 1;
-    })
-    .slice(0, TOP_OF_MIND_SIGNAL_LIMIT);
+    });
+
+  const strip = (s: (typeof scored)[number]): SelectedSignal => ({
+    id: s.id,
+    statement: s.statement,
+    confidence: s.confidence,
+    evidenceCount: s.evidenceCount,
+    lastEvidenceAt: s.lastEvidenceAt,
+    score: s.score,
+  });
+
+  const chosen = chooseSelection(
+    scored.filter((s) => s.status === "active"),
+    scored.filter((s) => s.status === "emerging"),
+  );
+  return { signals: chosen.signals.map(strip), provisional: chosen.provisional };
+}
+
+/**
+ * The cold-start rule, isolated from the database so it can be reasoned about
+ * directly. Both lists arrive already ranked, strongest first.
+ *
+ * With enough durable patterns, the artifact is those alone — identical to
+ * the behaviour before the cold start existed, so an established profile is
+ * never diluted with single-observation noise. Below the floor, the selection
+ * borrows the strongest forming patterns, and only enough to reach the floor,
+ * and reports itself provisional so the synthesis writes tentatively.
+ */
+export function chooseSelection<T>(
+  active: T[],
+  emerging: T[],
+): { signals: T[]; provisional: boolean } {
+  if (active.length >= TOP_OF_MIND_MIN_SIGNALS) {
+    return { signals: active.slice(0, TOP_OF_MIND_SIGNAL_LIMIT), provisional: false };
+  }
+  const backfill = emerging.slice(0, Math.max(0, TOP_OF_MIND_MIN_SIGNALS - active.length));
+  return { signals: [...active, ...backfill], provisional: backfill.length > 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -691,7 +749,7 @@ export async function refreshTopOfMindForProfile(
   const now = deps.now ?? new Date();
   const provider = deps.modelProvider ?? (await getDefaultModelProvider());
 
-  const [profileRows, selected, liveBefore] = await Promise.all([
+  const [profileRows, selection, liveBefore] = await Promise.all([
     db
       .select({ preferredLocale: profiles.preferredLocale })
       .from(profiles)
@@ -700,6 +758,8 @@ export async function refreshTopOfMindForProfile(
     selectSignals(db, input.profileId, now),
     loadLiveArtifact(db, input.profileId),
   ]);
+  const selected = selection.signals;
+  const provisional = selection.provisional;
 
   if (selected.length === 0 && liveBefore === null) {
     // There is no artifact and nothing to make one from. Recording versions
@@ -729,6 +789,7 @@ export async function refreshTopOfMindForProfile(
     const recentFeedback = await loadRecentFeedback(db, input.profileId);
     const synthesis = await provider.synthesizeTopOfMind({
       recentFeedback,
+      provisional,
       profileId: input.profileId,
       preferredLocale: normalizeSupportedLocale(profileRows[0]?.preferredLocale),
       signals: selected.map((signal) => ({

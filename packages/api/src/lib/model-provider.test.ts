@@ -54,6 +54,7 @@ const SYNTHESIS_INPUT: TopOfMindSynthesisInput = {
   lockedEntries: [],
   currentEntries: [],
       recentFeedback: [],
+      provisional: false,
 };
 
 function geminiResponse(payload: unknown): Response {
