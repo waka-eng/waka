@@ -259,6 +259,24 @@ export default $config({
             router: {
               instance: router,
               path: "/api",
+              /**
+               * Never cache an API response at the edge.
+               *
+               * Every response is scoped to one session's profile, so two
+               * callers asking the same URL are owed different answers. The
+               * default distribution behaviour keys on the URL and does not
+               * vary on `Authorization`, which on the deployed stage served a
+               * non-member's 404 for a group wall back to that group's owner
+               * — and would, in the other order, have served a member's wall
+               * to someone who never joined.
+               *
+               * The API also sends `Cache-Control: no-store`; this is the
+               * half that does not depend on the distribution choosing to
+               * honour an origin header.
+               *
+               * `4135ea2d-…` is AWS's managed **CachingDisabled** policy.
+               */
+              cachePolicy: "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
             },
           }
         : true,

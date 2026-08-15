@@ -144,6 +144,14 @@ async function mintAgentSession(browser: Session, profileId: string): Promise<st
   });
   if (!exchanged.ok) throw new Error(`cli/exchange → ${exchanged.status}`);
   const { token } = (await exchanged.json()) as { token: string };
+  const who = await fetch(`${browser.baseUrl}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((r) => r.json() as Promise<{ profile: { id: string; type: string } }>);
+  if (who.profile.id !== profileId) {
+    throw new Error(
+      `consent bound the credential to ${who.profile.type} ${who.profile.id}, not the requested ${profileId}`,
+    );
+  }
   return token;
 }
 
@@ -316,7 +324,12 @@ async function main(): Promise<void> {
         headers: { Authorization: `Bearer ${agentToken}` },
       });
       if (asAgent.status !== 403) {
-        throw new Error(`expected 403 for an agent-bound session, got ${asAgent.status}`);
+        // A 404 here has meant a shared cache answering with someone else's
+        // response rather than the gate failing; the body distinguishes them.
+        const body = (await asAgent.text()).slice(0, 120);
+        throw new Error(
+          `expected 403 for an agent-bound session, got ${asAgent.status}: ${body}`,
+        );
       }
 
       // And it cannot join one either.

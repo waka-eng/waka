@@ -28,6 +28,27 @@ import { topOfMindRoutes } from "./routes/top-of-mind.js";
 
 export const app = new Hono();
 
+/**
+ * Nothing this API returns may be cached by anything in front of it.
+ *
+ * Every response here is scoped to one session's profile, so two callers
+ * asking the same URL are owed different answers. A shared cache keyed on the
+ * URL alone will happily serve one person's answer to another — measured on
+ * the deployed stage before this existed: a non-member's 404 for a group wall
+ * was served back to the group's own owner, and the same mechanism would have
+ * served a member's wall contents to someone who had never joined.
+ *
+ * `no-store` rather than `no-cache`, because `no-cache` still permits storing
+ * a copy to revalidate later, and there is no revalidation any intermediary
+ * could perform here that would establish who is asking. `Vary` is belt and
+ * braces for a cache that ignores `Cache-Control` but honours a vary key.
+ */
+app.use("*", async (c, next) => {
+  await next();
+  c.header("Cache-Control", "no-store, private");
+  c.header("Vary", "Authorization, Cookie");
+});
+
 // Liveness probe + capability handshake for external clients (waka-mcp
 // validates the API URL against it at login; capabilities let clients
 // feature-detect instead of guessing).

@@ -1,6 +1,14 @@
 # Goal: three layers on a clean slate — profiles, signals, and one top of mind
 
-Status: draft v3 — ready to run (2026-08-15). v1 drafted; v2 after
+Status: **halted at the Phase 9 gate, 2026-08-15.** Phases 0–8 passed and
+are merged to `dev`; the shared database carries the new schema; the
+deployed stage runs the new code and passes its e2e. The gate is unmet
+for one reason: **the deployed distribution caches authenticated API
+responses**, and the fix cannot be deployed from here — these AWS
+credentials lack `ssm:GetParameter` on the SST bootstrap parameter. See
+the Phase 9 entry in `## Log`.
+
+Previously: draft v3 — ready to run (2026-08-15). v1 drafted; v2 after
 adversarial review the same day (demolition resequenced into Phase 1,
 every surface sentenced, cutover phase added); v3 records the owner's
 database decision: **wipe in place** on the shared instance. Phase 0's
@@ -906,3 +914,59 @@ constraints, so composite FKs need table-level unique *constraints* as
 targets; and `drizzle-kit migrate` swallows the resulting Postgres error
 behind its spinner — applying the SQL through `psql` was the only way to
 see it.
+
+### Phase 9 — cutover (2026-08-15)
+
+**Gate: FAILED — halted.** Criterion: deployed e2e green, waka-mcp live
+suite green against the deployed stage, and a probe for `wow_moments`
+returning undefined-table.
+
+Measured:
+
+| Item | Result |
+|---|---|
+| Merge waka#232 → `dev` | done (`752fab5`) |
+| Merge waka-mcp#3 → `main` | done |
+| Shared Neon database backed up | done — 3.9 MB, 175 tables with data, `~/waka-backups/` |
+| Shared database migrated | done — 21 tables, 7 tenant FKs, `wow_moments` gone |
+| `sst deploy --stage dev` | **failed** — `AccessDeniedException: user kti-web-dev is not authorized to perform ssm:GetParameter on arn:…:parameter/sst/bootstrap` |
+| Deployed stage running new code | yes — a pipeline deployed the merge; `/api/health` reports the rebuilt capability set |
+| Deployed e2e: signals | 6/6 (one step self-skipped: no unlocked signal was available to exercise the cascade) |
+| Deployed e2e: top of mind | 7/7 — and this run produced `reason: "no_change"`, exercising live the branch only unit tests could reach locally |
+| Deployed e2e: groups | **7/8** |
+
+**What the failing step found is not a test problem.** Step 8 expected an
+agent-bound session to be refused at a group wall and saw `404 Group not
+found` instead of `403`. The credential *was* correctly bound (the
+harness now asserts that against `/api/auth/me`), and the same request
+made by hand returned `403`. The difference was that the e2e fetches
+that exact URL earlier in the run as a *non-member*.
+
+Reproduced deliberately: account A creates a group; non-member B fetches
+`/api/groups/:id/wall` and gets 404; **A, the owner, then gets B's cached
+404 for their own group.** CloudFront is caching authenticated API
+responses keyed on the URL, with no `Vary` on the credential. The
+dangerous direction is the other one — a member's 200 with wall contents
+served to someone who never joined.
+
+Fixed in code at both layers, neither verifiable without a deploy:
+
+1. The API now sends `Cache-Control: no-store, private` and
+   `Vary: Authorization, Cookie` on every response
+   (`src/no-store.test.ts`, 9 tests). `no-store` rather than `no-cache`:
+   the latter still permits storing a copy to revalidate, and no
+   intermediary can revalidate *who is asking*.
+2. The router mounts `/api` with AWS's managed **CachingDisabled** policy
+   (`4135ea2d-…`), so the fix does not depend on the distribution
+   choosing to honour an origin header.
+
+**What is needed to finish.** Someone whose AWS identity can read
+`/sst/bootstrap` runs `pnpm sst deploy --stage dev`, then re-runs
+`pnpm tsx tools/e2e/groups.ts --base-url https://dev.waka.im` (expect
+8/8) and waka-mcp's `pnpm test:live` against the deployed URL. Until
+then the deployed stage is serving cached authenticated responses.
+
+Final numbers, Phases 0–8: **300 unit tests** across 24 files, web 56
+tests + build, admin typecheck, `db:check`, and 29/29 e2e steps locally
+(8 layer 1, 6 signals, 7 top of mind, 8 groups). Model spend across all
+gate runs: roughly 150 flash-lite/embedding calls, inside the budget.
