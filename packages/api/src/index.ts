@@ -19,6 +19,7 @@ import { decisionMemoRoutes } from "./routes/decision-memo.js";
 import { feedbackRoutes } from "./routes/feedback.js";
 import { guidedReflectionRoutes } from "./routes/guided-reflection.js";
 import { groupsRoutes } from "./routes/groups.js";
+import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
 import { signalArchiveRoutes } from "./routes/signals.js";
@@ -28,11 +29,10 @@ import { wowStatusRoutes } from "./routes/wow-status.js";
 
 export const app = new Hono();
 
-/**
- * Liveness probe. Useful for `sst dev` smoke tests and for any future
- * uptime monitor that just needs a 200 to confirm the Lambda is awake.
- */
-app.get("/api/health", (c) => c.json({ ok: true }));
+// Liveness probe + capability handshake for external clients (waka-mcp
+// validates the API URL against it at login; capabilities let clients
+// feature-detect newer query params instead of guessing).
+app.route("/api/health", healthRoutes);
 
 // Auth routes (signup, login, ...) live under /api/auth.
 app.route("/api/auth", authRoutes);
