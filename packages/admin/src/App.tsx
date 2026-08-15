@@ -10,7 +10,12 @@ import {
 import "./styles.css";
 
 const STATUS_OPTIONS = ["pending", "running", "succeeded", "failed"];
-const TYPE_OPTIONS = ["process_inspiration"];
+const TYPE_OPTIONS = [
+  "enrich_attachment",
+  "derive_signals",
+  "refresh_top_of_mind",
+  "refresh_group_top_of_mind",
+];
 
 interface Notice {
   kind: "info" | "warning" | "error" | "success";
@@ -24,9 +29,25 @@ function formatDate(value: string | null): string {
   return date.toLocaleString();
 }
 
-function inspirationId(job: AdminBackgroundJob): string {
-  const value = job.payloadSummary.inspirationId;
-  return typeof value === "string" && value.length > 0 ? value : "—";
+/**
+ * The payload summary, rendered from whatever the server chose to name.
+ *
+ * Every job type carries a different payload, and the server is the side that
+ * knows which of its keys are safe to show — so this prints the record it is
+ * handed rather than reaching for one job type's field by name. A type this
+ * app has never heard of still reads correctly.
+ */
+function payloadEntries(job: AdminBackgroundJob): Array<[string, string]> {
+  return Object.entries(job.payloadSummary).map(([key, value]) => [
+    key,
+    typeof value === "string" ? value : JSON.stringify(value),
+  ]);
+}
+
+function payloadInline(job: AdminBackgroundJob): string {
+  const entries = payloadEntries(job);
+  if (entries.length === 0) return "—";
+  return entries.map(([key, value]) => `${key}: ${value}`).join(" · ");
 }
 
 function classifyError(error: unknown): Notice {
@@ -47,71 +68,6 @@ function classifyError(error: unknown): Notice {
     return { kind: "error", message: error.message };
   }
   return { kind: "error", message: "Unexpected error while loading background jobs" };
-}
-
-function PipelineDetail({ job }: { job: AdminBackgroundJob }): JSX.Element {
-  const pipeline = job.pipeline;
-  if (!pipeline) {
-    return <p className="empty">No bounded pipeline detail is available for this job type.</p>;
-  }
-
-  return (
-    <div className="detail-grid">
-      <section>
-        <h3>Inspiration</h3>
-        {pipeline.inspiration ? (
-          <dl>
-            <dt>ID</dt>
-            <dd className="mono">{pipeline.inspiration.id}</dd>
-            <dt>Preview</dt>
-            <dd>{pipeline.inspiration.textPreview || "—"}</dd>
-            <dt>Kind / category</dt>
-            <dd>
-              {pipeline.inspiration.kind ?? "—"} / {pipeline.inspiration.category ?? "—"}
-            </dd>
-            <dt>Cluster</dt>
-            <dd>{pipeline.inspiration.cluster ?? "Unclassified"}</dd>
-            <dt>Classified at</dt>
-            <dd>{formatDate(pipeline.inspiration.classifiedAt)}</dd>
-            <dt>Scores</dt>
-            <dd>
-              importance {pipeline.inspiration.importanceScore}, wow {pipeline.inspiration.wowScore}
-            </dd>
-            <dt>Created / updated</dt>
-            <dd>
-              {formatDate(pipeline.inspiration.createdAt)} / {formatDate(pipeline.inspiration.updatedAt)}
-            </dd>
-          </dl>
-        ) : (
-          <p className="empty inline-empty">
-            Inspiration is not visible: {pipeline.inspirationMissingReason ?? "unknown"}.
-          </p>
-        )}
-      </section>
-
-      <section>
-        <h3>Linked WOW moments</h3>
-        {pipeline.wowMoments.length > 0 ? (
-          <ul className="wow-list">
-            {pipeline.wowMoments.map((moment) => (
-              <li key={moment.id}>
-                <div className="wow-title">
-                  <strong>{moment.titlePreview}</strong>
-                  <span className="pill status-succeeded">{moment.kind}</span>
-                </div>
-                <p>{moment.explanationPreview || "—"}</p>
-                <p className="muted">
-                  score {moment.wowScore} · {formatDate(moment.createdAt)} · <span className="mono">{moment.id}</span>
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="empty inline-empty">No linked WOW moments.</p>
-        )}
-      </section>
-    </div>
-  );
 }
 
 export function App(): JSX.Element {
@@ -247,7 +203,7 @@ export function App(): JSX.Element {
                   <th>Attempts</th>
                   <th>Run after</th>
                   <th>Last error</th>
-                  <th>Inspiration ID</th>
+                  <th>Payload</th>
                   <th>Created</th>
                   <th>Updated</th>
                   <th>Action</th>
@@ -265,7 +221,7 @@ export function App(): JSX.Element {
                     </td>
                     <td>{formatDate(job.runAfter)}</td>
                     <td className="error-cell">{job.lastError ?? "—"}</td>
-                    <td className="mono">{inspirationId(job)}</td>
+                    <td className="mono">{payloadInline(job)}</td>
                     <td>{formatDate(job.createdAt)}</td>
                     <td>{formatDate(job.updatedAt)}</td>
                     <td className="action-cell">
@@ -305,8 +261,8 @@ export function App(): JSX.Element {
               </dd>
               <dt>Type</dt>
               <dd>{selectedJob.type}</dd>
-              <dt>User</dt>
-              <dd className="mono">{selectedJob.userId}</dd>
+              <dt>Profile</dt>
+              <dd className="mono">{selectedJob.profileId}</dd>
               <dt>Attempts</dt>
               <dd>
                 {selectedJob.attempts}/{selectedJob.maxAttempts}
@@ -319,14 +275,23 @@ export function App(): JSX.Element {
               <dd className="error-cell">{selectedJob.lastError ?? "—"}</dd>
               <dt>Payload summary</dt>
               <dd>
-                inspirationId: <span className="mono">{inspirationId(selectedJob)}</span>
+                {payloadEntries(selectedJob).length === 0 ? (
+                  "—"
+                ) : (
+                  <ul className="payload-list">
+                    {payloadEntries(selectedJob).map(([key, value]) => (
+                      <li key={key}>
+                        {key}: <span className="mono">{value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </dd>
               <dt>Created / updated</dt>
               <dd>
                 {formatDate(selectedJob.createdAt)} / {formatDate(selectedJob.updatedAt)}
               </dd>
             </dl>
-            <PipelineDetail job={selectedJob} />
             {selectedJob.status === "failed" ? (
               <button
                 type="button"

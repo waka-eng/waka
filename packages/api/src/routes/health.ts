@@ -1,26 +1,32 @@
 /**
- * Liveness + capability handshake.
+ * Liveness and capability handshake.
  *
- * `GET /api/health` has always been an unauthenticated liveness probe
- * (`{ ok: true }`); it now also identifies the service and advertises
- * capabilities so external clients — waka-mcp first — can feature-detect
- * instead of guessing. That matters because the user-facing read endpoints
- * use `.strict()` query schemas: an older server hard-400s on a query param
- * it doesn't know (e.g. `lens` before the provenance work landed), so a
- * client cannot probe by just sending the param and watching what happens.
+ * An unauthenticated probe that also says who is answering and what it can
+ * do, so an external client — waka-mcp first — can feature-detect rather than
+ * guess. Guessing is unsafe here specifically: the read endpoints use
+ * `.strict()` query schemas, so a server that does not know a parameter
+ * rejects the whole request rather than ignoring it. "Send it and see" tells
+ * a client nothing it can act on.
  *
- * Keep shipped entries stable — clients key off the exact strings.
+ * Clients key off the exact strings, so a shipped entry is not renamed
+ * casually — a rename is a break, and it should be one they can detect.
  */
 
 import { Hono } from "hono";
 
 export const apiCapabilities = [
-  // /api/auth/cli/start + /exchange — the waka-mcp loopback login.
-  "cli-auth",
-  // POST /api/inspirations accepts `source: "app" | "agent"` from CLI sessions.
+  // The three-layer model: /api/inspirations, /api/signals, /api/top-of-mind.
+  "three-layers",
+  // Accounts own profiles; /api/profiles lists and manages them.
+  "profiles",
+  // /api/auth/cli/start renders a consent page with a profile picker, and the
+  // credential it mints binds to the chosen profile.
+  "cli-auth-consent",
+  // POST /api/inspirations accepts `source: "app" | "agent"` from an
+  // agent-bound session.
   "signal-source",
-  // GET /api/top-of-mind accepts `lens=all|app|agent`.
-  "top-of-mind-lens",
+  // Attachments carry enrichment: a link's page body, an image's description.
+  "attachment-enrichment",
 ] as const;
 
 export const healthRoutes = new Hono();

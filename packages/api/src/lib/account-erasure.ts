@@ -1,35 +1,51 @@
+/**
+ * Permanent account erasure.
+ *
+ * Two kinds of work, in a deliberate order:
+ *
+ *   1. **Bytes we own outside Postgres** — the S3 objects behind image and
+ *      file attachments. They go first, while the database still lists them:
+ *      the rows are the only inventory of what to delete, so dropping them
+ *      before the objects would strand private bytes with nothing left
+ *      pointing at them. Every external delete is idempotent, so a failure
+ *      leaves the inventory intact and a retry finishes the same work.
+ *
+ *   2. **The account row.** Everything a person owns hangs off their
+ *      profiles, and every memory table cascades from `profiles`, which
+ *      cascades from `accounts` — so one delete takes the whole stack:
+ *      inspirations, attachments, reflections, embeddings, signals and their
+ *      evidence and shares, personal top-of-mind artifacts, group
+ *      memberships, background jobs, feedback, sessions, CLI login codes.
+ *
+ * What cascades cannot reach is anything owned by a *group*: a group's top of
+ * mind is generated from its members' shared signals, so its prose can carry
+ * a departing member's thinking while belonging to a row the member does not
+ * own. Those artifacts are removed explicitly below and regenerate clean from
+ * the remaining members' signals.
+ */
+
 import {
   DeleteObjectsCommand,
   S3Client,
   type ObjectIdentifier,
 } from "@aws-sdk/client-s3";
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 import {
+  accounts,
   attachments,
-  combinationReadings,
-  combinations,
-  documents,
-  groupConversationRooms,
   groupMembers,
-  groupRoomParticipants,
-  groupRoomPrompts,
-  groupRoomSignals,
-  groups,
-  groupTopOfMindNoteSignals,
-  groupTopOfMindNotes,
-  inspirations,
-  users,
+  profiles,
+  topOfMindEntries,
+  topOfMindEntrySignals,
+  topOfMinds,
 } from "../db/index.js";
 import { getDb } from "./db.js";
-import { getRuntimeVault } from "../vault/runtime.js";
-import type { VaultStore } from "../vault/vault.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
-export interface EraseUserAccountDependencies {
+export interface EraseAccountDependencies {
   db?: WakaDb;
-  vault?: VaultStore;
   deleteAttachmentObjects?: (keys: string[]) => Promise<void>;
 }
 
@@ -76,144 +92,77 @@ async function deleteAttachmentObjectsFromS3(keys: string[]): Promise<void> {
 }
 
 /**
- * Permanently erase every storage representation before dropping the account.
- * External deletes are idempotent, so a failed attempt leaves the DB inventory
- * intact and a retry can safely finish the same work.
+ * Erase an account and every profile it owns. Safe to retry: the external
+ * deletes are idempotent and the database work happens in one transaction.
  */
-export async function eraseUserAccount(
-  userId: string,
-  deps: EraseUserAccountDependencies = {},
+export async function eraseAccount(
+  accountId: string,
+  deps: EraseAccountDependencies = {},
 ): Promise<void> {
   const db = deps.db ?? getDb();
-  const vault = deps.vault ?? getRuntimeVault();
 
-  const [
-    indexedDocuments,
-    attachmentRows,
-    groupRows,
-    evidenceGroupRows,
-    combinationRows,
-    participantRoomRows,
-    signalRoomRows,
-  ] = await Promise.all([
-    db
-      .select({ path: documents.path })
-      .from(documents)
-      .where(eq(documents.userId, userId)),
-    db
-      .select({ s3Key: attachments.s3Key })
-      .from(attachments)
-      .innerJoin(inspirations, eq(attachments.inspirationId, inspirations.id))
-      .where(and(eq(inspirations.userId, userId), isNotNull(attachments.s3Key))),
-    db
-      .select({ groupId: groupMembers.groupId })
-      .from(groupMembers)
-      .where(eq(groupMembers.userId, userId)),
-    db
-      .select({ groupId: groupTopOfMindNotes.groupId })
-      .from(groupTopOfMindNoteSignals)
-      .innerJoin(
-        groupTopOfMindNotes,
-        eq(groupTopOfMindNoteSignals.groupTopOfMindNoteId, groupTopOfMindNotes.id),
-      )
-      .where(eq(groupTopOfMindNoteSignals.ownerUserId, userId)),
-    db
-      .select({ id: combinations.id })
-      .from(combinations)
-      .leftJoin(
-        combinationReadings,
-        eq(combinationReadings.combinationId, combinations.id),
-      )
-      .where(
-        or(
-          eq(combinations.createdByUserId, userId),
-          sql<boolean>`exists (
-            select 1
-            from jsonb_array_elements(${combinationReadings.memberGrades}) as member_grade
-            where member_grade->>'userId' = ${userId}
-          )`,
-          sql<boolean>`exists (
-            select 1
-            from jsonb_array_elements(${combinationReadings.memberQuotes}) as member_quote
-            where member_quote->>'userId' = ${userId}
-          )`,
+  const profileRows = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.accountId, accountId));
+  const profileIds = profileRows.map((row) => row.id);
+
+  let attachmentKeys: string[] = [];
+  let groupIds: string[] = [];
+
+  if (profileIds.length > 0) {
+    const [attachmentRows, membershipRows, citedGroupRows] = await Promise.all([
+      db
+        .select({ s3Key: attachments.s3Key })
+        .from(attachments)
+        .where(
+          and(
+            inArray(attachments.profileId, profileIds),
+            isNotNull(attachments.s3Key),
+          ),
         ),
+      db
+        .select({ groupId: groupMembers.groupId })
+        .from(groupMembers)
+        .where(inArray(groupMembers.profileId, profileIds)),
+      // Membership alone is insufficient: leaving a group deliberately keeps
+      // its board intact, so a former group is only reachable through the
+      // citations that still credit this account's signals.
+      db
+        .select({ groupId: topOfMinds.groupId })
+        .from(topOfMindEntrySignals)
+        .innerJoin(
+          topOfMindEntries,
+          eq(topOfMindEntrySignals.entryId, topOfMindEntries.id),
+        )
+        .innerJoin(topOfMinds, eq(topOfMindEntries.topOfMindId, topOfMinds.id))
+        .where(inArray(topOfMindEntrySignals.ownerProfileId, profileIds)),
+    ]);
+
+    attachmentKeys = [
+      ...new Set(
+        attachmentRows
+          .map((row) => row.s3Key)
+          .filter((key): key is string => typeof key === "string" && key.length > 0),
       ),
-    db
-      .select({ roomId: groupRoomParticipants.roomId })
-      .from(groupRoomParticipants)
-      .where(eq(groupRoomParticipants.userId, userId)),
-    db
-      .select({ roomId: groupRoomSignals.roomId })
-      .from(groupRoomSignals)
-      .where(eq(groupRoomSignals.userId, userId)),
-  ]);
+    ];
 
-  const vaultPaths = new Set(indexedDocuments.map((row) => row.path));
-  for await (const path of vault.list(`${userId}/`)) vaultPaths.add(path);
-  for (const path of vaultPaths) await vault.delete(path);
+    groupIds = [
+      ...new Set(
+        [...membershipRows, ...citedGroupRows]
+          .map((row) => row.groupId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    ];
+  }
 
-  const keys = Array.from(
-    new Set(
-      attachmentRows
-        .map((row) => row.s3Key)
-        .filter((key): key is string => typeof key === "string" && key.length > 0),
-    ),
-  );
-  await (deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3)(keys);
-
-  // Membership alone is insufficient: leaving a room deliberately keeps its
-  // historical board intact. If the person later erases their account, find
-  // those former rooms through the evidence rows that still cite their work.
-  const groupIds = [
-    ...new Set([
-      ...groupRows.map((row) => row.groupId),
-      ...evidenceGroupRows.map((row) => row.groupId),
-    ]),
-  ];
-  const combinationIds = [...new Set(combinationRows.map((row) => row.id))];
-  const roomIds = [
-    ...new Set([
-      ...participantRoomRows.map((row) => row.roomId),
-      ...signalRoomRows.map((row) => row.roomId),
-    ]),
-  ];
+  await (deps.deleteAttachmentObjects ?? deleteAttachmentObjectsFromS3)(attachmentKeys);
 
   await db.transaction(async (tx) => {
     if (groupIds.length > 0) {
-      // These records belong to a room rather than a user, so FK cascades
-      // cannot know that their prose and embedded quotes were derived from the
-      // departing member. Remove the affected generations and let remaining
-      // members produce a clean reading on their next visit.
-      await tx
-        .delete(groupTopOfMindNotes)
-        .where(inArray(groupTopOfMindNotes.groupId, groupIds));
-      await tx.delete(combinations).where(inArray(combinations.groupId, groupIds));
-      await tx
-        .update(groups)
-        .set({ lastSynthesisAt: null, updatedAt: new Date() })
-        .where(inArray(groups.id, groupIds));
+      await tx.delete(topOfMinds).where(inArray(topOfMinds.groupId, groupIds));
     }
 
-    if (combinationIds.length > 0) {
-      // Future subset/handshake combinations need not belong to a room. Their
-      // structured grades and quotes still identify the person, so erase them
-      // through their own inventory as well as through affected room ids.
-      await tx.delete(combinations).where(inArray(combinations.id, combinationIds));
-    }
-
-    if (roomIds.length > 0) {
-      // Legacy conversation-room prompts can also carry excerpts or a
-      // synthesis of the member's signals without retaining a direct user FK.
-      await tx
-        .delete(groupRoomPrompts)
-        .where(inArray(groupRoomPrompts.roomId, roomIds));
-      await tx
-        .update(groupConversationRooms)
-        .set({ feedbackSummary: {}, updatedAt: new Date() })
-        .where(inArray(groupConversationRooms.id, roomIds));
-    }
-
-    await tx.delete(users).where(eq(users.id, userId));
+    await tx.delete(accounts).where(eq(accounts.id, accountId));
   });
 }

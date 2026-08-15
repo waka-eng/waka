@@ -26,13 +26,19 @@
  * us the strongest possible "load .env before SUT imports" guarantee
  * without sprinkling `dotenv/config` into every spec.
  *
- * Guardrails before schema setup
- * ------------------------------
- * The full API suite may create/update test-only schema prerequisites before
- * route specs hit the production-style getDb(). To protect developer and
- * remote databases, setup refuses DB_CONNECTION_URL values that do not look
- * like local disposable test databases unless the runner explicitly sets
- * WAKA_ALLOW_TEST_SCHEMA_DDL=1 after confirming the target is safe.
+ * Guardrails
+ * ----------
+ * Route specs write real rows through the production-style getDb() and reap
+ * them afterwards. To protect developer and remote databases, setup refuses
+ * DB_CONNECTION_URL values that do not look like local disposable test
+ * databases unless the runner explicitly sets WAKA_ALLOW_TEST_SCHEMA_DDL=1
+ * after confirming the target is safe.
+ *
+ * What setup deliberately does NOT do is patch the schema. The migration
+ * corpus is one baseline file and `drizzle-kit migrate` is the only thing
+ * that applies it — a test run that finds a table missing is telling the
+ * truth about the database it was pointed at, and papering over that here
+ * is how a suite ends up green against a schema nothing else has.
  */
 
 import { existsSync } from "node:fs";
@@ -40,7 +46,6 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { config as loadDotenv } from "dotenv";
-import postgres from "postgres";
 
 // ---------------------------------------------------------------------------
 // 1. Load .env from the repo root.
@@ -156,265 +161,3 @@ if (!process.env.JWT_SECRET && !process.env.AUTH_SECRET) {
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = "test";
 }
-
-// ---------------------------------------------------------------------------
-// 4. Ensure public-schema test prerequisites added after the last deployed
-//    migration exist before route specs hit the production-style getDb().
-// ---------------------------------------------------------------------------
-
-async function ensureRevisitEventSchema(): Promise<void> {
-  const connectionString = process.env.DB_CONNECTION_URL;
-  if (!connectionString) return;
-
-  const sql = postgres(connectionString, {
-    max: 1,
-    prepare: false,
-    onnotice: () => {},
-  });
-
-  try {
-    await sql.unsafe(
-      `SELECT pg_advisory_lock(hashtext('waka_test_revisit_event_schema'))`,
-    );
-    await sql.unsafe(`
-      DO $$ BEGIN
-        CREATE TYPE "public"."signal_revisit_event_type" AS ENUM(
-          'detail_opened',
-          'detail_returned',
-          'reflection_created',
-          'inspiration_updated'
-        );
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS "public"."signal_revisit_events" (
-        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-        "user_id" uuid NOT NULL,
-        "signal_id" uuid NOT NULL,
-        "event_type" "public"."signal_revisit_event_type" NOT NULL,
-        "created_at" timestamp with time zone DEFAULT now() NOT NULL
-      );
-    `);
-    await sql.unsafe(`
-      DO $$ BEGIN
-        ALTER TABLE "public"."signal_revisit_events"
-          ADD CONSTRAINT "signal_revisit_events_user_id_users_id_fk"
-          FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
-          ON DELETE cascade ON UPDATE no action;
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      DO $$ BEGIN
-        ALTER TABLE "public"."signal_revisit_events"
-          ADD CONSTRAINT "signal_revisit_events_signal_id_signals_id_fk"
-          FOREIGN KEY ("signal_id") REFERENCES "public"."signals"("id")
-          ON DELETE cascade ON UPDATE no action;
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "signal_revisit_events_signal_created_idx"
-        ON "public"."signal_revisit_events"
-        USING btree ("user_id", "signal_id", "created_at" DESC NULLS LAST);
-    `);
-    await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "signal_revisit_events_user_created_idx"
-        ON "public"."signal_revisit_events"
-        USING btree ("user_id", "created_at" DESC NULLS LAST);
-    `);
-  } finally {
-    await sql
-      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_revisit_event_schema'))`)
-      .catch(() => {});
-    await sql.end({ timeout: 5 }).catch(() => {});
-  }
-}
-
-async function ensureLocalePreferenceSchema(): Promise<void> {
-  const connectionString = process.env.DB_CONNECTION_URL;
-  if (!connectionString) return;
-
-  const sql = postgres(connectionString, {
-    max: 1,
-    prepare: false,
-    onnotice: () => {},
-  });
-
-  try {
-    await sql.unsafe(
-      `SELECT pg_advisory_lock(hashtext('waka_test_locale_preference_schema'))`,
-    );
-    await sql.unsafe(`
-      ALTER TABLE "public"."users"
-        ADD COLUMN IF NOT EXISTS "preferred_locale" text NOT NULL DEFAULT 'en-US';
-    `);
-    await sql.unsafe(`
-      ALTER TABLE "public"."top_of_mind_notes"
-        ADD COLUMN IF NOT EXISTS "locale" text NOT NULL DEFAULT 'en-US';
-    `);
-  } finally {
-    await sql
-      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_locale_preference_schema'))`)
-      .catch(() => {});
-    await sql.end({ timeout: 5 }).catch(() => {});
-  }
-}
-
-async function ensureMeaningPacketSchema(): Promise<void> {
-  const connectionString = process.env.DB_CONNECTION_URL;
-  if (!connectionString) return;
-
-  const sql = postgres(connectionString, {
-    max: 1,
-    prepare: false,
-    onnotice: () => {},
-  });
-
-  try {
-    await sql.unsafe(
-      `SELECT pg_advisory_lock(hashtext('waka_test_meaning_packet_schema'))`,
-    );
-    await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS "public"."signal_packets" (
-        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-        "user_id" uuid NOT NULL,
-        "signal_id" uuid NOT NULL,
-        "primary_spark_id" uuid,
-        "spark_text" text DEFAULT '' NOT NULL,
-        "artifact_excerpt" text DEFAULT '' NOT NULL,
-        "packet_text" text NOT NULL,
-        "source_metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
-        "classifier_snapshot" jsonb DEFAULT '{}'::jsonb NOT NULL,
-        "input_fingerprint" text NOT NULL,
-        "token_estimate" integer DEFAULT 0 NOT NULL,
-        "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-        "updated_at" timestamp with time zone DEFAULT now() NOT NULL
-      );
-    `);
-    await sql.unsafe(`
-      DO $$ BEGIN
-        ALTER TABLE "public"."signal_packets"
-          ADD CONSTRAINT "signal_packets_user_id_users_id_fk"
-          FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
-          ON DELETE cascade ON UPDATE no action;
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      DO $$ BEGIN
-        ALTER TABLE "public"."signal_packets"
-          ADD CONSTRAINT "signal_packets_signal_id_signals_id_fk"
-          FOREIGN KEY ("signal_id") REFERENCES "public"."signals"("id")
-          ON DELETE cascade ON UPDATE no action;
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      DO $$ BEGIN
-        ALTER TABLE "public"."signal_packets"
-          ADD CONSTRAINT "signal_packets_primary_spark_id_signal_sparks_id_fk"
-          FOREIGN KEY ("primary_spark_id") REFERENCES "public"."signal_sparks"("id")
-          ON DELETE set null ON UPDATE no action;
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "signal_packets_user_signal_unique_idx"
-        ON "public"."signal_packets" ("user_id", "signal_id");
-    `);
-    await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "signal_packets_user_updated_idx"
-        ON "public"."signal_packets" ("user_id", "updated_at" DESC);
-    `);
-  } finally {
-    await sql
-      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_meaning_packet_schema'))`)
-      .catch(() => {});
-    await sql.end({ timeout: 5 }).catch(() => {});
-  }
-}
-
-async function ensureDocumentsSchema(): Promise<void> {
-  const connectionString = process.env.DB_CONNECTION_URL;
-  if (!connectionString) return;
-
-  const sql = postgres(connectionString, {
-    max: 1,
-    prepare: false,
-    onnotice: () => {},
-  });
-
-  try {
-    await sql.unsafe(
-      `SELECT pg_advisory_lock(hashtext('waka_test_documents_schema'))`,
-    );
-    await sql.unsafe(`
-      DO $$ BEGIN
-        CREATE TYPE "public"."document_type" AS ENUM(
-          'signal',
-          'top_of_mind_note',
-          'context_node',
-          'context_edge'
-        );
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      CREATE TABLE IF NOT EXISTS "public"."documents" (
-        "id" uuid PRIMARY KEY NOT NULL,
-        "user_id" uuid NOT NULL,
-        "doc_type" "public"."document_type" NOT NULL,
-        "path" text NOT NULL,
-        "content_hash" text NOT NULL,
-        "rev" integer DEFAULT 1 NOT NULL,
-        "search_text" text,
-        "cluster" "public"."cluster",
-        "importance_score" integer,
-        "wow_score" integer,
-        "created_at" timestamp with time zone,
-        "indexed_at" timestamp with time zone DEFAULT now() NOT NULL
-      );
-    `);
-    await sql.unsafe(`
-      DO $$ BEGIN
-        ALTER TABLE "public"."documents"
-          ADD CONSTRAINT "documents_user_id_users_id_fk"
-          FOREIGN KEY ("user_id") REFERENCES "public"."users"("id")
-          ON DELETE cascade ON UPDATE no action;
-      EXCEPTION
-        WHEN duplicate_object THEN null;
-      END $$;
-    `);
-    await sql.unsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS "documents_user_path_unique_idx"
-        ON "public"."documents" ("user_id", "path");
-    `);
-    await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "documents_user_type_created_idx"
-        ON "public"."documents" ("user_id", "doc_type", "created_at" DESC NULLS LAST);
-    `);
-    await sql.unsafe(`
-      CREATE INDEX IF NOT EXISTS "documents_user_type_score_idx"
-        ON "public"."documents" ("user_id", "doc_type", "wow_score" DESC NULLS LAST);
-    `);
-  } finally {
-    await sql
-      .unsafe(`SELECT pg_advisory_unlock(hashtext('waka_test_documents_schema'))`)
-      .catch(() => {});
-    await sql.end({ timeout: 5 }).catch(() => {});
-  }
-}
-
-await ensureRevisitEventSchema();
-await ensureLocalePreferenceSchema();
-await ensureMeaningPacketSchema();
-await ensureDocumentsSchema();

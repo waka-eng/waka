@@ -1,30 +1,23 @@
 /**
- * Drizzle ORM schema — attachments table.
+ * Drizzle ORM schema — attachments and their enrichment.
  *
- * Attachments belong to a single inspiration and represent one of three kinds:
- *   - link  : an external URL the user pasted (no S3 object)
- *   - image : an image uploaded to S3 via presigned PUT
- *   - file  : any other file uploaded to S3 via presigned PUT
+ * An attachment is a link, image, or file saved with an inspiration.
  *
- * For S3-backed kinds (image, file), the actual bytes are uploaded directly
- * from the browser to S3 using a presigned URL — the API never proxies the
- * payload. We persist:
- *   - url     : public/canonical URL the frontend renders (for link kind this
- *               is the user-supplied URL; for S3-backed kinds it is the
- *               object URL — may be a presigned GET if the bucket is private).
- *   - s3Key   : the S3 object key, NULL for `link`. Used to issue presigned
- *               GET URLs and to delete the object on inspiration delete.
- *   - name    : original filename (for image/file) or display label (for link).
+ * **Enrichment** is machine-derived context about what was attached, so that
+ * signal extraction can read what the human *saved* and not only what they
+ * typed: a link's page body, an image's transcribed description. It is
+ * cached on the row and re-derived only when the attachment changes.
  *
- * The foreign key cascades on inspiration delete so attachments are cleaned
- * up automatically when their parent inspiration is removed. Note that this
- * cascade does NOT delete the underlying S3 object — that is handled in
- * application code so we can also call DeleteObject before the row is gone.
+ * Enrichment is never presented as the human's words. Downstream, a quote
+ * drawn from enrichment is attributed to the source, not to the person —
+ * attributing an article's argument to the member who saved the link would
+ * be a claim about them that nobody made.
  */
 
 import { relations } from "drizzle-orm";
 import {
   bigint,
+  foreignKey,
   index,
   integer,
   pgEnum,
@@ -34,27 +27,12 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { signals } from "./schema";
+import { inspirations } from "./schema-inspirations";
+import { profiles } from "./schema-profiles";
 
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
-
-/**
- * Allowed attachment kinds. Postgres enforces the set at the DB layer; the
- * frontend uses the same string literals (`link` | `image` | `file`).
- *
- * Ordering is the canonical order written into Postgres; do NOT reorder
- * existing values once a migration has been applied.
- */
-export const attachmentTypeEnumValues = ["link", "image", "file"] as const;
-
-export type AttachmentType = (typeof attachmentTypeEnumValues)[number];
-
-export const attachmentTypeEnum = pgEnum(
-  "attachment_type",
-  attachmentTypeEnumValues,
-);
+export const attachmentTypeValues = ["link", "image", "file"] as const;
+export type AttachmentType = (typeof attachmentTypeValues)[number];
+export const attachmentTypeEnum = pgEnum("attachment_type", attachmentTypeValues);
 
 export const attachmentEnrichmentStatusValues = [
   "pending",
@@ -62,69 +40,59 @@ export const attachmentEnrichmentStatusValues = [
   "failed",
   "unavailable",
 ] as const;
-
-export type AttachmentEnrichmentStatus =
-  (typeof attachmentEnrichmentStatusValues)[number];
-
+export type AttachmentEnrichmentStatus = (typeof attachmentEnrichmentStatusValues)[number];
 export const attachmentEnrichmentStatusEnum = pgEnum(
   "attachment_enrichment_status",
   attachmentEnrichmentStatusValues,
 );
 
-// ---------------------------------------------------------------------------
-// attachments
-// ---------------------------------------------------------------------------
+/**
+ * How the enrichment text was obtained. Extraction reads `enrichmentText`
+ * uniformly, but a reader (and a quote's attribution) needs to know whether
+ * it is a page's own prose or a description of a picture.
+ */
+export const attachmentEnrichmentKindValues = ["page_body", "image_description"] as const;
+export type AttachmentEnrichmentKind = (typeof attachmentEnrichmentKindValues)[number];
+export const attachmentEnrichmentKindEnum = pgEnum(
+  "attachment_enrichment_kind",
+  attachmentEnrichmentKindValues,
+);
 
 export const attachments = pgTable(
   "attachments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    inspirationId: uuid("signal_id")
+    profileId: uuid("profile_id")
       .notNull()
-      .references(() => signals.id, { onDelete: "cascade" }),
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    inspirationId: uuid("inspiration_id").notNull(),
 
     type: attachmentTypeEnum("type").notNull(),
 
-    // Canonical URL the UI renders. For link attachments this is the user's
-    // URL verbatim. For S3-backed attachments this is typically the
-    // `https://<bucket>.s3.<region>.amazonaws.com/<key>` form, or a
-    // presigned GET URL minted at read time if the bucket is private.
+    /** For links, the user's URL verbatim; for uploads, the object URL. */
     url: text("url").notNull(),
-
-    // Display name. Optional because pasted links may not have a label.
     name: text("name"),
 
-    // S3 object key. NULL when type === "link" (no S3 object). Required for
-    // type ∈ {image, file} — application code enforces this; the DB only
-    // requires it to be nullable so link rows are valid.
+    /** S3 object key — NULL for links, required for image/file uploads. */
     s3Key: text("s3_key"),
-
-    // MIME type captured at presigned-PUT time (e.g. "image/png",
-    // "application/pdf"). Used to set the correct Content-Type header when
-    // serving the file back via a presigned GET, and to render the right
-    // preview affordance in the UI. NULL for `link` attachments (the URL is
-    // dereferenced directly by the browser).
     contentType: text("content_type"),
-
-    // Object size in bytes. bigint because S3 objects can exceed the 2^31
-    // boundary that Postgres `integer` enforces. NULL for `link` attachments
-    // and for rows recorded before the metadata was captured.
-    //
-    // We use Drizzle's `mode: "number"` form so values flow through as plain
-    // JS numbers in the typical < 2^53 range — application code that needs
-    // larger files can switch to "bigint" mode without a schema migration.
+    /** bigint: S3 objects can exceed Postgres integer's 2^31 boundary. */
     size: bigint("size", { mode: "number" }),
 
-    // Source-grounded enrichment/provenance. These fields describe facts
-    // directly available from the URL string or uploaded object metadata; they
-    // never contain generated captions, OCR, or inferred meaning. Existing
-    // rows may be NULL and should render as a neutral unavailable state.
+    // --- enrichment ---------------------------------------------------------
     enrichmentStatus: attachmentEnrichmentStatusEnum("enrichment_status"),
-    enrichmentSource: text("enrichment_source"),
-    enrichmentSourceUrl: text("enrichment_source_url"),
+    enrichmentKind: attachmentEnrichmentKindEnum("enrichment_kind"),
+    /**
+     * The bounded text extraction reads: a link's main body prose, or an
+     * image's description including any legible text transcribed verbatim.
+     */
+    enrichmentText: text("enrichment_text"),
     enrichmentErrorReason: text("enrichment_error_reason"),
     enrichmentUpdatedAt: timestamp("enrichment_updated_at", { withTimezone: true }),
+
+    // Structured link metadata, kept separate from the bulk text.
     finalUrl: text("final_url"),
     hostname: text("hostname"),
     title: text("title"),
@@ -134,29 +102,27 @@ export const attachments = pgTable(
     imageWidth: integer("image_width"),
     imageHeight: integer("image_height"),
 
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    // Loading an inspiration detail view fetches all of its attachments;
-    // this index supports that lookup.
-    inspirationIdx: index("attachments_signal_idx").on(
-      table.inspirationId,
-    ),
+    inspirationIdx: index("attachments_inspiration_idx").on(table.inspirationId),
+    profileIdx: index("attachments_profile_idx").on(table.profileId),
+    // An attachment cannot hang off another profile's inspiration.
+    inspirationFk: foreignKey({
+      columns: [table.profileId, table.inspirationId],
+      foreignColumns: [inspirations.profileId, inspirations.id],
+      name: "attachments_inspiration_fk",
+    }).onDelete("cascade"),
   }),
 );
 
 export type Attachment = typeof attachments.$inferSelect;
 export type NewAttachment = typeof attachments.$inferInsert;
 
-// ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
-
 export const attachmentsRelations = relations(attachments, ({ one }) => ({
-  inspiration: one(signals, {
+  inspiration: one(inspirations, {
     fields: [attachments.inspirationId],
-    references: [signals.id],
+    references: [inspirations.id],
   }),
 }));

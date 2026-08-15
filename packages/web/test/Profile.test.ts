@@ -7,42 +7,47 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ProfilePage from "../src/pages/Profile";
 
-const mockAuthState = vi.hoisted(() => ({
-  value: {
-    user: {
-      id: "user-1",
-      email: "river@example.com",
-      name: "River",
-      avatarUrl: null,
-      preferredLocale: "en-US" as "en-US" | "ko-KR",
-      onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
-      publicHandle: "q00",
-      publicProfileEnabled: false,
-      publicTopOfMindEnabled: false,
-      isAdmin: false,
+const mockAuthState = vi.hoisted(() => {
+  const account = {
+    id: "account-1",
+    email: "river@example.com",
+    onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
+    isAdmin: false,
+  };
+  const profile = {
+    id: "profile-1",
+    accountId: "account-1",
+    type: "human" as "human" | "agent",
+    name: "River",
+    avatarUrl: null,
+    preferredLocale: "en-US" as "en-US" | "ko-KR",
+    publicHandle: "q00",
+    publicProfileEnabled: false,
+    publicTopOfMindEnabled: false,
+  };
+  return {
+    value: {
+      account,
+      profile,
+      isLoading: false,
+      isAuthenticated: true,
+      login: vi.fn(),
+      signup: vi.fn(),
+      logout: vi.fn(async () => undefined),
+      refresh: vi.fn(async () => null),
+      updatePreferredLocale: vi.fn(),
+      updateProfile: vi.fn(async () => ({
+        account,
+        profile: {
+          ...profile,
+          publicProfileEnabled: true,
+          publicTopOfMindEnabled: true,
+        },
+      })),
+      deleteAccount: vi.fn(async () => undefined),
     },
-    isLoading: false,
-    isAuthenticated: true,
-    login: vi.fn(),
-    signup: vi.fn(),
-    logout: vi.fn(async () => undefined),
-    refresh: vi.fn(async () => null),
-    updatePreferredLocale: vi.fn(),
-    updateProfile: vi.fn(async () => ({
-      id: "user-1",
-      email: "river@example.com",
-      name: "River",
-      avatarUrl: null,
-      preferredLocale: "en-US" as "en-US" | "ko-KR",
-      onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
-      publicHandle: "q00",
-      publicProfileEnabled: true,
-      publicTopOfMindEnabled: true,
-      isAdmin: false,
-    })),
-    deleteAccount: vi.fn(async () => undefined),
-  },
-}));
+  };
+});
 
 vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => mockAuthState.value,

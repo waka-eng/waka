@@ -59,9 +59,6 @@ const COPY = {
   },
 } as const;
 
-function publicNoteText(note: FetchPublicProfileResponse["topOfMindNotes"][number]): string {
-  return note.body || note.ambientSignal || note.title;
-}
 
 export default function PublicProfilePage(): JSX.Element {
   const { handle = "" } = useParams();
@@ -81,7 +78,7 @@ export default function PublicProfilePage(): JSX.Element {
     setData(null);
     (async () => {
       try {
-        const next = await fetchPublicProfile(handle, { limit: 12 });
+        const next = await fetchPublicProfile(handle);
         if (!cancelled) setData(next);
       } catch (err) {
         if (!cancelled) {
@@ -102,6 +99,12 @@ export default function PublicProfilePage(): JSX.Element {
 
   const locale = normalizeSupportedLocale(data?.profile.preferredLocale);
   const copy = COPY[locale];
+  /*
+    The page shows the artifact's statements and only those. Entry ids and the
+    signals behind them are the owner's, not the visitor's, so the public
+    payload never carries them and there is nothing here to strip.
+  */
+  const entries = data?.topOfMind?.entries ?? [];
 
   function goToPrivateApp(): void {
     if (auth?.isAuthenticated) {
@@ -153,11 +156,11 @@ export default function PublicProfilePage(): JSX.Element {
         </section>
 
         <section className="nc-stage nc-stage--top-of-mind-wall" aria-label={copy.topOfMind}>
-          {data.topOfMindNotes.length > 0 ? (
-            data.topOfMindNotes.map((note, index) => (
+          {entries.length > 0 ? (
+            entries.map((entry, index) => (
               <article
                 className={`nc-note${index === 0 ? " nc-note--featured" : ""}`}
-                key={`${note.title}-${index}`}
+                key={`${entry.body}-${index}`}
                 style={{
                   ["--bg" as string]: NOTE_COLORS[index]?.hue ?? NOTE_COLORS[0].hue,
                   ["--ink" as string]: NOTE_COLORS[index]?.ink ?? NOTE_COLORS[0].ink,
@@ -169,7 +172,7 @@ export default function PublicProfilePage(): JSX.Element {
                 }}
               >
                 <div className="nc-note-preview" aria-label="post-it preview">
-                  <p className="nc-note-body nc-note-body--preview">{publicNoteText(note)}</p>
+                  <p className="nc-note-body nc-note-body--preview">{entry.body}</p>
                 </div>
               </article>
             ))

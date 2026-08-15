@@ -1,52 +1,61 @@
 /**
- * Neutral scheduler/worker for durable background classification work.
+ * Postgres is the queue.
  *
- * The public name remains `enqueueClassification` for the existing route call
- * site, but this module no longer talks to a broker. It writes a Postgres
- * `background_jobs` row and schedules an in-process drain tick. If the process
- * exits before the tick runs, the pending DB row is still inspectable and can
- * be drained manually or by future cron via `drainBackgroundJobs`.
+ * There is no broker. Work is a row in `background_jobs`, claimed with an
+ * atomic `UPDATE … FOR UPDATE SKIP LOCKED`, retried with exponential backoff,
+ * and swept by two things: an in-process timer for the single-process case
+ * (local dev, the monolith) and a cron-driven Lambda for the deployed case.
+ *
+ * Keeping the queue in the same transaction-capable store as the data is what
+ * makes it correct: a job can never reference a row that was rolled back, and
+ * an enqueue that participates in the caller's transaction is atomic with the
+ * write that motivated it.
+ *
+ * Three mechanics carry the weight, and all three are worth keeping in mind
+ * when changing anything here:
+ *
+ *   - **Idempotency keys.** A unique partial index on `idempotency_key`
+ *     collapses duplicate enqueues of the same work into one row, so a route
+ *     that fires on every save does not need to know whether it already did.
+ *   - **Stale-lock reclaim.** A worker that dies mid-job leaves a `running`
+ *     row locked. Anything locked longer than `STALE_LOCK_SECONDS` is
+ *     claimable again — without it, one crashed Lambda strands the job.
+ *   - **Backoff to a terminal state.** Attempts are counted at claim time;
+ *     once they exceed `maxAttempts` the row becomes `failed` and stays put,
+ *     with its sanitized error, rather than looping forever.
+ *
+ * The four job types are the pipeline:
+ *   enrich_attachment          → read what was saved (page body, image text)
+ *   derive_signals             → extract → embed → match-or-mint (layer 2)
+ *   refresh_top_of_mind        → re-synthesize a profile's artifact (layer 3)
+ *   refresh_group_top_of_mind  → the same for a group's shared signals
  */
 
-import { createHash, randomUUID } from "node:crypto";
-
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 
 import {
   type BackgroundJob,
   backgroundJobs,
   type BackgroundJobStatus,
-  groupMembers,
-  groupTopOfMindNotes,
-  type GroupReadingRefreshPayload,
-  groupDirectionContributions,
-  type MeaningGraphRebuildPayload,
-  type ProcessInspirationPayload,
-  signals,
-  users,
+  type DeriveSignalsPayload,
+  type EnrichAttachmentPayload,
+  type RefreshGroupTopOfMindPayload,
+  type RefreshTopOfMindPayload,
 } from "../db/index.js";
-import { runClassificationJob } from "../queue/classifier.js";
 import { getDb } from "./db.js";
-import { refreshGroupCombinationReading } from "./group-combination-reading.js";
+import { enrichAttachment } from "./signal-enrichment.js";
 import {
-  loadGroupWithMembers,
-  refreshGroupTopOfMind,
-} from "./group-top-of-mind.js";
+  describeSignalDerivation,
+  deriveSignalsForInspiration,
+} from "./signal-derivation.js";
 import {
-  normalizeSupportedLocale,
-  type SupportedLocale,
-} from "./locales.js";
-import {
-  createInitialMeaningGraphRebuildPayload,
-  rebuildMeaningGraphForUser,
-} from "./meaning-graph-rebuild.js";
-import { refreshTopOfMindNotesFromContextGraph } from "./top-of-mind-refresh.js";
+  refreshTopOfMindForGroup,
+  refreshTopOfMindForProfile,
+} from "./top-of-mind-synthesis.js";
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const MAX_ERROR_LENGTH = 1_000;
 const STALE_LOCK_SECONDS = 15 * 60;
-const GROUP_READING_PIPELINE_VERSION = "group-reading-v3";
-const GROUP_READING_MAX_TRIGGERS = 6;
 
 let drainScheduled = false;
 let drainTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,59 +75,14 @@ export interface BackgroundJobSummary {
   updatedAt: Date | string;
 }
 
-export interface EnqueueClassificationResult {
+export interface EnqueueResult {
   jobId: string;
-}
-
-export interface EnqueueMeaningGraphRebuildResult {
-  jobId: string;
-  job: BackgroundJobSummary;
-}
-
-export type GroupReadingGenerationPhase =
-  | "processing"
-  | "ready"
-  | "needs_people"
-  | "needs_more_context"
-  | "failed";
-
-export interface GroupReadingGenerationStatus {
-  phase: GroupReadingGenerationPhase;
-  message: string;
-  memberCount: number;
-  sharedSignalCount: number;
-  noteCount: number;
-  job: {
-    id: string;
-    type: "group_reading_refresh";
-    status: BackgroundJobStatus;
-    lastError: string | null;
-    updatedAt: string;
-  } | null;
-}
-
-export type GroupReadingRefreshReason = GroupReadingRefreshPayload["reason"];
-
-interface GroupReadingMaterialSnapshot {
-  memberUserIds: string[];
-  sharedSignalCount: number;
-  materialFingerprint: string;
-  preferredLocale: SupportedLocale;
-}
-
-interface EnqueueGroupReadingRefreshResult {
-  snapshot: GroupReadingMaterialSnapshot;
-  job: BackgroundJobSummary | null;
-}
-
-export interface EnqueueClassificationOptions {
   /**
-   * Optional idempotency scope for re-processing the same inspiration after a
-   * meaningful user event (for example, a reflection). The default keeps the
-   * original create-path behaviour: only one create classification job exists
-   * per inspiration.
+   * False when an equivalent job was already waiting and this request joined
+   * it. Callers surface it so a second "refresh" click can say the pass is
+   * already coming rather than implying it started a new one.
    */
-  idempotencyScope?: string;
+  created: boolean;
 }
 
 export interface DrainBackgroundJobsOptions {
@@ -134,557 +98,181 @@ export interface DrainBackgroundJobsResult {
   failed: number;
 }
 
-export interface GroupReadingRefreshJobDependencies {
-  db?: ReturnType<typeof getDb>;
-  loadGroup?: typeof loadGroupWithMembers;
-  refreshNotes?: typeof refreshGroupTopOfMind;
-  refreshCombination?: typeof refreshGroupCombinationReading;
-}
+// ---------------------------------------------------------------------------
+// Enqueue
+// ---------------------------------------------------------------------------
 
-export async function enqueueClassification(
-  inspirationId: string,
-  userId: string,
-  options: EnqueueClassificationOptions = {},
-): Promise<EnqueueClassificationResult> {
-  const db = getDb();
-  const idempotencyKey = options.idempotencyScope
-    ? `process_inspiration:${inspirationId}:${options.idempotencyScope}`
-    : `process_inspiration:${inspirationId}`;
-  const rows = await db.execute(sql<{ id: string }>`
-    INSERT INTO background_jobs (user_id, type, payload, max_attempts, idempotency_key)
+/**
+ * An idempotency key coalesces work that is *still in flight*. It does not
+ * mean "this was done once, never again": a capture edited twice needs
+ * distilling twice, and a job row that already succeeded is a record of the
+ * previous edit, not a reason to skip the current one.
+ *
+ * Hence the split below. While the existing row is `pending` or `running`,
+ * a second enqueue is the same work arriving twice and is absorbed — that is
+ * the debounce a burst of saves depends on. Once the row is terminal
+ * (`succeeded` or `failed`) the same key means new work, so the row is reset
+ * to pending with the fresh payload, a cleared error, and a zeroed attempt
+ * count, which is what makes it a retry rather than a resurrection carrying
+ * the old failure's budget.
+ */
+const TERMINAL_JOB_STATUS = sql`background_jobs.status IN ('succeeded'::background_job_status, 'failed'::background_job_status)`;
+
+/**
+ * One enqueue path for every keyed job type, so the ON CONFLICT clause and
+ * the drain scheduling cannot drift between call sites.
+ */
+async function enqueueKeyedJob(input: {
+  profileId: string;
+  type: "enrich_attachment" | "derive_signals" | "refresh_group_top_of_mind";
+  payload: EnrichAttachmentPayload | DeriveSignalsPayload | RefreshGroupTopOfMindPayload;
+  idempotencyKey: string;
+}): Promise<EnqueueResult> {
+  const rows = await getDb().execute(sql<{ id: string }>`
+    INSERT INTO background_jobs (profile_id, type, payload, max_attempts, idempotency_key)
     VALUES (
-      ${userId}::uuid,
-      'process_inspiration'::background_job_type,
-      ${JSON.stringify({ inspirationId })}::jsonb,
+      ${input.profileId}::uuid,
+      ${input.type}::background_job_type,
+      ${JSON.stringify(input.payload)}::jsonb,
       ${DEFAULT_MAX_ATTEMPTS},
-      ${idempotencyKey}
+      ${input.idempotencyKey}
     )
     ON CONFLICT (idempotency_key)
     WHERE idempotency_key IS NOT NULL
-    DO UPDATE SET updated_at = now()
-    RETURNING id
+    DO UPDATE SET
+      status = CASE
+        WHEN ${TERMINAL_JOB_STATUS} THEN 'pending'::background_job_status
+        ELSE background_jobs.status
+      END,
+      payload = CASE
+        WHEN ${TERMINAL_JOB_STATUS} THEN EXCLUDED.payload
+        ELSE background_jobs.payload
+      END,
+      attempts = CASE WHEN ${TERMINAL_JOB_STATUS} THEN 0 ELSE background_jobs.attempts END,
+      run_after = CASE WHEN ${TERMINAL_JOB_STATUS} THEN now() ELSE background_jobs.run_after END,
+      locked_at = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.locked_at END,
+      last_error = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.last_error END,
+      max_attempts = GREATEST(background_jobs.max_attempts, EXCLUDED.max_attempts),
+      updated_at = now()
+    RETURNING id, (xmax = 0) AS created
   `);
-  const [job] = rows as unknown as Array<{ id: string }>;
-
-  if (shouldAutoDrainBackgroundJobs()) {
-    scheduleBackgroundJobDrain();
-  }
-  return { jobId: job!.id };
-}
-
-export async function enqueueMeaningGraphRebuild(
-  userId: string,
-): Promise<EnqueueMeaningGraphRebuildResult> {
-  const payload = createInitialMeaningGraphRebuildPayload(userId);
-  const [job] = await upsertMeaningGraphRebuildJob(userId, payload);
-  if (!job) {
-    throw new Error("Failed to enqueue meaning graph rebuild job");
-  }
-
-  if (shouldAutoDrainBackgroundJobs()) {
-    scheduleBackgroundJobDrain();
-  }
-
-  return { jobId: job.id, job: summarizeBackgroundJob(job) };
-}
-
-/**
- * Request one complete room read (shared notes, then ambition) for the exact
- * material currently in the room.
- *
- * The fingerprint is the idempotency boundary: repeated page opens and
- * multiple members capturing against the same room all converge on one durable
- * job. A manual reread gets a unique suffix so it remains an actual retry even
- * after a failed job for unchanged material.
- */
-export async function enqueueGroupReadingRefresh(input: {
-  groupId: string;
-  requestedByUserId: string;
-  preferredLocale?: SupportedLocale;
-  reason?: GroupReadingRefreshReason;
-  force?: boolean;
-}): Promise<EnqueueGroupReadingRefreshResult | null> {
-  const db = getDb();
-  const preferredLocale = normalizeSupportedLocale(input.preferredLocale);
-  const snapshot = await loadGroupReadingMaterial(db, {
-    groupId: input.groupId,
-    requestedByUserId: input.requestedByUserId,
-    preferredLocale,
-  });
-  if (!snapshot) return null;
-
-  // There is no cross-person claim to look for yet. Avoid a doomed model pass,
-  // but still return the snapshot so the status endpoint can explain why.
-  if (snapshot.memberUserIds.length < 2 || snapshot.sharedSignalCount === 0) {
-    return { snapshot, job: null };
-  }
-
-  const reason = input.reason ?? "bootstrap";
-  const payload: GroupReadingRefreshPayload = {
-    groupId: input.groupId,
-    requestedByUserId: input.requestedByUserId,
-    preferredLocale,
-    materialFingerprint: snapshot.materialFingerprint,
-    reason,
-  };
-  const stableKey = [
-    "group_reading_refresh",
-    input.groupId,
-    preferredLocale,
-    snapshot.materialFingerprint,
-  ].join(":");
-  const idempotencyKey = input.force ? `${stableKey}:${randomUUID()}` : stableKey;
-  const rows = await db.execute(sql<BackgroundJob>`
-    WITH inserted AS (
-      INSERT INTO background_jobs (user_id, type, payload, max_attempts, idempotency_key)
-      VALUES (
-        ${input.requestedByUserId}::uuid,
-        'group_reading_refresh'::background_job_type,
-        ${JSON.stringify(payload)}::jsonb,
-        ${DEFAULT_MAX_ATTEMPTS},
-        ${idempotencyKey}
-      )
-      ON CONFLICT (idempotency_key)
-      WHERE idempotency_key IS NOT NULL
-      DO NOTHING
-      RETURNING *
-    )
-    SELECT
-      inserted.id,
-      inserted.user_id AS "userId",
-      inserted.type,
-      inserted.payload,
-      inserted.status,
-      inserted.attempts,
-      inserted.max_attempts AS "maxAttempts",
-      inserted.run_after AS "runAfter",
-      inserted.locked_at AS "lockedAt",
-      inserted.last_error AS "lastError",
-      inserted.idempotency_key AS "idempotencyKey",
-      inserted.created_at AS "createdAt",
-      inserted.updated_at AS "updatedAt"
-    FROM inserted
-    UNION ALL
-    SELECT
-      existing.id,
-      existing.user_id AS "userId",
-      existing.type,
-      existing.payload,
-      existing.status,
-      existing.attempts,
-      existing.max_attempts AS "maxAttempts",
-      existing.run_after AS "runAfter",
-      existing.locked_at AS "lockedAt",
-      existing.last_error AS "lastError",
-      existing.idempotency_key AS "idempotencyKey",
-      existing.created_at AS "createdAt",
-      existing.updated_at AS "updatedAt"
-    FROM background_jobs AS existing
-    WHERE existing.idempotency_key = ${idempotencyKey}
-      AND NOT EXISTS (SELECT 1 FROM inserted)
-    LIMIT 1
-  `);
-  const [job] = rows as unknown as BackgroundJob[];
-  if (!job) throw new Error("Failed to enqueue room reading refresh job");
+  const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
+  if (!job) throw new Error(`Failed to enqueue ${input.type} job`);
 
   if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
-  return { snapshot, job: summarizeBackgroundJob(job) };
-}
-
-/** Enqueue every room affected after one member's signal has finished processing. */
-export async function enqueueGroupReadingRefreshesForUser(
-  userId: string,
-): Promise<void> {
-  const db = getDb();
-  const [membershipRows, userRows] = await Promise.all([
-    db
-      .select({ groupId: groupMembers.groupId })
-      .from(groupMembers)
-      .where(eq(groupMembers.userId, userId)),
-    db
-      .select({ preferredLocale: users.preferredLocale })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1),
-  ]);
-  const preferredLocale = normalizeSupportedLocale(userRows[0]?.preferredLocale);
-  await Promise.all(
-    membershipRows.map((membership) =>
-      enqueueGroupReadingRefresh({
-        groupId: membership.groupId,
-        requestedByUserId: userId,
-        preferredLocale,
-        reason: "material_changed",
-      }),
-    ),
-  );
+  return { jobId: job.id, created: job.created };
 }
 
 /**
- * Membership changes can be requested by someone who is no longer in the room
- * (leave). Pick a remaining member as the durable job owner.
+ * Read a link's page body or describe an image, so extraction can see what
+ * the person saved and not only what they typed.
+ *
+ * Keyed on the attachment: an attachment is enriched once, and a second
+ * enqueue for the same one is the same work.
  */
-export async function enqueueGroupReadingRefreshForGroup(
-  groupId: string,
-  reason: GroupReadingRefreshReason = "membership_changed",
-): Promise<void> {
-  const [member] = await getDb()
-    .select({ userId: groupMembers.userId, preferredLocale: users.preferredLocale })
-    .from(groupMembers)
-    .innerJoin(users, eq(groupMembers.userId, users.id))
-    .where(eq(groupMembers.groupId, groupId))
-    .orderBy(asc(groupMembers.createdAt))
-    .limit(1);
-  if (!member) return;
-  await enqueueGroupReadingRefresh({
-    groupId,
-    requestedByUserId: member.userId,
-    preferredLocale: normalizeSupportedLocale(member.preferredLocale),
-    reason,
+export async function enqueueEnrichAttachment(
+  profileId: string,
+  attachmentId: string,
+  inspirationId: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "enrich_attachment",
+    payload: { attachmentId, inspirationId },
+    idempotencyKey: `enrich_attachment:${attachmentId}`,
   });
 }
 
-/** Stored state plus the durable pass currently responsible for advancing it. */
-export async function getGroupReadingGenerationStatus(input: {
-  groupId: string;
-  requestedByUserId: string;
-  preferredLocale?: SupportedLocale;
-  force?: boolean;
-  /** False for progress polling: authorize/count without re-hashing all material. */
-  ensure?: boolean;
-}): Promise<GroupReadingGenerationStatus | null> {
-  const preferredLocale = normalizeSupportedLocale(input.preferredLocale);
-  const ensured =
-    input.ensure === false
-      ? null
-      : await enqueueGroupReadingRefresh({
-          ...input,
-          preferredLocale,
-          reason: input.force ? "manual" : "bootstrap",
-        });
-  const snapshot =
-    ensured?.snapshot ??
-    (input.ensure === false
-      ? await loadGroupReadingStatusSnapshot(getDb(), {
-          groupId: input.groupId,
-          requestedByUserId: input.requestedByUserId,
-          preferredLocale,
-        })
-      : null);
-  if (!snapshot) return null;
-
-  const db = getDb();
-  const [latestRows, noteRows] = await Promise.all([
-    db
-      .select()
-      .from(backgroundJobs)
-      .where(
-        and(
-          eq(backgroundJobs.type, "group_reading_refresh"),
-          sql`${backgroundJobs.payload} ->> 'groupId' = ${input.groupId}`,
-        ),
-      )
-      .orderBy(desc(backgroundJobs.createdAt))
-      .limit(1),
-    db
-      .select({ count: sql<number>`cast(count(*) as int)` })
-      .from(groupTopOfMindNotes)
-      .where(
-        and(
-          eq(groupTopOfMindNotes.groupId, input.groupId),
-          eq(groupTopOfMindNotes.lifecycleStatus, "active"),
-        ),
-      ),
-  ]);
-  const latest = latestRows[0] ?? null;
-  const noteCount = Number(noteRows[0]?.count ?? 0);
-  return groupReadingStatusFrom({
-    snapshot,
-    latest,
-    noteCount,
+/**
+ * Distill one capture into signals.
+ *
+ * The reason is part of the key: a re-derivation after an edit is genuinely
+ * different work from the original pass, and collapsing the two would mean an
+ * edited capture never gets re-read. Editing the same capture again re-arms
+ * the row rather than colliding with it — see the conflict clause above; the
+ * cascade rule in the data model requires every edit to re-derive.
+ */
+export async function enqueueDeriveSignals(
+  profileId: string,
+  inspirationId: string,
+  reason: DeriveSignalsPayload["reason"],
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "derive_signals",
+    payload: { inspirationId, reason },
+    idempotencyKey: `derive_signals:${inspirationId}:${reason}`,
   });
 }
 
-export async function getLatestMeaningGraphRebuildJob(
-  userId: string,
-): Promise<BackgroundJobSummary | null> {
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(backgroundJobs)
-    .where(and(eq(backgroundJobs.userId, userId), eq(backgroundJobs.type, "meaning_graph_rebuild")))
-    .orderBy(desc(backgroundJobs.createdAt))
-    .limit(1);
-  const job = rows[0];
-  return job ? summarizeBackgroundJob(job) : null;
-}
-
-export async function getMeaningGraphRebuildJob(
-  userId: string,
-  jobId: string,
-): Promise<BackgroundJobSummary | null> {
-  const rows = await getDb()
-    .select()
-    .from(backgroundJobs)
-    .where(
-      and(
-        eq(backgroundJobs.userId, userId),
-        eq(backgroundJobs.id, jobId),
-        eq(backgroundJobs.type, "meaning_graph_rebuild"),
-      ),
-    )
-    .limit(1);
-  const job = rows[0];
-  return job ? summarizeBackgroundJob(job) : null;
-}
-
-async function upsertMeaningGraphRebuildJob(
-  userId: string,
-  payload: MeaningGraphRebuildPayload,
-): Promise<BackgroundJob[]> {
-  const payloadJson = JSON.stringify(payload);
-  const rows = await getDb().execute(sql<BackgroundJob>`
-    INSERT INTO background_jobs (user_id, type, payload, max_attempts, idempotency_key)
+/**
+ * Re-synthesize a profile's top of mind.
+ *
+ * Debounced by the database rather than by a key: a partial unique index
+ * permits one pending-or-running refresh per profile, so a burst of captures
+ * collapses into a single synthesis instead of paying for one per capture.
+ * The conflict target below mirrors that index predicate exactly.
+ */
+export async function enqueueTopOfMindRefresh(
+  profileId: string,
+  reason: RefreshTopOfMindPayload["reason"],
+): Promise<EnqueueResult> {
+  const payload: RefreshTopOfMindPayload = { reason };
+  const rows = await getDb().execute(sql<{ id: string }>`
+    INSERT INTO background_jobs (profile_id, type, payload, max_attempts)
     VALUES (
-      ${userId}::uuid,
-      'meaning_graph_rebuild'::background_job_type,
-      ${payloadJson}::jsonb,
-      ${DEFAULT_MAX_ATTEMPTS},
-      NULL
+      ${profileId}::uuid,
+      'refresh_top_of_mind'::background_job_type,
+      ${JSON.stringify(payload)}::jsonb,
+      ${DEFAULT_MAX_ATTEMPTS}
     )
-    ON CONFLICT (user_id, type)
-    WHERE "public"."background_job_type_label"(type) = 'meaning_graph_rebuild'
+    ON CONFLICT (profile_id, type)
+    WHERE type = 'refresh_top_of_mind'::background_job_type
       AND status IN ('pending'::background_job_status, 'running'::background_job_status)
-    DO UPDATE SET
-      max_attempts = GREATEST(background_jobs.max_attempts, ${DEFAULT_MAX_ATTEMPTS}),
-      updated_at = now()
-    RETURNING
-      id,
-      user_id AS "userId",
-      type,
-      payload,
-      status,
-      attempts,
-      max_attempts AS "maxAttempts",
-      run_after AS "runAfter",
-      locked_at AS "lockedAt",
-      last_error AS "lastError",
-      idempotency_key AS "idempotencyKey",
-      created_at AS "createdAt",
-      updated_at AS "updatedAt"
+    DO UPDATE SET updated_at = now()
+    RETURNING id, (xmax = 0) AS created
   `);
-  return rows as unknown as BackgroundJob[];
-}
+  const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
+  if (!job) throw new Error("Failed to enqueue refresh_top_of_mind job");
 
-function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {
-  return {
-    id: job.id,
-    type: job.type,
-    status: job.status,
-    payload: job.payload,
-    attempts: job.attempts,
-    maxAttempts: job.maxAttempts,
-    runAfter: job.runAfter,
-    lockedAt: job.lockedAt,
-    lastError: job.lastError,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt,
-  };
-}
-
-async function loadGroupReadingMaterial(
-  db: ReturnType<typeof getDb>,
-  input: {
-    groupId: string;
-    requestedByUserId: string;
-    preferredLocale: SupportedLocale;
-  },
-): Promise<GroupReadingMaterialSnapshot | null> {
-  const memberRows = await db
-    .select({ userId: groupMembers.userId })
-    .from(groupMembers)
-    .where(eq(groupMembers.groupId, input.groupId))
-    .orderBy(asc(groupMembers.userId));
-  if (!memberRows.some((member) => member.userId === input.requestedByUserId)) {
-    return null;
-  }
-
-  const [sharedRows, contributionRows] = await Promise.all([
-    db
-      .select({
-        id: signals.id,
-        userId: signals.userId,
-        text: signals.text,
-        enrichment: signals.enrichment,
-        kind: signals.kind,
-        captureElapsedMs: signals.captureElapsedMs,
-      })
-      .from(signals)
-      .innerJoin(
-        groupMembers,
-        and(
-          eq(groupMembers.userId, signals.userId),
-          eq(groupMembers.groupId, input.groupId),
-        ),
-      )
-      .where(eq(signals.sharedToGroups, true))
-      .orderBy(asc(signals.userId), asc(signals.id)),
-    db
-      .select({
-        id: groupDirectionContributions.id,
-        readingId: groupDirectionContributions.readingId,
-        userId: groupDirectionContributions.userId,
-        kind: groupDirectionContributions.kind,
-        body: groupDirectionContributions.body,
-        updatedAt: groupDirectionContributions.updatedAt,
-      })
-      .from(groupDirectionContributions)
-      .where(eq(groupDirectionContributions.groupId, input.groupId))
-      .orderBy(asc(groupDirectionContributions.createdAt), asc(groupDirectionContributions.id)),
-  ]);
-
-  const memberUserIds = memberRows.map((member) => member.userId);
-  const materialFingerprint = createHash("sha256")
-    .update(
-      JSON.stringify({
-        version: GROUP_READING_PIPELINE_VERSION,
-        preferredLocale: input.preferredLocale,
-        memberUserIds,
-        signals: sharedRows.map((signal) => ({
-          id: signal.id,
-          userId: signal.userId,
-          text: signal.text,
-          enrichment: signal.enrichment,
-          kind: signal.kind,
-          captureElapsedMs: signal.captureElapsedMs,
-        })),
-        contributions: contributionRows,
-      }),
-    )
-    .digest("hex");
-
-  return {
-    memberUserIds,
-    sharedSignalCount: sharedRows.length,
-    materialFingerprint,
-    preferredLocale: input.preferredLocale,
-  };
+  if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+  return { jobId: job.id, created: job.created };
 }
 
 /**
- * Polling only needs authorization and counts. Do not pull every signal's text
- * back across the network and hash it again every two seconds while a model is
- * already working on the durable job created by the first request.
+ * Re-synthesize a group's top of mind from the signals its members share.
+ *
+ * Keyed on the group rather than on the group and the reason: whatever moved
+ * — a new share, a member joining, an accepted proposal — the work is the
+ * same single pass over that group's current shared set, and a live job for
+ * it already covers a second request.
+ *
+ * The owning profile is the member whose action prompted the pass. It is the
+ * job's tenant for audit and cleanup; the synthesis itself reads the group.
  */
-async function loadGroupReadingStatusSnapshot(
-  db: ReturnType<typeof getDb>,
-  input: {
-    groupId: string;
-    requestedByUserId: string;
-    preferredLocale: SupportedLocale;
-  },
-): Promise<GroupReadingMaterialSnapshot | null> {
-  const [row] = await db
-    .select({
-      memberUserIds: sql<string[]>`
-        coalesce(
-          array_agg(distinct ${groupMembers.userId})
-            filter (where ${groupMembers.userId} is not null),
-          array[]::uuid[]
-        )
-      `,
-      sharedSignalCount: sql<number>`cast(count(${signals.id}) as int)`,
-    })
-    .from(groupMembers)
-    .leftJoin(
-      signals,
-      and(
-        eq(signals.userId, groupMembers.userId),
-        eq(signals.sharedToGroups, true),
-      ),
-    )
-    .where(eq(groupMembers.groupId, input.groupId));
-  const memberUserIds = row?.memberUserIds ?? [];
-  if (!memberUserIds.includes(input.requestedByUserId)) return null;
-  return {
-    memberUserIds,
-    sharedSignalCount: Number(row?.sharedSignalCount ?? 0),
-    materialFingerprint: "",
-    preferredLocale: input.preferredLocale,
-  };
+export async function enqueueGroupTopOfMindRefresh(
+  profileId: string,
+  groupId: string,
+  reason: RefreshGroupTopOfMindPayload["reason"],
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "refresh_group_top_of_mind",
+    payload: { groupId, reason },
+    idempotencyKey: `refresh_group_top_of_mind:${groupId}`,
+  });
 }
 
-function groupReadingStatusFrom(input: {
-  snapshot: GroupReadingMaterialSnapshot;
-  latest: BackgroundJob | null;
-  noteCount: number;
-}): GroupReadingGenerationStatus {
-  const { snapshot, latest, noteCount } = input;
-  const job = latest
-    ? {
-        id: latest.id,
-        type: "group_reading_refresh" as const,
-        status: latest.status,
-        lastError: latest.lastError,
-        updatedAt:
-          latest.updatedAt instanceof Date
-            ? latest.updatedAt.toISOString()
-            : String(latest.updatedAt),
-      }
-    : null;
-  const base = {
-    memberCount: snapshot.memberUserIds.length,
-    sharedSignalCount: snapshot.sharedSignalCount,
-    noteCount,
-    job,
-  };
+// ---------------------------------------------------------------------------
+// Drain scheduling
+// ---------------------------------------------------------------------------
 
-  if (snapshot.memberUserIds.length < 2) {
-    return {
-      ...base,
-      phase: "needs_people",
-      message: "Invite someone. A room needs two people before it can form a shared top of mind.",
-    };
-  }
-  if (snapshot.sharedSignalCount === 0) {
-    return {
-      ...base,
-      phase: "needs_more_context",
-      message: "No shared inspiration material has reached this room yet.",
-    };
-  }
-  if (latest?.status === "pending" || latest?.status === "running") {
-    return {
-      ...base,
-      phase: "processing",
-      message: "Reading the room's new shared material. The saved wall stays available while it works.",
-    };
-  }
-  if (latest?.status === "failed") {
-    return {
-      ...base,
-      phase: "failed",
-      message:
-        noteCount > 0
-          ? "The current room reading is still here, but the latest reread did not finish. Try again."
-          : "The room's latest reading did not finish. Try reading it again.",
-    };
-  }
-  if (noteCount > 0) {
-    return {
-      ...base,
-      phase: "ready",
-      message: "This room is up to date with its shared material.",
-    };
-  }
-  return {
-    ...base,
-    phase: "needs_more_context",
-    message:
-      "The room read what is shared, but no cross-person pattern holds strongly enough yet.",
-  };
-}
-
+/**
+ * The in-process drain is for processes that stay alive. Under vitest it
+ * would leave timers running past the test that created them, and on Lambda
+ * the container is frozen the moment the response is returned, so the timer
+ * fires late or never — cron owns draining there.
+ */
 function shouldAutoDrainBackgroundJobs(): boolean {
   if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "1") return true;
   if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "0") return false;
@@ -703,12 +291,32 @@ export function scheduleBackgroundJobDrain(delayMs = 0): void {
     drainTimer = null;
     drainDueAt = 0;
     drainBackgroundJobs().catch((err) => {
-      console.error("[background-jobs] drain tick failed", {
-        error: sanitizeError(err),
-      });
+      console.error("[background-jobs] drain tick failed", { error: sanitizeError(err) });
     });
   }, normalizedDelay);
 }
+
+/**
+ * Derive the next local wake-up from Postgres rather than from the batch that
+ * happened to run. That preserves both cases at once: a ready eleventh job is
+ * drained immediately, while a job that just failed stays scheduled for its
+ * backoff even when the batch was full.
+ */
+async function scheduleNextPendingBackgroundJobDrain(): Promise<void> {
+  const [next] = await getDb()
+    .select({ runAfter: backgroundJobs.runAfter })
+    .from(backgroundJobs)
+    .where(eq(backgroundJobs.status, "pending"))
+    .orderBy(asc(backgroundJobs.runAfter))
+    .limit(1);
+  if (!next) return;
+  const runAfter = coerceDate(next.runAfter);
+  scheduleBackgroundJobDrain(Math.max(0, runAfter.getTime() - Date.now() + 25));
+}
+
+// ---------------------------------------------------------------------------
+// Drain
+// ---------------------------------------------------------------------------
 
 export async function drainBackgroundJobs(
   options: DrainBackgroundJobsOptions = {},
@@ -745,223 +353,184 @@ export async function drainBackgroundJobs(
   return result;
 }
 
-/**
- * Derive the next local wake-up from Postgres instead of from the batch that
- * happened to run. That preserves both cases at once: a ready eleventh job is
- * drained immediately, while a failed job remains scheduled for its backoff
- * even when the current batch was full.
- */
-async function scheduleNextPendingBackgroundJobDrain(): Promise<void> {
-  const [next] = await getDb()
-    .select({ runAfter: backgroundJobs.runAfter })
-    .from(backgroundJobs)
-    .where(eq(backgroundJobs.status, "pending"))
-    .orderBy(asc(backgroundJobs.runAfter))
-    .limit(1);
-  if (!next) return;
-  const runAfter = coerceDate(next.runAfter);
-  scheduleBackgroundJobDrain(Math.max(0, runAfter.getTime() - Date.now() + 25));
-}
-
+/** The cron entry point. Named separately so the Lambda reads as a worker. */
 export async function runBackgroundJobWorker(
   options: DrainBackgroundJobsOptions = {},
 ): Promise<DrainBackgroundJobsResult> {
   return drainBackgroundJobs(options);
 }
 
-/** Execute both stages of one room pass; exported so the ordering is testable. */
-export async function runGroupReadingRefreshJob(
-  payload: GroupReadingRefreshPayload,
-  deps: GroupReadingRefreshJobDependencies = {},
-): Promise<void> {
-  const db = deps.db ?? getDb();
-  const loadGroup = deps.loadGroup ?? loadGroupWithMembers;
-  const refreshNotes = deps.refreshNotes ?? refreshGroupTopOfMind;
-  const refreshCombination =
-    deps.refreshCombination ?? refreshGroupCombinationReading;
-  const loaded = await loadGroup(db, {
-    userId: payload.requestedByUserId,
-    groupId: payload.groupId,
-  });
-  // The room may have been deleted or the requesting member may have left
-  // while this durable job waited. That is obsolete work, not a retryable
-  // failure.
-  if (!loaded || loaded.members.length < 2) return;
+// ---------------------------------------------------------------------------
+// The job router
+// ---------------------------------------------------------------------------
 
-  let noteError: unknown = null;
-  try {
-    await refreshNotes(db, {
-      userId: payload.requestedByUserId,
-      groupId: payload.groupId,
-      limit: 5,
-      preferredLocale: normalizeSupportedLocale(payload.preferredLocale),
-      maxTriggers: GROUP_READING_MAX_TRIGGERS,
-    });
-  } catch (err) {
-    noteError = err;
+export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
+  switch (job.type) {
+    case "enrich_attachment": {
+      const payload = parseEnrichAttachmentPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+
+      const enrichment = await enrichAttachment(payload.attachmentId);
+
+      // `enrichAttachment` never throws, because a login wall or a page of
+      // pure JavaScript is an ordinary outcome of saving things from the
+      // internet. Exactly one of its verdicts is worth another attempt:
+      // `failed` means the page was never reached. Throwing here is what
+      // hands that case to the backoff already built into the drain — without
+      // it, one timed-out fetch leaves the attachment unenriched forever and
+      // the job row claims it succeeded.
+      if (enrichment.status === "failed") {
+        throw new Error(
+          `Attachment enrichment failed for ${payload.attachmentId}: ${enrichment.reason}`,
+        );
+      }
+
+      // `unavailable` and `missing` are settled answers — the page has nothing
+      // to give, or the attachment is gone. Both are terminal, and both still
+      // leave the capture worth distilling with whatever it does have.
+      //
+      // Enqueued rather than called inline: a slow page fetch and a model
+      // extraction should not share one attempt budget.
+      await enqueueDeriveSignals(job.profileId, payload.inspirationId, "edited");
+      return;
+    }
+
+    case "derive_signals": {
+      const payload = parseDeriveSignalsPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+
+      const result = await deriveSignalsForInspiration(payload);
+      console.log("[background-jobs] derived signals", {
+        jobId: job.id,
+        inspirationId: payload.inspirationId,
+        summary: describeSignalDerivation(result),
+      });
+
+      // The artifact only needs reconsidering when the signal set actually
+      // moved. A capture that yielded nothing must not cost a synthesis.
+      const changed =
+        result.matchedSignalIds.length > 0 ||
+        result.mintedSignalIds.length > 0 ||
+        result.promotedSignalIds.length > 0;
+      if (changed) {
+        await enqueueTopOfMindRefresh(job.profileId, "signals_changed");
+      }
+      return;
+    }
+
+    case "refresh_top_of_mind": {
+      const payload = parseRefreshTopOfMindPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+
+      const result = await refreshTopOfMindForProfile({
+        profileId: job.profileId,
+        reason: payload.reason,
+      });
+      console.log("[background-jobs] refreshed top of mind", {
+        jobId: job.id,
+        profileId: job.profileId,
+        status: result.status,
+        version: result.version,
+        reason: result.reason,
+        entryCount: result.entryCount,
+      });
+      return;
+    }
+
+    case "refresh_group_top_of_mind": {
+      const payload = parseRefreshGroupTopOfMindPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+
+      await refreshTopOfMindForGroup({
+        groupId: payload.groupId,
+        reason: payload.reason,
+      });
+      return;
+    }
+
+    default: {
+      // Exhaustive over the enum: adding a job type without a branch is a
+      // compile error rather than a runtime surprise on a Friday.
+      const unhandled: never = job.type;
+      throw new Error(`Unsupported background job type: ${String(unhandled)}`);
+    }
   }
-
-  let combinationError: unknown = null;
-  try {
-    // Always run this stage. In particular, a note refresh legitimately
-    // declined by cooldown must not suppress the ambition reading — that was
-    // the wiring bug that left "What this room is after" blank.
-    await refreshCombination(db, {
-      userId: payload.requestedByUserId,
-      groupId: payload.groupId,
-      preferredLocale: normalizeSupportedLocale(payload.preferredLocale),
-    });
-  } catch (err) {
-    combinationError = err;
-  }
-
-  if (noteError) throw noteError;
-  if (combinationError) throw combinationError;
 }
 
 /**
- * Distill the lens-scoped boards ("app" and "agent") after the combined
- * refresh. Only runs when the user has signals from BOTH client kinds — with
- * a single source the "all" board already equals that lens, and two extra
- * synthesis passes would buy nothing. Failures are logged, not thrown: lens
- * boards are additive surfaces and must not fail the whole rebuild job.
+ * A payload that cannot be parsed will not parse on retry either. Marking the
+ * job succeeded stops the loop; the sanitized warning is what makes the drop
+ * visible.
  */
-async function refreshLensScopedTopOfMindNotes(userId: string): Promise<void> {
-  const db = getDb();
-  const sourceRows = await db
-    .selectDistinct({ source: signals.source })
-    .from(signals)
-    .where(eq(signals.userId, userId));
-  const clientKinds = new Set(
-    sourceRows.map((row) => (row.source === "agent" ? "agent" : "app")),
-  );
-  if (clientKinds.size < 2) return;
-
-  for (const lens of ["app", "agent"] as const) {
-    try {
-      await refreshTopOfMindNotesFromContextGraph(db, {
-        userId,
-        lens,
-        synthesisTrigger: "weekly_refresh",
-      });
-    } catch (err) {
-      console.warn("[background-jobs] lens-scoped top-of-mind refresh failed", {
-        userId,
-        lens,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
+function dropPoisonPayload(job: BackgroundJob): void {
+  console.warn("[background-jobs] dropping malformed job payload", {
+    jobId: job.id,
+    type: job.type,
+  });
 }
 
-async function processBackgroundJob(job: BackgroundJob): Promise<void> {
-  if (job.type === "process_inspiration") {
-    const payload = parseProcessInspirationPayload(job.payload);
-    if (!payload) {
-      // Permanent poison payload: do not throw/retry. Mark as succeeded so the
-      // queue does not loop forever; the sanitized warning stays in logs.
-      console.warn("[background-jobs] dropping malformed process_inspiration job", {
-        jobId: job.id,
-      });
-      return;
-    }
-
-    await runClassificationJob(payload.inspirationId, { userId: job.userId, backgroundJobId: job.id });
-    // Classification/embedding is now durable. Only then schedule room work so
-    // a room job cannot race the signal job and conclude the new save has no
-    // usable vector yet.
-    await enqueueGroupReadingRefreshesForUser(job.userId);
-    return;
-  }
-
-  if (job.type === "meaning_graph_rebuild") {
-    await rebuildMeaningGraphForUser({
-      userId: job.userId,
-      initialPayload: job.payload,
-      onProgress: (progress) => updateMeaningGraphRebuildProgress(job.id, progress),
-    });
-    const refresh = await refreshTopOfMindNotesFromContextGraph(getDb(), {
-      userId: job.userId,
-      synthesisTrigger: "weekly_refresh",
-    });
-    if (refresh.synthesis.failed > 0 && refresh.synthesis.synthesized === 0) {
-      throw new Error("Top-of-mind synthesis did not complete");
-    }
-    await refreshLensScopedTopOfMindNotes(job.userId);
-    return;
-  }
-
-  if (job.type === "group_reading_refresh") {
-    const payload = parseGroupReadingRefreshPayload(job.payload);
-    if (!payload) {
-      console.warn("[background-jobs] dropping malformed group_reading_refresh job", {
-        jobId: job.id,
-      });
-      return;
-    }
-
-    await runGroupReadingRefreshJob(payload);
-    return;
-  }
-
-  throw new Error(`Unsupported background job type: ${job.type}`);
-}
-
-async function updateMeaningGraphRebuildProgress(
-  jobId: string,
-  payload: MeaningGraphRebuildPayload,
-): Promise<void> {
-  await getDb().execute(sql`
-    UPDATE background_jobs
-    SET payload = ${JSON.stringify(payload)}::jsonb,
-        updated_at = now()
-    WHERE id = ${jobId}::uuid
-  `);
-}
-
-function parseProcessInspirationPayload(
-  payload: unknown,
-): ProcessInspirationPayload | null {
-  if (
-    !payload ||
-    typeof payload !== "object" ||
-    typeof (payload as { inspirationId?: unknown }).inspirationId !== "string"
-  ) {
-    return null;
-  }
-  const inspirationId = (payload as { inspirationId: string }).inspirationId.trim();
-  if (!inspirationId) return null;
-  return { inspirationId };
-}
-
-function parseGroupReadingRefreshPayload(
-  payload: unknown,
-): GroupReadingRefreshPayload | null {
+function readString(payload: unknown, key: string): string | null {
   if (!payload || typeof payload !== "object") return null;
-  const value = payload as Partial<GroupReadingRefreshPayload>;
-  if (
-    typeof value.groupId !== "string" ||
-    typeof value.requestedByUserId !== "string" ||
-    typeof value.preferredLocale !== "string" ||
-    typeof value.materialFingerprint !== "string" ||
-    typeof value.reason !== "string"
-  ) {
-    return null;
-  }
-  if (
-    !["bootstrap", "material_changed", "membership_changed", "manual"].includes(
-      value.reason,
-    )
-  ) {
-    return null;
-  }
-  return value as GroupReadingRefreshPayload;
+  const value = (payload as Record<string, unknown>)[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
+function parseEnrichAttachmentPayload(payload: unknown): EnrichAttachmentPayload | null {
+  const attachmentId = readString(payload, "attachmentId");
+  const inspirationId = readString(payload, "inspirationId");
+  if (!attachmentId || !inspirationId) return null;
+  return { attachmentId, inspirationId };
+}
+
+function parseDeriveSignalsPayload(payload: unknown): DeriveSignalsPayload | null {
+  const inspirationId = readString(payload, "inspirationId");
+  const reason = readString(payload, "reason");
+  if (!inspirationId) return null;
+  if (reason !== "created" && reason !== "edited") return null;
+  return { inspirationId, reason };
+}
+
+function parseRefreshTopOfMindPayload(payload: unknown): RefreshTopOfMindPayload | null {
+  const reason = readString(payload, "reason");
+  if (reason !== "signals_changed" && reason !== "manual") return null;
+  return { reason };
+}
+
+function parseRefreshGroupTopOfMindPayload(
+  payload: unknown,
+): RefreshGroupTopOfMindPayload | null {
+  const groupId = readString(payload, "groupId");
+  const reason = readString(payload, "reason");
+  if (!groupId) return null;
+  if (
+    reason !== "shares_changed" &&
+    reason !== "membership_changed" &&
+    reason !== "proposal_accepted" &&
+    reason !== "manual"
+  ) {
+    return null;
+  }
+  return { groupId, reason };
+}
+
+// ---------------------------------------------------------------------------
+// Claim / complete
+// ---------------------------------------------------------------------------
+
+/**
+ * Claim one job atomically.
+ *
+ * `FOR UPDATE SKIP LOCKED` is what lets several workers drain the same table
+ * without coordination: each takes a different row instead of blocking on the
+ * same one. The second arm of the WHERE is the stale-lock reclaim — a
+ * `running` row whose lock has aged past the ceiling belongs to a worker that
+ * is not coming back.
+ */
 async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob | null> {
-  const db = getDb();
   const nowIso = now.toISOString();
-  const rows = await db.execute(sql<BackgroundJob>`
+  const rows = await getDb().execute(sql<BackgroundJob>`
     UPDATE background_jobs AS job
     SET
       status = 'running'::background_job_status,
@@ -986,7 +555,7 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
     )
     RETURNING
       job.id,
-      job.user_id AS "userId",
+      job.profile_id AS "profileId",
       job.type,
       job.payload,
       job.status,
@@ -1022,34 +591,60 @@ async function markJobFailedOrPending(
   now: Date,
 ): Promise<void> {
   const status: BackgroundJobStatus = exhausted ? "failed" : "pending";
-  const lockedAt = exhausted ? coerceNullableDate(job.lockedAt)?.toISOString() ?? null : null;
-  const runAfter = (exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now)).toISOString();
-  const updatedAt = now.toISOString();
+  const lockedAt = exhausted ? (coerceNullableDate(job.lockedAt)?.toISOString() ?? null) : null;
+  const runAfter = (
+    exhausted ? coerceDate(job.runAfter) : calculateBackoffRunAfter(job.attempts, now)
+  ).toISOString();
   await getDb().execute(sql`
     UPDATE background_jobs
     SET status = ${status}::background_job_status,
         locked_at = ${lockedAt}::timestamptz,
         run_after = ${runAfter}::timestamptz,
         last_error = ${sanitizeError(err)},
-        updated_at = ${updatedAt}::timestamptz
+        updated_at = ${now.toISOString()}::timestamptz
     WHERE id = ${job.id}::uuid
   `);
 }
+
+export function summarizeBackgroundJob(job: BackgroundJob): BackgroundJobSummary {
+  return {
+    id: job.id,
+    type: job.type,
+    status: job.status,
+    payload: job.payload,
+    attempts: job.attempts,
+    maxAttempts: job.maxAttempts,
+    runAfter: job.runAfter,
+    lockedAt: job.lockedAt,
+    lastError: job.lastError,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
 
 function coerceDate(value: Date | string): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
 function coerceNullableDate(value: Date | string | null): Date | null {
-  if (value === null) return null;
-  return coerceDate(value);
+  return value === null ? null : coerceDate(value);
 }
 
+/** 30s, 60s, 120s, … capped at 15 minutes. */
 function calculateBackoffRunAfter(attempts: number, now: Date): Date {
   const delaySeconds = Math.min(15 * 60, 30 * 2 ** Math.max(0, attempts - 1));
   return new Date(now.getTime() + delaySeconds * 1_000);
 }
 
+/**
+ * Errors are stored on the row and read by whoever is on call, so anything
+ * that looks like a credential is stripped before it lands in a column that
+ * outlives the incident.
+ */
 function sanitizeError(err: unknown): string {
   const raw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   return raw

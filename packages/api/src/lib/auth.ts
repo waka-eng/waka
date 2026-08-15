@@ -92,9 +92,9 @@ export async function verifyPassword(
  * `sign`/`verify` helpers accept it without unsafe casts.
  */
 export interface SessionPayload extends JWTPayload {
-  /** users.id (uuid) */
+  /** profiles.id (uuid) — the profile this session acts as */
   sub: string;
-  /** users.email (denormalised so middleware can log/identify without a DB hit) */
+  /** accounts.email (denormalised so middleware can log/identify without a DB hit) */
   email: string;
   /** Issued-at (seconds since epoch) */
   iat: number;
@@ -130,22 +130,26 @@ function getJwtSecret(): string {
 }
 
 /**
- * Sign a session token for the given user. The returned string is a
+ * Sign a session token bound to a profile. The returned string is a
  * compact-form JWT ready to drop into the session cookie.
+ *
+ * `sub` is the profile, not the account: a session acts as exactly one
+ * profile, and everything downstream — ownership of what it captures, what
+ * it may read — follows from that.
  */
 export async function signSessionToken(input: {
-  userId: string;
+  profileId: string;
   email: string;
 }): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const payload: SessionPayload = {
-    sub: input.userId,
+    sub: input.profileId,
     email: input.email,
     iat: now,
     exp: now + SESSION_TTL_SECONDS,
-    // 16 bytes = 128 bits of entropy — overkill for the uniqueness the
-    // `sessions.token_hash` index needs, but cheap and future-proof if we
-    // ever add a "list active sessions" UI keyed by jti.
+    // 16 bytes = 128 bits of entropy. Without it, two tokens minted for the
+    // same profile inside one wall-clock second would be byte-identical and
+    // collide on the `sessions.token_hash` unique index.
     jti: randomBytes(16).toString("hex"),
   };
   return sign(payload, getJwtSecret(), JWT_ALG);

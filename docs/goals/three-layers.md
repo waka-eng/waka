@@ -46,22 +46,27 @@ Three forces converge on a rebuild rather than another rename-in-place:
 
 ## Database strategy
 
-There is no purely local database: `.env.local` points at the shared
-remote Neon instance that also backs the deployed dev stage. Owner
-decision (2026-08-15): **wipe in place** — the rebuild happens directly
-on that shared database. Accepted consequences, recorded so nobody
-rediscovers them as surprises:
+Revised at Phase 1 execution (2026-08-15) on evidence that contradicts
+the earlier assumption. The "wipe in place" decision was taken believing
+the target was a dev database. It is not: `.env.development` and
+`.env.production` resolve to the **same** Neon host and database
+(`ep-hidden-mouse-…neon.tech / neondb`), so wiping "dev" would wipe
+production. A local Postgres is running and `.env.local` already names
+`localhost:5432/waka_dev`, which carried the old schema.
 
-- **Phase 1 drops every table in the shared database**, after the
-  executing session confirms the exact connection string with the owner
-  — approval of this document is not approval of a specific `DROP`.
-- From Phase 1 until the Phase 9 deploy, `dev.waka.im` and any waka-mcp
-  client pointed at it are **down**: the deployed old code queries
-  tables that no longer exist. The deployed stage's 1-minute
-  `BackgroundJobDrain` cron will error-loop against missing tables for
-  the duration — harmless, but noisy in the Lambda logs.
-- Phase 9 therefore has no second wipe: the database already carries the
-  new schema; cutover is merge + `sst deploy` + verification.
+Therefore:
+
+- **Phases 1–8 run against local `waka_dev`.** It is wiped and migrated
+  to the baseline — that is the wipe the owner approved, on a database
+  whose only content was the schema being replaced.
+- **The Neon instance is not touched by this goal.** It keeps serving
+  the deployed stage on the old code and old schema throughout, so
+  `dev.waka.im` and any waka-mcp client stay up for the whole rebuild.
+- **Phase 9 is where the shared database is decided**, and it is a real
+  decision rather than a formality, because that database is production
+  as well as dev. Cutover therefore halts for the owner: confirm the
+  target, take a backup or a Neon branch first, then migrate and deploy.
+  Nothing before Phase 9 depends on it.
 
 ## Shape of the work
 
@@ -189,10 +194,9 @@ later gate requires a fully green repo:
    only — value reactions that feed regeneration). Nothing parked
    appears in the baseline.
 2. **The baseline reset.** Delete `drizzle/migrations/*` + `meta/`;
-   generate `0000_three_layers` as the sole migration. After the owner
-   confirms the exact connection string, drop the old tables and migrate
-   the shared database to the baseline. Rewrite `test/helpers/db.ts`
-   fixtures/cleanup and
+   generate `0000_three_layers` as the sole migration; drop the old
+   tables in local `waka_dev` and migrate it to the baseline. Rewrite
+   `test/helpers/db.ts` fixtures/cleanup and
    `migrations.test.ts` (it currently pins old migration filenames) for
    the single-baseline world. Rewrite `tools/seed-demo.ts` +
    `demo-seed-data.ts` to create an account, its human profile, one
@@ -420,3 +424,485 @@ deployed stage; a probe for `wow_moments` returns undefined-table.
   accordingly (`dev.waka.im` accepted down from Phase 1 until the
   Phase 9 deploy). Prerequisite PRs waka#230, waka#231, and waka-mcp#2
   all merged. Ready for `/goal three-layers`.
+
+### Phase 0 — inventory (2026-08-15), awaiting owner signature
+
+Surface counted by enumeration, not memory: **18 routes, 20 schema
+modules, 56 lib files, 15 queue/scoring/vault files, 8 web pages, 17
+tools**. Every one carries a verdict below. Verdicts: **K** keep
+(re-keyed/re-pointed, behavior preserved), **R** rewrite (concept
+survives, implementation replaced by a named phase), **P** park (feature
+leaves; code and tables removed; revivable as its own goal), **D**
+delete (no return path).
+
+**Routes (18)**
+
+| Route | V | Note |
+|---|---|---|
+| `auth.ts`, `auth-google.ts` | K | `users` → `accounts`; signup/login create the human profile (P1–2) |
+| `auth-cli.ts` | K | + consent page and profile picker (P2) |
+| `health.ts` | K | capabilities set updated at P7 |
+| `attachments.ts` | K | presign flow unchanged; enrichment both-modal (P3) |
+| `inspirations.ts` | R | L1: capture/edit/delete/search, absorbs the archive (P3) |
+| `signals.ts` | R | becomes L2 (P4); its archive behavior moves to `inspirations.ts` |
+| `top-of-mind.ts` | R | artifact + entries + version metadata (P5) |
+| `groups.ts` | K | re-keyed to profiles; wall shows shared signals (P6) |
+| `feedback.ts` | K | target enum → `signal \| top_of_mind_entry` |
+| `public-profiles.ts` | K | re-points at the human profile's artifact (P5) |
+| `admin-background-jobs.ts` | K | trimmed to generic payload summaries |
+| `guided-reflection.ts` | P | question generator only; `reflections` stays |
+| `decision-memo.ts` | P | |
+| `wow-moments.ts`, `wow-status.ts` | D | |
+| `admin-meaning-graph.ts`, `admin-top-of-mind-preview.ts` | D | |
+
+**Schema modules (20 → 17 + 3 new)**
+
+| Module | V | Note |
+|---|---|---|
+| `client.ts` | K | |
+| `index.ts` | R | barrel; **all ten alias exports die** |
+| `schema.ts` | R | `users`→`accounts`; old `signals`→`inspirations`; sparks + packets + context graph out |
+| *(new)* `schema-profiles.ts` | + | `profiles` (account_id, type, name) |
+| *(new)* `schema-signals.ts` | + | L2 `signals` + `signal_evidence` + `signal_shares` |
+| *(new)* `schema-top-of-mind.ts` | + | `top_of_minds` + `top_of_mind_entries` |
+| `schema-sessions.ts` | K | + bound `profile_id` (replaces `client`) |
+| `schema-cli-login-codes.ts` | K | |
+| `schema-attachments.ts` | K | enrichment block extended for images |
+| `schema-reflections.ts` | K | re-keyed as inspiration detail |
+| `schema-embeddings.ts` | R | inspiration **and** signal vectors (P4) |
+| `schema-background-jobs.ts` | K | job types rewritten |
+| `schema-feedback.ts` | K | new target enum |
+| `schema-groups.ts` | K | member = human profile |
+| `schema-group-direction.ts` | K | co-edit machinery (P6) |
+| `schema-wow-moments.ts` | D | replaced by the artifact tables |
+| `schema-group-rooms.ts` | D | incl. zero-consumer `group_room_feedback` |
+| `schema-activations.ts`, `schema-revisits.ts` | P | |
+| `schema-combinations.ts`, `schema-member-events.ts`, `schema-reading-divergence.ts` | P | |
+| `schema-documents.ts` | P | with the vault |
+
+**Lib (56)** — K: `account-erasure` (cascade rewritten), `admin-auth`,
+`auth`, `db`, `gemini-http`, `google-oauth`, `group-direction-policy`,
+`group-direction`, `inspiration-embeddings`, `locales`, `member-labels`,
+`middleware` (+matrix, P2), `model-provider`, `public-handles`, `queue`,
+`salience` (`verifyQuote` backs P5 citation safety), `session`,
+`signal-enrichment` (upgraded P3), `top-of-mind-family-lock`.
+R: `feedback-application`, `gemini-model-provider`,
+`group-top-of-mind{,-synthesis}` (P6), `top-of-mind-persistence`,
+`top-of-mind-refresh` (P5), `top-of-mind-value`.
+P: `combination-reading`, `context-node-types`, `decision-memo`,
+`group-combination-reading`, `guided-reflection-question`,
+`member-set-hash`, `node-dynamics`, `reading-divergence{,-gemini}`,
+`room-timeline`, `signal-activation`, `signal-readings`.
+D: `ambition-synthesis{,-gemini}` (superseded by whole-artifact
+synthesis), `auto-wow-generation` (zero callers), `inspiration-scores`,
+`meaning-candidates`, `meaning-graph-rebuild`, `meaning-graph-writer`
+(keyword ontology), `meaning-packets`, `meaning-relationship-judge`,
+`memory-movement` (dormancy re-implemented over `signal_evidence`),
+`signal-packets`, `signals` (aliased score presentation),
+`top-of-mind-dedupe`, `top-of-mind-notes` (compatibility serializer),
+`top-of-mind-preview`, `wow-candidates`, `wow-generation-config`,
+`wow-judge`.
+
+**Queue / scoring / vault (15)** — `queue/gemini.ts` R (HTTP plumbing
+kept; classifier prompt out, extract/synthesis clients in);
+`queue/classifier.ts` + its smoke D; `scoring/board-selection.ts` K
+(P6 may reuse); `scoring/wow-score.ts` D (with `inspiration-scores`);
+`scoring/activation.ts`, `scoring/stability.ts` P; all seven `vault/*` P.
+
+**Web (8)** — K: `Login`, `Onboarding`, `Profile`, `PublicProfile`
+(re-pointed), `Surface` (parked views — readings, direction, rooms —
+and orphaned `api.ts` exports removed). D: `MeaningGraph`,
+`AdminWowStatus`, `AdminHome`.
+
+**Tools (17)** — K: `dev-stack/boot-and-wait`, `visual-diff/*` (pairs
+re-pointed). R: `seed-demo`, `demo-seed-data` (account + human profile +
+agent profile + demo stack). P: `export-vault`, `reindex-vault`.
+D: all five `e2e/*` (replaced by `tools/e2e/organic.ts`, P3),
+`enrich-signals`, `pool-shape`, `turn-density`, `group-reading-eval`,
+`verify-timeline-phase0`, and `packages/api/scripts/{pull-boards,
+replay-stability}.ts`.
+
+**Park register** (revival goal named per feature): decision-memo →
+*decision-memo*; guided-reflection → *guided-reflection*;
+salience/readings → *salience*; room timelines → *room-timeline*;
+combinations → *combination-as-an-act*; revisits + activations →
+*brain-inspired-spark-engine*; stability/node-dynamics →
+*durable-interest* (halted; verdict stands); context-edge graph →
+*context-graph*; vault → *vault-durability*.
+
+**Three judgment calls flagged for the owner** (the rest follow
+mechanically from the canon):
+
+1. **Vault parked wholesale** — the capture write hook is 7 call sites
+   behind an existing DI seam, but `exporter.ts`/`serialize.ts` are
+   typed against six dying tables, so keeping it is a rewrite, not a
+   re-point. Parking loses YAML durability/export until its own goal.
+2. **`inspiration-scores` + `wow-score` deleted** — L1 stops carrying
+   `importance_score`/`wow_score`, so the archive loses its
+   resonance/revisited sorts (recency + text search remain). Ranking
+   moves to L2 confidence/evidence, per the canon. This is the one
+   deletion that visibly changes an existing surface.
+3. **Admin app kept, trimmed** — undeployed, three endpoints; useful
+   queue observability during this very goal. Cheap to keep, cheap to
+   drop if you'd rather.
+
+**Accepted mid-goal facts**: from Phase 1 until the Phase 9 deploy,
+`dev.waka.im` and any waka-mcp client pointed at it are down, and the
+deployed stage's 1-minute cron error-loops against missing tables; all
+pre-goal sessions and CLI credentials die with the Phase 1 wipe.
+
+**Gate status: PASSED — owner signed 2026-08-15**, inventory unamended.
+Two addenda applied during execution, both inside the signed categories:
+the `routes/*.smoke.ts` scripts (excluded from every test config, so they
+never ran) went with the stale-e2e deletions, and the old
+`packages/api/test/` integration suite went with the features it tested —
+Phases 3–6 rebuild coverage on the new harness.
+
+### Phase 1 — schema review (2026-08-15)
+
+Database strategy revised at execution: `.env.development` and
+`.env.production` resolve to the *same* Neon host and database, so the
+approved "wipe the dev database" would have destroyed production. A local
+Postgres was already running with `waka_dev` on the old schema; that is
+the wipe target. `.env.local` was switched to it (backup at
+`.env.local.bak-three-layers`) so the rebuild tooling cannot reach Neon.
+The shared instance keeps serving the deployed stage on old code
+throughout, and Phase 9 decides it deliberately.
+
+**One concept, one table, zero aliases** (21 tables, 1 migration
+`0000_three_layers.sql`, `db:check` clean):
+
+| Canon concept | Table | Notes |
+|---|---|---|
+| Account (auth identity) | `accounts` | email/credentials/onboarding only |
+| Profile (memory owner) | `profiles` | partial unique index = one human per account |
+| Session | `sessions` | binds `profile_id`; the old client flag is gone |
+| CLI login code | `cli_login_codes` | carries the chosen `profile_id` |
+| Inspiration (L1) | `inspirations` | + GIN index for SQL-backed search |
+| Attachment | `attachments` | enrichment block incl. `enrichment_kind`/`enrichment_text` |
+| Reflection | `reflections` | L1 detail |
+| Embeddings | `inspiration_embeddings`, `signal_embeddings` | match-or-mint inputs |
+| Signal (L2) | `signals` | `locked_at`, `unsupported_at`, `last_evidence_at` |
+| Evidence | `signal_evidence` | M:N, unique (signal, inspiration) |
+| Share | `signal_shares` | the only thing that crosses into a group |
+| Top of mind (L3) | `top_of_minds` | CHECK profile XOR group; partial unique = one live artifact each |
+| Entry | `top_of_mind_entries` | pin/dismiss/lock are columns here, not feedback |
+| Citation | `top_of_mind_entry_signals` | FK-enforced; `owner_profile_id` attributes group entries |
+| Group | `groups`, `group_members` | member = human profile |
+| Co-edit | `group_top_of_mind_proposals`, `group_top_of_mind_affirmations` | |
+| Queue | `background_jobs` | 4 job types; partial unique debounces artifact refresh |
+| Feedback | `feedback` | targets narrowed to signal \| entry |
+
+**Gate: PASSED.** `pnpm db:generate` → exactly one baseline migration;
+migrate + `db:check` clean on the wiped database; all five checks green:
+api typecheck clean, **api test:unit 19 files / 218 tests**, web typecheck
+clean, **web test 6 files / 56 tests**, web build ok (267.77 kB js /
+121.66 kB css), admin typecheck clean, `test:dev-local-script` ok.
+Diff: **328 files, +18,126 / −104,172**.
+
+Queue conflict semantics verified against a live Postgres
+(`packages/api/scripts/verify-enqueue.ts`, 4/4 as expected): first enqueue
+inserts; a duplicate while pending coalesces onto the same row; a
+*succeeded* row re-arms to pending with `attempts=0` and the error
+cleared; the artifact refresh collapses a burst onto one job.
+
+Three defects found by cross-checking one agent's output against another,
+all fixed before the gate:
+1. `enqueueDeriveSignals` keyed with `DO UPDATE SET updated_at`, so once a
+   capture's job had succeeded every later edit was silently swallowed and
+   the signals never re-derived — the canon's cascade rule, broken.
+2. `enrich_attachment` ignored `enrichAttachment`'s return, recording a
+   transport failure as a successful job, so a timed-out link was stuck
+   without enrichment forever.
+3. ~150 lines of signal-embedding code written by one agent and
+   independently superseded by another's better approach (a signal's
+   vector *is* its statement's vector) — deleted rather than left as a
+   second way to do the same thing.
+
+**Deferred to Phase 8** (residue, gates nothing): dead CSS in
+`styles/global.css` and `styles/surface.css` for the parked
+direction/rooms/timeline surfaces.
+
+### Phase 2 — profiles in behavior (2026-08-15)
+
+**Gate: PASSED.** All five checks green; **api test:unit 21 files / 258
+tests** (up from 19/218 — 40 added).
+
+The matrix is proven cell by cell in `lib/profile-access.test.ts` rather
+than sampled: every (session binding × target profile × operation) pair
+is asserted, including the case that catches a check comparing ids and
+forgetting the tenant — same profile id, different account, refused.
+
+`GET /api/auth/cli/start` **no longer mints anything.** It renders a
+consent page; `POST /api/auth/cli/consent` is what issues the code. That
+closes the drive-by hole: a session cookie is `SameSite=Lax` and is
+therefore sent on exactly the top-level GET navigation an attacker can
+cause, so the old shape would have handed a live 30-day credential to a
+local port of the attacker's choosing with nothing shown to the person.
+Lax does not send the cookie on a cross-site POST, and a human has to
+press the button. Second lock: the form carries an HMAC bound to the
+session, callback, and state, with a 10-minute life, so a stale tab
+cannot replay a confirmation for a callback nobody saw. Tests assert the
+bare GET returns 200 with no `Location` header and zero inserts, and
+that forged, absent, and callback-swapped tokens all mint nothing.
+
+Agent profiles became real: `/api/profiles` lists for either session
+kind (an agent needs to know what it may reach) but only a human-profile
+session may create, rename, or delete — an agent that could mint itself
+memories would be administering the account rather than working inside
+it. The human profile cannot be deleted at all; the delete is scoped to
+agent rows in SQL, so it is not merely refused, it is not found.
+
+The consent page was rendered and looked at in both colour schemes and
+at mobile width (`scripts/render-consent-page.ts`) — it is API-rendered
+HTML with no SPA behind it, so nothing in the web build would otherwise
+exercise how it looks, and it is the one screen standing between a stray
+navigation and a live credential.
+
+### Phase 3 — layer 1, enrichment, and the harness (2026-08-15)
+
+**Gate: PASSED — 8/8 steps against a live stack** (`pnpm dev:local`,
+local Postgres, fixture server on 127.0.0.1:8791):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS (3 capabilities) |
+| 2 | signup creates account + human profile | PASS |
+| 3 | three captures land and read back | PASS |
+| 4 | **search finds a capture buried past the newest 200** | PASS (8.2s, 206 captures) |
+| 5 | edit readable back, delete gone | PASS |
+| 6 | **second account reaches nothing of the first** | PASS (404, empty archive) |
+| 7 | **link enriched from the page body** | PASS (609 chars, body marker present, boilerplate absent) |
+| 8 | **image enriched from what it depicts** | PASS (248 chars, marker transcribed) |
+
+All five checks green; **api test:unit 22 files / 276 tests** (18 added).
+
+Step 4 is the regression the previous archive shipped: it filtered the
+newest ~200 rows in application memory, so anything older was simply
+unfindable. Step 7's fixture hides its salient sentence in the page body
+and puts a decoy in the `<aside>`/`<script>`/`<footer>` — the gate
+asserts the body marker is present *and* the boilerplate marker absent,
+so it catches both "never read the body" and "swept the chrome up as
+prose".
+
+**Image vision shipped.** `lib/image-description.ts` sends the bytes
+inline to flash-lite at temperature 0 and asks for legible text
+*verbatim*, because a description may be quoted back as words the person
+saved and an approximation would put words in their mouth. It refuses
+instructions found inside an image — an image is content, never a
+request. Failures are classified: a rate limit retries, a safety block
+does not. Verified against the real model
+(`scripts/verify-image-description.ts`): a generated PNG reading
+"SMALL TOOLS" came back transcribed verbatim.
+
+Two blockers the harness surfaced, both fixed in the API rather than
+worked around in the test:
+1. The SSRF guard refused the loopback fixture unconditionally. Rather
+   than a "skip the check in dev" flag — the kind that eventually ships —
+   `WAKA_ENRICHMENT_ALLOWED_HOSTS` names specific hosts, is empty by
+   default, and is set by nothing in the deployed configuration.
+2. Images could only be finalized through S3, so an image capture needed
+   an object store to exist. Recording an image **by URL** is a real
+   capability (a pasted image arrives that way) and it goes through the
+   same address guard a link gets; the harness uses it, so enrichment is
+   exercisable against a plain local stack.
+
+Spend this phase: ~8 flash-lite calls (1 vision verification, 1 gate
+vision call, ~6 during harness development) — far inside the ≤150 line.
+
+### Phase 4 — layer 2, signals (2026-08-15)
+
+**Gate: PASSED — 6/6 against a live stack** (`tools/e2e/signals.ts`):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS |
+| 2 | 5 related + 2 unrelated captures land | PASS |
+| 3 | **a signal cites ≥2 related captures** | PASS (2.0s, evidence=3) |
+| 4 | **a different archive shares zero statements** | PASS (3 vs 3, zero identical) |
+| 5 | **a locked statement survives regeneration byte for byte** | PASS |
+| 6 | **deleting every citation retires an unlocked signal** | PASS |
+
+All five checks green; api test:unit 22 files / 276 tests.
+
+Step 4 is the canned-ontology regression made measurable. Two archives
+with no shared vocabulary — one about small tools, one about a garden —
+produced three statements each and zero in common. The previous middle
+layer bucketed every capture into nine hardcoded English sentences, so
+every archive converged on the same "insights"; that cannot happen now
+without this step going red.
+
+**Step 6 found a real bug and it was fixed rather than accommodated.**
+Evidence rows vanish by foreign-key cascade when an inspiration is
+deleted, but nothing re-evaluated the signals left standing on nothing —
+they stayed `active` with zero support indefinitely, which is the canon's
+cascade rule broken. Deletion is the one path where support disappears
+without any derivation pass running, so the reconciliation is now driven
+from the delete itself (`reconcileSignalsAfterEvidenceLoss`), collecting
+the citing signals *before* the cascade removes the join. What happens to
+a stranded signal depends on whose words it is: a generated statement is
+retired, a locked one keeps its text and is marked unsupported — deleting
+someone's own sentence because its footnotes went would be WAKA editing
+them. First run: 5/6 with step 6 timing out at 300s "still active";
+after the fix, 6/6 with the retirement landing in 0.0s.
+
+**Consolidation:** two `cosineSimilarity` implementations existed, one
+returning `null` for incomparable vectors and one returning 0. The null
+form won and is now the only one — a missing embedding must not look
+like a confident decision that nothing matched, because that silently
+mints a duplicate signal.
+
+Spend this phase: ~40 flash-lite/embedding calls across two gate runs —
+inside the ≤150 line.
+
+### Phase 5 — layer 3, one top of mind (2026-08-15)
+
+**Gate: PASSED — 7/7 against a live stack** (`tools/e2e/top-of-mind.ts`):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS |
+| 2 | an archive synthesizes into a first artifact | PASS (v1, 3 entries, reason=initial) |
+| 3 | **every cited signal resolves to one the profile owns** | PASS (3 citations, all resolvable) |
+| 4 | **a locked entry survives regeneration byte for byte** | PASS (v2, carried verbatim) |
+| 5 | **pin and dismiss round-trip and survive** | PASS |
+| 6 | a refresh records an explicit decision | PASS (v3, reason=regenerated) |
+| 7 | **only one artifact is live** | PASS (3 versions, exactly 1 live) |
+
+All five checks green; **api test:unit 23 files / 291 tests** (15 added).
+
+Step 6 passed but did not exercise the branch it was aimed at: with
+nothing newly captured, synthesis still returned different wording and
+the pass recorded `regenerated` rather than `no_change`. Both calls run
+at temperature 0, so this is model nondeterminism, not a defect — and
+the criterion ("every refresh records a decision") did hold. But
+accepting either reason left the `no_change` path unproven, so it is now
+proven where it is actually decided, in code: `isUnchanged` is asserted
+across reworded bodies, moved citations, appearing and disappearing
+entries, and dismissed entries on either side.
+
+The same reasoning covers the two guarantees a live run can never
+demonstrate, because they only matter when the model misbehaves:
+`assembleEntries` reproduces a locked entry from the **stored row** even
+when the model reworded it or returned nothing at all, and
+`validateSynthesizedEntries` drops an invented citation rather than
+writing it — a hallucinated id would otherwise fail a foreign key and
+take somebody's whole regeneration down with it.
+
+Spend this phase: ~25 flash-lite/embedding calls.
+
+### Phase 6 — groups (2026-08-15)
+
+**Gate: PASSED — 8/8 against a live stack** (`tools/e2e/groups.ts`):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS |
+| 2 | two archives meet in a group | PASS |
+| 3 | each member shares one of their own signals | PASS |
+| 4 | the wall shows statements attributed to owners | PASS (2 from 2 members) |
+| 5 | **no group surface exposes another member's raw capture** | PASS (5 surfaces checked) |
+| 6 | a proposal is accepted once a second member affirms | PASS |
+| 7 | **a non-member cannot tell the group exists** | PASS (404, not 403) |
+| 8 | **an agent-bound session cannot reach a wall** | PASS (403 at the wall and at the door) |
+
+All five checks green; api test:unit 23 files / 291 tests.
+
+Step 5 does not inspect a field. One capture contains a phrase nobody
+would write twice, and every group surface the other member can reach is
+fetched and searched for it — the boundary holds because nothing
+anywhere returns it, not because the serializer everyone remembered to
+check happens to omit it.
+
+**Step 8 failed first, and the fault was the test.** It asserted the
+agent gate by passing `?profile=` on a *human* session; groups ignore
+that parameter and read the session's own profile type, so a 200 was
+correct behavior and the assertion was meaningless. Rewritten to mint a
+credential that genuinely acts as the agent profile — through the same
+loopback flow waka-mcp uses, consent page and all — it now proves the
+real thing, and exercises Phase 2's consent flow end to end as a side
+effect.
+
+Spend this phase: ~15 flash-lite/embedding calls. **Running total across
+Phases 3–6: ~90 calls**, inside the ≤450 budgeted across the three
+spending phases.
+
+### Phase 7 — MCP speaks the canon (2026-08-15)
+
+**Gate: PASSED — 8/8 live** against `pnpm dev:local`, verified twice
+(the agent's run and an independent one). waka-mcp commit `f9ce134` on
+branch `three-layers`.
+
+Tools renamed to the canon: `waka_add_inspiration`,
+`waka_list_inspirations`, `waka_list_signals` (now meaning layer 2),
+`waka_get_profile`, and a new `waka_list_profiles`. Login gained a
+device label and a `--profile` preselect; the CLI's own side is
+unchanged because the consent page is a browser concern.
+
+The live suite proves the agent story end to end: log in bound to an
+**agent** profile through the real loopback flow, capture into the human
+profile as `source: "app"`, capture into its own as `"agent"`, recall
+both layers in both profiles, read both artifacts — and be **refused**
+(403) when editing the human's signal. That last step carries a control:
+the same PATCH against its own profile answers 404, so the 403 proves
+authorization refused the crossing rather than the route lacking a
+handler. Offline suite: 32 tests, and it stays offline even with
+`WAKA_LIVE_BASE_URL` exported.
+
+**A tuning limitation worth recording rather than hiding.** Layer 3
+selects only `active` signals (≥3 evidence), and match-or-mint needs
+cosine ≥0.86 to treat two statements as one pattern. Five captures on a
+theme worded five different ways therefore mint five `emerging` signals
+and synthesize *nothing*. That is defensible — an artifact built on
+single observations would be noise — but it means a new account can save
+a handful of related thoughts and see no top of mind. Both numbers are
+named exports precisely so this is a one-file diff; it wants real
+archives to tune against, not a guess. Logged as follow-up, not fixed
+here.
+
+### Phase 8 — the sweep (2026-08-15)
+
+**Gate: PASSED.** The grep gate over `packages/**`, `tools/**`,
+`scripts/**` returns **zero hits** for every dead concept in both
+vocabularies: `wow_`, `wowMoment`, `WowMoment`, `top_of_mind_note`,
+`contextNode`, `context_node`, `contextEdge`, `context_edge`,
+`meaningNode`, `meaningEdge`, `meaningPacket`, `signalPacket`,
+`signal_packets`, `spark`, `Spark`, `sharedToGroups`,
+`shared_to_groups`, `sessionClient`, and `lens` as an identifier. All
+five checks green plus `db:check`.
+
+Two occurrences of the *word* "lens" survive, both in prose describing
+what an agent profile is **not** ("rather than as a lens over the
+person's") — the canon's own phrasing for the idea the lens boards got
+wrong. That is the English word, not the dead column; the gate targets
+the identifier forms.
+
+Found and fixed while sweeping: **`/api/health` was still advertising
+`top-of-mind-lens`**, so a client feature-detecting against it would have
+been told a deleted capability existed. The set is now `three-layers`,
+`profiles`, `cli-auth-consent`, `signal-source`,
+`attachment-enrichment`. This is the sanctioned break of the
+stable-strings rule that Phase 7 names; the test that pins those strings
+was updated deliberately rather than deleted, because it is what makes
+the next rename a decision instead of an accident.
+
+Residue removed: **664 dead CSS rules** (surface.css 2891 → 1417 lines,
+global.css 5572 → 2767), taking the built stylesheet from 121.66 kB to
+56.67 kB. Removal was mechanical but conservative — a rule went only if
+every class it names is referenced nowhere in the app — and verified by
+checking that of the 131 classes components actually use, **zero** lost a
+rule they previously had. 30 orphaned i18n keys deleted. Six superseded
+design docs plus `HANDOFF.md` moved to `docs/archive/pre-three-layers/`
+with a README saying what each described and why it is gone. `AGENTS.md`
+and `README.md` rewritten to the canon.
+
+**Tenant integrity is enforced by the database, not by convention.** Seven
+composite foreign keys — `(profile_id, parent_id)` against unique
+constraints on `inspirations` and `signals` — make a cross-profile row
+impossible in `attachments`, `reflections`, `signal_evidence` (both
+parents), `signal_shares`, and both embedding tables. Two failures found
+and fixed getting there: drizzle emits `CREATE UNIQUE INDEX` after FK
+constraints, so composite FKs need table-level unique *constraints* as
+targets; and `drizzle-kit migrate` swallows the resulting Postgres error
+behind its spinner — applying the SQL through `psql` was the only way to
+see it.

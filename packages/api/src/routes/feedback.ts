@@ -1,39 +1,64 @@
+/**
+ * `/api/feedback` — a reader's verdict on something WAKA generated.
+ *
+ * Deliberately narrow: does this signal ring true, does this top-of-mind entry
+ * land. That is the part that is genuinely a reaction, and it is what the next
+ * regeneration reads back.
+ *
+ * Pin, dismiss and lock are **not** feedback. They are state on the entry, set
+ * through the entry's own endpoints, because the generator has to read them on
+ * every pass and "is this pinned?" must never require replaying a history of
+ * reactions. A request that asks for one of them here is answered with that
+ * redirection rather than a bare validation error: the caller is not
+ * malformed, it is aimed at the wrong door.
+ *
+ * A target must belong to the acting profile. A group entry is not a valid
+ * target: what a group says about itself changes through proposals, so a
+ * private verdict on a shared entry would be a vote nobody else can see.
+ */
+
 import { and, desc, eq } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
   feedback,
-  feedbackEmotionEnumValues,
-  feedbackTargetEnumValues,
-  feedbackValueEnumValues,
-  inspirations,
-  meaningNodes,
-  wowMoments,
+  feedbackTargetTypeValues,
+  feedbackValueValues,
+  signals,
+  topOfMindEntries,
+  topOfMinds,
   type Feedback,
-  type FeedbackEmotion,
-  type FeedbackTarget,
+  type FeedbackTargetType,
   type FeedbackValue,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
-import { applyFeedbackToGraph } from "../lib/feedback-application.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
-import { lockTopOfMindFamily } from "../lib/top-of-mind-persistence.js";
+
+type WakaDb = ReturnType<typeof getDb>;
 
 const DEFAULT_FEEDBACK_LIMIT = 50;
 const MAX_FEEDBACK_LIMIT = 100;
 const MAX_CORRECTION_TEXT_LENGTH = 2000;
 
-const feedbackTargetSchema = z.enum(feedbackTargetEnumValues);
-const feedbackValueSchema = z.enum(feedbackValueEnumValues);
-const feedbackEmotionSchema = z.enum(feedbackEmotionEnumValues);
+/** Words that mean entry state. Listed so the refusal can say where they go. */
+const ENTRY_STATE_VALUES = [
+  "important",
+  "not_important",
+  "pin",
+  "pinned",
+  "dismiss",
+  "dismissed",
+] as const;
+
+const ENTRY_STATE_MESSAGE =
+  "Pinning and dismissing are entry state, not feedback. Use the top-of-mind entry's pin/dismiss endpoints; feedback records whether a claim rings true.";
 
 const createFeedbackRequestSchema = z
   .object({
-    targetType: feedbackTargetSchema,
+    targetType: z.enum(feedbackTargetTypeValues),
     targetId: z.string().uuid("targetId must be a uuid"),
-    value: feedbackValueSchema,
-    emotionLabel: feedbackEmotionSchema.optional(),
+    value: z.enum(feedbackValueValues),
     correctionText: z
       .string()
       .trim()
@@ -48,7 +73,7 @@ const createFeedbackRequestSchema = z
 
 const listFeedbackQuerySchema = z
   .object({
-    targetType: feedbackTargetSchema.optional(),
+    targetType: z.enum(feedbackTargetTypeValues).optional(),
     targetId: z.string().uuid("targetId must be a uuid").optional(),
     limit: z
       .string()
@@ -65,34 +90,27 @@ const listFeedbackQuerySchema = z
   })
   .strict();
 
-type WakaDb = ReturnType<typeof getDb>;
-
 export interface FeedbackRecord {
   id: string;
-  userId: string;
-  targetType: FeedbackTarget;
+  profileId: string;
+  targetType: FeedbackTargetType;
   targetId: string;
   value: FeedbackValue;
-  emotionLabel: FeedbackEmotion | null;
   correctionText: string | null;
-  source: string;
-  metadata: Record<string, unknown>;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface CreateFeedbackInput {
-  userId: string;
-  targetType: FeedbackTarget;
+  profileId: string;
+  targetType: FeedbackTargetType;
   targetId: string;
   value: FeedbackValue;
-  emotionLabel?: FeedbackEmotion;
   correctionText?: string;
 }
 
 export interface ListFeedbackInput {
-  userId: string;
-  targetType?: FeedbackTarget;
+  profileId: string;
+  targetType?: FeedbackTargetType;
   targetId?: string;
   limit: number;
 }
@@ -100,163 +118,82 @@ export interface ListFeedbackInput {
 export interface FeedbackRouteDependencies {
   getDatabase?: typeof getDb;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
-  createFeedback?: (
-    db: WakaDb,
-    input: CreateFeedbackInput,
-  ) => Promise<FeedbackRecord | null>;
-  listFeedback?: (
-    db: WakaDb,
-    input: ListFeedbackInput,
-  ) => Promise<FeedbackRecord[]>;
+  createFeedback?: (db: WakaDb, input: CreateFeedbackInput) => Promise<FeedbackRecord | null>;
+  listFeedback?: (db: WakaDb, input: ListFeedbackInput) => Promise<FeedbackRecord[]>;
 }
 
 function serializeFeedback(row: Feedback): FeedbackRecord {
   return {
     id: row.id,
-    userId: row.userId,
+    profileId: row.profileId,
     targetType: row.targetType,
     targetId: row.targetId,
     value: row.value,
-    emotionLabel: row.emotionLabel,
     correctionText: row.correctionText,
-    source: row.source,
-    metadata: row.metadata,
     createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-async function targetBelongsToUser(
+/**
+ * Is this target the acting profile's to judge?
+ *
+ * `feedback.target_id` is not a foreign key — it points at two tables — so
+ * this is the check that keeps it honest. Without it, feedback could be filed
+ * against any id at all, and regeneration would read a stranger's verdict as
+ * the owner's.
+ */
+async function targetBelongsToProfile(
   db: WakaDb,
-  input: { userId: string; targetType: FeedbackTarget; targetId: string },
+  input: { profileId: string; targetType: FeedbackTargetType; targetId: string },
 ): Promise<boolean> {
   if (input.targetType === "signal") {
     const [row] = await db
-      .select({ id: inspirations.id })
-      .from(inspirations)
-      .where(
-        and(
-          eq(inspirations.userId, input.userId),
-          eq(inspirations.id, input.targetId),
-        ),
-      )
+      .select({ id: signals.id })
+      .from(signals)
+      .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
       .limit(1);
     return Boolean(row);
-  }
-
-  if (input.targetType === "top_of_mind_note") {
-    const [row] = await db
-      .select({ id: wowMoments.id })
-      .from(wowMoments)
-      .where(
-        and(
-          eq(wowMoments.userId, input.userId),
-          eq(wowMoments.id, input.targetId),
-        ),
-      )
-      .limit(1);
-    return Boolean(row);
-  }
-
-  const filters = [
-    eq(meaningNodes.userId, input.userId),
-    eq(meaningNodes.id, input.targetId),
-  ];
-  if (input.targetType === "hypothesis") {
-    filters.push(eq(meaningNodes.type, "hypothesis"));
   }
 
   const [row] = await db
-    .select({ id: meaningNodes.id })
-    .from(meaningNodes)
-    .where(and(...filters))
+    .select({ id: topOfMindEntries.id })
+    .from(topOfMindEntries)
+    .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+    .where(
+      and(
+        eq(topOfMindEntries.id, input.targetId),
+        eq(topOfMinds.profileId, input.profileId),
+      ),
+    )
     .limit(1);
   return Boolean(row);
 }
 
-export async function createFeedbackForUser(
+export async function createFeedbackForProfile(
   db: WakaDb,
   input: CreateFeedbackInput,
 ): Promise<FeedbackRecord | null> {
-  return db.transaction(async (tx) => {
-    const txDb = tx as unknown as WakaDb;
-    let targetId = input.targetId;
-    if (input.targetType === "top_of_mind_note") {
-      const [target] = await tx
-        .select({ semanticKey: wowMoments.semanticKey })
-        .from(wowMoments)
-        .where(
-          and(
-            eq(wowMoments.userId, input.userId),
-            eq(wowMoments.id, input.targetId),
-          ),
-        )
-        .limit(1);
-      if (!target) return null;
-      if (target.semanticKey) {
-        await lockTopOfMindFamily(txDb, input.userId, target.semanticKey);
-        const [activeRevision] = await tx
-          .select({ id: wowMoments.id })
-          .from(wowMoments)
-          .where(
-            and(
-              eq(wowMoments.userId, input.userId),
-              eq(wowMoments.semanticKey, target.semanticKey),
-              eq(wowMoments.lifecycleStatus, "active"),
-            ),
-          )
-          .orderBy(desc(wowMoments.createdAt))
-          .limit(1);
-        targetId = activeRevision?.id ?? input.targetId;
-      }
-    }
-    const targetExists = await targetBelongsToUser(txDb, {
-      ...input,
-      targetId,
-    });
-    if (!targetExists) return null;
+  const owned = await targetBelongsToProfile(db, input);
+  if (!owned) return null;
 
-    const now = new Date();
-    const [row] = await tx
-      .insert(feedback)
-      .values({
-        userId: input.userId,
-        targetType: input.targetType,
-        targetId,
-        value: input.value,
-        emotionLabel: input.emotionLabel ?? null,
-        correctionText: input.correctionText ?? null,
-        source: "user",
-        updatedAt: now,
-      })
-      .returning();
-
-    if (!row) return null;
-
-    const metadata = await applyFeedbackToGraph(txDb, {
-      feedbackId: row.id,
-      userId: input.userId,
+  const [row] = await db
+    .insert(feedback)
+    .values({
+      profileId: input.profileId,
       targetType: input.targetType,
-      targetId,
+      targetId: input.targetId,
       value: input.value,
       correctionText: input.correctionText ?? null,
-    });
-
-    const updatedAt = new Date();
-    await tx
-      .update(feedback)
-      .set({ metadata, updatedAt })
-      .where(eq(feedback.id, row.id));
-
-    return serializeFeedback({ ...row, metadata, updatedAt });
-  });
+    })
+    .returning();
+  return row ? serializeFeedback(row) : null;
 }
 
-export async function listFeedbackForUser(
+export async function listFeedbackForProfile(
   db: WakaDb,
   input: ListFeedbackInput,
 ): Promise<FeedbackRecord[]> {
-  const filters = [eq(feedback.userId, input.userId)];
+  const filters = [eq(feedback.profileId, input.profileId)];
   if (input.targetType) filters.push(eq(feedback.targetType, input.targetType));
   if (input.targetId) filters.push(eq(feedback.targetId, input.targetId));
 
@@ -270,13 +207,22 @@ export async function listFeedbackForUser(
   return rows.map(serializeFeedback);
 }
 
+/** Is the caller asking for entry state rather than filing a verdict? */
+function asksForEntryState(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const value = (body as { value?: unknown }).value;
+  return (
+    typeof value === "string" && (ENTRY_STATE_VALUES as readonly string[]).includes(value)
+  );
+}
+
 export function createFeedbackRoutes(
   deps: FeedbackRouteDependencies = {},
 ): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
-  const createFeedback = deps.createFeedback ?? createFeedbackForUser;
-  const listFeedback = deps.listFeedback ?? listFeedbackForUser;
+  const createFeedback = deps.createFeedback ?? createFeedbackForProfile;
+  const listFeedback = deps.listFeedback ?? listFeedbackForProfile;
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
@@ -286,6 +232,10 @@ export function createFeedbackRoutes(
       rawBody = await c.req.json();
     } catch {
       return c.json({ error: "Request body must be valid JSON" }, 400);
+    }
+
+    if (asksForEntryState(rawBody)) {
+      return c.json({ error: ENTRY_STATE_MESSAGE }, 400);
     }
 
     const parsed = createFeedbackRequestSchema.safeParse(rawBody);
@@ -299,15 +249,20 @@ export function createFeedbackRoutes(
       );
     }
 
+    const session = c.get("session");
     const row = await createFeedback(getDatabase(), {
-      userId: c.get("user").id,
-      ...parsed.data,
+      profileId: session.profile.id,
+      targetType: parsed.data.targetType,
+      targetId: parsed.data.targetId,
+      value: parsed.data.value,
+      ...(parsed.data.correctionText
+        ? { correctionText: parsed.data.correctionText }
+        : {}),
     });
 
     if (!row) {
       return c.json({ error: "Feedback target not found" }, 404);
     }
-
     return c.json({ feedback: row }, 201);
   });
 
@@ -323,10 +278,11 @@ export function createFeedbackRoutes(
       );
     }
 
+    const session = c.get("session");
     const rows = await listFeedback(getDatabase(), {
-      userId: c.get("user").id,
-      targetType: parsedQuery.data.targetType,
-      targetId: parsedQuery.data.targetId,
+      profileId: session.profile.id,
+      ...(parsedQuery.data.targetType ? { targetType: parsedQuery.data.targetType } : {}),
+      ...(parsedQuery.data.targetId ? { targetId: parsedQuery.data.targetId } : {}),
       limit: parsedQuery.data.limit ?? DEFAULT_FEEDBACK_LIMIT,
     });
 

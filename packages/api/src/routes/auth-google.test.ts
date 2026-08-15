@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { accounts } from "../db/index.js";
+
 const mockState = vi.hoisted(() => ({
   db: undefined as any,
   createSessionRow: vi.fn(async () => undefined),
@@ -64,41 +66,61 @@ function mockGoogleToken(claimOverrides: Record<string, unknown>) {
   );
 }
 
+/**
+ * A queue of canned `select` results plus recorders for what the callback
+ * writes: `setCalls` collects every `update().set()` payload and
+ * `insertCalls` every `insert().values()` payload, tagged with its table.
+ */
 function makeDb(selectResults: unknown[][]) {
-  const select = vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        limit: vi.fn(async () => selectResults.shift() ?? []),
-      })),
-    })),
+  const select = vi.fn(() => {
+    const chain: any = {};
+    chain.from = vi.fn(() => chain);
+    chain.where = vi.fn(() => ({
+      limit: vi.fn(async () => selectResults.shift() ?? []),
+    }));
+    return chain;
+  });
+
+  const setCalls: Array<{ table: unknown; values: any }> = [];
+  const update = vi.fn((table: unknown) => ({
+    set: vi.fn((values: any) => {
+      setCalls.push({ table, values });
+      const result: any = Promise.resolve(undefined);
+      result.where = vi.fn(() => {
+        const written: any = Promise.resolve(undefined);
+        written.returning = vi.fn(async () => [{ id: "profile-1" }]);
+        return written;
+      });
+      return result;
+    }),
   }));
-  const updateSet = vi.fn();
-  const update = vi.fn(() => ({
-    set: updateSet.mockImplementation((values: unknown) => ({
-      where: vi.fn(() => ({
-        returning: vi.fn(async () => [
-          {
-            id: "existing-user-id",
-            email: "user@example.com",
-            name: "Existing User",
-          },
-        ]),
-      })),
-      values,
-    })),
+
+  const insertCalls: Array<{ table: unknown; values: any }> = [];
+  const insert = vi.fn((table: unknown) => ({
+    values: vi.fn((values: any) => {
+      insertCalls.push({ table, values });
+      const result: any = Promise.resolve(undefined);
+      result.returning = vi.fn(async () =>
+        table === accounts
+          ? [{ id: "new-account-id", email: values.email }]
+          : [{ id: "new-profile-id" }],
+      );
+      return result;
+    }),
   }));
-  const insert = vi.fn(() => ({
-    values: vi.fn(() => ({
-      returning: vi.fn(async () => [
-        {
-          id: "new-user-id",
-          email: "user@example.com",
-          name: "Google User",
-        },
-      ]),
-    })),
-  }));
-  return { select, update, updateSet, insert };
+
+  const db: any = { select, update, insert, setCalls, insertCalls };
+  db.transaction = vi.fn(async (work: (tx: typeof db) => Promise<unknown>) => work(db));
+  return db;
+}
+
+/** bySub miss → byEmail hit → the account's existing human profile. */
+function linkableAccountDb() {
+  return makeDb([
+    [],
+    [{ id: "account-1", email: "user@example.com", googleSub: null }],
+    [{ id: "profile-1", name: "Existing" }],
+  ]);
 }
 
 function callbackRequest(returnToCookie?: string) {
@@ -137,17 +159,7 @@ describe("Google OAuth callback email verification", () => {
   });
 
   it("links an existing password account when Google supplies a verified email", async () => {
-    const db = makeDb([
-      [],
-      [
-        {
-          id: "existing-user-id",
-          email: "user@example.com",
-          name: "Existing User",
-          googleSub: null,
-        },
-      ],
-    ]);
+    const db = linkableAccountDb();
     mockState.db = db;
     mockGoogleToken({ email_verified: true });
 
@@ -155,24 +167,56 @@ describe("Google OAuth callback email verification", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("http://localhost:5173/");
-    expect(db.updateSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        googleSub: "google-sub-123",
-        avatarUrl: "https://example.com/avatar.png",
-      }),
-    );
+    // google_sub is the account's key; the avatar belongs to the profile.
+    expect(db.setCalls[0]!.values).toMatchObject({ googleSub: "google-sub-123" });
+    expect(db.setCalls[1]!.values).toMatchObject({
+      avatarUrl: "https://example.com/avatar.png",
+    });
     expect(response.headers.get("set-cookie")).toContain("waka_session=signed-session-token");
     expect(mockState.createSessionRow).toHaveBeenCalledWith({
-      userId: "existing-user-id",
+      profileId: "profile-1",
+      token: "signed-session-token",
+    });
+  });
+
+  it("keeps a name the person already chose instead of overwriting it with Google's", async () => {
+    const db = linkableAccountDb();
+    mockState.db = db;
+    mockGoogleToken({ email_verified: true });
+
+    await callbackRequest();
+
+    expect(db.setCalls[1]!.values).toMatchObject({ name: "Existing" });
+  });
+
+  it("creates the account and its human profile together on a first sign-in", async () => {
+    const db = makeDb([[], []]);
+    mockState.db = db;
+    mockGoogleToken({ email_verified: true });
+
+    const response = await callbackRequest();
+
+    expect(response.status).toBe(302);
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(db.insertCalls[0]!.values).toMatchObject({
+      email: "user@example.com",
+      passwordHash: null,
+      googleSub: "google-sub-123",
+    });
+    expect(db.insertCalls[1]!.values).toMatchObject({
+      accountId: "new-account-id",
+      type: "human",
+      name: "Google User",
+    });
+    // The session acts as the profile that owns the memory, not the account.
+    expect(mockState.createSessionRow).toHaveBeenCalledWith({
+      profileId: "new-profile-id",
       token: "signed-session-token",
     });
   });
 
   it("returns an invited user to the in-app join offer after OAuth", async () => {
-    mockState.db = makeDb([
-      [],
-      [{ id: "existing-user-id", email: "user@example.com", name: "Existing User" }],
-    ]);
+    mockState.db = linkableAccountDb();
     mockGoogleToken({ email_verified: true });
 
     const response = await callbackRequest("/?join=ROOM-123");
@@ -184,15 +228,27 @@ describe("Google OAuth callback email verification", () => {
   });
 
   it("rejects a backslash-shaped cross-origin return path", async () => {
-    mockState.db = makeDb([
-      [],
-      [{ id: "existing-user-id", email: "user@example.com", name: "Existing User" }],
-    ]);
+    mockState.db = linkableAccountDb();
     mockGoogleToken({ email_verified: true });
 
     const response = await callbackRequest("/\\evil.example/path");
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe("http://localhost:5173/");
+  });
+
+  it("refuses to move a link when the email already belongs to another Google account", async () => {
+    const db = makeDb([
+      [],
+      [{ id: "account-1", email: "user@example.com", googleSub: "some-other-sub" }],
+    ]);
+    mockState.db = db;
+    mockGoogleToken({ email_verified: true });
+
+    const response = await callbackRequest();
+
+    expect(response.headers.get("location")).toContain("error=account_conflict");
+    expect(db.update).not.toHaveBeenCalled();
+    expect(mockState.createSessionRow).not.toHaveBeenCalled();
   });
 });

@@ -1,97 +1,70 @@
 /**
  * Hono application entry-point.
  *
- * This module wires together the route modules into a single Hono app that
- * SST will deploy to Lambda (and that vitest exercises directly via
- * `app.request(...)`). Keep this file thin — actual handlers belong in
- * `./routes/*` — so route ownership stays clear.
+ * Wires the route modules into a single app that SST deploys to Lambda and
+ * that vitest exercises directly via `app.request(...)`. Keep this file thin
+ * — handlers belong in `./routes/*` — so route ownership stays obvious.
+ *
+ * The mounts follow the three layers: inspirations are what a person or an
+ * agent captures, signals are what WAKA distills from them, and the top of
+ * mind is the single artifact those signals synthesize into. Groups pool
+ * shared signals and grow an artifact of their own.
  */
 
 import { Hono } from "hono";
 import { handle } from "hono/aws-lambda";
 
+import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
 import { attachmentsRoutes } from "./routes/attachments.js";
 import { authRoutes } from "./routes/auth.js";
-import { adminBackgroundJobsRoutes } from "./routes/admin-background-jobs.js";
-import { adminMeaningGraphRoutes } from "./routes/admin-meaning-graph.js";
-import { adminTopOfMindPreviewRoutes } from "./routes/admin-top-of-mind-preview.js";
-import { decisionMemoRoutes } from "./routes/decision-memo.js";
 import { feedbackRoutes } from "./routes/feedback.js";
-import { guidedReflectionRoutes } from "./routes/guided-reflection.js";
 import { groupsRoutes } from "./routes/groups.js";
 import { healthRoutes } from "./routes/health.js";
 import { inspirationsRoutes } from "./routes/inspirations.js";
+import { profilesRoutes } from "./routes/profiles.js";
 import { publicProfileRoutes } from "./routes/public-profiles.js";
-import { signalArchiveRoutes } from "./routes/signals.js";
+import { signalsRoutes } from "./routes/signals.js";
 import { topOfMindRoutes } from "./routes/top-of-mind.js";
-import { wowMomentsRoutes } from "./routes/wow-moments.js";
-import { wowStatusRoutes } from "./routes/wow-status.js";
 
 export const app = new Hono();
 
 // Liveness probe + capability handshake for external clients (waka-mcp
 // validates the API URL against it at login; capabilities let clients
-// feature-detect newer query params instead of guessing).
+// feature-detect instead of guessing).
 app.route("/api/health", healthRoutes);
 
-// Auth routes (signup, login, ...) live under /api/auth.
+// Signup, login, session, profile preferences, and the CLI loopback flow.
 app.route("/api/auth", authRoutes);
 
-// Public profile routes are deliberately unauthenticated and return only the
-// owner-approved public surface.
+// The memories an account owns — its human profile and any agent profiles.
+app.route("/api/profiles", profilesRoutes);
+
+// Deliberately unauthenticated: returns only the owner-approved surface.
 app.route("/api/public/profiles", publicProfileRoutes);
 
-// Internal/dev-only background job observability routes. The router itself
-// applies both env-gate and requireAuth so the namespace stays hidden by
-// default while returning 401 for unauthenticated requests when explicitly on.
+// Internal/dev-only queue observability. The router applies its own env
+// gate, requireAuth, and admin allowlist, so the namespace stays hidden by
+// default while still returning 401 for anonymous callers when enabled.
 app.route("/api/admin/background-jobs", adminBackgroundJobsRoutes);
 
-// Internal/dev-only meaning graph inspection. This stays under /api/admin so
-// graph state is available for reviewers without becoming a user-facing API.
-app.route("/api/admin/meaning-graph", adminMeaningGraphRoutes);
-
-// Internal/dev-only preview of how the current meaning graph could power the
-// top-of-mind experience.
-app.route("/api/admin/top-of-mind-preview", adminTopOfMindPreviewRoutes);
-
-// Inspirations routes (create, list, ...) live under /api/inspirations.
-// Every handler in this router requires a valid session — the router
-// applies `requireAuth` at the mount point.
+// Layer 1 — capture, edit, delete, and search the raw archive.
 app.route("/api/inspirations", inspirationsRoutes);
 
-// User-facing guided Reflect Deeper prompt generation. The route owns the
-// model contract and returns deterministic fallback copy when generation is
-// unavailable, so the capture flow can stay safe and non-blocking.
-app.route("/api/guided-reflection", guidedReflectionRoutes);
-
-// User-facing saved-signal archive and deep-dive surface.
-app.route("/api/signals", signalArchiveRoutes);
-
-// User-facing reading of the current meaning graph.
-app.route("/api/top-of-mind", topOfMindRoutes);
-
-// Low-prominence scaffold for turning graph-backed notes into a build decision.
-app.route("/api/decision-memo", decisionMemoRoutes);
-
-// User feedback teaches the graph-backed signal and top-of-mind loop.
-app.route("/api/feedback", feedbackRoutes);
-
-// Group Top of Mind boards: pool members' shared inspirations into a shared,
-// synthesized board, and the room's collaboratively shaped direction.
-app.route("/api/groups", groupsRoutes);
-
-// Attachments routes (presigned uploads, ...) live under /api/attachments.
-// The router applies `requireAuth` at the mount point, so no anonymous
-// caller can mint an S3 upload URL.
+// Presigned uploads. The router applies requireAuth at the mount point, so
+// no anonymous caller can mint an S3 upload URL.
 app.route("/api/attachments", attachmentsRoutes);
 
-// WOW moment routes list persisted generated moments for the signed-in user.
-// Generation/scoring pipelines land later; this mount only exposes rows that
-// already exist in the database.
-app.route("/api/wow-moments", wowMomentsRoutes);
+// Layer 2 — the evidence-backed patterns WAKA derives, and their shares.
+app.route("/api/signals", signalsRoutes);
 
-// Tenant-scoped development/status view for the visible WOW generation pipeline.
-app.route("/api/wow-status", wowStatusRoutes);
+// Layer 3 — the one live artifact per profile, and its version chain.
+app.route("/api/top-of-mind", topOfMindRoutes);
+
+// Group walls of shared signals, and the artifact members co-edit.
+app.route("/api/groups", groupsRoutes);
+
+// Reader verdicts that teach the next regeneration.
+app.route("/api/feedback", feedbackRoutes);
 
 export const handler = handle(app);
 

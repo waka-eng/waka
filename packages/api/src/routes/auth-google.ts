@@ -13,10 +13,11 @@
  *   GET /api/auth/google/callback
  *     Receives `?code=...&state=...` from Google, validates the state cookie
  *     matches, exchanges the code for tokens (passing the PKCE verifier),
- *     decodes and validates the ID token's iss/aud/exp claims, upserts the
- *     user row (linking by google_sub or email), mints our normal session
- *     JWT into the standard waka_session cookie, and 302-redirects the
- *     visitor back to the frontend home route.
+ *     decodes and validates the ID token's iss/aud/exp claims, resolves the
+ *     account (linking by google_sub or email, creating it and its human
+ *     profile on a first sign-in), mints our normal session JWT into the
+ *     standard waka_session cookie, and 302-redirects the visitor back to
+ *     the frontend home route.
  *
  * Why this lives in its own file
  * ------------------------------
@@ -35,11 +36,11 @@
  *     them in as the attacker.
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
-import { users } from "../db/index.js";
+import { accounts, profiles } from "../db/index.js";
 import {
   buildSessionCookie,
   signSessionToken,
@@ -238,6 +239,60 @@ function decodeIdToken(idToken: string): GoogleIdTokenClaims {
 }
 
 // ---------------------------------------------------------------------------
+// The human profile behind a Google identity
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the human profile a Google sign-in acts as, refreshing what Google
+ * is authoritative about.
+ *
+ * The avatar is re-read on every sign-in (people change their Google photo
+ * and expect it to follow); the name is only filled when the profile has
+ * none, because a name edited in WAKA is the person's own choice and Google
+ * must not overwrite it.
+ *
+ * The insert is a recovery path: an account gets its human profile in the
+ * same transaction that creates it, so this only fires for a row that somehow
+ * lost one — and a session with no profile to act as could authenticate while
+ * owning nothing.
+ */
+async function resolveHumanProfile(
+  db: ReturnType<typeof getDb>,
+  accountId: string,
+  claims: GoogleIdTokenClaims,
+): Promise<string> {
+  const existing = await db
+    .select({ id: profiles.id, name: profiles.name })
+    .from(profiles)
+    .where(and(eq(profiles.accountId, accountId), eq(profiles.type, "human")))
+    .limit(1);
+
+  const found = existing[0];
+  if (found) {
+    await db
+      .update(profiles)
+      .set({
+        avatarUrl: claims.picture ?? null,
+        name: found.name && found.name.length > 0 ? found.name : (claims.name ?? ""),
+        updatedAt: new Date(),
+      })
+      .where(eq(profiles.id, found.id));
+    return found.id;
+  }
+
+  const inserted = await db
+    .insert(profiles)
+    .values({
+      accountId,
+      type: "human",
+      name: claims.name ?? "",
+      avatarUrl: claims.picture ?? null,
+    })
+    .returning({ id: profiles.id });
+  return inserted[0]!.id;
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -429,68 +484,50 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   }
 
   // -------------------------------------------------------------------------
-  // Upsert the user row.
+  // Resolve the account behind this Google identity.
   //
   // Three cases to handle:
-  //   1. We've seen this google_sub before  → log them in as that user.
+  //   1. We've seen this google_sub before  → sign in as that account.
   //   2. We've seen this email but no google_sub  → link the existing
-  //      account so the user can later sign in with either method.
-  //   3. Brand-new identity  → insert a new row.
+  //      account so the person can later sign in with either method.
+  //   3. Brand-new identity  → create the account and its human profile.
   //
   // We do this in a single SELECT-then-mutate path rather than ON CONFLICT
-  // because we may need to update either the `google_sub` (linking case)
-  // or the `avatar_url` (refresh case) and both branches are easier to
-  // reason about as explicit code.
+  // because we may need to update the `google_sub` (linking case) and both
+  // branches are easier to reason about as explicit code.
   // -------------------------------------------------------------------------
 
   const normalizedEmail = claims.email.trim().toLowerCase();
   const db = getDb();
 
-  let userRow: { id: string; email: string; name: string };
+  /** The account that signed in, and the profile the session will act as. */
+  let identity: { accountId: string; email: string; profileId: string };
 
   // 1. Look up by google_sub first — this is the immutable identity key.
   const bySub = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-    })
-    .from(users)
-    .where(eq(users.googleSub, claims.sub))
+    .select({ id: accounts.id, email: accounts.email })
+    .from(accounts)
+    .where(eq(accounts.googleSub, claims.sub))
     .limit(1);
 
   if (bySub.length > 0) {
-    // Refresh avatar (and name if we don't already have one) on every login.
     const found = bySub[0]!;
-    const updated = await db
-      .update(users)
-      .set({
-        avatarUrl: claims.picture ?? null,
-        name:
-          found.name && found.name.length > 0
-            ? found.name
-            : (claims.name ?? ""),
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, found.id))
-      .returning({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-      });
-    userRow = updated[0]!;
+    identity = {
+      accountId: found.id,
+      email: found.email,
+      profileId: await resolveHumanProfile(db, found.id, claims),
+    };
   } else {
     // 2. No google_sub match — look up by email so we can link an existing
     //    password-only account to this Google identity.
     const byEmail = await db
       .select({
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        googleSub: users.googleSub,
+        id: accounts.id,
+        email: accounts.email,
+        googleSub: accounts.googleSub,
       })
-      .from(users)
-      .where(eq(users.email, normalizedEmail))
+      .from(accounts)
+      .where(eq(accounts.email, normalizedEmail))
       .limit(1);
 
     if (byEmail.length > 0) {
@@ -502,63 +539,68 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
         // overwrite the link rather than risk an account-takeover bug.
         return failTo("account_conflict");
       }
-      const updated = await db
-        .update(users)
-        .set({
-          googleSub: claims.sub,
-          avatarUrl: claims.picture ?? null,
-          name:
-            found.name && found.name.length > 0
-              ? found.name
-              : (claims.name ?? ""),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, found.id))
-        .returning({
-          id: users.id,
-          email: users.email,
-          name: users.name,
-        });
-      userRow = updated[0]!;
+      await db
+        .update(accounts)
+        .set({ googleSub: claims.sub, updatedAt: new Date() })
+        .where(eq(accounts.id, found.id));
+      identity = {
+        accountId: found.id,
+        email: found.email,
+        profileId: await resolveHumanProfile(db, found.id, claims),
+      };
     } else {
-      // 3. Brand-new identity — insert. Wrap the unique-violation case in
-      //    case two callbacks raced past both lookups above.
+      // 3. Brand-new identity. The account and the memory it owns are created
+      //    together: an account with no profile could sign in and own
+      //    nothing. Wrap the unique-violation case in case two callbacks
+      //    raced past both lookups above.
       try {
-        const inserted = await db
-          .insert(users)
-          .values({
-            email: normalizedEmail,
-            // No password — this account is OAuth-only until the user sets one.
-            passwordHash: null,
-            googleSub: claims.sub,
-            name: claims.name ?? "",
-            avatarUrl: claims.picture ?? null,
-          })
-          .returning({
-            id: users.id,
-            email: users.email,
-            name: users.name,
-          });
-        userRow = inserted[0]!;
+        identity = await db.transaction(async (tx) => {
+          const [account] = await tx
+            .insert(accounts)
+            .values({
+              email: normalizedEmail,
+              // No password — OAuth-only until the person sets one.
+              passwordHash: null,
+              googleSub: claims.sub,
+            })
+            .returning({ id: accounts.id, email: accounts.email });
+
+          const [profile] = await tx
+            .insert(profiles)
+            .values({
+              accountId: account!.id,
+              type: "human",
+              name: claims.name ?? "",
+              avatarUrl: claims.picture ?? null,
+            })
+            .returning({ id: profiles.id });
+
+          return {
+            accountId: account!.id,
+            email: account!.email,
+            profileId: profile!.id,
+          };
+        });
       } catch (err) {
         const code = (err as { code?: string } | null)?.code;
         if (code === "23505") {
           // The losing side of a race against a concurrent OAuth login by
           // the same identity. Re-read by google_sub and use whichever row
           // the winner inserted.
-          const racedRow = await db
-            .select({
-              id: users.id,
-              email: users.email,
-              name: users.name,
-            })
-            .from(users)
-            .where(eq(users.googleSub, claims.sub))
+          const raced = await db
+            .select({ id: accounts.id, email: accounts.email })
+            .from(accounts)
+            .where(eq(accounts.googleSub, claims.sub))
             .limit(1);
-          if (racedRow.length === 0) {
+          const winner = raced[0];
+          if (!winner) {
             return failTo("upsert_failed");
           }
-          userRow = racedRow[0]!;
+          identity = {
+            accountId: winner.id,
+            email: winner.email,
+            profileId: await resolveHumanProfile(db, winner.id, claims),
+          };
         } else {
           throw err;
         }
@@ -573,15 +615,15 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   // -------------------------------------------------------------------------
 
   const sessionToken = await signSessionToken({
-    userId: userRow.id,
-    email: userRow.email,
+    profileId: identity.profileId,
+    email: identity.email,
   });
 
   // Persist the matching server-side session row so `/api/auth/logout` can
   // revoke this exact session. Mirrors the post-signup write in
   // routes/auth.ts — both paths must produce the same row shape so the
   // middleware can't tell OAuth and password sessions apart.
-  await createSessionRow({ userId: userRow.id, token: sessionToken });
+  await createSessionRow({ profileId: identity.profileId, token: sessionToken });
 
   // Append, don't replace — we want both the session cookie and the
   // delete-temp-cookie headers to land in one response.

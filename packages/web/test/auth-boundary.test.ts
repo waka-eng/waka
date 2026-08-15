@@ -6,7 +6,14 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RequireAuth } from "../src/components/RequireAuth";
-import { deleteAccount, fetchCurrentUser, login, updateAuthPreferences, updateAuthProfile } from "../src/lib/api";
+import {
+  deleteAccount,
+  fetchCurrentViewer,
+  login,
+  updateAuthPreferences,
+  updateAuthProfile,
+} from "../src/lib/api";
+import type { ApiViewer } from "../src/lib/api";
 import {
   AuthProvider,
   useAuth,
@@ -18,7 +25,7 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/lib/api")>();
   return {
     ...actual,
-    fetchCurrentUser: vi.fn(async () => null),
+    fetchCurrentViewer: vi.fn(async () => null),
     login: vi.fn(),
     signup: vi.fn(),
     logout: vi.fn(async () => undefined),
@@ -32,15 +39,49 @@ vi.mock("../src/lib/api", async (importOriginal) => {
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-const STORAGE_KEY = "waka.auth.user";
-const cachedUser = {
-  id: "cached-user",
+const STORAGE_KEY = "waka.auth.viewer";
+
+/**
+ * The two halves of "who is this session", built together so a test never
+ * accidentally asserts against an account carrying a profile's fields.
+ */
+function viewer(input: {
+  id: string;
+  email: string;
+  name: string;
+  preferredLocale?: "en-US" | "ko-KR";
+  onboardingCompletedAt?: string | null;
+  isAdmin?: boolean;
+}): ApiViewer {
+  return {
+    account: {
+      id: `account-${input.id}`,
+      email: input.email,
+      onboardingCompletedAt:
+        input.onboardingCompletedAt === undefined
+          ? "2026-01-01T00:00:00.000Z"
+          : input.onboardingCompletedAt,
+      isAdmin: input.isAdmin === true,
+    },
+    profile: {
+      id: `profile-${input.id}`,
+      accountId: `account-${input.id}`,
+      type: "human",
+      name: input.name,
+      avatarUrl: null,
+      preferredLocale: input.preferredLocale ?? "en-US",
+      publicHandle: null,
+      publicProfileEnabled: false,
+      publicTopOfMindEnabled: false,
+    },
+  };
+}
+
+const cachedViewer = viewer({
+  id: "cached",
   email: "cached@example.com",
   name: "Cached User",
-  preferredLocale: "en-US" as const,
-  onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-  isAdmin: false,
-};
+});
 
 let mountedRoot: Root | null = null;
 let mountedContainer: HTMLDivElement | null = null;
@@ -65,7 +106,7 @@ function installMemoryLocalStorage(): void {
 
 beforeEach(() => {
   installMemoryLocalStorage();
-  vi.mocked(fetchCurrentUser).mockReset();
+  vi.mocked(fetchCurrentViewer).mockReset();
   vi.mocked(login).mockReset();
   vi.mocked(updateAuthPreferences).mockReset();
   vi.mocked(updateAuthProfile).mockReset();
@@ -102,7 +143,7 @@ function LoginActionProbe(): JSX.Element {
   return createElement(
     "p",
     null,
-    latestAuth.user ? `Signed in as ${latestAuth.user.email}` : "Sign in probe",
+    latestAuth.account ? `Signed in as ${latestAuth.account.email}` : "Sign in probe",
   );
 }
 
@@ -169,7 +210,7 @@ async function renderAuthRoutes({
 
 describe("auth boundary", () => {
   it("keeps the login page reachable and visible for unauthenticated visitors", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/login" });
 
@@ -180,7 +221,7 @@ describe("auth boundary", () => {
   });
 
   it("supports expected keyboard navigation for login and signup tabs", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/login" });
     const loginTab = container.querySelector<HTMLButtonElement>("#login-tab-login");
@@ -231,7 +272,7 @@ describe("auth boundary", () => {
   });
 
   it("updates all signup shell copy when the pre-submit language selector changes", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/login" });
     const signupTab = container.querySelector<HTMLButtonElement>("#login-tab-signup");
@@ -267,7 +308,7 @@ describe("auth boundary", () => {
   });
 
   it("updates the OAuth error banner when the pre-submit signup language changes", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/login?error=missing_code" });
 
@@ -292,7 +333,7 @@ describe("auth boundary", () => {
   });
 
   it("keeps standalone SignupForm language selection backed by stored locale", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({
       initialPath: "/login",
@@ -312,9 +353,9 @@ describe("auth boundary", () => {
     expect(container.textContent).not.toContain("Create account");
   });
 
-  it("clears a cached user and routes home visitors to login when /auth/me returns no user", async () => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedUser));
-    vi.mocked(fetchCurrentUser).mockResolvedValue(null);
+  it("clears the cache and routes home visitors to login when /auth/me returns nobody", async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedViewer));
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(null);
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
@@ -323,9 +364,9 @@ describe("auth boundary", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
-  it("does not treat a cached user as authenticated when initial /auth/me fails", async () => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedUser));
-    vi.mocked(fetchCurrentUser).mockRejectedValue(new Error("server unavailable"));
+  it("does not treat a cached viewer as authenticated when initial /auth/me fails", async () => {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedViewer));
+    vi.mocked(fetchCurrentViewer).mockRejectedValue(new Error("server unavailable"));
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
@@ -335,22 +376,15 @@ describe("auth boundary", () => {
   });
 
   it("does not let a stale initial /auth/me response clear a newer login", async () => {
-    let resolveInitialMe: (user: null) => void = () => undefined;
-    vi.mocked(fetchCurrentUser).mockReturnValue(
+    let resolveInitialMe: (viewer: null) => void = () => undefined;
+    vi.mocked(fetchCurrentViewer).mockReturnValue(
       new Promise((resolve) => {
         resolveInitialMe = resolve;
       }),
     );
     vi.mocked(login).mockResolvedValue({
       token: "test-token",
-      user: {
-        id: "fresh-user",
-        email: "fresh@example.com",
-        name: "Fresh User",
-        preferredLocale: "en-US",
-        onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-        isAdmin: false,
-      },
+      ...viewer({ id: "fresh", email: "fresh@example.com", name: "Fresh User" }),
     });
 
     const container = await renderAuthRoutes({
@@ -373,20 +407,21 @@ describe("auth boundary", () => {
 
     expect(container.textContent).toContain("Signed in as fresh@example.com");
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}")).toMatchObject({
-      id: "fresh-user",
-      email: "fresh@example.com",
+      account: { email: "fresh@example.com" },
+      profile: { name: "Fresh User" },
     });
   });
 
   it("routes authenticated users with incomplete onboarding to onboarding", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue({
-      id: "fresh-user",
-      email: "fresh@example.com",
-      name: "",
-      preferredLocale: "ko-KR",
-      onboardingCompletedAt: null,
-      isAdmin: false,
-    });
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(
+      viewer({
+        id: "fresh",
+        email: "fresh@example.com",
+        name: "",
+        preferredLocale: "ko-KR",
+        onboardingCompletedAt: null,
+      }),
+    );
 
     const container = await renderAuthRoutes({ initialPath: "/" });
 
@@ -395,14 +430,9 @@ describe("auth boundary", () => {
   });
 
   it("redirects authenticated non-admin users away from admin routes", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue({
-      id: "fresh-user",
-      email: "fresh@example.com",
-      name: "Fresh User",
-      preferredLocale: "en-US",
-      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-      isAdmin: false,
-    });
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(
+      viewer({ id: "fresh", email: "fresh@example.com", name: "Fresh User" }),
+    );
 
     const container = await renderAuthRoutes({ initialPath: "/admin" });
 
@@ -411,14 +441,14 @@ describe("auth boundary", () => {
   });
 
   it("allows authenticated admin users through admin routes", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue({
-      id: "admin-user",
-      email: "admin@example.com",
-      name: "Admin User",
-      preferredLocale: "en-US",
-      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-      isAdmin: true,
-    });
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(
+      viewer({
+        id: "admin",
+        email: "admin@example.com",
+        name: "Admin User",
+        isAdmin: true,
+      }),
+    );
 
     const container = await renderAuthRoutes({ initialPath: "/admin" });
 
@@ -426,24 +456,17 @@ describe("auth boundary", () => {
   });
 
   it("persists locale preference updates through auth state and localStorage", async () => {
-    vi.mocked(fetchCurrentUser).mockResolvedValue({
-      id: "fresh-user",
-      email: "fresh@example.com",
-      name: "Fresh User",
-      preferredLocale: "en-US",
-      onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-      isAdmin: false,
-    });
-    vi.mocked(updateAuthPreferences).mockResolvedValue({
-      user: {
-        id: "fresh-user",
+    vi.mocked(fetchCurrentViewer).mockResolvedValue(
+      viewer({ id: "fresh", email: "fresh@example.com", name: "Fresh User" }),
+    );
+    vi.mocked(updateAuthPreferences).mockResolvedValue(
+      viewer({
+        id: "fresh",
         email: "fresh@example.com",
         name: "Fresh User",
         preferredLocale: "ko-KR",
-        onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-        isAdmin: false,
-      },
-    });
+      }),
+    );
 
     await renderAuthRoutes({
       initialPath: "/login",
@@ -455,9 +478,9 @@ describe("auth boundary", () => {
     });
 
     expect(updateAuthPreferences).toHaveBeenCalledWith({ preferredLocale: "ko-KR" });
-    expect(latestAuth.user?.preferredLocale).toBe("ko-KR");
+    expect(latestAuth.profile?.preferredLocale).toBe("ko-KR");
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}")).toMatchObject({
-      preferredLocale: "ko-KR",
+      profile: { preferredLocale: "ko-KR" },
     });
   });
 });
