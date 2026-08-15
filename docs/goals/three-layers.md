@@ -827,6 +827,42 @@ Spend this phase: ~15 flash-lite/embedding calls. **Running total across
 Phases 3–6: ~90 calls**, inside the ≤450 budgeted across the three
 spending phases.
 
+### Phase 8 — the sweep (2026-08-15)
+
+**Gate: PASSED.** The grep gate over `packages/**`, `tools/**`,
+`scripts/**` returns **zero hits** for every dead concept in both
+vocabularies: `wow_`, `wowMoment`, `WowMoment`, `top_of_mind_note`,
+`contextNode`, `context_node`, `contextEdge`, `context_edge`,
+`meaningNode`, `meaningEdge`, `meaningPacket`, `signalPacket`,
+`signal_packets`, `spark`, `Spark`, `sharedToGroups`,
+`shared_to_groups`, `sessionClient`, and `lens` as an identifier. All
+five checks green plus `db:check`.
+
+Two occurrences of the *word* "lens" survive, both in prose describing
+what an agent profile is **not** ("rather than as a lens over the
+person's") — the canon's own phrasing for the idea the lens boards got
+wrong. That is the English word, not the dead column; the gate targets
+the identifier forms.
+
+Found and fixed while sweeping: **`/api/health` was still advertising
+`top-of-mind-lens`**, so a client feature-detecting against it would have
+been told a deleted capability existed. The set is now `three-layers`,
+`profiles`, `cli-auth-consent`, `signal-source`,
+`attachment-enrichment`. This is the sanctioned break of the
+stable-strings rule that Phase 7 names; the test that pins those strings
+was updated deliberately rather than deleted, because it is what makes
+the next rename a decision instead of an accident.
+
+Residue removed: **664 dead CSS rules** (surface.css 2891 → 1417 lines,
+global.css 5572 → 2767), taking the built stylesheet from 121.66 kB to
+56.67 kB. Removal was mechanical but conservative — a rule went only if
+every class it names is referenced nowhere in the app — and verified by
+checking that of the 131 classes components actually use, **zero** lost a
+rule they previously had. 30 orphaned i18n keys deleted. Six superseded
+design docs plus `HANDOFF.md` moved to `docs/archive/pre-three-layers/`
+with a README saying what each described and why it is gone. `AGENTS.md`
+and `README.md` rewritten to the canon.
+
 **Tenant integrity is enforced by the database, not by convention.** Seven
 composite foreign keys — `(profile_id, parent_id)` against unique
 constraints on `inspirations` and `signals` — make a cross-profile row

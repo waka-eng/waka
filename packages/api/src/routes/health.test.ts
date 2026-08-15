@@ -17,9 +17,16 @@ describe("GET /api/health", () => {
     expect(body.capabilities).toEqual([...apiCapabilities]);
   });
 
+  /**
+   * Clients key off these exact strings, so a rename is a break they can see
+   * — which is the point of naming capabilities rather than version numbers.
+   * Changing one is a deliberate act; this test is what makes it deliberate.
+   */
   it("keeps the shipped capability strings stable for external clients", () => {
-    expect(apiCapabilities).toContain("cli-auth");
+    expect(apiCapabilities).toContain("three-layers");
+    expect(apiCapabilities).toContain("profiles");
+    expect(apiCapabilities).toContain("cli-auth-consent");
     expect(apiCapabilities).toContain("signal-source");
-    expect(apiCapabilities).toContain("top-of-mind-lens");
+    expect(apiCapabilities).toContain("attachment-enrichment");
   });
 });

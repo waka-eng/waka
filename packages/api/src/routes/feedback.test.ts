@@ -145,7 +145,7 @@ describe("POST /api/feedback", () => {
   });
 
   it.each([
-    ["a target type that is not a feedback target", { targetType: "wow_moment", targetId, value: "true" }],
+    ["a target type that is not a feedback target", { targetType: "inspiration", targetId, value: "true" }],
     ["a target id that is not a uuid", { targetType: "signal", targetId: "nope", value: "true" }],
     ["a field nobody asked for", { targetType: "signal", targetId, value: "true", source: "user" }],
   ])("rejects %s before persistence", async (_label, body) => {

@@ -38,7 +38,7 @@ import { cosineSimilarity } from "./vector.js";
  * true, spanned two members, and survived the restatement filter — they are
  * not of wildly different quality, and the question here is what the board
  * still lacks. Scoring quality highly would rebuild arrival order under a new
- * name, since `wow_score` is roughly what ranked the triggers.
+ * name, since arrival was already ordered by roughly the same strength.
  */
 export const BOARD_QUALITY_WEIGHT = 0.2;
 
