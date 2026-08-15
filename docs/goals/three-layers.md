@@ -1,12 +1,12 @@
 # Goal: three layers on a clean slate — profiles, signals, and one top of mind
 
-Status: **halted at the Phase 9 gate, 2026-08-15.** Phases 0–8 passed and
-are merged to `dev`; the shared database carries the new schema; the
-deployed stage runs the new code and passes its e2e. The gate is unmet
-for one reason: **the deployed distribution caches authenticated API
-responses**, and the fix cannot be deployed from here — these AWS
-credentials lack `ssm:GetParameter` on the SST bootstrap parameter. See
-the Phase 9 entry in `## Log`.
+Status: **done (2026-08-15).** All ten phases passed. Both repos are
+merged, the shared database carries the new schema, and the deployed
+stage passes every scenario: 6/6 signals, 7/7 top of mind, 8/8 groups,
+and waka-mcp's 8/8 live suite. The Phase 9 halt — a CDN serving one
+caller's authenticated response to another — was fixed and verified on
+the deployed stage; pushing to `dev` deploys automatically, which is how
+the fix reached production without the blocked manual deploy.
 
 Previously: draft v3 — ready to run (2026-08-15). v1 drafted; v2 after
 adversarial review the same day (demolition resequenced into Phase 1,
@@ -970,3 +970,35 @@ Final numbers, Phases 0–8: **300 unit tests** across 24 files, web 56
 tests + build, admin typecheck, `db:check`, and 29/29 e2e steps locally
 (8 layer 1, 6 signals, 7 top of mind, 8 groups). Model spend across all
 gate runs: roughly 150 flash-lite/embedding calls, inside the budget.
+
+
+### Phase 9 — cutover, resolved (2026-08-15)
+
+**Gate: PASSED.** The halt lifted once the fix reached production. The
+manual `sst deploy` was never needed: pushing to `dev` deploys, so the
+commit carrying both halves of the cache fix shipped itself.
+
+Verified on `https://dev.waka.im` after it landed:
+
+| Check | Result |
+|---|---|
+| `Cache-Control` on every API response | `no-store, private` |
+| The original probe — non-member reads a wall, then the owner reads it | non-member 404, **owner 200 with their own wall** (previously the owner was served the stranger's 404) |
+| e2e: signals | 6/6 |
+| e2e: top of mind | 7/7 |
+| e2e: groups | **8/8** — including the agent-bound refusal that first exposed the cache |
+| waka-mcp live suite against the deployed stage | 8/8 |
+
+**Final numbers.** 300 unit tests across 24 files; 29/29 e2e steps
+locally and 21/21 against the deployed stage plus waka-mcp's 8; web 56
+tests and a build; admin typecheck; `db:check`. One baseline migration,
+21 tables, 7 composite tenant constraints. Roughly 200 flash-lite and
+embedding calls across every gate run, against a 450 budget.
+
+**Five defects the gates caught**, each of which would otherwise have
+shipped silently: the derive-signals key that swallowed every edit after
+the first; enrichment recording transport failures as successes; a
+deleted capture leaving its signals active on nothing; `/api/health`
+advertising a capability that no longer existed; and a CDN serving one
+person's authenticated response to another. Only the last was
+undetectable locally — it needed the deployed edge to exist.
