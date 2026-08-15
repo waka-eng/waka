@@ -1021,12 +1021,26 @@ export async function affirmGroupProposal(
     )
     .limit(1);
 
+  let accepted = false;
   if (seconded) {
     const now = new Date();
-    await db
+    // Guard on `status = 'open'`: the open check above was a separate read,
+    // and a decline that commits between it and here would otherwise be flipped
+    // back to accepted. The guard makes the transition atomic — whichever of
+    // accept and decline commits second finds the row no longer open and does
+    // nothing. `accepted` follows the row actually changing, so the caller does
+    // not refresh a board for a change the group turned down.
+    const flipped = await db
       .update(groupTopOfMindProposals)
       .set({ status: "accepted", resolvedAt: now, updatedAt: now })
-      .where(eq(groupTopOfMindProposals.id, proposal.id));
+      .where(
+        and(
+          eq(groupTopOfMindProposals.id, proposal.id),
+          eq(groupTopOfMindProposals.status, "open"),
+        ),
+      )
+      .returning({ id: groupTopOfMindProposals.id });
+    accepted = flipped.length > 0;
   }
 
   const view = await loadProposalView(db, {
@@ -1035,7 +1049,7 @@ export async function affirmGroupProposal(
     viewerProfileId: input.profileId,
   });
   if (!view) return { ok: false, reason: "not_found" };
-  return { ok: true, proposal: view, accepted: Boolean(seconded) };
+  return { ok: true, proposal: view, accepted };
 }
 
 /**

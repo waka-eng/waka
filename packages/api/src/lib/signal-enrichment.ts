@@ -33,6 +33,7 @@ import {
   describeImage,
   ImageDescriptionError,
   isDescribableImageType,
+  MAX_IMAGE_BYTES,
 } from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 
@@ -397,9 +398,13 @@ export async function assertFetchableUrl(url: string): Promise<void> {
 /**
  * Follow redirects by hand so every hop is checked. `redirect: "follow"` lets a
  * public URL bounce us into the VPC on its second hop, which is the usual way
- * this protection is bypassed.
+ * this protection is bypassed — so an image fetched by URL must come through
+ * here too, not through a plain `fetch(..., { redirect: "follow" })`.
  */
-async function fetchWithTimeout(url: string): Promise<{ response: Response; finalUrl: string }> {
+async function fetchWithTimeout(
+  url: string,
+  accept = "text/html,application/xhtml+xml",
+): Promise<{ response: Response; finalUrl: string; controller: AbortController }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -409,18 +414,58 @@ async function fetchWithTimeout(url: string): Promise<{ response: Response; fina
       const response = await fetch(current, {
         signal: controller.signal,
         redirect: "manual",
-        headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/xhtml+xml" },
+        headers: { "User-Agent": USER_AGENT, Accept: accept },
       });
       const location = response.headers.get("location");
       if (response.status < 300 || response.status >= 400 || !location) {
-        return { response, finalUrl: current };
+        // The caller reads the body under the same abort signal, so the
+        // timeout covers the download, not only the headers; the caller
+        // aborts once it has what it needs.
+        return { response, finalUrl: current, controller };
       }
-      if (hop >= MAX_REDIRECTS) return { response, finalUrl: current };
+      if (hop >= MAX_REDIRECTS) return { response, finalUrl: current, controller };
       current = new URL(location, current).toString();
     }
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Read a response body up to `maxBytes`, then stop. A page or image that keeps
+ * streaming past the cap is truncated rather than buffered whole: the timeout
+ * bounds how long a slow drip may run, this bounds how much memory a fast one
+ * may take. Returns the bytes actually read.
+ */
+async function readCappedBody(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if (!response.body) {
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    return buffer.length > maxBytes ? buffer.subarray(0, maxBytes) : buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (total < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  await reader.cancel().catch(() => undefined);
+
+  const out = new Uint8Array(Math.min(total, maxBytes));
+  let offset = 0;
+  for (const chunk of chunks) {
+    if (offset >= out.length) break;
+    const slice = chunk.subarray(0, out.length - offset);
+    out.set(slice, offset);
+    offset += slice.length;
+  }
+  return out;
 }
 
 export interface LinkEnrichment extends LinkMetadata {
@@ -435,7 +480,7 @@ export interface LinkEnrichment extends LinkMetadata {
  * decides whether a page that could not be reached is worth another attempt.
  */
 export async function fetchLinkEnrichment(url: string): Promise<LinkEnrichment> {
-  const { response, finalUrl } = await fetchWithTimeout(url);
+  const { response, finalUrl, controller } = await fetchWithTimeout(url);
   const hostname = safeHostname(finalUrl);
   const empty: LinkEnrichment = {
     finalUrl,
@@ -453,7 +498,12 @@ export async function fetchLinkEnrichment(url: string): Promise<LinkEnrichment> 
   // to discover that costs a member's attachment nothing but latency.
   if (!contentType.includes("html")) return empty;
 
-  const html = (await response.text()).slice(0, MAX_HTML_CHARS);
+  // Bounded read under the fetch's own timeout, then release the connection.
+  // MAX_HTML_CHARS is a character budget; a UTF-8 byte cap of 4× is a safe
+  // ceiling that still truncates a runaway page.
+  const bytes = await readCappedBody(response, MAX_HTML_CHARS * 4);
+  controller.abort();
+  const html = new TextDecoder().decode(bytes).slice(0, MAX_HTML_CHARS);
   const metadata = extractLinkMetadata(html);
   const body = isYouTubeHost(hostname)
     ? extractYouTubeDescription(html) ?? extractPageBody(html)
@@ -536,11 +586,19 @@ async function readImageBytes(
     };
   }
 
-  await assertFetchableUrl(attachment.url);
-  const response = await fetch(attachment.url, { redirect: "follow" });
-  if (!response.ok) throw new Error(`image_fetch_${response.status}`);
+  // Through the same per-hop guard a link gets: a redirect into a private
+  // range on the second hop is exactly how this protection is bypassed, and
+  // "it is an image" is not a reason to trust the URL. One byte over the cap
+  // and describeImage rejects it, so reading cap+1 is enough to catch it.
+  const { response, controller } = await fetchWithTimeout(attachment.url, "image/*");
+  if (!response.ok) {
+    controller.abort();
+    throw new Error(`image_fetch_${response.status}`);
+  }
+  const bytes = await readCappedBody(response, MAX_IMAGE_BYTES + 1);
+  controller.abort();
   return {
-    bytes: new Uint8Array(await response.arrayBuffer()),
+    bytes,
     contentType:
       attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
   };

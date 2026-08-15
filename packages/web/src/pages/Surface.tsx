@@ -188,7 +188,7 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 export default function SurfacePage(): JSX.Element {
-  const { profile } = useAuth();
+  const { profile, updatePreferredLocale } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -493,24 +493,42 @@ export default function SurfacePage(): JSX.Element {
 
   /**
    * Reading again is a board-level act, so it belongs to the board's name
-   * rather than to a toolbar. The server accepts the request and synthesises
-   * in the background, so this reloads once the queue has plausibly run rather
-   * than pretending the new version is already here.
+   * rather than to a toolbar. The server answers 202 and synthesises in the
+   * background, so this polls until a version newer than the one on screen is
+   * live — an immediate single reload is guaranteed to re-render the old
+   * version, which reads as the button doing nothing. Bounded: synthesis is
+   * one model call plus queue latency, so a quiet minute means it genuinely
+   * did not land, and saying so beats spinning.
    */
   const reread = useCallback((): void => {
     if (refreshing) return;
     setRefreshing(true);
     void (async () => {
+      const before = topOfMind?.version ?? 0;
       try {
         await refreshTopOfMind();
-        await loadBoard();
+        const deadline = Date.now() + 90_000;
+        let seen = before;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 3_000));
+          const next = await fetchTopOfMind();
+          if (next && next.version > before) {
+            setTopOfMind(next);
+            setEntryDrafts({});
+            seen = next.version;
+            break;
+          }
+        }
+        if (seen === before) {
+          setNotice("Still reading — the new version will be here on your next visit.");
+        }
       } catch (err) {
         setNotice(errorMessage(err, "That reading did not start."));
       } finally {
         setRefreshing(false);
       }
     })();
-  }, [refreshing, loadBoard]);
+  }, [refreshing, topOfMind]);
 
   // -------------------------------------------------------------------------
   // Signals
@@ -930,6 +948,12 @@ export default function SurfacePage(): JSX.Element {
                     aria-expanded={openSignal?.id === signal.id}
                   >
                     {signal.evidenceCount} behind it · {signal.confidence}%
+                    {/* A still-forming pattern reads differently from a
+                        settled one; without this an emerging signal looks
+                        exactly like an active one it is not yet eligible to
+                        become part of the top of mind. */}
+                    {signal.status === "emerging" ? " · still forming" : ""}
+                    {signal.status === "retired" ? " · retired" : ""}
                     {signal.locked ? " · yours" : ""}
                     {signal.unsupported ? " · unsupported" : ""}
                   </button>
@@ -1304,6 +1328,11 @@ export default function SurfacePage(): JSX.Element {
                     onClick={() => {
                       setLocale(option.code);
                       writeStoredLocale(option.code);
+                      // The profile's locale drives generated-content language,
+                      // and boot reads it back from the server — so persist it
+                      // there, or this choice reverts on the next visit.
+                      // Best-effort: the local view has already switched.
+                      void updatePreferredLocale(option.code).catch(() => undefined);
                     }}
                   >
                     {option.nativeLabel}

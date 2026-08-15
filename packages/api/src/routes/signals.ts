@@ -41,6 +41,8 @@ import {
   type AuthEnv,
   type ProfileOperation,
 } from "../lib/middleware.js";
+import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { reembedSignalStatement } from "../lib/signal-derivation.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -424,9 +426,17 @@ export async function resolveProfileScope(
   }
 
   const target = await loadProfile(db, requestedProfileId);
-  // Same body for "no such profile" and "not yours": whether a profile id
-  // exists in someone else's account is not a caller's business.
-  if (!target) return { ok: false, status: 404, body: { error: "Profile not found" } };
+
+  // A profile in another account answers exactly like one that does not
+  // exist. Otherwise the pair of status codes is an oracle: 403 means "real
+  // id, someone else's" and 404 means "no such id", which lets any caller
+  // enumerate real profile ids across the whole install. The 403 below is
+  // therefore reserved for a same-account profile the operation forbids —
+  // an agent session reaching for write on its human, say — where the caller
+  // already knows the profile exists because it is its own account's.
+  if (!target || target.accountId !== session.profile.accountId) {
+    return { ok: false, status: 404, body: { error: "Profile not found" } };
+  }
 
   const denied = profileAccessError(session, target, operation);
   if (denied) return { ok: false, status: 403, body: denied };
@@ -447,6 +457,8 @@ export interface SignalRouteDependencies {
   shareSignal?: typeof shareSignalWithGroup;
   unshareSignal?: typeof unshareSignalFromGroup;
   loadProfile?: typeof loadProfileTarget;
+  reembed?: typeof reembedSignalStatement;
+  requestRefresh?: typeof enqueueTopOfMindRefresh;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
 
@@ -460,6 +472,23 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
   const shareSignal = deps.shareSignal ?? shareSignalWithGroup;
   const unshareSignal = deps.unshareSignal ?? unshareSignalFromGroup;
   const loadProfile = deps.loadProfile ?? loadProfileTarget;
+  const reembed = deps.reembed ?? reembedSignalStatement;
+  const requestRefresh = deps.requestRefresh ?? enqueueTopOfMindRefresh;
+
+  /**
+   * Curating a signal changes what the artifact should be built from, so the
+   * top of mind is re-synthesised in the background. Best-effort on purpose:
+   * the edit itself has already committed, and a failed enqueue is a stale
+   * board on the next refresh, not a lost edit. The debounce absorbs a burst.
+   */
+  const scheduleRefresh = (profileId: string): void => {
+    void requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
+      console.warn("[signals] top-of-mind refresh enqueue failed", {
+        profileId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
@@ -568,6 +597,15 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       statement: parsedBody.data.statement,
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
+
+    // The stored vector now describes the old wording; bring it in line so
+    // future captures match what the signal says, not what it used to.
+    await reembed(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+      statement: parsedBody.data.statement,
+    });
+    scheduleRefresh(scope.profileId);
     return c.json({ signal }, 200);
   });
 
@@ -602,6 +640,10 @@ export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<Aut
       signalId: parsedParams.data.signalId,
     });
     if (!deleted) return c.json({ error: "Signal not found" }, 404);
+
+    // The artifact may cite the signal just removed; re-synthesise so an entry
+    // is not left resting on a citation that no longer resolves.
+    scheduleRefresh(scope.profileId);
     return c.json({ deleted: true }, 200);
   });
 

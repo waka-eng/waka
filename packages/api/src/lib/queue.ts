@@ -108,15 +108,21 @@ export interface DrainBackgroundJobsResult {
  * distilling twice, and a job row that already succeeded is a record of the
  * previous edit, not a reason to skip the current one.
  *
- * Hence the split below. While the existing row is `pending` or `running`,
- * a second enqueue is the same work arriving twice and is absorbed — that is
- * the debounce a burst of saves depends on. Once the row is terminal
- * (`succeeded` or `failed`) the same key means new work, so the row is reset
- * to pending with the fresh payload, a cleared error, and a zeroed attempt
- * count, which is what makes it a retry rather than a resurrection carrying
- * the old failure's budget.
+ * Three cases, not two. A `pending` row is work not yet started, so a second
+ * enqueue is the same work arriving twice and is absorbed — the debounce a
+ * burst of saves depends on. A terminal row (`succeeded`/`failed`) means the
+ * key now names new work, so it resets to pending with the fresh payload, a
+ * cleared error, and a zeroed attempt count.
+ *
+ * A `running` row is the subtle one: the pass already read its inputs, so
+ * absorbing a request that arrived after it started would lose that request
+ * — the edit made mid-derivation would never re-derive. So a running row is
+ * flagged `rerun_requested` instead, and the worker turns a flagged job back
+ * to pending on completion. The trailing edge is kept, once, however many
+ * enqueues land during the run.
  */
 const TERMINAL_JOB_STATUS = sql`background_jobs.status IN ('succeeded'::background_job_status, 'failed'::background_job_status)`;
+const RUNNING_JOB_STATUS = sql`background_jobs.status = 'running'::background_job_status`;
 
 /**
  * One enqueue path for every keyed job type, so the ON CONFLICT clause and
@@ -152,6 +158,11 @@ async function enqueueKeyedJob(input: {
       run_after = CASE WHEN ${TERMINAL_JOB_STATUS} THEN now() ELSE background_jobs.run_after END,
       locked_at = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.locked_at END,
       last_error = CASE WHEN ${TERMINAL_JOB_STATUS} THEN NULL ELSE background_jobs.last_error END,
+      rerun_requested = CASE
+        WHEN ${RUNNING_JOB_STATUS} THEN true
+        WHEN ${TERMINAL_JOB_STATUS} THEN false
+        ELSE background_jobs.rerun_requested
+      END,
       max_attempts = GREATEST(background_jobs.max_attempts, EXCLUDED.max_attempts),
       updated_at = now()
     RETURNING id, (xmax = 0) AS created
@@ -229,7 +240,12 @@ export async function enqueueTopOfMindRefresh(
     ON CONFLICT (profile_id, type)
     WHERE type = 'refresh_top_of_mind'::background_job_type
       AND status IN ('pending'::background_job_status, 'running'::background_job_status)
-    DO UPDATE SET updated_at = now()
+    DO UPDATE SET
+      -- Landing on a running refresh means the signals changed after it began
+      -- reading them; flag a re-run so the artifact reflects the change rather
+      -- than staying stale until some unrelated later event.
+      rerun_requested = CASE WHEN ${RUNNING_JOB_STATUS} THEN true ELSE background_jobs.rerun_requested END,
+      updated_at = now()
     RETURNING id, (xmax = 0) AS created
   `);
   const [job] = rows as unknown as Array<{ id: string; created: boolean }>;
@@ -548,6 +564,12 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
         OR (
           candidate.status = 'running'::background_job_status
           AND candidate.locked_at < ${nowIso}::timestamptz - (${STALE_LOCK_SECONDS} || ' seconds')::interval
+          -- A job that crashes the worker (rather than throwing) never runs
+          -- its own failure path, so only the reclaim bounds it. Without this
+          -- ceiling a poison job is reclaimed every stale-lock interval
+          -- forever; with it, a job that has already been attempted its full
+          -- budget is left where it is rather than taking the worker down again.
+          AND candidate.attempts < candidate.max_attempts
         )
       ORDER BY candidate.run_after ASC, candidate.created_at ASC
       LIMIT 1
@@ -574,9 +596,19 @@ async function claimNextBackgroundJob(now = new Date()): Promise<BackgroundJob |
 }
 
 async function markJobSucceeded(jobId: string): Promise<void> {
+  // A job flagged mid-run goes back to pending, its flag cleared and its
+  // attempts zeroed — the trailing edge the running pass could not see, run
+  // exactly once no matter how many requests arrived while it worked. An
+  // unflagged job simply succeeds.
   await getDb().execute(sql`
     UPDATE background_jobs
-    SET status = 'succeeded'::background_job_status,
+    SET status = CASE
+          WHEN rerun_requested THEN 'pending'::background_job_status
+          ELSE 'succeeded'::background_job_status
+        END,
+        rerun_requested = false,
+        attempts = CASE WHEN rerun_requested THEN 0 ELSE attempts END,
+        run_after = CASE WHEN rerun_requested THEN now() ELSE run_after END,
         locked_at = NULL,
         last_error = NULL,
         updated_at = now()

@@ -34,6 +34,7 @@ import {
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import { acquireTopOfMindArtifactLock } from "../lib/top-of-mind-family-lock.js";
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -260,27 +261,39 @@ export async function updateLiveEntry(
     >;
   },
 ): Promise<TopOfMindEntryView | null> {
-  const [entry] = await db
-    .select({ id: topOfMindEntries.id, topOfMindId: topOfMindEntries.topOfMindId })
-    .from(topOfMindEntries)
-    .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
-    .where(
-      and(
-        eq(topOfMindEntries.id, input.entryId),
-        eq(topOfMinds.profileId, input.profileId),
-        eq(topOfMinds.status, "live"),
-      ),
-    )
-    .limit(1);
-  if (!entry) return null;
+  // Under the artifact lock, and resolving the live entry *inside* the lock.
+  // A synthesis holds the same lock while it reads entries and writes the next
+  // version, so without this an edit could land on the row of a version being
+  // superseded — the person's own words silently dropped from the new live
+  // artifact. Taking the lock makes the edit wait for any in-flight synthesis,
+  // then apply to whatever version is live once it does.
+  const topOfMindId = await db.transaction(async (tx) => {
+    await acquireTopOfMindArtifactLock(tx, { profileId: input.profileId });
 
-  await db
-    .update(topOfMindEntries)
-    .set({ ...input.patch, updatedAt: new Date() })
-    .where(eq(topOfMindEntries.id, entry.id));
+    const [entry] = await tx
+      .select({ id: topOfMindEntries.id, topOfMindId: topOfMindEntries.topOfMindId })
+      .from(topOfMindEntries)
+      .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+      .where(
+        and(
+          eq(topOfMindEntries.id, input.entryId),
+          eq(topOfMinds.profileId, input.profileId),
+          eq(topOfMinds.status, "live"),
+        ),
+      )
+      .limit(1);
+    if (!entry) return null;
 
-  const entries = await loadEntries(db, entry.topOfMindId, true);
-  return entries.find((row) => row.id === entry.id) ?? null;
+    await tx
+      .update(topOfMindEntries)
+      .set({ ...input.patch, updatedAt: new Date() })
+      .where(eq(topOfMindEntries.id, entry.id));
+    return entry.topOfMindId;
+  });
+
+  if (topOfMindId === null) return null;
+  const entries = await loadEntries(db, topOfMindId, true);
+  return entries.find((row) => row.id === input.entryId) ?? null;
 }
 
 // ---------------------------------------------------------------------------

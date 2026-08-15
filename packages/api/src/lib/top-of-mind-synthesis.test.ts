@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assembleEntries,
+  SELECTION_DISPUTED_MULTIPLIER,
   computeComebackBonus,
   computeSelectionScore,
   countLockViolations,
@@ -214,5 +215,40 @@ describe("selection favours what returned after a silence", () => {
       now: NOW,
     });
     expect(strong).toBeGreaterThan(thin);
+  });
+});
+
+describe("selection listens to the owner's verdicts", () => {
+  const base = {
+    confidence: 80,
+    evidenceCount: 5,
+    lastEvidenceAt: new Date(NOW.getTime() - DAY),
+    comebackBonus: 0,
+    now: NOW,
+  };
+
+  /**
+   * A multiplier rather than an exclusion: the person may be wrong, the
+   * pattern may return with new evidence, and a memory that silently drops
+   * whatever was disputed cannot be argued with.
+   */
+  it("dampens a disputed signal without banishing it", () => {
+    const trusted = computeSelectionScore(base);
+    const disputed = computeSelectionScore({ ...base, disputed: true });
+
+    expect(disputed).toBeGreaterThan(0);
+    expect(disputed).toBeCloseTo(trusted * SELECTION_DISPUTED_MULTIPLIER, 5);
+  });
+
+  it("still lets a strong disputed signal outrank a weak trusted one", () => {
+    const strongDisputed = computeSelectionScore({ ...base, disputed: true });
+    const weakTrusted = computeSelectionScore({
+      confidence: 10,
+      evidenceCount: 1,
+      lastEvidenceAt: new Date(NOW.getTime() - 120 * DAY),
+      comebackBonus: 0,
+      now: NOW,
+    });
+    expect(strongDisputed).toBeGreaterThan(weakTrusted);
   });
 });

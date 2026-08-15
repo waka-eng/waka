@@ -508,24 +508,26 @@ cliAuthRoutes.post("/exchange", async (c) => {
   const db = getDb();
   const codeHash = await hashSessionToken(parsed.data.code);
 
+  // Claim and consume in one statement. A select-then-delete would let two
+  // concurrent exchanges of the same code both read the row and both mint a
+  // session; DELETE ... RETURNING hands the row to exactly one of them, and
+  // the loser sees no row and is told the code is spent. The code transits a
+  // loopback URL (local server logs, shell history), so single-use is the
+  // property bounding that exposure.
   const rows = await db
-    .select({
+    .delete(cliLoginCodes)
+    .where(eq(cliLoginCodes.codeHash, codeHash))
+    .returning({
       id: cliLoginCodes.id,
       profileId: cliLoginCodes.profileId,
       deviceLabel: cliLoginCodes.deviceLabel,
       expiresAt: cliLoginCodes.expiresAt,
-    })
-    .from(cliLoginCodes)
-    .where(eq(cliLoginCodes.codeHash, codeHash))
-    .limit(1);
+    });
 
   const row = rows[0];
   if (!row) {
     return c.json({ error: "Invalid or already-used code" }, 400);
   }
-
-  // Single-use: delete now, before we even know whether it's expired.
-  await db.delete(cliLoginCodes).where(eq(cliLoginCodes.id, row.id));
 
   if (row.expiresAt.getTime() <= Date.now()) {
     return c.json({ error: "Code expired" }, 400);

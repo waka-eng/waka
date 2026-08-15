@@ -34,6 +34,7 @@ import {
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
+import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
@@ -263,6 +264,19 @@ export function createFeedbackRoutes(
     if (!row) {
       return c.json({ error: "Feedback target not found" }, 404);
     }
+
+    // A verdict changes what the next synthesis should weigh — a signal marked
+    // not_true fights uphill, an entry the person rejected should not return in
+    // the same form. Re-synthesise so the correction lands without waiting on
+    // an unrelated future capture. Best-effort: the verdict has committed.
+    void enqueueTopOfMindRefresh(session.profile.id, "signals_changed").catch(
+      (err: unknown) => {
+        console.warn("[feedback] refresh enqueue failed", {
+          profileId: session.profile.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      },
+    );
     return c.json({ feedback: row }, 201);
   });
 

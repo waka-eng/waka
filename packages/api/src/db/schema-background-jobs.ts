@@ -15,6 +15,7 @@
 
 import { relations, sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -93,6 +94,15 @@ export const backgroundJobs = pgTable(
 
     /** Set to collapse duplicate enqueues of the same work. */
     idempotencyKey: text("idempotency_key"),
+
+    /**
+     * A request that arrived while this job was already running. The running
+     * pass read its inputs before that request existed, so absorbing it would
+     * lose the newer work — an inspiration edited mid-derivation would never
+     * re-derive. Instead the enqueue sets this flag, and the worker turns a
+     * flagged job back to `pending` on completion rather than `succeeded`.
+     */
+    rerunRequested: boolean("rerun_requested").notNull().default(false),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -7,7 +7,7 @@ const HUMAN_SESSION: AuthenticatedSession = {
   sessionId: "session-1",
   account: { id: "account-1", email: "user@example.com" },
   profile: {
-    id: "profile-human",
+    id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     accountId: "account-1",
     type: "human",
     name: "Mina",
@@ -18,12 +18,12 @@ const HUMAN_SESSION: AuthenticatedSession = {
 const AGENT_SESSION: AuthenticatedSession = {
   ...HUMAN_SESSION,
   sessionId: "session-2",
-  profile: { ...HUMAN_SESSION.profile, id: "profile-agent", type: "agent", name: "Scout" },
+  profile: { ...HUMAN_SESSION.profile, id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", type: "agent", name: "Scout" },
 };
 
 function profileRow(overrides: Record<string, unknown> = {}) {
   return {
-    id: "profile-agent",
+    id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     accountId: "account-1",
     type: "agent",
     name: "Scout",
@@ -111,7 +111,7 @@ beforeEach(() => {
 
 describe("GET /api/profiles", () => {
   it("lists the account's profiles for either kind of session", async () => {
-    mockState.db = makeDb({ selects: [[profileRow({ id: "profile-human", type: "human" })]] });
+    mockState.db = makeDb({ selects: [[profileRow({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", type: "human" })]] });
 
     const res = await createApp().request("/api/profiles");
 
@@ -185,9 +185,9 @@ describe("POST /api/profiles", () => {
 
 describe("DELETE /api/profiles/:profileId", () => {
   it("removes an agent profile", async () => {
-    mockState.db = makeDb({ returning: [[{ id: "profile-agent" }]] });
+    mockState.db = makeDb({ returning: [[{ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" }]] });
 
-    const res = await createApp().request("/api/profiles/profile-agent", {
+    const res = await createApp().request("/api/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", {
       method: "DELETE",
     });
 
@@ -201,7 +201,7 @@ describe("DELETE /api/profiles/:profileId", () => {
   it("will not remove the human profile", async () => {
     mockState.db = makeDb({ returning: [[]] });
 
-    const res = await createApp().request("/api/profiles/profile-human", {
+    const res = await createApp().request("/api/profiles/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", {
       method: "DELETE",
     });
 
@@ -211,7 +211,7 @@ describe("DELETE /api/profiles/:profileId", () => {
   it("refuses an agent session", async () => {
     mockState.session = AGENT_SESSION;
 
-    const res = await createApp().request("/api/profiles/profile-agent", {
+    const res = await createApp().request("/api/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", {
       method: "DELETE",
     });
 
@@ -224,7 +224,7 @@ describe("PATCH /api/profiles/:profileId", () => {
   it("renames a profile the account owns", async () => {
     mockState.db = makeDb({ returning: [[profileRow({ name: "Renamed" })]] });
 
-    const res = await jsonRequest("/api/profiles/profile-agent", "PATCH", {
+    const res = await jsonRequest("/api/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "PATCH", {
       name: "Renamed",
     });
 
@@ -246,7 +246,7 @@ describe("PATCH /api/profiles/:profileId", () => {
   it("refuses an agent session", async () => {
     mockState.session = AGENT_SESSION;
 
-    const res = await jsonRequest("/api/profiles/profile-agent", "PATCH", {
+    const res = await jsonRequest("/api/profiles/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "PATCH", {
       name: "Nope",
     });
 

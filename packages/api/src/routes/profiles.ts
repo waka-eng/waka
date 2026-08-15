@@ -31,6 +31,13 @@ const MAX_AGENT_PROFILES = 8;
 
 const MAX_NAME_LENGTH = 80;
 
+/**
+ * A path segment that is not a uuid reaches a uuid column comparison and
+ * Postgres raises a cast error — a 500 for what is really a malformed request.
+ * Validate the shape first so it answers 400.
+ */
+const profileIdSchema = z.string().uuid();
+
 const createProfileSchema = z
   .object({
     name: z.string().trim().min(1).max(MAX_NAME_LENGTH),
@@ -121,6 +128,9 @@ profilesRoutes.patch("/:profileId", async (c) => {
   if (session.profile.type !== "human") {
     return c.json({ error: "Only the account owner can rename a profile" }, 403);
   }
+  if (!profileIdSchema.safeParse(c.req.param("profileId")).success) {
+    return c.json({ error: "Profile not found" }, 404);
+  }
 
   let rawBody: unknown;
   try {
@@ -162,6 +172,9 @@ profilesRoutes.delete("/:profileId", async (c) => {
   const session = c.get("session");
   if (session.profile.type !== "human") {
     return c.json({ error: "Only the account owner can remove a profile" }, 403);
+  }
+  if (!profileIdSchema.safeParse(c.req.param("profileId")).success) {
+    return c.json({ error: "Profile not found" }, 404);
   }
 
   const [deleted] = await getDb()
