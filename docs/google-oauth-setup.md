@@ -80,7 +80,7 @@ Inspect with `pnpm sst secret list`.
 After `pnpm dev` (alias for `sst dev`) is running:
 
 ```bash
-curl -s "$API_URL/api/health"          # → {"ok":true}
+curl -s "$API_URL/api/health"          # → {"ok":true,"service":"waka","capabilities":[...]}
 ```
 
 …and inside the Hono handler the secrets are visible as either:

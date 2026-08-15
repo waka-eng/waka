@@ -51,6 +51,7 @@ export default defineConfig({
       "src/routes/auth-profile.test.ts",
       "src/routes/feedback.test.ts",
       "src/routes/groups.test.ts",
+      "src/routes/health.test.ts",
       "src/routes/inspirations-readings.test.ts",
       "src/routes/public-profiles.test.ts",
       "src/routes/top-of-mind.test.ts",
