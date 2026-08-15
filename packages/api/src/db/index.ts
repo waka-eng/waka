@@ -1,35 +1,33 @@
 /**
  * Drizzle schema barrel.
  *
- * Re-exports every table, enum, type, and relations object across the
- * schema modules so that callers (Hono handlers, queue worker, drizzle-kit
- * migration generator, vitest suite) can do:
+ * Re-exports every table, enum, type, and relations object so callers (Hono
+ * handlers, the background worker, drizzle-kit, vitest) have one import path:
  *
- *   import { users, inspirations, attachments, reflections } from "./db";
+ *   import { accounts, profiles, inspirations, signals } from "./db";
  *
- * The split into sibling modules (schema.ts, schema-attachments.ts,
- * schema-reflections.ts) keeps each AC's diff small and reviewable, while
- * this barrel preserves a single canonical import path for everything.
+ * **One name per concept, and no aliases.** Never re-export a table under a
+ * second identifier, however convenient it looks during a rename: a table
+ * with two names is a bug waiting for someone to write code against the
+ * wrong one, and the reader who finds both has no way to tell which is
+ * authoritative.
  *
- * drizzle-kit's `schema` config option also accepts a glob, but pointing it
- * at this file is equivalent and explicit.
+ * The three layers, in order:
+ *   inspirations (raw capture) → signals (evidence-backed patterns)
+ *   → top_of_minds + top_of_mind_entries (one artifact per profile/group)
  */
 
-export * from "./schema";
-export * from "./schema-attachments";
-export * from "./schema-reflections";
+export * from "./schema-accounts";
+export * from "./schema-profiles";
 export * from "./schema-sessions";
 export * from "./schema-cli-login-codes";
-export * from "./schema-wow-moments";
+export * from "./schema-inspirations";
+export * from "./schema-attachments";
+export * from "./schema-reflections";
 export * from "./schema-embeddings";
-export * from "./schema-background-jobs";
-export * from "./schema-revisits";
-export * from "./schema-feedback";
-export * from "./schema-documents";
-export * from "./schema-activations";
-export * from "./schema-group-rooms";
+export * from "./schema-signals";
+export * from "./schema-top-of-mind";
 export * from "./schema-groups";
-export * from "./schema-member-events";
-export * from "./schema-combinations";
-export * from "./schema-group-direction";
-export * from "./schema-reading-divergence";
+export * from "./schema-group-coedit";
+export * from "./schema-background-jobs";
+export * from "./schema-feedback";

@@ -20,13 +20,13 @@ function safeRedirect(from: unknown): string {
 }
 
 export default function OnboardingPage(): JSX.Element {
-  const { user, updateProfile } = useAuth();
+  const { profile, updateProfile } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as { from?: unknown } | null;
-  const [name, setName] = useState(user?.name ?? "");
+  const [name, setName] = useState(profile?.name ?? "");
   const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
-    normalizeSupportedLocale(user?.preferredLocale ?? readStoredLocale()),
+    normalizeSupportedLocale(profile?.preferredLocale ?? readStoredLocale()),
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);

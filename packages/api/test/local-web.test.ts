@@ -14,7 +14,8 @@ describe("local web dist server", () => {
     expect(isApiRoute("/api/auth/google/login")).toBe(true);
     expect(isApiRoute("/api/inspirations/123")).toBe(true);
     expect(isApiRoute("/api/attachments/presign")).toBe(true);
-    expect(isApiRoute("/api/wow-moments")).toBe(true);
+    expect(isApiRoute("/api/top-of-mind")).toBe(true);
+    expect(isApiRoute("/api/signals")).toBe(true);
     expect(isApiRoute("/api/health")).toBe(true);
     expect(isApiRoute("/auth/google/login")).toBe(false);
     expect(isApiRoute("/inspirations/123")).toBe(false);
@@ -41,7 +42,7 @@ describe("local web dist server", () => {
     expect(asset.status).toBe(200);
     await expect(asset.text()).resolves.toBe("console.log('waka');");
 
-    const clientRoute = await app.request("/boards/today");
+    const clientRoute = await app.request("/signals");
     expect(clientRoute.status).toBe(200);
     expect(clientRoute.headers.get("content-type")).toContain("text/html");
     await expect(clientRoute.text()).resolves.toBe("<main>WAKA SPA</main>");

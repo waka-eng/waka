@@ -1,3 +1,13 @@
+/**
+ * Cron entry point for the background queue.
+ *
+ * On Lambda the container is frozen the instant a response is returned, so
+ * the in-process drain timer in lib/queue.ts cannot be relied on there. This
+ * handler is the deployed sweeper: it claims a bounded batch, runs it, and
+ * exits. The bound matters — an unbounded drain would let one busy profile
+ * hold a scheduled invocation open past its timeout and lose the batch.
+ */
+
 import { runBackgroundJobWorker } from "./lib/queue.js";
 
 const DEFAULT_CRON_LIMIT = 5;

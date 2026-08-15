@@ -46,22 +46,27 @@ Three forces converge on a rebuild rather than another rename-in-place:
 
 ## Database strategy
 
-There is no purely local database: `.env.local` points at the shared
-remote Neon instance that also backs the deployed dev stage. Owner
-decision (2026-08-15): **wipe in place** — the rebuild happens directly
-on that shared database. Accepted consequences, recorded so nobody
-rediscovers them as surprises:
+Revised at Phase 1 execution (2026-08-15) on evidence that contradicts
+the earlier assumption. The "wipe in place" decision was taken believing
+the target was a dev database. It is not: `.env.development` and
+`.env.production` resolve to the **same** Neon host and database
+(`ep-hidden-mouse-…neon.tech / neondb`), so wiping "dev" would wipe
+production. A local Postgres is running and `.env.local` already names
+`localhost:5432/waka_dev`, which carried the old schema.
 
-- **Phase 1 drops every table in the shared database**, after the
-  executing session confirms the exact connection string with the owner
-  — approval of this document is not approval of a specific `DROP`.
-- From Phase 1 until the Phase 9 deploy, `dev.waka.im` and any waka-mcp
-  client pointed at it are **down**: the deployed old code queries
-  tables that no longer exist. The deployed stage's 1-minute
-  `BackgroundJobDrain` cron will error-loop against missing tables for
-  the duration — harmless, but noisy in the Lambda logs.
-- Phase 9 therefore has no second wipe: the database already carries the
-  new schema; cutover is merge + `sst deploy` + verification.
+Therefore:
+
+- **Phases 1–8 run against local `waka_dev`.** It is wiped and migrated
+  to the baseline — that is the wipe the owner approved, on a database
+  whose only content was the schema being replaced.
+- **The Neon instance is not touched by this goal.** It keeps serving
+  the deployed stage on the old code and old schema throughout, so
+  `dev.waka.im` and any waka-mcp client stay up for the whole rebuild.
+- **Phase 9 is where the shared database is decided**, and it is a real
+  decision rather than a formality, because that database is production
+  as well as dev. Cutover therefore halts for the owner: confirm the
+  target, take a backup or a Neon branch first, then migrate and deploy.
+  Nothing before Phase 9 depends on it.
 
 ## Shape of the work
 
@@ -189,10 +194,9 @@ later gate requires a fully green repo:
    only — value reactions that feed regeneration). Nothing parked
    appears in the baseline.
 2. **The baseline reset.** Delete `drizzle/migrations/*` + `meta/`;
-   generate `0000_three_layers` as the sole migration. After the owner
-   confirms the exact connection string, drop the old tables and migrate
-   the shared database to the baseline. Rewrite `test/helpers/db.ts`
-   fixtures/cleanup and
+   generate `0000_three_layers` as the sole migration; drop the old
+   tables in local `waka_dev` and migrate it to the baseline. Rewrite
+   `test/helpers/db.ts` fixtures/cleanup and
    `migrations.test.ts` (it currently pins old migration filenames) for
    the single-baseline world. Rewrite `tools/seed-demo.ts` +
    `demo-seed-data.ts` to create an account, its human profile, one
@@ -547,5 +551,85 @@ mechanically from the canon):
 deployed stage's 1-minute cron error-loops against missing tables; all
 pre-goal sessions and CLI credentials die with the Phase 1 wipe.
 
-**Gate status: HALTED for owner signature.** Amend any verdict above,
-then the goal resumes at Phase 1.
+**Gate status: PASSED — owner signed 2026-08-15**, inventory unamended.
+Two addenda applied during execution, both inside the signed categories:
+the `routes/*.smoke.ts` scripts (excluded from every test config, so they
+never ran) went with the stale-e2e deletions, and the old
+`packages/api/test/` integration suite went with the features it tested —
+Phases 3–6 rebuild coverage on the new harness.
+
+### Phase 1 — schema review (2026-08-15)
+
+Database strategy revised at execution: `.env.development` and
+`.env.production` resolve to the *same* Neon host and database, so the
+approved "wipe the dev database" would have destroyed production. A local
+Postgres was already running with `waka_dev` on the old schema; that is
+the wipe target. `.env.local` was switched to it (backup at
+`.env.local.bak-three-layers`) so the rebuild tooling cannot reach Neon.
+The shared instance keeps serving the deployed stage on old code
+throughout, and Phase 9 decides it deliberately.
+
+**One concept, one table, zero aliases** (21 tables, 1 migration
+`0000_three_layers.sql`, `db:check` clean):
+
+| Canon concept | Table | Notes |
+|---|---|---|
+| Account (auth identity) | `accounts` | email/credentials/onboarding only |
+| Profile (memory owner) | `profiles` | partial unique index = one human per account |
+| Session | `sessions` | binds `profile_id`; the old client flag is gone |
+| CLI login code | `cli_login_codes` | carries the chosen `profile_id` |
+| Inspiration (L1) | `inspirations` | + GIN index for SQL-backed search |
+| Attachment | `attachments` | enrichment block incl. `enrichment_kind`/`enrichment_text` |
+| Reflection | `reflections` | L1 detail |
+| Embeddings | `inspiration_embeddings`, `signal_embeddings` | match-or-mint inputs |
+| Signal (L2) | `signals` | `locked_at`, `unsupported_at`, `last_evidence_at` |
+| Evidence | `signal_evidence` | M:N, unique (signal, inspiration) |
+| Share | `signal_shares` | the only thing that crosses into a group |
+| Top of mind (L3) | `top_of_minds` | CHECK profile XOR group; partial unique = one live artifact each |
+| Entry | `top_of_mind_entries` | pin/dismiss/lock are columns here, not feedback |
+| Citation | `top_of_mind_entry_signals` | FK-enforced; `owner_profile_id` attributes group entries |
+| Group | `groups`, `group_members` | member = human profile |
+| Co-edit | `group_top_of_mind_proposals`, `group_top_of_mind_affirmations` | |
+| Queue | `background_jobs` | 4 job types; partial unique debounces artifact refresh |
+| Feedback | `feedback` | targets narrowed to signal \| entry |
+
+**Gate: PASSED.** `pnpm db:generate` → exactly one baseline migration;
+migrate + `db:check` clean on the wiped database; all five checks green:
+api typecheck clean, **api test:unit 19 files / 218 tests**, web typecheck
+clean, **web test 6 files / 56 tests**, web build ok (267.77 kB js /
+121.66 kB css), admin typecheck clean, `test:dev-local-script` ok.
+Diff: **328 files, +18,126 / −104,172**.
+
+Queue conflict semantics verified against a live Postgres
+(`packages/api/scripts/verify-enqueue.ts`, 4/4 as expected): first enqueue
+inserts; a duplicate while pending coalesces onto the same row; a
+*succeeded* row re-arms to pending with `attempts=0` and the error
+cleared; the artifact refresh collapses a burst onto one job.
+
+Three defects found by cross-checking one agent's output against another,
+all fixed before the gate:
+1. `enqueueDeriveSignals` keyed with `DO UPDATE SET updated_at`, so once a
+   capture's job had succeeded every later edit was silently swallowed and
+   the signals never re-derived — the canon's cascade rule, broken.
+2. `enrich_attachment` ignored `enrichAttachment`'s return, recording a
+   transport failure as a successful job, so a timed-out link was stuck
+   without enrichment forever.
+3. ~150 lines of signal-embedding code written by one agent and
+   independently superseded by another's better approach (a signal's
+   vector *is* its statement's vector) — deleted rather than left as a
+   second way to do the same thing.
+
+**Deferred to Phase 8** (residue, gates nothing): dead CSS in
+`styles/global.css` and `styles/surface.css` for the parked
+direction/rooms/timeline surfaces.
+
+**Tenant integrity is enforced by the database, not by convention.** Seven
+composite foreign keys — `(profile_id, parent_id)` against unique
+constraints on `inspirations` and `signals` — make a cross-profile row
+impossible in `attachments`, `reflections`, `signal_evidence` (both
+parents), `signal_shares`, and both embedding tables. Two failures found
+and fixed getting there: drizzle emits `CREATE UNIQUE INDEX` after FK
+constraints, so composite FKs need table-level unique *constraints* as
+targets; and `drizzle-kit migrate` swallows the resulting Postgres error
+behind its spinner — applying the SQL through `psql` was the only way to
+see it.

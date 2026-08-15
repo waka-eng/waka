@@ -1,22 +1,37 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const FAKE_USER = {
-  id: "user-1",
-  email: "user@example.com",
-  name: "Test User",
-  avatarUrl: null,
-  preferredLocale: "en-US",
-  onboardingCompletedAt: null,
-  publicHandle: null,
-  publicProfileEnabled: false,
-  publicTopOfMindEnabled: false,
+import type { AuthenticatedSession } from "../lib/session.js";
+
+const HUMAN_SESSION: AuthenticatedSession = {
+  sessionId: "session-1",
+  account: { id: "account-1", email: "user@example.com" },
+  profile: {
+    id: "profile-human",
+    accountId: "account-1",
+    type: "human",
+    name: "Mina",
+    preferredLocale: "en-US",
+  },
+};
+
+const AGENT_SESSION: AuthenticatedSession = {
+  sessionId: "session-2",
+  account: { id: "account-1", email: "user@example.com" },
+  profile: {
+    id: "profile-agent",
+    accountId: "account-1",
+    type: "agent",
+    name: "Scout",
+    preferredLocale: "en-US",
+  },
 };
 
 const mockState = vi.hoisted(() => ({
   db: undefined as any,
   createSessionRow: vi.fn(async () => undefined),
   signSessionToken: vi.fn(async () => "signed-session-token"),
+  session: undefined as any,
   authenticated: true,
 }));
 
@@ -25,13 +40,15 @@ vi.mock("../lib/db.js", () => ({
 }));
 
 vi.mock("../lib/auth.js", () => ({
+  SESSION_COOKIE_NAME: "waka_session",
   SESSION_TTL_SECONDS: 60 * 60 * 24 * 30,
   signSessionToken: mockState.signSessionToken,
+  verifySessionToken: vi.fn(async () => null),
 }));
 
 // hashSessionToken is a pure SHA-256 helper with no I/O — keep the real
-// implementation so a code minted by /start and looked up by /exchange
-// hash to the same value. Only createSessionRow (a DB write) is stubbed.
+// implementation so a code minted by /start and looked up by /exchange hash
+// to the same value. Only createSessionRow (a DB write) is stubbed.
 vi.mock("../lib/session.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/session.js")>();
   return {
@@ -40,15 +57,22 @@ vi.mock("../lib/session.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/middleware.js", () => ({
-  requireAuth: async (c: any, next: any) => {
-    if (!mockState.authenticated) {
-      return c.json({ error: "Authentication required" }, 401);
-    }
-    c.set("user", FAKE_USER);
-    await next();
-  },
-}));
+// The access matrix stays real: this route's whole job on the /start side is
+// deciding which profile a credential may be minted for.
+vi.mock("../lib/middleware.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/middleware.js")>();
+  return {
+    ...actual,
+    requireAuth: async (c: any, next: any) => {
+      if (!mockState.authenticated) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      c.set("session", mockState.session);
+      c.set("sessionToken", "browser-token");
+      await next();
+    },
+  };
+});
 
 import { hashSessionToken } from "../lib/session.js";
 import { cliAuthRoutes } from "./auth-cli.js";
@@ -59,16 +83,24 @@ function createApp() {
   return app;
 }
 
-/** Mirrors auth-google.test.ts's makeDb: a queue of canned `select` results,
- * consumed in call order, plus spies for insert/delete. */
+/**
+ * A queue of canned `select` results consumed in call order, plus spies for
+ * insert/delete. `.where()` resolves directly and also carries `.limit()`, so
+ * one mock serves both query shapes in this file.
+ */
 function makeDb(selectResults: unknown[][] = []) {
-  const select = vi.fn(() => ({
-    from: vi.fn(() => ({
-      where: vi.fn(() => ({
-        limit: vi.fn(async () => selectResults.shift() ?? []),
-      })),
-    })),
-  }));
+  const select = vi.fn(() => {
+    const chain: any = {};
+    chain.from = vi.fn(() => chain);
+    chain.innerJoin = vi.fn(() => chain);
+    chain.where = vi.fn(() => {
+      const rows = selectResults.shift() ?? [];
+      const result: any = Promise.resolve(rows);
+      result.limit = vi.fn(async () => rows);
+      return result;
+    });
+    return chain;
+  });
   const insertValues = vi.fn(async (_values: unknown) => undefined);
   const insert = vi.fn(() => ({ values: insertValues }));
   const deleteWhere = vi.fn(async () => undefined);
@@ -80,6 +112,7 @@ beforeEach(() => {
   mockState.createSessionRow.mockClear();
   mockState.signSessionToken.mockClear();
   mockState.authenticated = true;
+  mockState.session = HUMAN_SESSION;
   mockState.db = makeDb([]);
 });
 
@@ -144,12 +177,15 @@ describe("GET /api/auth/cli/start", () => {
     expect(db.insert).toHaveBeenCalledTimes(1);
     expect(db.insertValues).toHaveBeenCalledTimes(1);
     const stored = db.insertValues.mock.calls[0]![0] as {
-      userId: string;
+      profileId: string;
       codeHash: string;
+      deviceLabel: string | null;
       expiresAt: Date;
     };
-    expect(stored.userId).toBe(FAKE_USER.id);
+    // The plaintext code never reaches the database.
     expect(stored.codeHash).toBe(await hashSessionToken(code!));
+    expect(stored.codeHash).not.toBe(code);
+    expect(stored.profileId).toBe(HUMAN_SESSION.profile.id);
     expect(stored.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
@@ -160,6 +196,61 @@ describe("GET /api/auth/cli/start", () => {
     );
 
     expect(res.status).toBe(302);
+  });
+
+  it("binds the code to a named profile of the same account", async () => {
+    const db = makeDb([
+      [
+        { id: "profile-human", accountId: "account-1", name: "Mina" },
+        { id: "profile-agent", accountId: "account-1", name: "Scout" },
+      ],
+    ]);
+    mockState.db = db;
+
+    const res = await createApp().request(
+      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc&profile=scout&device=claude-code",
+      { redirect: "manual" },
+    );
+
+    expect(res.status).toBe(302);
+    const stored = db.insertValues.mock.calls[0]![0] as {
+      profileId: string;
+      deviceLabel: string | null;
+    };
+    expect(stored.profileId).toBe("profile-agent");
+    expect(stored.deviceLabel).toBe("claude-code");
+  });
+
+  it("rejects a profile the account does not own", async () => {
+    const db = makeDb([[{ id: "profile-human", accountId: "account-1", name: "Mina" }]]);
+    mockState.db = db;
+
+    const res = await createApp().request(
+      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc&profile=someone-else",
+      { redirect: "manual" },
+    );
+
+    expect(res.status).toBe(400);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it("refuses to let an agent session mint a credential for the human profile", async () => {
+    mockState.session = AGENT_SESSION;
+    const db = makeDb([
+      [
+        { id: "profile-human", accountId: "account-1", name: "Mina" },
+        { id: "profile-agent", accountId: "account-1", name: "Scout" },
+      ],
+    ]);
+    mockState.db = db;
+
+    const res = await createApp().request(
+      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc&profile=Mina",
+      { redirect: "manual" },
+    );
+
+    expect(res.status).toBe(403);
+    expect(db.insert).not.toHaveBeenCalled();
   });
 });
 
@@ -186,12 +277,16 @@ describe("POST /api/auth/cli/exchange", () => {
   });
 
   it("deletes an expired code (single-use even on failure) and refuses to mint a session", async () => {
-    const expiredRow = {
-      id: "code-row-1",
-      userId: FAKE_USER.id,
-      expiresAt: new Date(Date.now() - 1000),
-    };
-    mockState.db = makeDb([[expiredRow]]);
+    mockState.db = makeDb([
+      [
+        {
+          id: "code-row-1",
+          profileId: "profile-agent",
+          deviceLabel: null,
+          expiresAt: new Date(Date.now() - 1000),
+        },
+      ],
+    ]);
 
     const res = await exchangeRequest("some-code");
 
@@ -202,46 +297,74 @@ describe("POST /api/auth/cli/exchange", () => {
     expect(mockState.signSessionToken).not.toHaveBeenCalled();
   });
 
-  it("exchanges a valid code for a brand-new, independently-tracked session", async () => {
-    const validRow = {
-      id: "code-row-2",
-      userId: FAKE_USER.id,
-      expiresAt: new Date(Date.now() + 60_000),
-    };
+  it("exchanges a valid code for a session bound to the code's profile", async () => {
     mockState.db = makeDb([
-      [validRow],
-      [{ id: FAKE_USER.id, email: FAKE_USER.email }],
+      [
+        {
+          id: "code-row-2",
+          profileId: "profile-agent",
+          deviceLabel: "claude-code",
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      ],
+      [{ id: "profile-agent", email: "user@example.com" }],
     ]);
 
     const res = await exchangeRequest("valid-code");
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { token: string; user: { email: string } };
+    const body = (await res.json()) as {
+      token: string;
+      expiresAt: string;
+      user: { email: string };
+    };
     expect(body.token).toBe("signed-session-token");
-    expect(body.user).toEqual({ email: FAKE_USER.email });
+    expect(body.user).toEqual({ email: "user@example.com" });
+    expect(Date.parse(body.expiresAt)).toBeGreaterThan(Date.now());
     expect(mockState.db.deleteWhere).toHaveBeenCalledTimes(1);
     expect(mockState.signSessionToken).toHaveBeenCalledWith({
-      userId: FAKE_USER.id,
-      email: FAKE_USER.email,
+      profileId: "profile-agent",
+      email: "user@example.com",
     });
     expect(mockState.createSessionRow).toHaveBeenCalledWith({
-      userId: FAKE_USER.id,
+      profileId: "profile-agent",
       token: "signed-session-token",
-      client: "cli",
+      deviceLabel: "claude-code",
     });
   });
 
-  it("rejects a code reused a second time", async () => {
-    const validRow = {
-      id: "code-row-3",
-      userId: FAKE_USER.id,
-      expiresAt: new Date(Date.now() + 60_000),
-    };
-    // First exchange succeeds; the second sees an empty result because the
-    // row was already deleted by the first call.
+  it("refuses a code whose profile is gone", async () => {
     mockState.db = makeDb([
-      [validRow],
-      [{ id: FAKE_USER.id, email: FAKE_USER.email }],
+      [
+        {
+          id: "code-row-3",
+          profileId: "profile-erased",
+          deviceLabel: null,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      ],
+      [],
+    ]);
+
+    const res = await exchangeRequest("valid-code");
+
+    expect(res.status).toBe(400);
+    expect(mockState.createSessionRow).not.toHaveBeenCalled();
+  });
+
+  it("rejects a code reused a second time", async () => {
+    // The first exchange succeeds; the second sees an empty result because
+    // the row was already deleted by the first call.
+    mockState.db = makeDb([
+      [
+        {
+          id: "code-row-4",
+          profileId: "profile-human",
+          deviceLabel: null,
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      ],
+      [{ id: "profile-human", email: "user@example.com" }],
       [],
     ]);
 

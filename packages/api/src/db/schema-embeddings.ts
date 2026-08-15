@@ -1,10 +1,15 @@
 /**
- * Drizzle ORM schema — inspiration embeddings.
+ * Drizzle ORM schema — embeddings for inspirations and signals.
  *
- * Stores one Gemini embedding vector per inspiration. The table carries both
- * `user_id` and `inspiration_id` so worker/route code can preserve tenant
- * scope in every lookup, and the composite foreign key prevents an embedding
- * row from pairing one user's id with another user's inspiration.
+ * Two stores, one shape. Signal generation needs both: a new inspiration is
+ * embedded to find what it resembles, and every signal statement is embedded
+ * so match-or-mint can ask "is this the same pattern we already know?"
+ * without a model call in the common case.
+ *
+ * Vectors are jsonb rather than pgvector: the archives are small enough that
+ * cosine similarity in application code is fast, and it keeps the schema
+ * portable across Postgres hosts. `inputHash` is what makes regeneration
+ * cheap — re-embed only when the source text or the model actually changed.
  */
 
 import { relations } from "drizzle-orm";
@@ -12,77 +17,102 @@ import {
   foreignKey,
   index,
   integer,
-  jsonb,
   pgTable,
+  jsonb,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { inspirations, signals, users } from "./schema";
+import { inspirations } from "./schema-inspirations";
+import { profiles } from "./schema-profiles";
+import { signals } from "./schema-signals";
+
+export const inspirationEmbeddings = pgTable(
+  "inspiration_embeddings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+
+    profileId: uuid("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    inspirationId: uuid("inspiration_id").notNull(),
+
+    model: text("model").notNull(),
+    dimensions: integer("dimensions").notNull(),
+    /** SHA-256 of the canonical embedding input; regenerate only on change. */
+    inputHash: text("input_hash").notNull(),
+    embedding: jsonb("embedding").$type<number[]>().notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    inspirationModelUnique: uniqueIndex("inspiration_embeddings_inspiration_model_idx").on(
+      table.inspirationId,
+      table.model,
+    ),
+    profileIdx: index("inspiration_embeddings_profile_idx").on(table.profileId),
+    inspirationFk: foreignKey({
+      columns: [table.profileId, table.inspirationId],
+      foreignColumns: [inspirations.profileId, inspirations.id],
+      name: "inspiration_embeddings_inspiration_fk",
+    }).onDelete("cascade"),
+  }),
+);
+
+export type InspirationEmbedding = typeof inspirationEmbeddings.$inferSelect;
+export type NewInspirationEmbedding = typeof inspirationEmbeddings.$inferInsert;
 
 export const signalEmbeddings = pgTable(
   "signal_embeddings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
+
+    profileId: uuid("profile_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    inspirationId: uuid("signal_id")
-      .notNull()
-      .references(() => signals.id, { onDelete: "cascade" }),
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
+    signalId: uuid("signal_id").notNull(),
+
     model: text("model").notNull(),
     dimensions: integer("dimensions").notNull(),
     inputHash: text("input_hash").notNull(),
     embedding: jsonb("embedding").$type<number[]>().notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    onePerInspirationIdx: uniqueIndex(
-      "signal_embeddings_signal_unique_idx",
-    ).on(table.inspirationId),
-    userInspirationIdx: index("signal_embeddings_user_signal_idx").on(
-      table.userId,
-      table.inspirationId,
-    ),
-    userModelIdx: index("signal_embeddings_user_model_idx").on(
-      table.userId,
+    signalModelUnique: uniqueIndex("signal_embeddings_signal_model_idx").on(
+      table.signalId,
       table.model,
     ),
-    userModelDimensionsIdx: index(
-      "signal_embeddings_user_model_dimensions_idx",
-    ).on(table.userId, table.model, table.dimensions),
-    tenantInspirationFk: foreignKey({
-      name: "signal_embeddings_user_signal_fk",
-      columns: [table.userId, table.inspirationId],
-      foreignColumns: [signals.userId, signals.id],
+    // Match-or-mint scans one profile's signal vectors on every capture.
+    profileIdx: index("signal_embeddings_profile_idx").on(table.profileId),
+    signalFk: foreignKey({
+      columns: [table.profileId, table.signalId],
+      foreignColumns: [signals.profileId, signals.id],
+      name: "signal_embeddings_signal_fk",
     }).onDelete("cascade"),
   }),
 );
 
-export const inspirationEmbeddings = signalEmbeddings;
-
 export type SignalEmbedding = typeof signalEmbeddings.$inferSelect;
 export type NewSignalEmbedding = typeof signalEmbeddings.$inferInsert;
-export type InspirationEmbedding = SignalEmbedding;
-export type NewInspirationEmbedding = NewSignalEmbedding;
 
-export const inspirationEmbeddingsRelations = relations(
-  inspirationEmbeddings,
-  ({ one }) => ({
-    user: one(users, {
-      fields: [inspirationEmbeddings.userId],
-      references: [users.id],
-    }),
-    inspiration: one(inspirations, {
-      fields: [inspirationEmbeddings.inspirationId],
-      references: [inspirations.id],
-    }),
+export const inspirationEmbeddingsRelations = relations(inspirationEmbeddings, ({ one }) => ({
+  inspiration: one(inspirations, {
+    fields: [inspirationEmbeddings.inspirationId],
+    references: [inspirations.id],
   }),
-);
+}));
+
+export const signalEmbeddingsRelations = relations(signalEmbeddings, ({ one }) => ({
+  signal: one(signals, {
+    fields: [signalEmbeddings.signalId],
+    references: [signals.id],
+  }),
+}));

@@ -77,12 +77,8 @@ export PORT=3010
 export PUBLIC_API_URL="http://localhost:3010"
 export PUBLIC_WEB_URL="http://localhost:3010"
 export VITE_API_URL=""
-export VITE_SHOW_INTERNAL_STATUS=true
-export WAKA_SHOW_INTERNAL_STATUS=true
 export WAKA_SERVE_WEB_DIST=1
 export WAKA_WEB_DIST_DIR="$web_dist_dir"
-export WAKA_VAULT_ROOT="${WAKA_VAULT_ROOT:-$repo_root/.waka-vault-local}"
-mkdir -p "$WAKA_VAULT_ROOT"
 
 if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
   if [[ "$WAKA_API_DOTENV_PATH" != "$repo_root/.env.local" ]]; then
@@ -100,18 +96,8 @@ if [[ "${WAKA_DEV_LOCAL_DRY_RUN:-}" == "1" ]]; then
     exit 1
   fi
 
-  if [[ "${VITE_SHOW_INTERNAL_STATUS:-}" != "true" ]] || [[ "${WAKA_SHOW_INTERNAL_STATUS:-}" != "true" ]]; then
-    echo "dev:local dry run failed: internal WOW status must be enabled for the local same-origin demo build and API" >&2
-    exit 1
-  fi
-
   if [[ "$WAKA_SERVE_WEB_DIST" != "1" ]] || [[ "$WAKA_WEB_DIST_DIR" != "$web_dist_dir" ]]; then
     echo "dev:local dry run failed: web dist serving is not configured" >&2
-    exit 1
-  fi
-
-  if [[ -z "$WAKA_VAULT_ROOT" ]]; then
-    echo "dev:local dry run failed: WAKA_VAULT_ROOT must point at a local filesystem vault" >&2
     exit 1
   fi
 
@@ -121,7 +107,7 @@ fi
 
 echo "Starting WAKA local dev (Option B monolithic)..."
 echo "  Browser: http://localhost:3010"
-echo "Building web app for same-origin API paths with internal demo status visible..."
+echo "Building web app for same-origin API paths..."
 
 pnpm --filter @waka/web build
 

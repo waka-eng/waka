@@ -1,11 +1,16 @@
 /**
- * Durable Postgres-backed background jobs.
+ * Drizzle ORM schema — background jobs.
  *
- * The API inserts a row here after the user-facing row is durable. A lightweight
- * in-process tick drains runnable rows immediately, and future cron/processes
- * can call the same worker entry point. Postgres is the durable queue so local
- * and production deployments do not require a separate message broker for
- * classifier/WOW processing.
+ * Postgres is the queue. There is no broker: rows are claimed with a lock
+ * timestamp, retried with backoff, and swept by a cron drain plus an
+ * in-process tick. Keeping the queue in the same transaction-capable store
+ * as the data means a job can never reference a row that was rolled back.
+ *
+ * Job types map to the three-layer pipeline:
+ *   - enrich_attachment  : fetch a link's body / describe an image, cache it
+ *   - derive_signals     : extract → embed → match-or-mint for one inspiration
+ *   - refresh_top_of_mind: re-synthesize a profile's artifact (debounced)
+ *   - refresh_group_top_of_mind : the same for a group's shared signals
  */
 
 import { relations, sql } from "drizzle-orm";
@@ -21,89 +26,74 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { users } from "./schema";
+import { profiles } from "./schema-profiles";
 
-export const backgroundJobStatusValues = [
-  "pending",
-  "running",
-  "succeeded",
-  "failed",
+export const backgroundJobTypeValues = [
+  "enrich_attachment",
+  "derive_signals",
+  "refresh_top_of_mind",
+  "refresh_group_top_of_mind",
 ] as const;
+export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
+export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
+
+export const backgroundJobStatusValues = ["pending", "running", "succeeded", "failed"] as const;
 export type BackgroundJobStatus = (typeof backgroundJobStatusValues)[number];
 export const backgroundJobStatusEnum = pgEnum(
   "background_job_status",
   backgroundJobStatusValues,
 );
 
-export const backgroundJobTypeValues = [
-  "process_inspiration",
-  "meaning_graph_rebuild",
-  "group_reading_refresh",
-] as const;
-export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
-export const backgroundJobTypeEnum = pgEnum(
-  "background_job_type",
-  backgroundJobTypeValues,
-);
-
-export interface ProcessInspirationPayload {
+export interface EnrichAttachmentPayload {
+  attachmentId: string;
   inspirationId: string;
-  autoWowGeneration?: {
-    status: string;
-    generated: boolean;
-    judgment?: {
-      isWowMoment: false;
-      reason: string;
-      debugSummary: string;
-      rawGeminiPreview?: string;
-      parseFailureStage?: string;
-      finishReason?: string;
-      schemaIssueSummary?: string;
-    };
-  };
 }
 
-export interface MeaningGraphRebuildPayload {
-  requestedByUserId: string;
-  phase: "queued" | "counting" | "clearing" | "processing" | "completed";
-  totalInspirations: number;
-  processedInspirations: number;
-  nodesTouched: number;
-  evidenceTouched: number;
-  edgesTouched: number;
-  startedAt?: string;
-  completedAt?: string;
+export interface DeriveSignalsPayload {
+  inspirationId: string;
+  /** "created" on capture, "edited" when re-derivation follows an edit. */
+  reason: "created" | "edited";
 }
 
-export interface GroupReadingRefreshPayload {
+export interface RefreshTopOfMindPayload {
+  /** Why the artifact is being reconsidered — recorded on the new version. */
+  reason: "signals_changed" | "manual";
+}
+
+export interface RefreshGroupTopOfMindPayload {
   groupId: string;
-  requestedByUserId: string;
-  preferredLocale: string;
-  materialFingerprint: string;
-  reason: "bootstrap" | "material_changed" | "membership_changed" | "manual";
+  reason: "shares_changed" | "membership_changed" | "proposal_accepted" | "manual";
 }
 
 export type BackgroundJobPayload =
-  | ProcessInspirationPayload
-  | MeaningGraphRebuildPayload
-  | GroupReadingRefreshPayload;
+  | EnrichAttachmentPayload
+  | DeriveSignalsPayload
+  | RefreshTopOfMindPayload
+  | RefreshGroupTopOfMindPayload;
 
 export const backgroundJobs = pgTable(
   "background_jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
+
+    profileId: uuid("profile_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => profiles.id, { onDelete: "cascade" }),
+
     type: backgroundJobTypeEnum("type").notNull(),
     payload: jsonb("payload").$type<BackgroundJobPayload>().notNull(),
     status: backgroundJobStatusEnum("status").notNull().default("pending"),
+
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
+
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lastError: text("last_error"),
+
+    /** Set to collapse duplicate enqueues of the same work. */
     idempotencyKey: text("idempotency_key"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -111,19 +101,21 @@ export const backgroundJobs = pgTable(
     runnableIdx: index("background_jobs_runnable_idx")
       .on(table.runAfter, table.createdAt)
       .where(sql`${table.status} = 'pending'`),
-    userStatusIdx: index("background_jobs_user_status_idx").on(
-      table.userId,
+    profileStatusIdx: index("background_jobs_profile_status_idx").on(
+      table.profileId,
       table.status,
     ),
     idempotencyUnique: uniqueIndex("background_jobs_idempotency_key_unique_idx")
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
-    activeMeaningGraphRebuildUnique: uniqueIndex(
-      "background_jobs_active_meaning_graph_rebuild_user_idx",
-    )
-      .on(table.userId, table.type)
+    /**
+     * At most one live artifact refresh per profile: the debounce that keeps
+     * a burst of captures from paying for a burst of syntheses.
+     */
+    activeTopOfMindRefreshUnique: uniqueIndex("background_jobs_active_top_of_mind_idx")
+      .on(table.profileId, table.type)
       .where(
-        sql`${table.type} = 'meaning_graph_rebuild'::background_job_type AND ${table.status} IN ('pending'::background_job_status, 'running'::background_job_status)`,
+        sql`${table.type} = 'refresh_top_of_mind'::background_job_type AND ${table.status} IN ('pending'::background_job_status, 'running'::background_job_status)`,
       ),
   }),
 );
@@ -132,8 +124,8 @@ export type BackgroundJob = typeof backgroundJobs.$inferSelect;
 export type NewBackgroundJob = typeof backgroundJobs.$inferInsert;
 
 export const backgroundJobsRelations = relations(backgroundJobs, ({ one }) => ({
-  user: one(users, {
-    fields: [backgroundJobs.userId],
-    references: [users.id],
+  profile: one(profiles, {
+    fields: [backgroundJobs.profileId],
+    references: [profiles.id],
   }),
 }));

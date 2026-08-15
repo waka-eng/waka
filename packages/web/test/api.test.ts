@@ -2,188 +2,155 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
-  addGroupDirectionContribution,
-  createInspiration,
   createFeedback,
-  fetchSavedSignalDetail,
-  fetchSavedSignals,
+  createInspiration,
+  deleteInspiration,
+  fetchCurrentViewer,
+  fetchInspiration,
   fetchInspirations,
-  fetchGroupDirection,
   fetchPublicProfile,
-  fetchTopOfMindNote,
-  fetchTopOfMindNotes,
-  fetchLegacyTopOfMindCompatibilityMoments,
-  formatMeaningGraphRebuildError,
-  respondToGroupDirectionProposal,
+  fetchSignal,
+  fetchSignals,
+  fetchTopOfMind,
+  refreshTopOfMind,
+  holdTopOfMindEntry,
+  shareSignal,
   updateAuthPreferences,
+  updateSignal,
+  updateTopOfMindEntry,
   type ApiInspiration,
-  type ApiSavedSignalDetail,
-  type ApiSavedSignalSearchResult,
-  type ApiTopOfMindNoteSurface,
-  type ListTopOfMindCompatibilityMomentsResponse,
+  type ApiInspirationSummary,
+  type ApiSignal,
+  type ApiSignalDetail,
+  type ApiTopOfMind,
+  type ApiViewer,
 } from "../src/lib/api";
 
-const emptySuccess: ListTopOfMindCompatibilityMomentsResponse = { wowMoments: [] };
-
-const topOfMindNote: ApiTopOfMindNoteSurface = {
-  id: "note-1",
-  userId: "user-1",
-  title: "I need workrooms where making the thing is the default temperature.",
-  ambitionDimension: "work",
-  ambientSignal: "I need workrooms where making the thing is the default temperature.",
-  matchedEnvironment: "A working culture where recurring signals become visible through repeated making.",
-  antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
-  evidenceRationale: "Three saved signals are clustering around this frequency.",
-  rejectedAlternativeInterpretation: null,
-  type: "pattern",
-  body: "Three saved signals rhyme.",
-  prompt: null,
-  guidance: null,
-  confidence: 91,
-  status: "active",
-  relatedSignalIds: ["signal-1"],
-  relatedContextNodeIds: [],
-  createdAt: "2026-05-01T00:00:00.000Z",
-  updatedAt: "2026-05-01T00:00:00.000Z",
-  source: "wow_moment_compatibility",
-  isProvisional: true,
-  legacy: {
-    wowMomentId: "note-1",
-    wowKind: "recurrence",
-    wowScore: 91,
+const viewer: ApiViewer = {
+  account: {
+    id: "account-1",
+    email: "river@example.com",
+    onboardingCompletedAt: "2026-05-01T00:00:00.000Z",
+    isAdmin: false,
   },
-  evidencePreviews: [
-    {
-      signalId: "signal-1",
-      role: "Source signal",
-      reason: "This signal shows the recurring ritual.",
-      textPreview: "Signal text",
-      kind: "note",
-      createdAt: "2026-04-30T00:00:00.000Z",
-      resonanceScore: 64,
-    },
-  ],
-  relatedSignals: [
-    {
-      id: "signal-1",
-      preview: "Signal text",
-      kind: "note",
-      createdAt: "2026-04-30T00:00:00.000Z",
-      resonanceScore: 64,
-    },
-  ],
+  profile: {
+    id: "profile-1",
+    accountId: "account-1",
+    type: "human",
+    name: "River",
+    avatarUrl: null,
+    preferredLocale: "en-US",
+    publicHandle: "river",
+    publicProfileEnabled: true,
+    publicTopOfMindEnabled: true,
+  },
 };
 
-const signalLayerInspiration: ApiInspiration = {
-  id: "insp-1",
-  userId: "user-1",
-  text: "light bends around dense thoughts",
-  kind: "note",
-  category: 3,
-  importanceScore: 44,
-  wowScore: 71,
-  cluster: null,
-  classifiedAt: null,
+const inspirationSummary: ApiInspirationSummary = {
+  id: "inspiration-1",
+  textPreview: "Notion's first-run screen hands you a shape instead of a blank page.",
+  kind: "link",
+  source: "app",
   createdAt: "2026-05-30T20:00:00.000Z",
   updatedAt: "2026-05-30T20:00:00.000Z",
-  signalScores: {
-    resonance: 71,
-    recurrence: 71,
-    agency: 44,
-    identitySignal: 44,
-    decisionRelevance: 44,
-  },
-  signal: {
-    id: "insp-1",
-    userId: "user-1",
-    text: "light bends around dense thoughts",
-    kind: "note",
-    category: 3,
-    scores: {
-      resonance: 71,
-      recurrence: 71,
-      agency: 44,
-      identitySignal: 44,
-      decisionRelevance: 44,
-    },
-    capturedAt: "2026-05-30T20:00:00.000Z",
-    updatedAt: "2026-05-30T20:00:00.000Z",
-    interpretation: {
-      cluster: null,
-      classifiedAt: null,
-    },
-    legacy: {
-      inspirationId: "insp-1",
-      importanceScore: 44,
-      wowScore: 71,
-    },
-  },
+  attachmentSummary: [{ id: "attachment-1", type: "link", label: "Notion" }],
+  reflectionCount: 1,
 };
 
-const savedSignalResult: ApiSavedSignalSearchResult = {
-  id: "sig-1",
-  userId: "user-1",
-  textPreview: "A saved signal about quiet research rooms.",
-  kind: "note",
-  capturedAt: "2026-05-30T12:00:00.000Z",
-  updatedAt: "2026-05-30T12:00:00.000Z",
-  answeredReflectionCount: 0,
-  skippedReflectionCount: 0,
-  resonanceScore: 84,
-  signalScores: {
-    resonance: 84,
-    recurrence: 62,
-    agency: 71,
-    identitySignal: 73,
-    decisionRelevance: 70,
-  },
-  highlightedSnippets: [
+const inspiration: ApiInspiration = {
+  id: "inspiration-1",
+  profileId: "profile-1",
+  text: "Notion's first-run screen hands you a shape instead of a blank page.",
+  kind: "link",
+  source: "app",
+  createdAt: "2026-05-30T20:00:00.000Z",
+  updatedAt: "2026-05-30T20:00:00.000Z",
+  attachments: [
     {
-      id: "spark-1",
-      text: "quiet research rooms",
-      source: "user_selected",
-      confidence: 100,
-      isPrimary: true,
+      id: "attachment-1",
+      inspirationId: "inspiration-1",
+      type: "link",
+      url: "https://notion.so",
+      name: null,
+      contentType: null,
+      size: null,
+      createdAt: "2026-05-30T20:00:00.000Z",
+      enrichment: {
+        status: "ready",
+        kind: "page_body",
+        text: "Pick a template to start from.",
+        errorReason: null,
+        updatedAt: "2026-05-30T20:01:00.000Z",
+        link: {
+          finalUrl: "https://www.notion.so/",
+          hostname: "notion.so",
+          title: "Notion",
+          description: "Pick a template to start from.",
+          siteName: "Notion",
+          previewImageUrl: null,
+        },
+        image: null,
+      },
     },
   ],
-  matchingSnippets: ["quiet research rooms"],
-  relatedContextTerms: ["environment: quiet rooms"],
-  relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
-  relatedGroupNotes: [],
-  attachmentSummary: [],
-  relevanceReasons: ["highlight match"],
+  reflections: [
+    {
+      id: "reflection-1",
+      inspirationId: "inspiration-1",
+      question: "Why did this catch you?",
+      answer: "A blank page is a demand.",
+      skipped: false,
+      createdAt: "2026-05-30T20:02:00.000Z",
+    },
+  ],
 };
 
-const savedSignalDetail: ApiSavedSignalDetail = {
-  ...savedSignalResult,
-  rawText: "A saved signal about quiet research rooms and who gets to think there.",
-  attachments: [],
-  resonanceFeedback: [],
-  signalPacket: {
-    id: "packet-1",
-    text: "waka.signal_packet.v1\nWHY_IT_MATTERS: quiet rooms keep recurring.",
-    primarySpark: "quiet research rooms",
-    artifactExcerpt: "A saved signal about quiet research rooms.",
-    updatedAt: "2026-05-30T12:30:00.000Z",
-  },
-  relatedContextNodes: [
+const signal: ApiSignal = {
+  id: "signal-1",
+  statement: "You keep saving products that make the first move for you.",
+  status: "active",
+  confidence: 78,
+  evidenceCount: 3,
+  lastEvidenceAt: "2026-05-30T20:00:00.000Z",
+  locked: false,
+  unsupported: false,
+  sharedGroupIds: [],
+  createdAt: "2026-05-20T00:00:00.000Z",
+};
+
+const signalDetail: ApiSignalDetail = {
+  ...signal,
+  evidence: [
     {
-      id: "node-1",
-      type: "environment",
-      label: "quiet research rooms",
-      description: "Where attention seems to work.",
-      confidence: 78,
-      evidenceReason: "The signal names the environment directly.",
+      inspirationId: "inspiration-1",
+      preview: "Notion's first-run screen hands you a shape instead of a blank page.",
+      quote: "hands you a shape instead of a blank page",
+      reason: "The capture names the move being made for the person.",
+      createdAt: "2026-05-30T20:00:00.000Z",
     },
   ],
-  relatedTopOfMindNotes: [
+};
+
+const topOfMind: ApiTopOfMind = {
+  id: "top-of-mind-1",
+  version: 4,
+  reason: "regenerated",
+  createdAt: "2026-06-01T00:00:00.000Z",
+  entries: [
     {
-      id: "note-1",
-      title: "Rooms for honest work keep returning",
+      id: "entry-1",
       type: "pattern",
-      body: "Several signals point at this room.",
-      confidence: 86,
-      status: "active",
+      body: "You are drawn to products that refuse to start empty.",
+      belief: null,
+      prompt: "Where else are you waiting to be handed a shape?",
+      locked: false,
+      pinned: false,
+      dismissed: false,
+      sortOrder: 0,
+      citedSignals: [
+        { id: "signal-1", statement: "You keep saving products that make the first move for you." },
+      ],
+      createdAt: "2026-06-01T00:00:00.000Z",
     },
   ],
 };
@@ -192,480 +159,38 @@ function stubFetch(response: Response): void {
   vi.stubGlobal("fetch", vi.fn(async () => response));
 }
 
-describe("fetchLegacyTopOfMindCompatibilityMoments", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-  it("returns top-of-mind compatibility moments from a successful JSON response", async () => {
-    const body: ListTopOfMindCompatibilityMomentsResponse = {
-      wowMoments: [
-        {
-          id: "moment-1",
-          userId: "user-1",
-          title: "I need workrooms where making the thing is the default temperature.",
-          kind: "recurrence",
-          why: "Three saved inspirations rhyme.",
-          beliefStatement: null,
-          reflectionQuestion: null,
-          reflectionGuide: "Choose the one rhyme that feels most alive, then write a small next question.",
-          wowScore: 91,
-          createdAt: "2026-05-01T00:00:00.000Z",
-          updatedAt: "2026-05-01T00:00:00.000Z",
-          relatedInspirations: [],
-          topOfMindNote: {
-            id: "moment-1",
-            userId: "user-1",
-            title: "I need workrooms where making the thing is the default temperature.",
-            ambitionDimension: "work",
-            ambientSignal: "I need workrooms where making the thing is the default temperature.",
-            matchedEnvironment: "A working culture where recurring signals become visible through repeated making.",
-            antiEnvironment: "Work contexts that reward commentary while the real object stays abstract.",
-            evidenceRationale: "Three saved signals are clustering around this frequency.",
-            type: "action",
-            body: "Three saved inspirations rhyme.",
-            prompt: null,
-            guidance: "Choose the one rhyme that feels most alive, then write a small next question.",
-            confidence: 91,
-            status: "active",
-            relatedSignalIds: [],
-            relatedContextNodeIds: [],
-            createdAt: "2026-05-01T00:00:00.000Z",
-            updatedAt: "2026-05-01T00:00:00.000Z",
-            source: "wow_moment_compatibility",
-            isProvisional: true,
-            legacy: {
-              wowMomentId: "moment-1",
-              wowKind: "recurrence",
-              wowScore: 91,
-            },
-          },
-        },
-      ],
-    };
-    stubFetch(Response.json(body));
+describe("the session", () => {
+  it("reads the account and the profile it is acting as", async () => {
+    stubFetch(Response.json(viewer));
 
-    await expect(fetchLegacyTopOfMindCompatibilityMoments()).resolves.toEqual(body.wowMoments);
-    expect(fetch).toHaveBeenCalledWith("/api/wow-moments", {
+    await expect(fetchCurrentViewer()).resolves.toEqual(viewer);
+    expect(fetch).toHaveBeenCalledWith("/api/auth/me", {
       method: "GET",
       credentials: "include",
       headers: { Accept: "application/json" },
     });
   });
 
-  it("preserves non-2xx API errors", async () => {
-    stubFetch(Response.json({ error: "Please sign in" }, { status: 401 }));
+  /*
+    An anonymous visitor is the expected case on a cold load, not a failure, so
+    the guard can route to /login without a try/catch around every read.
+  */
+  it("treats a rejected cookie as nobody rather than as an error", async () => {
+    stubFetch(Response.json({ error: "Authentication required" }, { status: 401 }));
 
-    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
-      name: "ApiError",
-      status: 401,
-      message: "Please sign in",
-    } satisfies Partial<ApiError>);
+    await expect(fetchCurrentViewer()).resolves.toBeNull();
   });
 
-  it("throws ApiError for a successful response missing wowMoments", async () => {
-    stubFetch(Response.json({ moments: [] }));
+  it("PATCHes the preferred locale and returns both halves back", async () => {
+    stubFetch(Response.json(viewer));
 
-    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
-      name: "ApiError",
-      status: 200,
-      message: "Malformed top-of-mind compatibility response",
-    } satisfies Partial<ApiError>);
-  });
-
-  it("throws ApiError for a successful response with non-array wowMoments", async () => {
-    stubFetch(Response.json({ wowMoments: null }));
-
-    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
-      name: "ApiError",
-      status: 200,
-      message: "Malformed top-of-mind compatibility response",
-    } satisfies Partial<ApiError>);
-  });
-
-  it("throws ApiError for a successful non-JSON response", async () => {
-    stubFetch(new Response("<html>ok</html>", { status: 200 }));
-
-    await expect(fetchLegacyTopOfMindCompatibilityMoments()).rejects.toMatchObject({
-      name: "ApiError",
-      status: 200,
-      message: "Malformed top-of-mind compatibility response",
-    } satisfies Partial<ApiError>);
-  });
-
-  it("still accepts an empty successful compatibility list", async () => {
-    stubFetch(Response.json(emptySuccess));
-
-    await expect(fetchLegacyTopOfMindCompatibilityMoments()).resolves.toEqual([]);
-  });
-});
-
-describe("fetchTopOfMindNotes", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("returns active top-of-mind notes from the user-facing route", async () => {
-    stubFetch(Response.json({ topOfMindNotes: [topOfMindNote] }));
-
-    await expect(fetchTopOfMindNotes({ limit: 3 })).resolves.toEqual([
-      topOfMindNote,
-    ]);
-    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind?limit=3", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  });
-
-  it("throws ApiError for a malformed note list response", async () => {
-    stubFetch(Response.json({ topOfMindNotes: null }));
-
-    await expect(fetchTopOfMindNotes()).rejects.toMatchObject({
-      name: "ApiError",
-      status: 200,
-      message: "Malformed top-of-mind notes response",
-    } satisfies Partial<ApiError>);
-  });
-});
-
-describe("fetchTopOfMindNote", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("returns a single top-of-mind note detail", async () => {
-    stubFetch(Response.json({ topOfMindNote }));
-
-    await expect(fetchTopOfMindNote("note-1")).resolves.toEqual(topOfMindNote);
-    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/note-1", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  });
-
-  it("preserves API errors from the detail endpoint", async () => {
-    stubFetch(Response.json({ error: "Top-of-mind note not found" }, { status: 404 }));
-
-    await expect(fetchTopOfMindNote("missing")).rejects.toMatchObject({
-      name: "ApiError",
-      status: 404,
-      message: "Top-of-mind note not found",
-    } satisfies Partial<ApiError>);
-  });
-});
-
-describe("fetchPublicProfile", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("returns a public profile and calls the public route", async () => {
-    stubFetch(Response.json({
-      profile: {
-        name: "River",
-        handle: "q00",
-        preferredLocale: "en-US",
-      },
-      topOfMindNotes: [topOfMindNote],
-    }));
-
-    await expect(fetchPublicProfile("@Q00", { limit: 2 })).resolves.toMatchObject({
-      profile: { handle: "q00" },
-      topOfMindNotes: [{ title: topOfMindNote.title }],
-    });
-    expect(fetch).toHaveBeenCalledWith("/api/public/profiles/Q00?limit=2", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  });
-
-  it("throws ApiError for a malformed public profile response", async () => {
-    stubFetch(Response.json({ profile: null, topOfMindNotes: [] }));
-
-    await expect(fetchPublicProfile("q00")).rejects.toMatchObject({
-      name: "ApiError",
-      status: 200,
-      message: "Malformed public profile response",
-    } satisfies Partial<ApiError>);
-  });
-});
-
-describe("saved signal archive API", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("fetches saved signal search results with search, filter, and sort params", async () => {
-    stubFetch(Response.json({ signals: [savedSignalResult] }));
-
-    await expect(
-      fetchSavedSignals({
-        q: "room",
-        filter: "highlighted",
-        sort: "resonance",
-        limit: 12,
-      }),
-    ).resolves.toEqual([savedSignalResult]);
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/signals?q=room&filter=highlighted&sort=resonance&limit=12",
-      {
-        method: "GET",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      },
+    await expect(updateAuthPreferences({ preferredLocale: "ko-KR" })).resolves.toEqual(
+      viewer,
     );
-  });
-
-  it("fetches a saved signal deep dive", async () => {
-    stubFetch(Response.json({ signal: savedSignalDetail }));
-
-    await expect(fetchSavedSignalDetail("sig-1")).resolves.toEqual(savedSignalDetail);
-    expect(fetch).toHaveBeenCalledWith("/api/signals/sig-1", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  });
-
-  it("throws ApiError for malformed saved signal list responses", async () => {
-    stubFetch(Response.json({ signals: null }));
-
-    await expect(fetchSavedSignals()).rejects.toMatchObject({
-      name: "ApiError",
-      status: 200,
-      message: "Malformed saved signals response",
-    } satisfies Partial<ApiError>);
-  });
-});
-
-describe("createFeedback", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("persists top-of-mind note feedback through the feedback route", async () => {
-    const feedback = {
-      id: "feedback-1",
-      userId: "user-1",
-      targetType: "top_of_mind_note" as const,
-      targetId: "note-1",
-      value: "partly" as const,
-      emotionLabel: null,
-      correctionText: "This is closer if it mentions the workshop.",
-      source: "user",
-      metadata: {},
-      createdAt: "2026-05-01T00:00:00.000Z",
-      updatedAt: "2026-05-01T00:00:00.000Z",
-    };
-    stubFetch(Response.json({ feedback }, { status: 201 }));
-
-    await expect(
-      createFeedback({
-        targetType: "top_of_mind_note",
-        targetId: "note-1",
-        value: "partly",
-        correctionText: "This is closer if it mentions the workshop.",
-      }),
-    ).resolves.toEqual(feedback);
-    expect(fetch).toHaveBeenCalledWith("/api/feedback", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        targetType: "top_of_mind_note",
-        targetId: "note-1",
-        value: "partly",
-        correctionText: "This is closer if it mentions the workshop.",
-      }),
-    });
-  });
-
-  it("preserves feedback API failures", async () => {
-    stubFetch(Response.json({ error: "Feedback target not found" }, { status: 404 }));
-
-    await expect(
-      createFeedback({
-        targetType: "top_of_mind_note",
-        targetId: "missing",
-        value: "not_true",
-      }),
-    ).rejects.toMatchObject({
-      name: "ApiError",
-      status: 404,
-      message: "Feedback target not found",
-    } satisfies Partial<ApiError>);
-  });
-});
-
-describe("collaborative room direction API", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  const direction = {
-    current: null,
-    proposal: null,
-    history: [],
-    contributions: [],
-    responses: [],
-    memberCount: 2,
-    sharedInspirationCount: 4,
-    sharedContributorCount: 2,
-    newInspirationCount: 4,
-    newContributorCount: 2,
-    contributorCount: 0,
-    requiredContributors: 2,
-    requiredResponses: 2,
-    viewerResponse: null,
-  };
-
-  it("loads the current, proposal, collaboration and history in one request", async () => {
-    stubFetch(Response.json({ direction }));
-    await expect(fetchGroupDirection("room-1")).resolves.toEqual(direction);
-    expect(fetch).toHaveBeenCalledWith("/api/groups/room-1/direction", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  });
-
-  it("adds a structured shaping note", async () => {
-    const contribution = {
-      id: "thought-1",
-      readingId: "reading-1",
-      userId: "user-1",
-      memberName: "River",
-      kind: "missing" as const,
-      body: "Experimentation is missing.",
-      createdAt: "2026-08-04T00:00:00.000Z",
-      updatedAt: "2026-08-04T00:00:00.000Z",
-    };
-    const result = {
-      contribution,
-      contributorCount: 1,
-      requiredContributors: 3,
-      updateReady: false,
-    };
-    stubFetch(Response.json(result, { status: 201 }));
-    await expect(
-      addGroupDirectionContribution("room-1", {
-        kind: "missing",
-        body: "Experimentation is missing.",
-      }),
-    ).resolves.toEqual(result);
-    expect(fetch).toHaveBeenCalledWith("/api/groups/room-1/direction/contributions", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind: "missing", body: "Experimentation is missing." }),
-    });
-  });
-
-  it("sends a review response to the exact proposal", async () => {
-    const result = { decision: "pending" as const, direction };
-    stubFetch(Response.json(result));
-    await expect(
-      respondToGroupDirectionProposal("room-1", "proposal-1", "accept"),
-    ).resolves.toEqual(result);
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/groups/room-1/direction/proposals/proposal-1/respond",
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: "accept" }),
-      },
-    );
-  });
-});
-
-describe("inspiration signal compatibility", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("keeps createInspiration on the existing route while preserving signal-facing scores", async () => {
-    stubFetch(Response.json({ inspiration: signalLayerInspiration }, { status: 201 }));
-
-    await expect(
-      createInspiration({
-        text: "light bends around dense thoughts",
-        kind: "note",
-        category: 3,
-      }),
-    ).resolves.toEqual(signalLayerInspiration);
-
-    expect(fetch).toHaveBeenCalledWith("/api/inspirations", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: "light bends around dense thoughts",
-        kind: "note",
-        category: 3,
-      }),
-    });
-  });
-
-  /**
-   * A save is the capturing user's, and no room's.
-   *
-   * The composer can be opened while standing in a room, and used to be
-   * reached at `/rooms/:id/capture`, which read as capturing INTO that room.
-   * It never did: the request carries no room, `createInspirationSchema` has
-   * no field for one, and the row is written with the session's own user id.
-   * This pins the request shape so a future "helpful" addition of a room id
-   * has to break a test that says why it must not.
-   */
-  it("sends no room or group with a save, whatever room the composer was opened from", async () => {
-    stubFetch(Response.json({ inspiration: signalLayerInspiration }, { status: 201 }));
-
-    await createInspiration({ text: "saved while looking at a room's wall" });
-
-    const [, init] = vi.mocked(fetch).mock.calls[0]!;
-    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-
-    expect(Object.keys(body)).toEqual(["text"]);
-    for (const key of ["roomId", "groupId", "room", "group"]) {
-      expect(body).not.toHaveProperty(key);
-    }
-  });
-
-  it("keeps fetchInspirations on the existing route while exposing signal-facing scores", async () => {
-    stubFetch(Response.json({ inspirations: [signalLayerInspiration] }));
-
-    await expect(fetchInspirations()).resolves.toEqual([signalLayerInspiration]);
-
-    expect(fetch).toHaveBeenCalledWith("/api/inspirations", {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  });
-});
-
-describe("updateAuthPreferences", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("PATCHes the preferred locale and returns the updated user", async () => {
-    const body = {
-      user: {
-        id: "user-1",
-        email: "user@example.com",
-        name: "User",
-        preferredLocale: "ko-KR" as const,
-        onboardingCompletedAt: "2026-01-01T00:00:00.000Z",
-        isAdmin: false,
-      },
-    };
-    stubFetch(Response.json(body));
-
-    await expect(updateAuthPreferences({ preferredLocale: "ko-KR" })).resolves.toEqual(body);
     expect(fetch).toHaveBeenCalledWith("/api/auth/me/preferences", {
       method: "PATCH",
       credentials: "include",
@@ -675,29 +200,271 @@ describe("updateAuthPreferences", () => {
   });
 });
 
-describe("formatMeaningGraphRebuildError", () => {
-  it("explains ambiguous remote timeout and proxy failures", () => {
-    const message = formatMeaningGraphRebuildError(
-      new ApiError({ status: 502, message: "Bad Gateway" }),
+describe("inspirations", () => {
+  it("posts a capture and returns the row the server wrote", async () => {
+    stubFetch(Response.json({ inspiration }, { status: 201 }));
+
+    await expect(
+      createInspiration({ text: inspiration.text, kind: "note" }),
+    ).resolves.toEqual(inspiration);
+    expect(fetch).toHaveBeenCalledWith("/api/inspirations", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: inspiration.text, kind: "note" }),
+    });
+  });
+
+  /**
+   * A capture belongs to the profile that made it and to nothing else. Sharing
+   * happens a layer up, per signal and per group, so a capture request that
+   * carried a group would be claiming a relationship the schema does not have.
+   * This pins the request shape so a future "helpful" addition has to break a
+   * test that says why it must not.
+   */
+  it("sends no group with a capture", async () => {
+    stubFetch(Response.json({ inspiration }, { status: 201 }));
+
+    await createInspiration({ text: "saved while looking at a wall" });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+
+    expect(Object.keys(body)).toEqual(["text"]);
+    for (const key of ["groupId", "group", "shareToGroups", "roomId"]) {
+      expect(body).not.toHaveProperty(key);
+    }
+  });
+
+  it("searches the archive through the query string", async () => {
+    stubFetch(Response.json({ inspirations: [inspirationSummary] }));
+
+    await expect(fetchInspirations({ q: "notion", limit: 40 })).resolves.toEqual([
+      inspirationSummary,
+    ]);
+    expect(fetch).toHaveBeenCalledWith("/api/inspirations?q=notion&limit=40", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("opens one capture with its attachments and reflections", async () => {
+    stubFetch(Response.json({ inspiration }));
+
+    await expect(fetchInspiration("inspiration-1")).resolves.toEqual(inspiration);
+    expect(fetch).toHaveBeenCalledWith("/api/inspirations/inspiration-1", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("surfaces the server's own words when a delete is refused", async () => {
+    stubFetch(Response.json({ error: "Inspiration not found" }, { status: 404 }));
+
+    await expect(deleteInspiration("missing")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "Inspiration not found",
+    } satisfies Partial<ApiError>);
+  });
+});
+
+describe("signals", () => {
+  it("lists the acting profile's distilled patterns", async () => {
+    stubFetch(Response.json({ signals: [signal] }));
+
+    await expect(fetchSignals({ status: "active", limit: 100 })).resolves.toEqual([
+      signal,
+    ]);
+    expect(fetch).toHaveBeenCalledWith("/api/signals?status=active&limit=100", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("adds the evidence when one signal is opened", async () => {
+    stubFetch(Response.json({ signal: signalDetail }));
+
+    await expect(fetchSignal("signal-1")).resolves.toEqual(signalDetail);
+    expect(fetch).toHaveBeenCalledWith("/api/signals/signal-1", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  it("sends a rewritten statement, which is what locks it", async () => {
+    stubFetch(Response.json({ signal: { ...signal, locked: true } }));
+
+    await expect(
+      updateSignal("signal-1", { statement: "You save products that start you off." }),
+    ).resolves.toMatchObject({ locked: true });
+    expect(fetch).toHaveBeenCalledWith("/api/signals/signal-1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ statement: "You save products that start you off." }),
+    });
+  });
+
+  it("shares one signal with one group", async () => {
+    stubFetch(Response.json({ shared: true, groupId: "group-1" }, { status: 201 }));
+
+    await expect(shareSignal("signal-1", "group-1")).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledWith("/api/signals/signal-1/shares", {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ groupId: "group-1" }),
+    });
+  });
+});
+
+describe("top of mind", () => {
+  it("reads the one current artifact and its entries", async () => {
+    stubFetch(Response.json({ topOfMind }));
+
+    await expect(fetchTopOfMind()).resolves.toEqual(topOfMind);
+    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
+  });
+
+  /*
+    A profile with nothing to read has no artifact. That is a state the board
+    renders, not an error it reports.
+  */
+  it("reports no artifact as null rather than as a failure", async () => {
+    stubFetch(Response.json({ topOfMind: null }));
+
+    await expect(fetchTopOfMind()).resolves.toBeNull();
+  });
+
+  it("accepts a queued refresh without a body to read", async () => {
+    stubFetch(new Response(null, { status: 202 }));
+
+    await expect(refreshTopOfMind()).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/refresh", {
+      method: "POST",
+      credentials: "include",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: "{}",
+    });
+  });
+
+  it("edits and holds entries through the entry routes", async () => {
+    stubFetch(Response.json({ entry: { ...topOfMind.entries[0]!, locked: true } }));
+    await expect(
+      updateTopOfMindEntry("entry-1", { body: "You want to be handed a shape." }),
+    ).resolves.toMatchObject({ locked: true });
+    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/entries/entry-1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body: "You want to be handed a shape." }),
+    });
+
+    stubFetch(Response.json({ entry: { ...topOfMind.entries[0]!, pinned: true } }));
+    await expect(holdTopOfMindEntry("entry-1")).resolves.toMatchObject({ pinned: true });
+    expect(fetch).toHaveBeenCalledWith("/api/top-of-mind/entries/entry-1/pin", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+  });
+});
+
+describe("feedback", () => {
+  it("records a verdict about one top-of-mind entry", async () => {
+    const feedback = {
+      id: "feedback-1",
+      profileId: "profile-1",
+      targetType: "top_of_mind_entry" as const,
+      targetId: "entry-1",
+      value: "partly" as const,
+      correctionText: "Closer if it mentions the workshop.",
+      createdAt: "2026-06-01T00:00:00.000Z",
+    };
+    stubFetch(Response.json({ feedback }, { status: 201 }));
+
+    await expect(
+      createFeedback({
+        targetType: "top_of_mind_entry",
+        targetId: "entry-1",
+        value: "partly",
+        correctionText: "Closer if it mentions the workshop.",
+      }),
+    ).resolves.toEqual(feedback);
+    expect(fetch).toHaveBeenCalledWith("/api/feedback", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        targetType: "top_of_mind_entry",
+        targetId: "entry-1",
+        value: "partly",
+        correctionText: "Closer if it mentions the workshop.",
+      }),
+    });
+  });
+
+  it("preserves feedback API failures", async () => {
+    stubFetch(Response.json({ error: "Feedback target not found" }, { status: 404 }));
+
+    await expect(
+      createFeedback({ targetType: "signal", targetId: "missing", value: "not_true" }),
+    ).rejects.toMatchObject({
+      name: "ApiError",
+      status: 404,
+      message: "Feedback target not found",
+    } satisfies Partial<ApiError>);
+  });
+});
+
+describe("public profile", () => {
+  it("strips the leading @ before asking for a handle", async () => {
+    stubFetch(
+      Response.json({
+        profile: { name: "River", handle: "river", preferredLocale: "en-US" },
+        topOfMind: {
+          version: 4,
+          publishedAt: "2026-06-01T00:00:00.000Z",
+          entries: [
+            {
+              type: "pattern",
+              body: "You are drawn to products that refuse to start empty.",
+              belief: null,
+              prompt: null,
+              pinned: false,
+            },
+          ],
+        },
+      }),
     );
 
-    expect(message).toContain("timed out or the remote proxy returned HTTP 502/504");
-    expect(message).toContain("may still be running server-side");
-    expect(message).toContain("click Refresh");
+    const result = await fetchPublicProfile("@river");
+    expect(result.profile.handle).toBe("river");
+    expect(result.topOfMind?.entries).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledWith("/api/public/profiles/river", {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+    });
   });
 
-  it("adds rebuild context to ordinary API failures", () => {
-    expect(
-      formatMeaningGraphRebuildError(new ApiError({ status: 500, message: "Gemini quota exhausted" })),
-    ).toBe("Rebuild failed: Gemini quota exhausted");
-  });
+  it("throws ApiError when the response carries no profile", async () => {
+    stubFetch(Response.json({}));
 
-  it("uses localized Korean rebuild failure copy without leaking server English", () => {
-    expect(
-      formatMeaningGraphRebuildError(
-        new ApiError({ status: 500, message: "Failed to enqueue context graph rebuild" }),
-        "ko-KR",
-      ),
-    ).toBe("다시 만들기 실패: 그래프를 다시 만들지 못했습니다. 잠시 뒤 다시 시도하세요.");
+    await expect(fetchPublicProfile("river")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 200,
+      message: "Malformed public profile response",
+    } satisfies Partial<ApiError>);
   });
 });

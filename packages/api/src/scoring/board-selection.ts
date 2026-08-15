@@ -29,7 +29,7 @@
  * greedy selection needs. Any absolute threshold added here is a bug.
  */
 
-import { cosineSimilarity } from "./wow-score.js";
+import { cosineSimilarity } from "./vector.js";
 
 /**
  * How much a reading's own strength counts, against what it adds to the board.

@@ -1,127 +1,114 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildCanonicalInspirationEmbeddingInput,
-  hashEmbeddingInput,
-} from "./inspiration-embeddings.js";
-import {
-  MIN_AUDIBLE_CHARS,
-  audibleLength,
-  enrichmentBudgetFor,
-  extractArticleBody,
-  extractFirstUrl,
-  extractHtmlSummary,
+  MAX_ENRICHMENT_TEXT_CHARS,
+  assertFetchableUrl,
+  composeEnrichmentText,
+  extractLinkMetadata,
+  extractPageBody,
   extractYouTubeDescription,
-  isAudible,
   isAuthWallSummary,
   isPrivateAddress,
   stripBoilerplateLines,
 } from "./signal-enrichment.js";
 
-describe("extractFirstUrl", () => {
-  it("finds the first link in mixed text", () => {
-    expect(extractFirstUrl("watch this https://youtu.be/abc123 before friday")).toBe(
-      "https://youtu.be/abc123",
-    );
-  });
-
-  it("returns null for plain text", () => {
-    expect(extractFirstUrl("a thought with no link in it")).toBeNull();
-  });
-
-  it("does not swallow trailing punctuation wrappers", () => {
-    expect(extractFirstUrl('see (https://example.com/a) now')).toBe("https://example.com/a");
-  });
-});
-
-describe("extractHtmlSummary", () => {
-  it("prefers og tags and joins title with description", () => {
+describe("extractLinkMetadata", () => {
+  it("prefers og tags over the title element", () => {
     const html = `<html><head>
       <title>Fallback title</title>
       <meta property="og:title" content="The real title" />
       <meta property="og:description" content="What the page is about" />
+      <meta property="og:site_name" content="Example" />
     </head></html>`;
-    expect(extractHtmlSummary(html)).toBe("The real title — What the page is about");
+    expect(extractLinkMetadata(html)).toEqual({
+      title: "The real title",
+      description: "What the page is about",
+      siteName: "Example",
+      previewImageUrl: null,
+    });
   });
 
-  it("falls back to title tag and meta description", () => {
+  it("falls back to the title element and the plain description", () => {
     const html = `<head><title>  Plain &amp; simple </title>
       <meta name="description" content="a description"></head>`;
-    expect(extractHtmlSummary(html)).toBe("Plain & simple — a description");
+    const metadata = extractLinkMetadata(html);
+    expect(metadata.title).toBe("Plain & simple");
+    expect(metadata.description).toBe("a description");
   });
 
-  it("returns null for a page with nothing to say", () => {
-    expect(extractHtmlSummary("<html><body>no head</body></html>")).toBeNull();
-  });
-
-  it("decodes hex entities, not just decimal ones", () => {
+  it("decodes hex entities, not only decimal ones", () => {
     // Seen stored verbatim on a real save: `&#x27;와인 바꿔치기 논란&#x27;`.
-    // The embedding read the entity as part of the words.
+    // Extraction read the entity itself as part of the words.
     const html = `<head><title>&#x27;와인 바꿔치기&#x27; &#39;quoted&#39;</title></head>`;
-    expect(extractHtmlSummary(html)).toBe("'와인 바꿔치기' 'quoted'");
+    expect(extractLinkMetadata(html).title).toBe("'와인 바꿔치기' 'quoted'");
   });
 
   it("says nothing for a page that is asking for an account", () => {
-    // A LinkedIn post save came back as LinkedIn's signup page, so the save
-    // embedded as *a LinkedIn account page* rather than as the post.
+    // A LinkedIn post save came back as LinkedIn's signup page, so the capture
+    // read as *a LinkedIn account page* rather than as the post.
     const html = `<head><title>Sign Up | LinkedIn</title>
       <meta name="description" content="500 million+ members | Manage your professional identity."></head>`;
-    expect(extractHtmlSummary(html)).toBeNull();
+    expect(extractLinkMetadata(html)).toEqual({
+      title: null,
+      description: null,
+      siteName: null,
+      previewImageUrl: null,
+    });
   });
 
   it("does not mistake an article about logging in for a login wall", () => {
-    const html = `<head><title>Login screens are a design problem</title>
-      <meta name="description" content="Why the first screen decides whether anyone sees the second."></head>`;
-    expect(extractHtmlSummary(html)).toContain("Login screens are a design problem");
-  });
-
-  it("carries the page's own prose, not just its blurb", () => {
-    const body = "x".repeat(80);
-    const html = `<head><title>T</title><meta name="description" content="D"></head>
-      <body><p>nav</p><p>${body}</p></body>`;
-    const out = extractHtmlSummary(html);
-    expect(out).toContain(body);
-    // Short fragments are navigation and captions, not prose.
-    expect(out).not.toContain("nav");
+    expect(
+      isAuthWallSummary(
+        "Login screens are a design problem",
+        "Why the first screen decides whether anyone sees the second.",
+      ),
+    ).toBe(false);
   });
 });
 
 /**
- * The invariant the module exists to hold. Enrichment fills silence; it does
- * not add volume. A fixed cap gave the same budget to a bare link and to a
- * thousand-word note, which quietly amplified whoever already wrote most —
- * the imbalance the trigger fairness work exists to remove.
+ * The point of link enrichment. A title and a blurb name what was saved; only
+ * the body says what it argued, and extraction can cite nothing it cannot read.
  */
-describe("enrichmentBudgetFor", () => {
-  it("gives a bare link the full top-up", () => {
-    expect(enrichmentBudgetFor("https://example.com/a-long-article-slug")).toBeGreaterThan(1000);
+describe("extractPageBody", () => {
+  it("keeps paragraphs and skips captions and navigation", () => {
+    const para = "This is a real paragraph with enough words to be prose rather than a caption.";
+    const html = `<article><p>Share</p><p>${para}</p></article>`;
+    expect(extractPageBody(html, 500)).toBe(para);
   });
 
-  it("gives a save its owner already filled almost nothing", () => {
-    const essay = "말".repeat(1400);
-    expect(enrichmentBudgetFor(`${essay} https://example.com`)).toBe(200);
+  it("drops the chrome around the prose", () => {
+    const para = "The argument of the piece, stated at enough length to count as prose.";
+    const html = `<body>
+      <nav><p>Home — About — Contact — Subscribe to the newsletter today</p></nav>
+      <script>var tracking = "Home About Contact Subscribe";</script>
+      <main><p>${para}</p></main>
+      <footer><p>Copyright, all rights reserved, terms of service and privacy</p></footer>
+    </body>`;
+    expect(extractPageBody(html, 500)).toBe(para);
   });
 
-  it("scales between the two rather than switching", () => {
-    const thin = enrichmentBudgetFor(`${"x".repeat(200)} https://example.com`);
-    const thick = enrichmentBudgetFor(`${"x".repeat(800)} https://example.com`);
-    expect(thin).toBeGreaterThan(thick);
+  it("reads a page that never uses a paragraph tag", () => {
+    // Div soup is an unusual template, not an empty page. Losing it entirely
+    // would silence a whole class of ordinary sites.
+    const html = `<main><div><span>${"the body of a div-only page ".repeat(4)}</span></div></main>`;
+    expect(extractPageBody(html, 500)).toContain("the body of a div-only page");
   });
 
-  /**
-   * The URL is the thing being explained, not content. Counting its characters
-   * would let a long tracking-laden link argue the save is already audible.
-   */
-  it("does not let a long URL pass as the owner's own words", () => {
-    const longUrl = `https://example.com/${"seg/".repeat(200)}`;
-    expect(enrichmentBudgetFor(longUrl)).toBeGreaterThan(1000);
+  it("stays inside its budget", () => {
+    const para = "y".repeat(300);
+    expect(extractPageBody(`<p>${para}</p><p>${para}</p>`, 120)).toHaveLength(120);
+  });
+
+  it("returns null for a page with nothing to read", () => {
+    expect(extractPageBody("<body><div>chrome</div></body>", 500)).toBeNull();
   });
 });
 
 describe("stripBoilerplateLines", () => {
   /**
-   * Structure over vocabulary: the keyword list only knows the languages
-   * someone thought to add, so these shapes must carry the work.
+   * Structure over vocabulary: a keyword list only knows the languages someone
+   * thought to add, so these shapes have to carry the work.
    */
   it("drops sign-off shapes in a language the keyword list never learned", () => {
     const description = [
@@ -149,9 +136,8 @@ describe("stripBoilerplateLines", () => {
   });
 
   /**
-   * The bug that killed the first attempt at this: splitting on "." as well as
-   * on newlines shredded the text it was meant to clean, because Korean prose
-   * and bare URLs both contain periods.
+   * Splitting on "." as well as on newlines shreds the text it is meant to
+   * clean: Korean prose and bare URLs both contain periods.
    */
   it("never splits prose or URLs on their periods", () => {
     const line = "정주영도 너무 힘들었던 사업.. 참고 https://www.youtube.com/watch?v=abc";
@@ -167,80 +153,37 @@ describe("extractYouTubeDescription", () => {
     expect(extractYouTubeDescription(html)).toBe("왜 정책이 중요한가");
   });
 
-  it("returns null when the page has no player JSON", () => {
+  it("returns null when the page carries no player JSON", () => {
     expect(extractYouTubeDescription("<html></html>")).toBeNull();
   });
 });
 
-describe("extractArticleBody", () => {
-  it("keeps paragraphs and skips captions and nav", () => {
-    const para = "This is a real paragraph with enough words to be prose rather than a caption.";
-    const html = `<article><p>Share</p><p>${para}</p></article>`;
-    expect(extractArticleBody(html, 500)).toBe(para);
+describe("composeEnrichmentText", () => {
+  it("leads with what the page calls itself, then what it says", () => {
+    expect(composeEnrichmentText(["A title", null, "The body."])).toBe("A title — The body.");
   });
 
-  it("stays inside its budget", () => {
-    const para = "y".repeat(300);
-    expect(extractArticleBody(`<p>${para}</p><p>${para}</p>`, 120)).toHaveLength(120);
+  it("is null when the page offered nothing", () => {
+    expect(composeEnrichmentText([null, "", "   "])).toBeNull();
   });
 
-  it("returns null for a page with no prose", () => {
-    expect(extractArticleBody("<body><div>just chrome</div></body>", 500)).toBeNull();
-  });
-});
-
-describe("enrichment in the embedding input", () => {
-  const base = {
-    text: "https://example.com/talk",
-    kind: "link",
-    category: null,
-  };
-
-  it("leaves un-enriched inputs byte-identical to the pre-enrichment format", () => {
-    // The load-bearing property. Enrichment joins the canonical input only
-    // when present, so a row without it hashes exactly as it did before the
-    // column existed — and nothing regenerates until a row actually gains
-    // enrichment. If this test fails, every stored embedding regenerates.
-    const input = buildCanonicalInspirationEmbeddingInput(base);
-    expect(input).toBe(
-      [
-        "waka.inspiration_embedding_input.v2",
-        "kind:link",
-        "category:null",
-        "text:",
-        "https://example.com/talk",
-        "reflections:",
-        "none",
-      ].join("\n"),
-    );
-    expect(buildCanonicalInspirationEmbeddingInput({ ...base, enrichment: null })).toBe(input);
-    expect(buildCanonicalInspirationEmbeddingInput({ ...base, enrichment: "" })).toBe(input);
-    expect(buildCanonicalInspirationEmbeddingInput({ ...base, enrichment: "   " })).toBe(input);
-  });
-
-  it("changes the hash exactly when enrichment appears", () => {
-    const before = hashEmbeddingInput(buildCanonicalInspirationEmbeddingInput(base));
-    const after = hashEmbeddingInput(
-      buildCanonicalInspirationEmbeddingInput({
-        ...base,
-        enrichment: "The real title — What the page is about",
-      }),
-    );
-    expect(after).not.toBe(before);
+  it("caps what one saved link can contribute", () => {
+    const text = composeEnrichmentText(["t", "x".repeat(MAX_ENRICHMENT_TEXT_CHARS * 2)]);
+    expect(text).toHaveLength(MAX_ENRICHMENT_TEXT_CHARS);
   });
 });
 
 describe("addresses the enrichment fetch must refuse", () => {
   /**
-   * Enrichment fetches a URL a user typed, from inside our network. Without
-   * this check that is an SSRF sink: the cloud metadata endpoint at
-   * 169.254.169.254 hands out role credentials to anything that asks.
+   * Enrichment fetches a URL a member typed, from inside our network. Unguarded
+   * that is an SSRF sink: the cloud metadata endpoint at 169.254.169.254 hands
+   * role credentials to anything that asks.
    */
   it("refuses loopback, link-local, and RFC1918 addresses", () => {
     for (const address of [
       "127.0.0.1",
       "0.0.0.0",
-      "169.254.169.254", // AWS instance metadata
+      "169.254.169.254", // instance metadata
       "10.1.2.3",
       "172.16.0.1",
       "172.31.255.255",
@@ -262,61 +205,28 @@ describe("addresses the enrichment fetch must refuse", () => {
   });
 });
 
-describe("audibility", () => {
-  /**
-   * The real one, from Waka's board. 40 characters, none of them words.
-   * This save was a synthesis trigger and a candidate before the gate existed.
-   */
-  const bareLink = "https://youtu.be/8IWA3Pud2aA?si=g1k0-YrZn";
-
-  it("hears no words in a bare link, however long the URL", () => {
-    expect(audibleLength(bareLink, null)).toBe(0);
-    expect(isAudible({ text: bareLink, enrichment: null })).toBe(false);
-    // A longer URL must not become more audible — the link is the thing being
-    // explained, not the explanation.
-    expect(isAudible({ text: `${bareLink}&utm_source=${"x".repeat(400)}`, enrichment: null })).toBe(
-      false,
+/** Address literals only, so the guard is proven without asking a resolver. */
+describe("assertFetchableUrl", () => {
+  it("refuses a scheme that is not http(s)", async () => {
+    await expect(assertFetchableUrl("file:///etc/passwd")).rejects.toThrow("unsupported_scheme");
+    await expect(assertFetchableUrl("gopher://example.com/")).rejects.toThrow(
+      "unsupported_scheme",
     );
   });
 
-  it("hears a link once enrichment gives it the page's words", () => {
-    const enrichment = "가".repeat(MIN_AUDIBLE_CHARS);
-    expect(isAudible({ text: bareLink, enrichment })).toBe(true);
+  it("refuses the metadata endpoint and the private ranges", async () => {
+    await expect(assertFetchableUrl("http://169.254.169.254/latest/meta-data/")).rejects.toThrow(
+      "private_address",
+    );
+    await expect(assertFetchableUrl("http://127.0.0.1:5432/")).rejects.toThrow("private_address");
+    await expect(assertFetchableUrl("http://[::1]/")).rejects.toThrow("private_address");
   });
 
-  it("hears someone's own writing without any enrichment", () => {
-    expect(isAudible({ text: "a".repeat(MIN_AUDIBLE_CHARS), enrichment: null })).toBe(true);
-    expect(isAudible({ text: "a".repeat(MIN_AUDIBLE_CHARS - 1), enrichment: null })).toBe(false);
+  it("refuses something that is not a URL at all", async () => {
+    await expect(assertFetchableUrl("not a url")).rejects.toThrow("unfetchable_url");
   });
 
-  it("counts a note that merely contains a link by its own words", () => {
-    const shortNote = `read this ${bareLink}`;
-    expect(isAudible({ text: shortNote, enrichment: null })).toBe(false);
-    const realNote = `${"이 글은 ".repeat(40)} ${bareLink}`;
-    expect(isAudible({ text: realNote, enrichment: null })).toBe(true);
-  });
-
-  /**
-   * The SQL prefilters in `group-top-of-mind-synthesis` and `wow-candidates`
-   * repeat this predicate so the scan window is not spent on silent saves.
-   * They are written to OVER-include — no whitespace normalization — so the two
-   * can never disagree in the direction that silently drops a real signal.
-   * This pins that direction.
-   */
-  it("is never stricter than the SQL prefilter that precedes it", () => {
-    const sqlApproximation = (text: string, enrichment: string | null) =>
-      text.replace(/https?:\/\/\S+/g, " ").length + (enrichment?.length ?? 0);
-
-    for (const [text, enrichment] of [
-      [bareLink, null],
-      ["read this " + bareLink, null],
-      ["a".repeat(200), null],
-      [bareLink, "b".repeat(200)],
-      ["  spaced   out   words  ".repeat(20), null],
-    ] as const) {
-      if (isAudible({ text, enrichment })) {
-        expect(sqlApproximation(text, enrichment)).toBeGreaterThanOrEqual(MIN_AUDIBLE_CHARS);
-      }
-    }
+  it("allows a public address literal", async () => {
+    await expect(assertFetchableUrl("https://93.184.216.34/article")).resolves.toBeUndefined();
   });
 });

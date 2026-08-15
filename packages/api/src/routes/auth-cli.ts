@@ -10,7 +10,7 @@
  *     Requires an already-authenticated browser (`waka_session` cookie or
  *     Bearer header) — the user must have logged into WAKA in this browser
  *     first. Validates that `callback` points at a loopback address, mints
- *     a short-lived one-time exchange code tied to the current user, and
+ *     a short-lived one-time exchange code bound to a profile, and
  *     302-redirects to `${callback}?code=...&state=...`.
  *
  *   POST /api/auth/cli/exchange
@@ -18,6 +18,11 @@
  *     unexpired, single-use code for a brand-new session JWT + row —
  *     completely separate from the browser's own session, so revoking one
  *     does not affect the other.
+ *
+ * **The credential binds to one profile.** An agent using WAKA as its own
+ * memory logs in bound to its agent profile; a person logging in for their
+ * own memory binds to the human profile. Audit and revocation are per-profile
+ * because the binding is what authorization reads.
  *
  * Why a code instead of minting the session directly in /start?
  *   A 30-day session JWT embedded in a redirect URL would sit in the local
@@ -32,10 +37,10 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { cliLoginCodes, users } from "../db/index.js";
+import { accounts, cliLoginCodes, profiles } from "../db/index.js";
 import { SESSION_TTL_SECONDS, signSessionToken } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
-import { type AuthEnv, requireAuth } from "../lib/middleware.js";
+import { type AuthEnv, profileAccessError, requireAuth } from "../lib/middleware.js";
 import { createSessionRow, hashSessionToken } from "../lib/session.js";
 
 // ---------------------------------------------------------------------------
@@ -52,6 +57,9 @@ const CODE_TTL_SECONDS = 2 * 60;
 /** `state` is opaque and only ever echoed back; cap it so a malformed value
  * can't bloat the redirect URL. */
 const MAX_STATE_LENGTH = 256;
+
+/** Long enough for "Mina's MacBook Pro", short enough to stay a label. */
+const MAX_DEVICE_LABEL_LENGTH = 120;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,13 +115,19 @@ function safeLoopbackCallback(value: string | null): URL | null {
 export const cliAuthRoutes = new Hono<AuthEnv>();
 
 /**
- * GET /api/auth/cli/start?callback=<loopback-url>&state=<opaque>
+ * GET /api/auth/cli/start?callback=<loopback-url>&state=<opaque>&profile=<id|name>&device=<label>
  *
  * `requireAuth` means an unauthenticated hit gets the standard 401 JSON
  * body rather than a redirect chain back through /login — this endpoint is
  * only ever opened by a CLI tool in a browser the user is expected to
  * already be logged into WAKA with. If not, the JSON error is enough of a
  * signal for the CLI's own error message to tell the user to log in first.
+ *
+ * `profile` names which of the account's profiles the credential binds to,
+ * defaulting to the profile the browser is already acting as. Phase 2 adds
+ * the consent step in front of this: an API-rendered page where the person
+ * picks the profile and confirms, so a credential is never minted by a
+ * top-level navigation alone.
  */
 cliAuthRoutes.get("/start", requireAuth, async (c) => {
   const callback = safeLoopbackCallback(c.req.query("callback") ?? null);
@@ -129,17 +143,50 @@ cliAuthRoutes.get("/start", requireAuth, async (c) => {
     return c.json({ error: "state is required" }, 400);
   }
 
-  const user = c.get("user");
+  const session = c.get("session");
+  const db = getDb();
+
+  let boundProfileId = session.profile.id;
+  const requestedProfile = (c.req.query("profile") ?? "").trim();
+  if (requestedProfile && requestedProfile !== session.profile.id) {
+    // Candidates come from the account, never from the request: a caller can
+    // ask for a profile by name, but only ever one of its own.
+    const candidates = await db
+      .select({ id: profiles.id, accountId: profiles.accountId, name: profiles.name })
+      .from(profiles)
+      .where(eq(profiles.accountId, session.profile.accountId));
+
+    const target = candidates.find(
+      (row) =>
+        row.id === requestedProfile ||
+        row.name.toLowerCase() === requestedProfile.toLowerCase(),
+    );
+    if (!target) {
+      return c.json({ error: "Unknown profile" }, 400);
+    }
+
+    // Minting a credential for a profile is an administrative act, not a
+    // read: an agent-bound session may read the human profile but must not
+    // be able to issue a credential that acts as it.
+    const denied = profileAccessError(session, target, "write");
+    if (denied) {
+      return c.json(denied, 403);
+    }
+    boundProfileId = target.id;
+  }
+
+  const deviceLabel =
+    (c.req.query("device") ?? "").trim().slice(0, MAX_DEVICE_LABEL_LENGTH) || null;
+
   const code = randomCode();
   const codeHash = await hashSessionToken(code);
 
-  await getDb()
-    .insert(cliLoginCodes)
-    .values({
-      userId: user.id,
-      codeHash,
-      expiresAt: new Date(Date.now() + CODE_TTL_SECONDS * 1000),
-    });
+  await db.insert(cliLoginCodes).values({
+    profileId: boundProfileId,
+    codeHash,
+    deviceLabel,
+    expiresAt: new Date(Date.now() + CODE_TTL_SECONDS * 1000),
+  });
 
   callback.searchParams.set("code", code);
   callback.searchParams.set("state", state);
@@ -186,7 +233,8 @@ cliAuthRoutes.post("/exchange", async (c) => {
   const rows = await db
     .select({
       id: cliLoginCodes.id,
-      userId: cliLoginCodes.userId,
+      profileId: cliLoginCodes.profileId,
+      deviceLabel: cliLoginCodes.deviceLabel,
       expiresAt: cliLoginCodes.expiresAt,
     })
     .from(cliLoginCodes)
@@ -205,25 +253,35 @@ cliAuthRoutes.post("/exchange", async (c) => {
     return c.json({ error: "Code expired" }, 400);
   }
 
-  const userRows = await db
-    .select({ id: users.id, email: users.email })
-    .from(users)
-    .where(eq(users.id, row.userId))
+  // The email comes from the account behind the bound profile — the CLI
+  // shows it so the person can see which login they just connected.
+  const profileRows = await db
+    .select({ id: profiles.id, email: accounts.email })
+    .from(profiles)
+    .innerJoin(accounts, eq(accounts.id, profiles.accountId))
+    .where(eq(profiles.id, row.profileId))
     .limit(1);
-  const user = userRows[0];
-  if (!user) {
-    return c.json({ error: "User no longer exists" }, 400);
+  const profile = profileRows[0];
+  if (!profile) {
+    return c.json({ error: "Profile no longer exists" }, 400);
   }
 
   // Mint a session independent of the browser's own — revoking this one
-  // later (e.g. a future `waka-mcp logout`) will not touch the browser
-  // session, and vice versa.
-  const token = await signSessionToken({ userId: user.id, email: user.email });
-  await createSessionRow({ userId: user.id, token, client: "cli" });
+  // later (e.g. `waka-mcp logout`) will not touch the browser session, and
+  // vice versa.
+  const token = await signSessionToken({
+    profileId: profile.id,
+    email: profile.email,
+  });
+  await createSessionRow({
+    profileId: profile.id,
+    token,
+    deviceLabel: row.deviceLabel,
+  });
 
   return c.json({
     token,
     expiresAt: new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString(),
-    user: { email: user.email },
+    user: { email: profile.email },
   });
 });

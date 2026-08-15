@@ -8,29 +8,33 @@ import postgres from "postgres";
 
 import { hashPassword } from "../packages/api/src/lib/auth";
 import {
+  DEMO_AGENT_PROFILE_NAME,
+  DEMO_HUMAN_PROFILE_NAME,
   DEMO_INSPIRATIONS,
-  DEMO_SEED_KIND,
-  DEMO_WOW_MOMENTS,
+  DEMO_SEED_MARKER,
+  DEMO_SIGNALS,
+  DEMO_TOP_OF_MIND_ENTRIES,
   getDemoSeedSummary,
 } from "./demo-seed-data";
 
 interface Args {
   databaseUrl: string;
-  userId?: string;
+  accountId?: string;
   email?: string;
   password?: string;
   name: string;
   replace: boolean;
-  createUser: boolean;
+  createAccount: boolean;
   allowRemote: boolean;
   cleanupDemoData: boolean;
 }
 
 export interface DemoCleanupSummary {
   deletedDemoInspirations: number;
-  deletedDemoWowMoments: number;
-  preservedMixedWowMoments: number;
-  preservedNonDemoWowMoments: number;
+  deletedDemoSignals: number;
+  preservedMixedSignals: number;
+  deletedDemoTopOfMinds: number;
+  deletedDemoAgentProfiles: number;
 }
 
 type SeedSql = postgres.Sql | postgres.TransactionSql;
@@ -72,21 +76,21 @@ function usage(): never {
 Usage:
   pnpm demo:seed -- --email=demo@example.test
   pnpm demo:seed -- --email=demo@example.test --create-user --password=<password> [--name="Demo User"]
-  pnpm demo:seed -- --user-id=<uuid>
+  pnpm demo:seed -- --account-id=<uuid>
   pnpm demo:seed -- --email=demo@example.test --cleanup-demo-data
 
 Options:
   --database-url=<url>  Defaults to DB_CONNECTION_URL or DATABASE_URL from the environment, .env, or .env.development.
-  --user-id=<uuid>      Existing user id to seed for.
-  --email=<email>       Existing user email to seed for. Fails if missing unless --create-user is passed.
-  --create-user         Create the --email user if missing. Requires --password so the user can log in.
-  --password=<password> Hash with the API auth helper when --create-user inserts a user.
-  --name=<name>         Name used only when --email creates a user. Default: WAKA Demo.
+  --account-id=<uuid>   Existing account id to seed for. Also accepted as --user-id.
+  --email=<email>       Existing account email to seed for. Fails if missing unless --create-user is passed.
+  --create-user         Create the --email account if missing. Requires --password so it can be signed into.
+  --password=<password> Hashed with the API auth helper when --create-user inserts an account.
+  --name=<name>         Name for the human profile when --email creates an account. Default: ${DEMO_HUMAN_PROFILE_NAME}.
   --append-demo-data    Append another demo dataset instead of replacing this script's prior demo rows.
-  --cleanup-demo-data   Remove this script's prior demo seed rows for an existing user without creating the user or reseeding.
+  --cleanup-demo-data   Remove this script's prior demo rows for an existing account without creating it or reseeding.
   --allow-remote        Permit a non-local database URL. Prefer local/dev DBs only.
 
-No secrets are logged. The script only writes real tenant-scoped rows for the selected user.`);
+No secrets are logged. The script only writes profile-scoped rows for the selected account.`);
   process.exit(1);
 }
 
@@ -97,28 +101,31 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
     readArg("--database-url", argv) ?? process.env.DB_CONNECTION_URL ?? process.env.DATABASE_URL;
   if (!databaseUrl) usage();
 
-  const userId = readArg("--user-id", argv);
+  /* The id an account is selected by. `--user-id` names the same value, and
+     is read so a command that has been in someone's shell history for months
+     still selects the right row. */
+  const accountId = readArg("--account-id", argv) ?? readArg("--user-id", argv);
   const email = readArg("--email", argv);
-  if (!userId && !email) usage();
+  if (!accountId && !email) usage();
 
   const password = readArg("--password", argv);
-  const createUser = hasFlag("--create-user", argv);
+  const createAccount = hasFlag("--create-user", argv);
   const cleanupDemoData = hasFlag("--cleanup-demo-data", argv);
   const appendDemoData = hasFlag("--append-demo-data", argv);
-  if (cleanupDemoData && createUser) {
-    throw new Error("--cleanup-demo-data cannot be combined with --create-user; cleanup only works for existing users.");
+  if (cleanupDemoData && createAccount) {
+    throw new Error("--cleanup-demo-data cannot be combined with --create-user; cleanup only works for existing accounts.");
   }
   if (cleanupDemoData && password) {
-    throw new Error("--cleanup-demo-data cannot be combined with --password; cleanup never creates or updates users.");
+    throw new Error("--cleanup-demo-data cannot be combined with --password; cleanup never creates or updates accounts.");
   }
   if (cleanupDemoData && appendDemoData) {
     throw new Error("--cleanup-demo-data cannot be combined with --append-demo-data.");
   }
-  if (createUser && !email) {
+  if (createAccount && !email) {
     throw new Error("--create-user requires --email.");
   }
-  if (createUser && !password) {
-    throw new Error("--create-user requires --password so the demo user can log in.");
+  if (createAccount && !password) {
+    throw new Error("--create-user requires --password so the demo account can be signed into.");
   }
   if (password && (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH)) {
     throw new Error(
@@ -128,12 +135,12 @@ export function parseArgs(argv = process.argv.slice(2)): Args {
 
   return {
     databaseUrl,
-    userId,
+    accountId,
     email,
     password,
-    name: readArg("--name", argv) ?? "WAKA Demo",
+    name: readArg("--name", argv) ?? DEMO_HUMAN_PROFILE_NAME,
     replace: !appendDemoData,
-    createUser,
+    createAccount,
     allowRemote: hasFlag("--allow-remote", argv),
     cleanupDemoData,
   };
@@ -149,199 +156,348 @@ export function assertLocalDatabase(databaseUrl: string, allowRemote: boolean): 
   );
 }
 
-export async function resolveDemoUser(
+export async function resolveDemoAccount(
   sql: SeedSql,
-  input: Pick<Args, "userId" | "email" | "name" | "password" | "createUser">,
+  input: Pick<Args, "accountId" | "email" | "name" | "password" | "createAccount">,
 ): Promise<{ id: string; email: string }> {
-  if (input.userId) {
+  if (input.accountId) {
     const rows = await sql<{ id: string; email: string }[]>`
-      select id, email from users where id = ${input.userId} limit 1
+      select id, email from accounts where id = ${input.accountId} limit 1
     `;
     if (rows.length === 0) {
-      throw new Error(`No user exists for --user-id=${input.userId}`);
+      throw new Error(`No account exists for --account-id=${input.accountId}`);
     }
     return rows[0]!;
   }
 
   const email = input.email!.trim().toLowerCase();
   const existing = await sql<{ id: string; email: string }[]>`
-    select id, email from users where lower(email) = ${email} limit 1
+    select id, email from accounts where lower(email) = ${email} limit 1
   `;
   if (existing.length > 0) return existing[0]!;
 
-  if (!input.createUser) {
+  if (!input.createAccount) {
     throw new Error(
-      `No user exists for --email=${email}. Sign up first or pass --create-user --password=<password>.`,
+      `No account exists for --email=${email}. Sign up first or pass --create-user --password=<password>.`,
     );
   }
 
   const id = randomUUID();
   const passwordHash = await hashPassword(input.password!);
   const inserted = await sql<{ id: string; email: string }[]>`
-    insert into users (id, email, password_hash, name, created_at, updated_at)
-    values (${id}, ${email}, ${passwordHash}, ${input.name}, now(), now())
+    insert into accounts (id, email, password_hash, onboarding_completed_at, created_at, updated_at)
+    values (${id}, ${email}, ${passwordHash}, now(), now(), now())
     returning id, email
   `;
   return inserted[0]!;
 }
 
+/**
+ * The account's human profile, created if the account has none.
+ *
+ * An account has exactly one, enforced by a partial unique index, so this
+ * selects before inserting rather than upserting on a key that would need to
+ * name the enum value in the conflict target.
+ */
+export async function ensureHumanProfile(
+  sql: SeedSql,
+  accountId: string,
+  name: string,
+): Promise<string> {
+  const existing = await sql<{ id: string }[]>`
+    select id from profiles where account_id = ${accountId} and type = 'human' limit 1
+  `;
+  if (existing.length > 0) return existing[0]!.id;
+
+  const id = randomUUID();
+  await sql`
+    insert into profiles (id, account_id, type, name, created_at, updated_at)
+    values (${id}, ${accountId}, 'human'::profile_type, ${name}, now(), now())
+  `;
+  return id;
+}
+
+/**
+ * The demo agent profile — an agent using WAKA as its own memory.
+ *
+ * Selected by name because that name is this script's, which is also what
+ * makes it safe for cleanup to remove the whole profile: nothing a person
+ * created is inside it.
+ */
+export async function ensureDemoAgentProfile(
+  sql: SeedSql,
+  accountId: string,
+): Promise<string> {
+  const existing = await sql<{ id: string }[]>`
+    select id from profiles
+    where account_id = ${accountId} and type = 'agent' and name = ${DEMO_AGENT_PROFILE_NAME}
+    limit 1
+  `;
+  if (existing.length > 0) return existing[0]!.id;
+
+  const id = randomUUID();
+  await sql`
+    insert into profiles (id, account_id, type, name, created_at, updated_at)
+    values (${id}, ${accountId}, 'agent'::profile_type, ${DEMO_AGENT_PROFILE_NAME}, now(), now())
+  `;
+  return id;
+}
+
+function markedText(text: string): string {
+  return `${DEMO_SEED_MARKER}\n${text}`;
+}
+
+/**
+ * Remove what this script wrote, and only that.
+ *
+ * Demo rows are identified structurally rather than by a tag column:
+ *   - an inspiration is this script's if its text carries the marker,
+ *   - a signal is this script's if EVERY capture behind it is one of those —
+ *     a signal that also rests on something the person captured is left alone
+ *     and counted as preserved,
+ *   - an artifact is this script's if every entry in it cites only those
+ *     signals,
+ *   - the demo agent profile is this script's outright, so deleting it takes
+ *     its whole stack with it.
+ */
 export async function replacePriorDemoRows(
   sql: SeedSql,
-  userId: string,
+  accountId: string,
 ): Promise<DemoCleanupSummary> {
-  const wowRows = await sql<Array<{
-    deleted_demo_wow_moments: string | number;
-    preserved_mixed_wow_moments: string | number;
-    preserved_non_demo_wow_moments: string | number;
+  const marker = `${DEMO_SEED_MARKER}%`;
+
+  const topOfMindRows = await sql<Array<{ deleted_demo_top_of_minds: string | number }>>`
+    with account_profiles as (
+      select id from profiles where account_id = ${accountId}
+    ), demo_inspirations as (
+      select id from inspirations
+      where profile_id in (select id from account_profiles)
+        and text like ${marker}
+    ), demo_signals as (
+      select s.id
+      from signals s
+      where s.profile_id in (select id from account_profiles)
+        and exists (select 1 from signal_evidence e where e.signal_id = s.id)
+        and not exists (
+          select 1 from signal_evidence e
+          where e.signal_id = s.id
+            and e.inspiration_id not in (select id from demo_inspirations)
+        )
+    ), demo_top_of_minds as (
+      select t.id
+      from top_of_minds t
+      where t.profile_id in (select id from account_profiles)
+        and exists (select 1 from top_of_mind_entries en where en.top_of_mind_id = t.id)
+        and not exists (
+          select 1
+          from top_of_mind_entries en
+          left join top_of_mind_entry_signals es on es.entry_id = en.id
+          where en.top_of_mind_id = t.id
+            and (es.signal_id is null or es.signal_id not in (select id from demo_signals))
+        )
+    ), deleted as (
+      delete from top_of_minds where id in (select id from demo_top_of_minds) returning id
+    )
+    select count(*) as deleted_demo_top_of_minds from deleted
+  `;
+
+  const signalRows = await sql<Array<{
+    deleted_demo_signals: string | number;
+    preserved_mixed_signals: string | number;
   }>>`
-    with prior_demo_inspirations as (
-      select id from signals
-      where user_id = ${userId}
-        and kind = ${DEMO_SEED_KIND}
-    ), demo_linked_moments as (
-      select distinct wm.id
-      from top_of_mind_note_signals wmi
-      inner join prior_demo_inspirations pdi on pdi.id = wmi.signal_id
-      inner join top_of_mind_notes wm on wm.id = wmi.top_of_mind_note_id
-      where wm.user_id = ${userId}
-        and wmi.user_id = ${userId}
-    ), demo_only_moments as (
-      select dlm.id
-      from demo_linked_moments dlm
+    with account_profiles as (
+      select id from profiles where account_id = ${accountId}
+    ), demo_inspirations as (
+      select id from inspirations
+      where profile_id in (select id from account_profiles)
+        and text like ${marker}
+    ), linked_signals as (
+      select distinct e.signal_id as id
+      from signal_evidence e
+      where e.inspiration_id in (select id from demo_inspirations)
+    ), demo_only_signals as (
+      select l.id from linked_signals l
       where not exists (
-        select 1
-        from top_of_mind_note_signals wmi
-        left join prior_demo_inspirations pdi on pdi.id = wmi.signal_id
-        where wmi.top_of_mind_note_id = dlm.id
-          and wmi.user_id = ${userId}
-          and pdi.id is null
+        select 1 from signal_evidence e
+        where e.signal_id = l.id
+          and e.inspiration_id not in (select id from demo_inspirations)
       )
-    ), mixed_demo_moments as (
-      select dlm.id
-      from demo_linked_moments dlm
+    ), mixed_signals as (
+      select l.id from linked_signals l
       where exists (
-        select 1
-        from top_of_mind_note_signals wmi
-        left join prior_demo_inspirations pdi on pdi.id = wmi.signal_id
-        where wmi.top_of_mind_note_id = dlm.id
-          and wmi.user_id = ${userId}
-          and pdi.id is null
+        select 1 from signal_evidence e
+        where e.signal_id = l.id
+          and e.inspiration_id not in (select id from demo_inspirations)
       )
-    ), non_demo_moments as (
-      select wm.id
-      from top_of_mind_notes wm
-      where wm.user_id = ${userId}
-        and not exists (select 1 from demo_linked_moments dlm where dlm.id = wm.id)
-    ), deleted_demo_moments as (
-      delete from top_of_mind_notes
-      where user_id = ${userId}
-        and id in (select id from demo_only_moments)
-      returning id
+    ), deleted as (
+      delete from signals where id in (select id from demo_only_signals) returning id
     )
     select
-      (select count(*) from deleted_demo_moments) as deleted_demo_wow_moments,
-      (select count(*) from mixed_demo_moments) as preserved_mixed_wow_moments,
-      (select count(*) from non_demo_moments) as preserved_non_demo_wow_moments
+      (select count(*) from deleted) as deleted_demo_signals,
+      (select count(*) from mixed_signals) as preserved_mixed_signals
   `;
+
   const inspirationRows = await sql<Array<{ deleted_demo_inspirations: string | number }>>`
-    with deleted_demo_inspirations as (
-      delete from signals
-      where user_id = ${userId}
-        and kind = ${DEMO_SEED_KIND}
+    with account_profiles as (
+      select id from profiles where account_id = ${accountId}
+    ), deleted as (
+      delete from inspirations
+      where profile_id in (select id from account_profiles)
+        and text like ${marker}
       returning id
     )
-    select count(*) as deleted_demo_inspirations from deleted_demo_inspirations
+    select count(*) as deleted_demo_inspirations from deleted
+  `;
+
+  const profileRows = await sql<Array<{ deleted_demo_agent_profiles: string | number }>>`
+    with deleted as (
+      delete from profiles
+      where account_id = ${accountId}
+        and type = 'agent'
+        and name = ${DEMO_AGENT_PROFILE_NAME}
+      returning id
+    )
+    select count(*) as deleted_demo_agent_profiles from deleted
   `;
 
   const toNumber = (value: string | number | undefined): number => Number(value ?? 0);
-  const wowSummary = wowRows[0];
   return {
     deletedDemoInspirations: toNumber(inspirationRows[0]?.deleted_demo_inspirations),
-    deletedDemoWowMoments: toNumber(wowSummary?.deleted_demo_wow_moments),
-    preservedMixedWowMoments: toNumber(wowSummary?.preserved_mixed_wow_moments),
-    preservedNonDemoWowMoments: toNumber(wowSummary?.preserved_non_demo_wow_moments),
+    deletedDemoSignals: toNumber(signalRows[0]?.deleted_demo_signals),
+    preservedMixedSignals: toNumber(signalRows[0]?.preserved_mixed_signals),
+    deletedDemoTopOfMinds: toNumber(topOfMindRows[0]?.deleted_demo_top_of_minds),
+    deletedDemoAgentProfiles: toNumber(profileRows[0]?.deleted_demo_agent_profiles),
   };
 }
 
-export function buildDemoWowMomentIdempotencyKey(params: {
-  userId: string;
-  triggerInspirationId: string;
-  kind: string;
-  relatedInspirationIds: string[];
-  version?: number;
-}): string {
-  const stableRelatedIds = Array.from(new Set(params.relatedInspirationIds)).sort();
-  return [
-    `wow-moment-v${params.version ?? 2}`,
-    params.userId,
-    params.triggerInspirationId,
-    params.kind,
-    stableRelatedIds.join(","),
-  ].join(":");
-}
-
-export async function seedDemoRows(sql: SeedSql, userId: string): Promise<void> {
+export async function seedDemoRows(
+  sql: SeedSql,
+  profiles: { human: string; agent: string },
+): Promise<void> {
   const inspirationIds = new Map<string, string>();
+  const inspirationProfiles = new Map<string, string>();
+  const inspirationTimes = new Map<string, Date>();
+  const signalIds = new Map<string, string>();
   const now = Date.now();
 
   for (const [index, seed] of DEMO_INSPIRATIONS.entries()) {
     const id = randomUUID();
-    const createdAt = new Date(now - (DEMO_INSPIRATIONS.length - index) * 60 * 60 * 1000);
+    const profileId = seed.source === "agent" ? profiles.agent : profiles.human;
+    const capturedAt = new Date(now - (DEMO_INSPIRATIONS.length - index) * 60 * 60 * 1000);
     await sql`
-      insert into signals (
-        id, user_id, text, kind, category, importance_score, wow_score,
-        cluster, classified_at, created_at, updated_at
-      ) values (
-        ${id}, ${userId}, ${seed.text}, ${seed.kind}, ${seed.category},
-        ${seed.importanceScore}, ${seed.wowScore}, ${seed.cluster}::cluster,
-        ${createdAt}, ${createdAt}, ${createdAt}
+      insert into inspirations (id, profile_id, text, kind, source, created_at, updated_at)
+      values (
+        ${id}, ${profileId}, ${markedText(seed.text)}, ${seed.kind}::inspiration_kind,
+        ${seed.source}::inspiration_source, ${capturedAt}, ${capturedAt}
       )
     `;
     inspirationIds.set(seed.slug, id);
+    inspirationProfiles.set(seed.slug, profileId);
+    inspirationTimes.set(seed.slug, capturedAt);
+
+    for (const reflection of seed.reflections ?? []) {
+      await sql`
+        insert into reflections (id, profile_id, inspiration_id, question, answer, skipped, created_at)
+        values (
+          ${randomUUID()}, ${profileId}, ${id}, ${reflection.question},
+          ${reflection.answer ?? null}, ${reflection.skipped === true}, ${capturedAt}
+        )
+      `;
+    }
   }
 
-  for (const [momentIndex, moment] of DEMO_WOW_MOMENTS.entries()) {
+  for (const seed of DEMO_SIGNALS) {
     const id = randomUUID();
-    const createdAt = new Date(now - momentIndex * 30 * 60 * 1000);
-    const relatedInspirationIds = moment.related.map((related) => {
-      const inspirationId = inspirationIds.get(related.inspirationSlug);
-      if (!inspirationId) {
-        throw new Error(`Demo WOW moment references unknown inspiration slug ${related.inspirationSlug}`);
+    const profileId = seed.profile === "agent" ? profiles.agent : profiles.human;
+    const evidenceTimes = seed.evidence.map((evidence) => {
+      const at = inspirationTimes.get(evidence.inspirationSlug);
+      if (!at) {
+        throw new Error(`Demo signal ${seed.slug} cites unknown inspiration ${evidence.inspirationSlug}`);
       }
-      return inspirationId;
+      return at;
     });
-    const triggerInspirationId = relatedInspirationIds[0];
-    if (!triggerInspirationId) {
-      throw new Error(`Demo WOW moment ${moment.slug} must reference at least one inspiration`);
-    }
-    const idempotencyKey = buildDemoWowMomentIdempotencyKey({
-      userId,
-      triggerInspirationId,
-      kind: moment.kind,
-      relatedInspirationIds,
-    });
+    const lastEvidenceAt = evidenceTimes.reduce((latest, at) => (at > latest ? at : latest));
+    const createdAt = evidenceTimes.reduce((earliest, at) => (at < earliest ? at : earliest));
+
     await sql`
-      insert into top_of_mind_notes (
-        id, user_id, title, kind, idempotency_key, why, reflection_question, wow_score,
-        created_at, updated_at
+      insert into signals (
+        id, profile_id, statement, status, confidence, last_evidence_at, created_at, updated_at
       ) values (
-        ${id}, ${userId}, ${moment.title}, ${moment.kind}::wow_kind, ${idempotencyKey}, ${moment.why},
-        ${moment.reflectionQuestion}, ${moment.wowScore}, ${createdAt}, ${createdAt}
+        ${id}, ${profileId}, ${seed.statement}, ${seed.status}::signal_status,
+        ${seed.confidence}, ${lastEvidenceAt}, ${createdAt}, ${lastEvidenceAt}
+      )
+    `;
+    signalIds.set(seed.slug, id);
+
+    for (const evidence of seed.evidence) {
+      const inspirationId = inspirationIds.get(evidence.inspirationSlug)!;
+      /* Evidence never crosses a profile: a signal cites the captures of the
+         memory that owns it, and nothing else. */
+      if (inspirationProfiles.get(evidence.inspirationSlug) !== profileId) {
+        throw new Error(
+          `Demo signal ${seed.slug} cites ${evidence.inspirationSlug}, which belongs to a different profile`,
+        );
+      }
+      await sql`
+        insert into signal_evidence (id, profile_id, signal_id, inspiration_id, reason, quote, created_at)
+        values (
+          ${randomUUID()}, ${profileId}, ${id}, ${inspirationId}, ${evidence.reason},
+          ${evidence.quote ?? null}, ${inspirationTimes.get(evidence.inspirationSlug)!}
+        )
+      `;
+    }
+  }
+
+  /* Exactly one live artifact per profile, enforced by a partial unique index.
+     Anything already standing is superseded rather than deleted, because the
+     version history is the artifact's identity over time. */
+  const live = await sql<Array<{ id: string; version: number }>>`
+    select id, version from top_of_minds
+    where profile_id = ${profiles.human} and status = 'live'
+    limit 1
+  `;
+  const previous = live[0];
+  const nextVersion = (previous?.version ?? 0) + 1;
+  const topOfMindId = randomUUID();
+  const createdAt = new Date(now);
+
+  await sql`
+    insert into top_of_minds (id, profile_id, version, status, reason, created_at)
+    values (
+      ${topOfMindId}, ${profiles.human}, ${nextVersion}, 'live'::top_of_mind_status,
+      ${previous ? "regenerated" : "initial"}::top_of_mind_revision_reason, ${createdAt}
+    )
+  `;
+  if (previous) {
+    await sql`
+      update top_of_minds
+      set status = 'superseded'::top_of_mind_status,
+          replaced_by_id = ${topOfMindId},
+          replaced_at = ${createdAt}
+      where id = ${previous.id}
+    `;
+  }
+
+  for (const [index, entry] of DEMO_TOP_OF_MIND_ENTRIES.entries()) {
+    const entryId = randomUUID();
+    await sql`
+      insert into top_of_mind_entries (
+        id, top_of_mind_id, type, body, belief, prompt, pinned_at, sort_order, created_at, updated_at
+      ) values (
+        ${entryId}, ${topOfMindId}, ${entry.type}::top_of_mind_entry_type, ${entry.body},
+        ${entry.belief ?? null}, ${entry.prompt ?? null},
+        ${entry.pinned ? createdAt : null}, ${index}, ${createdAt}, ${createdAt}
       )
     `;
 
-    for (const [relatedIndex, related] of moment.related.entries()) {
-      const inspirationId = relatedInspirationIds[relatedIndex];
-      if (!inspirationId) {
-        throw new Error(`Demo WOW moment references unknown inspiration slug ${related.inspirationSlug}`);
+    for (const slug of entry.citedSignalSlugs) {
+      const signalId = signalIds.get(slug);
+      if (!signalId) {
+        throw new Error(`Demo top-of-mind entry cites unknown signal ${slug}`);
       }
       await sql`
-        insert into top_of_mind_note_signals (
-          id, user_id, top_of_mind_note_id, signal_id, role, reason, sort_order, created_at
-        ) values (
-          ${randomUUID()}, ${userId}, ${id}, ${inspirationId}, ${related.role}, ${related.reason},
-          ${relatedIndex}, ${createdAt}
-        )
+        insert into top_of_mind_entry_signals (id, entry_id, signal_id, owner_profile_id, created_at)
+        values (${randomUUID()}, ${entryId}, ${signalId}, ${profiles.human}, ${createdAt})
       `;
     }
   }
@@ -360,24 +516,37 @@ async function main(): Promise<void> {
 
   try {
     const result = await sql.begin(async (tx) => {
-      const resolvedUser = await resolveDemoUser(tx, args);
+      const account = await resolveDemoAccount(tx, args);
       if (args.cleanupDemoData) {
-        const cleanup = await replacePriorDemoRows(tx, resolvedUser.id);
-        return { user: resolvedUser, cleanup };
+        const cleanup = await replacePriorDemoRows(tx, account.id);
+        return { account, cleanup };
       }
-      if (args.replace) await replacePriorDemoRows(tx, resolvedUser.id);
-      await seedDemoRows(tx, resolvedUser.id);
-      return { user: resolvedUser, cleanup: null };
+      if (args.replace) await replacePriorDemoRows(tx, account.id);
+      const human = await ensureHumanProfile(tx, account.id, args.name);
+      const agent = await ensureDemoAgentProfile(tx, account.id);
+      await seedDemoRows(tx, { human, agent });
+      return { account, cleanup: null };
     });
+
     if (result.cleanup) {
       console.log(
-        `Removed WAKA demo seed data for ${result.user.email}: ${result.cleanup.deletedDemoInspirations} demo inspirations and ${result.cleanup.deletedDemoWowMoments} linked demo WOW moments removed. Account and user-created inspirations preserved.`,
+        `Removed WAKA demo data for ${result.account.email}: ` +
+          `${result.cleanup.deletedDemoInspirations} inspirations, ` +
+          `${result.cleanup.deletedDemoSignals} signals, ` +
+          `${result.cleanup.deletedDemoTopOfMinds} top-of-mind versions and ` +
+          `${result.cleanup.deletedDemoAgentProfiles} agent profiles removed. ` +
+          `${result.cleanup.preservedMixedSignals} signals resting on real captures were preserved, ` +
+          `along with the account and everything captured in it.`,
       );
       return;
     }
+
     const summary = getDemoSeedSummary();
     console.log(
-      `Seeded WAKA demo data for ${result.user.email}: ${summary.inspirationCount} inspirations, ${summary.wowMomentCount} WOW moments, ${summary.linkedInspirationCount} linked inspiration references.`,
+      `Seeded WAKA demo data for ${result.account.email}: ` +
+        `${summary.inspirationCount} inspirations (${summary.agentSourcedCount} from an agent), ` +
+        `${summary.signalCount} signals over ${summary.evidenceCount} evidence links, ` +
+        `and one top of mind with ${summary.entryCount} entries.`,
     );
   } finally {
     await sql.end({ timeout: 5 });

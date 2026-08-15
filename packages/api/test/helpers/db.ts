@@ -11,7 +11,7 @@
  *   1. Tests must be hermetic. A failed test cleanup would leave rows
  *      visible to the dev / sst-dev session sharing the same Neon URL.
  *   2. Tests must be safely parallelizable. Two test files truncating
- *      `public.users` simultaneously would hand each other empty tables
+ *      `public.accounts` simultaneously would hand each other empty tables
  *      mid-run.
  *   3. CI re-runs need a clean slate every invocation, with no
  *      cross-pipeline contamination.
@@ -21,16 +21,17 @@
  *
  *   - Creates a fresh schema named `waka_test_<random>` on the live Neon DB.
  *   - Opens a postgres-js connection whose `search_path` is pinned to that
- *     schema (so `users`, `signals`, etc. unqualified references all
+ *     schema (so `accounts`, `inspirations`, etc. unqualified references all
  *     resolve to the test schema, and the production `lib/db.ts` queries —
  *     which never qualify with a schema name — would also work if pointed
  *     at this connection by an integration test).
- *   - Re-applies every committed Drizzle migration into the fresh schema by
- *     reading the SQL files on disk and rewriting hard-coded `"public"`
- *     identifiers to the test schema. This avoids depending on
- *     drizzle-orm/postgres-js's `migrate()` (which does not support a target
- *     schema other than `public`) while keeping the migration corpus the
- *     single source of truth — no duplicated DDL.
+ *   - Replays the migration corpus into the fresh schema by reading the SQL
+ *     files on disk and rewriting hard-coded `"public"` identifiers to the
+ *     test schema. The corpus is one baseline file, so a test schema is the
+ *     shape of `drizzle/migrations/0000_three_layers.sql` and nothing else.
+ *     This avoids depending on drizzle-orm/postgres-js's `migrate()` (which
+ *     does not support a target schema other than `public`) while keeping the
+ *     migration corpus the single source of truth — no duplicated DDL.
  *   - Returns a Drizzle client bound to that connection, plus a `cleanup`
  *     function that drops the schema CASCADE and closes the connection.
  *
@@ -59,11 +60,11 @@
  *   afterAll(async () => { await testDb.cleanup(); });
  *   beforeEach(async () => { await testDb.truncateAll(); });
  *
- *   describe("signals", () => {
+ *   describe("inspirations", () => {
  *     it("inserts a row", async () => {
  *       const [row] = await testDb.db
- *         .insert(signals)
- *         .values({ userId, text: "hi" })
+ *         .insert(inspirations)
+ *         .values({ profileId, text: "hi" })
  *         .returning();
  *       expect(row).toBeDefined();
  *     });
@@ -234,6 +235,9 @@ function findMigrationsDir(): string {
  * do not parse the journal here — the on-disk filename order is the
  * apply-order contract drizzle-kit upholds, and reading both would only add
  * a place for them to disagree.
+ *
+ * There is one file today. The loop stays because the next migration is the
+ * one that would otherwise be silently skipped.
  */
 function listMigrationFiles(dir: string): string[] {
   return readdirSync(dir)
@@ -245,7 +249,7 @@ function listMigrationFiles(dir: string): string[] {
  * Apply every migration in `dir` to the given test schema.
  *
  * The committed migration SQL hard-codes `"public"` in foreign-key
- * references (e.g. `REFERENCES "public"."users"("id")`) — that's how
+ * references (e.g. `REFERENCES "public"."profiles"("id")`) — that's how
  * drizzle-kit emits them and we keep the SQL files faithful for production
  * use. To redirect those references at the test schema we do a literal
  * string substitution `"public"` → `"<schemaName>"` before executing.
@@ -376,25 +380,41 @@ export async function createTestDatabase(): Promise<TestDatabase> {
   const db = drizzle(sql, { schema });
 
   /**
-   * Domain tables in dependency order (children → parents). TRUNCATE …
+   * Every domain table, in dependency order (children → parents). TRUNCATE …
    * RESTART IDENTITY CASCADE handles the FK cascade for us, but listing
    * children first makes the intent obvious to a reader and keeps the
    * statement quick (CASCADE walks fewer constraints).
+   *
+   * Listing them all — rather than only the roots the rest cascade from —
+   * is what makes a missed table a loud failure (`relation does not exist`)
+   * the first time the schema and this list disagree, instead of a test that
+   * quietly inherits the previous test's rows.
    *
    * We schema-qualify each name explicitly so `truncateAll` works even if
    * a future test mutates `search_path` mid-run.
    */
   const truncatableTables = [
-    "documents",
-    "signal_revisit_events",
+    "feedback",
+    "background_jobs",
+    "group_top_of_mind_affirmations",
+    "group_top_of_mind_proposals",
+    "top_of_mind_entry_signals",
+    "top_of_mind_entries",
+    "top_of_minds",
+    "group_members",
+    "groups",
+    "signal_shares",
+    "signal_evidence",
     "signal_embeddings",
-    "top_of_mind_note_signals",
-    "top_of_mind_notes",
+    "signals",
+    "inspiration_embeddings",
     "reflections",
     "attachments",
-    "signals",
+    "inspirations",
+    "cli_login_codes",
     "sessions",
-    "users",
+    "profiles",
+    "accounts",
   ];
 
   let closed = false;

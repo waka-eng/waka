@@ -1,325 +1,417 @@
 /**
- * The group authorization boundary, against a real database.
+ * The group boundary: who gets in, and what can come out.
  *
- * `groups.test.ts` stubs the service layer, so its "returns 404 when the caller
- * is not a member" cases assert that a route forwards a `null` a mock just
- * returned. That verifies routing. It does not verify that a non-member is
- * actually turned away, because the function that decides it —
- * `loadGroupWithMembers` — never runs.
+ * `groups.test.ts` proves the endpoints do their jobs. This file proves the
+ * three rules that make a group safe to be in, and each is asserted in the
+ * shape that could actually fail:
  *
- * These do run them. Every case here is two real users and real rows: the only
- * shape in which "B cannot read A's group" means anything.
- *
- * Deliberately NOT in `vitest.unit.config.ts` — it needs a migrated disposable
- * database, so it belongs to the full suite.
+ *   1. **A non-member is turned away before anything is read.** Asserting a
+ *      404 alone would pass on a route that read the whole wall and then
+ *      forgot to send it. So the content loaders are stubs that fail the test
+ *      if they are ever reached.
+ *   2. **An agent-bound session has no seat at all.** Same standard: the
+ *      refusal has to happen before the membership lookup, not after it.
+ *   3. **No inspiration text can leave through a group.** Asserted against a
+ *      loader that deliberately over-selects — the route must publish the
+ *      fields it means to and nothing else — and against the module's own
+ *      source, which must not reference layer 1 at any point.
  */
 
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
-import { createUserFixture } from "../../test/fixtures/users.js";
-import {
-  groupTopOfMindNoteSignals,
-  groupTopOfMindNotes,
-  inspirationEmbeddings,
-  signals,
-} from "../db/index.js";
-import { loadTriggerSignals } from "../lib/group-top-of-mind-synthesis.js";
-import {
-  createGroupForUser,
-  deleteGroup,
-  joinGroupByCode,
-  leaveGroup,
-  listGroupTopOfMind,
-  listGroupsForUser,
-} from "../lib/group-top-of-mind.js";
-import {
-  getGroupCombinationReading,
-  refreshGroupCombinationReading,
-} from "../lib/group-combination-reading.js";
+import { Hono } from "hono";
+import { describe, expect, it, vi } from "vitest";
 
-let harness: TestDatabase;
+import type { AuthenticatedSession } from "../lib/session.js";
+import {
+  createGroupsRoutes,
+  type GroupMembership,
+  type GroupSummary,
+  type GroupTopOfMindView,
+  type GroupsRouteDependencies,
+  type GroupWallSignal,
+} from "./groups.js";
 
-beforeEach(async () => {
-  harness ??= await createTestDatabase();
-  await harness.truncateAll();
+const accountId = "00000000-0000-4000-8000-0000000000a1";
+const humanProfileId = "00000000-0000-4000-8000-000000000001";
+const agentProfileId = "00000000-0000-4000-8000-000000000002";
+const otherProfileId = "00000000-0000-4000-8000-000000000003";
+const groupId = "00000000-0000-4000-8000-000000000101";
+const proposalId = "00000000-0000-4000-8000-000000000301";
+const signalId = "00000000-0000-4000-8000-000000000401";
+
+/** A raw capture. If this string reaches a group response, the test failed. */
+const RAW_CAPTURE = "the bench in the window at my mother's house";
+
+const humanSession: AuthenticatedSession = {
+  sessionId: "00000000-0000-4000-8000-0000000000f1",
+  account: { id: accountId, email: "ada@example.com" },
+  profile: {
+    id: humanProfileId,
+    accountId,
+    type: "human",
+    name: "Ada",
+    preferredLocale: "en-US",
+  },
+};
+
+const agentSession: AuthenticatedSession = {
+  ...humanSession,
+  sessionId: "00000000-0000-4000-8000-0000000000f2",
+  profile: {
+    id: agentProfileId,
+    accountId,
+    type: "agent",
+    name: "Claude",
+    preferredLocale: "en-US",
+  },
+};
+
+function sessionMiddleware(as: AuthenticatedSession) {
+  return async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+    c.set("session", as);
+    await next();
+  };
+}
+
+/** Every dependency that reads or writes group content, wired to explode. */
+function unreachableDependencies(): GroupsRouteDependencies {
+  const unreachable = (name: string) =>
+    vi.fn(async () => {
+      throw new Error(`${name} must not run for a caller without a seat`);
+    });
+  return {
+    listGroups: unreachable("listGroups") as never,
+    createGroup: unreachable("createGroup") as never,
+    joinGroup: unreachable("joinGroup") as never,
+    leaveGroupFn: unreachable("leaveGroup") as never,
+    deleteGroupFn: unreachable("deleteGroup") as never,
+    renameGroupFn: unreachable("renameGroup") as never,
+    removeMemberFn: unreachable("removeGroupMember") as never,
+    listMembers: unreachable("listGroupMembers") as never,
+    loadWall: unreachable("loadGroupWall") as never,
+    loadTopOfMind: unreachable("loadGroupTopOfMind") as never,
+    enqueueRefresh: unreachable("enqueueGroupTopOfMindRefresh") as never,
+    listProposals: unreachable("listGroupProposals") as never,
+    createProposal: unreachable("createGroupProposal") as never,
+    affirmProposal: unreachable("affirmGroupProposal") as never,
+    declineProposal: unreachable("declineGroupProposal") as never,
+  };
+}
+
+function mount(deps: GroupsRouteDependencies, as: AuthenticatedSession) {
+  const app = new Hono();
+  app.route(
+    "/api/groups",
+    createGroupsRoutes({
+      getDatabase: (() => ({})) as GroupsRouteDependencies["getDatabase"],
+      authMiddleware: sessionMiddleware(as) as never,
+      ...deps,
+    }),
+  );
+  return app;
+}
+
+/** Every group-scoped surface, in the form a caller would reach it. */
+const groupScopedRequests: Array<[string, string, RequestInit]> = [
+  ["the roster", `/api/groups/${groupId}/members`, { method: "GET" }],
+  ["the wall", `/api/groups/${groupId}/wall`, { method: "GET" }],
+  ["the top of mind", `/api/groups/${groupId}/top-of-mind`, { method: "GET" }],
+  [
+    "a refresh",
+    `/api/groups/${groupId}/top-of-mind/refresh`,
+    { method: "POST" },
+  ],
+  ["the proposals", `/api/groups/${groupId}/proposals`, { method: "GET" }],
+  [
+    "a new proposal",
+    `/api/groups/${groupId}/proposals`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "add_entry", body: "let me in" }),
+    },
+  ],
+  [
+    "an affirmation",
+    `/api/groups/${groupId}/proposals/${proposalId}/affirm`,
+    { method: "POST" },
+  ],
+  [
+    "a decline",
+    `/api/groups/${groupId}/proposals/${proposalId}/decline`,
+    { method: "POST" },
+  ],
+  ["a rename", `/api/groups/${groupId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "mine now" }),
+  }],
+  ["a deletion", `/api/groups/${groupId}`, { method: "DELETE" }],
+  [
+    "a removal",
+    `/api/groups/${groupId}/members/${otherProfileId}`,
+    { method: "DELETE" },
+  ],
+];
+
+describe("a non-member", () => {
+  it.each(groupScopedRequests)(
+    "cannot reach %s, and nothing is read on the way to being told so",
+    async (_label, path, init) => {
+      const app = mount(
+        { ...unreachableDependencies(), loadMembership: vi.fn(async () => null) },
+        humanSession,
+      );
+
+      const response = await app.request(path, init);
+
+      // 404, not 403: "you may not see this" would confirm the id names a
+      // real group, which is the one fact a non-member must not learn.
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toEqual({ error: "Group not found" });
+    },
+  );
+
+  it("is turned away by the membership check itself, not by an empty result", async () => {
+    const loadMembership = vi.fn(async () => null);
+    const app = mount(
+      { ...unreachableDependencies(), loadMembership },
+      humanSession,
+    );
+
+    await app.request(`/api/groups/${groupId}/wall`);
+
+    expect(loadMembership).toHaveBeenCalledWith({}, {
+      groupId,
+      profileId: humanProfileId,
+    });
+  });
 });
 
-afterAll(async () => {
-  await harness?.cleanup();
-});
-
-const db = () => harness.db as never;
-
-async function twoUsers() {
-  const alice = await createUserFixture(harness.db);
-  const bob = await createUserFixture(harness.db);
-  return { alice: alice.user, bob: bob.user };
-}
-
-async function saveSignal(userId: string, text: string, shared = true, wowScore = 0) {
-  const [row] = await harness.db
-    .insert(signals)
-    .values({ userId, text, kind: "note", sharedToGroups: shared, wowScore })
-    .returning({ id: signals.id });
-  return row!.id;
-}
-
-/** Embeddings gate trigger eligibility, so a trigger test has to write one. */
-async function embed(userId: string, signalId: string) {
-  await harness.db.insert(inspirationEmbeddings).values({
-    userId,
-    inspirationId: signalId,
-    model: "test-model",
-    dimensions: 3,
-    embedding: [0.1, 0.2, 0.3],
-    inputHash: `hash-${signalId}`,
-  });
-}
-
-describe("group board membership", () => {
-  it("hides a group's board from a non-member", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "studio" });
-
-    await expect(
-      listGroupTopOfMind(db(), { userId: bob.id, groupId: group.id, limit: 5 }),
-    ).resolves.toBeNull();
-
-    // And is not merely hiding it from everyone.
-    await expect(
-      listGroupTopOfMind(db(), { userId: alice.id, groupId: group.id, limit: 5 }),
-    ).resolves.not.toBeNull();
-  });
-
-  it("opens the board to a member once they join by code", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "studio" });
-
-    const joined = await joinGroupByCode(db(), { userId: bob.id, joinCode: group.joinCode });
-    expect(joined.ok).toBe(true);
-
-    await expect(
-      listGroupTopOfMind(db(), { userId: bob.id, groupId: group.id, limit: 5 }),
-    ).resolves.not.toBeNull();
-  });
-
-  it("rejects an unknown join code without creating anything", async () => {
-    const { bob } = await twoUsers();
-    const result = await joinGroupByCode(db(), { userId: bob.id, joinCode: "ZZZZZZZZ" });
-    expect(result.ok).toBe(false);
-  });
+describe("an agent-bound session", () => {
+  const membership: GroupMembership = {
+    groupId,
+    profileId: agentProfileId,
+    role: "owner",
+  };
 
   /**
-   * Leaving stops future contribution, not past fact.
-   *
-   * This asserted deletion when it was written, which was the behaviour then.
-   * Phase 0 changed it deliberately: a departing member's evidence rows are
-   * KEPT so the room's timeline can still render their era with their saves
-   * intact, and the note they were half of is retired rather than destroyed.
-   * The founder decision is "departures: past stays, marked".
-   *
-   * That trade only holds because the privacy guarantee moved to the read
-   * layer instead — so the assertion that matters is the last one: the rows
-   * survive in the table and are still unreadable from the board.
+   * Membership is between people. An agent profile owns its own stack, so it
+   * has no business at a human's table — and a membership lookup that would
+   * have said "owner" is the point: the refusal cannot depend on the agent
+   * happening not to be in the group.
    */
-  it("retires a leaver's note and keeps their evidence unreadable, not deleted", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "studio" });
-    await joinGroupByCode(db(), { userId: bob.id, joinCode: group.joinCode });
-
-    // A note grounded in both members, as a real group note must be.
-    const aliceSignal = await saveSignal(alice.id, "the bench in the window");
-    const bobSignal = await saveSignal(bob.id, "the hallway that tells you where to stand");
-    const [note] = await harness.db
-      .insert(groupTopOfMindNotes)
-      .values({
-        groupId: group.id,
-        title: "Rooms that instruct without speaking",
-        kind: "recurrence",
-        idempotencyKey: "test-key",
-        why: "Both collections keep circling architecture as instruction.",
-      })
-      .returning({ id: groupTopOfMindNotes.id });
-    await harness.db.insert(groupTopOfMindNoteSignals).values([
-      { groupTopOfMindNoteId: note!.id, signalId: aliceSignal, ownerUserId: alice.id },
-      { groupTopOfMindNoteId: note!.id, signalId: bobSignal, ownerUserId: bob.id },
-    ]);
-
-    await leaveGroup(db(), { userId: bob.id, groupId: group.id });
-
-    // The evidence stays: the timeline has to be able to show that this note
-    // rested on Bob while Bob was here.
-    const remainingEvidence = await harness.db.select().from(groupTopOfMindNoteSignals);
-    expect(remainingEvidence.map((row) => row.ownerUserId)).toContain(bob.id);
-
-    // The note survives as history but stops being what the room reads: it no
-    // longer spans two present members, so it is not the group's any more.
-    const remainingNotes = await harness.db.select().from(groupTopOfMindNotes);
-    expect(remainingNotes).toHaveLength(1);
-    expect(remainingNotes[0]!.lifecycleStatus).toBe("replaced");
-
-    // The guarantee that makes keeping the rows safe. Alice is still in the
-    // room; Bob's words must not reach her through the board he left.
-    const board = await listGroupTopOfMind(db(), {
-      userId: alice.id,
-      groupId: group.id,
-      limit: 5,
-    });
-    expect(board!.notes).toHaveLength(0);
-  });
-});
-
-describe("deleting a room", () => {
-  it("lets the owner delete it, and takes the board down with it", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "studio" });
-    await joinGroupByCode(db(), { userId: bob.id, joinCode: group.joinCode });
-
-    const aliceSignal = await saveSignal(alice.id, "the bench in the window");
-    const [note] = await harness.db
-      .insert(groupTopOfMindNotes)
-      .values({
-        groupId: group.id,
-        title: "Rooms that instruct without speaking",
-        kind: "recurrence",
-        idempotencyKey: "delete-key",
-        why: "Both collections circle architecture as instruction.",
-      })
-      .returning({ id: groupTopOfMindNotes.id });
-    await harness.db.insert(groupTopOfMindNoteSignals).values({
-      groupTopOfMindNoteId: note!.id,
-      signalId: aliceSignal,
-      ownerUserId: alice.id,
-    });
-
-    await expect(
-      deleteGroup(db(), { userId: alice.id, groupId: group.id }),
-    ).resolves.toEqual({ ok: true });
-
-    // Memberships, notes and evidence go with the group via cascade...
-    expect(await harness.db.select().from(groupTopOfMindNotes)).toHaveLength(0);
-    expect(await harness.db.select().from(groupTopOfMindNoteSignals)).toHaveLength(0);
-    await expect(listGroupsForUser(db(), bob.id)).resolves.toEqual([]);
-
-    // ...but a member's own saved signal is theirs, not the room's.
-    const surviving = await harness.db.select().from(signals);
-    expect(surviving.map((row) => row.id)).toContain(aliceSignal);
-  });
-
-  it("refuses a member who does not own it, and says why", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "studio" });
-    await joinGroupByCode(db(), { userId: bob.id, joinCode: group.joinCode });
-
-    await expect(
-      deleteGroup(db(), { userId: bob.id, groupId: group.id }),
-    ).resolves.toEqual({ ok: false, reason: "not_owner" });
-
-    // And the room is still there.
-    await expect(listGroupsForUser(db(), bob.id)).resolves.toHaveLength(1);
-  });
-
-  it("tells a non-member nothing beyond not-found", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "studio" });
-
-    // Bob never joined: "not_owner" would confirm the id names a real room.
-    await expect(
-      deleteGroup(db(), { userId: bob.id, groupId: group.id }),
-    ).resolves.toEqual({ ok: false, reason: "not_found" });
-  });
-
-  it("reports not-found for a room that does not exist", async () => {
-    const { alice } = await twoUsers();
-    await expect(
-      deleteGroup(db(), {
-        userId: alice.id,
-        groupId: "00000000-0000-4000-8000-00000000dead",
-      }),
-    ).resolves.toEqual({ ok: false, reason: "not_found" });
-  });
-});
-
-describe("synthesis trigger selection", () => {
-  it("represents a quiet member even when a prolific one outranks them entirely", async () => {
-    // The round-robin interleave exists so one member cannot dominate a pass.
-    // A single query with a global score-ordered LIMIT silently defeats it:
-    // the quiet member falls outside the window and seeds nothing, so the pass
-    // only ever asks "what does A's collection say", never "what do A and B
-    // say together" — which is the whole point of a group board.
-    const { alice, bob } = await twoUsers();
-
-    /**
-     * Long enough to be heard.
-     *
-     * Saves below the audibility floor never seed a reading — there are no
-     * words in them to read — so a fixture written as `alice signal 3` now
-     * describes a save the pipeline correctly ignores, and this test would
-     * assert fairness over an empty pass. Fairness is what it is for, so its
-     * fixtures have to be saves a real person could have written.
-     */
-    const audible = (text: string) =>
-      `${text}. ${"Something worth keeping, written out at the length a person actually writes. "
-        .repeat(2)}`;
-
-    for (let i = 0; i < 40; i += 1) {
-      const id = await saveSignal(alice.id, audible(`alice signal ${i}`), true, 900 + i);
-      await embed(alice.id, id);
-    }
-    const bobSignal = await saveSignal(
-      bob.id,
-      audible("the one thing bob saved"),
-      true,
-      1,
-    );
-    await embed(bob.id, bobSignal);
-
-    const triggers = await loadTriggerSignals(db(), [alice.id, bob.id]);
-
-    expect(triggers.map((t) => t.userId)).toContain(bob.id);
-    expect(triggers.some((t) => t.id === bobSignal)).toBe(true);
-    // And still bounded rather than reading everything Alice ever saved.
-    expect(triggers.length).toBeLessThanOrEqual(24);
-  });
-});
-
-describe("a combination's reading is only for the room it belongs to", () => {
-  it("is unreachable to someone outside the room, and empty-but-visible inside it", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "Alice's room" });
-
-    // Outside: the same answer as a room that does not exist. `null` here must
-    // never be confused with "a member, nothing read yet" — that distinction is
-    // the whole reason this returns a wrapper rather than the surface.
-    expect(
-      await getGroupCombinationReading(db(), { userId: bob.id, groupId: group.id }),
-    ).toBeNull();
-
-    // Inside: a member sees that nothing has been read, which is a real answer.
-    expect(
-      await getGroupCombinationReading(db(), { userId: alice.id, groupId: group.id }),
-    ).toEqual({ reading: null });
-  });
-
-  it("will not read a combination for a non-member, so no model call is ever bought for one", async () => {
-    const { alice, bob } = await twoUsers();
-    const group = await createGroupForUser(db(), { userId: alice.id, name: "Alice's room" });
-
-    // A reader that throws if reached: the membership check must short-circuit
-    // BEFORE the model, or an outsider could spend the room's money to be told
-    // no. Refusing late is a cost bug as well as a privacy one.
-    const reader = {
-      read: () => {
-        throw new Error("the reader must not run for a non-member");
+  it.each([
+    ["listing groups", "/api/groups", { method: "GET" }],
+    [
+      "creating one",
+      "/api/groups",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "ours" }),
       },
+    ],
+    [
+      "joining one",
+      "/api/groups/join",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ joinCode: "ABCD2345" }),
+      },
+    ],
+    ...groupScopedRequests.map(
+      ([label, path, init]) => [label, path, init] as [string, string, RequestInit],
+    ),
+  ])("is refused %s", async (_label, path, init) => {
+    const loadMembership = vi.fn(async () => membership);
+    const app = mount(
+      { ...unreachableDependencies(), loadMembership },
+      agentSession,
+    );
+
+    const response = await app.request(path, init);
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Groups are between people, not agent profiles",
+    });
+    // Refused for who it is, before anyone asks whether it has a seat.
+    expect(loadMembership).not.toHaveBeenCalled();
+  });
+});
+
+describe("what a group can publish", () => {
+  const membership: GroupMembership = {
+    groupId,
+    profileId: humanProfileId,
+    role: "member",
+  };
+
+  /**
+   * A loader that reaches too far.
+   *
+   * The privacy rule cannot rest on every future query being written
+   * correctly, so the route is the second line: it names the fields it
+   * publishes, and a row carrying more than that is simply not asked for.
+   */
+  const overSelectedWallRow = {
+    signalId,
+    statement: "Rooms that instruct without speaking",
+    confidence: 72,
+    ownerProfileId: otherProfileId,
+    ownerName: "Grace",
+    sharedAt: "2026-08-10T00:00:00.000Z",
+    inspirationText: RAW_CAPTURE,
+    quote: RAW_CAPTURE,
+    evidenceReason: RAW_CAPTURE,
+  };
+
+  const overSelectedTopOfMind = {
+    topOfMind: {
+      id: "00000000-0000-4000-8000-000000000501",
+      version: 1,
+      status: "live" as const,
+      reason: "initial" as const,
+      createdAt: "2026-08-12T00:00:00.000Z",
+      sourceInspirations: [RAW_CAPTURE],
+    },
+    entries: [
+      {
+        id: "00000000-0000-4000-8000-000000000201",
+        type: "pattern" as const,
+        body: "You both keep circling instruction without speech.",
+        belief: null,
+        prompt: null,
+        lockedAt: null,
+        pinnedAt: null,
+        sortOrder: 0,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        contributors: [{ profileId: otherProfileId, name: "Grace", quote: RAW_CAPTURE }],
+        evidence: RAW_CAPTURE,
+      },
+    ],
+  };
+
+  function mountWithLeakyLoaders() {
+    return mount(
+      {
+        loadMembership: vi.fn(async () => membership),
+        loadWall: vi.fn(async () => [overSelectedWallRow as GroupWallSignal]),
+        loadTopOfMind: vi.fn(
+          async () => overSelectedTopOfMind as unknown as GroupTopOfMindView,
+        ),
+      },
+      humanSession,
+    );
+  }
+
+  it("shows the pattern on the wall and nothing underneath it", async () => {
+    const response = await mountWithLeakyLoaders().request(
+      `/api/groups/${groupId}/wall`,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { wall: Array<Record<string, unknown>> };
+    expect(Object.keys(body.wall[0]!).sort()).toEqual([
+      "confidence",
+      "ownerName",
+      "ownerProfileId",
+      "sharedAt",
+      "signalId",
+      "statement",
+    ]);
+    // No field for the capture behind the statement, under any name.
+    expect(body.wall[0]).not.toHaveProperty("inspirationText");
+    expect(body.wall[0]).not.toHaveProperty("quote");
+    expect(body.wall[0]).not.toHaveProperty("evidenceReason");
+  });
+
+  it("attributes a group entry to a member without carrying their evidence", async () => {
+    const response = await mountWithLeakyLoaders().request(
+      `/api/groups/${groupId}/top-of-mind`,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      entries: Array<Record<string, unknown>>;
     };
-    expect(
-      await refreshGroupCombinationReading(
-        db(),
-        { userId: bob.id, groupId: group.id },
-        { reader: reader as never },
-      ),
-    ).toBeNull();
+    const entry = body.entries[0]!;
+    expect(entry).not.toHaveProperty("evidence");
+    expect(entry.contributors).toEqual([
+      { profileId: otherProfileId, name: "Grace" },
+    ]);
+  });
+
+  it.each([
+    [`/api/groups/${groupId}/wall`],
+    [`/api/groups/${groupId}/top-of-mind`],
+  ])("never lets a raw capture through %s", async (path) => {
+    const response = await mountWithLeakyLoaders().request(path);
+    await expect(response.text()).resolves.not.toContain(RAW_CAPTURE);
+  });
+});
+
+describe("the group module itself", () => {
+  /**
+   * The guarantee one layer below the responses.
+   *
+   * Serializing carefully protects today's queries; this protects tomorrow's.
+   * An inspiration never crosses an account boundary, so a group query has no
+   * legitimate reason to name layer 1 at all — and a join written by someone
+   * who has not read the canon is exactly how that rule gets broken.
+   */
+  it("never reads layer 1", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("./groups.ts", import.meta.url)),
+      "utf8",
+    );
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+    expect(code).not.toMatch(/\binspirations\b/);
+    expect(code).not.toMatch(/\bsignalEvidence\b/);
+    expect(code).not.toMatch(/\binspirationId\b/);
+  });
+});
+
+describe("a member of one group is not a member of another", () => {
+  it("gets the seat it asked about, not whichever it holds", async () => {
+    const loadMembership = vi.fn(async () => null);
+    const otherGroupId = "00000000-0000-4000-8000-000000000102";
+    const groups: GroupSummary[] = [
+      {
+        id: groupId,
+        name: "builders",
+        joinCode: "ABCD2345",
+        role: "owner",
+        memberCount: 2,
+        createdAt: "2026-07-07T00:00:00.000Z",
+      },
+    ];
+    const app = mount(
+      {
+        loadMembership,
+        listGroups: vi.fn(async () => groups),
+        loadWall: vi.fn(async () => {
+          throw new Error("the wall of a group the caller is not in must not load");
+        }) as never,
+      },
+      humanSession,
+    );
+
+    const own = await app.request("/api/groups");
+    await expect(own.json()).resolves.toEqual({ groups });
+
+    const response = await app.request(`/api/groups/${otherGroupId}/wall`);
+    expect(response.status).toBe(404);
+    expect(loadMembership).toHaveBeenCalledWith({}, {
+      groupId: otherGroupId,
+      profileId: humanProfileId,
+    });
   });
 });

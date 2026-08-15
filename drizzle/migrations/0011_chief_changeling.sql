@@ -1,1 +1,0 @@
-ALTER TABLE "wow_moments" ADD COLUMN "belief_statement" text;

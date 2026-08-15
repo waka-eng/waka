@@ -1,5 +1,5 @@
 /**
- * Hono test-client harness for inspiration CRUD (and sibling) route tests.
+ * Hono test-client harness for route tests.
  *
  * Why this exists
  * ---------------
@@ -17,7 +17,7 @@
  *   4. Re-implement the "extract `Set-Cookie` value" / "merge two header
  *      bags" / "assert JSON content-type" plumbing per file.
  *
- * Repeated by 30 tests, those four lines become the longest part of every
+ * Repeated across the suite, those four lines become the longest part of every
  * spec — and the place a typo (`Authrization`) silently invalidates the
  * test by demoting it to an unauthenticated request that 401s "as expected".
  * The harness here collapses the boilerplate into one ergonomic call site:
@@ -47,7 +47,7 @@
  * Therefore: this module exposes
  *   - `apiRequest(path, init)`            → raw Response (escape hatch).
  *   - `apiJson<T>(path, init)`            → `{ status, headers, body }`.
- *   - `authedClient(fixture | token)`     → ergonomic per-user client.
+ *   - `authedClient(fixture | token)`     → ergonomic per-session client.
  *   - `extractSetCookie(res, name)`       → strict cookie reader.
  *
  * Authentication contract
@@ -58,7 +58,7 @@
  *                                       cookie jar to manage.
  *   2. `Cookie: waka_session=<jwt>`   — exercises the browser path.
  *
- * The harness defaults to (1). The cookie form is available on the per-user
+ * The harness defaults to (1). The cookie form is available on the
  * client via `client.withAuthMode("cookie")` for tests that explicitly want
  * to validate the cookie path (e.g. logout flows).
  *
@@ -70,20 +70,16 @@
  * schema-isolated test database returned by `createTestDatabase()` is a
  * SEPARATE connection / schema and is NOT visible to the Hono handlers.
  *
- * Practical implication for inspiration CRUD tests:
- *   - When a test drives writes through `client.json("POST", ...)`, the row
- *     lands in `public.inspirations` (etc.), and any cleanup MUST go
- *     through `getDb()` against the same schema. Use the
- *     `createCleanupTracker()` helper from `./cleanup.ts` to track inserted
- *     user ids and delete them in `afterEach` (FK CASCADE on
- *     `inspirations.user_id` reaps inspirations + attachments + reflections
- *     in one round-trip).
+ * Practical implication for route tests:
+ *   - When a test drives writes through `client.json("POST", ...)`, the rows
+ *     land in the shared schema, and any cleanup MUST go through `getDb()`
+ *     against that same schema. Deleting the account reaps everything under
+ *     it, because every memory table cascades from `profiles`.
  *   - When a test drives writes DIRECTLY through Drizzle (e.g. exercises a
  *     queue worker handler in isolation), use `createTestDatabase()` for
- *     hermetic schema isolation and pass that handle to
- *     `createUserFixture(testDb.db, ...)`. Mixing the two on a single test
- *     is a bug — the user row would live in one schema and the inspiration
- *     in another, with the join silently returning empty.
+ *     hermetic schema isolation. Mixing the two on a single test is a bug —
+ *     the profile row would live in one schema and the inspiration in
+ *     another, with the join silently returning empty.
  *
  * The harness does NOT enforce this distinction; it cannot know which
  * connection a given handler used. Test authors must pick one mode per
@@ -92,7 +88,6 @@
 
 import { app } from "../../src/index.js";
 import { SESSION_COOKIE_NAME } from "../../src/lib/auth.js";
-import type { UserFixture } from "../fixtures/users.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -109,6 +104,15 @@ import type { UserFixture } from "../fixtures/users.js";
  * `headers` is a flat record so call sites don't have to import a `Headers`
  * polyfill type; the harness merges this with auth + content-type defaults.
  */
+/**
+ * Anything a spec can authenticate as. Structural rather than tied to one
+ * factory: a spec that mints its own session row and one that builds a token
+ * by hand hand the harness the same thing — the token.
+ */
+export interface SessionFixture {
+  token: string;
+}
+
 export interface ApiRequestInit {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
@@ -133,17 +137,18 @@ export interface ApiJsonResponse<T = unknown> {
 }
 
 /**
- * Per-user ergonomic client. Pre-binds the bearer token (or session cookie)
- * so individual call sites stay focused on the request being exercised.
+ * Per-session ergonomic client. Pre-binds the bearer token (or session
+ * cookie) so individual call sites stay focused on the request being
+ * exercised.
  *
  * Construction:
- *   - `authedClient(userFixture)` — extract `.token` automatically.
- *   - `authedClient(jwtString)`   — pass a raw token (e.g. one synthesised
- *                                   manually for a negative-path test).
+ *   - `authedClient(fixture)`   — extract `.token` automatically.
+ *   - `authedClient(jwtString)` — pass a raw token (e.g. one synthesised
+ *                                 manually for a negative-path test).
  *
  * The returned client is immutable; `withAuthMode` returns a new client so
- * a single user fixture can drive both bearer-mode and cookie-mode tests
- * in the same describe block without interfering.
+ * a single fixture can drive both bearer-mode and cookie-mode tests in the
+ * same describe block without interfering.
  */
 export interface AuthedClient {
   /** The bound JWT. Exposed for direct `app.request` calls when needed. */
@@ -152,13 +157,13 @@ export interface AuthedClient {
   readonly authMode: "bearer" | "cookie";
 
   /**
-   * Issue a request as this user; return the raw Response. Use when the
+   * Issue a request as this session; return the raw Response. Use when the
    * test needs to inspect a Set-Cookie header, a non-JSON body, etc.
    */
   request(path: string, init?: ApiRequestInit): Promise<Response>;
 
   /**
-   * Issue a request as this user; return `{ status, headers, body }` with
+   * Issue a request as this session; return `{ status, headers, body }` with
    * `body` typed as `T` (the type is a convenience for the call site —
    * the harness does not enforce the shape at runtime).
    */
@@ -333,21 +338,20 @@ export async function apiJson<T = unknown>(
 }
 
 // ---------------------------------------------------------------------------
-// Public API: per-user client
+// Public API: per-session client
 // ---------------------------------------------------------------------------
 
 /**
- * Build a per-user client that auto-injects auth for every request. Accepts
- * either a `UserFixture` (the common case — the fixture already carries a
- * fully-valid session row + token) or a raw JWT string (escape hatch for
- * tests that synthesise tokens manually).
+ * Build a per-session client that auto-injects auth for every request.
+ * Accepts either a fixture carrying a fully-valid session token or a raw JWT
+ * string (escape hatch for tests that synthesise tokens manually).
  *
  * Default auth mode: `bearer` (Authorization header). Switch to cookie
  * with `client.withAuthMode("cookie")` for tests that drive the browser
  * path explicitly.
  */
 export function authedClient(
-  source: UserFixture | string,
+  source: SessionFixture | string,
   options: { authMode?: "bearer" | "cookie" } = {},
 ): AuthedClient {
   const token = typeof source === "string" ? source : source.token;
