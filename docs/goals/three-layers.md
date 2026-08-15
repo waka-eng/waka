@@ -1,13 +1,13 @@
 # Goal: three layers on a clean slate — profiles, signals, and one top of mind
 
-Status: draft v2 — awaiting owner review (2026-08-15). v1 was adversarially
-reviewed the same day; v2 resequences demolition into Phase 1, adds the
-database strategy and a cutover phase, and sentences every surface v1 left
-unowned. Phase 0's gate is owner sign-off on the keep/park/delete
-inventory; nothing is deleted before that.
-Prerequisite: the docs PR (waka#231) must be merged to `dev` before
-`/goal three-layers` can start — the goal branch is cut from `dev` and
-this document must exist there.
+Status: draft v3 — ready to run (2026-08-15). v1 drafted; v2 after
+adversarial review the same day (demolition resequenced into Phase 1,
+every surface sentenced, cutover phase added); v3 records the owner's
+database decision: **wipe in place** on the shared instance. Phase 0's
+gate is owner sign-off on the keep/park/delete inventory; nothing is
+deleted before that.
+Prerequisite satisfied: waka#231 (this document + the canon) merged to
+`dev` on 2026-08-15, alongside waka#230 and waka-mcp#2.
 Branch: `goal/three-layers` (waka). Companion branch `three-layers` in
 waka-mcp, prepared in Phase 7, merged at Phase 9.
 Canon: `docs/data-model.md` — this goal implements that document and has
@@ -46,21 +46,22 @@ Three forces converge on a rebuild rather than another rename-in-place:
 
 ## Database strategy
 
-There is no purely local database today: `.env.local` points at a shared
-remote Neon instance that also backs the deployed dev stage. Therefore:
+There is no purely local database: `.env.local` points at the shared
+remote Neon instance that also backs the deployed dev stage. Owner
+decision (2026-08-15): **wipe in place** — the rebuild happens directly
+on that shared database. Accepted consequences, recorded so nobody
+rediscovers them as surprises:
 
-- **Phases 1–8 run against a scratch database** — a fresh Neon
-  branch/database created for this goal (or a local Postgres container).
-  The goal branch's `.env.local` points at it. The shared instance and
-  the deployed `dev.waka.im` stage keep running the **old** code and
-  schema, untouched, for the entire goal.
-- Because the deployed stage stays on the old world until Phase 9, the
-  owner's daily waka-mcp usage keeps working mid-goal. There is no MCP
-  outage window until cutover, and at cutover the waka-mcp update lands
-  the same day.
-- **The only wipe of a shared database happens in Phase 9**, after the
-  owner confirms the exact connection string at execution time. Approval
-  of this document is not approval of a specific `DROP`.
+- **Phase 1 drops every table in the shared database**, after the
+  executing session confirms the exact connection string with the owner
+  — approval of this document is not approval of a specific `DROP`.
+- From Phase 1 until the Phase 9 deploy, `dev.waka.im` and any waka-mcp
+  client pointed at it are **down**: the deployed old code queries
+  tables that no longer exist. The deployed stage's 1-minute
+  `BackgroundJobDrain` cron will error-loop against missing tables for
+  the duration — harmless, but noisy in the Lambda logs.
+- Phase 9 therefore has no second wipe: the database already carries the
+  new schema; cutover is merge + `sst deploy` + verification.
 
 ## Shape of the work
 
@@ -158,9 +159,9 @@ Starting proposal, for the owner to amend at the gate:
   `docs/data-model.md`, which supersedes the Product Direction
   vocabulary below" — so every later phase's executor reads the canon
   first (the full AGENTS.md rewrite happens in Phase 8). Record the
-  accepted mid-goal facts: the deployed dev stage stays on the old world
-  until Phase 9; all pre-goal sessions and CLI credentials die at
-  cutover.
+  accepted mid-goal facts: the deployed dev stage and any waka-mcp
+  client are down from Phase 1 until the Phase 9 deploy; all pre-goal
+  sessions and CLI credentials die with the Phase 1 wipe.
 
 **Gate (owner):** the amended inventory is signed and recorded in
 `## Log`. Fail = the model needs another pass; halt and revise the canon
@@ -188,8 +189,10 @@ later gate requires a fully green repo:
    only — value reactions that feed regeneration). Nothing parked
    appears in the baseline.
 2. **The baseline reset.** Delete `drizzle/migrations/*` + `meta/`;
-   generate `0000_three_layers` as the sole migration; migrate onto the
-   scratch database. Rewrite `test/helpers/db.ts` fixtures/cleanup and
+   generate `0000_three_layers` as the sole migration. After the owner
+   confirms the exact connection string, drop the old tables and migrate
+   the shared database to the baseline. Rewrite `test/helpers/db.ts`
+   fixtures/cleanup and
    `migrations.test.ts` (it currently pins old migration filenames) for
    the single-baseline world. Rewrite `tools/seed-demo.ts` +
    `demo-seed-data.ts` to create an account, its human profile, one
@@ -207,7 +210,7 @@ later gate requires a fully green repo:
    its dead exports; the router loses the dead pages.
 
 **Gate:** `pnpm db:generate` yields exactly one baseline migration;
-migrate + `pnpm db:check` clean on the scratch DB; **all five checks
+migrate + `pnpm db:check` clean on the wiped database; **all five checks
 green** (api typecheck, api test:unit, web typecheck+build, admin
 typecheck); `pnpm test:dev-local-script` passes; a schema-review table in
 `## Log` maps every canon concept to exactly one table name with zero
@@ -224,9 +227,8 @@ hole — and the exchanged session binds the chosen `profile_id`.
 Authorization middleware enforces the canon's matrix: human-profile
 sessions are account admins; agent-bound sessions get full access to
 their own profile, read + capture on the human profile, nothing else.
-State plainly: all sessions minted before this phase are invalid;
-browser and CLI re-login (the deployed stage is unaffected until
-Phase 9).
+State plainly: every pre-goal session and credential already died with
+the Phase 1 wipe; browser and CLI re-login against the new world.
 
 **Gate:** an authorization test suite proves the matrix — for each
 (session binding × target profile × operation class) cell a test asserts
@@ -256,7 +258,7 @@ network-flaky. Boot via the kept `boot-and-wait`.
 **Gate:** CRUD + search API tests green (search finds a seeded match
 beyond the newest 200); cross-profile tenant-isolation negative tests;
 the e2e harness completes a signup → capture → archive round-trip
-against `pnpm dev:local` on the scratch DB; enrichment rows recorded
+against `pnpm dev:local`; enrichment rows recorded
 `ready` for the fixture link (body text present) and fixture image
 (transcription present); all five checks green.
 
@@ -342,11 +344,9 @@ target for the permitted cross-profile read); `waka-login` surfaces the
 profile picker; response schemas re-validated; both SKILL.md files
 re-taught. **Build the live-stack test mode this phase's gate needs**
 (today's suite is fully fetch-mocked): a vitest project that runs the
-real client against `pnpm dev:local` + scratch DB. `/api/health`
-capabilities become the post-rebuild set (the sanctioned break of the
-stable-strings rule, detectable by old clients). Nothing merges or
-deploys yet — the owner's daily MCP keeps working against the deployed
-old stage until Phase 9.
+real client against `pnpm dev:local`. `/api/health` capabilities become
+the post-rebuild set (the sanctioned break of the stable-strings rule,
+detectable by old clients). Nothing merges or deploys yet.
 
 **Gate:** the live-mode suite passes end to end — login as agent
 profile, capture into human profile (`source: "app"`), capture into own
@@ -379,17 +379,16 @@ and the `inspirations`-as-alias export. All five checks green plus
 
 ### Phase 9 — Cutover
 
-Merge `goal/three-layers` to `dev` (one PR). Owner confirms the exact
-connection string of the deployed stage's database; wipe + baseline
-migrate. `sst deploy` the dev stage; run the e2e harness against the
+Merge `goal/three-layers` to `dev` (one PR). The database already
+carries the new schema (Phase 1 wiped in place), so cutover is code
+only: `sst deploy` the dev stage; run the e2e harness against the
 deployed URL. Merge waka-mcp `three-layers` the same day; re-run
-`waka-login` (old credentials are dead by design); the live-mode suite
+`waka-login` (old credentials died at Phase 1); the live-mode suite
 passes against the deployed stage. `Status:` flips to done with final
 numbers in `## Log`.
 
 **Gate:** deployed e2e green; waka-mcp live suite green against the
-deployed stage; the old stage's schema is gone (a probe for
-`wow_moments` returns undefined-table).
+deployed stage; a probe for `wow_moments` returns undefined-table.
 
 ---
 
@@ -416,3 +415,8 @@ deployed stage; the old stage's schema is gone (a probe for
   vocabularies; e2e harness + fixture server made explicit Phase 3
   scope; waka-mcp live-mode suite made explicit Phase 7 scope; budget
   section added. Awaiting Phase 0 owner review.
+- 2026-08-15 — v3: owner chose **wipe in place** over a scratch
+  database; the database strategy, Phase 1, and Phase 9 updated
+  accordingly (`dev.waka.im` accepted down from Phase 1 until the
+  Phase 9 deploy). Prerequisite PRs waka#230, waka#231, and waka-mcp#2
+  all merged. Ready for `/goal three-layers`.
