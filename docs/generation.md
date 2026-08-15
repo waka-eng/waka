@@ -34,6 +34,45 @@ without a model.
 
 ---
 
+## The life of one inspiration
+
+The same pipeline, told as one capture's story. Say you save: *"Turned down
+the platform-team offer. I keep choosing depth over breadth."*
+
+1. **Capture.** The text lands as an inspiration — yours, editable, deletable,
+   never shared. If it carried a link or an image, enrichment fetches the page
+   body / describes the image in the background and re-derives when done.
+2. **Extraction.** One model call reads the capture (plus reflections and
+   enrichment) and proposes at most three candidate statements — here, likely
+   one: "You keep choosing depth over breadth." Zero would also be a valid
+   answer; a grocery list yields nothing.
+3. **Match or mint.** The candidate is embedded and compared against your
+   existing signals. If you have said this before in other words, the cosine
+   is high and the capture **attaches as evidence** to that signal. In the
+   ambiguous band the judge is asked once. Otherwise a new signal is born
+   `emerging`.
+4. **Recurrence decides.** At three pieces of evidence the signal promotes to
+   `active`. One mention is a thought; three are a pattern.
+5. **Confidence follows the evidence** — how much, how spread out, how
+   recent, whether an agent corroborated it — computed fresh at every read,
+   so a pattern you stop feeding fades without anyone touching it.
+6. **Selection.** When the signal set changes, a refresh scores every
+   eligible signal and takes the strongest twelve. New profiles borrow their
+   best still-forming signals so the board is never blank.
+7. **Synthesis.** One model call returns the whole artifact — at most seven
+   entries, each citing the signals it rests on. Code then validates every
+   citation, restores your locked entries byte-for-byte, and writes the next
+   **version** of your top of mind. The old one is superseded, never erased.
+8. **You push back.** Edit an entry (it locks), dismiss it, pin it, or mark
+   it *not true* — and the next synthesis is told, with your correction
+   outranking the model's phrasing. Delete the original inspiration and the
+   whole chain unwinds: evidence gone, signal retired or marked unsupported,
+   artifact re-synthesized.
+
+Everything below specifies each step precisely.
+
+---
+
 ## Layer 1 → Layer 2: how a signal is generated
 
 ### 1. What starts a derivation
@@ -133,8 +172,8 @@ several signals, one signal accumulates many captures), unique per
 
 ### 5. Confidence, promotion, lifecycle
 
-**Confidence** (0–100) is recomputed from the full evidence set on every
-change, in `computeSignalConfidence`:
+**Confidence** (0–100) is a pure function of the evidence set and the clock,
+`computeSignalConfidence`:
 
 ```
 confidence = SUPPORT × (evidence count, saturating at CONFIDENCE_SATURATION_EVIDENCE = 6)
@@ -149,6 +188,23 @@ with weights `CONFIDENCE_SUPPORT_WEIGHT` (55), `CONFIDENCE_SPREAD_WEIGHT`
 diversity term is a *bonus*, not a weight, deliberately: most profiles are
 app-only, and a weight would cap every solo human below 100 forever.
 Corroboration adds; its absence must not subtract.
+
+Because the formula contains a clock, *when* it runs is part of the contract:
+
+- **Computed live at every personal read** — `GET /api/signals` (list and
+  detail, so the web surface and MCP inherit it) and layer-3 selection both
+  recompute confidence from the evidence rows at request time **[checked]**.
+  This is what makes the recency term real: a signal that goes quiet fades on
+  its own, with no write needed.
+- **A snapshot is stored on the signal row**, written whenever evidence
+  changes. It is written at the exact moment the recency term peaks, so it
+  can only ever overstate a signal that has since gone quiet — which is why
+  no personal surface serves it. It exists for two readers: as a coarse SQL
+  pre-sort before live ranking, and as what the **group wall** shows. The
+  wall's query is deliberately unable to reach `signal_evidence` or
+  `inspirations` (a member must never touch another member's private layers),
+  so it shows "confidence as the owner's system last wrote it" — the one
+  documented staleness in the system.
 
 **Promotion.** A signal is born `emerging` and becomes `active` at
 `SIGNAL_PROMOTION_MIN_EVIDENCE` (3) pieces of evidence. Recurrence is the bar:
@@ -277,6 +333,40 @@ feedback fenced as data.
 
 Versions form a chain: the previous live artifact is marked superseded and
 points at its replacement. Nothing is mutated in place; history is walkable.
+
+---
+
+## How time is applied
+
+Four terms read the clock; nothing else does. What matters is *when* each is
+evaluated — a decay term only exists if something actually runs it.
+
+| Term | Shape | Evaluated |
+|---|---|---|
+| Confidence recency (weight 15) | half-life `CONFIDENCE_RECENCY_HALF_LIFE_DAYS` (45) since the newest evidence | Live, at every personal read and every selection **[checked]** |
+| Confidence spread (weight 30) | span of evidence, saturating at `CONFIDENCE_SATURATION_SPREAD_DAYS` (30) | Same — but monotonic: spread never shrinks as time passes |
+| Selection recency (weight 0.2) | half-life `SELECTION_RECENCY_HALF_LIFE_DAYS` (30) since last evidence | Live, at every refresh |
+| Comeback bonus (weight 0.15) | needs a gap ≥ `COMEBACK_MIN_DORMANT_DAYS` (21); the return must be ≤ `COMEBACK_MAX_RETURN_AGE_DAYS` (14) old | Live, at every refresh |
+
+So a signal decays twice, on different clocks: its **confidence** fades with
+a 45-day half-life on the recency slice, and its **selection score** fades
+again with a 30-day half-life. Both are computed from the evidence timestamps
+at the moment of the read — no cron rewrites scores, and a profile nobody
+touches costs nothing. The stored confidence snapshot does *not* decay (it is
+rewritten only when evidence changes), which is exactly why no personal
+surface serves it — see the confidence section above.
+
+Deliberate consequences:
+
+- **Silence is information.** A quiet signal sinks in both confidence and
+  selection, making room without anyone dismissing anything.
+- **Scores floor rather than vanish.** Support and spread do not decay, so a
+  well-evidenced dormant signal settles at a low-but-nonzero score instead of
+  zero. Dormant patterns stay *reachable* — surfaced again the moment fresh
+  evidence or a comeback lands — rather than deleted by arithmetic.
+- **Returns beat persistence.** The comeback bonus pays for a gap plus a
+  recent return, so a pattern that resurfaces after months outranks one that
+  never went away. A comeback you did not act on within two weeks is history.
 
 ---
 

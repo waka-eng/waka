@@ -30,6 +30,7 @@
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import {
+  inspirations,
   profiles,
   signalEvidence,
   signals,
@@ -41,6 +42,7 @@ import {
   feedback,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import { computeSignalConfidence } from "./signal-derivation.js";
 import { normalizeSupportedLocale } from "./locales.js";
 import {
   getDefaultModelProvider,
@@ -258,8 +260,10 @@ async function selectSignals(
     .select({
       signalId: signalEvidence.signalId,
       createdAt: signalEvidence.createdAt,
+      source: inspirations.source,
     })
     .from(signalEvidence)
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
     .where(
       inArray(
         signalEvidence.signalId,
@@ -267,11 +271,14 @@ async function selectSignals(
       ),
     );
 
-  const evidenceBySignal = new Map<string, Date[]>();
+  const evidenceBySignal = new Map<
+    string,
+    Array<{ createdAt: Date; source: "app" | "agent" }>
+  >();
   for (const row of evidenceRows) {
     const bucket = evidenceBySignal.get(row.signalId);
-    if (bucket) bucket.push(row.createdAt);
-    else evidenceBySignal.set(row.signalId, [row.createdAt]);
+    if (bucket) bucket.push(row);
+    else evidenceBySignal.set(row.signalId, [row]);
   }
 
   // The latest verdict per signal decides `disputed` — newest first, first
@@ -302,16 +309,23 @@ async function selectSignals(
 
   const scored = rows
     .map((row) => {
-      const evidenceAt = evidenceBySignal.get(row.id) ?? [];
+      const evidence = evidenceBySignal.get(row.id) ?? [];
+      const evidenceAt = evidence.map((item) => item.createdAt);
+      // Live, not the stored snapshot: the snapshot was written the moment
+      // evidence last landed — its decay term frozen at full — so ranking by
+      // it would keep a signal that went quiet months ago scoring as if it
+      // were still current. Time only passes for this signal if it passes
+      // here, at read.
+      const confidence = computeSignalConfidence(evidence, now);
       return {
         id: row.id,
         statement: row.statement,
         status: row.status,
-        confidence: row.confidence,
+        confidence,
         evidenceCount: evidenceAt.length,
         lastEvidenceAt: row.lastEvidenceAt,
         score: computeSelectionScore({
-          confidence: row.confidence,
+          confidence,
           evidenceCount: evidenceAt.length,
           lastEvidenceAt: row.lastEvidenceAt,
           comebackBonus: computeComebackBonus(evidenceAt, now),
