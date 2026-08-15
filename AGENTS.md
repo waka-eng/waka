@@ -1,5 +1,15 @@
 # WAKA Agent Notes
 
+> **The three-layers rebuild is in progress.** The vocabulary of record is
+> [`docs/data-model.md`](docs/data-model.md), which **supersedes the Product
+> Direction vocabulary below** — read the canon first. In short: an
+> *inspiration* is the raw capture (what the `signals` table holds today), a
+> *signal* is a WAKA-derived evidence-backed pattern, and a *top of mind* is
+> one versioned artifact per profile. Sparks, WOW vocabulary, lens boards, and
+> the context-edge graph are being removed. The rebuild is
+> [`docs/goals/three-layers.md`](docs/goals/three-layers.md); this banner and
+> the section below are rewritten at its Phase 8.
+
 ## Product Direction
 
 WAKA is pivoting from an inspirations capture app into an ambition mirror powered by a personal context graph.

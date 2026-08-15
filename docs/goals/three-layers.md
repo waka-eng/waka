@@ -420,3 +420,132 @@ deployed stage; a probe for `wow_moments` returns undefined-table.
   accordingly (`dev.waka.im` accepted down from Phase 1 until the
   Phase 9 deploy). Prerequisite PRs waka#230, waka#231, and waka-mcp#2
   all merged. Ready for `/goal three-layers`.
+
+### Phase 0 — inventory (2026-08-15), awaiting owner signature
+
+Surface counted by enumeration, not memory: **18 routes, 20 schema
+modules, 56 lib files, 15 queue/scoring/vault files, 8 web pages, 17
+tools**. Every one carries a verdict below. Verdicts: **K** keep
+(re-keyed/re-pointed, behavior preserved), **R** rewrite (concept
+survives, implementation replaced by a named phase), **P** park (feature
+leaves; code and tables removed; revivable as its own goal), **D**
+delete (no return path).
+
+**Routes (18)**
+
+| Route | V | Note |
+|---|---|---|
+| `auth.ts`, `auth-google.ts` | K | `users` → `accounts`; signup/login create the human profile (P1–2) |
+| `auth-cli.ts` | K | + consent page and profile picker (P2) |
+| `health.ts` | K | capabilities set updated at P7 |
+| `attachments.ts` | K | presign flow unchanged; enrichment both-modal (P3) |
+| `inspirations.ts` | R | L1: capture/edit/delete/search, absorbs the archive (P3) |
+| `signals.ts` | R | becomes L2 (P4); its archive behavior moves to `inspirations.ts` |
+| `top-of-mind.ts` | R | artifact + entries + version metadata (P5) |
+| `groups.ts` | K | re-keyed to profiles; wall shows shared signals (P6) |
+| `feedback.ts` | K | target enum → `signal \| top_of_mind_entry` |
+| `public-profiles.ts` | K | re-points at the human profile's artifact (P5) |
+| `admin-background-jobs.ts` | K | trimmed to generic payload summaries |
+| `guided-reflection.ts` | P | question generator only; `reflections` stays |
+| `decision-memo.ts` | P | |
+| `wow-moments.ts`, `wow-status.ts` | D | |
+| `admin-meaning-graph.ts`, `admin-top-of-mind-preview.ts` | D | |
+
+**Schema modules (20 → 17 + 3 new)**
+
+| Module | V | Note |
+|---|---|---|
+| `client.ts` | K | |
+| `index.ts` | R | barrel; **all ten alias exports die** |
+| `schema.ts` | R | `users`→`accounts`; old `signals`→`inspirations`; sparks + packets + context graph out |
+| *(new)* `schema-profiles.ts` | + | `profiles` (account_id, type, name) |
+| *(new)* `schema-signals.ts` | + | L2 `signals` + `signal_evidence` + `signal_shares` |
+| *(new)* `schema-top-of-mind.ts` | + | `top_of_minds` + `top_of_mind_entries` |
+| `schema-sessions.ts` | K | + bound `profile_id` (replaces `client`) |
+| `schema-cli-login-codes.ts` | K | |
+| `schema-attachments.ts` | K | enrichment block extended for images |
+| `schema-reflections.ts` | K | re-keyed as inspiration detail |
+| `schema-embeddings.ts` | R | inspiration **and** signal vectors (P4) |
+| `schema-background-jobs.ts` | K | job types rewritten |
+| `schema-feedback.ts` | K | new target enum |
+| `schema-groups.ts` | K | member = human profile |
+| `schema-group-direction.ts` | K | co-edit machinery (P6) |
+| `schema-wow-moments.ts` | D | replaced by the artifact tables |
+| `schema-group-rooms.ts` | D | incl. zero-consumer `group_room_feedback` |
+| `schema-activations.ts`, `schema-revisits.ts` | P | |
+| `schema-combinations.ts`, `schema-member-events.ts`, `schema-reading-divergence.ts` | P | |
+| `schema-documents.ts` | P | with the vault |
+
+**Lib (56)** — K: `account-erasure` (cascade rewritten), `admin-auth`,
+`auth`, `db`, `gemini-http`, `google-oauth`, `group-direction-policy`,
+`group-direction`, `inspiration-embeddings`, `locales`, `member-labels`,
+`middleware` (+matrix, P2), `model-provider`, `public-handles`, `queue`,
+`salience` (`verifyQuote` backs P5 citation safety), `session`,
+`signal-enrichment` (upgraded P3), `top-of-mind-family-lock`.
+R: `feedback-application`, `gemini-model-provider`,
+`group-top-of-mind{,-synthesis}` (P6), `top-of-mind-persistence`,
+`top-of-mind-refresh` (P5), `top-of-mind-value`.
+P: `combination-reading`, `context-node-types`, `decision-memo`,
+`group-combination-reading`, `guided-reflection-question`,
+`member-set-hash`, `node-dynamics`, `reading-divergence{,-gemini}`,
+`room-timeline`, `signal-activation`, `signal-readings`.
+D: `ambition-synthesis{,-gemini}` (superseded by whole-artifact
+synthesis), `auto-wow-generation` (zero callers), `inspiration-scores`,
+`meaning-candidates`, `meaning-graph-rebuild`, `meaning-graph-writer`
+(keyword ontology), `meaning-packets`, `meaning-relationship-judge`,
+`memory-movement` (dormancy re-implemented over `signal_evidence`),
+`signal-packets`, `signals` (aliased score presentation),
+`top-of-mind-dedupe`, `top-of-mind-notes` (compatibility serializer),
+`top-of-mind-preview`, `wow-candidates`, `wow-generation-config`,
+`wow-judge`.
+
+**Queue / scoring / vault (15)** — `queue/gemini.ts` R (HTTP plumbing
+kept; classifier prompt out, extract/synthesis clients in);
+`queue/classifier.ts` + its smoke D; `scoring/board-selection.ts` K
+(P6 may reuse); `scoring/wow-score.ts` D (with `inspiration-scores`);
+`scoring/activation.ts`, `scoring/stability.ts` P; all seven `vault/*` P.
+
+**Web (8)** — K: `Login`, `Onboarding`, `Profile`, `PublicProfile`
+(re-pointed), `Surface` (parked views — readings, direction, rooms —
+and orphaned `api.ts` exports removed). D: `MeaningGraph`,
+`AdminWowStatus`, `AdminHome`.
+
+**Tools (17)** — K: `dev-stack/boot-and-wait`, `visual-diff/*` (pairs
+re-pointed). R: `seed-demo`, `demo-seed-data` (account + human profile +
+agent profile + demo stack). P: `export-vault`, `reindex-vault`.
+D: all five `e2e/*` (replaced by `tools/e2e/organic.ts`, P3),
+`enrich-signals`, `pool-shape`, `turn-density`, `group-reading-eval`,
+`verify-timeline-phase0`, and `packages/api/scripts/{pull-boards,
+replay-stability}.ts`.
+
+**Park register** (revival goal named per feature): decision-memo →
+*decision-memo*; guided-reflection → *guided-reflection*;
+salience/readings → *salience*; room timelines → *room-timeline*;
+combinations → *combination-as-an-act*; revisits + activations →
+*brain-inspired-spark-engine*; stability/node-dynamics →
+*durable-interest* (halted; verdict stands); context-edge graph →
+*context-graph*; vault → *vault-durability*.
+
+**Three judgment calls flagged for the owner** (the rest follow
+mechanically from the canon):
+
+1. **Vault parked wholesale** — the capture write hook is 7 call sites
+   behind an existing DI seam, but `exporter.ts`/`serialize.ts` are
+   typed against six dying tables, so keeping it is a rewrite, not a
+   re-point. Parking loses YAML durability/export until its own goal.
+2. **`inspiration-scores` + `wow-score` deleted** — L1 stops carrying
+   `importance_score`/`wow_score`, so the archive loses its
+   resonance/revisited sorts (recency + text search remain). Ranking
+   moves to L2 confidence/evidence, per the canon. This is the one
+   deletion that visibly changes an existing surface.
+3. **Admin app kept, trimmed** — undeployed, three endpoints; useful
+   queue observability during this very goal. Cheap to keep, cheap to
+   drop if you'd rather.
+
+**Accepted mid-goal facts**: from Phase 1 until the Phase 9 deploy,
+`dev.waka.im` and any waka-mcp client pointed at it are down, and the
+deployed stage's 1-minute cron error-loops against missing tables; all
+pre-goal sessions and CLI credentials die with the Phase 1 wipe.
+
+**Gate status: HALTED for owner signature.** Amend any verdict above,
+then the goal resumes at Phase 1.
