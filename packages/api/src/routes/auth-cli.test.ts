@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedSession } from "../lib/session.js";
 
+// The consent token is an HMAC over the session, callback, and state.
+process.env.JWT_SECRET ??= "test-consent-secret";
+
 const HUMAN_SESSION: AuthenticatedSession = {
   sessionId: "session-1",
   account: { id: "account-1", email: "user@example.com" },
@@ -27,6 +30,19 @@ const AGENT_SESSION: AuthenticatedSession = {
   },
 };
 
+const HUMAN_ROW = {
+  id: "profile-human",
+  accountId: "account-1",
+  name: "Mina",
+  type: "human" as const,
+};
+const AGENT_ROW = {
+  id: "profile-agent",
+  accountId: "account-1",
+  name: "Scout",
+  type: "agent" as const,
+};
+
 const mockState = vi.hoisted(() => ({
   db: undefined as any,
   createSessionRow: vi.fn(async () => undefined),
@@ -47,8 +63,8 @@ vi.mock("../lib/auth.js", () => ({
 }));
 
 // hashSessionToken is a pure SHA-256 helper with no I/O — keep the real
-// implementation so a code minted by /start and looked up by /exchange hash
-// to the same value. Only createSessionRow (a DB write) is stubbed.
+// implementation so a code minted by /consent and looked up by /exchange
+// hash to the same value. Only createSessionRow (a DB write) is stubbed.
 vi.mock("../lib/session.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/session.js")>();
   return {
@@ -57,8 +73,8 @@ vi.mock("../lib/session.js", async (importOriginal) => {
   };
 });
 
-// The access matrix stays real: this route's whole job on the /start side is
-// deciding which profile a credential may be minted for.
+// The access matrix stays real: deciding which profile a credential may be
+// minted for is this route's whole job on the consent side.
 vi.mock("../lib/middleware.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/middleware.js")>();
   return {
@@ -85,8 +101,8 @@ function createApp() {
 
 /**
  * A queue of canned `select` results consumed in call order, plus spies for
- * insert/delete. `.where()` resolves directly and also carries `.limit()`, so
- * one mock serves both query shapes in this file.
+ * insert/delete. `.where()` resolves directly and also carries `.limit()` and
+ * `.orderBy()`, so one mock serves every query shape in this file.
  */
 function makeDb(selectResults: unknown[][] = []) {
   const select = vi.fn(() => {
@@ -97,6 +113,7 @@ function makeDb(selectResults: unknown[][] = []) {
       const rows = selectResults.shift() ?? [];
       const result: any = Promise.resolve(rows);
       result.limit = vi.fn(async () => rows);
+      result.orderBy = vi.fn(async () => rows);
       return result;
     });
     return chain;
@@ -106,6 +123,33 @@ function makeDb(selectResults: unknown[][] = []) {
   const deleteWhere = vi.fn(async () => undefined);
   const del = vi.fn(() => ({ where: deleteWhere }));
   return { select, insert, insertValues, delete: del, deleteWhere };
+}
+
+const CALLBACK = "http://127.0.0.1:5555/callback";
+
+function startUrl(params: Record<string, string>): string {
+  const query = new URLSearchParams(params).toString();
+  return `/api/auth/cli/start?${query}`;
+}
+
+/** Pull the hidden fields out of the rendered consent form. */
+function readFormFields(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const match of html.matchAll(
+    /<input type="hidden" name="([^"]+)" value="([^"]*)"/g,
+  )) {
+    fields[match[1]!] = match[2]!.replace(/&amp;/g, "&").replace(/&#39;/g, "'");
+  }
+  return fields;
+}
+
+function postConsent(fields: Record<string, string>) {
+  return createApp().request("/api/auth/cli/consent", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(fields).toString(),
+    redirect: "manual",
+  });
 }
 
 beforeEach(() => {
@@ -121,7 +165,7 @@ describe("GET /api/auth/cli/start", () => {
     mockState.authenticated = false;
 
     const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc",
+      startUrl({ callback: CALLBACK, state: "abc" }),
       { redirect: "manual" },
     );
 
@@ -130,7 +174,7 @@ describe("GET /api/auth/cli/start", () => {
 
   it("rejects a non-loopback callback", async () => {
     const res = await createApp().request(
-      "/api/auth/cli/start?callback=https://evil.example/callback&state=abc",
+      startUrl({ callback: "https://evil.example/callback", state: "abc" }),
       { redirect: "manual" },
     );
 
@@ -140,7 +184,7 @@ describe("GET /api/auth/cli/start", () => {
 
   it("rejects a same-origin (non-loopback) callback", async () => {
     const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://waka.example/callback&state=abc",
+      startUrl({ callback: "http://waka.example/callback", state: "abc" }),
       { redirect: "manual" },
     );
 
@@ -148,109 +192,195 @@ describe("GET /api/auth/cli/start", () => {
   });
 
   it("requires state", async () => {
-    const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback",
-      { redirect: "manual" },
-    );
+    const res = await createApp().request(startUrl({ callback: CALLBACK }), {
+      redirect: "manual",
+    });
 
     expect(res.status).toBe(400);
   });
 
-  it("mints a one-time code, stores its hash, and redirects to the loopback callback", async () => {
-    const db = makeDb([]);
+  /**
+   * The reason the consent page exists. A session cookie is SameSite=Lax,
+   * which is sent on exactly this kind of top-level navigation — so if the
+   * bare GET still minted, any page able to navigate the browser here while
+   * the person was signed in would have handed a live credential to a local
+   * port of its choosing, silently.
+   */
+  it("mints nothing and issues no redirect — it renders a page", async () => {
+    const db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
     mockState.db = db;
 
     const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=my-state",
+      startUrl({ callback: CALLBACK, state: "drive-by" }),
       { redirect: "manual" },
     );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("location")).toBeNull();
+    expect(db.insert).not.toHaveBeenCalled();
+
+    const html = await res.text();
+    expect(html).toContain("<form method=\"post\" action=\"/api/auth/cli/consent\"");
+    expect(html).toContain("user@example.com");
+  });
+
+  it("offers every profile the session may bind, and preselects the named one", async () => {
+    mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+
+    const res = await createApp().request(
+      startUrl({ callback: CALLBACK, state: "s", profile: "Scout" }),
+      { redirect: "manual" },
+    );
+    const html = await res.text();
+
+    expect(html).toContain('value="profile-human"');
+    expect(html).toContain('value="profile-agent"');
+    expect(html).toMatch(/value="profile-agent"\s+checked/);
+  });
+
+  it("offers an agent session only its own profile", async () => {
+    mockState.session = AGENT_SESSION;
+    mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+
+    const res = await createApp().request(
+      startUrl({ callback: CALLBACK, state: "s" }),
+      { redirect: "manual" },
+    );
+    const html = await res.text();
+
+    expect(html).toContain('value="profile-agent"');
+    expect(html).not.toContain('value="profile-human"');
+  });
+
+  it("escapes a device label rather than reflecting it into the page", async () => {
+    mockState.db = makeDb([[HUMAN_ROW]]);
+
+    const res = await createApp().request(
+      startUrl({ callback: CALLBACK, state: "s", device: '<script>alert(1)</script>' }),
+      { redirect: "manual" },
+    );
+    const html = await res.text();
+
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("POST /api/auth/cli/consent", () => {
+  async function renderThenFields(
+    overrides: Record<string, string> = {},
+    rows: unknown[] = [HUMAN_ROW, AGENT_ROW],
+  ) {
+    mockState.db = makeDb([rows as unknown[]]);
+    const res = await createApp().request(
+      startUrl({ callback: CALLBACK, state: "my-state", ...overrides }),
+      { redirect: "manual" },
+    );
+    return readFormFields(await res.text());
+  }
+
+  it("mints a one-time code, stores only its hash, and redirects to the callback", async () => {
+    const fields = await renderThenFields();
+    const db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+    mockState.db = db;
+
+    const res = await postConsent({ ...fields, profileId: "profile-human" });
 
     expect(res.status).toBe(302);
     const location = new URL(res.headers.get("location")!);
     expect(location.origin).toBe("http://127.0.0.1:5555");
-    expect(location.pathname).toBe("/callback");
     expect(location.searchParams.get("state")).toBe("my-state");
 
     const code = location.searchParams.get("code");
     expect(code).toBeTruthy();
 
-    expect(db.insert).toHaveBeenCalledTimes(1);
     expect(db.insertValues).toHaveBeenCalledTimes(1);
     const stored = db.insertValues.mock.calls[0]![0] as {
       profileId: string;
       codeHash: string;
-      deviceLabel: string | null;
-      expiresAt: Date;
     };
-    // The plaintext code never reaches the database.
+    expect(stored.profileId).toBe("profile-human");
     expect(stored.codeHash).toBe(await hashSessionToken(code!));
     expect(stored.codeHash).not.toBe(code);
-    expect(stored.profileId).toBe(HUMAN_SESSION.profile.id);
-    expect(stored.expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it("binds the code to the chosen profile", async () => {
+    const fields = await renderThenFields();
+    const db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+    mockState.db = db;
+
+    await postConsent({ ...fields, profileId: "profile-agent" });
+
+    const stored = db.insertValues.mock.calls[0]![0] as { profileId: string };
+    expect(stored.profileId).toBe("profile-agent");
+  });
+
+  it("refuses without a consent token", async () => {
+    const fields = await renderThenFields();
+    mockState.db = makeDb([[HUMAN_ROW]]);
+
+    const res = await postConsent({
+      ...fields,
+      consent: "",
+      profileId: "profile-human",
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockState.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("refuses a forged consent token", async () => {
+    const fields = await renderThenFields();
+    mockState.db = makeDb([[HUMAN_ROW]]);
+
+    const res = await postConsent({
+      ...fields,
+      consent: `${Date.now() + 60_000}.not-a-real-signature`,
+      profileId: "profile-human",
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockState.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("refuses a token minted for a different callback", async () => {
+    const fields = await renderThenFields();
+    mockState.db = makeDb([[HUMAN_ROW]]);
+
+    const res = await postConsent({
+      ...fields,
+      callback: "http://127.0.0.1:9999/callback",
+      profileId: "profile-human",
+    });
+
+    expect(res.status).toBe(400);
+    expect(mockState.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("refuses a profile the session may not bind", async () => {
+    mockState.session = AGENT_SESSION;
+    const fields = await renderThenFields({}, [AGENT_ROW]);
+    mockState.db = makeDb([[AGENT_ROW]]);
+
+    const res = await postConsent({ ...fields, profileId: "profile-human" });
+
+    expect(res.status).toBe(400);
+    expect(mockState.db.insert).not.toHaveBeenCalled();
   });
 
   it("accepts http://localhost as well as http://127.0.0.1", async () => {
-    const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://localhost:5555/callback&state=abc",
+    mockState.db = makeDb([[HUMAN_ROW]]);
+    const rendered = await createApp().request(
+      startUrl({ callback: "http://localhost:7777/cb", state: "s" }),
       { redirect: "manual" },
     );
+    const fields = readFormFields(await rendered.text());
+    mockState.db = makeDb([[HUMAN_ROW]]);
+
+    const res = await postConsent({ ...fields, profileId: "profile-human" });
 
     expect(res.status).toBe(302);
-  });
-
-  it("binds the code to a named profile of the same account", async () => {
-    const db = makeDb([
-      [
-        { id: "profile-human", accountId: "account-1", name: "Mina" },
-        { id: "profile-agent", accountId: "account-1", name: "Scout" },
-      ],
-    ]);
-    mockState.db = db;
-
-    const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc&profile=scout&device=claude-code",
-      { redirect: "manual" },
-    );
-
-    expect(res.status).toBe(302);
-    const stored = db.insertValues.mock.calls[0]![0] as {
-      profileId: string;
-      deviceLabel: string | null;
-    };
-    expect(stored.profileId).toBe("profile-agent");
-    expect(stored.deviceLabel).toBe("claude-code");
-  });
-
-  it("rejects a profile the account does not own", async () => {
-    const db = makeDb([[{ id: "profile-human", accountId: "account-1", name: "Mina" }]]);
-    mockState.db = db;
-
-    const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc&profile=someone-else",
-      { redirect: "manual" },
-    );
-
-    expect(res.status).toBe(400);
-    expect(db.insert).not.toHaveBeenCalled();
-  });
-
-  it("refuses to let an agent session mint a credential for the human profile", async () => {
-    mockState.session = AGENT_SESSION;
-    const db = makeDb([
-      [
-        { id: "profile-human", accountId: "account-1", name: "Mina" },
-        { id: "profile-agent", accountId: "account-1", name: "Scout" },
-      ],
-    ]);
-    mockState.db = db;
-
-    const res = await createApp().request(
-      "/api/auth/cli/start?callback=http://127.0.0.1:5555/callback&state=abc&profile=Mina",
-      { redirect: "manual" },
-    );
-
-    expect(res.status).toBe(403);
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(new URL(res.headers.get("location")!).hostname).toBe("localhost");
   });
 });
 

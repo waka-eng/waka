@@ -623,6 +623,42 @@ all fixed before the gate:
 `styles/global.css` and `styles/surface.css` for the parked
 direction/rooms/timeline surfaces.
 
+### Phase 2 — profiles in behavior (2026-08-15)
+
+**Gate: PASSED.** All five checks green; **api test:unit 21 files / 258
+tests** (up from 19/218 — 40 added).
+
+The matrix is proven cell by cell in `lib/profile-access.test.ts` rather
+than sampled: every (session binding × target profile × operation) pair
+is asserted, including the case that catches a check comparing ids and
+forgetting the tenant — same profile id, different account, refused.
+
+`GET /api/auth/cli/start` **no longer mints anything.** It renders a
+consent page; `POST /api/auth/cli/consent` is what issues the code. That
+closes the drive-by hole: a session cookie is `SameSite=Lax` and is
+therefore sent on exactly the top-level GET navigation an attacker can
+cause, so the old shape would have handed a live 30-day credential to a
+local port of the attacker's choosing with nothing shown to the person.
+Lax does not send the cookie on a cross-site POST, and a human has to
+press the button. Second lock: the form carries an HMAC bound to the
+session, callback, and state, with a 10-minute life, so a stale tab
+cannot replay a confirmation for a callback nobody saw. Tests assert the
+bare GET returns 200 with no `Location` header and zero inserts, and
+that forged, absent, and callback-swapped tokens all mint nothing.
+
+Agent profiles became real: `/api/profiles` lists for either session
+kind (an agent needs to know what it may reach) but only a human-profile
+session may create, rename, or delete — an agent that could mint itself
+memories would be administering the account rather than working inside
+it. The human profile cannot be deleted at all; the delete is scoped to
+agent rows in SQL, so it is not merely refused, it is not found.
+
+The consent page was rendered and looked at in both colour schemes and
+at mobile width (`scripts/render-consent-page.ts`) — it is API-rendered
+HTML with no SPA behind it, so nothing in the web build would otherwise
+exercise how it looks, and it is the one screen standing between a stray
+navigation and a live credential.
+
 **Tenant integrity is enforced by the database, not by convention.** Seven
 composite foreign keys — `(profile_id, parent_id)` against unique
 constraints on `inspirations` and `signals` — make a cross-profile row
