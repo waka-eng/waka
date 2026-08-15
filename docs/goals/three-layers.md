@@ -755,6 +755,42 @@ mints a duplicate signal.
 Spend this phase: ~40 flash-lite/embedding calls across two gate runs —
 inside the ≤150 line.
 
+### Phase 5 — layer 3, one top of mind (2026-08-15)
+
+**Gate: PASSED — 7/7 against a live stack** (`tools/e2e/top-of-mind.ts`):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS |
+| 2 | an archive synthesizes into a first artifact | PASS (v1, 3 entries, reason=initial) |
+| 3 | **every cited signal resolves to one the profile owns** | PASS (3 citations, all resolvable) |
+| 4 | **a locked entry survives regeneration byte for byte** | PASS (v2, carried verbatim) |
+| 5 | **pin and dismiss round-trip and survive** | PASS |
+| 6 | a refresh records an explicit decision | PASS (v3, reason=regenerated) |
+| 7 | **only one artifact is live** | PASS (3 versions, exactly 1 live) |
+
+All five checks green; **api test:unit 23 files / 291 tests** (15 added).
+
+Step 6 passed but did not exercise the branch it was aimed at: with
+nothing newly captured, synthesis still returned different wording and
+the pass recorded `regenerated` rather than `no_change`. Both calls run
+at temperature 0, so this is model nondeterminism, not a defect — and
+the criterion ("every refresh records a decision") did hold. But
+accepting either reason left the `no_change` path unproven, so it is now
+proven where it is actually decided, in code: `isUnchanged` is asserted
+across reworded bodies, moved citations, appearing and disappearing
+entries, and dismissed entries on either side.
+
+The same reasoning covers the two guarantees a live run can never
+demonstrate, because they only matter when the model misbehaves:
+`assembleEntries` reproduces a locked entry from the **stored row** even
+when the model reworded it or returned nothing at all, and
+`validateSynthesizedEntries` drops an invented citation rather than
+writing it — a hallucinated id would otherwise fail a foreign key and
+take somebody's whole regeneration down with it.
+
+Spend this phase: ~25 flash-lite/embedding calls.
+
 **Tenant integrity is enforced by the database, not by convention.** Seven
 composite foreign keys — `(profile_id, parent_id)` against unique
 constraints on `inspirations` and `signals` — make a cross-profile row

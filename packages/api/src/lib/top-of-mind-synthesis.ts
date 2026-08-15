@@ -121,7 +121,7 @@ interface SelectedSignal {
   score: number;
 }
 
-interface CarriedEntry {
+export interface CarriedEntry {
   type: TopOfMindEntryType;
   body: string;
   belief: string | null;
@@ -386,7 +386,7 @@ export function countLockViolations(
 // Versioning
 // ---------------------------------------------------------------------------
 
-interface PersistedEntry {
+export interface PersistedEntry {
   type: TopOfMindEntryType;
   body: string;
   belief: string | null;
@@ -466,7 +466,7 @@ export function assembleEntries(input: {
  * excluded from every read: they ride along so a dismissal survives the next
  * regeneration, and where they sit in the list is not something anyone sees.
  */
-function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): boolean {
+export function isUnchanged(previous: CarriedEntry[], next: PersistedEntry[]): boolean {
   const before = [...previous]
     .filter((entry) => entry.dismissedAt === null)
     .sort((a, b) => a.sortOrder - b.sortOrder);
