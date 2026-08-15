@@ -710,6 +710,51 @@ worked around in the test:
 Spend this phase: ~8 flash-lite calls (1 vision verification, 1 gate
 vision call, ~6 during harness development) — far inside the ≤150 line.
 
+### Phase 4 — layer 2, signals (2026-08-15)
+
+**Gate: PASSED — 6/6 against a live stack** (`tools/e2e/signals.ts`):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS |
+| 2 | 5 related + 2 unrelated captures land | PASS |
+| 3 | **a signal cites ≥2 related captures** | PASS (2.0s, evidence=3) |
+| 4 | **a different archive shares zero statements** | PASS (3 vs 3, zero identical) |
+| 5 | **a locked statement survives regeneration byte for byte** | PASS |
+| 6 | **deleting every citation retires an unlocked signal** | PASS |
+
+All five checks green; api test:unit 22 files / 276 tests.
+
+Step 4 is the canned-ontology regression made measurable. Two archives
+with no shared vocabulary — one about small tools, one about a garden —
+produced three statements each and zero in common. The previous middle
+layer bucketed every capture into nine hardcoded English sentences, so
+every archive converged on the same "insights"; that cannot happen now
+without this step going red.
+
+**Step 6 found a real bug and it was fixed rather than accommodated.**
+Evidence rows vanish by foreign-key cascade when an inspiration is
+deleted, but nothing re-evaluated the signals left standing on nothing —
+they stayed `active` with zero support indefinitely, which is the canon's
+cascade rule broken. Deletion is the one path where support disappears
+without any derivation pass running, so the reconciliation is now driven
+from the delete itself (`reconcileSignalsAfterEvidenceLoss`), collecting
+the citing signals *before* the cascade removes the join. What happens to
+a stranded signal depends on whose words it is: a generated statement is
+retired, a locked one keeps its text and is marked unsupported — deleting
+someone's own sentence because its footnotes went would be WAKA editing
+them. First run: 5/6 with step 6 timing out at 300s "still active";
+after the fix, 6/6 with the retirement landing in 0.0s.
+
+**Consolidation:** two `cosineSimilarity` implementations existed, one
+returning `null` for incomparable vectors and one returning 0. The null
+form won and is now the only one — a missing embedding must not look
+like a confident decision that nothing matched, because that silently
+mints a duplicate signal.
+
+Spend this phase: ~40 flash-lite/embedding calls across two gate runs —
+inside the ≤150 line.
+
 **Tenant integrity is enforced by the database, not by convention.** Seven
 composite foreign keys — `(profile_id, parent_id)` against unique
 constraints on `inspirations` and `signals` — make a cross-profile row

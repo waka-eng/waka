@@ -32,6 +32,7 @@ import {
   signals,
   type SignalStatus,
 } from "../db/index.js";
+import { cosineSimilarity } from "../scoring/vector.js";
 import { getDb } from "./db.js";
 import {
   ensureInspirationEmbedding,
@@ -111,30 +112,6 @@ const MAX_REASON_LENGTH = 500;
 // ---------------------------------------------------------------------------
 // Pure helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Cosine similarity of two equal-length vectors, or null when they cannot be
- * compared. Null rather than 0: "these came from different models" is a
- * different fact from "these are unrelated", and only one of them should
- * silently fall through to minting.
- */
-export function cosineSimilarity(a: number[], b: number[]): number | null {
-  if (a.length === 0 || a.length !== b.length) return null;
-
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    const left = a[i]!;
-    const right = b[i]!;
-    dot += left * right;
-    normA += left * left;
-    normB += right * right;
-  }
-  if (normA === 0 || normB === 0) return null;
-
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -683,6 +660,93 @@ async function refreshSignalLifecycle(
     .where(eq(signals.id, signalId));
 
   return promote;
+}
+
+/**
+ * Settle signals whose citations have just been deleted.
+ *
+ * Evidence rows vanish by foreign-key cascade when an inspiration is deleted,
+ * which leaves a signal standing on nothing while still claiming to be
+ * active. Deletion is the one path where support disappears without any
+ * derivation pass running, so the reconciliation has to be driven from the
+ * delete itself.
+ *
+ * What happens to a stranded signal depends on whose words it is. A generated
+ * statement is retired: nothing supports it and nobody chose it. A locked one
+ * is the owner's own sentence, so it stays and is marked unsupported instead —
+ * deleting a person's writing because its footnotes went would be WAKA
+ * editing them.
+ *
+ * Callers pass the signal ids collected *before* the delete, since afterwards
+ * there is nothing left to join through.
+ */
+export async function reconcileSignalsAfterEvidenceLoss(
+  db: WakaDb,
+  input: { profileId: string; signalIds: string[] },
+): Promise<{ retired: string[]; unsupported: string[] }> {
+  const retired: string[] = [];
+  const unsupported: string[] = [];
+  if (input.signalIds.length === 0) return { retired, unsupported };
+
+  const now = new Date();
+
+  for (const signalId of input.signalIds) {
+    const [signal] = await db
+      .select({
+        id: signals.id,
+        status: signals.status,
+        lockedAt: signals.lockedAt,
+      })
+      .from(signals)
+      .where(and(eq(signals.id, signalId), eq(signals.profileId, input.profileId)))
+      .limit(1);
+    if (!signal || signal.status === "retired") continue;
+
+    const remaining = await db
+      .select({ createdAt: signalEvidence.createdAt })
+      .from(signalEvidence)
+      .where(eq(signalEvidence.signalId, signalId));
+
+    if (remaining.length > 0) {
+      // Still supported, just by less. Confidence and recency move with it.
+      const evidenceAt = remaining.map((row) => row.createdAt);
+      await db
+        .update(signals)
+        .set({
+          confidence: computeSignalConfidence(evidenceAt, now),
+          lastEvidenceAt: evidenceAt.reduce<Date | null>(
+            (latest, date) => (latest === null || date > latest ? date : latest),
+            null,
+          ),
+          unsupportedAt: null,
+          updatedAt: now,
+        })
+        .where(eq(signals.id, signalId));
+      continue;
+    }
+
+    if (signal.lockedAt) {
+      await db
+        .update(signals)
+        .set({ unsupportedAt: now, confidence: 0, lastEvidenceAt: null, updatedAt: now })
+        .where(eq(signals.id, signalId));
+      unsupported.push(signalId);
+    } else {
+      await db
+        .update(signals)
+        .set({
+          status: "retired",
+          confidence: 0,
+          lastEvidenceAt: null,
+          unsupportedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(signals.id, signalId));
+      retired.push(signalId);
+    }
+  }
+
+  return { retired, unsupported };
 }
 
 /** Exposed for callers that summarize a pass without re-reading the rows. */

@@ -112,7 +112,9 @@ function nearestSelectedSimilarity(
   for (const chosen of selected) {
     if (chosen.embedding.length !== candidate.embedding.length) continue;
     const similarity = cosineSimilarity(candidate.embedding, chosen.embedding);
-    if (similarity > nearest) nearest = similarity;
+    // An incomparable pair tells us nothing about distance; skip it rather
+    // than letting it read as "maximally far".
+    if (similarity !== null && similarity > nearest) nearest = similarity;
   }
   // Nothing to be near yet: maximally distinct by definition.
   return nearest < 0 ? 0 : nearest;

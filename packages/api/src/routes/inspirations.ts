@@ -52,12 +52,14 @@ import {
   inspirations,
   profiles,
   reflections,
+  signalEvidence,
   type DeriveSignalsPayload,
   type Inspiration,
   type InspirationSource,
   type Reflection,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { reconcileSignalsAfterEvidenceLoss } from "../lib/signal-derivation.js";
 import {
   type AuthEnv,
   profileAccessError,
@@ -951,6 +953,19 @@ export function createInspirationsRoutes(
         ),
       );
 
+    // Likewise: the evidence rows naming this capture are about to cascade
+    // away, and afterwards there is no join left to find the signals that
+    // rested on it.
+    const citingRows = await db
+      .selectDistinct({ signalId: signalEvidence.signalId })
+      .from(signalEvidence)
+      .where(
+        and(
+          eq(signalEvidence.inspirationId, idCheck.data),
+          eq(signalEvidence.profileId, target.profileId),
+        ),
+      );
+
     const deleted = await db
       .delete(inspirations)
       .where(
@@ -964,6 +979,11 @@ export function createInspirationsRoutes(
     if (deleted.length === 0) {
       return c.json({ error: "Inspiration not found" }, 404);
     }
+
+    await reconcileSignalsAfterEvidenceLoss(db, {
+      profileId: target.profileId,
+      signalIds: citingRows.map((row) => row.signalId),
+    });
 
     await sweepAttachmentObjects(
       s3KeyRows
