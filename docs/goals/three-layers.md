@@ -84,7 +84,21 @@ Starting proposal, for the owner to amend at the gate:
 - Delete: `/api/wow-moments`, `/api/wow-status`, the WOW→note
   compatibility serializer, lens boards, every alias export, the legacy
   `index.html` monolith reference in docs (file may stay archived), stale
-  `tools/e2e` scripts that AGENTS.md already flags as dead.
+  `tools/e2e` scripts that AGENTS.md already flags as dead. Plus the
+  audit-confirmed dead list (2026-08-15 pipeline audit): the six-cluster
+  classification call (`queue/gemini.ts` classifier — its only living
+  consumers are two same-cluster tie-breakers), the keyword-bucket node
+  ontology in `meaning-graph-writer.ts` (canned labels), the legacy
+  pairwise auto-WOW path (`lib/auto-wow-generation.ts`, zero callers),
+  `spreadCaptureActivation` (zero callers), the memory-movement event
+  enum (`evaluateSignalMemoryMovement`, test-only), the aliased
+  `signalScores` fields (three of five are copies), the `asks_for` edge
+  kind (never produced), spark auto-detection/confidence/analysis
+  columns, and `meaning_packets.input_fingerprint` (written, never read).
+- Park additionally: `scoring/stability.ts` + `lib/node-dynamics.ts`
+  (dark code reachable only from dev scripts; parked with the two-clocks
+  verdict), and the context-edge graph (cross-signal relations return at
+  layer 3 where they are useful).
 
 **Gate (owner):** the inventory is reviewed and signed by the owner —
 recorded in `## Log` as the amended keep/park/delete lists. Fail = the
@@ -150,37 +164,72 @@ beyond the 200 newest (seed 300, find #1). Web capture smoke passes.
 
 ### Phase 4 — Layer 2: signals
 
-The background pipeline derives **signals**: evidence-backed statements
-with confidence, generated from inspirations via the kept machinery.
-Curation endpoints: edit statement (sets lock), hide, delete. The cascade
-rule goes live: inspiration edit re-derives its dependents; inspiration
-delete drops evidence links and retires unsupported **unlocked** signals,
-while locked ones survive marked unsupported. Per-signal per-group
-sharing replaces `shared_to_groups`. `GET /api/signals` now means layer 2.
+The generator, per new or edited inspiration (background job):
 
-**Gate (e2e, spends Gemini):** on a fresh profile, capture 5 related +
-2 unrelated organic inspirations; within the background cadence, ≥1
-signal exists citing ≥2 of the related inspirations as evidence. Cascade
-tests: deleting all evidence retires an unlocked signal and preserves a
-locked one as unsupported. Lock test: regeneration never alters a locked
-statement (byte-equal before/after).
+1. **Extract** — one flash-lite call producing 0–3 candidate signal
+   statements in the user's own language, each grounded in cited spans;
+   a spark, when present, must be accounted for. This one call replaces
+   both the six-cluster classification (deleted) and the keyword-bucket
+   ontology whose canned labels were the old middle layer's biggest
+   fidelity gap.
+2. **Embed** the inspiration and each candidate statement
+   (`gemini-embedding-001`, 768d, unchanged).
+3. **Match or mint** — deterministic: a candidate above a high cosine
+   threshold against the profile's existing signals attaches as new
+   evidence (strengthening it); an ambiguous band gets one merge-judge
+   call ("same underlying pattern?"); below it, a new signal is minted
+   `emerging`. Thresholds are tuned at this phase's gate, not guessed
+   here.
+4. **Lifecycle, pure code** — confidence from evidence count, time
+   spread, and source diversity; `emerging` promotes at ≥3 evidence; the
+   cascade rule (edit re-derives; delete drops evidence links and
+   retires unsupported **unlocked** signals, locked ones survive marked
+   unsupported); locks absolute.
+
+Curation endpoints: edit statement (sets lock), hide, delete. Per-signal
+per-group sharing replaces `shared_to_groups`. `GET /api/signals` now
+means layer 2. The context-edge graph is parked, not rebuilt.
+
+**Gate (e2e, spends Gemini):** on a fresh profile, capture 5 related + 2
+unrelated organic inspirations; within the background cadence, ≥1 signal
+exists citing ≥2 of the related inspirations as evidence, and statements
+are profile-specific — two profiles seeded with *different* content must
+produce zero identical statements (the canned-ontology regression test).
+Cascade tests: deleting all evidence retires an unlocked signal and
+preserves a locked one as unsupported. Lock test: regeneration never
+alters a locked statement (byte-equal before/after).
 
 ### Phase 5 — Layer 3: one top of mind per profile
 
-The generator synthesizes **one artifact per profile** from its signals:
-versioned, entries typed (`pattern | tension | question | hypothesis |
-action` carry over; belief statements get their native yes/no decision
-here), lockable, pinnable. `GET /api/top-of-mind` returns the acting
-profile's current version + metadata. The public-profile surface
-re-points at the human profile's artifact. Web: the one-surface board
-reads artifact + entries.
+Refresh is cooldown-debounced after signal changes (plus manual). The
+generator: (1) deterministic selection of the top K signals —
+confidence, evidence count, reinforcement recency, and the
+dormancy-comeback bonus kept from `memory-movement` (a signal returning
+after months outranks a hot streak); (2) **one** synthesis call for the
+whole artifact — in: the current version with locked entries marked
+immutable, the selected signals, recent feedback; out: the next
+version, entries typed (`pattern | tension | question | hypothesis |
+action`, belief statements decided natively here), each citing the
+signal ids it rests on. Whole-artifact synthesis replaces the old five
+per-node calls so entries can express tensions *between* signals;
+(3) validation in code: the 12-reason copy gate carries over, plus
+citation safety (every cited signal id must exist) and byte-identical
+enforcement of locked entries — never trusted to the model;
+(4) deterministic diff-and-version with the `replaced_by` chain. A
+refresh always records a version decision — "no change" is an explicit
+outcome with a reason, never a silent empty generation.
+
+`GET /api/top-of-mind` returns the acting profile's current version +
+metadata. The public-profile surface re-points at the human profile's
+artifact. Web: the one-surface board reads artifact + entries.
 
 **Gate (e2e, spends Gemini):** organic flow — captures → signals →
 artifact v1; edit one entry (locks it); capture more → regeneration
 produces v2 where the locked entry is byte-identical, version history
-shows v1→v2, and unlocked stale entries retired. One artifact per
-profile enforced by constraint, not convention (insert of a second live
-artifact fails in a test).
+shows v1→v2, unlocked stale entries retired, and every entry's cited
+signal ids resolve. One artifact per profile enforced by constraint, not
+convention (insert of a second live artifact fails in a test). A refresh
+with no material change records an explicit no-change decision.
 
 ### Phase 6 — Groups: walls of signals, a co-edited top of mind
 

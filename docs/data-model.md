@@ -94,8 +94,13 @@ agent's relayed excerpt, an agent's own observation.
     `source: "agent"`.
 - Inspirations **never cross an account boundary**: not shown on group
   walls, not cited to other members, not exported by group flows.
-- Attachments, sparks (user-highlighted spans), and enrichment hang off
-  the inspiration as capture-time detail.
+- A **spark** is a layer-1 annotation: the span(s) of an inspiration the
+  human marked as what moved them, plus an optional note. A spark is a
+  human act — it has no confidence score and no auto-detected variants —
+  and it is *input* to signal generation (a salience prior and the anchor
+  for evidence quotes), never a signal itself.
+- Attachments and enrichment likewise hang off the inspiration as
+  capture-time detail.
 
 ## Signal (layer 2)
 
@@ -172,7 +177,8 @@ words for the wrong layer. Disposition of every existing concept:
 | **Profile** | No entity — all data keyed `user_id` | New `profiles` table (`account_id`, `type: human \| agent`, name). Every memory table re-keys from `user_id` to `profile_id`. Public handle/visibility flags move from `users` to the human profile. |
 | **Inspiration** (L1) | `signals` table (!), written by `POST /api/inspirations`; code aliases `signals`/`inspirations` for the same rows | Rename table + identifiers to `inspirations`; the alias dies. The route was right all along. Not append-only: editable/deletable with the evidence-cascade rule. |
 | Capture provenance | `signals.source` (`app`/`agent`), `sessions.client` (`web`/`cli`) | `source` keeps its meaning (whose initiative). `sessions.client` is replaced by the session's **bound profile** (`sessions.profile_id`), which also subsumes the audit half of provenance. |
-| **Signal** (L2) | No first-class entity. Nearest machinery: `context_nodes`/`context_edges`/`context_evidence`, `signal_packets`, `signal_sparks` | New first-class `signals` table: statement, confidence, lock state, share state, evidence links (M:N to inspirations). Graph/packets/sparks become internal generation machinery feeding it. |
+| **Spark** (L1 annotation) | `signal_sparks` (offsets, confidence, source variants incl. auto-detected, six unused analysis columns) | Keeps its name. Becomes `inspiration_sparks`: human-marked span + optional note only — confidence, the analysis columns, and auto-detected pseudo-sparks are dropped. |
+| **Signal** (L2) | No first-class entity. Nearest machinery: `context_nodes`/`context_edges`/`context_evidence`, `signal_packets` | New first-class `signals` table: statement, confidence, lock state, share state, evidence links (M:N to inspirations). Packets/embeddings become internal generation machinery feeding it; the context-edge graph is parked. |
 | Sharing flag | `signals.shared_to_groups` on the **capture** row | Moves to layer 2: per-signal, per-group. Raw captures are no longer shareable at all. |
 | **Top of mind** (L3) | `top_of_mind_notes` (physical table renamed from `wow_moments`, code identifier still `wowMoments`), plus a separately computed `topOfMind` preview blob | One versioned `top_of_mind` artifact **per profile** with entries; notes table, preview blob, and the WOW→note compatibility serializer are all replaced. |
 | WOW vocabulary | `wow_kind`, `why`, `belief_statement`, `reflection_question`, `reflection_guide`, `wow_score`; routes `/api/wow-moments`, `/api/wow-status` | Deleted. Native entry fields are designed for the new generator (`type`, `body`, `prompt`, `confidence` carry over from the current surface; belief statements get a deliberate yes/no as a native field, not a legacy leftover). |
@@ -242,6 +248,14 @@ follows the permission matrix.
 - **2026-08-15** — Defaults pending a counter-case: only humans and
   agents create inspirations (no system imports); groups are between
   human profiles; agent profiles don't join walls.
+- **2026-08-15** — **Spark keeps its name** (over "highlight") and is
+  defined strictly as the layer-1 human annotation: span + optional note,
+  no confidence, no auto-detected variants.
+- **2026-08-15** — Generation design adopted (see the goal doc, Phases
+  4–5): signals via extract → embed → match-or-mint per inspiration;
+  top of mind via one whole-artifact synthesis call per debounced
+  refresh; the six-cluster classification call and the keyword-bucket
+  node ontology are deleted, not ported.
 
 The migration itself (schema, API, web, MCP phases and gates) belongs in a
 `docs/goals/` goal document that references this file.
