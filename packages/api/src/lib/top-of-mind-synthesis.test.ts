@@ -12,7 +12,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   assembleEntries,
+  chooseSelection,
   SELECTION_DISPUTED_MULTIPLIER,
+  TOP_OF_MIND_MIN_SIGNALS,
+  TOP_OF_MIND_SIGNAL_LIMIT,
   computeComebackBonus,
   computeSelectionScore,
   countLockViolations,
@@ -250,5 +253,41 @@ describe("selection listens to the owner's verdicts", () => {
       now: NOW,
     });
     expect(strongDisputed).toBeGreaterThan(weakTrusted);
+  });
+});
+
+describe("cold start: the artifact appears before patterns have recurred", () => {
+  const a = (n: number) => Array.from({ length: n }, (_, i) => `active-${i}`);
+  const e = (n: number) => Array.from({ length: n }, (_, i) => `emerging-${i}`);
+
+  it("borrows forming signals when there are no durable ones yet", () => {
+    const chosen = chooseSelection([], e(5));
+    expect(chosen.provisional).toBe(true);
+    expect(chosen.signals).toHaveLength(TOP_OF_MIND_MIN_SIGNALS);
+    expect(chosen.signals.every((id) => id.startsWith("emerging"))).toBe(true);
+  });
+
+  it("tops a thin active set up to the floor with forming signals, active first", () => {
+    const chosen = chooseSelection(a(1), e(5));
+    expect(chosen.provisional).toBe(true);
+    expect(chosen.signals).toHaveLength(TOP_OF_MIND_MIN_SIGNALS);
+    expect(chosen.signals[0]).toBe("active-0");
+  });
+
+  /** The whole point of the floor: an established profile is never diluted. */
+  it("uses durable signals alone once there are enough of them", () => {
+    const chosen = chooseSelection(a(TOP_OF_MIND_MIN_SIGNALS), e(20));
+    expect(chosen.provisional).toBe(false);
+    expect(chosen.signals.every((id) => id.startsWith("active"))).toBe(true);
+  });
+
+  it("caps a large durable set at the signal limit", () => {
+    const chosen = chooseSelection(a(50), e(0));
+    expect(chosen.signals).toHaveLength(TOP_OF_MIND_SIGNAL_LIMIT);
+    expect(chosen.provisional).toBe(false);
+  });
+
+  it("stays empty when the profile has nothing", () => {
+    expect(chooseSelection([], [])).toEqual({ signals: [], provisional: false });
   });
 });
