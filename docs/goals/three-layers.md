@@ -791,6 +791,42 @@ take somebody's whole regeneration down with it.
 
 Spend this phase: ~25 flash-lite/embedding calls.
 
+### Phase 6 — groups (2026-08-15)
+
+**Gate: PASSED — 8/8 against a live stack** (`tools/e2e/groups.ts`):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS |
+| 2 | two archives meet in a group | PASS |
+| 3 | each member shares one of their own signals | PASS |
+| 4 | the wall shows statements attributed to owners | PASS (2 from 2 members) |
+| 5 | **no group surface exposes another member's raw capture** | PASS (5 surfaces checked) |
+| 6 | a proposal is accepted once a second member affirms | PASS |
+| 7 | **a non-member cannot tell the group exists** | PASS (404, not 403) |
+| 8 | **an agent-bound session cannot reach a wall** | PASS (403 at the wall and at the door) |
+
+All five checks green; api test:unit 23 files / 291 tests.
+
+Step 5 does not inspect a field. One capture contains a phrase nobody
+would write twice, and every group surface the other member can reach is
+fetched and searched for it — the boundary holds because nothing
+anywhere returns it, not because the serializer everyone remembered to
+check happens to omit it.
+
+**Step 8 failed first, and the fault was the test.** It asserted the
+agent gate by passing `?profile=` on a *human* session; groups ignore
+that parameter and read the session's own profile type, so a 200 was
+correct behavior and the assertion was meaningless. Rewritten to mint a
+credential that genuinely acts as the agent profile — through the same
+loopback flow waka-mcp uses, consent page and all — it now proves the
+real thing, and exercises Phase 2's consent flow end to end as a side
+effect.
+
+Spend this phase: ~15 flash-lite/embedding calls. **Running total across
+Phases 3–6: ~90 calls**, inside the ≤450 budgeted across the three
+spending phases.
+
 **Tenant integrity is enforced by the database, not by convention.** Seven
 composite foreign keys — `(profile_id, parent_id)` against unique
 constraints on `inspirations` and `signals` — make a cross-profile row
