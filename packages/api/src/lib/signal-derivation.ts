@@ -110,9 +110,9 @@ export const CONFIDENCE_SATURATION_SPREAD_DAYS = 30;
 export const CONFIDENCE_RECENCY_HALF_LIFE_DAYS = 45;
 
 /** Weights of the three confidence terms; they sum to 100. */
-const CONFIDENCE_SUPPORT_WEIGHT = 55;
-const CONFIDENCE_SPREAD_WEIGHT = 30;
-const CONFIDENCE_RECENCY_WEIGHT = 15;
+export const CONFIDENCE_SUPPORT_WEIGHT = 55;
+export const CONFIDENCE_SPREAD_WEIGHT = 30;
+export const CONFIDENCE_RECENCY_WEIGHT = 15;
 
 /**
  * Ceiling on how many of a profile's signals are scanned for a match. The

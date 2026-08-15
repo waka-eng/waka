@@ -11,6 +11,11 @@ Breaking changes are currently acceptable: no backward compatibility, no
 legacy aliases. One name per concept, everywhere — DB, code identifiers,
 API surface, MCP tools.
 
+This document covers *what the layers are*. The generation mechanics —
+exactly how signals are derived from inspirations and the top of mind from
+signals, with every threshold — live in [generation.md](generation.md),
+whose numbers are machine-checked against the implementation in CI.
+
 ---
 
 ## Accounts and profiles
