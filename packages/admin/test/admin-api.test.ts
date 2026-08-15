@@ -10,8 +10,8 @@ import {
 
 const job: AdminBackgroundJob = {
   id: "job-1",
-  userId: "user-1",
-  type: "process_inspiration",
+  profileId: "profile-1",
+  type: "derive_signals",
   status: "failed",
   attempts: 3,
   maxAttempts: 3,
@@ -21,7 +21,7 @@ const job: AdminBackgroundJob = {
   idempotencyKey: null,
   createdAt: "2026-05-01T00:00:00.000Z",
   updatedAt: "2026-05-01T00:01:00.000Z",
-  payloadSummary: { inspirationId: "insp-1" },
+  payloadSummary: { inspirationId: "inspiration-1" },
 };
 
 function stubFetch(response: Response): void {
@@ -36,11 +36,11 @@ describe("admin background jobs API", () => {
   it("lists jobs with credentials through the same-origin admin API path", async () => {
     stubFetch(Response.json({ jobs: [job] }));
 
-    await expect(fetchBackgroundJobs({ status: "failed", type: "process_inspiration" })).resolves.toEqual([
+    await expect(fetchBackgroundJobs({ status: "failed", type: "derive_signals" })).resolves.toEqual([
       job,
     ]);
     expect(fetch).toHaveBeenCalledWith(
-      "/api/admin/background-jobs?status=failed&type=process_inspiration",
+      "/api/admin/background-jobs?status=failed&type=derive_signals",
       {
         method: "GET",
         credentials: "include",
@@ -60,35 +60,10 @@ describe("admin background jobs API", () => {
     } satisfies Partial<AdminApiError>);
   });
 
-  it("fetches detail pipeline without requiring or rendering raw payload fields", async () => {
+  it("takes the detail as a bounded payload summary and drops the raw payload", async () => {
     const detail: AdminBackgroundJob = {
       ...job,
-      pipeline: {
-        type: "process_inspiration",
-        inspiration: {
-          id: "insp-1",
-          textPreview: "bounded preview only",
-          kind: "note",
-          category: 2,
-          cluster: "bridge",
-          classifiedAt: "2026-05-01T00:02:00.000Z",
-          importanceScore: 7,
-          wowScore: 9,
-          createdAt: "2026-05-01T00:00:00.000Z",
-          updatedAt: "2026-05-01T00:02:00.000Z",
-        },
-        inspirationMissingReason: null,
-        wowMoments: [
-          {
-            id: "wow-1",
-            kind: "surprise_bridge",
-            titlePreview: "Bridge insight",
-            explanationPreview: "safe explanation preview",
-            wowScore: 11,
-            createdAt: "2026-05-01T00:03:00.000Z",
-          },
-        ],
-      },
+      payloadSummary: { inspirationId: "inspiration-1", reason: "capture" },
     };
     stubFetch(Response.json({ job: detail, payload: { accessToken: "do-not-use" } }));
 
@@ -98,6 +73,31 @@ describe("admin background jobs API", () => {
       credentials: "include",
       headers: { Accept: "application/json" },
     });
+  });
+
+  /*
+    A job type this app has never heard of still has to list and open, or the
+    admin surface goes blind exactly when a new worker is being introduced.
+  */
+  it("accepts a job type it does not know", async () => {
+    const unknown: AdminBackgroundJob = {
+      ...job,
+      type: "a_worker_added_after_this_build",
+      payloadSummary: {},
+    };
+    stubFetch(Response.json({ jobs: [unknown] }));
+
+    await expect(fetchBackgroundJobs()).resolves.toEqual([unknown]);
+  });
+
+  it("rejects a job row with no owning profile", async () => {
+    const { profileId: _profileId, ...withoutProfile } = job;
+    stubFetch(Response.json({ jobs: [withoutProfile] }));
+
+    await expect(fetchBackgroundJobs()).rejects.toMatchObject({
+      name: "AdminApiError",
+      message: "Malformed background job response",
+    } satisfies Partial<AdminApiError>);
   });
 
   it("retries a failed job and returns the updated job", async () => {

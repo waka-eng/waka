@@ -1,170 +1,210 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
-import { createSignalArchiveRoutes, type SavedSignalDetail } from "./signals.js";
+import type { AuthenticatedSession } from "../lib/session.js";
+import {
+  createSignalRoutes,
+  type SignalDetail,
+  type SignalSummary,
+} from "./signals.js";
 
-const user = { id: "00000000-0000-4000-8000-000000000001" };
+const accountId = "00000000-0000-4000-8000-0000000000a1";
+const humanProfileId = "00000000-0000-4000-8000-000000000001";
+const agentProfileId = "00000000-0000-4000-8000-000000000002";
+const otherAccountId = "00000000-0000-4000-8000-0000000000a2";
 const signalId = "00000000-0000-4000-8000-000000000101";
+const groupId = "00000000-0000-4000-8000-000000000201";
 
-function authMiddleware() {
+function sessionFor(
+  profileId: string,
+  type: "human" | "agent",
+  profileAccountId = accountId,
+): AuthenticatedSession {
+  return {
+    sessionId: "session-1",
+    account: { id: profileAccountId, email: "someone@example.com" },
+    profile: {
+      id: profileId,
+      accountId: profileAccountId,
+      type,
+      name: type === "human" ? "Owner" : "Assistant",
+      preferredLocale: "en-US",
+    },
+  };
+}
+
+function authMiddleware(session: AuthenticatedSession) {
   return async (c: any, next: () => Promise<void>) => {
-    c.set("user", user);
+    c.set("session", session);
     await next();
   };
 }
 
+const summary: SignalSummary = {
+  id: signalId,
+  statement: "Quiet rooms are where the honest work happens.",
+  status: "active",
+  confidence: 72,
+  evidenceCount: 4,
+  lastEvidenceAt: "2026-05-30T12:00:00.000Z",
+  locked: false,
+  unsupported: false,
+  sharedGroupIds: [groupId],
+  createdAt: "2026-05-01T10:00:00.000Z",
+};
+
+const detail: SignalDetail = {
+  ...summary,
+  evidence: [
+    {
+      inspirationId: "00000000-0000-4000-8000-000000000301",
+      preview: "A saved note about quiet research rooms.",
+      reason: "The capture names the room as the condition, not the topic.",
+      quote: "quiet research rooms",
+      createdAt: "2026-05-30T12:00:00.000Z",
+    },
+  ],
+};
+
 describe("GET /api/signals", () => {
-  it("passes search, filter, sort, and tenant scope to the archive assembler", async () => {
+  it("scopes the list to the acting profile and passes status and limit through", async () => {
     const db = {};
-    const listSignals = vi.fn(async () => [
-      {
-        id: signalId,
-        userId: user.id,
-        textPreview: "A saved signal about quiet research rooms.",
-        kind: "note",
-        capturedAt: "2026-05-30T12:00:00.000Z",
-        updatedAt: "2026-05-30T12:00:00.000Z",
-        shared: true,
-        resonanceScore: 84,
-        signalScores: {
-          resonance: 84,
-          recurrence: 62,
-          agency: 71,
-          identitySignal: 73,
-          decisionRelevance: 70,
-        },
-        highlightedSnippets: [
-          {
-            id: "spark-1",
-            text: "quiet research rooms",
-            source: "user_selected",
-            confidence: 100,
-            isPrimary: true,
-          },
-        ],
-        matchingSnippets: ["quiet research rooms"],
-        relatedContextTerms: ["environment: quiet rooms"],
-        relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
-        relatedGroupNotes: [],
-        attachmentSummary: [],
-        relevanceReasons: ["highlight match", "context match"],
-      },
-    ]);
+    const listSignals = vi.fn(async () => [summary]);
     const app = new Hono();
     app.route(
       "/api/signals",
-      createSignalArchiveRoutes({
+      createSignalRoutes({
         getDatabase: () => db as any,
         listSignals,
-        authMiddleware: authMiddleware(),
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
     );
 
-    const response = await app.request(
-      "/api/signals?q=room&filter=highlighted&sort=resonance&limit=12",
-    );
+    const response = await app.request("/api/signals?status=active&limit=12");
 
     expect(response.status).toBe(200);
     expect(listSignals).toHaveBeenCalledWith(db, {
-      userId: user.id,
-      query: "room",
-      filter: "highlighted",
-      sort: "resonance",
+      profileId: humanProfileId,
+      status: "active",
       limit: 12,
     });
-    await expect(response.json()).resolves.toMatchObject({
+    await expect(response.json()).resolves.toEqual({
       signals: [
         {
           id: signalId,
-          textPreview: "A saved signal about quiet research rooms.",
-          highlightedSnippets: [{ text: "quiet research rooms" }],
-          relatedContextTerms: ["environment: quiet rooms"],
-          relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
-        relatedGroupNotes: [],
+          statement: "Quiet rooms are where the honest work happens.",
+          status: "active",
+          confidence: 72,
+          evidenceCount: 4,
+          lastEvidenceAt: "2026-05-30T12:00:00.000Z",
+          locked: false,
+          unsupported: false,
+          sharedGroupIds: [groupId],
+          createdAt: "2026-05-01T10:00:00.000Z",
         },
       ],
     });
   });
 
-  it("returns detail with packet, context, top-of-mind, feedback, and raw text without admin graph fields", async () => {
-    const detail: SavedSignalDetail = {
-      id: signalId,
-      userId: user.id,
-      textPreview: "A saved signal about quiet research rooms.",
-      rawText: "A saved signal about quiet research rooms and who gets to think there.",
-      kind: "note",
-      capturedAt: "2026-05-30T12:00:00.000Z",
-      updatedAt: "2026-05-30T12:00:00.000Z",
-      shared: true,
-      resonanceScore: 84,
-      signalScores: {
-        resonance: 84,
-        recurrence: 62,
-        agency: 71,
-        identitySignal: 73,
-        decisionRelevance: 70,
-      },
-      highlightedSnippets: [
-        {
-          id: "spark-1",
-          text: "who gets to think there",
-          source: "user_selected",
-          confidence: 100,
-          isPrimary: true,
-        },
-      ],
-      matchingSnippets: [],
-      relatedContextTerms: ["environment"],
-      relatedTopOfMindNoteTitles: ["Rooms for honest work keep returning"],
-        relatedGroupNotes: [],
-      attachmentSummary: [],
-      relevanceReasons: ["has highlighted snippets"],
-      attachments: [],
-      resonanceFeedback: [
-        {
-          id: "feedback-1",
-          value: "important",
-          emotionLabel: "want",
-          correctionText: null,
-          createdAt: "2026-05-30T13:00:00.000Z",
-        },
-      ],
-      signalPacket: {
-        id: "packet-1",
-        text: "waka.signal_packet.v1\nWHY_IT_MATTERS: quiet rooms keep recurring.",
-        primarySpark: "who gets to think there",
-        artifactExcerpt: "A saved signal about quiet research rooms.",
-        updatedAt: "2026-05-30T12:30:00.000Z",
-      },
-      relatedContextNodes: [
-        {
-          id: "node-1",
-          type: "environment",
-          label: "quiet research rooms",
-          description: "A durable context claim about where attention works.",
-          confidence: 78,
-          evidenceReason: "The signal names the environment directly.",
-        },
-      ],
-      relatedTopOfMindNotes: [
-        {
-          id: "note-1",
-          title: "Rooms for honest work keep returning",
-          type: "pattern",
-          body: "Several signals point at this room.",
-          confidence: 86,
-          status: "active",
-        },
-      ],
-    };
+  it("defaults the limit rather than letting a caller ask for the whole archive", async () => {
+    const listSignals = vi.fn(async () => []);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        listSignals,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    await app.request("/api/signals");
+
+    expect(listSignals).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      status: undefined,
+      limit: 80,
+    });
+  });
+
+  it("rejects unknown query parameters instead of silently ignoring them", async () => {
+    const listSignals = vi.fn(async () => []);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        listSignals,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request("/api/signals?sort=resonance");
+
+    expect(response.status).toBe(400);
+    expect(listSignals).not.toHaveBeenCalled();
+  });
+
+  it("lets an agent session read the account's human profile", async () => {
+    const listSignals = vi.fn(async () => [summary]);
+    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId }));
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        listSignals,
+        loadProfile,
+        authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals?profile=${humanProfileId}`);
+
+    expect(response.status).toBe(200);
+    expect(listSignals).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      status: undefined,
+      limit: 80,
+    });
+  });
+
+  it("answers a cross-account profile as not-found, not forbidden", async () => {
+    // A 403 here would confirm the id names a real profile in another account;
+    // the same body as a nonexistent id keeps that from being an oracle.
+    const listSignals = vi.fn(async () => [summary]);
+    const loadProfile = vi.fn(async () => ({
+      id: humanProfileId,
+      accountId: otherAccountId,
+    }));
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        listSignals,
+        loadProfile,
+        authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals?profile=${humanProfileId}`);
+
+    expect(response.status).toBe(404);
+    expect(listSignals).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/signals/:signalId", () => {
+  it("returns the signal with the evidence behind it", async () => {
     const getSignal = vi.fn(async () => detail);
     const app = new Hono();
     app.route(
       "/api/signals",
-      createSignalArchiveRoutes({
+      createSignalRoutes({
         getDatabase: () => ({}) as any,
         getSignal,
-        authMiddleware: authMiddleware(),
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
       }),
     );
 
@@ -172,19 +212,228 @@ describe("GET /api/signals", () => {
 
     expect(response.status).toBe(200);
     expect(getSignal).toHaveBeenCalledWith(expect.anything(), {
-      userId: user.id,
+      profileId: humanProfileId,
       signalId,
     });
-    const body = (await response.json()) as { signal: SavedSignalDetail };
-    expect(body.signal).toMatchObject({
-      id: signalId,
-      rawText: expect.stringContaining("quiet research rooms"),
-      signalPacket: { text: expect.stringContaining("waka.signal_packet.v1") },
-      relatedContextNodes: [{ type: "environment", label: "quiet research rooms" }],
-      relatedTopOfMindNotes: [{ title: "Rooms for honest work keep returning" }],
-      resonanceFeedback: [{ value: "important", emotionLabel: "want" }],
+    const body = (await response.json()) as { signal: SignalDetail };
+    expect(body.signal.evidence).toEqual([
+      {
+        inspirationId: "00000000-0000-4000-8000-000000000301",
+        preview: "A saved note about quiet research rooms.",
+        reason: "The capture names the room as the condition, not the topic.",
+        quote: "quiet research rooms",
+        createdAt: "2026-05-30T12:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("returns 404 for a signal that belongs to someone else", async () => {
+    const getSignal = vi.fn(async () => null);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        getSignal,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}`);
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("PATCH /api/signals/:signalId", () => {
+  it("edits the statement, re-embeds it, and schedules a refresh", async () => {
+    const updateStatement = vi.fn(async () => ({
+      ...detail,
+      statement: "Quiet rooms are the condition, not the preference.",
+      locked: true,
+    }));
+    const reembed = vi.fn(async () => undefined);
+    const requestRefresh = vi.fn(async () => ({ jobId: "job-1", created: true }));
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        updateStatement,
+        reembed,
+        requestRefresh,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        statement: "Quiet rooms are the condition, not the preference.",
+      }),
     });
-    expect(JSON.stringify(body)).not.toContain("meaningNodeId");
-    expect(JSON.stringify(body)).not.toContain("admin");
+
+    expect(response.status).toBe(200);
+    expect(updateStatement).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      signalId,
+      statement: "Quiet rooms are the condition, not the preference.",
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      signal: { locked: true, statement: "Quiet rooms are the condition, not the preference." },
+    });
+    expect(reembed).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      signalId,
+      statement: "Quiet rooms are the condition, not the preference.",
+    });
+    expect(requestRefresh).toHaveBeenCalledWith(humanProfileId, "signals_changed");
+  });
+
+  it("refuses an agent session editing the human profile's signals", async () => {
+    const updateStatement = vi.fn();
+    const loadProfile = vi.fn(async () => ({ id: humanProfileId, accountId }));
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        updateStatement,
+        loadProfile,
+        authMiddleware: authMiddleware(sessionFor(agentProfileId, "agent")),
+      }),
+    );
+
+    const response = await app.request(
+      `/api/signals/${signalId}?profile=${humanProfileId}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ statement: "Rewritten by an agent." }),
+      },
+    );
+
+    expect(response.status).toBe(403);
+    expect(updateStatement).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty statement", async () => {
+    const updateStatement = vi.fn();
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        updateStatement,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ statement: "   " }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(updateStatement).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/signals/:signalId", () => {
+  it("deletes the acting profile's signal", async () => {
+    const deleteSignal = vi.fn(async () => true);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        deleteSignal,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}`, { method: "DELETE" });
+
+    expect(response.status).toBe(200);
+    expect(deleteSignal).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      signalId,
+    });
+  });
+});
+
+describe("signal shares", () => {
+  it("shares a signal to a group the acting profile belongs to", async () => {
+    const shareSignal = vi.fn(async () => "shared" as const);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        shareSignal,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}/shares`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ groupId }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(shareSignal).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      signalId,
+      groupId,
+    });
+  });
+
+  it("refuses to share into a group the acting profile is not in", async () => {
+    const shareSignal = vi.fn(async () => "not_a_member" as const);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        shareSignal,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}/shares`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ groupId }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("removes a share", async () => {
+    const unshareSignal = vi.fn(async () => true);
+    const app = new Hono();
+    app.route(
+      "/api/signals",
+      createSignalRoutes({
+        getDatabase: () => ({}) as any,
+        unshareSignal,
+        authMiddleware: authMiddleware(sessionFor(humanProfileId, "human")),
+      }),
+    );
+
+    const response = await app.request(`/api/signals/${signalId}/shares/${groupId}`, {
+      method: "DELETE",
+    });
+
+    expect(response.status).toBe(200);
+    expect(unshareSignal).toHaveBeenCalledWith(expect.anything(), {
+      profileId: humanProfileId,
+      signalId,
+      groupId,
+    });
+    await expect(response.json()).resolves.toEqual({ shared: false, groupId });
   });
 });

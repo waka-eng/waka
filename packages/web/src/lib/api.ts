@@ -9,10 +9,11 @@
  *   - shape-stable error objects { error: string; details?: ... } the UI
  *     can render directly without each caller reinventing the parse.
  *
- * The `signup` helper is the first endpoint we wire up because the /login
- * page needs it. As more endpoints come online (login, inspirations, ...),
- * each gets its own typed function here so callers stay decoupled from the
- * URL surface.
+ * The vocabulary here is the vocabulary of `docs/data-model.md`, one name per
+ * concept: an **account** logs in, a **profile** owns memory, and a profile's
+ * memory is three layers — inspirations, signals, one top of mind. Nothing in
+ * this file translates between two names for the same thing; if a name here
+ * disagrees with that document, this file is the side that is wrong.
  */
 
 import type { SupportedLocale } from "./locales";
@@ -21,17 +22,38 @@ import type { SupportedLocale } from "./locales";
 // Shared types
 // ---------------------------------------------------------------------------
 
-export interface ApiUser {
+/**
+ * The auth identity: one login, one person. Everything on it answers "who
+ * signed in and what may they reach", which is why the display fields live on
+ * the profile instead — a person's name is a property of the memory they own,
+ * and an account owns several.
+ */
+export interface ApiAccount {
   id: string;
   email: string;
-  name: string;
-  avatarUrl?: string | null;
-  preferredLocale: SupportedLocale;
   onboardingCompletedAt: string | null;
+  isAdmin: boolean;
+}
+
+export type ApiProfileType = "human" | "agent";
+
+/** The unit that owns memory. Every session acts as exactly one of these. */
+export interface ApiProfile {
+  id: string;
+  accountId: string;
+  type: ApiProfileType;
+  name: string;
+  avatarUrl: string | null;
+  preferredLocale: SupportedLocale;
   publicHandle: string | null;
   publicProfileEnabled: boolean;
   publicTopOfMindEnabled: boolean;
-  isAdmin: boolean;
+}
+
+/** Who the session is: the account that logged in, acting as one profile. */
+export interface ApiViewer {
+  account: ApiAccount;
+  profile: ApiProfile;
 }
 
 /**
@@ -108,8 +130,7 @@ export interface SignupRequest {
   preferredLocale?: SupportedLocale;
 }
 
-export interface SignupResponse {
-  user: ApiUser;
+export interface AuthSessionResponse extends ApiViewer {
   /**
    * Session JWT. Mirrored in the httpOnly cookie; included in the body so
    * non-browser clients (CLI, e2e tests) can authenticate too. The web app
@@ -122,16 +143,15 @@ export interface SignupResponse {
 /**
  * POST /auth/signup
  *
- * Creates an email+password account and establishes a session. On success
- * the server has already set the `waka_session` cookie; the returned object
- * is mostly useful for displaying "Welcome, <name>" and routing the user to
- * the home page.
+ * Creates an email+password account, its human profile, and a session. On
+ * success the server has already set the `waka_session` cookie; the returned
+ * object is what the app renders itself from until the next `/auth/me`.
  *
  * Throws `ApiError` on any non-2xx response so callers get a single,
  * predictable failure path (try/catch instead of a discriminated union).
  */
-export async function signup(input: SignupRequest): Promise<SignupResponse> {
-  return postJson<SignupResponse>(apiPath("/auth/signup"), input, "Signup failed");
+export async function signup(input: SignupRequest): Promise<AuthSessionResponse> {
+  return postJson<AuthSessionResponse>(apiPath("/auth/signup"), input, "Signup failed");
 }
 
 // ---------------------------------------------------------------------------
@@ -143,23 +163,14 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface LoginResponse {
-  user: ApiUser;
-  token: string;
-}
-
 /**
  * POST /auth/login
  *
- * Authenticate an existing email+password account. Server sets the
- * `waka_session` cookie; the user object is returned for UI rendering.
- *
- * The endpoint may not yet be implemented on the backend in earlier
- * sub-ACs — in that case the call returns an `ApiError` with a 404 status
- * which the auth context surfaces to the caller without crashing.
+ * Authenticate an existing account. Server sets the `waka_session` cookie;
+ * the account + acting profile are returned for UI rendering.
  */
-export async function login(input: LoginRequest): Promise<LoginResponse> {
-  return postJson<LoginResponse>(apiPath("/auth/login"), input, "Login failed");
+export async function login(input: LoginRequest): Promise<AuthSessionResponse> {
+  return postJson<AuthSessionResponse>(apiPath("/auth/login"), input, "Login failed");
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +181,7 @@ export async function login(input: LoginRequest): Promise<LoginResponse> {
  * POST /auth/logout
  *
  * Asks the server to clear the session cookie. We swallow non-2xx responses
- * here because client-side state (the in-memory user, localStorage cache)
+ * here because client-side state (the in-memory viewer, localStorage cache)
  * MUST be cleared regardless of whether the network round-trip succeeds —
  * otherwise a flaky network leaves the UI showing a "logged in" state that
  * the server has already invalidated. The auth context handles that policy.
@@ -185,22 +196,23 @@ export async function logout(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Current user
+// Current viewer
 // ---------------------------------------------------------------------------
 
 /**
  * GET /auth/me
  *
- * Returns the authenticated user implied by the session cookie, or `null`
- * if the cookie is missing/invalid/expired. Used by `<AuthProvider>` on
- * mount to hydrate state from the server (the cookie is httpOnly so JS
- * cannot read it directly — the server must tell us who it sees).
+ * Returns the account implied by the session cookie plus the profile that
+ * session acts as, or `null` when the cookie is missing/invalid/expired. Used
+ * by `<AuthProvider>` on mount to hydrate state from the server (the cookie is
+ * httpOnly so JS cannot read it directly — the server must tell us who it
+ * sees).
  *
  * A 401 response is treated as "no session" rather than an error: it's the
  * expected outcome for an anonymous visitor. Genuine network failures throw
  * `ApiError` so the caller can decide whether to retry.
  */
-export async function fetchCurrentUser(): Promise<ApiUser | null> {
+export async function fetchCurrentViewer(): Promise<ApiViewer | null> {
   let res: Response;
   try {
     res = await fetch(apiPath("/auth/me"), {
@@ -215,18 +227,13 @@ export async function fetchCurrentUser(): Promise<ApiUser | null> {
     });
   }
 
-  if (res.status === 401 || res.status === 404) {
-    // 401 = no/expired cookie. 404 = endpoint not yet wired up server-side
-    // (earlier sub-ACs). Both translate to "no authenticated user" so the
-    // UI can render the /login route without exploding.
-    return null;
-  }
+  if (res.status === 401) return null;
 
   let body: unknown = null;
   try {
     body = await res.json();
   } catch {
-    // fall through
+    // Non-JSON response — handled below.
   }
 
   if (!res.ok) {
@@ -238,34 +245,26 @@ export async function fetchCurrentUser(): Promise<ApiUser | null> {
     });
   }
 
-  // Tolerate either { user: {...} } or the user object directly so the
-  // server contract has room to evolve without breaking the client.
-  const payload = body as { user?: ApiUser } | ApiUser | null;
-  if (!payload) return null;
-  if ("user" in payload && payload.user) return payload.user;
-  if ("id" in payload && "email" in payload) return payload as ApiUser;
-  return null;
+  const payload = (body ?? {}) as Partial<ApiViewer>;
+  if (!payload.account || !payload.profile) return null;
+  return { account: payload.account, profile: payload.profile };
 }
 
 export interface UpdateAuthPreferencesRequest {
   preferredLocale: SupportedLocale;
 }
 
-export interface UpdateAuthPreferencesResponse {
-  user: ApiUser;
-}
-
 /**
- * PATCH /auth/preferences
+ * PATCH /auth/me/preferences
  *
- * Persists account-level preferences that should follow the user across
- * devices. Today that is only preferredLocale, which also drives future
- * AI-generated WOW copy server-side.
+ * Persists preferences that should follow the person across devices. Today
+ * that is only preferredLocale, which also drives the language of everything
+ * the server generates for this profile.
  */
 export async function updateAuthPreferences(
   input: UpdateAuthPreferencesRequest,
-): Promise<UpdateAuthPreferencesResponse> {
-  return patchJson<UpdateAuthPreferencesResponse>(
+): Promise<ApiViewer> {
+  return patchJson<ApiViewer>(
     apiPath("/auth/me/preferences"),
     input,
     "Failed to update preferences",
@@ -281,14 +280,17 @@ export interface UpdateAuthProfileRequest {
   publicTopOfMindEnabled?: boolean;
 }
 
-export interface UpdateAuthProfileResponse {
-  user: ApiUser;
-}
-
+/**
+ * PATCH /auth/me/profile
+ *
+ * The name, avatar, language and public surface all belong to the profile;
+ * `completeOnboarding` is the one field here that lands on the account, which
+ * is why the response carries both.
+ */
 export async function updateAuthProfile(
   input: UpdateAuthProfileRequest,
-): Promise<UpdateAuthProfileResponse> {
-  return patchJson<UpdateAuthProfileResponse>(
+): Promise<ApiViewer> {
+  return patchJson<ApiViewer>(
     apiPath("/auth/me/profile"),
     input,
     "Failed to update profile",
@@ -322,2076 +324,37 @@ export async function deleteAccount(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Inspirations
-// ---------------------------------------------------------------------------
-
-/**
- * Cluster taxonomy. Mirrors the `cluster` Postgres enum exposed by the API
- * (see `packages/api/src/db/schema.ts`). The classifier worker fills this in
- * asynchronously; until then the column is `null` and the UI renders an
- * "uncategorised" state.
- */
-export type ClusterKind =
-  | "outlier"
-  | "bridge"
-  | "morph"
-  | "convergence"
-  | "tension"
-  | "loop";
-
-/**
- * Canonical inspiration row as the API returns it from POST /inspirations
- * (and, eventually, GET /inspirations).
- *
- * Field shape mirrors the Drizzle insert `.returning(...)` clause exactly so
- * the UI can render the just-saved row without a follow-up GET, satisfying
- * the seed's optimistic-save contract.
- */
-export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
-
-export type ApiSignalScoreName =
-  | "resonance"
-  | "recurrence"
-  | "agency"
-  | "identitySignal"
-  | "decisionRelevance";
-
-export type ApiSignalScores = Record<ApiSignalScoreName, number>;
-
-export interface ApiSignal {
-  id: string;
-  userId: string;
-  text: string;
-  kind: ApiInspirationKind | null;
-  category: number | null;
-  scores: ApiSignalScores;
-  capturedAt: string;
-  updatedAt: string;
-  interpretation: {
-    cluster: ClusterKind | null;
-    classifiedAt: string | null;
-  };
-  legacy: {
-    inspirationId: string;
-    importanceScore: number;
-    wowScore: number;
-  };
-}
-
-export interface ApiInspiration {
-  id: string;
-  userId: string;
-  text: string;
-  kind: ApiInspirationKind | null;
-  category: number | null;
-  importanceScore: number;
-  wowScore: number;
-  /** Whether this inspiration feeds the user's Group Top of Mind boards (US-052). */
-  sharedToGroups?: boolean;
-  cluster: ClusterKind | null;
-  classifiedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** Populated by GET /inspirations; omitted on older create/update responses. */
-  attachments?: ApiAttachment[];
-  /** Signal-facing compatibility layer over the current inspiration row. */
-  signal?: ApiSignal;
-  signalScores?: ApiSignalScores;
-}
-
-export interface ApiInspirationScoreBreakdown {
-  inspirationId: string;
-  displayedWowScore: number;
-  persistedCoreWowScore: number;
-  importanceScore: number;
-  freshnessAdjustment: {
-    ageDays: number;
-    freshnessScore: number;
-    displayedMinusCore: number;
-    source: "read_time";
-  };
-  stored: {
-    importanceScore: number;
-    coreWowScore: number;
-  };
-  factors: {
-    content: {
-      score: number;
-      textDepthScore: number;
-      contextScore: number;
-      meaningfulLinkCount: number;
-      nonLinkAttachmentCount: number;
-      reflectionTextChars: number;
-    };
-    processing: { score: number; hasReflection: boolean };
-    revisit: {
-      score: number;
-      uniqueRevisitDays: number;
-      totalRevisitCount: number;
-      recentRevisitCount: number;
-      uniqueRevisitDaysScore: number;
-      totalRevisitCountScore: number;
-      revisitedInLast7DaysScore: number;
-    };
-    relationship: {
-      available: boolean;
-      score: number | null;
-      topSimilaritySignal: number | null;
-      topSurpriseSimilaritySignal: number | null;
-      timeDistanceSignal: number | null;
-      relatedCandidateCount: number;
-      note: string;
-    };
-  };
-  formulas: {
-    importance: string;
-    coreWow: string;
-    displayedWow: string;
-    relationship?: string;
-  };
-}
-
-export interface CreateInspirationRequest {
-  text: string;
-  kind?: ApiInspirationKind;
-  category?: number;
-  selectedText?: string;
-  selectionStart?: number;
-  selectionEnd?: number;
-  sparks?: Array<{
-    text: string;
-    source?: ApiInspirationSparkSource;
-    startOffset?: number;
-    endOffset?: number;
-    confidence?: number;
-    isPrimary?: boolean;
-    note?: string;
-  }>;
-  /** Optional Reflect Deeper Q/A saved with the inspiration to avoid a partial post-save gap. */
-  reflections?: CreateReflectionRequest[];
-  /**
-   * How long the composer was open before this save, in milliseconds. The
-   * pulse-speed proxy: a fast save is a reaction, a slow one a composition.
-   * Optional everywhere — a save must never depend on having timed it.
-   */
-  captureElapsedMs?: number;
-  /** Whether this inspiration feeds the user's Group Top of Mind boards. Defaults to shared. */
-  shareToGroups?: boolean;
-}
-
-export interface UpdateInspirationRequest {
-  text?: string;
-  /** Flip whether this inspiration feeds the user's Group Top of Mind boards. */
-  shareToGroups?: boolean;
-}
-
-export type ApiInspirationSparkSource =
-  | "user_selected"
-  | "user_written"
-  | "user_added_later"
-  | "auto_detected"
-  | "confirmed_auto";
-
-export interface ApiInspirationSpark {
-  id: string;
-  userId: string;
-  inspirationId: string;
-  text: string;
-  source: ApiInspirationSparkSource;
-  startOffset: number | null;
-  endOffset: number | null;
-  confidence: number;
-  isPrimary: boolean;
-  note: string | null;
-  whatMovedUser: string | null;
-  impliedValues: string[];
-  worldviewClaims: string[];
-  tensions: string[];
-  decisionRelevance: string[];
-  emotionalCharge: string[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateInspirationResponse {
-  inspiration: ApiInspiration;
-  /** Present when Reflect Deeper Q/A was submitted in the create request. */
-  reflections?: ApiReflection[];
-}
-
-export interface UpdateInspirationResponse {
-  inspiration: ApiInspiration;
-}
-
-export type InspirationRevisitEventType =
-  | "detail_opened"
-  | "detail_returned"
-  | "reflection_created"
-  | "inspiration_updated";
-
-export interface CreateInspirationRevisitResponse {
-  revisit: {
-    id: string;
-    eventType: InspirationRevisitEventType;
-    createdAt: string;
-  };
-  inspiration: ApiInspirationScorePatch | null;
-}
-
-export interface GetInspirationScoreBreakdownResponse {
-  scoreBreakdown: ApiInspirationScoreBreakdown;
-}
-
-/**
- * POST /inspirations
- *
- * Persists a new inspiration owned by the authenticated user. The server
- * returns 201 with the canonical row and `cluster = null`; the SST queue
- * worker fills the cluster later. Throws `ApiError` on non-2xx.
- */
-export async function createInspiration(
-  input: CreateInspirationRequest,
-): Promise<ApiInspiration> {
-  const body = await postJson<CreateInspirationResponse>(
-    apiPath("/inspirations"),
-    input,
-    "Failed to save signal",
-  );
-  return body.inspiration;
-}
-
-/**
- * PATCH /inspirations/:id
- *
- * Updates the editable details for one caller-owned inspiration. The server
- * enforces tenant scope; callers only pass the row id and text body.
- */
-export async function updateInspiration(
-  id: string,
-  input: UpdateInspirationRequest,
-): Promise<ApiInspiration> {
-  const body = await patchJson<UpdateInspirationResponse>(
-    apiPath(`/inspirations/${encodeURIComponent(id)}`),
-    input,
-    "Failed to update signal",
-  );
-  return body.inspiration;
-}
-
-/**
- * POST /inspirations/:id/revisits
- *
- * Logs a meaningful user return/open interaction separately from list loading.
- * The server scopes the event by both session user and inspiration id, then
- * refreshes only that inspiration's local score best-effort.
- */
-export async function recordInspirationRevisit(
-  id: string,
-  eventType: InspirationRevisitEventType,
-): Promise<CreateInspirationRevisitResponse> {
-  return postJson<CreateInspirationRevisitResponse>(
-    apiPath(`/inspirations/${encodeURIComponent(id)}/revisits`),
-    { eventType },
-    "Failed to record signal revisit",
-  );
-}
-
-export async function fetchInspirationScoreBreakdown(
-  id: string,
-): Promise<ApiInspirationScoreBreakdown> {
-  const body = await getJson<GetInspirationScoreBreakdownResponse>(
-    apiPath(`/inspirations/${encodeURIComponent(id)}/score-breakdown`),
-    "Failed to load score breakdown",
-  );
-  return body.scoreBreakdown;
-}
-
-/** Response shape for GET /inspirations. */
-export interface ListInspirationsResponse {
-  inspirations: ApiInspiration[];
-}
-
-/**
- * GET /inspirations
- *
- * Returns the authenticated user's inspirations, newest first. The server
- * unconditionally scopes by `user_id`, so the caller never has to (and
- * cannot) filter by user — this client function is intentionally
- * argument-less for that reason.
- *
- * On a 401 (e.g. the cookie expired between mount and fetch) we surface an
- * `ApiError` so the caller can route the user back to /login. The
- * `<RequireAuth>` boundary normally prevents this code path from running
- * without a session, but the network can still race a server-side
- * invalidation, so callers should still handle the error.
- */
-export async function fetchInspirations(): Promise<ApiInspiration[]> {
-  let res: Response;
-  try {
-    res = await fetch(apiPath("/inspirations"), {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while loading signals",
-    });
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-
-  if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to load inspirations (HTTP ${res.status}). Please try again.`,
-    });
-  }
-
-  const payload = (body ?? {}) as Partial<ListInspirationsResponse>;
-  return Array.isArray(payload.inspirations) ? payload.inspirations : [];
-}
-
-/**
- * DELETE /inspirations/:id
- *
- * Permanently removes one of the caller's inspirations along with every
- * attachment row, reflection row, and S3 object the server can identify.
- * Server enforces tenant ownership; on a 404 (parent missing or owned by
- * someone else) we surface an `ApiError` so the caller can roll back any
- * optimistic UI state. Throws `ApiError` on non-2xx so the caller has a
- * single failure path (try/catch instead of a discriminated union).
- *
- * The inspiration delete is *not* idempotent in HTTP terms — calling it
- * twice surfaces a 404 the second time — but is idempotent from the
- * data-store perspective: after the first 200, the row and all of its
- * children are gone. Callers that want HTTP-level idempotency can swallow
- * the 404 themselves.
- */
-export async function deleteInspiration(id: string): Promise<void> {
-  const path = apiPath(`/inspirations/${encodeURIComponent(id)}`);
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while deleting signal",
-    });
-  }
-
-  if (res.ok) return;
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-  const errorBody = (body ?? {}) as { error?: string };
-  throw new ApiError({
-    status: res.status,
-    message:
-      errorBody.error ??
-      `Failed to delete signal (HTTP ${res.status}). Please try again.`,
-  });
-}
-
-export type WowKind =
-  | "recurrence"
-  | "bridge"
-  | "surprise_bridge"
-  | "tension"
-  | "outlier";
-
-export type ApiTopOfMindNoteType =
-  | "pattern"
-  | "tension"
-  | "question"
-  | "hypothesis"
-  | "action";
-
-export type ApiTopOfMindNoteStatus =
-  | "active"
-  | "dismissed"
-  | "stale"
-  | "replaced"
-  | "unavailable";
-
-export type ApiAmbitionDimension =
-  | "place"
-  | "people"
-  | "work"
-  | "taste"
-  | "tension"
-  | "identity"
-  | "rejection"
-  | "next_experiment";
-
-export interface ApiTopOfMindCompatibilitySignal {
-  inspirationId: string;
-  role: string;
-  reason: string;
-  text: string;
-  kind: string | null;
-  createdAt: string;
-  wowScore: number;
-}
-
-export interface ApiTopOfMindNote {
-  id: string;
-  userId: string;
-  title: string;
-  ambitionDimension: ApiAmbitionDimension;
-  ambientSignal: string;
-  matchedEnvironment: string;
-  antiEnvironment: string;
-  evidenceRationale: string;
-  rejectedAlternativeInterpretation: string | null;
-  type: ApiTopOfMindNoteType;
-  body: string;
-  prompt: string | null;
-  guidance: string | null;
-  confidence: number;
-  status: ApiTopOfMindNoteStatus;
-  isPinned: boolean;
-  userFeedbackValue: ApiFeedbackValue | null;
-  relatedSignalIds: string[];
-  relatedContextNodeIds: string[];
-  createdAt: string;
-  updatedAt: string;
-  source: "wow_moment_compatibility";
-  isProvisional: true;
-  legacy: {
-    wowMomentId: string;
-    wowKind: WowKind;
-    wowScore: number;
-  };
-}
-
-export interface ApiTopOfMindEvidencePreview {
-  signalId: string;
-  role: string;
-  reason: string;
-  textPreview: string;
-  /** The words that carried the reading, when the judge named them provably. */
-  quote?: string | null;
-  /** Whose words they were: the person's, or the page they linked. */
-  quoteSource?: "own" | "enrichment" | null;
-  kind: string | null;
-  createdAt: string;
-  resonanceScore: number;
-}
-
-export interface ApiTopOfMindRelatedSignalReference {
-  id: string;
-  preview: string;
-  kind: string | null;
-  createdAt: string;
-  resonanceScore: number;
-}
-
-export type ApiTopOfMindNoteSurface = ApiTopOfMindNote & {
-  evidencePreviews: ApiTopOfMindEvidencePreview[];
-  relatedSignals: ApiTopOfMindRelatedSignalReference[];
-};
-
-export type ApiTopOfMindGenerationPhase =
-  | "empty"
-  | "processing"
-  | "needs_more_context"
-  | "ready"
-  | "failed";
-
-export interface ApiTopOfMindGenerationStatus {
-  phase: ApiTopOfMindGenerationPhase;
-  message: string;
-  signalCount: number;
-  contextNodeCount: number;
-  evidenceCount: number;
-  noteCount: number;
-  job: {
-    id: string;
-    type: "process_inspiration" | "meaning_graph_rebuild";
-    status: "pending" | "running" | "succeeded" | "failed";
-    lastError: string | null;
-    updatedAt: string;
-  } | null;
-}
-
-// ---------------------------------------------------------------------------
-// Group Top of Mind boards (US-052)
-// ---------------------------------------------------------------------------
-
-export interface ApiGroupSummary {
-  id: string;
-  name: string;
-  role: string;
-  joinCode: string;
-  memberCount: number;
-  createdAt: string;
-}
-
-export interface ApiGroupMemberSummary {
-  userId: string;
-  name: string;
-  role: string;
-}
-
-export type ApiGroupEvidencePreview = ApiTopOfMindEvidencePreview & {
-  authorUserId: string;
-  authorName: string;
-};
-
-export type ApiGroupRelatedSignalReference = ApiTopOfMindRelatedSignalReference & {
-  authorUserId: string;
-  authorName: string;
-};
-
-export type ApiGroupTopOfMindNote = Omit<
-  ApiTopOfMindNoteSurface,
-  "evidencePreviews" | "relatedSignals"
-> & {
-  evidencePreviews: ApiGroupEvidencePreview[];
-  relatedSignals: ApiGroupRelatedSignalReference[];
-  authorUserId: string;
-  authorName: string;
-};
-
-export interface ApiGroupTopOfMind {
-  group: ApiGroupSummary;
-  members: ApiGroupMemberSummary[];
-  notes: ApiGroupTopOfMindNote[];
-}
-
-/**
- * A refresh response. Getting the same board back is ambiguous — it can mean
- * "looked, found nothing new" or "declined to look" — so the server says which.
- */
-export interface ApiGroupTopOfMindRefresh extends ApiGroupTopOfMind {
-  refreshed: boolean;
-  /** ISO timestamp the next run becomes possible, or null if it can run now. */
-  nextEligibleAt: string | null;
-}
-
-export interface ApiGroupCombinationReading {
-  id: string;
-  state: "revealed" | "forming";
-  ambition: string | null;
-  facets: Array<{ dimension: string; text: string }>;
-  awayFrom: string | null;
-  tension: string | null;
-  nextQuestion: string | null;
-  whatsMissing: string | null;
-  quotes: Array<{ userId: string; signalId: string; quote: string }>;
-  reconfirmedCount: number;
-  evidenceSpanStart: string | null;
-  evidenceSpanEnd: string | null;
-  updatedAt: string;
-  createdAt: string;
-  changeSummary: string | null;
-}
-
-export type ApiGroupDirectionContributionKind =
-  | "take"
-  | "feels_true"
-  | "missing"
-  | "change";
-
-export type ApiGroupDirectionResponseValue = "accept" | "keep_current";
-
-export interface ApiGroupDirectionEvidence {
-  signalId: string;
-  userId: string;
-  memberName: string;
-  quote: string;
-  textPreview: string;
-}
-
-export interface ApiGroupDirectionReading {
-  id: string;
-  versionNumber: number;
-  state: "revealed" | "forming";
-  ambition: string | null;
-  facets: Array<{ dimension: string; text: string }>;
-  awayFrom: string | null;
-  tension: string | null;
-  nextQuestion: string | null;
-  whatsMissing: string | null;
-  changeSummary: string | null;
-  evidence: ApiGroupDirectionEvidence[];
-  contributorCount: number;
-  reconfirmedCount: number;
-  evidenceSpanStart: string | null;
-  evidenceSpanEnd: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ApiGroupDirectionContribution {
-  id: string;
-  readingId: string;
-  userId: string;
-  memberName: string;
-  kind: ApiGroupDirectionContributionKind;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ApiGroupDirectionResponse {
-  userId: string;
-  memberName: string;
-  value: ApiGroupDirectionResponseValue;
-  updatedAt: string;
-}
-
-export interface ApiGroupDirection {
-  current: ApiGroupDirectionReading | null;
-  proposal: ApiGroupDirectionReading | null;
-  history: ApiGroupDirectionReading[];
-  contributions: ApiGroupDirectionContribution[];
-  responses: ApiGroupDirectionResponse[];
-  memberCount: number;
-  sharedInspirationCount: number;
-  sharedContributorCount: number;
-  newInspirationCount: number;
-  newContributorCount: number;
-  contributorCount: number;
-  requiredContributors: number;
-  requiredResponses: number;
-  viewerResponse: ApiGroupDirectionResponseValue | null;
-}
-
-export type ApiGroupReadingGenerationPhase =
-  | "processing"
-  | "ready"
-  | "needs_people"
-  | "needs_more_context"
-  | "failed";
-
-export interface ApiGroupReadingGenerationStatus {
-  phase: ApiGroupReadingGenerationPhase;
-  message: string;
-  memberCount: number;
-  sharedSignalCount: number;
-  noteCount: number;
-  job: {
-    id: string;
-    type: "group_reading_refresh";
-    status: "pending" | "running" | "succeeded" | "failed";
-    lastError: string | null;
-    updatedAt: string;
-  } | null;
-}
-
-export interface ApiTopOfMindCompatibilityMoment {
-  id: string;
-  userId: string;
-  title: string;
-  kind: WowKind;
-  why: string;
-  beliefStatement: string | null;
-  reflectionQuestion: string | null;
-  reflectionGuide: string | null;
-  wowScore: number;
-  createdAt: string;
-  updatedAt: string;
-  relatedInspirations: ApiTopOfMindCompatibilitySignal[];
-  topOfMindNote?: ApiTopOfMindNote;
-}
-
-export interface ListTopOfMindCompatibilityMomentsResponse {
-  wowMoments: ApiTopOfMindCompatibilityMoment[];
-}
-
-export interface ListTopOfMindNotesResponse {
-  topOfMindNotes: ApiTopOfMindNoteSurface[];
-  topOfMind?: ApiTopOfMind;
-}
-
-export interface GetTopOfMindNoteResponse {
-  topOfMindNote: ApiTopOfMindNoteSurface;
-}
-
-export interface UpdateTopOfMindNoteRequest {
-  title: string;
-}
-
-export interface UpdateTopOfMindNoteResponse {
-  topOfMindNote: ApiTopOfMindNoteSurface;
-}
-
-export interface ApiGroupRoomParticipant {
-  id: string;
-  userId: string | null;
-  displayName: string;
-  invitedEmail: string | null;
-  role: string;
-  status: string;
-}
-
-export interface ApiGroupRoomSignalPreview {
-  id: string;
-  signalId: string;
-  userId: string;
-  textPreview: string;
-  shareRaw: boolean;
-  createdAt: string;
-}
-
-export interface ApiGroupRoomPrompt {
-  id: string;
-  roomId: string;
-  promptText: string;
-  rationale: string;
-  actionLabel: string;
-  sourceTopOfMindNoteId: string | null;
-  evidencePreviews: Array<Record<string, unknown>>;
-  createdAt: string;
-}
-
-export interface ApiGroupConversationRoom {
-  id: string;
-  ownerUserId: string;
-  name: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  endedAt: string | null;
-  participants: ApiGroupRoomParticipant[];
-  selectedSignals: ApiGroupRoomSignalPreview[];
-  prompts: ApiGroupRoomPrompt[];
-  postConversation: {
-    feedbackCount: number;
-    latestNote: string | null;
-    nextAction: string;
-  };
-}
-
-export interface ApiGroupRoomFeedback {
-  id: string;
-  roomId: string;
-  promptId: string | null;
-  reaction: string;
-  note: string;
-  createdAt: string;
-}
-
-export interface ListGroupRoomsResponse {
-  rooms: ApiGroupConversationRoom[];
-}
-
-export interface CreateGroupRoomRequest {
-  name?: string;
-  participantEmails?: string[];
-}
-
-export interface CreateGroupRoomResponse {
-  room: ApiGroupConversationRoom;
-}
-
-export interface CreateDiscussionTopicRequest {
-  roomId?: string;
-  title?: string;
-  sourceTopOfMindNoteId?: string;
-  signalIds?: string[];
-}
-
-export interface CreateDiscussionTopicResponse {
-  room: ApiGroupConversationRoom;
-  prompt: ApiGroupRoomPrompt;
-}
-
-export interface CreateGroupRoomFeedbackRequest {
-  promptId?: string;
-  reaction?: "useful" | "unresolved" | "next_topic" | "action";
-  note?: string;
-}
-
-export interface CreateGroupRoomFeedbackResponse {
-  room: ApiGroupConversationRoom;
-  feedback: ApiGroupRoomFeedback;
-}
-
-export type ApiPublicTopOfMindEvidencePreview = Omit<
-  ApiTopOfMindEvidencePreview,
-  "signalId"
->;
-
-export type ApiPublicTopOfMindRelatedSignalReference = Omit<
-  ApiTopOfMindRelatedSignalReference,
-  "id"
->;
-
-export type ApiPublicTopOfMindNoteSurface = Omit<
-  ApiTopOfMindNoteSurface,
-  | "id"
-  | "userId"
-  | "relatedSignalIds"
-  | "relatedContextNodeIds"
-  | "legacy"
-  | "evidencePreviews"
-  | "relatedSignals"
-> & {
-  evidencePreviews: ApiPublicTopOfMindEvidencePreview[];
-  relatedSignals: ApiPublicTopOfMindRelatedSignalReference[];
-};
-
-export interface ApiPublicProfile {
-  name: string;
-  handle: string;
-  preferredLocale: SupportedLocale;
-}
-
-export interface FetchPublicProfileResponse {
-  profile: ApiPublicProfile;
-  topOfMindNotes: ApiPublicTopOfMindNoteSurface[];
-}
-
-export type ApiFeedbackTarget =
-  | "signal"
-  | "context_node"
-  | "top_of_mind_note"
-  | "hypothesis";
-export type ApiFeedbackValue =
-  | "true"
-  | "partly"
-  | "not_true"
-  | "important"
-  | "not_important";
-export type ApiFeedbackEmotion =
-  | "admire"
-  | "envy"
-  | "want"
-  | "fear"
-  | "curious"
-  | "aesthetic_only";
-
-export interface ApiFeedbackRecord {
-  id: string;
-  userId: string;
-  targetType: ApiFeedbackTarget;
-  targetId: string;
-  value: ApiFeedbackValue;
-  emotionLabel: ApiFeedbackEmotion | null;
-  correctionText: string | null;
-  source: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateFeedbackRequest {
-  targetType: ApiFeedbackTarget;
-  targetId: string;
-  value: ApiFeedbackValue;
-  emotionLabel?: ApiFeedbackEmotion;
-  correctionText?: string;
-}
-
-export interface CreateFeedbackResponse {
-  feedback: ApiFeedbackRecord;
-}
-
-export interface FetchTopOfMindCompatibilityMomentsOptions {
-  limit?: number;
-}
-
-export interface FetchTopOfMindNotesOptions {
-  limit?: number;
-}
-
-export type SavedSignalArchiveFilter =
-  | "all"
-  | "highlighted"
-  | "high_resonance"
-  | "tensions"
-  | "questions"
-  | "people_places"
-  | "recently_resurfaced";
-
-export type SavedSignalArchiveSort = "recent" | "resonance" | "revisited";
-
-export interface ApiSavedSignalSearchResult {
-  /**
-   * When this save is standing in for evidence, the words that carried the
-   * reading — so the drawer can say "these were the words" rather than showing
-   * a truncation that looks identical either way.
-   */
-  quote?: string | null;
-  /** Whose words they were: the person's own, or the page they linked. */
-  quoteSource?: "own" | "enrichment" | null;
-  id: string;
-  userId: string;
-  textPreview: string;
-  kind: string | null;
-  capturedAt: string;
-  updatedAt: string;
-  /**
-   * Public: every room you are in can read this save. Private: none of them
-   * can, and it never reaches a room's reading. Either way it stays yours and
-   * still shapes your own Top of Mind.
-   */
-  shared: boolean;
-  resonanceScore: number;
-  /**
-   * Client-only: on a Group Top of Mind evidence drawer, the member who saved
-   * this inspiration. Unset for the viewer's own saved signals.
-   */
-  ownerName?: string;
-  signalScores: ApiSignalScores;
-  highlightedSnippets: Array<{
-    id: string;
-    text: string;
-    source: string;
-    confidence: number;
-    isPrimary: boolean;
-  }>;
-  matchingSnippets: string[];
-  relatedContextTerms: string[];
-  relatedTopOfMindNoteTitles: string[];
-  /** Group boards this save fed: where else it led, and in whose company. */
-  relatedGroupNotes: Array<{ groupId: string; groupName: string; noteTitle: string }>;
-  attachmentSummary: Array<{
-    id: string;
-    type: AttachmentType;
-    label: string;
-    url?: string;
-  }>;
-  relevanceReasons: string[];
-}
-
-export interface ApiSavedSignalDetail extends ApiSavedSignalSearchResult {
-  rawText: string;
-  attachments: Array<{
-    id: string;
-    type: AttachmentType;
-    url?: string;
-    label: string;
-    contentType: string | null;
-    size: number | null;
-  }>;
-  resonanceFeedback: Array<{
-    id: string;
-    value: ApiFeedbackValue;
-    emotionLabel: ApiFeedbackEmotion | null;
-    correctionText: string | null;
-    createdAt: string;
-  }>;
-  signalPacket: {
-    id: string;
-    text: string;
-    primarySpark: string;
-    artifactExcerpt: string;
-    updatedAt: string;
-  } | null;
-  relatedContextNodes: Array<{
-    id: string;
-    type: string;
-    label: string;
-    description: string;
-    confidence: number;
-    evidenceReason: string;
-  }>;
-  relatedTopOfMindNotes: Array<{
-    id: string;
-    title: string;
-    type: ApiTopOfMindNoteType;
-    body: string;
-    confidence: number;
-    status: "active";
-  }>;
-}
-
-export interface FetchSavedSignalsOptions {
-  q?: string;
-  filter?: SavedSignalArchiveFilter;
-  sort?: SavedSignalArchiveSort;
-  limit?: number;
-}
-
-export interface ListSavedSignalsResponse {
-  signals: ApiSavedSignalSearchResult[];
-}
-
-export interface GetSavedSignalResponse {
-  signal: ApiSavedSignalDetail;
-}
-
-export type BackgroundJobType = "process_inspiration";
-export type BackgroundJobStatus = "pending" | "running" | "succeeded" | "failed";
-
-export interface ApiBackgroundJob {
-  id: string;
-  userId?: string;
-  type: BackgroundJobType;
-  status: BackgroundJobStatus;
-  attempts?: number;
-  maxAttempts?: number;
-  runAfter?: string;
-  lockedAt?: string | null;
-  lastError?: string | null;
-  idempotencyKey?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  payloadSummary?: {
-    inspirationId?: string;
-    [key: string]: unknown;
-  };
-}
-
-export interface FetchBackgroundJobsOptions {
-  type?: BackgroundJobType;
-  limit?: number;
-}
-
-export interface ListBackgroundJobsResponse {
-  jobs: ApiBackgroundJob[];
-}
-
-export interface ApiWowStatusRow {
-  inspiration: {
-    id: string;
-    textPreview: string;
-    kind: string | null;
-    category: number | null;
-    cluster: ClusterKind | null;
-    classifiedAt: string | null;
-    importanceScore: number;
-    wowScore: number;
-    createdAt: string;
-    updatedAt: string;
-  };
-  job: {
-    id: string;
-    status: BackgroundJobStatus;
-    attempts: number;
-    maxAttempts: number;
-    updatedAt: string;
-    lastError: string | null;
-  } | null;
-  embedded: boolean;
-  generatedWowMomentCount: number;
-  debugReason: {
-    code:
-      | "linked_wow_ready"
-      | "waiting_for_job"
-      | "missing_embedding"
-      | "job_failed"
-      | "no_generated_wow"
-      | "not_wow_judgment";
-    label: string;
-    detail: string;
-    rawGeminiPreview?: string;
-    parseFailureStage?: string;
-    finishReason?: string;
-    schemaIssueSummary?: string;
-  };
-}
-
-export interface ListWowStatusResponse {
-  rows: ApiWowStatusRow[];
-}
-
-export async function fetchWowStatus(limit = 12): Promise<ApiWowStatusRow[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  const body = await getJson<ListWowStatusResponse>(
-    apiPath(`/wow-status?${params.toString()}`),
-    "Failed to load top-of-mind status",
-  );
-  return Array.isArray(body.rows) ? body.rows : [];
-}
-
-export async function fetchLegacyTopOfMindCompatibilityMoments(
-  options: FetchTopOfMindCompatibilityMomentsOptions = {},
-): Promise<ApiTopOfMindCompatibilityMoment[]> {
-  const params = new URLSearchParams();
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-
-  let res: Response;
-  try {
-    res = await fetch(apiPath(`/wow-moments${query ? `?${query}` : ""}`), {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while loading top-of-mind compatibility notes",
-    });
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-
-  if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to load top-of-mind compatibility notes (HTTP ${res.status}). Please try again.`,
-    });
-  }
-
-  const payload = body as Partial<ListTopOfMindCompatibilityMomentsResponse> | null;
-  if (!payload || !Array.isArray(payload.wowMoments)) {
-    throw new ApiError({
-      status: res.status,
-      message: "Malformed top-of-mind compatibility response",
-    });
-  }
-  return payload.wowMoments;
-}
-
-export async function fetchTopOfMindNotes(
-  options: FetchTopOfMindNotesOptions = {},
-): Promise<ApiTopOfMindNoteSurface[]> {
-  const params = new URLSearchParams();
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-  const body = await getJson<ListTopOfMindNotesResponse>(
-    apiPath(`/top-of-mind${query ? `?${query}` : ""}`),
-    "Failed to load top-of-mind notes",
-  );
-
-  if (!Array.isArray(body.topOfMindNotes)) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed top-of-mind notes response",
-    });
-  }
-
-  return body.topOfMindNotes;
-}
-
-export async function fetchTopOfMindNote(
-  noteId: string,
-): Promise<ApiTopOfMindNoteSurface> {
-  const body = await getJson<GetTopOfMindNoteResponse>(
-    apiPath(`/top-of-mind/${noteId}`),
-    "Failed to load top-of-mind note",
-  );
-
-  if (!body.topOfMindNote) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed top-of-mind note response",
-    });
-  }
-
-  return body.topOfMindNote;
-}
-
-export async function updateTopOfMindNote(
-  noteId: string,
-  input: UpdateTopOfMindNoteRequest,
-): Promise<ApiTopOfMindNoteSurface> {
-  const body = await patchJson<UpdateTopOfMindNoteResponse>(
-    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}`),
-    input,
-    "Failed to update top-of-mind note",
-  );
-
-  if (!body.topOfMindNote) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed top-of-mind note update response",
-    });
-  }
-
-  return body.topOfMindNote;
-}
-
-export async function setTopOfMindNotePinned(
-  noteId: string,
-  pinned: boolean,
-): Promise<ApiTopOfMindNoteSurface> {
-  const body = await patchJson<UpdateTopOfMindNoteResponse>(
-    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/pin`),
-    { pinned },
-    pinned ? "Failed to hold that note" : "Failed to release that note",
-  );
-  return body.topOfMindNote;
-}
-
-export async function dismissTopOfMindNote(noteId: string): Promise<void> {
-  await postJson(
-    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/dismiss`),
-    {},
-    "Failed to take that note down",
-  );
-}
-
-export async function restoreTopOfMindNote(
-  noteId: string,
-): Promise<ApiTopOfMindNoteSurface> {
-  const body = await postJson<UpdateTopOfMindNoteResponse>(
-    apiPath(`/top-of-mind/${encodeURIComponent(noteId)}/restore`),
-    {},
-    "Failed to put that note back",
-  );
-  return body.topOfMindNote;
-}
-
-export async function fetchTopOfMindStatus(): Promise<ApiTopOfMindGenerationStatus> {
-  const body = await getJson<{ status: ApiTopOfMindGenerationStatus }>(
-    apiPath("/top-of-mind/status"),
-    "Failed to load top-of-mind status",
-  );
-  return body.status;
-}
-
-export async function refreshTopOfMind(): Promise<{ job: ApiMeaningGraphRebuildJob }> {
-  return postJson(
-    apiPath("/top-of-mind/refresh"),
-    {},
-    "Failed to start a new top-of-mind reading",
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Group Top of Mind boards (US-052)
-// ---------------------------------------------------------------------------
-
-/** Flip whether a saved inspiration feeds the user's Group Top of Mind boards. */
-export async function setInspirationSharing(
-  id: string,
-  shareToGroups: boolean,
-): Promise<ApiInspiration> {
-  const body = await patchJson<UpdateInspirationResponse>(
-    apiPath(`/inspirations/${encodeURIComponent(id)}`),
-    { shareToGroups },
-    "Failed to update sharing",
-  );
-  return body.inspiration;
-}
-
-/** GET /groups — the boards the signed-in user belongs to. */
-export async function fetchGroups(): Promise<ApiGroupSummary[]> {
-  const body = await getJson<{ groups: ApiGroupSummary[] }>(
-    apiPath("/groups"),
-    "Failed to load groups",
-  );
-  return Array.isArray(body.groups) ? body.groups : [];
-}
-
-/** POST /groups — create a board; caller becomes owner. */
-export async function createGroup(name: string): Promise<ApiGroupSummary> {
-  const body = await postJson<{ group: ApiGroupSummary }>(
-    apiPath("/groups"),
-    { name },
-    "Failed to create group",
-  );
-  return body.group;
-}
-
-/** POST /groups/join — join a board by its shareable code. */
-export async function joinGroup(
-  joinCode: string,
-): Promise<{ group: ApiGroupSummary; alreadyMember: boolean }> {
-  const body = await postJson<{ group: ApiGroupSummary; alreadyMember: boolean }>(
-    apiPath("/groups/join"),
-    { joinCode },
-    "Failed to join group",
-  );
-  return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
-}
-
-/** POST /groups/:id/leave */
-export async function leaveGroup(groupId: string): Promise<{ ok: boolean }> {
-  const body = await postJson<{ ok: boolean }>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/leave`),
-    {},
-    "Failed to leave group",
-  );
-  return { ok: Boolean(body.ok) };
-}
-
-/**
- * DELETE /groups/:id — the owner deletes the room outright.
- *
- * Distinct from leaving: this removes the board for everyone in it, along with
- * every note their collections produced together. Members' own saved signals
- * are untouched.
- */
-export async function deleteGroup(groupId: string): Promise<void> {
-  const path = apiPath(`/groups/${encodeURIComponent(groupId)}`);
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while deleting the room",
-    });
-  }
-
-  if (res.ok) return;
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — fall through to the status-based message.
-  }
-  const errorBody = (body ?? {}) as { error?: string };
-  throw new ApiError({
-    status: res.status,
-    message: errorBody.error ?? "Failed to delete the room",
-  });
-}
-
-/** PATCH /groups/:id — rename the room. Owner only. */
-export async function renameGroup(groupId: string, name: string): Promise<void> {
-  await requestJson(
-    apiPath(`/groups/${encodeURIComponent(groupId)}`),
-    "PATCH",
-    { name },
-    "Failed to rename the room",
-  );
-}
-
-/** DELETE /groups/:id/members/:memberId — owner removes someone. */
-export async function removeGroupMember(
-  groupId: string,
-  memberUserId: string,
-): Promise<void> {
-  await requestJson(
-    apiPath(
-      `/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberUserId)}`,
-    ),
-    "DELETE",
-    undefined,
-    "Failed to remove that member",
-  );
-}
-
-/**
- * Shared shape for the room's owner-only mutations: send, accept any 2xx, and
- * surface the server's own message when it refuses. Written once because the
- * three of them differ only in verb and wording.
- */
-async function requestJson(
-  path: string,
-  method: "PATCH" | "DELETE",
-  body: unknown,
-  fallbackMessage: string,
-): Promise<void> {
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method,
-      credentials: "include",
-      headers: body
-        ? { Accept: "application/json", "Content-Type": "application/json" }
-        : { Accept: "application/json" },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-  } catch {
-    throw new ApiError({ status: 0, message: "Network unreachable" });
-  }
-  if (res.ok) return;
-
-  let parsed: unknown = null;
-  try {
-    parsed = await res.json();
-  } catch {
-    // Non-JSON error body — fall back to the caller's message.
-  }
-  throw new ApiError({
-    status: res.status,
-    message: (parsed as { error?: string } | null)?.error ?? fallbackMessage,
-  });
-}
-
-/** GET /groups/:id/top-of-mind — synthesized group board. */
-export async function fetchGroupTopOfMind(
-  groupId: string,
-  limit?: number,
-): Promise<ApiGroupTopOfMind> {
-  const query = typeof limit === "number" ? `?limit=${limit}` : "";
-  return getJson<ApiGroupTopOfMind>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind${query}`),
-    "Failed to load group top of mind",
-  );
-}
-
-/** POST /groups/:id/top-of-mind/refresh — regenerate the group board. */
-export async function refreshGroupTopOfMind(
-  groupId: string,
-): Promise<ApiGroupTopOfMindRefresh> {
-  return postJson<ApiGroupTopOfMindRefresh>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
-    {},
-    "Failed to refresh group top of mind",
-  );
-}
-
-export async function fetchGroupCombinationReading(
-  groupId: string,
-): Promise<ApiGroupCombinationReading | null> {
-  const body = await getJson<{ reading: ApiGroupCombinationReading | null }>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/reading`),
-    "Failed to load the room's shared top of mind",
-  );
-  return body.reading;
-}
-
-export async function fetchGroupReadingStatus(
-  groupId: string,
-  options: { ensure?: boolean } = {},
-): Promise<ApiGroupReadingGenerationStatus> {
-  const query = options.ensure === false ? "?ensure=0" : "";
-  const body = await getJson<{ status: ApiGroupReadingGenerationStatus }>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/reading/status${query}`),
-    "Failed to load this room's reading status",
-  );
-  return body.status;
-}
-
-export async function requestGroupReadingRefresh(
-  groupId: string,
-): Promise<ApiGroupReadingGenerationStatus> {
-  const body = await postJson<{ status: ApiGroupReadingGenerationStatus }>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/reading/refresh`),
-    {},
-    "Failed to start this room's reread",
-  );
-  return body.status;
-}
-
-export async function fetchGroupDirection(groupId: string): Promise<ApiGroupDirection> {
-  const body = await getJson<{ direction: ApiGroupDirection }>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/direction`),
-    "Failed to load this room's shared top of mind",
-  );
-  return body.direction;
-}
-
-export async function addGroupDirectionContribution(
-  groupId: string,
-  input: { kind: ApiGroupDirectionContributionKind; body: string },
-): Promise<{
-  contribution: ApiGroupDirectionContribution;
-  contributorCount: number;
-  requiredContributors: number;
-  updateReady: boolean;
-}> {
-  return postJson(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/direction/contributions`),
-    input,
-    "Failed to add your thought",
-  );
-}
-
-export async function respondToGroupDirectionProposal(
-  groupId: string,
-  proposalId: string,
-  value: ApiGroupDirectionResponseValue,
-): Promise<{
-  decision: "adopted" | "kept_current" | "pending";
-  direction: ApiGroupDirection;
-}> {
-  return postJson(
-    apiPath(
-      `/groups/${encodeURIComponent(groupId)}/direction/proposals/${encodeURIComponent(proposalId)}/respond`,
-    ),
-    { value },
-    "Failed to save your response",
-  );
-}
-
-/** A note, as it stood at some moment on the room's timeline. */
-export interface ApiTimelineNote {
-  id: string;
-  title: string;
-  why: string;
-  /**
-   * Stable across revisions of the same reading. The rail keys its animation
-   * on this: a note that survives a scrubbed boundary must stay perfectly
-   * still, and only identity can tell "unchanged" from "replaced by something
-   * that reads similarly".
-   */
-  idempotencyKey: string;
-  createdAt: string;
-  replacedAt: string | null;
-  /** Whose saves this reading rests on — a past card keeps its faces. */
-  evidence: ApiTimelineEvidence[];
-}
-
-export interface ApiTimelineEvidence {
-  signalId: string;
-  ownerUserId: string;
-  ownerName: string;
-  textPreview: string;
-  reason: string;
-}
-
-export type ApiTimelineEvent =
-  | { kind: "formed"; at: string }
-  | { kind: "note_written"; at: string; noteId: string; title: string }
-  | { kind: "note_replaced"; at: string; noteId: string; title: string }
-  | {
-      kind: "member";
-      at: string;
-      event: "joined" | "left" | "removed";
-      userId: string;
-      name: string;
-    };
-
-export interface ApiRoomTimeline {
-  groupId: string;
-  formedAt: string;
-  events: ApiTimelineEvent[];
-}
-
-export interface ApiRoomTimelineResponse {
-  /**
-   * Null when a past board was asked for.
-   *
-   * A caller travelling already holds the room's life; rebuilding it on every
-   * scrub only to be discarded is what made the wall lag the rail.
-   */
-  timeline: ApiRoomTimeline | null;
-  board: { at: string; notes: ApiTimelineNote[] } | null;
-}
-
-/**
- * GET /groups/:id/timeline — everything the room did, and the board as it
- * stood at `at`.
- *
- * `at` omitted means now, which must equal today's wall exactly — that
- * equivalence is what makes the rail's resting position honest rather than a
- * second rendering of the same idea.
- */
-export async function fetchRoomTimeline(
-  groupId: string,
-  at?: string,
-): Promise<ApiRoomTimelineResponse> {
-  const query = at ? `?at=${encodeURIComponent(at)}` : "";
-  return getJson<ApiRoomTimelineResponse>(
-    apiPath(`/groups/${encodeURIComponent(groupId)}/timeline${query}`),
-    "Failed to load the room's timeline",
-  );
-}
-
-export async function fetchPublicProfile(
-  handle: string,
-  options: FetchTopOfMindNotesOptions = {},
-): Promise<FetchPublicProfileResponse> {
-  const normalizedHandle = handle.trim().replace(/^@+/, "");
-  const params = new URLSearchParams();
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-  const body = await getJson<FetchPublicProfileResponse>(
-    apiPath(`/public/profiles/${encodeURIComponent(normalizedHandle)}${query ? `?${query}` : ""}`),
-    "Failed to load public profile",
-  );
-
-  if (!body.profile || !Array.isArray(body.topOfMindNotes)) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed public profile response",
-    });
-  }
-
-  return body;
-}
-
-/**
- * Fill in list fields an older API may not send.
- *
- * The saved-signals list is rendered from these arrays directly, so a field
- * added on the server but absent from a response — a web bundle deployed ahead
- * of the API, or a stale dev server — took the whole drawer down with a
- * TypeError rather than simply showing one less thing. Defaulting here means
- * every caller can trust the declared shape.
- */
-function normalizeSavedSignal<T extends ApiSavedSignalSearchResult>(signal: T): T {
-  return {
-    ...signal,
-    relatedTopOfMindNoteTitles: signal.relatedTopOfMindNoteTitles ?? [],
-    relatedGroupNotes: signal.relatedGroupNotes ?? [],
-    highlightedSnippets: signal.highlightedSnippets ?? [],
-    matchingSnippets: signal.matchingSnippets ?? [],
-    relatedContextTerms: signal.relatedContextTerms ?? [],
-    attachmentSummary: signal.attachmentSummary ?? [],
-    relevanceReasons: signal.relevanceReasons ?? [],
-  };
-}
-
-export async function fetchSavedSignals(
-  options: FetchSavedSignalsOptions = {},
-): Promise<ApiSavedSignalSearchResult[]> {
-  const params = new URLSearchParams();
-  if (options.q) params.set("q", options.q);
-  if (options.filter && options.filter !== "all") params.set("filter", options.filter);
-  if (options.sort && options.sort !== "recent") params.set("sort", options.sort);
-  if (typeof options.limit === "number") params.set("limit", String(options.limit));
-  const query = params.toString();
-  const body = await getJson<ListSavedSignalsResponse>(
-    apiPath(`/signals${query ? `?${query}` : ""}`),
-    "Failed to load saved signals",
-  );
-
-  if (!Array.isArray(body.signals)) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed saved signals response",
-    });
-  }
-
-  return body.signals.map(normalizeSavedSignal);
-}
-
-export async function fetchSavedSignalDetail(
-  signalId: string,
-): Promise<ApiSavedSignalDetail> {
-  const body = await getJson<GetSavedSignalResponse>(
-    apiPath(`/signals/${encodeURIComponent(signalId)}`),
-    "Failed to load saved signal",
-  );
-
-  if (!body.signal) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed saved signal response",
-    });
-  }
-
-  return normalizeSavedSignal(body.signal);
-}
-
-/** One co-cited save — what your signal sat next to inside a reading. */
-export interface ApiSignalReadingNeighbor {
-  signalId: string;
-  textPreview: string;
-  ownerUserId: string;
-  ownerName: string;
-  ownerAvatarUrl: string | null;
-  isMine: boolean;
-}
-
-export type ApiSignalReadingContext =
-  | { scope: "alone" }
-  | { scope: "group"; groupId: string; groupName: string };
-
-/**
- * How differently a room reads this save from the way its owner does. Only
- * ever present on a group reading — "alone" is the side being compared
- * against, so it has nothing to differ from.
- */
-export interface ApiSignalReadingDivergence {
-  /** 0 = the room reads it the way you do; 100 = a different ambition. */
-  score: number;
-  /** The judge's one sentence naming the difference. */
-  rationale: string;
-}
-
-/**
- * One Top of Mind note that cited a signal — read alone or beside a room.
- * Solo readings are the owner's own; group readings are shared with the room
- * (the API only returns rooms the caller currently belongs to).
- */
-export interface ApiSignalReading {
-  context: ApiSignalReadingContext;
-  note: {
-    id: string;
-    title: string;
-    kind: string;
-    beliefStatement: string | null;
-    why: string;
-    createdAt: string;
-  };
-  myRole: { role: string; reason: string };
-  /** The words in THIS save that carried THIS reading. */
-  quote: string | null;
-  /** Whose words they were — the person's own, or the page they linked. */
-  quoteSource?: "own" | "enrichment" | null;
-  neighbors: ApiSignalReadingNeighbor[];
-}
-
-export async function fetchSignalReadings(
-  signalId: string,
-): Promise<ApiSignalReading[]> {
-  const body = await getJson<{ readings: ApiSignalReading[] }>(
-    apiPath(`/inspirations/${encodeURIComponent(signalId)}/readings`),
-    "Failed to load inspiration readings",
-  );
-  return Array.isArray(body.readings) ? body.readings : [];
-}
-
-export async function createFeedback(
-  input: CreateFeedbackRequest,
-): Promise<ApiFeedbackRecord> {
-  const body = await postJson<CreateFeedbackResponse>(
-    apiPath("/feedback"),
-    input,
-    "Failed to save feedback",
-  );
-
-  if (!body.feedback) {
-    throw new ApiError({
-      status: 200,
-      message: "Malformed feedback response",
-    });
-  }
-
-  return body.feedback;
-}
-
-export type ApiMeaningGraphMemoryState =
-  | "emerging"
-  | "active"
-  | "fading"
-  | "dormant"
-  | "reactivated"
-  | "contradicted"
-  | "needs_testing";
-
-export interface ApiMeaningGraphMemory {
-  state: ApiMeaningGraphMemoryState;
-  firstSeenAt: string;
-  lastSeenAt: string;
-  reinforcementCount: number;
-  recentReinforcementCount: number;
-  currentWeight: number;
-  confidence: number;
-  decay: number;
-  supportingSignalIds: string[];
-  movementScore: number;
-}
-
-export interface ApiMeaningGraphQualityIndicator {
-  type:
-    | "raw_graph_label"
-    | "shallow_summary"
-    | "generic_ambition_wrapper"
-    | "unsupported_synthesis"
-    | "healthy_specificity";
-  severity: "ok" | "watch" | "risk";
-  label: string;
-  detail: string;
-}
-
-export interface ApiMeaningGraphNode {
-  id: string;
-  type: string;
-  contextType: string;
-  ambitionDimension:
-    | "place"
-    | "people"
-    | "work"
-    | "taste"
-    | "identity"
-    | "rejection"
-    | "next_experiment";
-  label: string;
-  description: string;
-  status: string;
-  source: string;
-  weight: number;
-  confidence: number;
-  evidenceCount: number;
-  firstSeenAt: string;
-  lastReinforcedAt: string;
-  createdAt: string;
-  updatedAt: string;
-  memory: ApiMeaningGraphMemory;
-  qualityIndicators: ApiMeaningGraphQualityIndicator[];
-  relatedTopOfMindNotes: Array<{
-    id: string;
-    title: string;
-    why: string;
-    score: number;
-    ambitionDimension: ApiTopOfMindNote["ambitionDimension"];
-    ambientSignal: string;
-    matchedEnvironment: string;
-    antiEnvironment: string;
-    evidenceRationale: string;
-    rejectedAlternativeInterpretation: string | null;
-    whyNow: string;
-    changedRecently: string;
-    feedback: Array<{
-      id: string;
-      targetType: "top_of_mind_note";
-      value: ApiFeedbackValue;
-      emotionLabel: ApiFeedbackEmotion | null;
-      correctionText: string | null;
-      source: string;
-      createdAt: string;
-    }>;
-    qualityIndicators: ApiMeaningGraphQualityIndicator[];
-    createdAt: string;
-  }>;
-  feedback: Array<{
-    id: string;
-    targetType: "context_node" | "hypothesis";
-    value: ApiFeedbackValue;
-    emotionLabel: ApiFeedbackEmotion | null;
-    correctionText: string | null;
-    source: string;
-    createdAt: string;
-  }>;
-  evidence: Array<{
-    inspirationId: string;
-    packetId: string;
-    reason: string;
-    weight: number;
-    confidence: number;
-    source: string;
-    preview: string;
-    packetPreview: string;
-    tokenEstimate: number;
-    inspirationCreatedAt: string;
-    createdAt: string;
-  }>;
-}
-
-export interface ApiMeaningGraphEdge {
-  id: string;
-  sourceNodeId: string;
-  targetNodeId: string;
-  kind: string;
-  weight: number;
-  confidence: number;
-  evidenceCount: number;
-  evidenceInspirationIds: string[];
-  status: string;
-  source: string;
-  lastReinforcedAt: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ApiMeaningGraphRecentInspiration {
-  id: string;
-  preview: string;
-  cluster: ClusterKind | null;
-  createdAt: string;
-  packetCreatedAt: string | null;
-  meaningNotes: Array<{
-    id: string;
-    label: string;
-    type: string;
-    contextType?: string;
-    reason: string;
-  }>;
-  relationshipEdges: Array<{
-    id: string;
-    kind: string;
-    sourceNodeId: string;
-    sourceLabel: string;
-    sourceReason: string;
-    targetNodeId: string;
-    targetLabel: string;
-    targetReason: string;
-  }>;
-}
-
-export type ApiMeaningGraphHealthStatus =
-  | "no_data"
-  | "writer_failed"
-  | "sparse"
-  | "stale"
-  | "healthy";
-
-export interface ApiMeaningGraphHealthWarning {
-  type: ApiMeaningGraphHealthStatus | "no_packets";
-  message: string;
-}
-
-export interface ApiMeaningGraphHealth {
-  inspirationCount: number;
-  packetCount: number;
-  nodeCount: number;
-  edgeCount: number;
-  evidenceCount: number;
-  inspirationsWithoutPackets: number;
-  nodesWithoutEvidence: number;
-  edgeDensity: number;
-  status: ApiMeaningGraphHealthStatus;
-  warnings: ApiMeaningGraphHealthWarning[];
-}
-
-export interface ApiMeaningGraph {
-  nodes: ApiMeaningGraphNode[];
-  edges: ApiMeaningGraphEdge[];
-  recentInspirations: ApiMeaningGraphRecentInspiration[];
-  meta: {
-    nodeCount: number;
-    edgeCount: number;
-    evidenceCount: number;
-    limit: number;
-    health: ApiMeaningGraphHealth;
-  };
-}
-
-export interface ApiMeaningGraphRebuildResult {
-  inspirations: number;
-  nodesTouched: number;
-  evidenceTouched: number;
-  edgesTouched: number;
-}
-
-export type ApiBackgroundJobStatus = "pending" | "running" | "succeeded" | "failed";
-
-export interface ApiMeaningGraphRebuildPayload extends Partial<ApiMeaningGraphRebuildResult> {
-  requestedByUserId?: string;
-  phase?: "queued" | "counting" | "clearing" | "processing" | "completed";
-  totalInspirations?: number;
-  processedInspirations?: number;
-  startedAt?: string;
-  completedAt?: string;
-}
-
-export interface ApiMeaningGraphRebuildJob {
-  id: string;
-  type: "meaning_graph_rebuild";
-  status: ApiBackgroundJobStatus;
-  payload: ApiMeaningGraphRebuildPayload;
-  attempts: number;
-  maxAttempts: number;
-  runAfter: string | null;
-  lockedAt: string | null;
-  lastError: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function fetchMeaningGraph(limit = 120): Promise<ApiMeaningGraph> {
-  const params = new URLSearchParams({ limit: String(limit) });
-  const body = await getJson<{ graph: ApiMeaningGraph }>(
-    apiPath(`/admin/meaning-graph?${params.toString()}`),
-    "Failed to load context graph",
-  );
-  return body.graph;
-}
-
-export async function rebuildMeaningGraph(): Promise<{
-  job: ApiMeaningGraphRebuildJob;
-  statusUrl?: string;
-}> {
-  return postJson(apiPath("/admin/meaning-graph/rebuild"), {}, "Failed to enqueue context graph rebuild");
-}
-
-export async function fetchMeaningGraphRebuildJob(jobId?: string): Promise<{
-  job: ApiMeaningGraphRebuildJob | null;
-}> {
-  const path = jobId
-    ? `/admin/meaning-graph/rebuild/${encodeURIComponent(jobId)}`
-    : "/admin/meaning-graph/rebuild";
-  return getJson(apiPath(path), "Failed to load context graph rebuild status");
-}
-
-export function formatMeaningGraphRebuildError(err: unknown, locale: SupportedLocale = "en-US"): string {
-  const timeoutMessage = locale === "ko-KR"
-    ? "다시 만들기 상태 요청 시간이 초과되었거나 원격 프록시가 HTTP 502/504를 반환했습니다. 서버에서 작업이 계속 진행 중일 수 있습니다. 잠시 뒤 새로고침으로 그래프를 확인한 다음 다시 시작하세요."
-    : "The rebuild status request timed out or the remote proxy returned HTTP 502/504. " +
-      "The rebuild job may still be running server-side. Wait a minute, then click Refresh to check the graph before starting another rebuild.";
-
-  if (err instanceof ApiError && [0, 502, 504].includes(err.status)) {
-    return timeoutMessage;
-  }
-
-  if (err instanceof TypeError) {
-    return timeoutMessage;
-  }
-
-  if (locale === "ko-KR") {
-    if (err instanceof ApiError && err.status === 409) {
-      return "다시 만들기 실패: 로컬 데이터베이스 마이그레이션이 필요합니다. Drizzle 마이그레이션을 실행한 뒤 다시 시도하세요.";
-    }
-    return "다시 만들기 실패: 그래프를 다시 만들지 못했습니다. 잠시 뒤 다시 시도하세요.";
-  }
-
-  const message = err instanceof Error ? err.message : "Failed to rebuild context graph";
-  return `Rebuild failed: ${message}`;
-}
-
-export interface ApiTopOfMindSupportingInspiration {
-  id: string;
-  preview: string;
-  reason: string;
-  createdAt: string;
-}
-
-export interface ApiTopOfMindSignal {
-  nodeId: string;
-  label: string;
-  type: string;
-  reason: string;
-  evidenceCount: number;
-  lastReinforcedAt: string;
-  supportingInspirations: ApiTopOfMindSupportingInspiration[];
-}
-
-export interface ApiTopOfMindRelationshipSignal {
-  edgeId: string;
-  kind: string;
-  sourceNodeId: string;
-  sourceLabel: string;
-  targetNodeId: string;
-  targetLabel: string;
-  reason: string;
-  evidenceCount: number;
-  lastReinforcedAt: string;
-}
-
-export interface ApiTopOfMind {
-  generatedAt: string;
-  headline: string;
-  activeThemes: ApiTopOfMindSignal[];
-  activeQuestions: ApiTopOfMindSignal[];
-  relationshipSignals: ApiTopOfMindRelationshipSignal[];
-  summary: {
-    inspirationCount: number;
-    meaningNoteCount: number;
-    relationshipEdgeCount: number;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Attachments
+// Layer 1 — inspirations
 // ---------------------------------------------------------------------------
 
 /** Attachment kinds — mirrors the Postgres `attachment_type` enum. */
 export type AttachmentType = "link" | "image" | "file";
 export type AttachmentEnrichmentStatus = "pending" | "ready" | "failed" | "unavailable";
+export type AttachmentEnrichmentKind = "page_body" | "image_description";
 
+export type ApiInspirationKind = "note" | "link" | "image" | "mixed";
+
+/**
+ * Whose initiative the content was: the person's words (typed here, or relayed
+ * by an agent on their behalf) versus an agent's own observation. Distinct
+ * from which session captured it, which the server audits separately.
+ */
+export type ApiInspirationSource = "app" | "agent";
+
+/**
+ * Capture-time context the server derived from an attachment: a bounded fetch
+ * of a link, or a one-time description of an image. It exists so signal
+ * extraction can read what a person *saved* and not only what they typed, and
+ * is never presented as their words.
+ */
 export interface ApiAttachmentEnrichment {
-  status: AttachmentEnrichmentStatus;
-  source: string | null;
-  sourceUrl: string | null;
+  status: AttachmentEnrichmentStatus | null;
+  kind: AttachmentEnrichmentKind | null;
+  text: string | null;
   errorReason: string | null;
-  checkedAt: string | null;
+  updatedAt: string | null;
+  /** Present for link attachments; null for anything else. */
   link: {
-    originalUrl: string;
     finalUrl: string | null;
     hostname: string | null;
     title: string | null;
@@ -2399,33 +362,225 @@ export interface ApiAttachmentEnrichment {
     siteName: string | null;
     previewImageUrl: string | null;
   } | null;
-  image: {
-    filename: string | null;
-    contentType: string | null;
-    size: number | null;
-    width: number | null;
-    height: number | null;
-  } | null;
+  /** Present for image attachments; null for anything else. */
+  image: { width: number | null; height: number | null } | null;
 }
 
 /**
- * Canonical attachment row. POST /attachments returns `url` and `s3Key` for
- * the finalize flow, but refreshed inspiration list/detail payloads only expose
- * safe, renderable fields: link rows keep their public URL; private S3-backed
- * image/file rows omit raw keys and canonical bucket URLs.
+ * Canonical attachment row. The S3 key never crosses to the browser — a link
+ * carries the URL it was saved from, and an image or file carries the URL the
+ * server is willing to serve it at.
  */
 export interface ApiAttachment {
   id: string;
   inspirationId: string;
   type: AttachmentType;
-  url?: string;
+  url: string;
   name: string | null;
-  s3Key?: string | null;
   contentType: string | null;
   size: number | null;
   createdAt: string;
-  enrichment?: ApiAttachmentEnrichment;
+  enrichment: ApiAttachmentEnrichment;
 }
+
+/** Enough of an attachment to render a row without loading the detail. */
+export interface ApiAttachmentSummary {
+  id: string;
+  type: AttachmentType;
+  label: string;
+}
+
+/**
+ * The short human-authored Q&A hanging off a capture. Layer-1 detail: kept,
+ * the person's own words, and input to extraction.
+ */
+export interface ApiReflection {
+  id: string;
+  inspirationId: string;
+  question: string;
+  answer: string | null;
+  skipped: boolean;
+  createdAt: string;
+}
+
+/** One row of the archive: whatever the list needs, and nothing more. */
+export interface ApiInspirationSummary {
+  id: string;
+  textPreview: string;
+  kind: ApiInspirationKind | null;
+  source: ApiInspirationSource;
+  createdAt: string;
+  updatedAt: string;
+  attachmentSummary: ApiAttachmentSummary[];
+  reflectionCount: number;
+}
+
+/** One capture, opened: the full text and everything hanging off it. */
+export interface ApiInspiration {
+  id: string;
+  profileId: string;
+  text: string;
+  kind: ApiInspirationKind | null;
+  source: ApiInspirationSource;
+  createdAt: string;
+  updatedAt: string;
+  attachments: ApiAttachment[];
+  reflections: ApiReflection[];
+}
+
+export interface CreateReflectionRequest {
+  /** Required, trimmed, max 4 KB. */
+  question: string;
+  /** Optional. Empty / whitespace becomes `null` server-side. */
+  answer?: string;
+  /** Optional. When `true` the row is recorded as a deliberate "no answer". */
+  skipped?: boolean;
+}
+
+export interface CreateInspirationRequest {
+  text: string;
+  kind?: ApiInspirationKind;
+  source?: ApiInspirationSource;
+  /** Reflections saved with the capture, so a save is never half-recorded. */
+  reflections?: CreateReflectionRequest[];
+}
+
+export interface UpdateInspirationRequest {
+  text?: string;
+  kind?: ApiInspirationKind;
+}
+
+export interface FetchInspirationsOptions {
+  q?: string;
+  limit?: number;
+}
+
+/**
+ * POST /inspirations
+ *
+ * Persists a capture owned by the acting profile. The server returns 201 with
+ * the canonical row; signal derivation happens in the background afterwards.
+ */
+export async function createInspiration(
+  input: CreateInspirationRequest,
+): Promise<ApiInspiration> {
+  const body = await postJson<{ inspiration: ApiInspiration }>(
+    apiPath("/inspirations"),
+    input,
+    "Failed to save this capture",
+  );
+  return body.inspiration;
+}
+
+/**
+ * GET /inspirations
+ *
+ * The acting profile's private archive, newest first. The server scopes by
+ * profile unconditionally, so the caller never passes an owner — `q` searches
+ * the text and `limit` bounds the page.
+ */
+export async function fetchInspirations(
+  options: FetchInspirationsOptions = {},
+): Promise<ApiInspirationSummary[]> {
+  const params = new URLSearchParams();
+  if (options.q) params.set("q", options.q);
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<{ inspirations: ApiInspirationSummary[] }>(
+    apiPath(`/inspirations${query ? `?${query}` : ""}`),
+    "Failed to load your captures",
+  );
+  return Array.isArray(body.inspirations) ? body.inspirations : [];
+}
+
+/** GET /inspirations/:id — one capture with its attachments and reflections. */
+export async function fetchInspiration(id: string): Promise<ApiInspiration> {
+  const body = await getJson<{ inspiration: ApiInspiration }>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    "Failed to load this capture",
+  );
+  if (!body.inspiration) {
+    throw new ApiError({ status: 200, message: "Malformed capture response" });
+  }
+  return body.inspiration;
+}
+
+/**
+ * PATCH /inspirations/:id
+ *
+ * Editing a capture re-derives the signals it supports, which is why this is
+ * a plain edit and not a new row: the evidence link is what carries forward.
+ */
+export async function updateInspiration(
+  id: string,
+  input: UpdateInspirationRequest,
+): Promise<ApiInspiration> {
+  const body = await patchJson<{ inspiration: ApiInspiration }>(
+    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    input,
+    "Failed to update this capture",
+  );
+  return body.inspiration;
+}
+
+/**
+ * DELETE /inspirations/:id
+ *
+ * Removes the capture, its attachments, its reflections, and its evidence
+ * links. A signal that loses all of its evidence is retired unless a human
+ * edit locked it, in which case its text stays and it is marked unsupported.
+ */
+export async function deleteInspiration(id: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/inspirations/${encodeURIComponent(id)}`),
+    "DELETE",
+    undefined,
+    "Failed to delete this capture",
+  );
+}
+
+/** POST /inspirations/:id/reflections */
+export async function createReflection(
+  inspirationId: string,
+  input: CreateReflectionRequest,
+): Promise<ApiReflection> {
+  const body = await postJson<{ reflection: ApiReflection }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`),
+    input,
+    "Failed to save reflection",
+  );
+  return body.reflection;
+}
+
+/** GET /inspirations/:id/reflections — oldest first. */
+export async function fetchReflections(
+  inspirationId: string,
+): Promise<ApiReflection[]> {
+  const body = await getJson<{ reflections: ApiReflection[] }>(
+    apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`),
+    "Failed to load reflections",
+  );
+  return Array.isArray(body.reflections) ? body.reflections : [];
+}
+
+/** DELETE /inspirations/:id/reflections/:reflectionId */
+export async function deleteReflection(
+  inspirationId: string,
+  reflectionId: string,
+): Promise<void> {
+  await requestVoid(
+    apiPath(
+      `/inspirations/${encodeURIComponent(inspirationId)}/reflections/${encodeURIComponent(reflectionId)}`,
+    ),
+    "DELETE",
+    undefined,
+    "Failed to delete reflection",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Attachments
+// ---------------------------------------------------------------------------
 
 /**
  * Response from POST /attachments/presign.
@@ -2523,21 +678,17 @@ export type FinalizeAttachmentRequest =
       size?: number;
     };
 
-export interface FinalizeAttachmentResponse {
-  attachment: ApiAttachment;
-}
-
 /**
  * POST /attachments
  *
  * Finalize an attachment after the S3 PUT has succeeded (image / file) or
  * record a pasted link directly (link). The server enforces inspiration
- * ownership; on success it returns the canonical row.
+ * ownership; on success it returns the canonical row and queues enrichment.
  */
 export async function finalizeAttachment(
   input: FinalizeAttachmentRequest,
 ): Promise<ApiAttachment> {
-  const body = await postJson<FinalizeAttachmentResponse>(
+  const body = await postJson<{ attachment: ApiAttachment }>(
     apiPath("/attachments"),
     input,
     "Failed to record attachment",
@@ -2546,213 +697,601 @@ export async function finalizeAttachment(
 }
 
 // ---------------------------------------------------------------------------
-// Guided reflection question generation
+// Layer 2 — signals
 // ---------------------------------------------------------------------------
 
-export interface GuidedReflectionQuestionRequest {
-  locale?: SupportedLocale;
-  inspiration: {
-    text: string;
-    kind: ApiInspirationKind;
-    links?: string[];
-    attachmentKinds?: Array<"link" | "image" | "file">;
-    highlights?: string[];
-    resonance?: string | null;
-    resonanceNote?: string | null;
-  };
-  priorAnswers: Array<{ question: string; answer: string }>;
+export type ApiSignalStatus = "emerging" | "active" | "retired";
+
+/**
+ * An evidence-backed pattern: a durable distilled statement citing the
+ * profile's captures. `locked` means a human edited the text, so the server
+ * keeps attaching evidence to it but never rewrites it; `unsupported` means
+ * every capture behind it is gone and only the lock is keeping it here.
+ */
+export interface ApiSignal {
+  id: string;
+  statement: string;
+  status: ApiSignalStatus;
+  confidence: number;
+  evidenceCount: number;
+  lastEvidenceAt: string | null;
+  locked: boolean;
+  unsupported: boolean;
+  sharedGroupIds: string[];
+  createdAt: string;
 }
 
-export interface GuidedReflectionQuestionResponse {
-  question: string;
-  source: "model" | "fallback";
-  fallbackReason?:
-    | "no_model_config"
-    | "model_http_error"
-    | "model_network_error"
-    | "invalid_model_response"
-    | "empty_model_response";
+/** One capture standing behind a signal, and why it was read that way. */
+export interface ApiSignalEvidence {
+  inspirationId: string;
+  preview: string;
+  quote: string | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface ApiSignalDetail extends ApiSignal {
+  evidence: ApiSignalEvidence[];
+}
+
+export interface FetchSignalsOptions {
+  status?: ApiSignalStatus;
+  limit?: number;
+}
+
+/** GET /signals — the acting profile's distilled patterns. */
+export async function fetchSignals(
+  options: FetchSignalsOptions = {},
+): Promise<ApiSignal[]> {
+  const params = new URLSearchParams();
+  if (options.status) params.set("status", options.status);
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  const query = params.toString();
+  const body = await getJson<{ signals: ApiSignal[] }>(
+    apiPath(`/signals${query ? `?${query}` : ""}`),
+    "Failed to load your signals",
+  );
+  return Array.isArray(body.signals) ? body.signals : [];
+}
+
+/** GET /signals/:id — the same statement, plus what it rests on. */
+export async function fetchSignal(id: string): Promise<ApiSignalDetail> {
+  const body = await getJson<{ signal: ApiSignalDetail }>(
+    apiPath(`/signals/${encodeURIComponent(id)}`),
+    "Failed to load this signal",
+  );
+  if (!body.signal) {
+    throw new ApiError({ status: 200, message: "Malformed signal response" });
+  }
+  return body.signal;
 }
 
 /**
- * POST /guided-reflection/question
+ * PATCH /signals/:id
  *
- * Generates the next Reflect Deeper prompt from the current capture payload and
- * all prior guided answers. The server owns the LLM JSON contract and returns a
- * deterministic fallback question when model generation is unavailable.
+ * Rewriting a signal locks it: the person's words are frozen against
+ * regeneration from here on, while its evidence and confidence keep moving.
  */
-export async function generateGuidedReflectionQuestion(
-  input: GuidedReflectionQuestionRequest,
-): Promise<GuidedReflectionQuestionResponse> {
-  return postJson<GuidedReflectionQuestionResponse>(
-    apiPath("/guided-reflection/question"),
+export async function updateSignal(
+  id: string,
+  input: { statement: string },
+): Promise<ApiSignal> {
+  const body = await patchJson<{ signal: ApiSignal }>(
+    apiPath(`/signals/${encodeURIComponent(id)}`),
     input,
-    "Failed to generate reflection question",
+    "Failed to update this signal",
+  );
+  return body.signal;
+}
+
+/** DELETE /signals/:id */
+export async function deleteSignal(id: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/signals/${encodeURIComponent(id)}`),
+    "DELETE",
+    undefined,
+    "Failed to delete this signal",
+  );
+}
+
+/**
+ * POST /signals/:id/shares
+ *
+ * Sharing is per-signal and per-group. What reaches the group is the
+ * statement; the captures underneath it never leave the account.
+ */
+export async function shareSignal(id: string, groupId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/signals/${encodeURIComponent(id)}/shares`),
+    "POST",
+    { groupId },
+    "Failed to share this signal",
+  );
+}
+
+/** DELETE /signals/:id/shares/:groupId */
+export async function unshareSignal(id: string, groupId: string): Promise<void> {
+  await requestVoid(
+    apiPath(
+      `/signals/${encodeURIComponent(id)}/shares/${encodeURIComponent(groupId)}`,
+    ),
+    "DELETE",
+    undefined,
+    "Failed to stop sharing this signal",
   );
 }
 
 // ---------------------------------------------------------------------------
-// Reflections
+// Layer 3 — top of mind
 // ---------------------------------------------------------------------------
 
+export type ApiTopOfMindEntryType =
+  | "pattern"
+  | "tension"
+  | "question"
+  | "hypothesis"
+  | "action";
+
+export type ApiTopOfMindReason =
+  | "initial"
+  | "regenerated"
+  | "no_change"
+  | "member_proposal"
+  | "human_edit";
+
 /**
- * Canonical reflection row as returned by POST /inspirations/:id/reflections
- * and GET /inspirations/:id/reflections. Field shape mirrors the Drizzle
- * insert `.returning(...)` clause exactly so the SPA can render the just-
- * persisted row without a follow-up GET, satisfying the optimistic-update
- * contract for the inspiration detail view.
+ * One statement inside the artifact. `locked` is the same rule as a signal's:
+ * a human edit freezes the words and the server works around them.
  */
-export interface ApiReflection {
+export interface ApiTopOfMindEntry {
   id: string;
-  inspirationId: string;
-  userId: string;
-  question: string;
-  answer: string | null;
-  skipped: boolean;
+  type: ApiTopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  locked: boolean;
+  pinned: boolean;
+  dismissed: boolean;
+  sortOrder: number;
+  /** What the entry rests on: signals this profile holds, named. */
+  citedSignals: Array<{ id: string; statement: string }>;
   createdAt: string;
 }
 
 /**
- * Field-level validation errors as emitted by the Hono reflections handler.
+ * The single synthesized artifact for a profile or a group. Entries compose
+ * it, but the artifact is the unit: one identity, one current version, a
+ * linear history. A regeneration writes a new version rather than mutating
+ * this one.
  */
-export interface ReflectionFieldErrors extends ApiFieldErrors {
-  question?: string[];
-  answer?: string[];
-  skipped?: string[];
-}
-
-export interface CreateReflectionRequest {
-  /** Required, trimmed, max 4 KB. */
-  question: string;
-  /** Optional. Empty / whitespace becomes `null` server-side. */
-  answer?: string;
-  /** Optional. When `true` the row is recorded as a deliberate "no answer". */
-  skipped?: boolean;
-}
-
-export interface ApiInspirationScorePatch {
+export interface ApiTopOfMind {
   id: string;
-  importanceScore?: number;
-  wowScore?: number;
+  version: number;
+  reason: ApiTopOfMindReason;
+  createdAt: string;
+  entries: ApiTopOfMindEntry[];
 }
 
-export interface CreateReflectionResponse {
-  reflection: ApiReflection;
-  /** Added by newer API versions after score recomputation; older responses omit it. */
-  inspiration?: ApiInspirationScorePatch;
+export type ApiTopOfMindStatus = "live" | "superseded";
+
+/** A row of the version history — the artifact without its entries. */
+export interface ApiTopOfMindVersion {
+  id: string;
+  version: number;
+  status: ApiTopOfMindStatus;
+  reason: ApiTopOfMindReason;
+  entryCount: number;
+  replacedById: string | null;
+  replacedAt: string | null;
+  createdAt: string;
 }
 
 /**
- * POST /inspirations/:id/reflections
+ * GET /top-of-mind
  *
- * Attach a reflection (a question + optional answer / skipped flag) to one of
- * the caller's inspirations. Server enforces ownership of the parent
- * inspiration via the path id; we never send `userId` from the client. Throws
- * `ApiError` on non-2xx so the form can surface a single failure path.
+ * Null until the first synthesis lands, which is a real state rather than an
+ * error: a profile with nothing to read has nothing on its board.
  */
-export async function createReflection(
-  inspirationId: string,
-  input: CreateReflectionRequest,
-): Promise<CreateReflectionResponse> {
-  // Encode the path component so a malformed id doesn't smuggle a `?` /
-  // `#` into the URL. The server validates as a uuid and 400s on a miss.
-  const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`);
-  const body = await postJson<CreateReflectionResponse>(
-    path,
+export async function fetchTopOfMind(): Promise<ApiTopOfMind | null> {
+  const body = await getJson<{ topOfMind: ApiTopOfMind | null }>(
+    apiPath("/top-of-mind"),
+    "Failed to load your top of mind",
+  );
+  return body.topOfMind ?? null;
+}
+
+/** GET /top-of-mind/versions — newest first. */
+export async function fetchTopOfMindVersions(): Promise<ApiTopOfMindVersion[]> {
+  const body = await getJson<{ versions: ApiTopOfMindVersion[] }>(
+    apiPath("/top-of-mind/versions"),
+    "Failed to load earlier versions",
+  );
+  return Array.isArray(body.versions) ? body.versions : [];
+}
+
+/**
+ * POST /top-of-mind/refresh
+ *
+ * Accepted, not done: synthesis runs in the background and the caller polls
+ * `fetchTopOfMind` for the version that replaces the current one.
+ */
+export async function refreshTopOfMind(): Promise<void> {
+  await requestVoid(
+    apiPath("/top-of-mind/refresh"),
+    "POST",
+    {},
+    "Failed to start a new reading",
+  );
+}
+
+/** PATCH /top-of-mind/entries/:entryId — rewriting an entry locks it. */
+export async function updateTopOfMindEntry(
+  entryId: string,
+  input: { body: string },
+): Promise<ApiTopOfMindEntry> {
+  const body = await patchJson<{ entry: ApiTopOfMindEntry }>(
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}`),
     input,
-    "Failed to save reflection",
+    "Failed to update this entry",
   );
-  return body;
-}
-
-/** Response shape for GET /inspirations/:id/reflections. */
-export interface ListReflectionsResponse {
-  reflections: ApiReflection[];
+  return body.entry;
 }
 
 /**
- * GET /inspirations/:id/reflections
+ * POST /top-of-mind/entries/:entryId/pin
  *
- * Returns the caller's reflections for the given inspiration, ordered by
- * `created_at` ascending. The server enforces ownership; on a 404 (parent
- * missing or owned by someone else) we surface an `ApiError` so the caller
- * can route the user back to the list.
+ * Holding is one-directional by design: the generator reads a held entry on
+ * every pass and carries it into the version it writes, so releasing it is
+ * dismissing it rather than a second state to toggle back through.
  */
-export async function fetchReflections(
-  inspirationId: string,
-): Promise<ApiReflection[]> {
-  const path = apiPath(`/inspirations/${encodeURIComponent(inspirationId)}/reflections`);
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
-    throw new ApiError({
-      status: 0,
-      message: "Network unreachable while loading reflections",
-    });
-  }
-
-  let body: unknown = null;
-  try {
-    body = await res.json();
-  } catch {
-    // Non-JSON response — handled below.
-  }
-
-  if (!res.ok) {
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to load reflections (HTTP ${res.status}). Please try again.`,
-    });
-  }
-
-  const payload = (body ?? {}) as Partial<ListReflectionsResponse>;
-  return Array.isArray(payload.reflections) ? payload.reflections : [];
+export async function holdTopOfMindEntry(
+  entryId: string,
+): Promise<ApiTopOfMindEntry> {
+  const body = await postJson<{ entry: ApiTopOfMindEntry }>(
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}/pin`),
+    {},
+    "Failed to hold that entry",
+  );
+  return body.entry;
 }
 
-export async function deleteReflection(
-  inspirationId: string,
-  reflectionId: string,
-): Promise<void> {
-  const path = apiPath(
-    `/inspirations/${encodeURIComponent(inspirationId)}/reflections/${encodeURIComponent(reflectionId)}`,
+/** POST /top-of-mind/entries/:entryId/dismiss */
+export async function dismissTopOfMindEntry(
+  entryId: string,
+): Promise<ApiTopOfMindEntry> {
+  const body = await postJson<{ entry: ApiTopOfMindEntry }>(
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}/dismiss`),
+    {},
+    "Failed to take that entry down",
   );
-  let res: Response;
-  try {
-    res = await fetch(path, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-    });
-  } catch {
+  return body.entry;
+}
+
+/** POST /top-of-mind/entries/:entryId/restore */
+export async function restoreTopOfMindEntry(
+  entryId: string,
+): Promise<ApiTopOfMindEntry> {
+  const body = await postJson<{ entry: ApiTopOfMindEntry }>(
+    apiPath(`/top-of-mind/entries/${encodeURIComponent(entryId)}/restore`),
+    {},
+    "Failed to put that entry back",
+  );
+  return body.entry;
+}
+
+// ---------------------------------------------------------------------------
+// Groups
+// ---------------------------------------------------------------------------
+
+export type ApiGroupRole = "owner" | "member";
+
+export interface ApiGroupSummary {
+  id: string;
+  name: string;
+  joinCode: string;
+  role: ApiGroupRole;
+  memberCount: number;
+  createdAt: string;
+}
+
+export interface ApiGroupMember {
+  profileId: string;
+  name: string;
+  initials: string;
+  role: ApiGroupRole;
+  joinedAt: string;
+}
+
+/**
+ * A group wall row. The distilled statement crosses the account boundary;
+ * the captures it rests on never do, which is why there is no evidence here.
+ */
+export interface ApiGroupWallSignal {
+  signalId: string;
+  statement: string;
+  confidence: number;
+  ownerProfileId: string;
+  ownerName: string;
+  sharedAt: string;
+}
+
+export type ApiGroupProposalKind = "edit_entry" | "add_entry" | "remove_entry";
+export type ApiGroupProposalStatus = "open" | "accepted" | "declined";
+
+/** How members change a group's top of mind together. */
+export interface ApiGroupProposal {
+  id: string;
+  kind: ApiGroupProposalKind;
+  status: ApiGroupProposalStatus;
+  entryId: string | null;
+  body: string | null;
+  rationale: string | null;
+  proposedByProfileId: string;
+  proposedByName: string;
+  affirmations: Array<{ profileId: string; name: string; createdAt: string }>;
+  viewerAffirmed: boolean;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+/**
+ * A group's artifact, which is not shaped like a profile's.
+ *
+ * Entries carry contributors rather than cited signals: a member may see that
+ * someone's shared signal fed an entry, never which one, because the signal
+ * belongs to the account that shared it.
+ */
+export interface ApiGroupTopOfMindEntry {
+  id: string;
+  type: ApiTopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  lockedAt: string | null;
+  pinnedAt: string | null;
+  sortOrder: number;
+  createdAt: string;
+  contributors: Array<{ profileId: string; name: string }>;
+}
+
+export interface ApiGroupTopOfMind {
+  topOfMind: {
+    id: string;
+    version: number;
+    status: ApiTopOfMindStatus;
+    reason: ApiTopOfMindReason;
+    createdAt: string;
+  } | null;
+  entries: ApiGroupTopOfMindEntry[];
+}
+
+/** GET /groups — the groups the acting profile belongs to. */
+export async function fetchGroups(): Promise<ApiGroupSummary[]> {
+  const body = await getJson<{ groups: ApiGroupSummary[] }>(
+    apiPath("/groups"),
+    "Failed to load groups",
+  );
+  return Array.isArray(body.groups) ? body.groups : [];
+}
+
+/** POST /groups — create one; the caller becomes its owner. */
+export async function createGroup(name: string): Promise<ApiGroupSummary> {
+  const body = await postJson<{ group: ApiGroupSummary }>(
+    apiPath("/groups"),
+    { name },
+    "Failed to create group",
+  );
+  return body.group;
+}
+
+/** POST /groups/join — join by the shareable code. */
+export async function joinGroup(
+  joinCode: string,
+): Promise<{ group: ApiGroupSummary; alreadyMember: boolean }> {
+  const body = await postJson<{ group: ApiGroupSummary; alreadyMember?: boolean }>(
+    apiPath("/groups/join"),
+    { joinCode },
+    "Failed to join group",
+  );
+  return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
+}
+
+/** GET /groups/:id/members */
+export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember[]> {
+  const body = await getJson<{ members: ApiGroupMember[] }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/members`),
+    "Failed to load members",
+  );
+  return Array.isArray(body.members) ? body.members : [];
+}
+
+/** GET /groups/:id/wall — the signals members have shared here. */
+export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSignal[]> {
+  const body = await getJson<{ wall: ApiGroupWallSignal[] }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/wall`),
+    "Failed to load this group's wall",
+  );
+  return Array.isArray(body.wall) ? body.wall : [];
+}
+
+/** GET /groups/:id/top-of-mind — the group's own artifact. */
+export async function fetchGroupTopOfMind(
+  groupId: string,
+): Promise<ApiGroupTopOfMind> {
+  const body = await getJson<ApiGroupTopOfMind>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind`),
+    "Failed to load this group's top of mind",
+  );
+  return { topOfMind: body.topOfMind ?? null, entries: body.entries ?? [] };
+}
+
+/** POST /groups/:id/top-of-mind/refresh */
+export async function refreshGroupTopOfMind(groupId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/top-of-mind/refresh`),
+    "POST",
+    {},
+    "Failed to start a new group reading",
+  );
+}
+
+/** GET /groups/:id/proposals */
+export async function fetchGroupProposals(
+  groupId: string,
+): Promise<ApiGroupProposal[]> {
+  const body = await getJson<{ proposals: ApiGroupProposal[] }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/proposals`),
+    "Failed to load proposals",
+  );
+  return Array.isArray(body.proposals) ? body.proposals : [];
+}
+
+export interface CreateGroupProposalRequest {
+  kind: ApiGroupProposalKind;
+  entryId?: string | null;
+  body?: string;
+  rationale?: string;
+}
+
+/** POST /groups/:id/proposals */
+export async function createGroupProposal(
+  groupId: string,
+  input: CreateGroupProposalRequest,
+): Promise<ApiGroupProposal> {
+  const body = await postJson<{ proposal: ApiGroupProposal }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/proposals`),
+    input,
+    "Failed to propose that change",
+  );
+  return body.proposal;
+}
+
+/**
+ * POST /groups/:id/proposals/:proposalId/affirm
+ *
+ * Standing behind a proposal. Enough affirmations and the server accepts it,
+ * which is what writes the group's next version — so the answer says whether
+ * this press was the one that carried it.
+ */
+export async function affirmGroupProposal(
+  groupId: string,
+  proposalId: string,
+): Promise<{ proposal: ApiGroupProposal; accepted: boolean }> {
+  const body = await postJson<{ proposal: ApiGroupProposal; accepted?: boolean }>(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/proposals/${encodeURIComponent(proposalId)}/affirm`,
+    ),
+    {},
+    "That was not saved",
+  );
+  return { proposal: body.proposal, accepted: Boolean(body.accepted) };
+}
+
+/** POST /groups/:id/proposals/:proposalId/decline */
+export async function declineGroupProposal(
+  groupId: string,
+  proposalId: string,
+): Promise<ApiGroupProposal> {
+  const body = await postJson<{ proposal: ApiGroupProposal }>(
+    apiPath(
+      `/groups/${encodeURIComponent(groupId)}/proposals/${encodeURIComponent(proposalId)}/decline`,
+    ),
+    {},
+    "That was not saved",
+  );
+  return body.proposal;
+}
+
+// ---------------------------------------------------------------------------
+// Feedback
+// ---------------------------------------------------------------------------
+
+export type ApiFeedbackTarget = "signal" | "top_of_mind_entry";
+export type ApiFeedbackValue = "true" | "partly" | "not_true";
+
+export interface ApiFeedback {
+  id: string;
+  profileId: string;
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+  value: ApiFeedbackValue;
+  correctionText: string | null;
+  createdAt: string;
+}
+
+export interface CreateFeedbackRequest {
+  targetType: ApiFeedbackTarget;
+  targetId: string;
+  value: ApiFeedbackValue;
+  correctionText?: string;
+}
+
+/** POST /feedback — "true", "partly", or "not true", about one thing. */
+export async function createFeedback(
+  input: CreateFeedbackRequest,
+): Promise<ApiFeedback> {
+  const body = await postJson<{ feedback: ApiFeedback }>(
+    apiPath("/feedback"),
+    input,
+    "Failed to save feedback",
+  );
+  if (!body.feedback) {
+    throw new ApiError({ status: 200, message: "Malformed feedback response" });
+  }
+  return body.feedback;
+}
+
+// ---------------------------------------------------------------------------
+// Public profile
+// ---------------------------------------------------------------------------
+
+export interface ApiPublicProfile {
+  name: string;
+  handle: string;
+  preferredLocale: SupportedLocale;
+}
+
+/**
+ * The public surface carries statements and nothing that identifies what they
+ * were built from — no entry ids, no cited signals.
+ */
+export interface ApiPublicTopOfMindEntry {
+  type: ApiTopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  pinned: boolean;
+}
+
+export interface ApiPublicTopOfMind {
+  version: number;
+  publishedAt: string;
+  entries: ApiPublicTopOfMindEntry[];
+}
+
+export interface FetchPublicProfileResponse {
+  profile: ApiPublicProfile;
+  /** Null when the owner shares the page but not the board. */
+  topOfMind: ApiPublicTopOfMind | null;
+}
+
+export async function fetchPublicProfile(
+  handle: string,
+): Promise<FetchPublicProfileResponse> {
+  const normalizedHandle = handle.trim().replace(/^@+/, "");
+  const body = await getJson<FetchPublicProfileResponse>(
+    apiPath(`/public/profiles/${encodeURIComponent(normalizedHandle)}`),
+    "Failed to load public profile",
+  );
+
+  if (!body.profile) {
     throw new ApiError({
-      status: 0,
-      message: "Network unreachable while deleting reflection",
+      status: 200,
+      message: "Malformed public profile response",
     });
   }
 
-  if (!res.ok) {
-    let body: unknown = null;
-    try {
-      body = await res.json();
-    } catch {
-      // Non-JSON response — handled below.
-    }
-    const errorBody = (body ?? {}) as { error?: string };
-    throw new ApiError({
-      status: res.status,
-      message:
-        errorBody.error ??
-        `Failed to delete reflection (HTTP ${res.status}). Please try again.`,
-    });
-  }
+  return body;
 }
 
 // ---------------------------------------------------------------------------
@@ -2760,7 +1299,7 @@ export async function deleteReflection(
 // ---------------------------------------------------------------------------
 
 /**
- * Shared POST/PATCH JSON helpers. Centralise the credential-include /
+ * Shared GET/POST/PATCH/DELETE helpers. Centralise the credential-include /
  * JSON-parse / ApiError-translation dance so each endpoint helper above stays
  * small and consistent.
  */
@@ -2853,4 +1392,50 @@ async function writeJson<T>(
   }
 
   return body as T;
+}
+
+/**
+ * A write whose answer is only "it worked". Accepts any 2xx — including the
+ * 202 a queued refresh returns and the empty body a delete returns — and
+ * surfaces the server's own message when it refuses.
+ */
+async function requestVoid(
+  path: string,
+  method: "POST" | "PATCH" | "DELETE",
+  payload: unknown,
+  fallbackMessage: string,
+): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      credentials: "include",
+      headers:
+        payload === undefined
+          ? { Accept: "application/json" }
+          : { Accept: "application/json", "Content-Type": "application/json" },
+      ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+    });
+  } catch {
+    throw new ApiError({
+      status: 0,
+      message: `${fallbackMessage}: network unreachable`,
+    });
+  }
+
+  if (res.ok) return;
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON error body — fall back to the caller's message.
+  }
+  const errorBody = (body ?? {}) as { error?: string; details?: ApiFieldErrors };
+  throw new ApiError({
+    status: res.status,
+    message:
+      errorBody.error ?? `${fallbackMessage} (HTTP ${res.status}). Please try again.`,
+    fieldErrors: errorBody.details,
+  });
 }

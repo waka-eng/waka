@@ -1,24 +1,19 @@
 /**
- * Drizzle ORM schema — reflections table.
+ * Drizzle ORM schema — reflections.
  *
- * A reflection is a (question, answer) pair attached to an inspiration. The
- * question is mandatory at creation time; the answer is filled in later by
- * the user, or skipped explicitly via the `skipped` flag. Both states
- * (unanswered-pending and unanswered-skipped) are valid persistent states,
- * which is why `answer` is nullable AND `skipped` is a separate boolean
- * (rather than overloading NULL to mean "skipped").
+ * A short question-and-answer the human attaches to an inspiration, at
+ * capture or later. Layer-1 detail: human-authored, never generated, and
+ * read by signal extraction as some of the strongest context a capture
+ * carries — it is the person saying, in their own words, why this mattered.
  *
- * Reflections are scoped to a single inspiration via foreign key with
- * cascade-on-delete, so removing an inspiration also removes its reflections.
- *
- * Out of scope (per Seed): AI auto-generation of the question. The question
- * is supplied by the user (or by a future client-side template) and stored
- * verbatim.
+ * `skipped` records that a question was offered and declined, which is
+ * different from never having been asked.
  */
 
 import { relations } from "drizzle-orm";
 import {
   boolean,
+  foreignKey,
   index,
   pgTable,
   text,
@@ -26,77 +21,44 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { signals, users } from "./schema";
-
-// ---------------------------------------------------------------------------
-// reflections
-// ---------------------------------------------------------------------------
+import { inspirations } from "./schema-inspirations";
+import { profiles } from "./schema-profiles";
 
 export const reflections = pgTable(
   "reflections",
   {
     id: uuid("id").primaryKey().defaultRandom(),
 
-    inspirationId: uuid("signal_id")
+    profileId: uuid("profile_id")
       .notNull()
-      .references(() => signals.id, { onDelete: "cascade" }),
+      .references(() => profiles.id, { onDelete: "cascade" }),
 
-    // Denormalised owner pointer. The reflection is also reachable via
-    // inspirations.user_id, but storing user_id directly on this row lets
-    // every read path enforce per-user data isolation with a single WHERE
-    // clause (no join required) and matches the same pattern used for
-    // inspirations and attachments. Cascade on delete so removing a user
-    // removes their reflections, even if the inspiration row is gone.
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    inspirationId: uuid("inspiration_id").notNull(),
 
-    // The prompt the user is reflecting against. Required at insert.
     question: text("question").notNull(),
-
-    // The user's answer. NULL until the user answers (or forever if skipped).
+    /** Null while unanswered, or when the prompt was skipped. */
     answer: text("answer"),
-
-    // Explicit "I don't want to answer this" marker. Distinguishing this
-    // from `answer IS NULL` lets the UI render different affordances for
-    // pending vs deliberately skipped reflections.
     skipped: boolean("skipped").notNull().default(false),
 
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    // The detail view loads all reflections for an inspiration ordered by
-    // creation time; this index supports both the filter and the ordering.
-    inspirationCreatedIdx: index("reflections_signal_created_idx").on(
-      table.inspirationId,
-      table.createdAt,
-    ),
-    // The "all my reflections" view (and per-user authorization checks) walks
-    // the table by user_id ordered by created_at DESC. Mirrors the layout of
-    // inspirations_user_created_idx.
-    userCreatedIdx: index("reflections_user_created_idx").on(
-      table.userId,
-      table.createdAt.desc(),
-    ),
+    inspirationIdx: index("reflections_inspiration_idx").on(table.inspirationId),
+    // A reflection cannot attach to another profile's inspiration.
+    inspirationFk: foreignKey({
+      columns: [table.profileId, table.inspirationId],
+      foreignColumns: [inspirations.profileId, inspirations.id],
+      name: "reflections_inspiration_fk",
+    }).onDelete("cascade"),
   }),
 );
 
 export type Reflection = typeof reflections.$inferSelect;
 export type NewReflection = typeof reflections.$inferInsert;
 
-// ---------------------------------------------------------------------------
-// Relations
-// ---------------------------------------------------------------------------
-
 export const reflectionsRelations = relations(reflections, ({ one }) => ({
-  inspiration: one(signals, {
+  inspiration: one(inspirations, {
     fields: [reflections.inspirationId],
-    references: [signals.id],
-  }),
-  user: one(users, {
-    fields: [reflections.userId],
-    references: [users.id],
+    references: [inspirations.id],
   }),
 }));

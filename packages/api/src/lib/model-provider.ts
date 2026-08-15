@@ -1,51 +1,198 @@
-import type { ClassificationResult } from "../queue/gemini.js";
-import type {
-  MeaningRelationshipJudgeClient,
-} from "./meaning-relationship-judge.js";
-import type {
-  PersistSignalPacketParams,
-  PersistSignalPacketResult,
-} from "./signal-packets.js";
-import type {
-  AmbitionSynthesisInput,
-  AmbitionSynthesisOutput,
-} from "./ambition-synthesis.js";
-import type { SupportedLocale } from "./locales.js";
-import type {
-  TopOfMindRefreshCandidate,
-  TopOfMindRefreshEvidenceInput,
-  TopOfMindRefreshNodeInput,
-} from "./top-of-mind-refresh.js";
-import type { WowJudgeClient } from "./wow-judge.js";
+/**
+ * The seam between WAKA's generation pipeline and whichever model runs it.
+ *
+ * Two calls, one per generated layer:
+ *
+ *   extractSignalCandidates — layer 2, per inspiration. Reads one capture
+ *     (its text, its reflections, its attachment enrichment) and proposes at
+ *     most a handful of distilled statements, each grounded in a span it can
+ *     quote. Matching, minting, and lifecycle are pure code downstream; the
+ *     model's only job is to say what pattern this capture is evidence of.
+ *
+ *   synthesizeTopOfMind — layer 3, per refresh. Reads the profile's selected
+ *     signals and returns the WHOLE artifact. The artifact is the unit: a
+ *     model asked to patch entries has to reason about diffs it cannot see,
+ *     and every incremental variant of this call in practice drifted into
+ *     appending. It may also answer "nothing changed", which is a decision
+ *     the caller records as a version rather than a silent no-op.
+ *
+ * Everything below the interface is deliberately shallow. Selection, ranking,
+ * validation, versioning, and the lock rule live in lib/signal-derivation.ts
+ * and lib/top-of-mind-synthesis.ts, where they are testable without a model.
+ */
 
-export interface TopOfMindNoteGenerationInput {
-  userId: string;
-  preferredLocale?: SupportedLocale;
-  nodes: TopOfMindRefreshNodeInput[];
-  evidence: TopOfMindRefreshEvidenceInput[];
-  existingIdempotencyKeys?: Set<string>;
-  limit?: number;
-  now?: Date;
+import type { TopOfMindEntryType } from "../db/index.js";
+import type { SupportedLocale } from "./locales.js";
+
+// ---------------------------------------------------------------------------
+// Layer 2 — signal candidate extraction
+// ---------------------------------------------------------------------------
+
+/** Machine-derived context about something the human saved, not typed. */
+export interface AttachmentEnrichmentContext {
+  kind: "page_body" | "image_description";
+  /** For a link, its hostname; for an image, its file name when known. */
+  label: string | null;
+  text: string;
+}
+
+export interface SignalCandidateExtractionInput {
+  profileId: string;
+  /** Statements come back in the profile owner's language, not the prompt's. */
+  preferredLocale: SupportedLocale;
+  inspiration: {
+    id: string;
+    text: string;
+    /** "app" when the words are the human's, "agent" when an agent observed. */
+    source: "app" | "agent";
+    createdAt: Date;
+  };
+  /** The human's own answers — the strongest context a capture carries. */
+  reflections: Array<{ question: string; answer: string }>;
+  attachments: AttachmentEnrichmentContext[];
+  /**
+   * Statements the profile already holds. Passed so the model can phrase a
+   * candidate the same way it phrased the pattern before; the actual
+   * match-or-mint decision is made by cosine distance, not by the model.
+   */
+  existingStatements: Array<{ id: string; statement: string }>;
+}
+
+export interface SignalCandidate {
+  statement: string;
+  /** Why this capture is evidence of that pattern. */
+  reason?: string;
+  /** A verbatim span. Absent is honest; invented is not. */
+  quote?: string;
+}
+
+export interface SignalCandidateExtractionResult {
+  statements: SignalCandidate[];
+}
+
+// ---------------------------------------------------------------------------
+// Layer 3 — whole-artifact synthesis
+// ---------------------------------------------------------------------------
+
+export interface TopOfMindSynthesisSignal {
+  id: string;
+  statement: string;
+  confidence: number;
+  evidenceCount: number;
+  lastEvidenceAt: Date | null;
+}
+
+/**
+ * An entry the human has edited. It is sent so the model can build around it
+ * — and it must come back byte-identical. The caller enforces that rather
+ * than trusting it; see `lib/top-of-mind-synthesis.ts`.
+ */
+export interface TopOfMindLockedEntry {
+  id: string;
+  type: TopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  citedSignalIds: string[];
+}
+
+/**
+ * A verdict the person gave on something WAKA previously generated. Sent to
+ * synthesis because a reader who says "this is not true" and is then shown
+ * the same sentence again has been told their judgement does not count.
+ */
+export interface TopOfMindRecentFeedback {
+  target: "signal" | "entry";
+  /** What the verdict was about, so the model can recognise it. */
+  about: string;
+  value: "true" | "partly" | "not_true";
+  /** The person's own words about what is wrong, when they gave any. */
+  correction: string | null;
+}
+
+export interface TopOfMindSynthesisInput {
+  profileId: string;
+  preferredLocale: SupportedLocale;
+  /** Ranked by the deterministic selector, strongest first. */
+  signals: TopOfMindSynthesisSignal[];
+  lockedEntries: TopOfMindLockedEntry[];
+  /** The live artifact's generated entries, so "no change" is answerable. */
+  currentEntries: Array<{
+    type: TopOfMindEntryType;
+    body: string;
+    citedSignalIds: string[];
+  }>;
+  /** Newest first, bounded by the caller. */
+  recentFeedback: TopOfMindRecentFeedback[];
+  /**
+   * True when the selection had to borrow still-forming (emerging) signals to
+   * say anything at all — the cold start. The synthesis writes more
+   * tentatively, because these patterns have been seen once or twice, not
+   * confirmed by return.
+   */
+  provisional: boolean;
+}
+
+export interface TopOfMindSynthesisEntry {
+  type: TopOfMindEntryType;
+  body: string;
+  belief?: string;
+  prompt?: string;
+  citedSignalIds: string[];
+}
+
+export interface TopOfMindSynthesisResult {
+  entries: TopOfMindSynthesisEntry[];
+  /**
+   * The model's read that the current artifact still holds. Advisory: the
+   * caller decides, and records the decision either way.
+   */
+  noChange?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Layer 2 — the merge judge
+// ---------------------------------------------------------------------------
+
+/**
+ * Asked only inside the ambiguous cosine band, where distance alone cannot
+ * say whether two statements name one pattern. Everything above the band
+ * attaches and everything below mints without a call, so this costs at most
+ * one call per candidate and usually none.
+ */
+export interface SignalMatchJudgementInput {
+  preferredLocale: SupportedLocale;
+  candidateStatement: string;
+  existingStatement: string;
+}
+
+export interface SignalMatchJudgement {
+  /** True when both statements name the same durable pattern. */
+  samePattern: boolean;
 }
 
 export interface ModelProvider {
   readonly name: string;
-  readonly contextGraphRelationshipJudge: MeaningRelationshipJudgeClient;
-  readonly topOfMindNoteJudge: WowJudgeClient;
-  classifySignalText(rawText: string): Promise<ClassificationResult>;
-  generateSignalPacket(
-    params: PersistSignalPacketParams,
-  ): Promise<PersistSignalPacketResult>;
-  generateTopOfMindNotes(
-    input: TopOfMindNoteGenerationInput,
-  ): Promise<TopOfMindRefreshCandidate[]>;
-  synthesizeAmbition(
-    input: AmbitionSynthesisInput,
-  ): Promise<AmbitionSynthesisOutput | null>;
+  extractSignalCandidates(
+    input: SignalCandidateExtractionInput,
+  ): Promise<SignalCandidateExtractionResult>;
+  judgeSignalMatch(input: SignalMatchJudgementInput): Promise<SignalMatchJudgement>;
+  synthesizeTopOfMind(
+    input: TopOfMindSynthesisInput,
+  ): Promise<TopOfMindSynthesisResult>;
 }
 
 let defaultProvider: ModelProvider | null = null;
 
+/**
+ * Resolved lazily and through a dynamic import so nothing that merely wants
+ * the *type* of a provider drags the Gemini client (and its API-key check)
+ * into a cold start.
+ */
 export async function getDefaultModelProvider(): Promise<ModelProvider> {
   if (!defaultProvider) {
     const { createGeminiModelProvider } = await import("./gemini-model-provider.js");

@@ -1,42 +1,27 @@
 /**
- * Server-side session row management.
+ * Server-side session rows and the profile binding they carry.
  *
- * Where this fits
- * ---------------
- * `lib/auth.ts` mints a JWT (the cookie value) and hands it back to the
- * route. This module is what makes that JWT *revocable*: every time a JWT
- * is issued we also persist a row in the `sessions` table keyed by the
- * SHA-256 hash of the JWT. The auth middleware looks up that row on every
- * request and treats "no row" / "expired row" the same as "not logged in".
- * `POST /auth/logout` simply deletes the row, which renders the JWT inert
- * even though it is still cryptographically valid.
+ * The token in a cookie or bearer header is the credential; the row here is
+ * what makes it revocable. Only the SHA-256 hash of the token is stored, so
+ * a database dump cannot be replayed as live sessions.
  *
- * Why hash the token?
- *   A leaked DB dump must NOT be replayable as live sessions. We store
- *   only the hash; the only place the plaintext token lives is the
- *   browser's cookie jar.
- *
- * Why a separate module from auth.ts?
- *   auth.ts is "pure" primitives (no DB). Routes/middleware compose this
- *   module on top so a unit test can stub one half without booting the
- *   other. It also keeps the diff for Sub-AC 4 small and reviewable.
+ * **Every session acts as exactly one profile.** The browser acts as the
+ * account's human profile; a CLI/MCP session acts as whichever profile was
+ * chosen at the loopback consent step. Authorization is derived from that
+ * binding — see `resolveProfileAccess` in ./middleware.ts.
  */
 
 import { and, eq, gt } from "drizzle-orm";
 
-import { sessions, users } from "../db/index.js";
+import { accounts, profiles, sessions, type ProfileType } from "../db/index.js";
 import { SESSION_TTL_SECONDS } from "./auth.js";
 import { getDb } from "./db.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "./locales.js";
 
-/**
- * SHA-256 hex digest of an opaque string. Web Crypto is available in every
- * runtime we target (Lambda Node 20, vitest, sst dev) so we avoid `node:crypto`
- * to keep this file isomorphic with the (unlikely-but-cheap) edge runtime.
- */
+/** SHA-256 hex digest via WebCrypto — available in Node 20 and on Lambda. */
 export async function hashSessionToken(token: string): Promise<string> {
-  const data = new TextEncoder().encode(token);
-  const digest = await crypto.subtle.digest("SHA-256", data);
+  const encoded = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
   const bytes = new Uint8Array(digest);
   let hex = "";
   for (let i = 0; i < bytes.length; i++) {
@@ -46,62 +31,55 @@ export async function hashSessionToken(token: string): Promise<string> {
 }
 
 /**
- * Persist a server-side session row for the just-minted JWT. Call this
- * immediately after `signSessionToken` so the cookie the user gets is
- * already backed by a row when their next request lands.
- *
- * `expiresAt` is set to NOW + SESSION_TTL_SECONDS so we don't have to
- * decode the JWT to check expiry on every read — a cheap timestamp
- * comparison in Postgres does it for us.
+ * Persist the session row for a just-minted token. Call immediately after
+ * `signSessionToken` so the credential is backed by a row before the next
+ * request lands.
  */
 export async function createSessionRow(input: {
-  userId: string;
+  profileId: string;
   token: string;
+  /** Human-readable device label for a connected-devices view. */
+  deviceLabel?: string | null;
 }): Promise<void> {
   const db = getDb();
   const tokenHash = await hashSessionToken(input.token);
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
 
   await db.insert(sessions).values({
-    userId: input.userId,
+    profileId: input.profileId,
     tokenHash,
     expiresAt,
+    deviceLabel: input.deviceLabel ?? null,
   });
 }
 
 /**
- * Shape returned to authenticated handlers / middleware. Mirrors the
- * subset of the user row we want to expose without leaking
- * password_hash, google_sub, etc.
+ * The authenticated caller: which profile this session acts as, and which
+ * account that profile belongs to. Handlers read `session.profile.id` as the
+ * owner of anything they create.
  */
-export interface AuthenticatedUser {
-  id: string;
-  email: string;
-  name: string;
-  avatarUrl: string | null;
-  preferredLocale: SupportedLocale;
-  onboardingCompletedAt: Date | null;
-  publicHandle: string | null;
-  publicProfileEnabled: boolean;
-  publicTopOfMindEnabled: boolean;
+export interface AuthenticatedSession {
+  sessionId: string;
+  account: {
+    id: string;
+    email: string;
+  };
+  profile: {
+    id: string;
+    accountId: string;
+    type: ProfileType;
+    name: string;
+    preferredLocale: SupportedLocale;
+  };
 }
 
 /**
- * Look up the user behind a session token.
- *
- *  - Hashes the token, joins sessions → users in one round-trip, and
- *    filters to live sessions only (`expires_at > now()`).
- *  - Returns `null` for ANY failure mode (missing row, expired row,
- *    deleted user). The caller MUST treat this as "unauthenticated"
- *    without surfacing the reason — leaking "your session expired" vs
- *    "your session was revoked" is rarely useful and slightly fingerprintable.
- *  - Best-effort updates `last_seen_at` so a future "active devices" UI
- *    has accurate timestamps. We don't await/block on the failure of that
- *    update — it is purely informational.
+ * Resolve a token to its session, or null for any failure (missing row,
+ * expired row, deleted profile). Callers must treat null as
+ * "unauthenticated" without surfacing which — distinguishing "expired" from
+ * "revoked" is rarely useful and slightly fingerprintable.
  */
-export async function lookupSessionUser(
-  token: string,
-): Promise<AuthenticatedUser | null> {
+export async function lookupSession(token: string): Promise<AuthenticatedSession | null> {
   if (!token) return null;
   const tokenHash = await hashSessionToken(token);
   const db = getDb();
@@ -109,26 +87,24 @@ export async function lookupSessionUser(
   const rows = await db
     .select({
       sessionId: sessions.id,
-      userId: users.id,
-      email: users.email,
-      name: users.name,
-      avatarUrl: users.avatarUrl,
-      preferredLocale: users.preferredLocale,
-      onboardingCompletedAt: users.onboardingCompletedAt,
-      publicHandle: users.publicHandle,
-      publicProfileEnabled: users.publicProfileEnabled,
-      publicTopOfMindEnabled: users.publicTopOfMindEnabled,
+      profileId: profiles.id,
+      profileType: profiles.type,
+      profileName: profiles.name,
+      preferredLocale: profiles.preferredLocale,
+      accountId: accounts.id,
+      accountEmail: accounts.email,
     })
     .from(sessions)
-    .innerJoin(users, eq(users.id, sessions.userId))
+    .innerJoin(profiles, eq(profiles.id, sessions.profileId))
+    .innerJoin(accounts, eq(accounts.id, profiles.accountId))
     .where(and(eq(sessions.tokenHash, tokenHash), gt(sessions.expiresAt, new Date())))
     .limit(1);
 
   if (rows.length === 0) return null;
   const row = rows[0]!;
 
-  // Best-effort touch. We deliberately do not `await` errors — a write
-  // failure here must not turn a successful read into a 500.
+  // Best-effort touch; a write failure here must not turn a successful read
+  // into a 500.
   void db
     .update(sessions)
     .set({ lastSeenAt: new Date() })
@@ -138,34 +114,29 @@ export async function lookupSessionUser(
     });
 
   return {
-    id: row.userId,
-    email: row.email,
-    name: row.name,
-    avatarUrl: row.avatarUrl,
-    preferredLocale: normalizeSupportedLocale(row.preferredLocale),
-    onboardingCompletedAt: row.onboardingCompletedAt,
-    publicHandle: row.publicHandle,
-    publicProfileEnabled: row.publicProfileEnabled,
-    publicTopOfMindEnabled: row.publicTopOfMindEnabled,
+    sessionId: row.sessionId,
+    account: { id: row.accountId, email: row.accountEmail },
+    profile: {
+      id: row.profileId,
+      accountId: row.accountId,
+      type: row.profileType,
+      name: row.profileName,
+      preferredLocale: normalizeSupportedLocale(row.preferredLocale),
+    },
   };
 }
 
 /**
- * Delete the session row backing a token. Idempotent: deleting a row that
- * does not exist (already-logged-out, never-existed) is a no-op and
- * returns false. Returns true when at least one row was actually removed,
- * which the route handler can use to differentiate "real logout" from
- * "stale cookie cleanup" if it ever wants to.
+ * Delete the session row backing a token. Idempotent — returns false when
+ * there was nothing to remove (already logged out, stale cookie).
  */
 export async function revokeSessionByToken(token: string): Promise<boolean> {
   if (!token) return false;
   const tokenHash = await hashSessionToken(token);
   const db = getDb();
-
   const deleted = await db
     .delete(sessions)
     .where(eq(sessions.tokenHash, tokenHash))
     .returning({ id: sessions.id });
-
   return deleted.length > 0;
 }

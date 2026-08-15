@@ -36,7 +36,7 @@ export interface RequireAuthProps {
 }
 
 export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps): JSX.Element {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, account } = useAuth();
   const location = useLocation();
   const locale = readStoredLocale();
 
@@ -81,16 +81,16 @@ export function RequireAuth({ children, requireAdmin = false }: RequireAuthProps
     return <Navigate to="/login" replace state={{ from }} />;
   }
 
-  if (user && !user.onboardingCompletedAt && location.pathname !== "/onboarding") {
+  if (account && !account.onboardingCompletedAt && location.pathname !== "/onboarding") {
     const from = `${location.pathname}${location.search}${location.hash}`;
     return <Navigate to="/onboarding" replace state={{ from }} />;
   }
 
-  if (user?.onboardingCompletedAt && location.pathname === "/onboarding") {
+  if (account?.onboardingCompletedAt && location.pathname === "/onboarding") {
     return <Navigate to="/" replace />;
   }
 
-  if (requireAdmin && !user?.isAdmin) {
+  if (requireAdmin && !account?.isAdmin) {
     return <Navigate to="/" replace />;
   }
 

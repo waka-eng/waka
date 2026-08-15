@@ -2066,3 +2066,15 @@
   notes whose evidence owners number < 2 — hides any legacy single-member notes).
 - Verified: clean regen of Waka -> 24 triggers -> 5 notes, every one spanning
   >= 2 members (Yunji, 젭재규, Jae Gyu Lee, JQ). 202 API tests pass.
+
+2026-08-15 — three-layers: rebuilt WAKA on a clean schema. Accounts own profiles;
+profiles own inspirations (raw capture) → signals (evidence-backed patterns) →
+one versioned top of mind. 21 tables, one baseline migration, zero aliases,
+tenant isolation enforced by composite foreign keys. Consent page with a profile
+picker closes the SameSite=Lax drive-by credential hole. Image vision means an
+image-only capture is no longer invisible. Deleted: the WOW vocabulary, the
+keyword-ontology graph, lens boards, sparks, packets, the vault, rooms, readings,
+combinations. Gates: 8/8 layer-1 e2e, 6/6 signals, 7/7 top-of-mind, 8/8 groups,
+291 unit tests. Bugs the gates caught and fixed: derive-signals swallowed every
+edit after the first; enrichment recorded transport failures as successes;
+deleting every citation left a signal active forever.

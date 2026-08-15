@@ -16,18 +16,18 @@ const DELETE_CONFIRMATION = "DELETE";
 const PUBLIC_HANDLE_PATTERN = /^[a-z0-9_-]{3,24}$/;
 
 export default function ProfilePage(): JSX.Element {
-  const { user, logout, updateProfile, deleteAccount } = useAuth();
+  const { account, profile, logout, updateProfile, deleteAccount } = useAuth();
   const navigate = useNavigate();
-  const [name, setName] = useState(user?.name ?? "");
-  const [publicHandle, setPublicHandle] = useState(user?.publicHandle ?? "");
+  const [name, setName] = useState(profile?.name ?? "");
+  const [publicHandle, setPublicHandle] = useState(profile?.publicHandle ?? "");
   const [publicProfileEnabled, setPublicProfileEnabled] = useState(
-    user?.publicProfileEnabled === true,
+    profile?.publicProfileEnabled === true,
   );
   const [publicTopOfMindEnabled, setPublicTopOfMindEnabled] = useState(
-    user?.publicTopOfMindEnabled === true,
+    profile?.publicTopOfMindEnabled === true,
   );
   const [preferredLocale, setPreferredLocale] = useState<SupportedLocale>(() =>
-    normalizeSupportedLocale(user?.preferredLocale),
+    normalizeSupportedLocale(profile?.preferredLocale),
   );
   const [deleteText, setDeleteText] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -120,7 +120,7 @@ export default function ProfilePage(): JSX.Element {
             <h1 id="profile-title" className="login-title">
               {t(locale, "profileTitle")}
             </h1>
-            <p className="login-subtitle profile-email">{user?.email}</p>
+            <p className="login-subtitle profile-email">{account?.email}</p>
           </div>
           <button
             className="profile-signout-button"

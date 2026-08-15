@@ -1,16 +1,18 @@
+/**
+ * The surface is one composition, but its places still need URLs. This is the
+ * whole of that mapping: five states, each addressable, each round-tripping
+ * back to the state it came from so Back and Forward restore where the person
+ * actually was.
+ */
 export type SurfaceView =
   | "wall"
-  | "reading"
-  | "save"
-  | "ask"
   | "capture"
-  | "direction";
-
-export type SurfaceRoomId = string | null;
+  | "archive"
+  | "inspiration"
+  | "signals";
 
 export interface SurfaceRoute {
   view: SurfaceView;
-  roomId: SurfaceRoomId;
   entityId: string | null;
 }
 
@@ -23,114 +25,48 @@ function decodeSegment(value: string | undefined): string | null {
   }
 }
 
-/**
- * The Surface is one visual composition, but its meaningful places still
- * need URLs. This parser keeps room context in every nested view so browser
- * Back and Forward can restore where the member actually was.
- */
 export function parseSurfacePath(pathname: string): SurfaceRoute {
   const segments = pathname.split("/").filter(Boolean);
-  let roomId: SurfaceRoomId = null;
-  let rest = segments;
 
-  if (segments[0] === "rooms") {
-    roomId = decodeSegment(segments[1]);
-    if (!roomId) return { view: "wall", roomId: null, entityId: null };
-    rest = segments.slice(2);
+  if (segments.length === 0) return { view: "wall", entityId: null };
+  if (segments.length === 1 && segments[0] === "capture") {
+    return { view: "capture", entityId: null };
   }
-
-  if (rest.length === 0) return { view: "wall", roomId, entityId: null };
-  /*
-    `/rooms/:id/capture` is no longer built, but it is still read: an open tab,
-    a bookmark or a Back button from before this change should land on the
-    composer with that room still under it rather than on a dead route. The
-    room is carried through as the place to return to, which is all it ever
-    meant here.
-  */
-  if (rest.length === 1 && rest[0] === "capture") {
-    return { view: "capture", roomId, entityId: null };
+  if (segments.length === 1 && segments[0] === "signals") {
+    return { view: "signals", entityId: null };
   }
-  if (rest.length === 1 && rest[0] === "inspirations") {
-    return { view: "ask", roomId, entityId: null };
+  if (segments.length === 1 && segments[0] === "inspirations") {
+    return { view: "archive", entityId: null };
   }
-  if (rest.length === 2 && rest[0] === "inspirations") {
-    const entityId = decodeSegment(rest[1]);
+  if (segments.length === 2 && segments[0] === "inspirations") {
+    const entityId = decodeSegment(segments[1]);
+    /*
+      A malformed id is not a fourth state. Falling back to the archive keeps
+      an unopenable capture from stranding the person on a blank layer, and
+      the list they were reaching for is one step behind it anyway.
+    */
     return entityId
-      ? { view: "save", roomId, entityId }
-      : { view: "ask", roomId, entityId: null };
-  }
-  if (rest.length === 2 && rest[0] === "readings") {
-    const entityId = decodeSegment(rest[1]);
-    return entityId
-      ? { view: "reading", roomId, entityId }
-      : { view: "wall", roomId, entityId: null };
-  }
-  if (roomId && rest.length === 1 && rest[0] === "direction") {
-    return { view: "direction", roomId, entityId: null };
+      ? { view: "inspiration", entityId }
+      : { view: "archive", entityId: null };
   }
 
-  return { view: "wall", roomId, entityId: null };
-}
-
-/**
- * Which room the member is standing in, given the route and history state.
- *
- * Capture is the one view whose path carries no room, so for capture — and
- * only capture — the room arrives in history state instead. Everything that
- * depends on "which wall is behind this" reads through here: the room's name
- * and cast in the head, which status gets re-polled after a save, and where
- * closing the composer puts you back.
- *
- * A direct load of `/capture` has no state and therefore no room, which is
- * correct: nobody is standing anywhere, and the save is unaffected either way.
- */
-export function resolveSurfaceRoom(
-  route: SurfaceRoute,
-  historyState: unknown,
-): SurfaceRoomId {
-  if (route.view !== "capture") return route.roomId;
-  if (route.roomId) return route.roomId; // legacy /rooms/:id/capture
-  const carried = (historyState as { room?: unknown } | null | undefined)?.room;
-  return typeof carried === "string" && carried ? carried : null;
+  return { view: "wall", entityId: null };
 }
 
 export function buildSurfacePath(input: SurfaceRoute): string {
-  const base = input.roomId
-    ? `/rooms/${encodeURIComponent(input.roomId)}`
-    : "";
-
   switch (input.view) {
-    /*
-      Capture is never nested under a room, whatever room you opened it from.
-
-      A save belongs to the person who made it and to nothing else: the create
-      request carries no room, the API schema has no field for one, and the row
-      is written with the session's own user id. `/rooms/:id/capture` claimed a
-      relationship the database has never had — and worse, it implied the save
-      would reach THAT room, when sharing is a single per-signal flag that every
-      room you are in reads.
-
-      Which room you were standing in when you opened the composer is still
-      worth knowing — it is where closing the composer puts you back. That
-      travels in history state, where context belongs, rather than in the path,
-      where it reads as ownership.
-    */
     case "capture":
       return "/capture";
-    case "ask":
-      return `${base}/inspirations`;
-    case "save":
+    case "signals":
+      return "/signals";
+    case "archive":
+      return "/inspirations";
+    case "inspiration":
       return input.entityId
-        ? `${base}/inspirations/${encodeURIComponent(input.entityId)}`
-        : `${base}/inspirations`;
-    case "reading":
-      return input.entityId
-        ? `${base}/readings/${encodeURIComponent(input.entityId)}`
-        : base || "/";
-    case "direction":
-      return input.roomId ? `${base}/direction` : "/";
+        ? `/inspirations/${encodeURIComponent(input.entityId)}`
+        : "/inspirations";
     case "wall":
     default:
-      return base || "/";
+      return "/";
   }
 }

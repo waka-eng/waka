@@ -1,621 +1,745 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+/**
+ * `/api/signals` — layer 2: the profile's distilled, evidence-backed patterns.
+ *
+ * This is the curated surface, not the archive. Raw captures live behind
+ * `/api/inspirations`; what a reader gets here is the statement WAKA distilled
+ * from them, what supports it, and how sure it is.
+ *
+ * Three rules shape every handler below:
+ *
+ *   - **A read may cross profiles; a write mostly may not.** An agent-bound
+ *     session reading the human profile's signals is the conditioning case
+ *     the permission matrix exists for. `resolveProfileAccess` decides, from
+ *     facts the server controls, and nothing here is inferred from a header.
+ *   - **An edit locks.** PATCH sets `lockedAt`, and from that moment
+ *     regeneration may keep attaching evidence but never rewrites the text.
+ *     That is the whole of the edit rule, and it is enforced by writing the
+ *     timestamp here rather than by asking the generator to be careful.
+ *   - **Sharing exposes the statement, never the evidence.** A share is a
+ *     per-signal, per-group act by the signal's owner. The inspirations
+ *     behind it never cross an account boundary.
+ */
+
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import {
-  attachments,
-  feedback,
   groupMembers,
-  groupTopOfMindNoteSignals,
-  groupTopOfMindNotes,
-  groups,
-  inspirationSparks,
   inspirations,
-  meaningEvidence,
-  meaningNodes,
-  meaningPackets,
-  wowMomentInspirations,
-  wowMoments,
+  profiles,
+  signalEvidence,
+  signalShares,
+  signalStatusValues,
+  signals,
+  type SignalStatus,
 } from "../db/index.js";
-import { normalizeContextNodeType } from "../lib/context-node-types.js";
 import { getDb } from "../lib/db.js";
-import { calculateDisplayedInspirationScore } from "../lib/inspiration-scores.js";
-import { type AuthEnv, requireAuth } from "../lib/middleware.js";
-import { withSignalLayer } from "../lib/signals.js";
-import { topOfMindNoteTypeFromWowMoment } from "../lib/top-of-mind-notes.js";
+import {
+  profileAccessError,
+  requireAuth,
+  type AuthEnv,
+  type ProfileOperation,
+} from "../lib/middleware.js";
+import { enqueueTopOfMindRefresh } from "../lib/queue.js";
+import {
+  computeSignalConfidence,
+  reembedSignalStatement,
+} from "../lib/signal-derivation.js";
+import type { AuthenticatedSession } from "../lib/session.js";
 
-const DEFAULT_SIGNAL_ARCHIVE_LIMIT = 80;
-const MAX_SIGNAL_ARCHIVE_LIMIT = 200;
-const MAX_PREVIEW_LENGTH = 220;
+type WakaDb = ReturnType<typeof getDb>;
 
-const signalArchiveQuerySchema = z
+const DEFAULT_SIGNAL_LIMIT = 80;
+const MAX_SIGNAL_LIMIT = 200;
+const MAX_EVIDENCE_PREVIEW_LENGTH = 220;
+const MAX_STATEMENT_LENGTH = 500;
+
+// ---------------------------------------------------------------------------
+// Request validation
+// ---------------------------------------------------------------------------
+
+const limitSchema = z
+  .string()
+  .regex(/^\d+$/, "limit must be an integer")
+  .transform((value) => Number.parseInt(value, 10))
+  .pipe(
+    z
+      .number()
+      .int("limit must be an integer")
+      .min(1, "limit must be at least 1")
+      .max(MAX_SIGNAL_LIMIT, `limit must be <= ${MAX_SIGNAL_LIMIT}`),
+  );
+
+const listSignalsQuerySchema = z
   .object({
-    q: z.string().trim().max(200).optional(),
-    filter: z
-      .enum([
-        "all",
-        "highlighted",
-        "high_resonance",
-        "tensions",
-        "questions",
-        "people_places",
-        "recently_resurfaced",
-      ])
-      .optional(),
-    sort: z.enum(["recent", "resonance", "revisited"]).optional(),
-    limit: z
-      .string()
-      .regex(/^\d+$/, "limit must be an integer")
-      .transform((value) => Number.parseInt(value, 10))
-      .pipe(z.number().int().min(1).max(MAX_SIGNAL_ARCHIVE_LIMIT))
-      .optional(),
+    status: z.enum(signalStatusValues).optional(),
+    limit: limitSchema.optional(),
+    /** Read another profile in the same account, per the permission matrix. */
+    profile: z.string().uuid("profile must be a uuid").optional(),
   })
+  .strict();
+
+const signalScopeQuerySchema = z
+  .object({ profile: z.string().uuid("profile must be a uuid").optional() })
   .strict();
 
 const signalParamsSchema = z.object({
   signalId: z.string().uuid("signalId must be a uuid"),
 });
 
-type WakaDb = ReturnType<typeof getDb>;
+const shareParamsSchema = z.object({
+  signalId: z.string().uuid("signalId must be a uuid"),
+  groupId: z.string().uuid("groupId must be a uuid"),
+});
 
-export type SignalArchiveFilter = NonNullable<z.infer<typeof signalArchiveQuerySchema>["filter"]>;
-export type SignalArchiveSort = NonNullable<z.infer<typeof signalArchiveQuerySchema>["sort"]>;
+const updateSignalBodySchema = z
+  .object({
+    statement: z
+      .string()
+      .trim()
+      .min(1, "statement cannot be empty")
+      .max(MAX_STATEMENT_LENGTH, `statement must be <= ${MAX_STATEMENT_LENGTH} characters`),
+  })
+  .strict();
 
-export interface SignalArchiveListInput {
-  userId: string;
-  query?: string;
-  filter: SignalArchiveFilter;
-  sort: SignalArchiveSort;
+const createShareBodySchema = z
+  .object({ groupId: z.string().uuid("groupId must be a uuid") })
+  .strict();
+
+// ---------------------------------------------------------------------------
+// Response shapes
+// ---------------------------------------------------------------------------
+
+export interface SignalSummary {
+  id: string;
+  statement: string;
+  status: SignalStatus;
+  confidence: number;
+  evidenceCount: number;
+  lastEvidenceAt: string | null;
+  /** A human edited the statement; regeneration will not rewrite it. */
+  locked: boolean;
+  /** Locked, but every capture behind it is gone. */
+  unsupported: boolean;
+  sharedGroupIds: string[];
+  createdAt: string;
+}
+
+export interface SignalEvidenceItem {
+  inspirationId: string;
+  /** A bounded excerpt of the capture — enough to recognize, not the whole. */
+  preview: string;
+  reason: string | null;
+  quote: string | null;
+  createdAt: string;
+}
+
+export interface SignalDetail extends SignalSummary {
+  evidence: SignalEvidenceItem[];
+}
+
+export interface ListSignalsInput {
+  profileId: string;
+  status?: SignalStatus;
   limit: number;
 }
 
-export interface SavedSignalSearchResult {
+export interface GetSignalInput {
+  profileId: string;
+  signalId: string;
+}
+
+// ---------------------------------------------------------------------------
+// Assembly
+// ---------------------------------------------------------------------------
+
+function toIso(value: Date | string | null): string | null {
+  if (value === null) return null;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function truncatePreview(value: string): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_EVIDENCE_PREVIEW_LENGTH) return normalized;
+  return `${normalized.slice(0, MAX_EVIDENCE_PREVIEW_LENGTH - 3).trimEnd()}...`;
+}
+
+/**
+ * Evidence counts and share memberships are fetched per page rather than as
+ * correlated subqueries on the signal row: two bounded lookups keyed by the
+ * ids already in hand, instead of a count that re-runs for every row.
+ */
+async function decorateSignals(
+  db: WakaDb,
+  rows: Array<{
+    id: string;
+    statement: string;
+    status: SignalStatus;
+    confidence: number;
+    lastEvidenceAt: Date | null;
+    lockedAt: Date | null;
+    unsupportedAt: Date | null;
+    createdAt: Date;
+  }>,
+): Promise<SignalSummary[]> {
+  if (rows.length === 0) return [];
+  const ids = rows.map((row) => row.id);
+
+  const [evidenceRows, shareRows] = await Promise.all([
+    db
+      .select({
+        signalId: signalEvidence.signalId,
+        createdAt: signalEvidence.createdAt,
+        source: inspirations.source,
+      })
+      .from(signalEvidence)
+      .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+      .where(inArray(signalEvidence.signalId, ids)),
+    db
+      .select({ signalId: signalShares.signalId, groupId: signalShares.groupId })
+      .from(signalShares)
+      .where(inArray(signalShares.signalId, ids)),
+  ]);
+
+  // Confidence is computed from the evidence at read time, not served from
+  // the stored snapshot. The snapshot is written when evidence changes, which
+  // is precisely the moment its recency term is at its maximum — so a stored
+  // value can only overstate a signal that has since gone quiet. Reads tell
+  // the truth about now; the snapshot remains for the group wall, whose query
+  // must not reach these private tables.
+  const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
+  for (const row of evidenceRows) {
+    const bucket = evidenceBySignal.get(row.signalId);
+    if (bucket) bucket.push(row);
+    else evidenceBySignal.set(row.signalId, [row]);
+  }
+  const now = new Date();
+  const liveConfidence = new Map(
+    rows.map((row) => [
+      row.id,
+      computeSignalConfidence(evidenceBySignal.get(row.id) ?? [], now),
+    ]),
+  );
+
+  const countBySignal = new Map(
+    [...evidenceBySignal.entries()].map(([id, list]) => [id, list.length]),
+  );
+  const groupsBySignal = new Map<string, string[]>();
+  for (const row of shareRows) {
+    const bucket = groupsBySignal.get(row.signalId);
+    if (bucket) bucket.push(row.groupId);
+    else groupsBySignal.set(row.signalId, [row.groupId]);
+  }
+
+  // The SQL pre-sort used the stored snapshots; live values decay
+  // independently, so restore the promised order before serializing.
+  const ordered = [...rows].sort((a, b) => {
+    const ca = liveConfidence.get(a.id) ?? 0;
+    const cb = liveConfidence.get(b.id) ?? 0;
+    if (cb !== ca) return cb - ca;
+    const ra = a.lastEvidenceAt?.getTime() ?? 0;
+    const rb = b.lastEvidenceAt?.getTime() ?? 0;
+    if (rb !== ra) return rb - ra;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+
+  return ordered.map((row) => ({
+    id: row.id,
+    statement: row.statement,
+    status: row.status,
+    confidence: liveConfidence.get(row.id) ?? 0,
+    evidenceCount: countBySignal.get(row.id) ?? 0,
+    lastEvidenceAt: toIso(row.lastEvidenceAt),
+    locked: row.lockedAt !== null,
+    unsupported: row.unsupportedAt !== null,
+    sharedGroupIds: groupsBySignal.get(row.id) ?? [],
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
+export async function listProfileSignals(
+  db: WakaDb,
+  input: ListSignalsInput,
+): Promise<SignalSummary[]> {
+  const rows = await db
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      status: signals.status,
+      confidence: signals.confidence,
+      lastEvidenceAt: signals.lastEvidenceAt,
+      lockedAt: signals.lockedAt,
+      unsupportedAt: signals.unsupportedAt,
+      createdAt: signals.createdAt,
+    })
+    .from(signals)
+    .where(
+      input.status
+        ? and(eq(signals.profileId, input.profileId), eq(signals.status, input.status))
+        : eq(signals.profileId, input.profileId),
+    )
+    .orderBy(desc(signals.confidence), desc(signals.lastEvidenceAt), desc(signals.createdAt))
+    .limit(input.limit);
+
+  return decorateSignals(db, rows);
+}
+
+export async function getProfileSignal(
+  db: WakaDb,
+  input: GetSignalInput,
+): Promise<SignalDetail | null> {
+  const [row] = await db
+    .select({
+      id: signals.id,
+      statement: signals.statement,
+      status: signals.status,
+      confidence: signals.confidence,
+      lastEvidenceAt: signals.lastEvidenceAt,
+      lockedAt: signals.lockedAt,
+      unsupportedAt: signals.unsupportedAt,
+      createdAt: signals.createdAt,
+    })
+    .from(signals)
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .limit(1);
+  if (!row) return null;
+
+  const [summary] = await decorateSignals(db, [row]);
+  if (!summary) return null;
+
+  const evidenceRows = await db
+    .select({
+      inspirationId: signalEvidence.inspirationId,
+      reason: signalEvidence.reason,
+      quote: signalEvidence.quote,
+      createdAt: signalEvidence.createdAt,
+      text: inspirations.text,
+    })
+    .from(signalEvidence)
+    .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+    .where(eq(signalEvidence.signalId, input.signalId))
+    .orderBy(desc(signalEvidence.createdAt));
+
+  return {
+    ...summary,
+    evidence: evidenceRows.map((evidence) => ({
+      inspirationId: evidence.inspirationId,
+      preview: truncatePreview(evidence.text),
+      reason: evidence.reason,
+      quote: evidence.quote,
+      createdAt: evidence.createdAt.toISOString(),
+    })),
+  };
+}
+
+/**
+ * A human edit freezes the statement. `lockedAt` is set in the same statement
+ * that writes the text so there is no window in which an edited signal is
+ * unlocked and a concurrent regeneration could overwrite it.
+ */
+export async function updateSignalStatement(
+  db: WakaDb,
+  input: { profileId: string; signalId: string; statement: string; now?: Date },
+): Promise<SignalDetail | null> {
+  const updated = await db
+    .update(signals)
+    .set({
+      statement: input.statement,
+      lockedAt: input.now ?? new Date(),
+      updatedAt: input.now ?? new Date(),
+    })
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .returning({ id: signals.id });
+  if (updated.length === 0) return null;
+
+  return getProfileSignal(db, { profileId: input.profileId, signalId: input.signalId });
+}
+
+export async function deleteProfileSignal(
+  db: WakaDb,
+  input: { profileId: string; signalId: string },
+): Promise<boolean> {
+  const deleted = await db
+    .delete(signals)
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .returning({ id: signals.id });
+  return deleted.length > 0;
+}
+
+export async function shareSignalWithGroup(
+  db: WakaDb,
+  input: { profileId: string; signalId: string; groupId: string },
+): Promise<"shared" | "not_found" | "not_a_member"> {
+  const [signal] = await db
+    .select({ id: signals.id })
+    .from(signals)
+    .where(and(eq(signals.id, input.signalId), eq(signals.profileId, input.profileId)))
+    .limit(1);
+  if (!signal) return "not_found";
+
+  const [membership] = await db
+    .select({ id: groupMembers.id })
+    .from(groupMembers)
+    .where(
+      and(eq(groupMembers.groupId, input.groupId), eq(groupMembers.profileId, input.profileId)),
+    )
+    .limit(1);
+  if (!membership) return "not_a_member";
+
+  // Re-sharing is not an error: the caller wanted this signal on that wall,
+  // and after this call it is.
+  await db
+    .insert(signalShares)
+    .values({
+      profileId: input.profileId,
+      signalId: input.signalId,
+      groupId: input.groupId,
+    })
+    .onConflictDoNothing();
+
+  return "shared";
+}
+
+export async function unshareSignalFromGroup(
+  db: WakaDb,
+  input: { profileId: string; signalId: string; groupId: string },
+): Promise<boolean> {
+  const removed = await db
+    .delete(signalShares)
+    .where(
+      and(
+        eq(signalShares.signalId, input.signalId),
+        eq(signalShares.groupId, input.groupId),
+        eq(signalShares.profileId, input.profileId),
+      ),
+    )
+    .returning({ id: signalShares.id });
+  return removed.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Profile scoping
+// ---------------------------------------------------------------------------
+
+export interface ProfileScopeTarget {
   id: string;
-  userId: string;
-  textPreview: string;
-  kind: string | null;
-  capturedAt: string;
-  updatedAt: string;
-  /**
-   * Whether the rooms this person is in may read this save.
-   *
-   * On the list so the archive can show and change it in place. Without it the
-   * only way to find out was to open a save one at a time, which made a
-   * privacy setting something you could not audit.
-   */
-  shared: boolean;
-  resonanceScore: number;
-  signalScores: Record<string, number>;
-  highlightedSnippets: Array<{
-    id: string;
-    text: string;
-    source: string;
-    confidence: number;
-    isPrimary: boolean;
-  }>;
-  matchingSnippets: string[];
-  relatedContextTerms: string[];
-  relatedTopOfMindNoteTitles: string[];
-  /** Group boards this signal fed, newest first: where else it led. */
-  relatedGroupNotes: Array<{ groupId: string; groupName: string; noteTitle: string }>;
-  attachmentSummary: Array<{
-    id: string;
-    type: "link" | "image" | "file";
-    label: string;
-  }>;
-  relevanceReasons: string[];
+  accountId: string;
 }
 
-export interface SavedSignalDetail extends SavedSignalSearchResult {
-  rawText: string;
-  attachments: Array<{
-    id: string;
-    type: "link" | "image" | "file";
-    url?: string;
-    label: string;
-    contentType: string | null;
-    size: number | null;
-  }>;
-  resonanceFeedback: Array<{
-    id: string;
-    value: string;
-    emotionLabel: string | null;
-    correctionText: string | null;
-    createdAt: string;
-  }>;
-  signalPacket: {
-    id: string;
-    text: string;
-    primarySpark: string;
-    artifactExcerpt: string;
-    updatedAt: string;
-  } | null;
-  relatedContextNodes: Array<{
-    id: string;
-    type: string;
-    label: string;
-    description: string;
-    confidence: number;
-    evidenceReason: string;
-  }>;
-  relatedTopOfMindNotes: Array<{
-    id: string;
-    title: string;
-    type: string;
-    body: string;
-    confidence: number;
-    status: "active";
-  }>;
+export async function loadProfileTarget(
+  db: WakaDb,
+  profileId: string,
+): Promise<ProfileScopeTarget | null> {
+  const [row] = await db
+    .select({ id: profiles.id, accountId: profiles.accountId })
+    .from(profiles)
+    .where(eq(profiles.id, profileId))
+    .limit(1);
+  return row ?? null;
 }
 
-export interface SignalArchiveRoutesDependencies {
+export type ProfileScopeResolution =
+  | { ok: true; profileId: string }
+  | { ok: false; status: 403 | 404; body: { error: string } };
+
+/**
+ * Resolve which profile a request acts on. Absent an explicit target the
+ * answer is the session's own profile, which needs no check — a session may
+ * always act on the profile it is bound to.
+ *
+ * Shared with the layer-3 surface: both `/api/signals` and `/api/top-of-mind`
+ * take the same `?profile=` parameter and answer to the same access matrix,
+ * and a second copy of a security check is a second copy that can drift.
+ */
+export async function resolveProfileScope(
+  db: WakaDb,
+  session: AuthenticatedSession,
+  requestedProfileId: string | undefined,
+  operation: ProfileOperation,
+  loadProfile: typeof loadProfileTarget,
+): Promise<ProfileScopeResolution> {
+  if (!requestedProfileId || requestedProfileId === session.profile.id) {
+    return { ok: true, profileId: session.profile.id };
+  }
+
+  const target = await loadProfile(db, requestedProfileId);
+
+  // A profile in another account answers exactly like one that does not
+  // exist. Otherwise the pair of status codes is an oracle: 403 means "real
+  // id, someone else's" and 404 means "no such id", which lets any caller
+  // enumerate real profile ids across the whole install. The 403 below is
+  // therefore reserved for a same-account profile the operation forbids —
+  // an agent session reaching for write on its human, say — where the caller
+  // already knows the profile exists because it is its own account's.
+  if (!target || target.accountId !== session.profile.accountId) {
+    return { ok: false, status: 404, body: { error: "Profile not found" } };
+  }
+
+  const denied = profileAccessError(session, target, operation);
+  if (denied) return { ok: false, status: 403, body: denied };
+
+  return { ok: true, profileId: target.id };
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+
+export interface SignalRouteDependencies {
   getDatabase?: typeof getDb;
-  listSignals?: (db: WakaDb, input: SignalArchiveListInput) => Promise<SavedSignalSearchResult[]>;
-  getSignal?: (db: WakaDb, input: { userId: string; signalId: string }) => Promise<SavedSignalDetail | null>;
+  listSignals?: typeof listProfileSignals;
+  getSignal?: typeof getProfileSignal;
+  updateStatement?: typeof updateSignalStatement;
+  deleteSignal?: typeof deleteProfileSignal;
+  shareSignal?: typeof shareSignalWithGroup;
+  unshareSignal?: typeof unshareSignalFromGroup;
+  loadProfile?: typeof loadProfileTarget;
+  reembed?: typeof reembedSignalStatement;
+  requestRefresh?: typeof enqueueTopOfMindRefresh;
   authMiddleware?: MiddlewareHandler<AuthEnv>;
 }
 
-function truncatePreview(value: string, maxLength = MAX_PREVIEW_LENGTH): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
-}
-
-function includesQuery(values: string[], query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) return true;
-  return values.some((value) => value.toLowerCase().includes(normalized));
-}
-
-function attachmentLabel(row: {
-  type: "link" | "image" | "file";
-  url: string;
-  name: string | null;
-  hostname: string | null;
-  title: string | null;
-}): string {
-  if (row.type === "link") return row.title || row.hostname || row.name || row.url;
-  return row.name || row.type;
-}
-
-function matchSnippet(values: string[], query?: string): string[] {
-  const normalized = query?.trim().toLowerCase();
-  if (!normalized) return [];
-  const hit = values.find((value) => value.toLowerCase().includes(normalized));
-  return hit ? [truncatePreview(hit, 160)] : [];
-}
-
-type BaseSignalRow = {
-  id: string;
-  userId: string;
-  text: string;
-  kind: string | null;
-  category: number | null;
-  importanceScore: number;
-  wowScore: number;
-  cluster: any;
-  classifiedAt: Date | null;
-  sharedToGroups: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-async function fetchArchiveRows(db: WakaDb, userId: string, limit: number) {
-  const rows = await db
-    .select({
-      id: inspirations.id,
-      userId: inspirations.userId,
-      text: inspirations.text,
-      kind: inspirations.kind,
-      category: inspirations.category,
-      importanceScore: inspirations.importanceScore,
-      wowScore: inspirations.wowScore,
-      cluster: inspirations.cluster,
-      classifiedAt: inspirations.classifiedAt,
-      sharedToGroups: inspirations.sharedToGroups,
-      createdAt: inspirations.createdAt,
-      updatedAt: inspirations.updatedAt,
-    })
-    .from(inspirations)
-    .where(eq(inspirations.userId, userId))
-    .orderBy(desc(inspirations.createdAt))
-    .limit(Math.min(MAX_SIGNAL_ARCHIVE_LIMIT, Math.max(limit * 3, limit)));
-  return rows as BaseSignalRow[];
-}
-
-async function buildSignalResultMaps(db: WakaDb, userId: string, signalIds: string[]) {
-  if (signalIds.length === 0) {
-    return {
-      sparksBySignal: new Map<string, any[]>(),
-      contextBySignal: new Map<string, any[]>(),
-      topNotesBySignal: new Map<string, any[]>(),
-      groupNotesBySignal: new Map<string, any[]>(),
-      attachmentsBySignal: new Map<string, any[]>(),
-    };
-  }
-
-  const [sparkRows, contextRows, topNoteRows, groupNoteRows, attachmentRows] =
-    await Promise.all([
-    db
-      .select({
-        id: inspirationSparks.id,
-        inspirationId: inspirationSparks.inspirationId,
-        text: inspirationSparks.text,
-        source: inspirationSparks.source,
-        confidence: inspirationSparks.confidence,
-        isPrimary: inspirationSparks.isPrimary,
-      })
-      .from(inspirationSparks)
-      .where(and(eq(inspirationSparks.userId, userId), inArray(inspirationSparks.inspirationId, signalIds))),
-    db
-      .select({
-        inspirationId: meaningEvidence.inspirationId,
-        nodeId: meaningNodes.id,
-        type: meaningNodes.type,
-        label: meaningNodes.label,
-        description: meaningNodes.description,
-        confidence: meaningNodes.confidence,
-        reason: meaningEvidence.reason,
-      })
-      .from(meaningEvidence)
-      .innerJoin(meaningNodes, and(eq(meaningNodes.id, meaningEvidence.meaningNodeId), eq(meaningNodes.userId, userId)))
-      .where(and(eq(meaningEvidence.userId, userId), inArray(meaningEvidence.inspirationId, signalIds))),
-    db
-      .select({
-        inspirationId: wowMomentInspirations.inspirationId,
-        id: wowMoments.id,
-        title: wowMoments.title,
-        kind: wowMoments.kind,
-        why: wowMoments.why,
-        confidence: wowMoments.wowScore,
-      })
-      .from(wowMomentInspirations)
-      .innerJoin(wowMoments, and(eq(wowMoments.id, wowMomentInspirations.wowMomentId), eq(wowMoments.userId, userId)))
-      .where(and(eq(wowMomentInspirations.userId, userId), inArray(wowMomentInspirations.inspirationId, signalIds))),
-    /**
-     * Which group boards this signal fed, and what they made of it.
-     *
-     * The same fact as the solo query beside it, on the other side of the
-     * product's claim: a save can produce one reading alone and another
-     * beside other people. Scoped to rooms the viewer is still in, and to
-     * readings those rooms currently hold, so a departed room or a retired
-     * note stops being claimed.
-     */
-    db
-      .select({
-        inspirationId: groupTopOfMindNoteSignals.signalId,
-        id: groupTopOfMindNotes.id,
-        title: groupTopOfMindNotes.title,
-        groupId: groups.id,
-        groupName: groups.name,
-      })
-      .from(groupTopOfMindNoteSignals)
-      .innerJoin(
-        groupTopOfMindNotes,
-        eq(groupTopOfMindNoteSignals.groupTopOfMindNoteId, groupTopOfMindNotes.id),
-      )
-      .innerJoin(groups, eq(groupTopOfMindNotes.groupId, groups.id))
-      .innerJoin(
-        groupMembers,
-        and(eq(groupMembers.groupId, groups.id), eq(groupMembers.userId, userId)),
-      )
-      .where(
-        and(
-          inArray(groupTopOfMindNoteSignals.signalId, signalIds),
-          eq(groupTopOfMindNoteSignals.ownerUserId, userId),
-          eq(groupTopOfMindNotes.lifecycleStatus, "active"),
-        ),
-      ),
-    db
-      .select({
-        id: attachments.id,
-        inspirationId: attachments.inspirationId,
-        type: attachments.type,
-        url: attachments.url,
-        name: attachments.name,
-        contentType: attachments.contentType,
-        size: attachments.size,
-        hostname: attachments.hostname,
-        title: attachments.title,
-      })
-      .from(attachments)
-      .where(inArray(attachments.inspirationId, signalIds)),
-  ]);
-
-  const group = <T extends { inspirationId: string }>(rows: T[]) => {
-    const out = new Map<string, T[]>();
-    for (const row of rows) {
-      const bucket = out.get(row.inspirationId) ?? [];
-      bucket.push(row);
-      out.set(row.inspirationId, bucket);
-    }
-    return out;
-  };
-
-  return {
-    sparksBySignal: group(sparkRows),
-    contextBySignal: group(contextRows),
-    topNotesBySignal: group(topNoteRows),
-    groupNotesBySignal: group(groupNoteRows),
-    attachmentsBySignal: group(attachmentRows),
-  };
-}
-
-function serializeSearchResult(
-  row: BaseSignalRow,
-  maps: Awaited<ReturnType<typeof buildSignalResultMaps>>,
-  query?: string,
-): SavedSignalSearchResult {
-  const signal = withSignalLayer({
-    ...row,
-    wowScore: calculateDisplayedInspirationScore({
-      coreWowScore: row.wowScore,
-      createdAt: row.createdAt,
-    }),
-  });
-  const sparks = maps.sparksBySignal.get(row.id) ?? [];
-  const context = maps.contextBySignal.get(row.id) ?? [];
-  const topNotes = maps.topNotesBySignal.get(row.id) ?? [];
-  const attachmentRows = maps.attachmentsBySignal.get(row.id) ?? [];
-  const contextTerms = [...new Set(context.map((node) => node.label))].slice(0, 6);
-  const topNoteTitles = [...new Set(topNotes.map((note) => note.title))].slice(0, 4);
-  const groupNotes = (maps.groupNotesBySignal.get(row.id) ?? [])
-    .map((note: any) => ({
-      groupId: note.groupId as string,
-      groupName: note.groupName as string,
-      noteTitle: note.title as string,
-    }))
-    .slice(0, 4);
-  const haystack = [
-    row.text,
-    ...sparks.map((spark) => spark.text),
-    ...context.map((node) => `${node.label} ${node.description}`),
-    ...topNotes.map((note) => `${note.title} ${note.why}`),
-  ];
-  const reasons = new Set<string>();
-  if (query && includesQuery([row.text], query)) reasons.add("raw text match");
-  if (query && includesQuery(sparks.map((spark) => spark.text), query)) reasons.add("highlight match");
-  if (query && includesQuery(contextTerms, query)) reasons.add("context match");
-  if (signal.signalScores.resonance >= 70) reasons.add("high resonance");
-  if (sparks.length > 0) reasons.add("has highlighted snippets");
-  if (topNotes.length > 0) reasons.add("influenced top-of-mind notes");
-
-  return {
-    id: row.id,
-    userId: row.userId,
-    textPreview: truncatePreview(row.text),
-    kind: row.kind,
-    capturedAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    shared: row.sharedToGroups,
-    resonanceScore: signal.signalScores.resonance,
-    signalScores: signal.signalScores,
-    highlightedSnippets: sparks.slice(0, 4).map((spark) => ({
-      id: spark.id,
-      text: spark.text,
-      source: spark.source,
-      confidence: spark.confidence,
-      isPrimary: spark.isPrimary,
-    })),
-    matchingSnippets: matchSnippet(haystack, query),
-    relatedContextTerms: contextTerms,
-    relatedTopOfMindNoteTitles: topNoteTitles,
-    relatedGroupNotes: groupNotes,
-    attachmentSummary: attachmentRows.slice(0, 3).map((attachment) => ({
-      id: attachment.id,
-      type: attachment.type,
-      label: attachmentLabel(attachment),
-      ...(attachment.type === "link" && attachment.url ? { url: attachment.url } : {}),
-    })),
-    relevanceReasons: [...reasons].slice(0, 4),
-  };
-}
-
-function passesFilter(result: SavedSignalSearchResult, filter: SignalArchiveFilter): boolean {
-  if (filter === "all") return true;
-  if (filter === "highlighted") return result.highlightedSnippets.length > 0;
-  if (filter === "high_resonance") return result.resonanceScore >= 70;
-  if (filter === "tensions") {
-    return result.relatedContextTerms.some((term) => term.toLowerCase().includes("tension"));
-  }
-  if (filter === "questions") {
-    return result.relatedContextTerms.some((term) => term.includes("?") || term.toLowerCase().includes("question"));
-  }
-  if (filter === "people_places") {
-    return result.relatedContextTerms.some((term) => /person|people|place|room|environment/i.test(term));
-  }
-  return (
-    result.relatedTopOfMindNoteTitles.length > 0 ||
-    result.relatedGroupNotes.length > 0
-  );
-}
-
-function sortResults(results: SavedSignalSearchResult[], sort: SignalArchiveSort): SavedSignalSearchResult[] {
-  return [...results].sort((a, b) => {
-    if (sort === "resonance") return b.resonanceScore - a.resonanceScore;
-    if (sort === "revisited") {
-      return (
-        b.relatedTopOfMindNoteTitles.length +
-        b.relatedGroupNotes.length -
-        (a.relatedTopOfMindNoteTitles.length + a.relatedGroupNotes.length)
-      );
-    }
-    return new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime();
-  });
-}
-
-export async function listSavedSignals(
-  db: WakaDb,
-  input: SignalArchiveListInput,
-): Promise<SavedSignalSearchResult[]> {
-  const rows = await fetchArchiveRows(db, input.userId, input.limit);
-  const maps = await buildSignalResultMaps(db, input.userId, rows.map((row) => row.id));
-  const query = input.query?.trim();
-  const results = rows
-    .map((row) => serializeSearchResult(row, maps, query))
-    .filter((result) => {
-      if (query) {
-        const values = [
-          result.textPreview,
-          ...result.highlightedSnippets.map((snippet) => snippet.text),
-          ...result.relatedContextTerms,
-          ...result.relatedTopOfMindNoteTitles,
-          ...result.relatedGroupNotes.map((note) => `${note.groupName} ${note.noteTitle}`),
-        ];
-        if (!includesQuery(values, query)) return false;
-      }
-      return passesFilter(result, input.filter);
-    });
-  return sortResults(results, input.sort).slice(0, input.limit);
-}
-
-export async function getSavedSignal(
-  db: WakaDb,
-  input: { userId: string; signalId: string },
-): Promise<SavedSignalDetail | null> {
-  const [row] = await db
-    .select({
-      id: inspirations.id,
-      userId: inspirations.userId,
-      text: inspirations.text,
-      kind: inspirations.kind,
-      category: inspirations.category,
-      importanceScore: inspirations.importanceScore,
-      wowScore: inspirations.wowScore,
-      cluster: inspirations.cluster,
-      classifiedAt: inspirations.classifiedAt,
-      sharedToGroups: inspirations.sharedToGroups,
-      createdAt: inspirations.createdAt,
-      updatedAt: inspirations.updatedAt,
-    })
-    .from(inspirations)
-    .where(and(eq(inspirations.userId, input.userId), eq(inspirations.id, input.signalId)))
-    .limit(1);
-
-  if (!row) return null;
-  const maps = await buildSignalResultMaps(db, input.userId, [input.signalId]);
-  const base = serializeSearchResult(row as BaseSignalRow, maps);
-  const [packet] = await db
-    .select({
-      id: meaningPackets.id,
-      packetText: meaningPackets.packetText,
-      sparkText: meaningPackets.sparkText,
-      artifactExcerpt: meaningPackets.artifactExcerpt,
-      updatedAt: meaningPackets.updatedAt,
-    })
-    .from(meaningPackets)
-    .where(and(eq(meaningPackets.userId, input.userId), eq(meaningPackets.inspirationId, input.signalId)))
-    .limit(1);
-  const feedbackRows = await db
-    .select({
-      id: feedback.id,
-      value: feedback.value,
-      emotionLabel: feedback.emotionLabel,
-      correctionText: feedback.correctionText,
-      createdAt: feedback.createdAt,
-    })
-    .from(feedback)
-    .where(and(eq(feedback.userId, input.userId), eq(feedback.targetType, "signal"), eq(feedback.targetId, input.signalId)))
-    .orderBy(desc(feedback.createdAt));
-
-  return {
-    ...base,
-    rawText: row.text,
-    attachments: (maps.attachmentsBySignal.get(input.signalId) ?? []).map((attachment) => ({
-      id: attachment.id,
-      type: attachment.type,
-      ...(attachment.type === "link" ? { url: attachment.url } : {}),
-      label: attachmentLabel(attachment),
-      contentType: attachment.contentType,
-      size: attachment.size,
-    })),
-    resonanceFeedback: feedbackRows.map((item) => ({
-      id: item.id,
-      value: item.value,
-      emotionLabel: item.emotionLabel,
-      correctionText: item.correctionText,
-      createdAt: item.createdAt.toISOString(),
-    })),
-    signalPacket: packet
-      ? {
-          id: packet.id,
-          text: packet.packetText,
-          primarySpark: packet.sparkText,
-          artifactExcerpt: packet.artifactExcerpt,
-          updatedAt: packet.updatedAt.toISOString(),
-        }
-      : null,
-    relatedContextNodes: (maps.contextBySignal.get(input.signalId) ?? []).map((node) => ({
-      id: node.nodeId,
-      type: normalizeContextNodeType(node.type),
-      label: node.label,
-      description: node.description,
-      confidence: node.confidence,
-      evidenceReason: node.reason,
-    })),
-    relatedTopOfMindNotes: (maps.topNotesBySignal.get(input.signalId) ?? []).map((note) => ({
-      id: note.id,
-      title: note.title,
-      type: topOfMindNoteTypeFromWowMoment({ kind: note.kind }),
-      body: note.why,
-      confidence: note.confidence,
-      status: "active" as const,
-    })),
-  };
-}
-
-export function createSignalArchiveRoutes(
-  deps: SignalArchiveRoutesDependencies = {},
-): Hono<AuthEnv> {
+export function createSignalRoutes(deps: SignalRouteDependencies = {}): Hono<AuthEnv> {
   const routes = new Hono<AuthEnv>();
   const getDatabase = deps.getDatabase ?? getDb;
-  const listSignals = deps.listSignals ?? listSavedSignals;
-  const getSignal = deps.getSignal ?? getSavedSignal;
+  const listSignals = deps.listSignals ?? listProfileSignals;
+  const getSignal = deps.getSignal ?? getProfileSignal;
+  const updateStatement = deps.updateStatement ?? updateSignalStatement;
+  const deleteSignal = deps.deleteSignal ?? deleteProfileSignal;
+  const shareSignal = deps.shareSignal ?? shareSignalWithGroup;
+  const unshareSignal = deps.unshareSignal ?? unshareSignalFromGroup;
+  const loadProfile = deps.loadProfile ?? loadProfileTarget;
+  const reembed = deps.reembed ?? reembedSignalStatement;
+  const requestRefresh = deps.requestRefresh ?? enqueueTopOfMindRefresh;
+
+  /**
+   * Curating a signal changes what the artifact should be built from, so the
+   * top of mind is re-synthesised in the background. Best-effort on purpose:
+   * the edit itself has already committed, and a failed enqueue is a stale
+   * board on the next refresh, not a lost edit. The debounce absorbs a burst.
+   */
+  const scheduleRefresh = (profileId: string): void => {
+    void requestRefresh(profileId, "signals_changed").catch((err: unknown) => {
+      console.warn("[signals] top-of-mind refresh enqueue failed", {
+        profileId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
 
   routes.use("*", deps.authMiddleware ?? requireAuth);
 
   routes.get("/", async (c) => {
-    const parsedQuery = signalArchiveQuerySchema.safeParse(c.req.query());
+    const parsedQuery = listSignalsQuerySchema.safeParse(c.req.query());
     if (!parsedQuery.success) {
       return c.json(
         {
-          error: "Invalid signal archive query",
+          error: "Invalid signal query",
           details: parsedQuery.error.flatten().fieldErrors,
         },
         400,
       );
     }
-    const input = {
-      userId: c.get("user").id,
-      query: parsedQuery.data.q,
-      filter: parsedQuery.data.filter ?? "all",
-      sort: parsedQuery.data.sort ?? "recent",
-      limit: parsedQuery.data.limit ?? DEFAULT_SIGNAL_ARCHIVE_LIMIT,
-    } satisfies SignalArchiveListInput;
-    const signals = await listSignals(getDatabase(), input);
-    return c.json({ signals }, 200);
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "read",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const signalRows = await listSignals(db, {
+      profileId: scope.profileId,
+      status: parsedQuery.data.status,
+      limit: parsedQuery.data.limit ?? DEFAULT_SIGNAL_LIMIT,
+    });
+    return c.json({ signals: signalRows }, 200);
   });
 
   routes.get("/:signalId", async (c) => {
     const parsedParams = signalParamsSchema.safeParse(c.req.param());
     if (!parsedParams.success) {
       return c.json(
-        {
-          error: "Invalid signal id",
-          details: parsedParams.error.flatten().fieldErrors,
-        },
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
         400,
       );
     }
-    const signal = await getSignal(getDatabase(), {
-      userId: c.get("user").id,
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "read",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const signal = await getSignal(db, {
+      profileId: scope.profileId,
       signalId: parsedParams.data.signalId,
     });
     if (!signal) return c.json({ error: "Signal not found" }, 404);
     return c.json({ signal }, 200);
   });
 
+  routes.patch("/:signalId", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const rawBody = await c.req.json().catch(() => null);
+    const parsedBody = updateSignalBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return c.json(
+        { error: "Invalid signal update", details: parsedBody.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const signal = await updateStatement(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+      statement: parsedBody.data.statement,
+    });
+    if (!signal) return c.json({ error: "Signal not found" }, 404);
+
+    // The stored vector now describes the old wording; bring it in line so
+    // future captures match what the signal says, not what it used to.
+    await reembed(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+      statement: parsedBody.data.statement,
+    });
+    scheduleRefresh(scope.profileId);
+    return c.json({ signal }, 200);
+  });
+
+  routes.delete("/:signalId", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+    const parsedQuery = signalScopeQuerySchema.safeParse(c.req.query());
+    if (!parsedQuery.success) {
+      return c.json(
+        { error: "Invalid signal query", details: parsedQuery.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const db = getDatabase();
+    const scope = await resolveProfileScope(
+      db,
+      c.get("session"),
+      parsedQuery.data.profile,
+      "write",
+      loadProfile,
+    );
+    if (!scope.ok) return c.json(scope.body, scope.status);
+
+    const deleted = await deleteSignal(db, {
+      profileId: scope.profileId,
+      signalId: parsedParams.data.signalId,
+    });
+    if (!deleted) return c.json({ error: "Signal not found" }, 404);
+
+    // The artifact may cite the signal just removed; re-synthesise so an entry
+    // is not left resting on a citation that no longer resolves.
+    scheduleRefresh(scope.profileId);
+    return c.json({ deleted: true }, 200);
+  });
+
+  /**
+   * Sharing is the owner's act. Group membership is between human profiles,
+   * and a share attributes a statement to the member who holds it, so the
+   * signal must belong to the session's own profile — an admin curating an
+   * agent's memory is not the same thing as publishing on its behalf.
+   */
+  routes.post("/:signalId/shares", async (c) => {
+    const parsedParams = signalParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid signal id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const rawBody = await c.req.json().catch(() => null);
+    const parsedBody = createShareBodySchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return c.json(
+        { error: "Invalid share request", details: parsedBody.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const outcome = await shareSignal(getDatabase(), {
+      profileId: c.get("session").profile.id,
+      signalId: parsedParams.data.signalId,
+      groupId: parsedBody.data.groupId,
+    });
+    if (outcome === "not_found") return c.json({ error: "Signal not found" }, 404);
+    if (outcome === "not_a_member") {
+      return c.json({ error: "Not a member of this group" }, 403);
+    }
+    return c.json({ shared: true, groupId: parsedBody.data.groupId }, 201);
+  });
+
+  routes.delete("/:signalId/shares/:groupId", async (c) => {
+    const parsedParams = shareParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) {
+      return c.json(
+        { error: "Invalid share id", details: parsedParams.error.flatten().fieldErrors },
+        400,
+      );
+    }
+
+    const removed = await unshareSignal(getDatabase(), {
+      profileId: c.get("session").profile.id,
+      signalId: parsedParams.data.signalId,
+      groupId: parsedParams.data.groupId,
+    });
+    if (!removed) return c.json({ error: "Share not found" }, 404);
+    return c.json({ shared: false, groupId: parsedParams.data.groupId }, 200);
+  });
+
   return routes;
 }
 
-export const signalArchiveRoutes = createSignalArchiveRoutes();
+export const signalsRoutes = createSignalRoutes();

@@ -1,140 +1,78 @@
 /**
- * Turn a bare-link save into something the pipeline can hear.
+ * Attachment enrichment — reading what a person saved, not only what they typed.
  *
- * A save is often just a URL. The heart reacted to something *inside* that
- * page — a line, a person, a moment — and the pipeline embeds text, so the
- * wrapper alone is nearly mute. This module fetches the page's own words
- * (title, description) and stores them beside the save.
+ * A capture is often a bare link, or an image with three words beside it. Every
+ * layer above reads text, so without this the saved thing is mute: whatever
+ * argument moved someone lives inside that page, and the page is not in the
+ * database. This module fetches it once, deterministically, and stores a
+ * bounded copy on the attachment so extraction can read the *material* rather
+ * than the wrapper.
  *
- * Deliberately modest: no headless browser, no transcripts, one request per
- * URL with a short timeout. The goal is audibility, not archival. A page that
- * refuses to speak (blocked, dead, empty) is recorded as attempted so it is
- * not knocked on forever.
+ * Enrichment is machine-derived context and never the person's words. A quote
+ * drawn from it downstream belongs to the source, not to the member who saved
+ * the link — attributing an article's claim to its reader would be a statement
+ * about them that nobody made.
+ *
+ * Deliberately modest: no headless browser, one request per URL, a short
+ * timeout, hand-followed redirects, and a hard character cap. A page that
+ * refuses to speak is recorded as such so it is not knocked on forever.
  */
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
-import { inspirations } from "../db/index.js";
+import {
+  attachments,
+  type AttachmentEnrichmentKind,
+  type AttachmentType,
+} from "../db/index.js";
+import { getDb } from "./db.js";
+import {
+  describeImage,
+  ImageDescriptionError,
+  isDescribableImageType,
+  MAX_IMAGE_BYTES,
+} from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 
 const FETCH_TIMEOUT_MS = 6000;
+
 /** Redirect hops we will follow, each re-checked. Enough for shorteners. */
 const MAX_REDIRECTS = 4;
-/**
- * How much text a save needs before the pipeline can hear it at all.
- *
- * Enrichment fills silence; it does not add volume. A fixed cap does the
- * opposite: it hands the same budget to a save that is nothing but a URL and
- * to a save whose owner already wrote a thousand words, so the second one
- * doubles in weight for reasons that have nothing to do with what its owner
- * said. That amplifies whoever writes most — the exact imbalance the trigger
- * fairness work exists to remove — while doing nothing extra for the save
- * that actually needed help.
- *
- * So the budget is a TOP-UP toward this floor, not an allowance. A bare link
- * gets the lot; a long note with a link in it gets almost none.
- */
-const AUDIBILITY_FLOOR_CHARS = 1200;
-/** Never fetch more than this, however silent the save. Not an article mirror. */
-const MAX_ENRICHMENT_CHARS = 1600;
 
 /**
- * Below this many readable characters, a save says nothing an embedding can
- * use, and the pipeline must not pretend otherwise.
+ * How much of a page is kept.
  *
- * Distinct from {@link AUDIBILITY_FLOOR_CHARS}, which is what enrichment aims
- * *at*. This is the far lower bar for being heard at all — a title and a
- * fragment. The two were previously one number in the lib and a different one
- * in a backfill script, so nothing enforced either.
- *
- * 60 admits one concrete captured sentence while still rejecting bare links,
- * labels, and fragmentary titles. The capture surface is intentionally quick;
- * requiring 120 characters made several coherent sentences collectively
- * invisible to rooms even though the solo context graph could read them.
+ * Enough for an article's argument, not enough to mirror the article. The cap
+ * is also what keeps one saved link from outweighing everything else a profile
+ * has ever written when extraction reads its material.
  */
-export const MIN_AUDIBLE_CHARS = 60;
+export const MAX_ENRICHMENT_TEXT_CHARS = 4000;
 
 /**
- * How much of this save an embedding can actually read.
+ * How much of a fetched document the extractors are allowed to see.
  *
- * URLs are stripped before counting, for the same reason the enrichment budget
- * strips them: a long link would otherwise argue that a save is full of words.
- * A bare `https://youtu.be/8IWA3Pud2aA?si=g1k0` is 40 characters of nothing.
- *
- * Enrichment counts, because that is the entire point of it — a link that has
- * been fetched carries the page's own words and is genuinely audible now.
+ * The patterns below run over attacker-chosen HTML: the page belongs to
+ * whoever wrote it and a member only chose to save a link to it. Handing a
+ * regex a megabyte of hostile markup is a denial of service waiting to be
+ * written, and nothing useful lives that far down — metadata sits in the head
+ * and the body extractor takes what it needs from the first screens.
  */
-export function audibleLength(text: string, enrichment: string | null): number {
-  const ownWords = text.replace(/https?:\/\/\S+/g, " ");
-  return `${ownWords} ${enrichment ?? ""}`.replace(/\s+/g, " ").trim().length;
-}
+const MAX_HTML_CHARS = 128_000;
 
 /**
- * Can the pipeline hear this save?
- *
- * The gate, not a judgement of worth. A save below the floor still lives on
- * its owner's wall, still belongs to them, and still counts as something they
- * reacted to — it simply cannot seed or support a reading, because there is
- * nothing in it to read. Saving is never gatekept; being *quoted* requires
- * words.
- */
-export function isAudible(signal: { text: string; enrichment: string | null }): boolean {
-  return audibleLength(signal.text, signal.enrichment) >= MIN_AUDIBLE_CHARS;
-}
-/**
- * Even a save that needs no help should say WHAT it linked to. This is enough
- * for a title and a blurb — identification, not substance.
- */
-const MIN_ENRICHMENT_CHARS = 200;
-
-/**
- * How much page text this save should be topped up with.
- *
- * Measured against the owner's OWN words, with the URL itself discounted: the
- * link is the thing being explained, so counting its characters as content
- * would let a long URL argue that the save is already audible.
- *
- * Exported because the invariant it encodes — thin saves get a lot, thick
- * saves get almost nothing — is the whole point of the module and is not
- * observable through a live fetch.
- */
-export function enrichmentBudgetFor(text: string): number {
-  const ownWords = text.replace(/https?:\/\/\S+/g, " ").replace(/\s+/g, " ").trim();
-  const topUp = AUDIBILITY_FLOOR_CHARS - ownWords.length;
-  if (topUp <= MIN_ENRICHMENT_CHARS) return MIN_ENRICHMENT_CHARS;
-  return Math.min(topUp, MAX_ENRICHMENT_CHARS);
-}
-/**
- * How much of a fetched page the extractors are allowed to see.
- *
- * The regexes below run over attacker-chosen HTML: the page belongs to
- * whoever wrote it, and a user only chose to save a link to it. Handing a
- * pattern 1.5 MB of hostile markup is a denial-of-service waiting to be
- * written, and nothing useful lives that far down anyway — og tags and the
- * player JSON are in the head, and the article body extractor takes what it
- * needs from the first screens of markup.
- *
- * Small enough to bound the worst case, large enough that a real article's
- * opening paragraphs are always inside it.
- */
-const MAX_HTML_CHARS = 64_000;
-
-/**
- * A realistic browser UA, not an honest bot one. YouTube (and others) serve
- * bot UAs a stripped page with no og tags at all; the page's own words are
- * public, we are fetching them once, and the polite string got us silence.
+ * A realistic browser UA, not an honest bot one. Several large sites serve bot
+ * UAs a stripped page with no metadata at all; the page's own words are public,
+ * we are fetching them once, and the polite string got us silence.
  */
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
-/** The first http(s) URL in a save's text, or null. */
-export function extractFirstUrl(text: string): string | null {
-  const match = text.match(/https?:\/\/[^\s<>"')\]]+/i);
-  return match ? match[0] : null;
-}
+// ---------------------------------------------------------------------------
+// Text extraction
+// ---------------------------------------------------------------------------
 
 function decodeEntities(value: string): string {
   return value
@@ -144,9 +82,9 @@ function decodeEntities(value: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    // Hex entities too. Decimal-only left `&#x27;` sitting in stored text —
-    // seen on a real save as `&#x27;와인 바꿔치기 논란&#x27;` — which the
-    // embedding then reads as part of the words.
+    // Hex entities as well as decimal ones. Seen on a real save as
+    // `&#x27;와인 바꿔치기 논란&#x27;`, which extraction then reads as part of
+    // the words.
     .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
     .replace(/&nbsp;/g, " ");
 }
@@ -158,11 +96,11 @@ function collapse(value: string): string {
 /**
  * Titles a site serves when it wants a login instead of showing the page.
  *
- * Stored verbatim, these are worse than nothing: a LinkedIn post save came
- * back as "Sign Up | LinkedIn — 500 million+ members | Manage your
- * professional identity…", so the save embedded as *a LinkedIn account page*
- * rather than as the post its owner reacted to. Silence at least leaves the
- * URL's own words standing alone.
+ * Stored verbatim these are worse than nothing: a LinkedIn post save came back
+ * as "Sign Up | LinkedIn — 500 million+ members | Manage your professional
+ * identity…", so the capture read as *a LinkedIn account page* rather than as
+ * the post its owner reacted to. Silence leaves the person's own words standing
+ * alone, which is the truthful outcome.
  */
 const AUTH_WALL_TITLE =
   /^(?:sign\s?up|sign\s?in|log\s?in|login|register|create an account|join now|로그인|회원가입)\b/i;
@@ -184,13 +122,12 @@ export function isAuthWallSummary(title: string | null, description: string | nu
 
 /**
  * Lines a creator repeats on every upload: contact addresses, socials, the
- * schedule, music credits, comment policy. They say nothing about the video
+ * schedule, music credits, comment policy. They say nothing about the thing
  * and, on a short description, they outweigh what does.
  *
- * Matched per LINE, never per sentence. An earlier pass split on "." as well
- * and shredded the text it was meant to clean — Korean prose and bare URLs
- * both contain periods, so `사업..` became `사업 —` and `www.youtube.com`
- * became `www — youtube — com`.
+ * Matched per LINE, never per sentence. Splitting on "." as well shreds the
+ * text it is meant to clean — Korean prose and bare URLs both contain periods,
+ * so `사업..` becomes `사업 —` and `www.youtube.com` becomes `www — youtube — com`.
  */
 const BOILERPLATE_LINE =
   /비즈니스\s*문의|광고\s*문의|협찬|business inquir|인스타그램|틱톡|업로드\s*일정|구독\s*(?:과|및|,)?\s*좋아요|\bBGM\b|음원\s*제공|저작권|편집\s*툴|Premiere\s*Pro|After\s*Effect|댓글은\s*삭제|혐오\s*및\s*차별/i;
@@ -202,11 +139,11 @@ const SOCIAL_HOST =
 /**
  * Line SHAPES that are a sign-off in any language.
  *
- * The keyword list above only knows the languages someone thought to add, so
- * a Japanese or Spanish creator's sign-off walks straight through it. These
- * do not depend on vocabulary: an address, a link to a profile, or a short
- * `label : url` pair is a pointer somewhere else, not a sentence about the
- * thing. Structure is the durable signal; keywords are the top-up.
+ * A keyword list only knows the languages someone thought to add, so a Japanese
+ * or Spanish creator's sign-off walks straight through it. These do not depend
+ * on vocabulary: an address, a link to a profile, or a short `label : url` pair
+ * is a pointer somewhere else, not a sentence about the thing. Structure is the
+ * durable signal; keywords are the top-up.
  */
 function isStructuralBoilerplate(line: string): boolean {
   // A bare link on its own line.
@@ -242,9 +179,9 @@ export function stripBoilerplateLines(value: string): string {
  * Read from `shortDescription` in the embedded player JSON rather than from
  * `og:description`, because the og tag arrives already whitespace-collapsed —
  * the line breaks that separate "what this video is about" from "business
- * inquiries / instagram / upload schedule" are gone by then, and the two
- * become one run of text that cannot be told apart. `shortDescription` keeps
- * them, so the sign-off can be dropped line by line.
+ * inquiries / instagram / upload schedule" are gone by then, and the two become
+ * one run of text that cannot be told apart. `shortDescription` keeps them, so
+ * the sign-off can be dropped line by line.
  */
 export function extractYouTubeDescription(html: string): string | null {
   const match = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
@@ -259,41 +196,58 @@ export function extractYouTubeDescription(html: string): string | null {
   return stripped.length > 0 ? stripped : null;
 }
 
+/** Blocks that exist to move you elsewhere rather than to say anything. */
+const CHROME_BLOCK =
+  /<(script|style|noscript|svg|nav|header|footer|aside|form|template)[^>]*>[\s\S]*?<\/\1>/gi;
+
 /**
- * The page's own prose, for pages that have some.
+ * The page's own prose.
  *
- * A title and a one-line description are ~200 characters, and a member whose
- * saves are all links therefore carries a fraction of the text of a member who
- * pastes essays — measured on a real board, ~290 characters against ~1,150,
- * which is most of why their saves never won a candidate slot. Paragraphs are
- * where the difference closes.
+ * This is the point of link enrichment. A title and a one-line blurb are ~200
+ * characters — enough to name what was saved, nowhere near enough to know what
+ * it argued — so a profile whose captures are all links carries a fraction of
+ * the material of one that pastes essays. Paragraphs are where that closes.
  *
- * Deliberately crude: `<p>` blocks, script/style stripped, short fragments
- * (nav links, captions, cookie notices) dropped. Not a readability port.
+ * Deliberately crude: chrome stripped, `<p>` blocks preferred, short fragments
+ * (nav links, captions, cookie notices) dropped, and a whole-container fallback
+ * for the many pages that never use a paragraph tag. Not a readability port.
  */
-export function extractArticleBody(html: string, budget: number): string | null {
-  const article = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1] ?? html;
-  const cleaned = article
-    .replace(/<(script|style|noscript|svg)[^>]*>[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<!--[\s\S]*?-->/g, " ");
+export function extractPageBody(html: string, budget = MAX_ENRICHMENT_TEXT_CHARS): string | null {
+  if (budget <= 0) return null;
+  const container =
+    html.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1] ??
+    html.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ??
+    html;
+  const cleaned = container.replace(CHROME_BLOCK, " ").replace(/<!--[\s\S]*?-->/g, " ");
 
   const paragraphs: string[] = [];
   for (const match of cleaned.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)) {
     const text = collapse(match[1]!.replace(/<[^>]+>/g, " "));
-    // Long enough to be prose rather than a caption, a byline or a nav item.
+    // Long enough to be prose rather than a caption, a byline, or a nav item.
     if (text.length < 60) continue;
     paragraphs.push(text);
     if (paragraphs.join(" ").length >= budget) break;
   }
-  if (paragraphs.length === 0) return null;
-  return paragraphs.join(" ").slice(0, budget).trim();
+  if (paragraphs.length > 0) return paragraphs.join(" ").slice(0, budget).trim();
+
+  // Div soup. Most pages that hide their content from a paragraph scan are
+  // ordinary sites with an unusual template, not empty ones — taking the
+  // stripped container is coarse but recovers material that would otherwise
+  // be lost entirely.
+  const flattened = collapse(cleaned.replace(/<[^>]+>/g, " "));
+  if (flattened.length < 60) return null;
+  return flattened.slice(0, budget).trim();
 }
 
-/** Pull title + description out of an HTML document, og tags first. */
-export function extractHtmlSummary(
-  html: string,
-  budget: number = MAX_ENRICHMENT_CHARS,
-): string | null {
+export interface LinkMetadata {
+  title: string | null;
+  description: string | null;
+  siteName: string | null;
+  previewImageUrl: string | null;
+}
+
+/** Structured facts a link card renders, og tags first. */
+export function extractLinkMetadata(html: string): LinkMetadata {
   const meta = (name: string): string | null => {
     const re = new RegExp(
       `<meta[^>]+(?:property|name)=["']${name}["'][^>]*content=["']([^"']*)["']|` +
@@ -305,35 +259,56 @@ export function extractHtmlSummary(
     return raw ? collapse(raw) : null;
   };
 
-  const ogTitle = meta("og:title");
   const titleTag = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  const title = ogTitle || (titleTag ? collapse(titleTag[1]!) : null);
+  const title = meta("og:title") || (titleTag ? collapse(titleTag[1]!) : null);
   const rawDescription = meta("og:description") || meta("description");
   const description = rawDescription ? stripBoilerplateLines(rawDescription) : null;
 
-  // A page asking for an account is not a page speaking. Return null so the
-  // caller records `page_silent` rather than storing the site's own pitch.
-  if (isAuthWallSummary(title, rawDescription)) return null;
+  // A page asking for an account is not a page speaking. Reporting nothing is
+  // what makes the caller record `page_silent` instead of storing the site's
+  // own pitch as if it were the material.
+  if (isAuthWallSummary(title, rawDescription)) {
+    return { title: null, description: null, siteName: null, previewImageUrl: null };
+  }
 
-  const head = [title, description].filter(
-    (part): part is string => Boolean(part && part.length > 0),
-  );
-  if (head.length === 0) return null;
-
-  const summary = head.join(" — ");
-  // Prose, when the page has any, is what makes a link save weigh the same as
-  // a pasted one. Appended rather than substituted: the title still names the
-  // thing, and a page with no paragraphs is no worse off than before.
-  const body = extractArticleBody(html, budget - summary.length);
-  const full = body ? `${summary} — ${body}` : summary;
-  return full.slice(0, budget);
+  return {
+    title: title && title.length > 0 ? title : null,
+    description: description && description.length > 0 ? description : null,
+    siteName: meta("og:site_name"),
+    previewImageUrl: meta("og:image") || meta("twitter:image"),
+  };
 }
+
+/**
+ * One field for extraction to read.
+ *
+ * The structured columns beside it exist to render a link card; this is the
+ * text. It leads with the page's own naming of itself because a video or a
+ * gallery frequently has no prose at all, and a title is still material.
+ */
+export function composeEnrichmentText(
+  parts: Array<string | null>,
+  cap = MAX_ENRICHMENT_TEXT_CHARS,
+): string | null {
+  const joined = parts
+    .map((part) => (part ?? "").trim())
+    .filter((part) => part.length > 0)
+    .join(" — ")
+    .trim();
+  if (joined.length === 0) return null;
+  return joined.slice(0, cap);
+}
+
+// ---------------------------------------------------------------------------
+// Fetching, with the hygiene a server-side fetch of a user's URL requires
+// ---------------------------------------------------------------------------
 
 /**
  * Is this address one the open internet cannot reach?
  *
- * Loopback, link-local (which on AWS is the instance metadata endpoint at
- * 169.254.169.254), RFC1918, carrier NAT, and the v6 equivalents.
+ * Loopback, link-local (which on AWS and GCP is the instance metadata endpoint
+ * at 169.254.169.254, handing role credentials to anything that asks), RFC1918,
+ * carrier NAT, and the v6 equivalents.
  */
 export function isPrivateAddress(address: string): boolean {
   const version = isIP(address);
@@ -361,46 +336,75 @@ export function isPrivateAddress(address: string): boolean {
 }
 
 /**
- * Server-side fetch of a URL a user typed is an SSRF sink: without this the
+ * A server-side fetch of a URL a member typed is an SSRF sink: unguarded, the
  * pipeline would happily read the cloud metadata endpoint or anything else
- * inside the VPC and store the response on a save. Scheme is allowlisted and
- * the host is resolved and checked before we connect.
+ * inside the VPC and store the response on a capture. The scheme is
+ * allowlisted and the host is resolved and checked before we connect.
  *
  * DNS is re-resolved by fetch after this check, so a hostile record could in
  * principle change between the two. Blocking on resolution is still the
- * meaningful barrier, and the response body only ever reaches us as a title
- * and description on one save.
+ * meaningful barrier, and the response body only ever reaches us as bounded
+ * text on one attachment.
  */
-async function assertFetchableUrl(url: string): Promise<void> {
+/**
+ * Hosts exempt from the private-address refusal, as `host` or `host:port`.
+ *
+ * Empty unless `WAKA_ENRICHMENT_ALLOWED_HOSTS` names something, and nothing in
+ * the deployed configuration sets it. It exists because the enrichment tests
+ * need a page and an image served from a fixture on loopback, and the honest
+ * way to allow that is a named exception the reader can see rather than a
+ * blanket "skip the check in dev" — which is the flag that eventually ships.
+ */
+function enrichmentHostAllowlist(): Set<string> {
+  const raw = process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS ?? "";
+  return new Set(
+    raw
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry.length > 0),
+  );
+}
+
+export async function assertFetchableUrl(url: string): Promise<void> {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    throw new Error("unfetchable url");
+    throw new Error("unfetchable_url");
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("unfetchable url: scheme");
+    throw new Error("unsupported_scheme");
   }
+
+  const allowed = enrichmentHostAllowlist();
+  if (allowed.has(parsed.host.toLowerCase()) || allowed.has(parsed.hostname.toLowerCase())) {
+    return;
+  }
+
   const host = parsed.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) {
-    if (isPrivateAddress(host)) throw new Error("unfetchable url: private address");
+    if (isPrivateAddress(host)) throw new Error("private_address");
     return;
   }
   const resolved = await lookup(host, { all: true });
-  if (resolved.length === 0) throw new Error("unfetchable url: unresolvable");
+  if (resolved.length === 0) throw new Error("unresolvable_host");
   // `all`, not the first: a name that returns one public and one private
   // address must not be reachable through the private one.
   if (resolved.some((entry) => isPrivateAddress(entry.address))) {
-    throw new Error("unfetchable url: private address");
+    throw new Error("private_address");
   }
 }
 
 /**
- * Follow redirects by hand so every hop is checked. `redirect: "follow"` would
- * let a public URL bounce us into the VPC on its second hop, which is the
- * usual way this protection is bypassed.
+ * Follow redirects by hand so every hop is checked. `redirect: "follow"` lets a
+ * public URL bounce us into the VPC on its second hop, which is the usual way
+ * this protection is bypassed — so an image fetched by URL must come through
+ * here too, not through a plain `fetch(..., { redirect: "follow" })`.
  */
-async function fetchWithTimeout(url: string): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  accept = "text/html,application/xhtml+xml",
+): Promise<{ response: Response; finalUrl: string; controller: AbortController }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
@@ -410,11 +414,16 @@ async function fetchWithTimeout(url: string): Promise<Response> {
       const response = await fetch(current, {
         signal: controller.signal,
         redirect: "manual",
-        headers: { "User-Agent": USER_AGENT, Accept: "text/html,application/json" },
+        headers: { "User-Agent": USER_AGENT, Accept: accept },
       });
       const location = response.headers.get("location");
-      if (response.status < 300 || response.status >= 400 || !location) return response;
-      if (hop >= MAX_REDIRECTS) return response;
+      if (response.status < 300 || response.status >= 400 || !location) {
+        // The caller reads the body under the same abort signal, so the
+        // timeout covers the download, not only the headers; the caller
+        // aborts once it has what it needs.
+        return { response, finalUrl: current, controller };
+      }
+      if (hop >= MAX_REDIRECTS) return { response, finalUrl: current, controller };
       current = new URL(location, current).toString();
     }
   } finally {
@@ -423,121 +432,317 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 }
 
 /**
- * YouTube blocks plain HTML scraping but publishes oEmbed for exactly this
- * use: title + author, no key required.
+ * Read a response body up to `maxBytes`, then stop. A page or image that keeps
+ * streaming past the cap is truncated rather than buffered whole: the timeout
+ * bounds how long a slow drip may run, this bounds how much memory a fast one
+ * may take. Returns the bytes actually read.
  */
-async function fetchYouTubeSummary(url: string, budget: number): Promise<string | null> {
-  // oEmbed for the reliable title/author; the watch page's og:description for
-  // the video's own words. A title alone is often too short to make a save
-  // audible — the description is where the content lives.
-  let titleLine: string | null = null;
-  try {
-    const oembed = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    const res = await fetchWithTimeout(oembed);
-    if (res.ok) {
-      const body = (await res.json()) as { title?: string; author_name?: string };
-      const parts = [body.title, body.author_name && `by ${body.author_name}`].filter(Boolean);
-      if (parts.length > 0) titleLine = parts.join(" — ");
-    }
-  } catch {
-    // fall through to the page itself
+async function readCappedBody(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array> {
+  if (!response.body) {
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    return buffer.length > maxBytes ? buffer.subarray(0, maxBytes) : buffer;
   }
 
-  let description: string | null = null;
-  try {
-    const res = await fetchWithTimeout(url);
-    if (res.ok) {
-      const html = (await res.text()).slice(0, MAX_HTML_CHARS);
-      // The player JSON first: it is the only copy of the description that
-      // still has line breaks, so it is the only one the sign-off can be
-      // stripped out of. `og:description` is the fallback for a page whose
-      // shape has changed.
-      description = extractYouTubeDescription(html);
-      if (!description) {
-        const summary = extractHtmlSummary(html, budget);
-        // The HTML summary repeats the title; keep only what it adds.
-        if (summary && (!titleLine || summary.length > titleLine.length + 20)) {
-          description = summary;
-        }
-      }
-    }
-  } catch {
-    // title alone is still better than silence
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (total < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
   }
+  await reader.cancel().catch(() => undefined);
 
-  const combined = [titleLine, description].filter(Boolean).join(" — ");
-  return combined.length > 0 ? combined.slice(0, budget) : null;
+  const out = new Uint8Array(Math.min(total, maxBytes));
+  let offset = 0;
+  for (const chunk of chunks) {
+    if (offset >= out.length) break;
+    const slice = chunk.subarray(0, out.length - offset);
+    out.set(slice, offset);
+    offset += slice.length;
+  }
+  return out;
 }
 
-/** Fetch what a URL says about itself. Null when the page will not speak. */
-export async function fetchUrlEnrichment(
-  url: string,
-  budget: number = MAX_ENRICHMENT_CHARS,
-): Promise<string | null> {
+export interface LinkEnrichment extends LinkMetadata {
+  finalUrl: string;
+  hostname: string | null;
+  /** The bounded text extraction reads. Null when the page said nothing. */
+  text: string | null;
+}
+
+/**
+ * Fetch what a URL says about itself. Throws on transport failure — the caller
+ * decides whether a page that could not be reached is worth another attempt.
+ */
+export async function fetchLinkEnrichment(url: string): Promise<LinkEnrichment> {
+  const { response, finalUrl, controller } = await fetchWithTimeout(url);
+  const hostname = safeHostname(finalUrl);
+  const empty: LinkEnrichment = {
+    finalUrl,
+    hostname,
+    title: null,
+    description: null,
+    siteName: null,
+    previewImageUrl: null,
+    text: null,
+  };
+
+  if (!response.ok) throw new Error(`http_${response.status}`);
+  const contentType = response.headers.get("content-type") ?? "";
+  // A PDF or a video stream is not something this reads, and pulling one down
+  // to discover that costs a member's attachment nothing but latency.
+  if (!contentType.includes("html")) return empty;
+
+  // Bounded read under the fetch's own timeout, then release the connection.
+  // MAX_HTML_CHARS is a character budget; a UTF-8 byte cap of 4× is a safe
+  // ceiling that still truncates a runaway page.
+  const bytes = await readCappedBody(response, MAX_HTML_CHARS * 4);
+  controller.abort();
+  const html = new TextDecoder().decode(bytes).slice(0, MAX_HTML_CHARS);
+  const metadata = extractLinkMetadata(html);
+  const body = isYouTubeHost(hostname)
+    ? extractYouTubeDescription(html) ?? extractPageBody(html)
+    : extractPageBody(html);
+
+  return {
+    ...metadata,
+    finalUrl,
+    hostname,
+    text: composeEnrichmentText([metadata.title, metadata.description, body]),
+  };
+}
+
+function safeHostname(url: string): string | null {
   try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    if (host === "youtube.com" || host === "youtu.be" || host === "m.youtube.com") {
-      return await fetchYouTubeSummary(url, budget);
-    }
-    const res = await fetchWithTimeout(url);
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("html")) return null;
-    // "Meta lives in the head" is a lie on modern sites: YouTube puts its og
-    // tags ~690KB in. Read generously; this runs once per URL ever.
-    const html = (await res.text()).slice(0, MAX_HTML_CHARS);
-    return extractHtmlSummary(html, budget);
+    return new URL(url).hostname || null;
   } catch {
     return null;
   }
 }
 
-export type EnrichSignalOutcome =
-  | "enriched"
-  | "no_url"
-  | "already_attempted"
-  | "page_silent";
+function isYouTubeHost(hostname: string | null): boolean {
+  if (!hostname) return false;
+  const host = hostname.replace(/^www\./, "");
+  return host === "youtube.com" || host === "youtu.be" || host === "m.youtube.com";
+}
+
+// ---------------------------------------------------------------------------
+// The entry point the queue calls
+// ---------------------------------------------------------------------------
+
+/** What enrichment concluded about an attachment it actually looked at. */
+export type AttachmentEnrichmentVerdict =
+  | { status: "ready"; kind: AttachmentEnrichmentKind; reason: null; text?: string }
+  /** Deterministically nothing to read. Another attempt would find the same. */
+  | { status: "unavailable"; reason: string }
+  /** Transport-level: the page may well answer on the next attempt. */
+  | { status: "failed"; reason: string };
+
+export type EnrichAttachmentResult = AttachmentEnrichmentVerdict | { status: "missing" };
+
+interface EnrichAttachmentDeps {
+  db?: WakaDb;
+}
+
+interface AttachmentRow {
+  id: string;
+  type: AttachmentType;
+  url: string;
+  s3Key: string | null;
+  contentType: string | null;
+}
 
 /**
- * Best-effort, at-most-once enrichment for one signal.
+ * Read an uploaded image's bytes.
  *
- * Writes `enriched_at` on every attempt — including failures — so a dead link
- * costs one fetch ever, not one per synthesis pass. `force` re-attempts.
- * Never throws: a save must not fail, and a pass must not stall, over a page
- * that would not speak.
+ * Uploads live in S3 and are fetched with the Lambda's own credentials, so no
+ * URL from the row is dereferenced on that path. An image recorded by URL
+ * instead goes through the same address guard as a link — an attachment is
+ * user-supplied either way, and "it is an image" is not a reason to let it
+ * point at an internal service.
  */
-export async function ensureSignalEnrichment(
-  db: WakaDb,
-  input: { userId: string; signalId: string; force?: boolean },
-): Promise<EnrichSignalOutcome> {
-  const [row] = await db
-    .select({
-      text: inspirations.text,
-      enrichedAt: inspirations.enrichedAt,
-    })
-    .from(inspirations)
-    .where(and(eq(inspirations.id, input.signalId), eq(inspirations.userId, input.userId)))
-    .limit(1);
-  if (!row) return "no_url";
-  if (row.enrichedAt && !input.force) return "already_attempted";
+async function readImageBytes(
+  attachment: AttachmentRow,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  if (attachment.s3Key) {
+    const { GetObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+    const region =
+      process.env.ATTACHMENTS_REGION || process.env.AWS_REGION || "us-west-2";
+    const bucket = process.env.ATTACHMENTS_BUCKET;
+    if (!bucket) throw new Error("attachments_bucket_unconfigured");
 
-  const url = extractFirstUrl(row.text);
-  if (!url) {
-    // Not a link save; mark attempted so it is never scanned again.
-    await db
-      .update(inspirations)
-      .set({ enrichedAt: new Date() })
-      .where(and(eq(inspirations.id, input.signalId), eq(inspirations.userId, input.userId)));
-    return "no_url";
+    const object = await new S3Client({ region }).send(
+      new GetObjectCommand({ Bucket: bucket, Key: attachment.s3Key }),
+    );
+    const bytes = await object.Body!.transformToByteArray();
+    return {
+      bytes,
+      contentType: attachment.contentType ?? object.ContentType ?? "image/png",
+    };
   }
 
-  // Top up toward the audibility floor, measured against what the owner
-  // already wrote. A bare link gets the full budget; a long note with a link
-  // in it gets only enough to name what it linked to.
-  const enrichment = await fetchUrlEnrichment(url, enrichmentBudgetFor(row.text));
+  // Through the same per-hop guard a link gets: a redirect into a private
+  // range on the second hop is exactly how this protection is bypassed, and
+  // "it is an image" is not a reason to trust the URL. One byte over the cap
+  // and describeImage rejects it, so reading cap+1 is enough to catch it.
+  const { response, controller } = await fetchWithTimeout(attachment.url, "image/*");
+  if (!response.ok) {
+    controller.abort();
+    throw new Error(`image_fetch_${response.status}`);
+  }
+  const bytes = await readCappedBody(response, MAX_IMAGE_BYTES + 1);
+  controller.abort();
+  return {
+    bytes,
+    contentType:
+      attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
+  };
+}
+
+/**
+ * Image enrichment: a one-time vision description, cached on the attachment,
+ * transcribing any legible text verbatim so extraction can read a screenshot
+ * the way a person does.
+ */
+export async function enrichImageAttachment(
+  attachment: AttachmentRow,
+): Promise<AttachmentEnrichmentVerdict> {
+  let bytes: Uint8Array;
+  let contentType: string;
+  try {
+    ({ bytes, contentType } = await readImageBytes(attachment));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    // A refused address or a missing bucket is a property of the attachment,
+    // not a bad day for the network.
+    const deterministic =
+      reason === "private_address" ||
+      reason === "unsupported_scheme" ||
+      reason === "unfetchable_url" ||
+      reason === "unresolvable_host" ||
+      reason === "attachments_bucket_unconfigured";
+    return deterministic
+      ? { status: "unavailable", reason }
+      : { status: "failed", reason: reason.slice(0, 200) };
+  }
+
+  if (!isDescribableImageType(contentType)) {
+    return { status: "unavailable", reason: `unsupported_image_type:${contentType}` };
+  }
+
+  try {
+    const text = await describeImage({ bytes, contentType });
+    return { status: "ready", kind: "image_description", reason: null, text };
+  } catch (err) {
+    if (err instanceof ImageDescriptionError) {
+      return err.transient
+        ? { status: "failed", reason: err.message.slice(0, 200) }
+        : { status: "unavailable", reason: err.message.slice(0, 200) };
+    }
+    return {
+      status: "failed",
+      reason: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+    };
+  }
+}
+
+async function enrichLinkAttachment(attachment: AttachmentRow): Promise<{
+  result: AttachmentEnrichmentVerdict;
+  link: Partial<LinkEnrichment>;
+}> {
+  let enrichment: LinkEnrichment;
+  try {
+    enrichment = await fetchLinkEnrichment(attachment.url);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    // A refused address or an unsupported scheme is a property of the URL, not
+    // a bad day for the network: retrying reaches the same verdict.
+    const deterministic =
+      reason === "private_address" ||
+      reason === "unsupported_scheme" ||
+      reason === "unfetchable_url" ||
+      reason === "unresolvable_host";
+    return {
+      result: deterministic
+        ? { status: "unavailable", reason }
+        : { status: "failed", reason: reason.slice(0, 200) },
+      link: {},
+    };
+  }
+
+  if (!enrichment.text) {
+    return { result: { status: "unavailable", reason: "page_silent" }, link: enrichment };
+  }
+  return { result: { status: "ready", kind: "page_body", reason: null }, link: enrichment };
+}
+
+/**
+ * Enrich one attachment and record the verdict on its row.
+ *
+ * Never throws. A dead link, a login wall, or a page of pure JavaScript is an
+ * ordinary outcome of saving things from the internet, and none of them should
+ * poison a queue or cost a member their capture. The result is returned so the
+ * caller can retry the one case worth retrying — `failed`, which means the page
+ * was never reached.
+ */
+export async function enrichAttachment(
+  attachmentId: string,
+  deps: EnrichAttachmentDeps = {},
+): Promise<EnrichAttachmentResult> {
+  const db = deps.db ?? getDb();
+
+  const [attachment] = await db
+    .select({
+      id: attachments.id,
+      type: attachments.type,
+      url: attachments.url,
+      s3Key: attachments.s3Key,
+      contentType: attachments.contentType,
+    })
+    .from(attachments)
+    .where(eq(attachments.id, attachmentId))
+    .limit(1);
+  if (!attachment) return { status: "missing" };
+
+  let result: AttachmentEnrichmentVerdict;
+  let link: Partial<LinkEnrichment> = {};
+
+  if (attachment.type === "link") {
+    const outcome = await enrichLinkAttachment(attachment);
+    result = outcome.result;
+    link = outcome.link;
+  } else if (attachment.type === "image") {
+    result = await enrichImageAttachment(attachment);
+  } else {
+    result = { status: "unavailable", reason: "unsupported_attachment_type" };
+  }
+
+  const now = new Date();
   await db
-    .update(inspirations)
-    .set({ enrichment, enrichedAt: new Date() })
-    .where(and(eq(inspirations.id, input.signalId), eq(inspirations.userId, input.userId)));
-  return enrichment ? "enriched" : "page_silent";
+    .update(attachments)
+    .set({
+      enrichmentStatus: result.status,
+      enrichmentKind: result.status === "ready" ? result.kind : null,
+      // A link's text is assembled from its metadata and body; an image's is
+      // the description itself, carried on the verdict.
+      enrichmentText:
+        result.status === "ready" ? (result.text ?? link.text ?? null) : null,
+      enrichmentErrorReason: result.status === "ready" ? null : result.reason,
+      enrichmentUpdatedAt: now,
+      finalUrl: link.finalUrl ?? null,
+      hostname: link.hostname ?? null,
+      title: link.title ?? null,
+      description: link.description ?? null,
+      siteName: link.siteName ?? null,
+      previewImageUrl: link.previewImageUrl ?? null,
+      updatedAt: now,
+    })
+    .where(eq(attachments.id, attachmentId));
+
+  return result;
 }

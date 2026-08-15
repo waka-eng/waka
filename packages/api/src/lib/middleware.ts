@@ -1,62 +1,36 @@
 /**
- * Hono auth middleware.
+ * Hono auth middleware and the cross-profile access matrix.
  *
- * Two flavours, both backed by the same lookup logic:
+ * `requireAuth` resolves the caller's session in three steps: read the token
+ * (bearer header wins over cookie), verify the JWT (cheap, no DB), then look
+ * up the session row (revocation, and the profile binding). Both the verify
+ * and the lookup are required: without the first, any random string costs a
+ * database round-trip; without the second, nothing could be revoked before
+ * its `exp`.
  *
- *   - `requireAuth`  : 401s any request that does not carry a valid,
- *                      live session. Use this on every protected route
- *                      (inspirations, attachments, /auth/me, …).
- *   - `optionalAuth` : populates `c.var.user` if a session is valid but
- *                      lets the request through unchanged otherwise.
- *                      Useful for endpoints that personalise output but
- *                      are still readable when logged out.
- *
- * The middleware does three things in order:
- *   1. Read `waka_session` cookie (or `Authorization: Bearer <token>`,
- *      so server-to-server scripts and the smoke tests can authenticate
- *      without a cookie jar).
- *   2. Verify the JWT signature/expiry — cheap, no DB hit.
- *   3. Look up the matching `sessions` row to confirm the token is
- *      still revocable-not-revoked and join through to `users`.
- *
- * Steps 2 and 3 are both required: without (2) any random string would
- * trigger a DB hit; without (3) we couldn't invalidate a session before
- * its `exp` claim.
- *
- * Why expose the user via `c.set("user", ...)` rather than a request
- * argument? Hono's middleware contract uses the per-request `Variables`
- * map for downstream handlers, and typing it via `MiddlewareEnv` below
- * lets handlers do `c.get("user")` with full IntelliSense.
+ * The matrix below is the whole of "what may an agent do to my memory?".
+ * It is enforced server-side, keyed only off facts the server controls —
+ * the session's bound profile and the target's owner — so a caller cannot
+ * talk its way into someone else's stack by asserting anything.
  */
 
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 
 import { SESSION_COOKIE_NAME, verifySessionToken } from "./auth.js";
-import {
-  type AuthenticatedUser,
-  lookupSessionUser,
-} from "./session.js";
+import { type AuthenticatedSession, lookupSession } from "./session.js";
 
-/**
- * Hono environment shape exposed by these middlewares. Mount with
- *   const app = new Hono<AuthEnv>();
- * (or a subset) so `c.get("user")` is typed.
- */
 export interface AuthEnv {
   Variables: {
-    user: AuthenticatedUser;
+    session: AuthenticatedSession;
     sessionToken: string;
   };
 }
 
 /**
- * Pull the token from a Hono context. Order of precedence:
- *   1. `Authorization: Bearer <jwt>` — explicit header, always wins.
- *   2. `waka_session` cookie — the browser path.
- *
- * Returns `null` when neither is present so the middleware can decide
- * whether absence is a 401 or "fall through".
+ * Bearer header first (server-to-server, waka-mcp), cookie second (the
+ * browser). Null when neither is present, so the caller decides whether
+ * absence is a 401 or a fall-through.
  */
 function readToken(c: Context): string | null {
   const authHeader = c.req.header("Authorization");
@@ -71,57 +45,91 @@ function readToken(c: Context): string | null {
   return null;
 }
 
-/**
- * Verify a token end-to-end and return the user, or null on any failure.
- * Shared by `requireAuth` and `optionalAuth` so the two cannot drift.
- */
-async function resolveUserFromToken(
-  token: string,
-): Promise<AuthenticatedUser | null> {
-  // Cheap signature/expiry check. Anything malformed gets thrown away
-  // before we burn a DB round-trip on it.
+/** Shared by both middlewares so they cannot drift. */
+async function resolveSessionFromToken(token: string): Promise<AuthenticatedSession | null> {
   const decoded = await verifySessionToken(token);
   if (!decoded?.sub) return null;
-
-  // Server-side row lookup. Confirms the JWT is still revocable-not-revoked
-  // AND joins through to a (still-existing) user row.
-  return lookupSessionUser(token);
+  return lookupSession(token);
 }
 
-/**
- * Middleware that 401s when there is no valid session.
- *
- * On success:
- *   - `c.set("user", AuthenticatedUser)`
- *   - `c.set("sessionToken", string)`  (so logout doesn't have to re-parse)
- */
 export const requireAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const token = readToken(c);
   if (!token) {
     return c.json({ error: "Authentication required" }, 401);
   }
-  const user = await resolveUserFromToken(token);
-  if (!user) {
+  const session = await resolveSessionFromToken(token);
+  if (!session) {
     return c.json({ error: "Authentication required" }, 401);
   }
-  c.set("user", user);
+  c.set("session", session);
   c.set("sessionToken", token);
   await next();
 };
 
-/**
- * Middleware that populates `c.var.user` when possible but lets the
- * request through either way. Useful for "if you happen to be logged in,
- * personalise the response" endpoints.
- */
 export const optionalAuth: MiddlewareHandler<AuthEnv> = async (c, next) => {
   const token = readToken(c);
   if (token) {
-    const user = await resolveUserFromToken(token);
-    if (user) {
-      c.set("user", user);
+    const session = await resolveSessionFromToken(token);
+    if (session) {
+      c.set("session", session);
       c.set("sessionToken", token);
     }
   }
   await next();
 };
+
+// ---------------------------------------------------------------------------
+// The access matrix
+// ---------------------------------------------------------------------------
+
+/**
+ * What a caller wants to do with a profile's memory:
+ *   - read    : list/inspect inspirations, signals, the top of mind
+ *   - capture : add an inspiration
+ *   - write   : everything else — curate signals, edit entries, share,
+ *               delete, administer
+ */
+export type ProfileOperation = "read" | "capture" | "write";
+
+export interface ProfileAccessTarget {
+  id: string;
+  accountId: string;
+}
+
+/**
+ * May this session perform `operation` on `target`?
+ *
+ * - A session acting as its own profile may do anything to it.
+ * - A **human**-profile session is the account's admin: full access to every
+ *   profile the account owns, including its agents' memories.
+ * - An **agent**-profile session may read and capture into the account's
+ *   human profile — that is the conditioning-and-relaying case — but may
+ *   never curate, edit, or delete the human's memory.
+ * - Nothing reaches across accounts, ever.
+ */
+export function resolveProfileAccess(
+  session: AuthenticatedSession,
+  target: ProfileAccessTarget,
+  operation: ProfileOperation,
+): boolean {
+  if (target.accountId !== session.profile.accountId) return false;
+  if (target.id === session.profile.id) return true;
+  if (session.profile.type === "human") return true;
+  // Agent session, some other profile in the same account.
+  return operation === "read" || operation === "capture";
+}
+
+/**
+ * Throwing form for handlers: returns nothing on success, or the 403 body to
+ * return. Kept as a value rather than an exception so handlers stay explicit
+ * about their failure responses.
+ */
+export function profileAccessError(
+  session: AuthenticatedSession,
+  target: ProfileAccessTarget,
+  operation: ProfileOperation,
+): { error: string } | null {
+  return resolveProfileAccess(session, target, operation)
+    ? null
+    : { error: "Not permitted for this profile" };
+}

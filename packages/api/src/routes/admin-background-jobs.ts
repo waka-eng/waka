@@ -1,26 +1,33 @@
 /**
- * Internal/dev-only background job observability API.
+ * Internal background-job observability.
  *
- * The whole namespace is hidden behind an explicit environment opt-in plus the
- * normal session auth middleware. It is for local/internal debugging only and
- * deliberately returns a safe summary of queue payloads instead of raw JSONB.
+ * Three gates, in order: the namespace only exists when a deployment opts in
+ * by environment, the caller must hold a session, and their account email must
+ * be on the admin allowlist. Any one of them alone is a single mistake away
+ * from exposing a queue.
+ *
+ * What it shows is deliberately thin. A job row carries operational facts —
+ * type, status, attempts, timing, the sanitized last error — plus the ids its
+ * payload names. It does not resolve those ids into the rows behind them: an
+ * operator debugging a stuck queue needs to know *which* work is stuck, not to
+ * read the person's captures through a debugging surface.
+ *
+ * Every query is scoped to the profiles of the acting account, so an admin sees
+ * their own account's queue and nothing else. Being an admin is permission to
+ * inspect the machinery, not permission to read other people's memory.
  */
 
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { Hono, type MiddlewareHandler } from "hono";
 
 import {
   backgroundJobs,
   backgroundJobStatusValues,
   backgroundJobTypeValues,
+  profiles,
   type BackgroundJob,
   type BackgroundJobStatus,
   type BackgroundJobType,
-  type GroupReadingRefreshPayload,
-  inspirations,
-  type ProcessInspirationPayload,
-  wowMomentInspirations,
-  wowMoments,
 } from "../db/index.js";
 import { requireAdminUser } from "../lib/admin-auth.js";
 import { getDb } from "../lib/db.js";
@@ -29,15 +36,15 @@ import { type AuthEnv, requireAuth } from "../lib/middleware.js";
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_LAST_ERROR_LENGTH = 1_000;
-const MAX_INSPIRATION_PREVIEW_LENGTH = 240;
-const MAX_WOW_TITLE_PREVIEW_LENGTH = 120;
-const MAX_WOW_EXPLANATION_PREVIEW_LENGTH = 240;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SECRET_ASSIGNMENT_RE =
   /\b(api[_-]?key|x-api-key|secret|password|token|access[_-]?token|refresh[_-]?token)\b\s*[:=]\s*("[^"]+"|'[^']+'|[^\s,;&]+)/gi;
 const AUTHORIZATION_HEADER_RE = /\bAuthorization\s*:\s*[^\r\n,;]+/gi;
 const BEARER_TOKEN_RE = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const LONG_TOKEN_LIKE_RE = /\b[A-Za-z0-9._~+/=-]{32,}\b/g;
+
+/** Payload keys safe to echo: an enum-valued reason, and identifiers. */
+const SAFE_PAYLOAD_KEY_RE = /(^reason$|Id$)/;
 
 export interface AdminBackgroundJobsRouteDependencies {
   getDatabase?: typeof getDb;
@@ -48,7 +55,7 @@ export interface AdminBackgroundJobsRouteDependencies {
 
 export interface AdminBackgroundJobSummary {
   id: string;
-  userId: string;
+  profileId: string;
   type: BackgroundJobType;
   status: BackgroundJobStatus;
   attempts: number;
@@ -59,36 +66,7 @@ export interface AdminBackgroundJobSummary {
   idempotencyKey: string | null;
   createdAt: string;
   updatedAt: string;
-  payloadSummary: Record<string, unknown>;
-}
-
-export interface AdminBackgroundJobPipelineDetail {
-  type: "process_inspiration";
-  inspiration: {
-    id: string;
-    textPreview: string;
-    kind: string | null;
-    category: number | null;
-    cluster: string | null;
-    classifiedAt: string | null;
-    importanceScore: number;
-    wowScore: number;
-    createdAt: string;
-    updatedAt: string;
-  } | null;
-  inspirationMissingReason: "payload_missing" | "not_found_or_not_visible" | null;
-  wowMoments: Array<{
-    id: string;
-    kind: string;
-    titlePreview: string;
-    explanationPreview: string;
-    wowScore: number;
-    createdAt: string;
-  }>;
-}
-
-export interface AdminBackgroundJobDetail extends AdminBackgroundJobSummary {
-  pipeline?: AdminBackgroundJobPipelineDetail;
+  payloadSummary: Record<string, string>;
 }
 
 export function isAdminBackgroundJobsEnabled(): boolean {
@@ -129,21 +107,24 @@ function parseType(raw: string | undefined): BackgroundJobType | null | undefine
     : null;
 }
 
-function summarizePayload(job: BackgroundJob): Record<string, unknown> {
-  if (job.type === "process_inspiration") {
-    const payload = job.payload as ProcessInspirationPayload;
-    return { inspirationId: payload.inspirationId };
+/**
+ * The payload, reduced to what is safe by construction.
+ *
+ * Keyed on the shape of the key rather than on the job type: payload shapes
+ * change as the pipeline does, and a per-type switch fails open — a field
+ * added tomorrow would be echoed by whichever branch forgot to exclude it.
+ * An identifier and a reason cannot carry a person's words; everything else is
+ * dropped, including anything that grows into free text later.
+ */
+export function summarizePayload(payload: unknown): Record<string, string> {
+  if (!payload || typeof payload !== "object") return {};
+  const summary: Record<string, string> = {};
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+    if (typeof value !== "string") continue;
+    if (!SAFE_PAYLOAD_KEY_RE.test(key)) continue;
+    summary[key] = value;
   }
-  if (job.type === "group_reading_refresh") {
-    const payload = job.payload as GroupReadingRefreshPayload;
-    return {
-      groupId: payload.groupId,
-      reason: payload.reason,
-      preferredLocale: payload.preferredLocale,
-      materialFingerprint: payload.materialFingerprint,
-    };
-  }
-  return {};
+  return summary;
 }
 
 function sanitizeLastError(lastError: string | null): string | null {
@@ -156,16 +137,10 @@ function sanitizeLastError(lastError: string | null): string | null {
     .slice(0, MAX_LAST_ERROR_LENGTH);
 }
 
-function truncatePreview(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
-}
-
-function serializeJob(job: BackgroundJob): AdminBackgroundJobSummary {
+export function serializeJob(job: BackgroundJob): AdminBackgroundJobSummary {
   return {
     id: job.id,
-    userId: job.userId,
+    profileId: job.profileId,
     type: job.type,
     status: job.status,
     attempts: job.attempts,
@@ -176,109 +151,25 @@ function serializeJob(job: BackgroundJob): AdminBackgroundJobSummary {
     idempotencyKey: job.idempotencyKey,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
-    payloadSummary: summarizePayload(job),
+    payloadSummary: summarizePayload(job.payload),
   };
 }
 
-async function loadProcessInspirationPipeline(input: {
-  db: ReturnType<typeof getDb>;
-  job: BackgroundJob;
-  currentUserId: string;
-}): Promise<AdminBackgroundJobPipelineDetail> {
-  const payloadSummary = summarizePayload(input.job);
-  const inspirationId = payloadSummary.inspirationId;
-  if (typeof inspirationId !== "string" || !UUID_RE.test(inspirationId)) {
-    return {
-      type: "process_inspiration",
-      inspiration: null,
-      inspirationMissingReason: "payload_missing",
-      wowMoments: [],
-    };
-  }
-
-  const inspirationRows = await input.db
-    .select({
-      id: inspirations.id,
-      text: inspirations.text,
-      kind: inspirations.kind,
-      category: inspirations.category,
-      cluster: inspirations.cluster,
-      classifiedAt: inspirations.classifiedAt,
-      importanceScore: inspirations.importanceScore,
-      wowScore: inspirations.wowScore,
-      createdAt: inspirations.createdAt,
-      updatedAt: inspirations.updatedAt,
-    })
-    .from(inspirations)
-    .where(and(eq(inspirations.id, inspirationId), eq(inspirations.userId, input.currentUserId)))
-    .limit(1);
-
-  const inspiration = inspirationRows[0];
-  if (!inspiration) {
-    return {
-      type: "process_inspiration",
-      inspiration: null,
-      inspirationMissingReason: "not_found_or_not_visible",
-      wowMoments: [],
-    };
-  }
-
-  const linkedWowMoments = await input.db
-    .select({
-      id: wowMoments.id,
-      kind: wowMoments.kind,
-      title: wowMoments.title,
-      why: wowMoments.why,
-      wowScore: wowMoments.wowScore,
-      createdAt: wowMoments.createdAt,
-    })
-    .from(wowMomentInspirations)
-    .innerJoin(wowMoments, eq(wowMomentInspirations.wowMomentId, wowMoments.id))
-    .where(
-      and(
-        eq(wowMomentInspirations.userId, input.currentUserId),
-        eq(wowMomentInspirations.inspirationId, inspiration.id),
-        eq(wowMoments.userId, input.currentUserId),
-      ),
-    )
-    .orderBy(asc(wowMomentInspirations.sortOrder), asc(wowMomentInspirations.createdAt));
-
-  return {
-    type: "process_inspiration",
-    inspiration: {
-      id: inspiration.id,
-      textPreview: truncatePreview(inspiration.text, MAX_INSPIRATION_PREVIEW_LENGTH),
-      kind: inspiration.kind,
-      category: inspiration.category,
-      cluster: inspiration.cluster,
-      classifiedAt: inspiration.classifiedAt?.toISOString() ?? null,
-      importanceScore: inspiration.importanceScore,
-      wowScore: inspiration.wowScore,
-      createdAt: inspiration.createdAt.toISOString(),
-      updatedAt: inspiration.updatedAt.toISOString(),
-    },
-    inspirationMissingReason: null,
-    wowMoments: linkedWowMoments.map((moment) => ({
-      id: moment.id,
-      kind: moment.kind,
-      titlePreview: truncatePreview(moment.title, MAX_WOW_TITLE_PREVIEW_LENGTH),
-      explanationPreview: truncatePreview(moment.why, MAX_WOW_EXPLANATION_PREVIEW_LENGTH),
-      wowScore: moment.wowScore,
-      createdAt: moment.createdAt.toISOString(),
-    })),
-  };
-}
-
-async function serializeJobDetail(input: {
-  db: ReturnType<typeof getDb>;
-  job: BackgroundJob;
-  currentUserId: string;
-}): Promise<AdminBackgroundJobDetail> {
-  const detail: AdminBackgroundJobDetail = serializeJob(input.job);
-  if (input.job.type === "process_inspiration") {
-    detail.pipeline = await loadProcessInspirationPipeline(input);
-  }
-  return detail;
+/**
+ * The profiles this account owns — the tenant boundary for every query below.
+ *
+ * Jobs are keyed by profile, and an account has several (its human profile and
+ * its agents), so "my queue" is a set rather than a single id.
+ */
+async function loadAccountProfileIds(
+  db: ReturnType<typeof getDb>,
+  accountId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.accountId, accountId));
+  return rows.map((row) => row.id);
 }
 
 export function createAdminBackgroundJobsRoutes(
@@ -298,54 +189,72 @@ export function createAdminBackgroundJobsRoutes(
     const type = parseType(c.req.query("type"));
     if (type === null) return c.json({ error: "Invalid type filter" }, 400);
 
-    const currentUserId = c.get("user").id;
-    const requestedUserId = c.req.query("userId");
-    if (requestedUserId && !UUID_RE.test(requestedUserId)) {
-      return c.json({ error: "Invalid userId filter" }, 400);
+    const requestedProfileId = c.req.query("profileId");
+    if (requestedProfileId && !UUID_RE.test(requestedProfileId)) {
+      return c.json({ error: "Invalid profileId filter" }, 400);
     }
 
-    if (requestedUserId && requestedUserId !== currentUserId) {
+    const db = getDatabase();
+    const accountProfileIds = await loadAccountProfileIds(db, c.get("session").account.id);
+    if (accountProfileIds.length === 0) return c.json({ jobs: [] });
+
+    // A filter for someone else's profile returns an empty list rather than a
+    // refusal: whether that id exists is not answered here either way.
+    if (requestedProfileId && !accountProfileIds.includes(requestedProfileId)) {
       return c.json({ jobs: [] });
     }
 
-    const conditions = [];
+    const conditions = [
+      inArray(
+        backgroundJobs.profileId,
+        requestedProfileId ? [requestedProfileId] : accountProfileIds,
+      ),
+    ];
     if (status) conditions.push(eq(backgroundJobs.status, status));
     if (type) conditions.push(eq(backgroundJobs.type, type));
-    conditions.push(eq(backgroundJobs.userId, currentUserId));
 
-    const query = getDatabase()
+    const rows = await db
       .select()
       .from(backgroundJobs)
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .where(and(...conditions))
       .orderBy(desc(backgroundJobs.createdAt))
       .limit(parseLimit(c.req.query("limit")));
 
-    const rows = await query;
     return c.json({ jobs: rows.map(serializeJob) });
   });
 
   routes.get("/:id", async (c) => {
     const id = c.req.param("id");
     if (!UUID_RE.test(id)) return c.notFound();
-    const currentUserId = c.get("user").id;
 
-    const rows = await getDatabase()
+    const db = getDatabase();
+    const accountProfileIds = await loadAccountProfileIds(db, c.get("session").account.id);
+    if (accountProfileIds.length === 0) return c.notFound();
+
+    const rows = await db
       .select()
       .from(backgroundJobs)
-      .where(and(eq(backgroundJobs.id, id), eq(backgroundJobs.userId, currentUserId)))
+      .where(
+        and(
+          eq(backgroundJobs.id, id),
+          inArray(backgroundJobs.profileId, accountProfileIds),
+        ),
+      )
       .limit(1);
     const job = rows[0];
     if (!job) return c.notFound();
 
-    return c.json({ job: await serializeJobDetail({ db: getDatabase(), job, currentUserId }) });
+    return c.json({ job: serializeJob(job) });
   });
 
   routes.post("/:id/retry", async (c) => {
     const id = c.req.param("id");
     if (!UUID_RE.test(id)) return c.notFound();
-    const currentUserId = c.get("user").id;
 
     const db = getDatabase();
+    const accountProfileIds = await loadAccountProfileIds(db, c.get("session").account.id);
+    if (accountProfileIds.length === 0) return c.notFound();
+
     const now = new Date();
     const updatedRows = await db
       .update(backgroundJobs)
@@ -360,7 +269,7 @@ export function createAdminBackgroundJobsRoutes(
       .where(
         and(
           eq(backgroundJobs.id, id),
-          eq(backgroundJobs.userId, currentUserId),
+          inArray(backgroundJobs.profileId, accountProfileIds),
           eq(backgroundJobs.status, "failed"),
         ),
       )
@@ -368,10 +277,18 @@ export function createAdminBackgroundJobsRoutes(
 
     const updated = updatedRows[0];
     if (!updated) {
+      // Distinguish "not yours / no such job" from "yours, but not failed":
+      // the second is a real answer an operator needs, the first must stay
+      // indistinguishable from a job that never existed.
       const existingRows = await db
         .select({ id: backgroundJobs.id })
         .from(backgroundJobs)
-        .where(and(eq(backgroundJobs.id, id), eq(backgroundJobs.userId, currentUserId)))
+        .where(
+          and(
+            eq(backgroundJobs.id, id),
+            inArray(backgroundJobs.profileId, accountProfileIds),
+          ),
+        )
         .limit(1);
       if (!existingRows[0]) return c.notFound();
       return c.json({ error: "Only failed background jobs can be retried" }, 409);

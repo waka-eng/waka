@@ -1,25 +1,44 @@
-import { and, eq } from "drizzle-orm";
+/**
+ * The public profile surface.
+ *
+ * One unauthenticated route: `GET /api/public/profiles/:handle`. It answers
+ * with a profile's display identity and, when that profile has opted in, the
+ * entries of its live top of mind.
+ *
+ * Nobody is authenticated here, so the rules are the strict ones:
+ *
+ *   - **Inspirations never appear.** Raw captures are private to the owning
+ *     account, full stop — this file does not read that table at all.
+ *   - **Signals never appear.** A top-of-mind entry rests on signals, but the
+ *     evidence stays behind; only the synthesized entry is public.
+ *   - **No identifiers leave.** Profile, artifact, entry, and signal ids stay
+ *     server-side; a public reader gets prose and nothing to correlate.
+ *   - Two flags gate it: `publicProfileEnabled` for the page itself and
+ *     `publicTopOfMindEnabled` for the artifact. Enabling the page does not
+ *     imply publishing what is on your mind.
+ */
+
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { users } from "../db/index.js";
+import {
+  profiles,
+  topOfMindEntries,
+  topOfMinds,
+  type TopOfMindEntryType,
+} from "../db/index.js";
 import { getDb } from "../lib/db.js";
 import { normalizeSupportedLocale, type SupportedLocale } from "../lib/locales.js";
 import {
   normalizePublicHandle,
   validatePublicHandle,
 } from "../lib/public-handles.js";
-import {
-  listTopOfMindNotesForUser,
-  type TopOfMindEvidencePreview,
-  type TopOfMindNoteSurface,
-  type TopOfMindRelatedSignalReference,
-} from "./top-of-mind.js";
 
 type WakaDb = ReturnType<typeof getDb>;
 
-const DEFAULT_PUBLIC_TOP_OF_MIND_LIMIT = 12;
-const MAX_PUBLIC_TOP_OF_MIND_LIMIT = 24;
+const DEFAULT_PUBLIC_ENTRY_LIMIT = 12;
+const MAX_PUBLIC_ENTRY_LIMIT = 24;
 
 const publicProfileParamsSchema = z
   .object({
@@ -38,10 +57,7 @@ const publicProfileQuerySchema = z
           .number()
           .int("limit must be an integer")
           .min(1, "limit must be at least 1")
-          .max(
-            MAX_PUBLIC_TOP_OF_MIND_LIMIT,
-            `limit must be <= ${MAX_PUBLIC_TOP_OF_MIND_LIMIT}`,
-          ),
+          .max(MAX_PUBLIC_ENTRY_LIMIT, `limit must be <= ${MAX_PUBLIC_ENTRY_LIMIT}`),
       )
       .optional(),
   })
@@ -55,29 +71,20 @@ export interface PublicProfileOwner {
   publicTopOfMindEnabled: boolean;
 }
 
-export type PublicTopOfMindEvidencePreview = Omit<
-  TopOfMindEvidencePreview,
-  "signalId"
->;
+/** One entry of the artifact, stripped to what a stranger may read. */
+export interface PublicTopOfMindEntry {
+  type: TopOfMindEntryType;
+  body: string;
+  belief: string | null;
+  prompt: string | null;
+  pinned: boolean;
+}
 
-export type PublicTopOfMindRelatedSignalReference = Omit<
-  TopOfMindRelatedSignalReference,
-  "id"
->;
-
-export type PublicTopOfMindNoteSurface = Omit<
-  TopOfMindNoteSurface,
-  | "id"
-  | "userId"
-  | "relatedSignalIds"
-  | "relatedContextNodeIds"
-  | "legacy"
-  | "evidencePreviews"
-  | "relatedSignals"
-> & {
-  evidencePreviews: PublicTopOfMindEvidencePreview[];
-  relatedSignals: PublicTopOfMindRelatedSignalReference[];
-};
+export interface PublicTopOfMind {
+  version: number;
+  publishedAt: string;
+  entries: PublicTopOfMindEntry[];
+}
 
 export interface PublicProfileRouteDependencies {
   getDatabase?: typeof getDb;
@@ -85,15 +92,10 @@ export interface PublicProfileRouteDependencies {
     db: WakaDb,
     handle: string,
   ) => Promise<PublicProfileOwner | null>;
-  listNotes?: (
+  getTopOfMind?: (
     db: WakaDb,
-    input: {
-      userId: string;
-      limit: number;
-      preferredLocale?: SupportedLocale;
-      audience?: "owner" | "public";
-    },
-  ) => Promise<TopOfMindNoteSurface[]>;
+    input: { profileId: string; limit: number },
+  ) => Promise<PublicTopOfMind | null>;
 }
 
 async function getPublicProfileByHandle(
@@ -102,17 +104,17 @@ async function getPublicProfileByHandle(
 ): Promise<PublicProfileOwner | null> {
   const [row] = await db
     .select({
-      id: users.id,
-      name: users.name,
-      publicHandle: users.publicHandle,
-      preferredLocale: users.preferredLocale,
-      publicTopOfMindEnabled: users.publicTopOfMindEnabled,
+      id: profiles.id,
+      name: profiles.name,
+      publicHandle: profiles.publicHandle,
+      preferredLocale: profiles.preferredLocale,
+      publicTopOfMindEnabled: profiles.publicTopOfMindEnabled,
     })
-    .from(users)
+    .from(profiles)
     .where(
       and(
-        eq(users.publicHandle, handle),
-        eq(users.publicProfileEnabled, true),
+        eq(profiles.publicHandle, handle),
+        eq(profiles.publicProfileEnabled, true),
       ),
     )
     .limit(1);
@@ -128,24 +130,56 @@ async function getPublicProfileByHandle(
   };
 }
 
-function serializePublicTopOfMindNote(
-  note: TopOfMindNoteSurface,
-): PublicTopOfMindNoteSurface {
-  const {
-    id: _id,
-    userId: _userId,
-    relatedSignalIds: _relatedSignalIds,
-    relatedContextNodeIds: _relatedContextNodeIds,
-    legacy: _legacy,
-    evidencePreviews,
-    relatedSignals,
-    ...surface
-  } = note;
+/**
+ * The profile's current artifact, in display order.
+ *
+ * Only the `live` version is readable: superseded versions are history, and
+ * history is nobody else's business. Dismissed entries are excluded in SQL
+ * rather than filtered afterwards — a dismissal is the owner saying "not
+ * this", and the row should never travel far enough to be dropped by mistake.
+ *
+ * Returns null when there is nothing to show, so a page with an emptied
+ * artifact renders as "no public top of mind" instead of an empty frame.
+ */
+async function getPublicTopOfMind(
+  db: WakaDb,
+  input: { profileId: string; limit: number },
+): Promise<PublicTopOfMind | null> {
+  const rows = await db
+    .select({
+      version: topOfMinds.version,
+      publishedAt: topOfMinds.createdAt,
+      type: topOfMindEntries.type,
+      body: topOfMindEntries.body,
+      belief: topOfMindEntries.belief,
+      prompt: topOfMindEntries.prompt,
+      pinnedAt: topOfMindEntries.pinnedAt,
+    })
+    .from(topOfMinds)
+    .innerJoin(topOfMindEntries, eq(topOfMindEntries.topOfMindId, topOfMinds.id))
+    .where(
+      and(
+        eq(topOfMinds.profileId, input.profileId),
+        eq(topOfMinds.status, "live"),
+        isNull(topOfMindEntries.dismissedAt),
+      ),
+    )
+    .orderBy(asc(topOfMindEntries.sortOrder))
+    .limit(input.limit);
+
+  const first = rows[0];
+  if (!first) return null;
 
   return {
-    ...surface,
-    evidencePreviews: evidencePreviews.map(({ signalId: _signalId, ...preview }) => preview),
-    relatedSignals: relatedSignals.map(({ id: _signalId, ...signal }) => signal),
+    version: first.version,
+    publishedAt: first.publishedAt.toISOString(),
+    entries: rows.map((row) => ({
+      type: row.type,
+      body: row.body,
+      belief: row.belief ?? null,
+      prompt: row.prompt ?? null,
+      pinned: row.pinnedAt !== null,
+    })),
   };
 }
 
@@ -155,7 +189,7 @@ export function createPublicProfileRoutes(
   const routes = new Hono();
   const getDatabase = deps.getDatabase ?? getDb;
   const getProfileByHandle = deps.getProfileByHandle ?? getPublicProfileByHandle;
-  const listNotes = deps.listNotes ?? listTopOfMindNotesForUser;
+  const getTopOfMind = deps.getTopOfMind ?? getPublicTopOfMind;
 
   routes.get("/:handle", async (c) => {
     const parsedParams = publicProfileParamsSchema.safeParse(c.req.param());
@@ -163,6 +197,8 @@ export function createPublicProfileRoutes(
       return c.json({ error: "Public profile not found" }, 404);
     }
 
+    // A handle that could never be stored cannot match a row, so it is
+    // answered as a miss without touching the database.
     const normalizedHandle = normalizePublicHandle(parsedParams.data.handle);
     if (validatePublicHandle(normalizedHandle)) {
       return c.json({ error: "Public profile not found" }, 404);
@@ -185,19 +221,12 @@ export function createPublicProfileRoutes(
       return c.json({ error: "Public profile not found" }, 404);
     }
 
-    const topOfMindNotes = profile.publicTopOfMindEnabled
-      ? await listNotes(db, {
-          userId: profile.id,
-          limit: parsedQuery.data.limit ?? DEFAULT_PUBLIC_TOP_OF_MIND_LIMIT,
-          preferredLocale: profile.preferredLocale,
-          /*
-            Nobody is authenticated here. A save its owner marked private must
-            not appear in this response in any form — its text was previously
-            published as an evidence excerpt with no sharing predicate at all.
-          */
-          audience: "public",
+    const topOfMind = profile.publicTopOfMindEnabled
+      ? await getTopOfMind(db, {
+          profileId: profile.id,
+          limit: parsedQuery.data.limit ?? DEFAULT_PUBLIC_ENTRY_LIMIT,
         })
-      : [];
+      : null;
 
     return c.json({
       profile: {
@@ -205,7 +234,7 @@ export function createPublicProfileRoutes(
         handle: profile.publicHandle,
         preferredLocale: profile.preferredLocale,
       },
-      topOfMindNotes: topOfMindNotes.map(serializePublicTopOfMindNote),
+      topOfMind,
     });
   });
 

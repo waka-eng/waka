@@ -24,7 +24,7 @@
  * the shared page layout primitives.
  */
 
-import React, { Suspense, lazy } from "react";
+import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
@@ -36,33 +36,10 @@ import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
 import "./styles/global.css";
-
-/*
-  The admin pages load on demand.
-
-  MeaningGraph pulls in reactflow and d3-force, which were 73% of a single
-  500kB bundle — shipped to every visitor of a route none of them can open,
-  since all three are behind `requireAuth requireAdmin`. Splitting them out
-  takes the surface's own chunk from 156kB to 40kB gzip and lifts reactflow's
-  stylesheet out of the render-blocking CSS.
-
-  These are the only lazy routes on purpose. Everything else here is on the
-  path a signed-in person actually walks, where a second request would cost
-  more than the bytes it saved.
-*/
-const AdminHomePage = lazy(() => import("./pages/AdminHome"));
-const AdminWowStatusPage = lazy(() => import("./pages/AdminWowStatus"));
-const MeaningGraphPage = lazy(() => import("./pages/MeaningGraph"));
 // Loaded after global.css and deliberately wins. See the header of that file
 // for what it supersedes and why it is separable rather than merged.
 import "./styles/system.css";
 import "./styles/surface.css";
-
-/* These routes are internal and admin-gated, so the wait says what it is
-   rather than pretending to be the page that is arriving. */
-function AdminLoading() {
-  return <div style={{ padding: "2rem", opacity: 0.6 }}>Loading…</div>;
-}
 
 function ProtectedSurface() {
   return (
@@ -113,55 +90,18 @@ ReactDOM.createRoot(root).render(
               - anonymous        → <Navigate> to /login with state.from set,
               - authenticated    → render the underlying page.
           */}
+          {/*
+            One surface, five addressable states. Each is declared here so the
+            public-profile route above cannot read "capture" or "signals" as
+            somebody's handle.
+          */}
           <Route element={<ProtectedSurface />}>
             <Route path="/" />
             <Route path="/capture" />
             <Route path="/inspirations" />
-            <Route path="/inspirations/:signalId" />
-            <Route path="/readings/:readingId" />
-            <Route path="/rooms/:roomId" />
-            {/*
-              Legacy. Capture is no longer nested under a room — a save belongs
-              to the person who made it, not to the wall they were looking at —
-              but this stays routable so a tab or bookmark from before the
-              change still opens the composer instead of dying.
-            */}
-            <Route path="/rooms/:roomId/capture" />
-            <Route path="/rooms/:roomId/inspirations" />
-            <Route path="/rooms/:roomId/inspirations/:signalId" />
-            <Route path="/rooms/:roomId/readings/:readingId" />
-            <Route path="/rooms/:roomId/direction" />
+            <Route path="/inspirations/:inspirationId" />
+            <Route path="/signals" />
           </Route>
-          <Route
-            path="/admin"
-            element={
-              <RequireAuth requireAdmin>
-                <Suspense fallback={<AdminLoading />}>
-                  <AdminHomePage />
-                </Suspense>
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/admin/wow-status"
-            element={
-              <RequireAuth requireAdmin>
-                <Suspense fallback={<AdminLoading />}>
-                  <AdminWowStatusPage />
-                </Suspense>
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/admin/meaning-graph"
-            element={
-              <RequireAuth requireAdmin>
-                <Suspense fallback={<AdminLoading />}>
-                  <MeaningGraphPage />
-                </Suspense>
-              </RequireAuth>
-            }
-          />
           {/*
             Catch-all: route the visitor through "/" so the guard makes the
             decision in one place. Authenticated users land on home;

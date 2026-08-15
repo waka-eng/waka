@@ -29,7 +29,7 @@
  * greedy selection needs. Any absolute threshold added here is a bug.
  */
 
-import { cosineSimilarity } from "./wow-score.js";
+import { cosineSimilarity } from "./vector.js";
 
 /**
  * How much a reading's own strength counts, against what it adds to the board.
@@ -38,7 +38,7 @@ import { cosineSimilarity } from "./wow-score.js";
  * true, spanned two members, and survived the restatement filter — they are
  * not of wildly different quality, and the question here is what the board
  * still lacks. Scoring quality highly would rebuild arrival order under a new
- * name, since `wow_score` is roughly what ranked the triggers.
+ * name, since arrival was already ordered by roughly the same strength.
  */
 export const BOARD_QUALITY_WEIGHT = 0.2;
 
@@ -112,7 +112,9 @@ function nearestSelectedSimilarity(
   for (const chosen of selected) {
     if (chosen.embedding.length !== candidate.embedding.length) continue;
     const similarity = cosineSimilarity(candidate.embedding, chosen.embedding);
-    if (similarity > nearest) nearest = similarity;
+    // An incomparable pair tells us nothing about distance; skip it rather
+    // than letting it read as "maximally far".
+    if (similarity !== null && similarity > nearest) nearest = similarity;
   }
   // Nothing to be near yet: maximally distinct by definition.
   return nearest < 0 ? 0 : nearest;

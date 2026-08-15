@@ -1,39 +1,97 @@
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
-import { createGroupsRoutes } from "./groups.js";
-import type {
-  GroupSummary,
-  GroupTopOfMindRefreshResult,
-  GroupTopOfMindResult,
-} from "../lib/group-top-of-mind.js";
+import type { AuthenticatedSession } from "../lib/session.js";
+import {
+  createGroupsRoutes,
+  proposalShapeIsValid,
+  type EnqueueGroupRefreshResult,
+  type GroupMemberSummary,
+  type GroupMembership,
+  type GroupProposalView,
+  type GroupSummary,
+  type GroupTopOfMindView,
+  type GroupsRouteDependencies,
+  type GroupWallSignal,
+} from "./groups.js";
 
-const user = { id: "00000000-0000-4000-8000-000000000001", preferredLocale: "en-US" };
+const accountId = "00000000-0000-4000-8000-0000000000a1";
+const profileId = "00000000-0000-4000-8000-000000000001";
+const otherProfileId = "00000000-0000-4000-8000-000000000002";
 const groupId = "00000000-0000-4000-8000-000000000101";
+const entryId = "00000000-0000-4000-8000-000000000201";
+const proposalId = "00000000-0000-4000-8000-000000000301";
+const signalId = "00000000-0000-4000-8000-000000000401";
 
-function authMiddleware() {
-  return async (c: any, next: () => Promise<void>) => {
-    c.set("user", user);
+const session: AuthenticatedSession = {
+  sessionId: "00000000-0000-4000-8000-0000000000f1",
+  account: { id: accountId, email: "ada@example.com" },
+  profile: {
+    id: profileId,
+    accountId,
+    type: "human",
+    name: "Ada",
+    preferredLocale: "en-US",
+  },
+};
+
+function sessionMiddleware(as: AuthenticatedSession = session) {
+  return async (c: { set: (key: string, value: unknown) => void }, next: () => Promise<void>) => {
+    c.set("session", as);
     await next();
   };
 }
 
+const ownerMembership: GroupMembership = { groupId, profileId, role: "owner" };
+const plainMembership: GroupMembership = { groupId, profileId, role: "member" };
+
 const groupSummary: GroupSummary = {
   id: groupId,
   name: "builders",
-  role: "owner",
   joinCode: "ABCD2345",
+  role: "owner",
   memberCount: 2,
   createdAt: "2026-07-07T00:00:00.000Z",
 };
 
-function mountWith(deps: Parameters<typeof createGroupsRoutes>[0]) {
+const wallSignal: GroupWallSignal = {
+  signalId,
+  statement: "Rooms that instruct without speaking",
+  confidence: 72,
+  ownerProfileId: otherProfileId,
+  ownerName: "Grace",
+  sharedAt: "2026-08-10T00:00:00.000Z",
+};
+
+const proposalView: GroupProposalView = {
+  id: proposalId,
+  kind: "edit_entry",
+  status: "open",
+  entryId,
+  body: "Say it about instruction, not architecture.",
+  rationale: "Both of us keep circling instruction.",
+  proposedByProfileId: profileId,
+  proposedByName: "Ada",
+  affirmations: [
+    { profileId, name: "Ada", createdAt: "2026-08-11T00:00:00.000Z" },
+  ],
+  viewerAffirmed: true,
+  resolvedAt: null,
+  createdAt: "2026-08-11T00:00:00.000Z",
+};
+
+function mountWith(
+  deps: GroupsRouteDependencies = {},
+  as: AuthenticatedSession = session,
+) {
   const app = new Hono();
   app.route(
     "/api/groups",
     createGroupsRoutes({
-      authMiddleware: authMiddleware(),
-      enqueueRoomReading: vi.fn(async () => undefined),
+      getDatabase: (() => ({})) as GroupsRouteDependencies["getDatabase"],
+      authMiddleware: sessionMiddleware(as) as never,
+      loadMembership: vi.fn(async () => ownerMembership),
+      enqueueRefresh: vi.fn(async () => ({ jobId: "job-1", alreadyQueued: false })),
       ...deps,
     }),
   );
@@ -41,22 +99,22 @@ function mountWith(deps: Parameters<typeof createGroupsRoutes>[0]) {
 }
 
 describe("GET /api/groups", () => {
-  it("lists the signed-in user's boards", async () => {
+  it("lists the groups the caller belongs to", async () => {
     const listGroups = vi.fn(async () => [groupSummary]);
-    const app = mountWith({ getDatabase: () => ({}) as any, listGroups });
+    const app = mountWith({ listGroups });
 
     const response = await app.request("/api/groups");
 
     expect(response.status).toBe(200);
-    expect(listGroups).toHaveBeenCalledWith({}, user.id);
+    expect(listGroups).toHaveBeenCalledWith({}, profileId);
     await expect(response.json()).resolves.toEqual({ groups: [groupSummary] });
   });
 });
 
 describe("POST /api/groups", () => {
-  it("creates a board and returns 201 with the owner's join code", async () => {
+  it("creates a group and hands back its join code", async () => {
     const createGroup = vi.fn(async () => groupSummary);
-    const app = mountWith({ getDatabase: () => ({}) as any, createGroup });
+    const app = mountWith({ createGroup });
 
     const response = await app.request("/api/groups", {
       method: "POST",
@@ -65,13 +123,13 @@ describe("POST /api/groups", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(createGroup).toHaveBeenCalledWith({}, { userId: user.id, name: "builders" });
+    expect(createGroup).toHaveBeenCalledWith({}, { profileId, name: "builders" });
     await expect(response.json()).resolves.toEqual({ group: groupSummary });
   });
 
-  it("rejects an empty name with 400", async () => {
-    const createGroup = vi.fn();
-    const app = mountWith({ getDatabase: () => ({}) as any, createGroup });
+  it("rejects a blank name before touching the database", async () => {
+    const createGroup = vi.fn(async () => groupSummary);
+    const app = mountWith({ createGroup });
 
     const response = await app.request("/api/groups", {
       method: "POST",
@@ -82,12 +140,34 @@ describe("POST /api/groups", () => {
     expect(response.status).toBe(400);
     expect(createGroup).not.toHaveBeenCalled();
   });
+
+  it("rejects unknown fields rather than silently dropping them", async () => {
+    const createGroup = vi.fn(async () => groupSummary);
+    const app = mountWith({ createGroup });
+
+    const response = await app.request("/api/groups", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "builders", role: "owner" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(createGroup).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/groups/join", () => {
-  it("joins by code", async () => {
-    const joinGroup = vi.fn(async () => ({ ok: true as const, group: groupSummary, alreadyMember: false }));
-    const app = mountWith({ getDatabase: () => ({}) as any, joinGroup });
+  it("joins by code and asks for a refresh, because the pool changed", async () => {
+    const joinGroup = vi.fn(async () => ({
+      ok: true as const,
+      group: groupSummary,
+      alreadyMember: false,
+    }));
+    const enqueueRefresh = vi.fn(async () => ({
+      jobId: "job-1",
+      alreadyQueued: false,
+    }));
+    const app = mountWith({ joinGroup, enqueueRefresh });
 
     const response = await app.request("/api/groups/join", {
       method: "POST",
@@ -96,12 +176,41 @@ describe("POST /api/groups/join", () => {
     });
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ group: groupSummary, alreadyMember: false });
+    await expect(response.json()).resolves.toEqual({
+      group: groupSummary,
+      alreadyMember: false,
+    });
+    expect(enqueueRefresh).toHaveBeenCalledWith(
+      {},
+      { groupId, requestedByProfileId: profileId, reason: "membership_changed" },
+    );
+  });
+
+  it("stays silent for someone who is already in", async () => {
+    const joinGroup = vi.fn(async () => ({
+      ok: true as const,
+      group: groupSummary,
+      alreadyMember: true,
+    }));
+    const enqueueRefresh = vi.fn(async () => ({
+      jobId: "job-1",
+      alreadyQueued: false,
+    }));
+    const app = mountWith({ joinGroup, enqueueRefresh });
+
+    const response = await app.request("/api/groups/join", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ joinCode: "ABCD2345" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(enqueueRefresh).not.toHaveBeenCalled();
   });
 
   it("returns 404 for an unknown code", async () => {
     const joinGroup = vi.fn(async () => ({ ok: false as const, reason: "not_found" as const }));
-    const app = mountWith({ getDatabase: () => ({}) as any, joinGroup });
+    const app = mountWith({ joinGroup });
 
     const response = await app.request("/api/groups/join", {
       method: "POST",
@@ -113,412 +222,429 @@ describe("POST /api/groups/join", () => {
   });
 });
 
+describe("POST /api/groups/:groupId/leave", () => {
+  it("leaves and asks for a refresh", async () => {
+    const leaveGroupFn = vi.fn(async () => ({ ok: true }));
+    const enqueueRefresh = vi.fn(async () => ({ jobId: "job-1", alreadyQueued: false }));
+    const app = mountWith({ leaveGroupFn, enqueueRefresh });
+
+    const response = await app.request(`/api/groups/${groupId}/leave`, { method: "POST" });
+
+    expect(response.status).toBe(200);
+    expect(leaveGroupFn).toHaveBeenCalledWith({}, { profileId, groupId });
+    expect(enqueueRefresh).toHaveBeenCalledWith(
+      {},
+      { groupId, requestedByProfileId: profileId, reason: "membership_changed" },
+    );
+  });
+
+  it("tells someone who was never in it nothing beyond not-found", async () => {
+    const app = mountWith({ leaveGroupFn: vi.fn(async () => ({ ok: false })) });
+
+    const response = await app.request(`/api/groups/${groupId}/leave`, { method: "POST" });
+
+    expect(response.status).toBe(404);
+  });
+});
+
 describe("DELETE /api/groups/:groupId", () => {
-  it("deletes the room for its owner", async () => {
-    const deleteGroupFn = vi.fn(async () => ({ ok: true }) as const);
-    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+  it("lets the owner close the group", async () => {
+    const deleteGroupFn = vi.fn(async () => undefined);
+    const app = mountWith({ deleteGroupFn });
 
     const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
 
     expect(response.status).toBe(200);
-    expect(deleteGroupFn).toHaveBeenCalledWith({}, { userId: user.id, groupId });
+    expect(deleteGroupFn).toHaveBeenCalledWith({}, groupId);
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
 
-  it("returns 403 for a member who does not own the room", async () => {
-    const deleteGroupFn = vi.fn(
-      async () => ({ ok: false, reason: "not_owner" }) as const,
-    );
-    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+  it("refuses a member who does not own it, and says why", async () => {
+    const deleteGroupFn = vi.fn(async () => undefined);
+    const app = mountWith({
+      loadMembership: vi.fn(async () => plainMembership),
+      deleteGroupFn,
+    });
 
     const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
 
     expect(response.status).toBe(403);
+    expect(deleteGroupFn).not.toHaveBeenCalled();
   });
 
-  it("returns 404 for a non-member, so an id is not confirmed to exist", async () => {
-    const deleteGroupFn = vi.fn(
-      async () => ({ ok: false, reason: "not_found" }) as const,
-    );
-    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
-
-    const response = await app.request(`/api/groups/${groupId}`, { method: "DELETE" });
-
-    expect(response.status).toBe(404);
-  });
-
-  it("rejects a malformed group id before touching the service", async () => {
-    const deleteGroupFn = vi.fn(async () => ({ ok: true }) as const);
-    const app = mountWith({ getDatabase: () => ({}) as any, deleteGroupFn });
+  it("rejects a malformed group id before any lookup", async () => {
+    const loadMembership = vi.fn(async () => ownerMembership);
+    const app = mountWith({ loadMembership });
 
     const response = await app.request("/api/groups/not-a-uuid", { method: "DELETE" });
 
     expect(response.status).toBe(400);
-    expect(deleteGroupFn).not.toHaveBeenCalled();
+    expect(loadMembership).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /api/groups/:groupId", () => {
+  it("renames the group for its owner", async () => {
+    const renameGroupFn = vi.fn(async () => ({ ...groupSummary, name: "the studio" }));
+    const app = mountWith({ renameGroupFn });
+
+    const response = await app.request(`/api/groups/${groupId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "the studio" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(renameGroupFn).toHaveBeenCalledWith({}, { groupId, name: "the studio" });
+    await expect(response.json()).resolves.toMatchObject({ group: { name: "the studio" } });
+  });
+
+  it("refuses a member who does not own it", async () => {
+    const renameGroupFn = vi.fn(async () => groupSummary);
+    const app = mountWith({
+      loadMembership: vi.fn(async () => plainMembership),
+      renameGroupFn,
+    });
+
+    const response = await app.request(`/api/groups/${groupId}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "the studio" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(renameGroupFn).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/groups/:groupId/members/:memberProfileId", () => {
+  it("lets the owner remove someone else", async () => {
+    const removeMemberFn = vi.fn(async () => true);
+    const app = mountWith({ removeMemberFn });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/members/${otherProfileId}`,
+      { method: "DELETE" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(removeMemberFn).toHaveBeenCalledWith(
+      {},
+      { groupId, memberProfileId: otherProfileId },
+    );
+  });
+
+  it("sends an owner removing themselves to leave or delete instead", async () => {
+    const removeMemberFn = vi.fn(async () => true);
+    const app = mountWith({ removeMemberFn });
+
+    const response = await app.request(`/api/groups/${groupId}/members/${profileId}`, {
+      method: "DELETE",
+    });
+
+    expect(response.status).toBe(400);
+    expect(removeMemberFn).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the named person is not in the group", async () => {
+    const app = mountWith({ removeMemberFn: vi.fn(async () => false) });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/members/${otherProfileId}`,
+      { method: "DELETE" },
+    );
+
+    expect(response.status).toBe(404);
+  });
+});
+
+describe("GET /api/groups/:groupId/members", () => {
+  it("returns the roster with display names and initials", async () => {
+    const members: GroupMemberSummary[] = [
+      {
+        profileId,
+        name: "Ada",
+        initials: "A",
+        role: "owner",
+        joinedAt: "2026-07-07T00:00:00.000Z",
+      },
+    ];
+    const app = mountWith({ listMembers: vi.fn(async () => members) });
+
+    const response = await app.request(`/api/groups/${groupId}/members`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ members });
+  });
+});
+
+describe("GET /api/groups/:groupId/wall", () => {
+  it("returns members' shared signals, statement and owner only", async () => {
+    const loadWall = vi.fn(async () => [wallSignal]);
+    const app = mountWith({ loadWall });
+
+    const response = await app.request(`/api/groups/${groupId}/wall`);
+
+    expect(response.status).toBe(200);
+    expect(loadWall).toHaveBeenCalledWith({}, groupId);
+    await expect(response.json()).resolves.toEqual({
+      wall: [
+        {
+          signalId,
+          statement: "Rooms that instruct without speaking",
+          confidence: 72,
+          ownerProfileId: otherProfileId,
+          ownerName: "Grace",
+          sharedAt: "2026-08-10T00:00:00.000Z",
+        },
+      ],
+    });
   });
 });
 
 describe("GET /api/groups/:groupId/top-of-mind", () => {
-  it("returns the synthesized board for a member", async () => {
-    const result: GroupTopOfMindResult = { group: groupSummary, members: [], notes: [] };
-    const listGroupNotes = vi.fn(async () => result);
-    const app = mountWith({ getDatabase: () => ({}) as any, listGroupNotes });
-
-    const response = await app.request(`/api/groups/${groupId}/top-of-mind?limit=5`);
-
-    expect(response.status).toBe(200);
-    expect(listGroupNotes).toHaveBeenCalledWith(
-      {},
-      { userId: user.id, groupId, limit: 5, preferredLocale: "en-US" },
-    );
-    await expect(response.json()).resolves.toEqual(result);
-  });
-
-  it("returns 404 when the caller is not a member (service returns null)", async () => {
-    const listGroupNotes = vi.fn(async () => null);
-    const app = mountWith({ getDatabase: () => ({}) as any, listGroupNotes });
+  it("returns the live artifact with per-entry member attribution", async () => {
+    const view: GroupTopOfMindView = {
+      topOfMind: {
+        id: "00000000-0000-4000-8000-000000000501",
+        version: 2,
+        status: "live",
+        reason: "regenerated",
+        createdAt: "2026-08-12T00:00:00.000Z",
+      },
+      entries: [
+        {
+          id: entryId,
+          type: "pattern",
+          body: "You both keep circling instruction without speech.",
+          belief: null,
+          prompt: null,
+          lockedAt: null,
+          pinnedAt: null,
+          sortOrder: 0,
+          createdAt: "2026-08-12T00:00:00.000Z",
+          contributors: [
+            { profileId, name: "Ada" },
+            { profileId: otherProfileId, name: "Grace" },
+          ],
+        },
+      ],
+    };
+    const app = mountWith({ loadTopOfMind: vi.fn(async () => view) });
 
     const response = await app.request(`/api/groups/${groupId}/top-of-mind`);
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(view);
+  });
+
+  it("says the group has no artifact yet rather than 404ing a member", async () => {
+    const app = mountWith({
+      loadTopOfMind: vi.fn(async () => ({ topOfMind: null, entries: [] })),
+    });
+
+    const response = await app.request(`/api/groups/${groupId}/top-of-mind`);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ topOfMind: null, entries: [] });
   });
 });
 
 describe("POST /api/groups/:groupId/top-of-mind/refresh", () => {
-  it("regenerates and returns the board for a member", async () => {
-    const result: GroupTopOfMindRefreshResult = {
-      group: groupSummary,
-      members: [],
-      notes: [],
-      refreshed: true,
-      nextEligibleAt: null,
-    };
-    const refreshGroupNotes = vi.fn(async () => result);
-    const app = mountWith({ getDatabase: () => ({}) as any, refreshGroupNotes });
+  it("queues a pass and answers 202 without waiting for it", async () => {
+    const queued: EnqueueGroupRefreshResult = { jobId: "job-9", alreadyQueued: false };
+    const enqueueRefresh = vi.fn(async () => queued);
+    const app = mountWith({ enqueueRefresh });
 
     const response = await app.request(`/api/groups/${groupId}/top-of-mind/refresh`, {
-      method: "POST",
-    });
-
-    expect(response.status).toBe(200);
-    expect(refreshGroupNotes).toHaveBeenCalledWith(
-      {},
-      { userId: user.id, groupId, limit: 5, preferredLocale: "en-US" },
-    );
-    await expect(response.json()).resolves.toEqual(result);
-  });
-
-  it("returns 404 for a non-member", async () => {
-    const refreshGroupNotes = vi.fn(async () => null);
-    const app = mountWith({ getDatabase: () => ({}) as any, refreshGroupNotes });
-
-    const response = await app.request(`/api/groups/${groupId}/top-of-mind/refresh`, {
-      method: "POST",
-    });
-
-    expect(response.status).toBe(404);
-  });
-});
-
-describe("room reading generation", () => {
-  const status = {
-    phase: "processing" as const,
-    message: "Reading the room.",
-    memberCount: 2,
-    sharedSignalCount: 5,
-    noteCount: 0,
-    job: {
-      id: "00000000-0000-4000-8000-000000000201",
-      type: "group_reading_refresh" as const,
-      status: "pending" as const,
-      lastError: null,
-      updatedAt: "2026-08-04T00:00:00.000Z",
-    },
-  };
-
-  it("ensures an idempotent background pass when status is read", async () => {
-    const getReadingStatus = vi.fn(async () => status);
-    const app = mountWith({ getReadingStatus });
-
-    const response = await app.request(`/api/groups/${groupId}/reading/status`);
-
-    expect(response.status).toBe(200);
-    expect(getReadingStatus).toHaveBeenCalledWith({
-      requestedByUserId: user.id,
-      groupId,
-      preferredLocale: "en-US",
-    });
-    await expect(response.json()).resolves.toEqual({ status });
-  });
-
-  it("uses the lightweight status path while the client polls", async () => {
-    const getReadingStatus = vi.fn(async () => status);
-    const app = mountWith({ getReadingStatus });
-
-    const response = await app.request(
-      `/api/groups/${groupId}/reading/status?ensure=0`,
-    );
-
-    expect(response.status).toBe(200);
-    expect(getReadingStatus).toHaveBeenCalledWith({
-      requestedByUserId: user.id,
-      groupId,
-      preferredLocale: "en-US",
-      ensure: false,
-    });
-  });
-
-  it("queues a manual complete-room pass and returns immediately", async () => {
-    const getReadingStatus = vi.fn(async () => status);
-    const app = mountWith({ getReadingStatus });
-
-    const response = await app.request(`/api/groups/${groupId}/reading/refresh`, {
       method: "POST",
     });
 
     expect(response.status).toBe(202);
-    expect(getReadingStatus).toHaveBeenCalledWith({
-      requestedByUserId: user.id,
-      groupId,
-      preferredLocale: "en-US",
-      force: true,
+    expect(enqueueRefresh).toHaveBeenCalledWith(
+      {},
+      { groupId, requestedByProfileId: profileId, reason: "manual" },
+    );
+    await expect(response.json()).resolves.toEqual({
+      queued: true,
+      jobId: "job-9",
+      alreadyQueued: false,
     });
-    await expect(response.json()).resolves.toEqual({ status });
   });
 
-  it("does not reveal a room to a non-member", async () => {
-    const app = mountWith({ getReadingStatus: vi.fn(async () => null) });
+  it("joins the pass that is already running instead of buying a second one", async () => {
+    const app = mountWith({
+      enqueueRefresh: vi.fn(async () => ({ jobId: "job-9", alreadyQueued: true })),
+    });
 
-    const response = await app.request(`/api/groups/${groupId}/reading/status`);
+    const response = await app.request(`/api/groups/${groupId}/top-of-mind/refresh`, {
+      method: "POST",
+    });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ alreadyQueued: true });
   });
 });
 
-describe("collaborative room direction", () => {
-  const direction = {
-    current: null,
-    proposal: null,
-    history: [],
-    contributions: [],
-    responses: [],
-    memberCount: 2,
-    sharedInspirationCount: 5,
-    sharedContributorCount: 2,
-    newInspirationCount: 5,
-    newContributorCount: 2,
-    contributorCount: 0,
-    requiredContributors: 2,
-    requiredResponses: 2,
-    viewerResponse: null,
-  };
+describe("group co-editing", () => {
+  it("lists the group's proposals with their affirmations", async () => {
+    const listProposals = vi.fn(async () => [proposalView]);
+    const app = mountWith({ listProposals });
 
-  it("returns the current direction, collaboration and version history together", async () => {
-    const getDirection = vi.fn(async () => direction);
-    const app = mountWith({ getDatabase: () => ({}) as any, getDirection });
-
-    const response = await app.request(`/api/groups/${groupId}/direction`);
+    const response = await app.request(`/api/groups/${groupId}/proposals?status=open&limit=10`);
 
     expect(response.status).toBe(200);
-    expect(getDirection).toHaveBeenCalledWith({}, {
-      userId: user.id,
-      groupId,
-      preferredLocale: "en-US",
-    });
-    await expect(response.json()).resolves.toEqual({ direction });
+    expect(listProposals).toHaveBeenCalledWith(
+      {},
+      { groupId, viewerProfileId: profileId, status: "open", limit: 10 },
+    );
+    await expect(response.json()).resolves.toEqual({ proposals: [proposalView] });
   });
 
-  it("adds an attributed shaping note and queues a reread", async () => {
-    const contribution = {
-      id: "00000000-0000-4000-8000-000000000301",
-      readingId: "00000000-0000-4000-8000-000000000302",
-      userId: user.id,
-      memberName: "Ada",
-      kind: "missing" as const,
-      body: "Shared experimentation is missing.",
-      createdAt: "2026-08-04T00:00:00.000Z",
-      updatedAt: "2026-08-04T00:00:00.000Z",
-    };
-    const addDirectionContribution = vi.fn(async () => ({
+  it("opens a proposal against an entry", async () => {
+    const createProposal = vi.fn(async () => ({
       ok: true as const,
-      contribution,
-      contributorCount: 2,
-      requiredContributors: 2,
-      updateReady: true,
+      proposal: proposalView,
     }));
-    const enqueueRoomReading = vi.fn(async () => undefined);
-    const app = mountWith({
-      getDatabase: () => ({}) as any,
-      addDirectionContribution,
-      enqueueRoomReading,
-    });
+    const app = mountWith({ createProposal });
 
-    const response = await app.request(`/api/groups/${groupId}/direction/contributions`, {
+    const response = await app.request(`/api/groups/${groupId}/proposals`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "missing", body: "Shared experimentation is missing." }),
+      body: JSON.stringify({
+        kind: "edit_entry",
+        entryId,
+        body: "Say it about instruction, not architecture.",
+        rationale: "Both of us keep circling instruction.",
+      }),
     });
 
     expect(response.status).toBe(201);
-    expect(addDirectionContribution).toHaveBeenCalledWith({}, {
-      userId: user.id,
-      groupId,
-      preferredLocale: "en-US",
-      kind: "missing",
-      body: "Shared experimentation is missing.",
-    });
-    expect(enqueueRoomReading).toHaveBeenCalledWith(groupId, "material_changed");
-    await expect(response.json()).resolves.toEqual({
-      contribution,
-      contributorCount: 2,
-      requiredContributors: 2,
-      updateReady: true,
-    });
-  });
-
-  it("saves a take without queuing a reread before half the room participates", async () => {
-    const contribution = {
-      id: "00000000-0000-4000-8000-000000000303",
-      readingId: "00000000-0000-4000-8000-000000000302",
-      userId: user.id,
-      memberName: "Ada",
-      kind: "take" as const,
-      body: "The open table feels central.",
-      createdAt: "2026-08-04T00:00:00.000Z",
-      updatedAt: "2026-08-04T00:00:00.000Z",
-    };
-    const enqueueRoomReading = vi.fn(async () => undefined);
-    const app = mountWith({
-      getDatabase: () => ({}) as any,
-      addDirectionContribution: vi.fn(async () => ({
-        ok: true as const,
-        contribution,
-        contributorCount: 2,
-        requiredContributors: 3,
-        updateReady: false,
-      })),
-      enqueueRoomReading,
-    });
-
-    const response = await app.request(`/api/groups/${groupId}/direction/contributions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "take", body: "The open table feels central." }),
-    });
-
-    expect(response.status).toBe(201);
-    expect(enqueueRoomReading).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toMatchObject({
-      contributorCount: 2,
-      requiredContributors: 3,
-      updateReady: false,
-    });
-  });
-
-  it("does not accept blank or unknown contribution prompts", async () => {
-    const addDirectionContribution = vi.fn();
-    const app = mountWith({ addDirectionContribution });
-    const response = await app.request(`/api/groups/${groupId}/direction/contributions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ kind: "vote", body: "" }),
-    });
-    expect(response.status).toBe(400);
-    expect(addDirectionContribution).not.toHaveBeenCalled();
-  });
-
-  it("records a member's proposal response and returns the settled snapshot", async () => {
-    const proposalId = "00000000-0000-4000-8000-000000000303";
-    const respondToDirectionProposal = vi.fn(async () => ({
-      ok: true as const,
-      decision: "pending" as const,
-    }));
-    const getDirection = vi.fn(async () => ({ ...direction, viewerResponse: "accept" as const }));
-    const app = mountWith({
-      getDatabase: () => ({}) as any,
-      respondToDirectionProposal,
-      getDirection,
-    });
-
-    const response = await app.request(
-      `/api/groups/${groupId}/direction/proposals/${proposalId}/respond`,
+    expect(createProposal).toHaveBeenCalledWith(
+      {},
       {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ value: "accept" }),
+        groupId,
+        profileId,
+        kind: "edit_entry",
+        entryId,
+        body: "Say it about instruction, not architecture.",
+        rationale: "Both of us keep circling instruction.",
       },
     );
+    await expect(response.json()).resolves.toEqual({ proposal: proposalView });
+  });
+
+  it("refuses a proposal aimed at an entry that is not this group's", async () => {
+    const app = mountWith({
+      createProposal: vi.fn(async () => ({
+        ok: false as const,
+        reason: "entry_not_found" as const,
+      })),
+    });
+
+    const response = await app.request(`/api/groups/${groupId}/proposals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "edit_entry", entryId, body: "elsewhere" }),
+    });
+
+    expect(response.status).toBe(404);
+  });
+
+  it("accepts a proposal a second member affirms, and asks for the next version", async () => {
+    const affirmProposal = vi.fn(async () => ({
+      ok: true as const,
+      proposal: { ...proposalView, status: "accepted" as const },
+      accepted: true,
+    }));
+    const enqueueRefresh = vi.fn(async () => ({ jobId: "job-2", alreadyQueued: false }));
+    const app = mountWith({ affirmProposal, enqueueRefresh });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/proposals/${proposalId}/affirm`,
+      { method: "POST" },
+    );
 
     expect(response.status).toBe(200);
-    expect(respondToDirectionProposal).toHaveBeenCalledWith({}, {
-      userId: user.id,
-      groupId,
-      proposalId,
-      preferredLocale: "en-US",
-      value: "accept",
+    await expect(response.json()).resolves.toMatchObject({ accepted: true });
+    expect(enqueueRefresh).toHaveBeenCalledWith(
+      {},
+      { groupId, requestedByProfileId: profileId, reason: "proposal_accepted" },
+    );
+  });
+
+  it("records an affirmation that is not yet enough without regenerating", async () => {
+    const enqueueRefresh = vi.fn(async () => ({ jobId: "job-2", alreadyQueued: false }));
+    const app = mountWith({
+      affirmProposal: vi.fn(async () => ({
+        ok: true as const,
+        proposal: proposalView,
+        accepted: false,
+      })),
+      enqueueRefresh,
     });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/proposals/${proposalId}/affirm`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ accepted: false });
+    expect(enqueueRefresh).not.toHaveBeenCalled();
+  });
+
+  it("answers 409 when the proposal has already been settled", async () => {
+    const app = mountWith({
+      affirmProposal: vi.fn(async () => ({
+        ok: false as const,
+        reason: "already_resolved" as const,
+      })),
+    });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/proposals/${proposalId}/affirm`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(409);
+  });
+
+  it("declines a proposal", async () => {
+    const declineProposal = vi.fn(async () => ({
+      ok: true as const,
+      proposal: { ...proposalView, status: "declined" as const },
+      accepted: false,
+    }));
+    const app = mountWith({ declineProposal });
+
+    const response = await app.request(
+      `/api/groups/${groupId}/proposals/${proposalId}/decline`,
+      { method: "POST" },
+    );
+
+    expect(response.status).toBe(200);
+    expect(declineProposal).toHaveBeenCalledWith(
+      {},
+      { groupId, proposalId, profileId },
+    );
     await expect(response.json()).resolves.toMatchObject({
-      decision: "pending",
-      direction: { viewerResponse: "accept" },
+      proposal: { status: "declined" },
     });
   });
 });
 
-describe("GET /api/groups/:groupId/timeline", () => {
-  /**
-   * A first load needs the room's life; travelling does not. Rebuilding the
-   * whole event list to answer a scrub is what made the wall arrive a beat
-   * after the rail, and historical boards never change, so the client keeps
-   * what it is given.
-   */
-  const board = { at: "2026-08-01T00:00:00.000Z", notes: [] };
-  const timeline = { groupId: "g", formedAt: board.at, events: [] };
-
-  it("carries the room's life on a first load", async () => {
-    const loadTimeline = vi.fn(async () => timeline);
-    const app = mountWith({
-      getDatabase: () => ({}) as any,
-      loadTimeline: loadTimeline as any,
-      loadBoardAsOf: (async () => board) as any,
-    });
-
-    const response = await app.request(`/api/groups/${groupSummary.id}/timeline`);
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ timeline, board });
-    expect(loadTimeline).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not rebuild it to answer a travel request", async () => {
-    const loadTimeline = vi.fn(async () => timeline);
-    const app = mountWith({
-      getDatabase: () => ({}) as any,
-      loadTimeline: loadTimeline as any,
-      loadBoardAsOf: (async () => board) as any,
-    });
-
-    const response = await app.request(
-      `/api/groups/${groupSummary.id}/timeline?at=2026-08-01T00%3A00%3A00.000Z`,
+describe("proposalShapeIsValid", () => {
+  it("holds each kind to the fields it means", () => {
+    expect(proposalShapeIsValid({ kind: "add_entry", body: "a new line" })).toBe(true);
+    expect(proposalShapeIsValid({ kind: "add_entry", body: "a new line", entryId })).toBe(
+      false,
     );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ timeline: null, board });
-    expect(loadTimeline).not.toHaveBeenCalled();
-  });
-
-  it("still tells a non-member nothing, travelling or not", async () => {
-    // `boardAsOf` gates on membership itself, so dropping the timeline read
-    // must not drop the authorization that used to come with it.
-    const app = mountWith({
-      getDatabase: () => ({}) as any,
-      loadTimeline: (async () => null) as any,
-      loadBoardAsOf: (async () => null) as any,
-    });
-
-    const response = await app.request(
-      `/api/groups/${groupSummary.id}/timeline?at=2026-08-01T00%3A00%3A00.000Z`,
+    expect(proposalShapeIsValid({ kind: "edit_entry", entryId, body: "reworded" })).toBe(
+      true,
     );
-
-    expect(response.status).toBe(404);
+    expect(proposalShapeIsValid({ kind: "edit_entry", entryId })).toBe(false);
+    expect(proposalShapeIsValid({ kind: "remove_entry", entryId })).toBe(true);
+    expect(proposalShapeIsValid({ kind: "remove_entry", entryId, body: "why" })).toBe(false);
   });
 });

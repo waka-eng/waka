@@ -1,34 +1,22 @@
 export type AdminJobStatus = "pending" | "running" | "succeeded" | "failed";
-export type AdminJobType = "process_inspiration";
+export type AdminJobType =
+  | "enrich_attachment"
+  | "derive_signals"
+  | "refresh_top_of_mind"
+  | "refresh_group_top_of_mind";
 
-export interface AdminBackgroundJobPipelineDetail {
-  type: "process_inspiration";
-  inspiration: {
-    id: string;
-    textPreview: string;
-    kind: string | null;
-    category: number | null;
-    cluster: string | null;
-    classifiedAt: string | null;
-    importanceScore: number;
-    wowScore: number;
-    createdAt: string;
-    updatedAt: string;
-  } | null;
-  inspirationMissingReason: "payload_missing" | "not_found_or_not_visible" | null;
-  wowMoments: Array<{
-    id: string;
-    kind: string;
-    titlePreview: string;
-    explanationPreview: string;
-    wowScore: number;
-    createdAt: string;
-  }>;
-}
-
+/**
+ * A queue row as this app is allowed to see it.
+ *
+ * `payloadSummary` is the whole of the detail view on purpose: the server
+ * decides which payload keys are safe to name and hands over a bounded record,
+ * so a new job type needs no change here and no raw payload ever reaches the
+ * browser. Rows are keyed by `profileId` because a job belongs to the memory it
+ * is working on, not to the login that happens to own it.
+ */
 export interface AdminBackgroundJob {
   id: string;
-  userId: string;
+  profileId: string;
   type: AdminJobType | string;
   status: AdminJobStatus | string;
   attempts: number;
@@ -39,11 +27,7 @@ export interface AdminBackgroundJob {
   idempotencyKey: string | null;
   createdAt: string;
   updatedAt: string;
-  payloadSummary: {
-    inspirationId?: unknown;
-    [key: string]: unknown;
-  };
-  pipeline?: AdminBackgroundJobPipelineDetail;
+  payloadSummary: Record<string, unknown>;
 }
 
 export interface ListBackgroundJobsFilters {
@@ -91,64 +75,6 @@ function messageFromBody(body: unknown, fallback: string): string {
   return fallback;
 }
 
-function isStringOrNull(value: unknown): value is string | null {
-  return typeof value === "string" || value === null;
-}
-
-function assertPipeline(value: unknown): AdminBackgroundJobPipelineDetail {
-  if (!value || typeof value !== "object") {
-    throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
-  }
-  const candidate = value as Partial<AdminBackgroundJobPipelineDetail>;
-  if (
-    candidate.type !== "process_inspiration" ||
-    !Array.isArray(candidate.wowMoments) ||
-    !(
-      candidate.inspirationMissingReason === null ||
-      candidate.inspirationMissingReason === "payload_missing" ||
-      candidate.inspirationMissingReason === "not_found_or_not_visible"
-    )
-  ) {
-    throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
-  }
-
-  if (candidate.inspiration !== null) {
-    const inspiration = candidate.inspiration;
-    if (
-      !inspiration ||
-      typeof inspiration.id !== "string" ||
-      typeof inspiration.textPreview !== "string" ||
-      !isStringOrNull(inspiration.kind) ||
-      !(typeof inspiration.category === "number" || inspiration.category === null) ||
-      !isStringOrNull(inspiration.cluster) ||
-      !isStringOrNull(inspiration.classifiedAt) ||
-      typeof inspiration.importanceScore !== "number" ||
-      typeof inspiration.wowScore !== "number" ||
-      typeof inspiration.createdAt !== "string" ||
-      typeof inspiration.updatedAt !== "string"
-    ) {
-      throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
-    }
-  }
-
-  for (const moment of candidate.wowMoments) {
-    if (
-      !moment ||
-      typeof moment !== "object" ||
-      typeof moment.id !== "string" ||
-      typeof moment.kind !== "string" ||
-      typeof moment.titlePreview !== "string" ||
-      typeof moment.explanationPreview !== "string" ||
-      typeof moment.wowScore !== "number" ||
-      typeof moment.createdAt !== "string"
-    ) {
-      throw new AdminApiError({ status: 200, message: "Malformed background job pipeline response" });
-    }
-  }
-
-  return candidate as AdminBackgroundJobPipelineDetail;
-}
-
 function assertJob(value: unknown): AdminBackgroundJob {
   if (!value || typeof value !== "object") {
     throw new AdminApiError({ status: 200, message: "Malformed background job response" });
@@ -156,6 +82,7 @@ function assertJob(value: unknown): AdminBackgroundJob {
   const candidate = value as Partial<AdminBackgroundJob>;
   if (
     typeof candidate.id !== "string" ||
+    typeof candidate.profileId !== "string" ||
     typeof candidate.type !== "string" ||
     typeof candidate.status !== "string" ||
     typeof candidate.attempts !== "number" ||
@@ -167,9 +94,6 @@ function assertJob(value: unknown): AdminBackgroundJob {
     candidate.payloadSummary === null
   ) {
     throw new AdminApiError({ status: 200, message: "Malformed background job response" });
-  }
-  if ("pipeline" in candidate && candidate.pipeline !== undefined) {
-    candidate.pipeline = assertPipeline(candidate.pipeline);
   }
   return candidate as AdminBackgroundJob;
 }

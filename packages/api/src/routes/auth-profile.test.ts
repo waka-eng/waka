@@ -1,64 +1,88 @@
 import { Hono } from "hono";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { authRoutes } from "./auth.js";
+import { accounts, profiles } from "../db/index.js";
+import type { AuthenticatedSession } from "../lib/session.js";
 
-const authState = vi.hoisted(() => ({
-  user: {
-    id: "00000000-0000-4000-8000-000000000001",
-    email: "user@example.com",
+const SESSION: AuthenticatedSession = {
+  sessionId: "session-1",
+  account: { id: "account-1", email: "user@example.com" },
+  profile: {
+    id: "profile-1",
+    accountId: "account-1",
+    type: "human",
     name: "Existing",
-    avatarUrl: null as string | null,
     preferredLocale: "en-US",
-    onboardingCompletedAt: null as Date | null,
-    publicHandle: null as string | null,
-    publicProfileEnabled: false,
-    publicTopOfMindEnabled: false,
   },
-}));
+};
 
-const dbState = vi.hoisted(() => ({
-  db: {} as any,
-}));
+/** The rows `loadIdentity` resolves for the session above. */
+const ACCOUNT_ROW = {
+  id: "account-1",
+  email: "user@example.com",
+  onboardingCompletedAt: null as Date | null,
+};
+
+const PROFILE_ROW = {
+  id: "profile-1",
+  accountId: "account-1",
+  type: "human" as const,
+  name: "Existing",
+  avatarUrl: null as string | null,
+  preferredLocale: "en-US",
+  publicHandle: null as string | null,
+  publicProfileEnabled: false,
+  publicTopOfMindEnabled: false,
+};
+
+const dbState = vi.hoisted(() => ({ db: {} as any }));
 
 const erasureState = vi.hoisted(() => ({
-  erase: vi.fn(async (_userId: string, deps: { db: any }) => {
-    await deps.db.delete({}).where({});
-  }),
+  erase: vi.fn(async (_accountId: string, _deps: { db: unknown }) => undefined),
 }));
 
-vi.mock("../lib/middleware.js", () => ({
-  requireAuth: async (c: any, next: () => Promise<void>) => {
-    const authorization = c.req.header("Authorization");
-    if (!authorization?.toLowerCase().startsWith("bearer ")) {
-      return c.json({ error: "Authentication required" }, 401);
-    }
-    c.set("user", authState.user);
-    c.set("sessionToken", authorization.slice(7).trim());
-    await next();
-  },
-}));
+vi.mock("../lib/middleware.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/middleware.js")>();
+  return {
+    ...actual,
+    requireAuth: async (c: any, next: () => Promise<void>) => {
+      const authorization = c.req.header("Authorization");
+      if (!authorization?.toLowerCase().startsWith("bearer ")) {
+        return c.json({ error: "Authentication required" }, 401);
+      }
+      c.set("session", SESSION);
+      c.set("sessionToken", authorization.slice(7).trim());
+      await next();
+    },
+  };
+});
 
 vi.mock("../lib/db.js", () => ({
   getDb: () => dbState.db,
 }));
 
 vi.mock("../lib/account-erasure.js", () => ({
-  eraseUserAccount: erasureState.erase,
+  eraseAccount: erasureState.erase,
 }));
 
 vi.mock("../lib/auth.js", () => ({
+  SESSION_COOKIE_NAME: "waka_session",
+  SESSION_TTL_SECONDS: 60 * 60 * 24 * 30,
   buildSessionClearCookie: () => "waka_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax",
   buildSessionCookie: () => "waka_session=test; Path=/; HttpOnly; SameSite=Lax",
   hashPassword: vi.fn(async () => "hashed-password"),
   signSessionToken: vi.fn(async () => "signed-token"),
   verifyPassword: vi.fn(async () => true),
+  verifySessionToken: vi.fn(async () => null),
 }));
 
 vi.mock("../lib/session.js", () => ({
   createSessionRow: vi.fn(async () => undefined),
   revokeSessionByToken: vi.fn(async () => undefined),
+  hashSessionToken: vi.fn(async () => "hashed-token"),
 }));
+
+import { authRoutes } from "./auth.js";
 
 function app() {
   const hono = new Hono();
@@ -66,41 +90,86 @@ function app() {
   return hono;
 }
 
-function makeProfileDb(updatedRows: unknown[]) {
-  const returning = vi.fn(async () => updatedRows);
-  const where = vi.fn(() => ({ returning }));
-  const set = vi.fn(() => ({ where }));
-  const update = vi.fn(() => ({ set }));
-  return { update, set, where, returning };
+/**
+ * `selects` is consumed in call order: the identity read first, then the
+ * handle-availability check when one runs. Writes are recorded in `setCalls`
+ * tagged with their table, since a profile edit can touch both tables.
+ */
+function makeDb(input: {
+  selects?: unknown[][];
+  updatedProfile?: unknown;
+  updatedAccount?: unknown;
+  failWithCode?: string;
+} = {}) {
+  const selects = [...(input.selects ?? [])];
+  const select = vi.fn(() => {
+    const chain: any = {};
+    chain.from = vi.fn(() => chain);
+    chain.innerJoin = vi.fn(() => chain);
+    chain.where = vi.fn(() => {
+      const rows = selects.shift() ?? [];
+      const result: any = Promise.resolve(rows);
+      result.limit = vi.fn(async () => rows);
+      return result;
+    });
+    return chain;
+  });
+
+  const setCalls: Array<{ table: unknown; values: any }> = [];
+  const update = vi.fn((table: unknown) => ({
+    set: vi.fn((values: any) => {
+      setCalls.push({ table, values });
+      return {
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => {
+            if (input.failWithCode) {
+              throw Object.assign(new Error("constraint"), { code: input.failWithCode });
+            }
+            return table === accounts
+              ? [input.updatedAccount ?? ACCOUNT_ROW]
+              : [input.updatedProfile ?? PROFILE_ROW];
+          }),
+        })),
+      };
+    }),
+  }));
+
+  const db: any = { select, update, setCalls };
+  db.transaction = vi.fn(async (work: (tx: typeof db) => Promise<unknown>) => work(db));
+  return db;
 }
 
-function makeDeleteDb() {
-  const where = vi.fn(async () => undefined);
-  const deleteFn = vi.fn(() => ({ where }));
-  return { delete: deleteFn, where };
+/** The identity read every authenticated handler starts from. */
+function identity(overrides: { account?: unknown; profile?: unknown } = {}) {
+  return [
+    {
+      account: { ...ACCOUNT_ROW, ...(overrides.account ?? {}) },
+      profile: { ...PROFILE_ROW, ...(overrides.profile ?? {}) },
+    },
+  ];
+}
+
+function authorized(body: unknown, method: string) {
+  return {
+    method,
+    body: JSON.stringify(body),
+    headers: {
+      Authorization: "Bearer test-token",
+      "Content-Type": "application/json",
+    },
+  };
 }
 
 beforeEach(() => {
   delete process.env.WAKA_ADMIN_EMAILS;
   delete process.env.WAKA_ADMIN_ALLOWLIST;
-  authState.user = {
-    id: "00000000-0000-4000-8000-000000000001",
-    email: "user@example.com",
-    name: "Existing",
-    avatarUrl: null,
-    preferredLocale: "en-US",
-    onboardingCompletedAt: null,
-    publicHandle: null,
-    publicProfileEnabled: false,
-    publicTopOfMindEnabled: false,
-  };
-  dbState.db = {};
+  dbState.db = makeDb({ selects: [identity()] });
   vi.clearAllMocks();
 });
 
 describe("GET /api/auth/me", () => {
-  it("marks allowlisted users as admins", async () => {
-    process.env.WAKA_ADMIN_EMAILS = "admin@example.com, user@example.com";
+  it("returns the account and the profile the session acts as", async () => {
+    dbState.db = makeDb({ selects: [identity()] });
 
     const response = await app().request("/api/auth/me", {
       headers: { Authorization: "Bearer test-token" },
@@ -108,15 +177,14 @@ describe("GET /api/auth/me", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      user: {
-        email: "user@example.com",
-        isAdmin: true,
-      },
+      account: { id: "account-1", email: "user@example.com", isAdmin: false },
+      profile: { id: "profile-1", type: "human", name: "Existing" },
     });
   });
 
-  it("marks authenticated non-admin users as non-admin", async () => {
-    process.env.WAKA_ADMIN_EMAILS = "admin@example.com";
+  it("marks allowlisted accounts as admins", async () => {
+    process.env.WAKA_ADMIN_EMAILS = "admin@example.com, user@example.com";
+    dbState.db = makeDb({ selects: [identity()] });
 
     const response = await app().request("/api/auth/me", {
       headers: { Authorization: "Bearer test-token" },
@@ -124,10 +192,39 @@ describe("GET /api/auth/me", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      user: {
-        email: "user@example.com",
-        isAdmin: false,
-      },
+      account: { email: "user@example.com", isAdmin: true },
+    });
+  });
+
+  it("401s when the acting profile no longer exists", async () => {
+    dbState.db = makeDb({ selects: [[]] });
+
+    const response = await app().request("/api/auth/me", {
+      headers: { Authorization: "Bearer test-token" },
+    });
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("PATCH /api/auth/me/preferences", () => {
+  it("writes the locale onto the acting profile", async () => {
+    const db = makeDb({
+      selects: [identity({ profile: { preferredLocale: "ko-KR" } })],
+    });
+    dbState.db = db;
+
+    const response = await app().request(
+      "/api/auth/me/preferences",
+      authorized({ preferredLocale: "ko-KR" }, "PATCH"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(db.setCalls).toHaveLength(1);
+    expect(db.setCalls[0]!.table).toBe(profiles);
+    expect(db.setCalls[0]!.values).toMatchObject({ preferredLocale: "ko-KR" });
+    await expect(response.json()).resolves.toMatchObject({
+      profile: { preferredLocale: "ko-KR" },
     });
   });
 });
@@ -145,14 +242,10 @@ describe("PATCH /api/auth/me/profile", () => {
   });
 
   it("rejects invalid profile payloads", async () => {
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({ name: "", preferredLocale: "fr-FR", extra: true }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized({ name: "", preferredLocale: "fr-FR", extra: true }, "PATCH"),
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -165,155 +258,119 @@ describe("PATCH /api/auth/me/profile", () => {
   });
 
   it("persists display names containing spaces", async () => {
-    const db = makeProfileDb([
-      {
-        ...authState.user,
-        name: "Mina Park",
-        preferredLocale: "en-US",
-      },
-    ]);
+    const db = makeDb({
+      selects: [identity()],
+      updatedProfile: { ...PROFILE_ROW, name: "Mina Park" },
+    });
     dbState.db = db;
 
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({ name: " Mina Park ", preferredLocale: "en-US" }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized({ name: " Mina Park ", preferredLocale: "en-US" }, "PATCH"),
+    );
 
     expect(response.status).toBe(200);
-    expect(db.update).toHaveBeenCalledTimes(1);
-    expect(db.set).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Mina Park" }),
-    );
+    expect(db.setCalls[0]!.values).toMatchObject({ name: "Mina Park" });
     await expect(response.json()).resolves.toMatchObject({
-      user: { name: "Mina Park" },
+      profile: { name: "Mina Park" },
     });
   });
 
-  it("persists display name, locale, and onboarding completion", async () => {
+  it("stamps onboarding on the account while the display identity stays on the profile", async () => {
     const completedAt = new Date("2026-06-20T10:15:30.000Z");
-    const db = makeProfileDb([
-      {
-        id: authState.user.id,
-        email: authState.user.email,
-        name: "Mina Lee",
-        avatarUrl: null,
-        preferredLocale: "ko-KR",
-        onboardingCompletedAt: completedAt,
-      },
-    ]);
+    const db = makeDb({
+      selects: [identity()],
+      updatedProfile: { ...PROFILE_ROW, name: "Mina Lee", preferredLocale: "ko-KR" },
+      updatedAccount: { ...ACCOUNT_ROW, onboardingCompletedAt: completedAt },
+    });
     dbState.db = db;
 
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: " Mina Lee ",
-        preferredLocale: "ko-KR",
-        completeOnboarding: true,
-      }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        { name: " Mina Lee ", preferredLocale: "ko-KR", completeOnboarding: true },
+        "PATCH",
+      ),
+    );
 
     expect(response.status).toBe(200);
-    expect(db.update).toHaveBeenCalledTimes(1);
-    expect(db.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "Mina Lee",
-        preferredLocale: "ko-KR",
-        onboardingCompletedAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-      }),
-    );
-    const body = await response.json();
-    expect(body).toMatchObject({
-      user: {
-        id: authState.user.id,
-        email: authState.user.email,
-        name: "Mina Lee",
-        preferredLocale: "ko-KR",
-        onboardingCompletedAt: completedAt.toISOString(),
-      },
+    expect(db.setCalls[0]!.table).toBe(profiles);
+    expect(db.setCalls[0]!.values).toMatchObject({
+      name: "Mina Lee",
+      preferredLocale: "ko-KR",
+      updatedAt: expect.any(Date),
+    });
+    expect(db.setCalls[1]!.table).toBe(accounts);
+    expect(db.setCalls[1]!.values).toMatchObject({
+      onboardingCompletedAt: expect.any(Date),
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      account: { onboardingCompletedAt: completedAt.toISOString() },
+      profile: { name: "Mina Lee", preferredLocale: "ko-KR" },
     });
   });
 
   it("keeps an existing onboarding completion timestamp stable", async () => {
     const existingCompletedAt = new Date("2026-06-19T08:00:00.000Z");
-    authState.user.onboardingCompletedAt = existingCompletedAt;
-    const db = makeProfileDb([
-      {
-        ...authState.user,
-        name: "Mina",
-        preferredLocale: "en-US",
-      },
-    ]);
+    const db = makeDb({
+      selects: [identity({ account: { onboardingCompletedAt: existingCompletedAt } })],
+      updatedProfile: { ...PROFILE_ROW, name: "Mina" },
+    });
     dbState.db = db;
 
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: "Mina",
-        preferredLocale: "en-US",
-        completeOnboarding: true,
-      }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        { name: "Mina", preferredLocale: "en-US", completeOnboarding: true },
+        "PATCH",
+      ),
+    );
 
     expect(response.status).toBe(200);
-    expect(db.set).toHaveBeenCalledWith(
-      expect.objectContaining({ onboardingCompletedAt: existingCompletedAt }),
-    );
+    // Only the profile is written: the stamp is already set and never moves.
+    expect(db.setCalls).toHaveLength(1);
+    expect(db.setCalls[0]!.table).toBe(profiles);
     await expect(response.json()).resolves.toMatchObject({
-      user: { onboardingCompletedAt: existingCompletedAt.toISOString() },
+      account: { onboardingCompletedAt: existingCompletedAt.toISOString() },
     });
   });
 
-  it("normalizes and persists hyphenated public handle settings for the signed-in user", async () => {
-    const db = makeProfileDb([
-      {
-        ...authState.user,
+  it("normalizes and persists hyphenated public handle settings", async () => {
+    const db = makeDb({
+      // Identity, then the availability check finding nobody else on it.
+      selects: [identity(), []],
+      updatedProfile: {
+        ...PROFILE_ROW,
         name: "Mina",
-        preferredLocale: "en-US",
         publicHandle: "mixed-case_handle",
         publicProfileEnabled: true,
         publicTopOfMindEnabled: true,
-      },
-    ]);
-    dbState.db = db;
-
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: "Mina",
-        preferredLocale: "en-US",
-        publicHandle: "@Mixed-Case_Handle",
-        publicProfileEnabled: true,
-        publicTopOfMindEnabled: true,
-      }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
       },
     });
+    dbState.db = db;
+
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        {
+          name: "Mina",
+          preferredLocale: "en-US",
+          publicHandle: "@Mixed-Case_Handle",
+          publicProfileEnabled: true,
+          publicTopOfMindEnabled: true,
+        },
+        "PATCH",
+      ),
+    );
 
     expect(response.status).toBe(200);
-    expect(db.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        publicHandle: "mixed-case_handle",
-        publicProfileEnabled: true,
-        publicTopOfMindEnabled: true,
-      }),
-    );
+    expect(db.setCalls[0]!.values).toMatchObject({
+      publicHandle: "mixed-case_handle",
+      publicProfileEnabled: true,
+      publicTopOfMindEnabled: true,
+    });
     await expect(response.json()).resolves.toMatchObject({
-      user: {
+      profile: {
         publicHandle: "mixed-case_handle",
         publicProfileEnabled: true,
         publicTopOfMindEnabled: true,
@@ -322,42 +379,40 @@ describe("PATCH /api/auth/me/profile", () => {
   });
 
   it("requires a public handle before enabling public sharing", async () => {
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: "Mina",
-        preferredLocale: "en-US",
-        publicHandle: "",
-        publicProfileEnabled: true,
-      }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const db = makeDb({ selects: [identity()] });
+    dbState.db = db;
+
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        {
+          name: "Mina",
+          preferredLocale: "en-US",
+          publicHandle: "",
+          publicProfileEnabled: true,
+        },
+        "PATCH",
+      ),
+    );
 
     expect(response.status).toBe(400);
+    expect(db.update).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
       details: { publicHandle: ["Choose a public handle first"] },
     });
   });
 
   it("rejects public handles containing spaces", async () => {
-    const db = makeProfileDb([]);
+    const db = makeDb({ selects: [identity()] });
     dbState.db = db;
 
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: "Mina Park",
-        preferredLocale: "en-US",
-        publicHandle: "bad handle",
-      }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        { name: "Mina Park", preferredLocale: "en-US", publicHandle: "bad handle" },
+        "PATCH",
+      ),
+    );
 
     expect(response.status).toBe(400);
     expect(db.update).not.toHaveBeenCalled();
@@ -371,38 +426,42 @@ describe("PATCH /api/auth/me/profile", () => {
     });
   });
 
-  it("returns a field conflict when the normalized public handle is already taken", async () => {
-    const duplicateError = Object.assign(new Error("duplicate public handle"), {
-      code: "23505",
-    });
-    const returning = vi.fn(async () => {
-      throw duplicateError;
-    });
-    const where = vi.fn(() => ({ returning }));
-    const set = vi.fn(() => ({ where }));
-    const update = vi.fn(() => ({ set }));
-    dbState.db = { update };
+  it("reports a field conflict when another profile already holds the handle", async () => {
+    const db = makeDb({ selects: [identity(), [{ id: "profile-2" }]] });
+    dbState.db = db;
 
-    const response = await app().request("/api/auth/me/profile", {
-      method: "PATCH",
-      body: JSON.stringify({
-        name: "Mina Park",
-        preferredLocale: "en-US",
-        publicHandle: "@Taken-Handle",
-      }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        { name: "Mina Park", preferredLocale: "en-US", publicHandle: "@Taken-Handle" },
+        "PATCH",
+      ),
+    );
 
     expect(response.status).toBe(409);
-    expect(set).toHaveBeenCalledWith(
-      expect.objectContaining({ publicHandle: "taken-handle" }),
-    );
+    expect(db.update).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
       error: "That public handle is already taken",
       details: { publicHandle: ["That public handle is already taken"] },
+    });
+  });
+
+  it("reports the same conflict when the unique index catches a racing claim", async () => {
+    const db = makeDb({ selects: [identity(), []], failWithCode: "23505" });
+    dbState.db = db;
+
+    const response = await app().request(
+      "/api/auth/me/profile",
+      authorized(
+        { name: "Mina Park", preferredLocale: "en-US", publicHandle: "@Taken-Handle" },
+        "PATCH",
+      ),
+    );
+
+    expect(response.status).toBe(409);
+    expect(db.setCalls[0]!.values).toMatchObject({ publicHandle: "taken-handle" });
+    await expect(response.json()).resolves.toMatchObject({
+      error: "That public handle is already taken",
     });
   });
 });
@@ -420,14 +479,10 @@ describe("DELETE /api/auth/me", () => {
   });
 
   it("requires the literal DELETE confirmation", async () => {
-    const response = await app().request("/api/auth/me", {
-      method: "DELETE",
-      body: JSON.stringify({ confirmation: "delete" }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me",
+      authorized({ confirmation: "delete" }, "DELETE"),
+    );
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
@@ -436,23 +491,27 @@ describe("DELETE /api/auth/me", () => {
     });
   });
 
-  it("deletes the authenticated user and clears the session cookie", async () => {
-    const db = makeDeleteDb();
+  it("erases the whole account, not just the acting profile, and clears the cookie", async () => {
+    const db = makeDb();
     dbState.db = db;
 
-    const response = await app().request("/api/auth/me", {
-      method: "DELETE",
-      body: JSON.stringify({ confirmation: "DELETE" }),
-      headers: {
-        Authorization: "Bearer test-token",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await app().request(
+      "/api/auth/me",
+      authorized({ confirmation: "DELETE" }, "DELETE"),
+    );
 
     expect(response.status).toBe(200);
-    expect(db.delete).toHaveBeenCalledTimes(1);
-    expect(db.where).toHaveBeenCalledTimes(1);
-    expect(erasureState.erase).toHaveBeenCalledWith(authState.user.id, { db });
+    expect(erasureState.erase).toHaveBeenCalledWith(SESSION.account.id, { db });
+    expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
+    await expect(response.json()).resolves.toEqual({ ok: true });
+  });
+});
+
+describe("POST /api/auth/logout", () => {
+  it("succeeds without a session so a stale cookie can always be cleared", async () => {
+    const response = await app().request("/api/auth/logout", { method: "POST" });
+
+    expect(response.status).toBe(200);
     expect(response.headers.get("Set-Cookie")).toContain("Max-Age=0");
     await expect(response.json()).resolves.toEqual({ ok: true });
   });
