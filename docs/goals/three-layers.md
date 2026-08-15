@@ -659,6 +659,57 @@ HTML with no SPA behind it, so nothing in the web build would otherwise
 exercise how it looks, and it is the one screen standing between a stray
 navigation and a live credential.
 
+### Phase 3 — layer 1, enrichment, and the harness (2026-08-15)
+
+**Gate: PASSED — 8/8 steps against a live stack** (`pnpm dev:local`,
+local Postgres, fixture server on 127.0.0.1:8791):
+
+| # | Step | Result |
+|---|---|---|
+| 1 | stack answers as waka | PASS (3 capabilities) |
+| 2 | signup creates account + human profile | PASS |
+| 3 | three captures land and read back | PASS |
+| 4 | **search finds a capture buried past the newest 200** | PASS (8.2s, 206 captures) |
+| 5 | edit readable back, delete gone | PASS |
+| 6 | **second account reaches nothing of the first** | PASS (404, empty archive) |
+| 7 | **link enriched from the page body** | PASS (609 chars, body marker present, boilerplate absent) |
+| 8 | **image enriched from what it depicts** | PASS (248 chars, marker transcribed) |
+
+All five checks green; **api test:unit 22 files / 276 tests** (18 added).
+
+Step 4 is the regression the previous archive shipped: it filtered the
+newest ~200 rows in application memory, so anything older was simply
+unfindable. Step 7's fixture hides its salient sentence in the page body
+and puts a decoy in the `<aside>`/`<script>`/`<footer>` — the gate
+asserts the body marker is present *and* the boilerplate marker absent,
+so it catches both "never read the body" and "swept the chrome up as
+prose".
+
+**Image vision shipped.** `lib/image-description.ts` sends the bytes
+inline to flash-lite at temperature 0 and asks for legible text
+*verbatim*, because a description may be quoted back as words the person
+saved and an approximation would put words in their mouth. It refuses
+instructions found inside an image — an image is content, never a
+request. Failures are classified: a rate limit retries, a safety block
+does not. Verified against the real model
+(`scripts/verify-image-description.ts`): a generated PNG reading
+"SMALL TOOLS" came back transcribed verbatim.
+
+Two blockers the harness surfaced, both fixed in the API rather than
+worked around in the test:
+1. The SSRF guard refused the loopback fixture unconditionally. Rather
+   than a "skip the check in dev" flag — the kind that eventually ships —
+   `WAKA_ENRICHMENT_ALLOWED_HOSTS` names specific hosts, is empty by
+   default, and is set by nothing in the deployed configuration.
+2. Images could only be finalized through S3, so an image capture needed
+   an object store to exist. Recording an image **by URL** is a real
+   capability (a pasted image arrives that way) and it goes through the
+   same address guard a link gets; the harness uses it, so enrichment is
+   exercisable against a plain local stack.
+
+Spend this phase: ~8 flash-lite calls (1 vision verification, 1 gate
+vision call, ~6 during harness development) — far inside the ≤150 line.
+
 **Tenant integrity is enforced by the database, not by convention.** Seven
 composite foreign keys — `(profile_id, parent_id)` against unique
 constraints on `inspirations` and `signals` — make a cross-profile row

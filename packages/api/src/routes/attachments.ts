@@ -123,6 +123,29 @@ const finalizeLinkSchema = z.object({
     .url("url must be a valid URL"),
 });
 
+/**
+ * An image that already lives somewhere — pasted from the web rather than
+ * uploaded. It carries no S3 key, so enrichment reads the bytes from the URL
+ * under the same address guard a link gets: an attachment is user-supplied
+ * either way, and being an image is not a reason to let it point inward.
+ */
+const finalizeRemoteImageSchema = z.object({
+  ...baseFinalizeFields,
+  type: z.literal("image"),
+  url: z
+    .string()
+    .trim()
+    .min(1, "url is required")
+    .max(2048, "url is too long")
+    .url("url must be a valid URL"),
+  contentType: z
+    .string()
+    .trim()
+    .max(255, "contentType is too long")
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+});
+
 const finalizeS3Schema = z.object({
   ...baseFinalizeFields,
   type: z.enum(["image", "file"]),
@@ -141,9 +164,15 @@ const finalizeS3Schema = z.object({
     .optional(),
 });
 
-const finalizeRequestSchema = z.discriminatedUnion("type", [
+/**
+ * Ordered rather than discriminated: `image` arrives two ways, carrying a
+ * `key` when it was uploaded and a `url` when it was pasted, so the S3 shape
+ * is tried first and a payload without a key falls through to the remote one.
+ */
+const finalizeRequestSchema = z.union([
   finalizeLinkSchema,
   finalizeS3Schema,
+  finalizeRemoteImageSchema,
 ]);
 
 export type FinalizeAttachmentRequest = z.infer<typeof finalizeRequestSchema>;
@@ -487,6 +516,16 @@ attachmentsRoutes.post("/", async (c) => {
       url: parsed.data.url,
       name: parsed.data.name ?? null,
       enrichmentStatus: initialEnrichmentStatus("link"),
+    };
+  } else if (!("key" in parsed.data)) {
+    rowToInsert = {
+      profileId: parent.profileId,
+      inspirationId: parent.id,
+      type: "image",
+      url: parsed.data.url,
+      name: parsed.data.name ?? null,
+      contentType: parsed.data.contentType ?? null,
+      enrichmentStatus: initialEnrichmentStatus("image"),
     };
   } else {
     const { key, type, name, contentType, size } = parsed.data;

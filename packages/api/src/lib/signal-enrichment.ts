@@ -29,6 +29,11 @@ import {
   type AttachmentType,
 } from "../db/index.js";
 import { getDb } from "./db.js";
+import {
+  describeImage,
+  ImageDescriptionError,
+  isDescribableImageType,
+} from "./image-description.js";
 import type { WakaDb } from "./inspiration-embeddings.js";
 
 const FETCH_TIMEOUT_MS = 6000;
@@ -340,6 +345,25 @@ export function isPrivateAddress(address: string): boolean {
  * meaningful barrier, and the response body only ever reaches us as bounded
  * text on one attachment.
  */
+/**
+ * Hosts exempt from the private-address refusal, as `host` or `host:port`.
+ *
+ * Empty unless `WAKA_ENRICHMENT_ALLOWED_HOSTS` names something, and nothing in
+ * the deployed configuration sets it. It exists because the enrichment tests
+ * need a page and an image served from a fixture on loopback, and the honest
+ * way to allow that is a named exception the reader can see rather than a
+ * blanket "skip the check in dev" — which is the flag that eventually ships.
+ */
+function enrichmentHostAllowlist(): Set<string> {
+  const raw = process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS ?? "";
+  return new Set(
+    raw
+      .split(",")
+      .map((entry) => entry.trim().toLowerCase())
+      .filter((entry) => entry.length > 0),
+  );
+}
+
 export async function assertFetchableUrl(url: string): Promise<void> {
   let parsed: URL;
   try {
@@ -350,6 +374,12 @@ export async function assertFetchableUrl(url: string): Promise<void> {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("unsupported_scheme");
   }
+
+  const allowed = enrichmentHostAllowlist();
+  if (allowed.has(parsed.host.toLowerCase()) || allowed.has(parsed.hostname.toLowerCase())) {
+    return;
+  }
+
   const host = parsed.hostname.replace(/^\[|\]$/g, "");
   if (isIP(host)) {
     if (isPrivateAddress(host)) throw new Error("private_address");
@@ -457,7 +487,7 @@ function isYouTubeHost(hostname: string | null): boolean {
 
 /** What enrichment concluded about an attachment it actually looked at. */
 export type AttachmentEnrichmentVerdict =
-  | { status: "ready"; kind: AttachmentEnrichmentKind; reason: null }
+  | { status: "ready"; kind: AttachmentEnrichmentKind; reason: null; text?: string }
   /** Deterministically nothing to read. Another attempt would find the same. */
   | { status: "unavailable"; reason: string }
   /** Transport-level: the page may well answer on the next attempt. */
@@ -473,22 +503,94 @@ interface AttachmentRow {
   id: string;
   type: AttachmentType;
   url: string;
+  s3Key: string | null;
+  contentType: string | null;
+}
+
+/**
+ * Read an uploaded image's bytes.
+ *
+ * Uploads live in S3 and are fetched with the Lambda's own credentials, so no
+ * URL from the row is dereferenced on that path. An image recorded by URL
+ * instead goes through the same address guard as a link — an attachment is
+ * user-supplied either way, and "it is an image" is not a reason to let it
+ * point at an internal service.
+ */
+async function readImageBytes(
+  attachment: AttachmentRow,
+): Promise<{ bytes: Uint8Array; contentType: string }> {
+  if (attachment.s3Key) {
+    const { GetObjectCommand, S3Client } = await import("@aws-sdk/client-s3");
+    const region =
+      process.env.ATTACHMENTS_REGION || process.env.AWS_REGION || "us-west-2";
+    const bucket = process.env.ATTACHMENTS_BUCKET;
+    if (!bucket) throw new Error("attachments_bucket_unconfigured");
+
+    const object = await new S3Client({ region }).send(
+      new GetObjectCommand({ Bucket: bucket, Key: attachment.s3Key }),
+    );
+    const bytes = await object.Body!.transformToByteArray();
+    return {
+      bytes,
+      contentType: attachment.contentType ?? object.ContentType ?? "image/png",
+    };
+  }
+
+  await assertFetchableUrl(attachment.url);
+  const response = await fetch(attachment.url, { redirect: "follow" });
+  if (!response.ok) throw new Error(`image_fetch_${response.status}`);
+  return {
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    contentType:
+      attachment.contentType ?? response.headers.get("content-type") ?? "image/png",
+  };
 }
 
 /**
  * Image enrichment: a one-time vision description, cached on the attachment,
  * transcribing any legible text verbatim so extraction can read a screenshot
  * the way a person does.
- *
- * The seam is here and the status it writes is honest — an image records
- * `unavailable` rather than pretending to a description nobody produced. The
- * model call lands in Phase 3 of docs/goals/three-layers.md; nothing else about
- * this path changes when it does.
  */
 export async function enrichImageAttachment(
-  _attachment: AttachmentRow,
+  attachment: AttachmentRow,
 ): Promise<AttachmentEnrichmentVerdict> {
-  return { status: "unavailable", reason: "image_description_pending_vision" };
+  let bytes: Uint8Array;
+  let contentType: string;
+  try {
+    ({ bytes, contentType } = await readImageBytes(attachment));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    // A refused address or a missing bucket is a property of the attachment,
+    // not a bad day for the network.
+    const deterministic =
+      reason === "private_address" ||
+      reason === "unsupported_scheme" ||
+      reason === "unfetchable_url" ||
+      reason === "unresolvable_host" ||
+      reason === "attachments_bucket_unconfigured";
+    return deterministic
+      ? { status: "unavailable", reason }
+      : { status: "failed", reason: reason.slice(0, 200) };
+  }
+
+  if (!isDescribableImageType(contentType)) {
+    return { status: "unavailable", reason: `unsupported_image_type:${contentType}` };
+  }
+
+  try {
+    const text = await describeImage({ bytes, contentType });
+    return { status: "ready", kind: "image_description", reason: null, text };
+  } catch (err) {
+    if (err instanceof ImageDescriptionError) {
+      return err.transient
+        ? { status: "failed", reason: err.message.slice(0, 200) }
+        : { status: "unavailable", reason: err.message.slice(0, 200) };
+    }
+    return {
+      status: "failed",
+      reason: (err instanceof Error ? err.message : String(err)).slice(0, 200),
+    };
+  }
 }
 
 async function enrichLinkAttachment(attachment: AttachmentRow): Promise<{
@@ -537,7 +639,13 @@ export async function enrichAttachment(
   const db = deps.db ?? getDb();
 
   const [attachment] = await db
-    .select({ id: attachments.id, type: attachments.type, url: attachments.url })
+    .select({
+      id: attachments.id,
+      type: attachments.type,
+      url: attachments.url,
+      s3Key: attachments.s3Key,
+      contentType: attachments.contentType,
+    })
     .from(attachments)
     .where(eq(attachments.id, attachmentId))
     .limit(1);
@@ -562,7 +670,10 @@ export async function enrichAttachment(
     .set({
       enrichmentStatus: result.status,
       enrichmentKind: result.status === "ready" ? result.kind : null,
-      enrichmentText: result.status === "ready" ? link.text ?? null : null,
+      // A link's text is assembled from its metadata and body; an image's is
+      // the description itself, carried on the verdict.
+      enrichmentText:
+        result.status === "ready" ? (result.text ?? link.text ?? null) : null,
       enrichmentErrorReason: result.status === "ready" ? null : result.reason,
       enrichmentUpdatedAt: now,
       finalUrl: link.finalUrl ?? null,
