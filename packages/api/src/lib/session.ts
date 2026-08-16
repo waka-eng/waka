@@ -35,6 +35,40 @@ export async function hashSessionToken(token: string): Promise<string> {
  * `signSessionToken` so the credential is backed by a row before the next
  * request lands.
  */
+/**
+ * A short, honest name for the machine behind a browser login.
+ *
+ * The CLI flow names itself (a hostname, or `--device`); a browser cannot, so
+ * this reads the coarsest facts out of the User-Agent — the browser family
+ * and the platform — and stops there. It is a label for a person recognising
+ * their own laptop in a list, not fingerprinting: no version, no build, and
+ * anything unrecognised is simply "Browser" rather than a guess.
+ */
+export function describeUserAgent(userAgent: string | null | undefined): string {
+  const ua = (userAgent ?? "").trim();
+  if (!ua) return "Browser";
+
+  // Order matters: Edge and Chrome both claim Safari, Chrome claims Safari.
+  const browser =
+    /\bEdg\//.test(ua) ? "Edge"
+    : /\bOPR\/|\bOpera\b/.test(ua) ? "Opera"
+    : /\bFirefox\//.test(ua) ? "Firefox"
+    : /\bChrome\//.test(ua) ? "Chrome"
+    : /\bSafari\//.test(ua) ? "Safari"
+    : null;
+
+  const platform =
+    /\biPhone\b|\biPad\b|\biPod\b/.test(ua) ? "iOS"
+    : /\bAndroid\b/.test(ua) ? "Android"
+    : /\bMac OS X\b|\bMacintosh\b/.test(ua) ? "macOS"
+    : /\bWindows\b/.test(ua) ? "Windows"
+    : /\bLinux\b/.test(ua) ? "Linux"
+    : null;
+
+  if (browser && platform) return `${browser} on ${platform}`;
+  return browser ?? platform ?? "Browser";
+}
+
 export async function createSessionRow(input: {
   profileId: string;
   token: string;

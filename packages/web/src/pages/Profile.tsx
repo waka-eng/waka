@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
   ApiError,
   createProfile,
+  endConnection,
+  fetchConnections,
   deleteProfile,
   fetchProfiles,
   renameProfile,
+  type ApiConnection,
   type ApiOwnedProfile,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { whenShort } from "../lib/when";
 import {
   normalizeSupportedLocale,
   supportedLocales,
@@ -21,6 +25,16 @@ import type { SupportedLocale } from "../lib/locales";
 
 const DELETE_CONFIRMATION = "DELETE";
 const PUBLIC_HANDLE_PATTERN = /^[a-z0-9_-]{3,24}$/;
+
+type ProfileTab = "you" | "access";
+
+/** Keyed to the catalog, so a renamed message is a type error, not a blank tab. */
+type MessageKey = Parameters<typeof t>[1];
+
+const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
+  { id: "you", labelKey: "profileTabYou" },
+  { id: "access", labelKey: "profileTabAccess" },
+];
 
 export default function ProfilePage(): JSX.Element {
   const { account, profile, logout, updateProfile, deleteAccount } = useAuth();
@@ -142,6 +156,61 @@ export default function ProfilePage(): JSX.Element {
     }
   }
 
+  /**
+   * One page, four rooms. Everything used to arrive at once — identity,
+   * sharing, memories, connections, and account deletion in a single column —
+   * which made the page a wall rather than a place. Tabs hide nothing; they
+   * decide what you are looking at now.
+   */
+  const [tab, setTab] = useState<ProfileTab>("you");
+  const tabRefs = useRef<Partial<Record<ProfileTab, HTMLButtonElement | null>>>({});
+
+  const [connections, setConnections] = useState<ApiConnection[] | null>(null);
+  const [busyConnectionId, setBusyConnectionId] = useState<string | null>(null);
+
+  const loadConnections = useCallback(async (): Promise<void> => {
+    try {
+      setConnections(await fetchConnections());
+    } catch {
+      setConnections([]);
+      setError(t(locale, "profileConnectionsError"));
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  async function handleEndConnection(connection: ApiConnection): Promise<void> {
+    // Ending the device you are holding logs you out of it, which is a
+    // different promise from ending some other machine — so it asks a
+    // different question.
+    const question = connection.current
+      ? t(locale, "profileConnectionEndCurrentConfirm")
+      : t(locale, "profileConnectionEndConfirm");
+    if (!window.confirm(question)) return;
+
+    setBusyConnectionId(connection.id);
+    setStatus(null);
+    setError(null);
+    try {
+      await endConnection(connection.id);
+      if (connection.current) {
+        // The credential this page is using is gone; anything else it tried
+        // to render would 401. Leave deliberately rather than let the app
+        // discover it.
+        navigate("/login", { replace: true });
+        return;
+      }
+      setConnections((current) => (current ?? []).filter((row) => row.id !== connection.id));
+      setStatus(t(locale, "profileConnectionEnded"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileConnectionsError"));
+    } finally {
+      setBusyConnectionId(null);
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const handle = normalizedPublicHandle || null;
@@ -229,7 +298,60 @@ export default function ProfilePage(): JSX.Element {
         </header>
         {status ? <div className="form-success" role="status">{status}</div> : null}
         {error ? <div className="form-error" role="alert">{error}</div> : null}
-        <form className="login-form" onSubmit={handleSubmit} noValidate>
+
+        {/*
+          A segmented control built as a tray holding one moving pill: the
+          indicator slides on `transform` alone, so switching rooms costs no
+          layout. Arrow keys move between tabs because a tablist that only
+          answers to a mouse is a tablist half-built.
+        */}
+        <div className="profile-tabs" role="tablist" aria-label={t(locale, "profileTabsLabel")}>
+          <span
+            className="profile-tabs-indicator"
+            aria-hidden="true"
+            style={{
+              transform: `translateX(${PROFILE_TABS.findIndex((entry) => entry.id === tab) * 100}%)`,
+            }}
+          />
+          {PROFILE_TABS.map((entry) => (
+            <button
+              key={entry.id}
+              ref={(node) => {
+                tabRefs.current[entry.id] = node;
+              }}
+              className={`profile-tab${entry.id === tab ? " is-active" : ""}`}
+              type="button"
+              role="tab"
+              id={`profile-tab-${entry.id}`}
+              aria-selected={entry.id === tab}
+              aria-controls={`profile-panel-${entry.id}`}
+              tabIndex={entry.id === tab ? 0 : -1}
+              onClick={() => setTab(entry.id)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                if (step === 0) return;
+                event.preventDefault();
+                const index = PROFILE_TABS.findIndex((row) => row.id === tab);
+                const next =
+                  PROFILE_TABS[(index + step + PROFILE_TABS.length) % PROFILE_TABS.length]!;
+                setTab(next.id);
+                tabRefs.current[next.id]?.focus();
+              }}
+            >
+              {t(locale, entry.labelKey)}
+            </button>
+          ))}
+        </div>
+        <form
+          className="login-form profile-panel"
+          onSubmit={handleSubmit}
+          noValidate
+          role="tabpanel"
+          id="profile-panel-you"
+          aria-labelledby="profile-tab-you"
+          hidden={tab !== "you"}
+        >
           <label className="field">
             <span className="field-label">{t(locale, "profileNickname")}</span>
             <input
@@ -338,6 +460,13 @@ export default function ProfilePage(): JSX.Element {
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>
         </form>
+        <div
+          className="profile-panel profile-room"
+          role="tabpanel"
+          id="profile-panel-access"
+          aria-labelledby="profile-tab-access"
+          hidden={tab !== "access"}
+        >
         <section className="profile-memories-panel" aria-labelledby="profile-memories-title">
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-memories-title">
@@ -346,20 +475,19 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-subtitle">{t(locale, "profileMemoriesHint")}</p>
           </div>
 
-          <ul className="profile-memory-list">
+          <ul className="profile-list">
             {(memories ?? []).map((memory) => {
               const isHuman = memory.type === "human";
               const busy = busyMemoryId === memory.id;
               const draft = memoryDrafts[memory.id] ?? memory.name;
+              const dirty = draft.trim().length > 0 && draft.trim() !== memory.name;
               return (
-                <li key={memory.id} className="profile-memory-row">
-                  <span
-                    className={`profile-memory-badge${isHuman ? " is-human" : ""}`}
-                  >
+                <li key={memory.id} className="profile-list-row profile-memory-row">
+                  <span className="profile-memory-badge">
                     {t(locale, isHuman ? "profileMemoryHuman" : "profileMemoryAgent")}
                   </span>
                   <input
-                    className="field-input profile-memory-name"
+                    className="profile-row-name"
                     type="text"
                     value={draft}
                     disabled={busy}
@@ -372,61 +500,123 @@ export default function ProfilePage(): JSX.Element {
                       setMemoryDrafts((current) => ({ ...current, [memory.id]: value }));
                     }}
                   />
+                  <span className="profile-row-actions">
+                    {/* Rename earns its place only once the name has changed —
+                        a permanently disabled button on every row is noise
+                        pretending to be affordance. */}
+                    {dirty || busy ? (
+                      <button
+                        className="profile-memory-action"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRenameMemory(memory)}
+                      >
+                        {busy
+                          ? t(locale, "profileMemoryRenameSaving")
+                          : t(locale, "profileMemoryRename")}
+                      </button>
+                    ) : null}
+                    {/* The human memory is the account's own and has no remove
+                        button at all — a disabled one would imply it is merely
+                        not allowed right now. */}
+                    {isHuman ? null : (
+                      <button
+                        className="profile-memory-action is-destructive"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRemoveMemory(memory)}
+                      >
+                        {busy
+                          ? t(locale, "profileMemoryRemoving")
+                          : t(locale, "profileMemoryRemove")}
+                      </button>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+            <li className="profile-list-row profile-memory-new">
+              <span className="profile-memory-badge" aria-hidden="true">
+                +
+              </span>
+              <input
+                className="profile-row-name"
+                type="text"
+                value={newMemoryName}
+                placeholder={t(locale, "profileMemoryNewLabel")}
+                disabled={creatingMemory}
+                onChange={(event) => setNewMemoryName(event.currentTarget.value)}
+              />
+              <span className="profile-row-actions">
+                {newMemoryName.trim() || creatingMemory ? (
                   <button
-                    className="profile-memory-action"
+                    className="profile-memory-action profile-memory-create"
                     type="button"
-                    disabled={busy || draft.trim() === memory.name || !draft.trim()}
-                    onClick={() => void handleRenameMemory(memory)}
+                    disabled={creatingMemory}
+                    onClick={() => void handleCreateMemory()}
                   >
-                    {busy
-                      ? t(locale, "profileMemoryRenameSaving")
-                      : t(locale, "profileMemoryRename")}
+                    {creatingMemory
+                      ? t(locale, "profileMemoryCreating")
+                      : t(locale, "profileMemoryCreate")}
                   </button>
-                  {/* The human memory is the account's own and has no remove
-                      button at all — a disabled one would imply it is merely
-                      not allowed right now. */}
-                  {isHuman ? null : (
+                ) : null}
+              </span>
+            </li>
+          </ul>
+        </section>
+        <section className="profile-memories-panel" aria-labelledby="profile-connections-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-connections-title">
+              {t(locale, "profileConnectionsTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileConnectionsHint")}</p>
+          </div>
+
+          <ul className="profile-list">
+            {(connections ?? []).map((connection) => {
+              const busy = busyConnectionId === connection.id;
+              return (
+                <li key={connection.id} className="profile-list-row profile-connection-row">
+                  <div className="profile-row-main">
+                    <span className="profile-row-title">
+                      {connection.deviceLabel ?? t(locale, "profileConnectionUnlabelled")}
+                      {connection.current ? (
+                        <span className="profile-row-tag">
+                          {t(locale, "profileConnectionThisDevice")}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="profile-row-meta">
+                      {connection.profile.name} · {t(locale, "profileConnectionLastSeen")}{" "}
+                      {whenShort(connection.lastSeenAt)}
+                    </span>
+                  </div>
+                  <span className="profile-row-actions">
                     <button
                       className="profile-memory-action is-destructive"
                       type="button"
                       disabled={busy}
-                      onClick={() => void handleRemoveMemory(memory)}
+                      onClick={() => void handleEndConnection(connection)}
                     >
                       {busy
-                        ? t(locale, "profileMemoryRemoving")
-                        : t(locale, "profileMemoryRemove")}
+                        ? t(locale, "profileConnectionEnding")
+                        : t(locale, "profileConnectionEnd")}
                     </button>
-                  )}
+                  </span>
                 </li>
               );
             })}
           </ul>
-
-          <label className="field">
-            <span className="field-label">{t(locale, "profileMemoryNewLabel")}</span>
-            <div className="profile-memory-new">
-              <input
-                className="field-input"
-                type="text"
-                value={newMemoryName}
-                placeholder={t(locale, "profileMemoryNewPlaceholder")}
-                disabled={creatingMemory}
-                onChange={(event) => setNewMemoryName(event.currentTarget.value)}
-              />
-              <button
-                className="btn-primary profile-memory-create"
-                type="button"
-                disabled={creatingMemory || !newMemoryName.trim()}
-                onClick={() => void handleCreateMemory()}
-              >
-                {creatingMemory
-                  ? t(locale, "profileMemoryCreating")
-                  : t(locale, "profileMemoryCreate")}
-              </button>
-            </div>
-          </label>
+          {connections !== null && connections.length === 0 ? (
+            <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
+          ) : null}
         </section>
-        <section className="profile-danger-panel" aria-labelledby="profile-danger-title">
+        </div>
+        <section
+          className="profile-danger-panel profile-panel"
+          aria-labelledby="profile-danger-title"
+          hidden={tab !== "you"}
+        >
           <div className="profile-danger-heading">
             <p className="login-eyebrow" id="profile-danger-title">
               {t(locale, "profileDangerZone")}

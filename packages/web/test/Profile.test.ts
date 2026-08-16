@@ -53,6 +53,24 @@ vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => mockAuthState.value,
 }));
 
+const mockConnectionsApi = vi.hoisted(() => {
+  const base = {
+    profile: { id: "profile-1", name: "River", type: "human" as "human" | "agent" },
+    createdAt: "2026-08-16T04:00:00.000Z",
+    lastSeenAt: "2026-08-16T06:00:00.000Z",
+    expiresAt: "2026-09-15T04:00:00.000Z",
+  };
+  return {
+    rows: [
+      { ...base, id: "session-current", deviceLabel: "Chrome on macOS", current: true },
+      { ...base, id: "session-other", deviceLabel: "agis-Mac-mini.local", current: false },
+      { ...base, id: "session-bare", deviceLabel: null, current: false },
+    ],
+    fetchConnections: vi.fn(async () => mockConnectionsApi.rows),
+    endConnection: vi.fn(async () => undefined),
+  };
+});
+
 const mockProfilesApi = vi.hoisted(() => {
   const human = {
     id: "profile-1",
@@ -79,6 +97,8 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
   createProfile: mockProfilesApi.createProfile,
   renameProfile: mockProfilesApi.renameProfile,
   deleteProfile: mockProfilesApi.deleteProfile,
+  fetchConnections: mockConnectionsApi.fetchConnections,
+  endConnection: mockConnectionsApi.endConnection,
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -203,6 +223,17 @@ function typeInto(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/** Click a tab by its visible label and let React settle. */
+async function openTab(container: HTMLDivElement, label: string): Promise<void> {
+  const tab = Array.from(container.querySelectorAll<HTMLButtonElement>(".profile-tab")).find(
+    (button) => button.textContent?.trim() === label,
+  );
+  if (!tab) throw new Error(`no tab labelled ${label}`);
+  await act(async () => {
+    tab.click();
+  });
+}
+
 function memoryRows(container: HTMLDivElement): HTMLLIElement[] {
   return Array.from(container.querySelectorAll<HTMLLIElement>(".profile-memory-row"));
 }
@@ -210,6 +241,7 @@ function memoryRows(container: HTMLDivElement): HTMLLIElement[] {
 describe("ProfilePage memories", () => {
   it("lists every memory the account owns, labelled by kind", async () => {
     const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
     const rows = memoryRows(container);
 
     expect(rows).toHaveLength(2);
@@ -224,6 +256,7 @@ describe("ProfilePage memories", () => {
    */
   it("offers no remove control at all on the human memory", async () => {
     const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
     const [human, agent] = memoryRows(container);
 
     const removeLabels = (row?: HTMLLIElement) =>
@@ -242,6 +275,7 @@ describe("ProfilePage memories", () => {
    */
   it("survives typing a new name into a memory row", async () => {
     const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
     const input = memoryRows(container)[1]?.querySelector<HTMLInputElement>("input");
     expect(input).toBeTruthy();
 
@@ -253,28 +287,33 @@ describe("ProfilePage memories", () => {
     expect(input?.value).toBe("claude-code");
   });
 
-  it("keeps rename inert until the name actually changes", async () => {
+  it("shows rename only once the name actually changes", async () => {
     const container = await renderProfilePage();
-    const row = memoryRows(container)[1]!;
-    const rename = Array.from(row.querySelectorAll("button")).find((b) =>
-      b.textContent?.includes("Rename"),
-    );
+    await openTab(container, "Memories & connections");
+    const row = () => memoryRows(container)[1]!;
+    const rename = () =>
+      Array.from(row().querySelectorAll("button")).find((b) =>
+        b.textContent?.includes("Rename"),
+      );
 
-    expect(rename?.disabled).toBe(true);
+    // A permanently disabled button on every row is noise pretending to be
+    // affordance — until the name changes there is nothing to offer.
+    expect(rename()).toBeUndefined();
 
     await act(async () => {
-      typeInto(row.querySelector<HTMLInputElement>("input")!, "claude-code");
+      typeInto(row().querySelector<HTMLInputElement>("input")!, "claude-code");
     });
-    expect(rename?.disabled).toBe(false);
+    expect(rename()).toBeTruthy();
 
     await act(async () => {
-      rename?.click();
+      rename()?.click();
     });
     expect(mockProfilesApi.renameProfile).toHaveBeenCalledWith("profile-2", "claude-code");
   });
 
   it("asks before removing a memory, and does nothing when declined", async () => {
     const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
     const remove = Array.from(memoryRows(container)[1]!.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Remove"),
     );
@@ -292,5 +331,140 @@ describe("ProfilePage memories", () => {
     });
     expect(mockProfilesApi.deleteProfile).toHaveBeenCalledWith("profile-2");
     confirmSpy.mockRestore();
+  });
+});
+
+describe("ProfilePage connections", () => {
+  const connectionRows = (container: HTMLDivElement) =>
+    Array.from(container.querySelectorAll<HTMLLIElement>(".profile-connection-row"));
+
+  it("lists every connection, naming the one you are using", async () => {
+    const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
+    const rows = connectionRows(container);
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.textContent).toContain("Chrome on macOS");
+    expect(rows[0]?.textContent).toContain("this device");
+    expect(rows[1]?.textContent).not.toContain("this device");
+  });
+
+  /** A login that never named itself still has to be recognisable in a list. */
+  it("gives an unlabelled connection a readable name", async () => {
+    const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
+    expect(connectionRows(container)[2]?.textContent).toContain("Unnamed device");
+  });
+
+  /** No surface may hand back a credential; there is nothing to hand back. */
+  it("never renders a token", async () => {
+    const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
+    const panel = container.querySelector("#profile-connections-title")?.closest("section");
+    expect(panel?.textContent).not.toMatch(/token|eyJ/i);
+  });
+
+  it("asks before ending a connection, and does nothing when declined", async () => {
+    const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
+    const end = connectionRows(container)[1]?.querySelector("button");
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await act(async () => {
+      end?.click();
+    });
+    expect(mockConnectionsApi.endConnection).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    await act(async () => {
+      end?.click();
+    });
+    expect(mockConnectionsApi.endConnection).toHaveBeenCalledWith("session-other");
+    confirmSpy.mockRestore();
+  });
+
+  /**
+   * Ending the device in your hand is a different promise from ending some
+   * other machine, so it has to ask a different question — and then leave,
+   * because every request this page makes next would be unauthorized.
+   */
+  it("warns differently before ending the current device", async () => {
+    const container = await renderProfilePage();
+    await openTab(container, "Memories & connections");
+    const end = connectionRows(container)[0]?.querySelector("button");
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await act(async () => {
+      end?.click();
+    });
+
+    expect(confirmSpy.mock.calls[0]?.[0]).toContain("signs you out here");
+    confirmSpy.mockRestore();
+  });
+});
+
+describe("ProfilePage rooms", () => {
+  const tabs = (container: HTMLDivElement) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>(".profile-tab"));
+  const shown = (container: HTMLDivElement, id: string) =>
+    !container.querySelector(`#profile-panel-${id}`)?.hasAttribute("hidden");
+
+  it("offers exactly two rooms as a tablist", async () => {
+    const container = await renderProfilePage();
+
+    expect(tabs(container).map((t) => t.textContent)).toEqual([
+      "You",
+      "Memories & connections",
+    ]);
+    expect(tabs(container)[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs(container)[0]?.getAttribute("aria-controls")).toBe("profile-panel-you");
+    expect(tabs(container)[1]?.getAttribute("aria-controls")).toBe("profile-panel-access");
+  });
+
+  it("shows one room at a time", async () => {
+    const container = await renderProfilePage();
+    expect([shown(container, "you"), shown(container, "access")]).toEqual([true, false]);
+
+    await openTab(container, "Memories & connections");
+    expect([shown(container, "you"), shown(container, "access")]).toEqual([false, true]);
+  });
+
+  /** Deleting an account should not sit beside a language picker. */
+  it("keeps account deletion in the identity room only", async () => {
+    const container = await renderProfilePage();
+    const danger = () => container.querySelector(".profile-danger-panel");
+
+    expect(danger()?.hasAttribute("hidden")).toBe(false);
+    await openTab(container, "Memories & connections");
+    expect(danger()?.hasAttribute("hidden")).toBe(true);
+  });
+
+  /** The indicator moves by transform alone; its offset is the active index. */
+  it("slides the indicator to the active tab", async () => {
+    const container = await renderProfilePage();
+    const pill = () =>
+      container.querySelector<HTMLElement>(".profile-tabs-indicator")?.style.transform;
+
+    expect(pill()).toBe("translateX(0%)");
+    await openTab(container, "Memories & connections");
+    expect(pill()).toBe("translateX(100%)");
+  });
+
+  /** A tablist that only answers a mouse is a tablist half-built. */
+  it("moves between tabs with the arrow keys, wrapping at the ends", async () => {
+    const container = await renderProfilePage();
+    const press = async (key: string) => {
+      const active = tabs(container).find((t) => t.getAttribute("aria-selected") === "true");
+      await act(async () => {
+        active?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      });
+    };
+
+    await press("ArrowRight");
+    expect(tabs(container)[1]?.getAttribute("aria-selected")).toBe("true");
+
+    await press("ArrowRight");
+    // Wrapped forward from the last tab back to the first.
+    expect(tabs(container)[0]?.getAttribute("aria-selected")).toBe("true");
   });
 });

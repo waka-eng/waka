@@ -271,5 +271,20 @@
   "profileMemoriesError": "Your memories could not be loaded.",
   "profileMemoryCreated": "Memory added.",
   "profileMemoryRenamed": "Memory renamed.",
-  "profileMemoryRemoved": "Memory removed."
+  "profileMemoryRemoved": "Memory removed.",
+  "profileConnectionsTitle": "Connections",
+  "profileConnectionsHint": "Machines currently signed in to this account, and which memory each one acts as. Ending a connection signs that machine out; it cannot be undone, but you can always sign in again.",
+  "profileConnectionThisDevice": "this device",
+  "profileConnectionUnlabelled": "Unnamed device",
+  "profileConnectionLastSeen": "last used",
+  "profileConnectionEnd": "End",
+  "profileConnectionEnding": "Ending…",
+  "profileConnectionEndConfirm": "End this connection? That machine will be signed out.",
+  "profileConnectionEndCurrentConfirm": "This is the device you are using. Ending it signs you out here. Continue?",
+  "profileConnectionsError": "Your connections could not be loaded.",
+  "profileConnectionEnded": "Connection ended.",
+  "profileConnectionsEmpty": "No other connections.",
+  "profileTabYou": "You",
+  "profileTabsLabel": "Profile sections",
+  "profileTabAccess": "Memories & connections"
 }
