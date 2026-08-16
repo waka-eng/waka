@@ -629,3 +629,166 @@ a:hover {
   box-shadow: none;
   overflow: visible;
 }
+
+/* ================= LIGHT, NOT JUST DARKNESS =================
+   Repointing the tokens made this screen dark. It did not make it feel like
+   the world, because the world's character is not its blackness — it is that
+   everything sits IN a volume with light behind it. A flat near-black page
+   with pale text on it is just a form with the colours swapped.
+
+   Three things carry that here, and none of them is decoration:
+   a ground that is deeper at the edges than the middle, a measure that stops
+   the column reading as a lonely strip, and a type scale that comes down to
+   reading size so the prose stops shouting. */
+
+.login-shell,
+.profile-shell {
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(32px, 7vh, 88px) 24px 96px;
+  /* the volume: one soft pool of light, high and centred, exactly where the
+     world puts the light behind its companion. It never reads as a gradient
+     because it has no edge — it is the room, not a panel in it. */
+  background:
+    radial-gradient(
+      120% 80% at 50% 12%,
+      rgba(232, 237, 244, 0.055) 0%,
+      rgba(232, 237, 244, 0.022) 34%,
+      transparent 68%
+    ),
+    var(--w-ground);
+}
+
+/* The card stops being a card: on this ground a bordered box is a hole cut
+   into the room. It is a column of content standing in the light. */
+.login-card,
+.profile-card {
+  width: 100%;
+  max-width: 620px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---------- type comes back to reading size ----------
+   The prose here was set at poster scale — a paragraph explaining a checkbox
+   was as loud as the page title. One display size, one reading size, one
+   label size, and nothing in between. */
+.login-title,
+.profile-header h1 {
+  font-size: clamp(38px, 5.2vw, 58px);
+  line-height: 1.02;
+  letter-spacing: -0.005em;
+  margin: 0;
+}
+.profile-email,
+.login-subtitle {
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+.field-hint {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--w-faint);
+}
+/* the long privacy paragraph: reading size, and a measure that does not run
+   the full width of the column */
+.profile-public-panel > .login-subtitle,
+.profile-danger-panel > .login-subtitle {
+  max-width: 52ch;
+  font-size: 14px;
+}
+
+/* the header sits apart from the form rather than on top of it */
+.profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 26px;
+}
+
+/* ================= THE SAME VALUES, NOT SIMILAR ONES =================
+   "Matching the world" was being done by eye — a 10px label here, a clamp
+   there, each one close to the world's and none of them equal to it. Close is
+   what makes two screens feel like two products. These are the world's own
+   numbers, lifted from world.css rather than approximated. */
+
+/* the label register, byte for byte from .jar-label */
+.login-eyebrow,
+.field-label,
+.profile-public-heading > .login-eyebrow,
+.profile-danger-heading > .login-eyebrow,
+.profile-tabs button,
+.profile-row-tag,
+.profile-memory-badge,
+.profile-memories-heading > .login-eyebrow {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--w-muted);
+}
+
+/* THE VOICE, at the poster's own weight and tracking.
+   Jost 300 and never heavier — in a geometric the elegance is the thin even
+   stroke and the air around it, and weight is what kills it. The page title
+   was landing near 58px and bold-ish, which is louder than anything the world
+   ever prints; the poster tops out at 34. */
+.login-title,
+.profile-header h1,
+h1,
+h2 {
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: 0.012em;
+  line-height: 1.32;
+  text-wrap: balance;
+  color: var(--w-ink);
+}
+
+/* THE GRAIN. The world's signature texture, and the one thing that made these
+   screens read as a different surface no matter what the palette said. It is
+   an overlay blend, so it leaves black black by construction and lives on the
+   midtones — the type and the rules — without ever lifting the ground.
+   Fixed to the frame, like film grain belongs to the lens rather than to what
+   is being filmed. */
+.login-shell::after,
+.profile-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  opacity: 0.09;
+  background-image: url("data:image/svg+xml;utf8,\
+<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'>\
+<filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter>\
+<rect width='140' height='140' filter='url(%23n)' opacity='0.55'/></svg>");
+  background-repeat: repeat;
+}
+
+/* THE RHYTHM. The world breathes between its three sections; this page had
+   form-density — every label 22px under the last. Sections now separate by a
+   full beat and the fields inside them by a half. */
+.profile-public-panel,
+.profile-danger-panel {
+  margin-top: 46px;
+  padding-top: 28px;
+  gap: 18px;
+}
+.field {
+  margin-bottom: 26px;
+}
+.profile-tabs {
+  margin-bottom: 30px;
+}
