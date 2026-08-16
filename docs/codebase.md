@@ -124,7 +124,24 @@ Only after 1–3, because those make the seams visible. In dependency order:
 - **`world/state/`** — loaders and hooks: `loadRoom`, the ball-list build, hue
   assignment.
 
-**Started.** `lib/world-appearance.ts` is the first piece out: the per-member
+### What makes a module, rather than a pile
+
+The test is not "are these functions small" — it is **does the group have ONE
+reason to exist**, statable in a sentence, such that you can read the whole
+file and know what belongs in it.
+
+- `lib/world-words.ts` — *data turned into the words this world says.* Every
+  function takes a fact and returns a phrase. It says "four days ago" and "you
+  and your agent", never "4d" or "2 members".
+- `lib/world-appearance.ts` — *whose memory this is, in colour.* Given a ramp
+  and a member's slot, returns colours.
+
+A good boundary asserts itself while you cross it. Lifting `dateWords` pulled
+in `ordWords`, `yearWords` and `numWords`, and those pulled their word tables —
+because they were always one thing. That is the boundary telling you where it
+is, and it is why extraction should follow the compiler rather than a plan.
+
+**Started.** `lib/world-appearance.ts` was the first piece out: the per-member
 hue system, extracted because none of it touches React or the frame loop.
 That is the test for whether something can leave — *does it need the loop or
 the component?* If not, it belongs in `lib/`, and moving it is safe. Working

@@ -65,6 +65,14 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 
 import { hueCss, tintRamp } from "../lib/world-appearance";
+import {
+  dateWords,
+  givenName,
+  numWords,
+  roomCompany,
+  whoWords,
+  yearWords,
+} from "../lib/world-words";
 
 import {
   affirmGroupProposal,
@@ -776,52 +784,7 @@ function parseColor(input: string): [number, number, number] {
 /* rgbToHsl went with the tint pairs: it existed to pick the lighter end of a
    gradient pair, and there are no pairs left to pick between. */
 
-const ONES = [
-  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-  "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-  "seventeen", "eighteen", "nineteen",
-];
-const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
 
-/** Numbers as words, up to ninety-nine. Counts are prose here, never digits. */
-function numWords(n: number): string {
-  if (n < 20) return ONES[n] ?? String(n);
-  if (n > 99) return String(n);
-  const t = TENS[Math.floor(n / 10)];
-  const o = n % 10;
-  return o === 0 ? t : `${t}-${ONES[o]}`;
-}
-
-const ORD_ONES = [
-  "zeroth", "first", "second", "third", "fourth", "fifth", "sixth", "seventh",
-  "eighth", "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth",
-  "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth",
-];
-const ORD_TENS = [
-  "", "", "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth",
-  "seventieth", "eightieth", "ninetieth",
-];
-
-/** Ordinals as words — "twenty-fifth", never "25th". */
-function ordWords(n: number): string {
-  if (n < 20) return ORD_ONES[n] ?? String(n);
-  if (n > 99) return String(n);
-  const o = n % 10;
-  return o === 0 ? ORD_TENS[Math.floor(n / 10)] : `${TENS[Math.floor(n / 10)]}-${ORD_ONES[o]}`;
-}
-
-/**
- * A year the way it is spoken — "twenty twenty-six", never "2026". The
- * two-thousands take the other form ("two thousand seven") until the tens
- * arrive, which is simply how people say them out loud.
- */
-function yearWords(y: number): string {
-  if (y < 1100 || y > 2099) return String(y);
-  const hi = Math.floor(y / 100);
-  const lo = y % 100;
-  if (hi === 20 && lo < 10) return lo === 0 ? "two thousand" : `two thousand ${numWords(lo)}`;
-  return `${numWords(hi)} ${numWords(lo)}`;
-}
 
 /**
  * How long ago, ALWAYS as a relative phrase in words — "Today", "Yesterday",
@@ -839,22 +802,6 @@ function agoWords(ms: number, T: number): string {
   if (days < 100) return `${cap(numWords(days))} days ago`;
   const months = Math.round(days / 30);
   return months < 2 ? "A few months ago" : `${cap(numWords(months))} months ago`;
-}
-
-/**
- * The absolute date, spelled all the way out — "May eighteenth", and with the
- * year when it is not this one. It used to format the day (and sometimes the
- * year) as digits, which put "June 25" in the panel directly beside a
- * relative line that obeyed the rule: states render, numerals never. The
- * spelled form is also the one a person would say aloud, which is the test
- * this whole surface is written to.
- */
-function dateWords(ms: number, T: number): string {
-  const d = new Date(ms);
-  const month = d.toLocaleDateString("en-US", { month: "long" });
-  const day = ordWords(d.getDate());
-  if (d.getFullYear() === new Date(T).getFullYear()) return `${month} ${day}`;
-  return `${month} ${day}, ${yearWords(d.getFullYear())}`;
 }
 
 /** The month a scrub is standing in, spoken — "June twenty twenty-six". */
@@ -1106,16 +1053,6 @@ function scatterSeed(id: string): number[] {
   const out: number[] = [];
   for (let i = 0; i < 12; i++) out.push(mix32(hashStr(`${id}/scat/${i}`)) / 4294967296);
   return out;
-}
-
-/**
- * The name a whisper says: the given name alone. The first whitespace-
- * separated part, which is the given name in a Western name and the whole of
- * a Korean one, since those are written without a space.
- */
-function givenName(full: string): string {
-  const first = full.trim().split(/\s+/)[0];
-  return first || full.trim();
 }
 
 /**
@@ -1397,21 +1334,6 @@ interface RoomEvidence {
   citedBy: string[];
 }
 
-/**
- * WHO IS HERE, IN WORDS AND NEVER AS A COUNT.
- *
- * "Three others" is a number wearing a sentence, and this page does not
- * render numerals. Names are what a person actually wants anyway. Past three
- * it says the first two and how many more — which is how anybody would say it
- * out loud.
- */
-function whoWords(rows: ApiGroupMember[]): string {
-  const names = rows.map((r) => givenName(r.name)).filter(Boolean);
-  if (names.length === 0) return "Who is here";
-  if (names.length <= 3) return names.join(", ");
-  return `${names[0]}, ${names[1]} and ${numWords(names.length - 2)} more`;
-}
-
 /** Everything a room needs before it is allowed to wake. Cached per session. */
 interface RoomData {
   evidence: RoomEvidence[];
@@ -1547,30 +1469,6 @@ function makeRoomBall(
  * its lead entry — pinned first, otherwise the top of the order — and there is
  * no generated stand-in when there is none.
  */
-/**
- * WHAT KIND OF COMPANY THIS IS.
- *
- * Four rooms with four different populations were four identical walls: the
- * one where you sit alone, the one you share with your own agent, the one
- * with four other people in it, and the one where five machines talk about
- * their work all read the same. Who is in a room is the single most important
- * thing about it — you speak differently in each — so the eyebrow carries it
- * beside the name.
- *
- * In words and never as a count, and never as a badge: it is a description of
- * the company, which is what a person would actually say about a room.
- */
-function roomCompany(members: ApiGroupMember[] | undefined): string | null {
-  if (!members || members.length === 0) return null;
-  const agents = members.filter((m) => m.type === "agent").length;
-  const people = members.length - agents;
-  if (members.length === 1) return "on your own";
-  if (people === 0) return "agents only";
-  if (agents === 0) return people === 2 ? "the two of you" : "people";
-  if (people === 1 && agents === 1) return "you and your agent";
-  return "people and agents";
-}
-
 function deriveRoomChrome(
   name: string,
   top: ApiGroupTopOfMind,
