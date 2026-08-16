@@ -192,20 +192,42 @@ async function main(): Promise<void> {
       });
       if (!pinned.ok) throw new Error(`pin → ${pinned.status}`);
 
+      // Only *locked* entries are guaranteed word-for-word across a
+      // regeneration; a generated line may legitimately be reworded, and a
+      // dismiss aimed at text the live version no longer contains is honestly
+      // a 404 — resolving it by position instead would take down a line the
+      // reader never pointed at. A correct client refetches and retries, which
+      // is exactly what the surface does, so the test does the same.
+      let dismissedId: string | null = null;
       if (dismissTarget) {
-        const dismissed = await api(
+        let dismissed = await api(
           owner!,
           `/api/top-of-mind/entries/${dismissTarget.id}/dismiss`,
           { method: "POST" },
         );
+        dismissedId = dismissTarget.id;
+
+        if (dismissed.status === 404) {
+          const current = await getTopOfMind(owner!, { includeDismissed: true });
+          const retarget = current!.entries.find(
+            (entry) => entry.body !== lockedText && !entry.dismissed,
+          );
+          if (!retarget) return "the board regenerated down to the locked line alone";
+          dismissed = await api(
+            owner!,
+            `/api/top-of-mind/entries/${retarget.id}/dismiss`,
+            { method: "POST" },
+          );
+          dismissedId = retarget.id;
+        }
         if (!dismissed.ok) throw new Error(`dismiss → ${dismissed.status}`);
       }
 
       const after = await getTopOfMind(owner!, { includeDismissed: true });
-      const stillPinned = after!.entries.find((entry) => entry.id === pinTarget.id);
+      const stillPinned = after!.entries.find((entry) => entry.body === lockedText);
       if (!stillPinned?.pinned) throw new Error("pin did not stick");
-      if (dismissTarget) {
-        const gone = after!.entries.find((entry) => entry.id === dismissTarget.id);
+      if (dismissedId) {
+        const gone = after!.entries.find((entry) => entry.id === dismissedId);
         if (!gone?.dismissed) throw new Error("dismiss did not stick");
       }
       return dismissTarget ? "pin and dismiss both stuck" : "pin stuck (only one entry to work with)";
