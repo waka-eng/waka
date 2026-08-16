@@ -430,11 +430,26 @@ describe("ProfilePage rooms", () => {
   });
 
   /** Deleting an account should not sit beside a language picker. */
-  it("keeps account deletion in the identity room only", async () => {
+  /*
+    Two gates, one attribute (`Profile.tsx`): the tab it lives on, and the word
+    that reveals it. This asserted only the first, from before the screen
+    disclosed progressively — so it read the closed disclosure as a missing
+    panel. Both gates are checked now, because "only in the identity room" and
+    "only once asked for" are separate promises and either can break alone.
+  */
+  it("keeps account deletion in the identity room only, and behind a word", async () => {
     const container = await renderProfilePage();
     const danger = () => container.querySelector(".profile-danger-panel");
+    const disclose = () =>
+      container.querySelector<HTMLButtonElement>(".profile-disclose-inline");
 
+    expect(danger()?.hasAttribute("hidden")).toBe(true);
+
+    await act(async () => {
+      disclose()?.click();
+    });
     expect(danger()?.hasAttribute("hidden")).toBe(false);
+
     await openTab(container, "Memories & connections");
     expect(danger()?.hasAttribute("hidden")).toBe(true);
   });
