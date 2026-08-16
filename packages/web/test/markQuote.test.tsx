@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { markQuote, paragraphs, whenShort } from "../src/pages/Surface";
+import { markQuote, paragraphs } from "../src/pages/Surface";
+import { whenShort } from "../src/lib/when";
 
 /**
  * The surface marks one span per citation — a citation IS one quote there — so

@@ -46,7 +46,7 @@ import {
   signSessionToken,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
-import { createSessionRow } from "../lib/session.js";
+import { createSessionRow, describeUserAgent } from "../lib/session.js";
 import {
   getGoogleClientId,
   getGoogleClientSecret,
@@ -623,7 +623,11 @@ export async function handleGoogleCallback(c: Context): Promise<Response> {
   // revoke this exact session. Mirrors the post-signup write in
   // routes/auth.ts — both paths must produce the same row shape so the
   // middleware can't tell OAuth and password sessions apart.
-  await createSessionRow({ profileId: identity.profileId, token: sessionToken });
+  await createSessionRow({
+    profileId: identity.profileId,
+    token: sessionToken,
+    deviceLabel: describeUserAgent(c.req.header("user-agent")),
+  });
 
   // Append, don't replace — we want both the session cookie and the
   // delete-temp-cookie headers to land in one response.
