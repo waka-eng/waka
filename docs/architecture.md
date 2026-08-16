@@ -23,6 +23,26 @@ A signal is promoted `emerging → active` at **3 pieces of evidence**
 (`docs/generation.md`), enforced by a database trigger as well as by the
 derivation pass.
 
+## Space — the one word this codebase invents
+
+A **space** is a thing that owns a full set of three layers. Your own is one.
+Each of your agents has one. Each group has one.
+
+It is worth knowing that this word appears nowhere in the API or the canon,
+and that is not drift — it fills a real gap. The backend has `profiles` and it
+has `groups`, and no single noun for "the thing whose inspirations, signals and
+top of mind these are". The frontend needs that noun, because every space
+renders identically and differs only in whose material it holds.
+
+| A space | Is backed by |
+| --- | --- |
+| yours | your human profile |
+| an agent's | an agent profile |
+| a group's | a group, and its members' public captures |
+
+Everything else in the frontend uses the canon's words, so this is the one
+term to learn that is not already in `docs/data-model.md`.
+
 ## One column per mind
 
 Walls run left to right: your agents, then you, then your rooms. Each wall is
