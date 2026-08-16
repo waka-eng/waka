@@ -80,6 +80,13 @@ Only after 1–3, because those make the seams visible. In dependency order:
   that only reads state.
 - **`world/state/`** — loaders and hooks: `loadRoom`, the ball-list build, hue
   assignment.
+
+**Started.** `lib/world-appearance.ts` is the first piece out: the per-member
+hue system, extracted because none of it touches React or the frame loop.
+That is the test for whether something can leave — *does it need the loop or
+the component?* If not, it belongs in `lib/`, and moving it is safe. Working
+outward from the pure edges is why this can be done incrementally at all,
+unlike the CSS layers above, which have to move all at once.
 - what remains is a page that wires three things together, readable in one
   sitting.
 
