@@ -1188,6 +1188,7 @@ body.dragging .drop-overlay {
 }
 
 .profile-public-panel,
+.profile-memories-panel,
 .profile-danger-panel {
   display: grid;
   gap: var(--space-4);
@@ -1195,12 +1196,14 @@ body.dragging .drop-overlay {
 }
 
 .profile-public-heading,
+.profile-memories-heading,
 .profile-danger-heading {
   display: grid;
   gap: 8px;
 }
 
 .profile-public-heading .login-eyebrow,
+.profile-memories-heading .login-eyebrow,
 .profile-danger-heading .login-eyebrow,
 .profile-public-heading .login-subtitle,
 .profile-danger-heading .login-subtitle {
@@ -2765,3 +2768,93 @@ textarea {
   }
 }
 
+
+/* The account's memories: one row per profile, name editable in place. */
+.profile-memory-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-memory-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.profile-memory-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+/* Which memory this is, said in a word rather than an icon. */
+.profile-memory-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.profile-memory-badge.is-human {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.profile-memory-action {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.profile-memory-action:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.profile-memory-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.profile-memory-action.is-destructive:hover:not(:disabled) {
+  border-color: var(--border-danger, var(--border-strong));
+  color: var(--text-danger, var(--text-primary));
+}
+
+.profile-memory-new {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.profile-memory-new .field-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Sized to sit beside the input rather than span the row like the page's
+   main submit does. */
+.profile-memory-create {
+  flex: 0 0 auto;
+  width: auto;
+  padding-inline: var(--space-4);
+}
+
+@media (max-width: 520px) {
+  .profile-memory-name {
+    flex-basis: 100%;
+    order: 3;
+  }
+}

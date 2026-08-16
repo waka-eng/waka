@@ -1,8 +1,15 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import { ApiError } from "../lib/api";
+import {
+  ApiError,
+  createProfile,
+  deleteProfile,
+  fetchProfiles,
+  renameProfile,
+  type ApiOwnedProfile,
+} from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import {
   normalizeSupportedLocale,
@@ -45,6 +52,95 @@ export default function ProfilePage(): JSX.Element {
     normalizedPublicHandle.length > 0
       ? `${typeof window === "undefined" ? "" : window.location.origin}/@${normalizedPublicHandle}`
       : null;
+
+  // The account's memories. Loaded here rather than from auth context because
+  // this is the only screen that administers them, and a stale list is worse
+  // than a brief spinner when the next click deletes one.
+  const [memories, setMemories] = useState<ApiOwnedProfile[] | null>(null);
+  const [newMemoryName, setNewMemoryName] = useState("");
+  const [creatingMemory, setCreatingMemory] = useState(false);
+  /** The id currently being renamed or removed, so only its own row is busy. */
+  const [busyMemoryId, setBusyMemoryId] = useState<string | null>(null);
+  const [memoryDrafts, setMemoryDrafts] = useState<Record<string, string>>({});
+
+  const loadMemories = useCallback(async (): Promise<void> => {
+    try {
+      const rows = await fetchProfiles();
+      setMemories(rows);
+      setMemoryDrafts(Object.fromEntries(rows.map((row) => [row.id, row.name])));
+    } catch {
+      setMemories([]);
+      setError(t(locale, "profileMemoriesError"));
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    void loadMemories();
+  }, [loadMemories]);
+
+  async function handleCreateMemory(): Promise<void> {
+    const name = newMemoryName.trim();
+    if (!name) {
+      setError(t(locale, "profileMemoryNameRequired"));
+      return;
+    }
+    setCreatingMemory(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const created = await createProfile(name);
+      setMemories((current) => [...(current ?? []), created]);
+      setMemoryDrafts((current) => ({ ...current, [created.id]: created.name }));
+      setNewMemoryName("");
+      setStatus(t(locale, "profileMemoryCreated"));
+    } catch (err) {
+      // The server's own words carry information this page cannot invent —
+      // the per-account ceiling, above all.
+      setError(err instanceof ApiError ? err.message : t(locale, "profileMemoriesError"));
+    } finally {
+      setCreatingMemory(false);
+    }
+  }
+
+  async function handleRenameMemory(memory: ApiOwnedProfile): Promise<void> {
+    const name = (memoryDrafts[memory.id] ?? "").trim();
+    if (!name) {
+      setError(t(locale, "profileMemoryNameRequired"));
+      return;
+    }
+    if (name === memory.name) return;
+    setBusyMemoryId(memory.id);
+    setStatus(null);
+    setError(null);
+    try {
+      const updated = await renameProfile(memory.id, name);
+      setMemories((current) =>
+        (current ?? []).map((row) => (row.id === updated.id ? updated : row)),
+      );
+      setStatus(t(locale, "profileMemoryRenamed"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileMemoriesError"));
+    } finally {
+      setBusyMemoryId(null);
+    }
+  }
+
+  async function handleRemoveMemory(memory: ApiOwnedProfile): Promise<void> {
+    // Deleting a memory takes its whole stack by cascade, so it asks first.
+    if (!window.confirm(t(locale, "profileMemoryRemoveConfirm"))) return;
+    setBusyMemoryId(memory.id);
+    setStatus(null);
+    setError(null);
+    try {
+      await deleteProfile(memory.id);
+      setMemories((current) => (current ?? []).filter((row) => row.id !== memory.id));
+      setStatus(t(locale, "profileMemoryRemoved"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileMemoriesError"));
+    } finally {
+      setBusyMemoryId(null);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -242,6 +338,94 @@ export default function ProfilePage(): JSX.Element {
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>
         </form>
+        <section className="profile-memories-panel" aria-labelledby="profile-memories-title">
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-memories-title">
+              {t(locale, "profileMemoriesTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileMemoriesHint")}</p>
+          </div>
+
+          <ul className="profile-memory-list">
+            {(memories ?? []).map((memory) => {
+              const isHuman = memory.type === "human";
+              const busy = busyMemoryId === memory.id;
+              const draft = memoryDrafts[memory.id] ?? memory.name;
+              return (
+                <li key={memory.id} className="profile-memory-row">
+                  <span
+                    className={`profile-memory-badge${isHuman ? " is-human" : ""}`}
+                  >
+                    {t(locale, isHuman ? "profileMemoryHuman" : "profileMemoryAgent")}
+                  </span>
+                  <input
+                    className="field-input profile-memory-name"
+                    type="text"
+                    value={draft}
+                    disabled={busy}
+                    aria-label={memory.name}
+                    onChange={(event) => {
+                      // Read the value here, not inside the updater: React
+                      // runs that callback after the handler returns, and by
+                      // then `currentTarget` is null.
+                      const value = event.currentTarget.value;
+                      setMemoryDrafts((current) => ({ ...current, [memory.id]: value }));
+                    }}
+                  />
+                  <button
+                    className="profile-memory-action"
+                    type="button"
+                    disabled={busy || draft.trim() === memory.name || !draft.trim()}
+                    onClick={() => void handleRenameMemory(memory)}
+                  >
+                    {busy
+                      ? t(locale, "profileMemoryRenameSaving")
+                      : t(locale, "profileMemoryRename")}
+                  </button>
+                  {/* The human memory is the account's own and has no remove
+                      button at all — a disabled one would imply it is merely
+                      not allowed right now. */}
+                  {isHuman ? null : (
+                    <button
+                      className="profile-memory-action is-destructive"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handleRemoveMemory(memory)}
+                    >
+                      {busy
+                        ? t(locale, "profileMemoryRemoving")
+                        : t(locale, "profileMemoryRemove")}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <label className="field">
+            <span className="field-label">{t(locale, "profileMemoryNewLabel")}</span>
+            <div className="profile-memory-new">
+              <input
+                className="field-input"
+                type="text"
+                value={newMemoryName}
+                placeholder={t(locale, "profileMemoryNewPlaceholder")}
+                disabled={creatingMemory}
+                onChange={(event) => setNewMemoryName(event.currentTarget.value)}
+              />
+              <button
+                className="btn-primary profile-memory-create"
+                type="button"
+                disabled={creatingMemory || !newMemoryName.trim()}
+                onClick={() => void handleCreateMemory()}
+              >
+                {creatingMemory
+                  ? t(locale, "profileMemoryCreating")
+                  : t(locale, "profileMemoryCreate")}
+              </button>
+            </div>
+          </label>
+        </section>
         <section className="profile-danger-panel" aria-labelledby="profile-danger-title">
           <div className="profile-danger-heading">
             <p className="login-eyebrow" id="profile-danger-title">
