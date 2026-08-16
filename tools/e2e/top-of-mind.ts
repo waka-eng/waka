@@ -180,8 +180,12 @@ async function main(): Promise<void> {
     });
 
     await step("pin and dismiss round-trip and survive a regeneration", async () => {
-      const pinTarget = first!.entries.find((entry) => entry.body === lockedText)!;
-      const dismissTarget = first!.entries.find((entry) => entry.id !== pinTarget.id);
+      // Reads the live version first, so this step measures pin/dismiss itself
+      // rather than racing the previous step's regeneration. Curating from a
+      // *stale* id is its own case, covered in the next step.
+      const live = await getTopOfMind(owner!, { includeDismissed: true });
+      const pinTarget = live!.entries.find((entry) => entry.body === lockedText)!;
+      const dismissTarget = live!.entries.find((entry) => entry.id !== pinTarget.id);
 
       const pinned = await api(owner!, `/api/top-of-mind/entries/${pinTarget.id}/pin`, {
         method: "POST",
@@ -205,6 +209,36 @@ async function main(): Promise<void> {
         if (!gone?.dismissed) throw new Error("dismiss did not stick");
       }
       return dismissTarget ? "pin and dismiss both stuck" : "pin stuck (only one entry to work with)";
+    });
+
+    await step("curating from a superseded id still finds the entry", async () => {
+      // Every regeneration writes new entry rows, so ids go stale the moment a
+      // synthesis lands — and synthesis lands within seconds of a capture. A
+      // reader's open board holds the old ids; their pin has to keep working,
+      // or their click on a line they can plainly see returns "no such entry".
+      const before = await getTopOfMind(owner!, { includeDismissed: true });
+      const staleEntry = before!.entries.find((entry) => entry.body === lockedText)!;
+
+      const regenerated = await refreshAndWait(
+        owner!,
+        before!.version,
+        "a regeneration that rotates every entry id",
+      );
+      const rotated = regenerated.entries.find((entry) => entry.body === lockedText);
+      if (!rotated) throw new Error("the locked line did not survive regeneration");
+      if (rotated.id === staleEntry.id) {
+        return "ids did not rotate this pass; nothing to prove";
+      }
+
+      const pinned = await api(owner!, `/api/top-of-mind/entries/${staleEntry.id}/pin`, {
+        method: "POST",
+      });
+      if (!pinned.ok) throw new Error(`pin via superseded id → ${pinned.status}`);
+
+      const after = await getTopOfMind(owner!, { includeDismissed: true });
+      const landed = after!.entries.find((entry) => entry.body === lockedText);
+      if (!landed?.pinned) throw new Error("the pin did not land on the live entry");
+      return `stale id ${staleEntry.id.slice(0, 8)} resolved to live ${landed.id.slice(0, 8)}`;
     });
 
     await step("a refresh with nothing new records an explicit no-change", async () => {
