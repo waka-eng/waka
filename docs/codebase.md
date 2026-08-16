@@ -113,7 +113,51 @@ handful of lines and it removes an entire category of failure.
 three languages, and `world-chrome.css` exists mostly to translate between
 them. Collapse to one set. The translation layer then deletes itself.
 
-### 4. Split `World.tsx`
+### 4. Split `World.tsx` — the decided shape
+
+```
+web/src/world/
+  wall/                 what EVERY wall has, one directory per layer
+    inspiration/        orbs, layout, the memory panel, the capture mouth
+    signal/             statements, verdicts, joining, proposals
+    top-of-mind/        the poster, provenance, the version history
+  wall-kinds/           how walls DIFFER
+    self.ts
+    agent.ts            machine hand · pixelated orbs · quantized motion
+    room.ts             members · hues · legend · proposals
+  axis/                 travel between walls
+  sim/                  the loop, sprites, camera, hit-testing
+  lib/                  data.ts · words.ts · appearance.ts
+web/src/account/        the flat screens: profile, login
+```
+
+**Canon words name the directories** — `inspiration`, `signal`, `top-of-mind`
+— so one vocabulary runs from the database to the folder:
+`api/routes/inspirations.ts` ↔ `world/wall/inspiration/`. A new engineer
+learns three words once and they hold everywhere.
+
+*Field*, *sky* and *headquarters* remain the words for WHERE these are drawn.
+They are spatial, and they belong in the UI and its comments, not in paths.
+
+**Everything sits under `wall/` because there is never one of anything.** There
+are seven fields on screen right now. A room's field and yours are the same
+code with different contents — `presentBalls()` already filters one list by
+`ball.agentId`, and the structure should say so.
+
+**`wall-kinds/` is the directory that fixes a bug class**, not just tidiness.
+"How does an agent's wall differ" is currently answered independently in at
+least six places — `isMachineWall`, `wornBeing`, `hasSky`, `hasDial`, the
+`data-kind` typography selector, `mechAt`'s quantization — and they have
+disagreed in production: a body hashed from a group id, typography and motion
+wired separately, "Our agents" reading as a machine's room in one place and a
+human's in another. One file owning what an agent's wall IS makes that
+impossible, and a new wall kind becomes a new file rather than a hunt.
+
+**Filenames stop repeating their directory.** `lib/world-words.ts` becomes
+`world/lib/words.ts`. If a filename restates its folder, one of them is
+redundant.
+
+### How to get there
 
 Only after 1–3, because those make the seams visible. In dependency order:
 
