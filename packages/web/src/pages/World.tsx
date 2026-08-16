@@ -64,6 +64,16 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import {
+  FIELD_CITED_LIFT,
+  FIELD_DECAY_HALF_LIFE_DAYS,
+  FIELD_FLOOR_ANSWERED,
+  FIELD_FLOOR_CITED,
+  FIELD_FLOOR_IN_GROUP,
+  FIELD_FRONTIER_DAYS,
+  FIELD_REFLECTION_SATURATION,
+  FIELD_REFLECTION_WEIGHT,
+} from "../lib/aliveness";
 import { hueCss, tintRamp } from "../lib/world-appearance";
 import {
   dateWords,
@@ -3516,7 +3526,7 @@ function buildPalette(
 function colorBall(b: Ball, T: number): void {
   const ref = Math.min(Math.max(b.updatedMs, b.capturedMs), T);
   const days = Math.max(0, (T - ref) / DAY_MS);
-  const decay = Math.pow(0.5, days / 7);
+  const decay = Math.pow(0.5, days / FIELD_DECAY_HALF_LIFE_DAYS);
   /**
    * WHAT YOU BUILT ON DOES NOT ROT.
    *
@@ -3532,10 +3542,18 @@ function colorBall(b: Ball, T: number): void {
    * of the field still fades exactly as it did, which is where the passage
    * of time is supposed to be visible.
    */
-  const tended = (b.hasNotes ? 0.34 : 0) + (b.reflections > 0 ? 0.18 : 0) + (b.hasGroup ? 0.1 : 0);
+  const tended =
+    (b.hasNotes ? FIELD_FLOOR_CITED : 0) +
+    (b.reflections > 0 ? FIELD_FLOOR_ANSWERED : 0) +
+    (b.hasGroup ? FIELD_FLOOR_IN_GROUP : 0);
   const a = clamp01(
-    Math.max(decay + 0.25 * Math.min(b.reflections, 2) * decay, tended) +
-      (b.hasNotes ? 0.12 : 0),
+    Math.max(
+      decay +
+        FIELD_REFLECTION_WEIGHT *
+          Math.min(b.reflections, FIELD_REFLECTION_SATURATION) *
+          decay,
+      tended,
+    ) + (b.hasNotes ? FIELD_CITED_LIFT : 0),
   );
   b.alive = a;
   b.alivePow = Math.pow(a, 1.4);
@@ -3547,7 +3565,7 @@ function colorBall(b: Ball, T: number): void {
    * about somewhere you have not gone. Same rule here: only a memory old
    * enough to have been read, and still cited by nothing, is a frontier.
    */
-  b.frontier = !b.hasNotes && days > 3;
+  b.frontier = !b.hasNotes && days > FIELD_FRONTIER_DAYS;
 }
 
 /**

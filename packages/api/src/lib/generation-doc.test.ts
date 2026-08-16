@@ -46,8 +46,34 @@ const MODULES: Record<string, Record<string, unknown>> = {
   "inspiration-embeddings.ts": embeddings,
 };
 
+/**
+ * The field's constants live in the WEB package, and are read as text rather
+ * than imported.
+ *
+ * Brightness in the field is a scoring model — it decides what a person sees —
+ * so its numbers belong under the same guard as the ones deciding what the
+ * machine concludes. They used to be eight literals in a render loop, silently
+ * disagreeing with the constants above.
+ *
+ * Read, not imported, because the API test suite must not take a dependency on
+ * the web package to check a document. A regex over `export const NAME = 7;`
+ * is enough, and it fails loudly if the file moves — which is the correct
+ * outcome, since the doc names its path.
+ */
+const WEB_TUNING = new URL("../../../web/src/lib/aliveness.ts", import.meta.url);
+
+function webTuningExports(): Map<string, string> {
+  const out = new Map<string, string>();
+  const src = readFileSync(fileURLToPath(WEB_TUNING), "utf8");
+  for (const m of src.matchAll(/^export const ([A-Z][A-Z0-9_]+) = ([0-9.]+);/gm)) {
+    out.set(m[1] as string, String(m[2]));
+  }
+  return out;
+}
+
 function tuningExports(): Map<string, string> {
   const out = new Map<string, string>();
+  for (const [name, value] of webTuningExports()) out.set(name, value);
   for (const mod of Object.values(MODULES)) {
     for (const [name, value] of Object.entries(mod)) {
       if (!/^[A-Z][A-Z0-9_]+$/.test(name)) continue;

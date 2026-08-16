@@ -427,6 +427,45 @@ instructions.
 
 ---
 
+## What the field shows, and why its numbers differ
+
+Everything above decides what the machine CONCLUDES. This section covers what
+a person SEES — an orb's brightness in the field — because that is also a
+scoring model, and it used to be eight unnamed literals in a render loop
+disagreeing with the five constants above.
+
+Source: `packages/web/src/lib/aliveness.ts`.
+
+| Constant | Value | What it does |
+| --- | --- | --- |
+| `FIELD_DECAY_HALF_LIFE_DAYS` | 7 | Half-life of an untended memory's light |
+| `FIELD_REFLECTION_SATURATION` | 2 | Attention stops adding light past this many reflections |
+| `FIELD_REFLECTION_WEIGHT` | 0.25 | What each reflection adds, as a fraction of current decay |
+| `FIELD_FLOOR_CITED` | 0.34 | A memory a signal rests on cannot sink below this |
+| `FIELD_FLOOR_ANSWERED` | 0.18 | Nor one you answered in your own words |
+| `FIELD_FLOOR_IN_GROUP` | 0.1 | Nor one that is out loud in a group |
+| `FIELD_CITED_LIFT` | 0.12 | Being cited also lifts a memory above its floor |
+| `FIELD_FRONTIER_DAYS` | 3 | Untouched longer than this and cited by nothing = a frontier |
+
+**Why the field decays faster than confidence.** 7 days against 45 and 30 is
+deliberate. Those govern what the machine concludes over months; this governs
+what a person sees on a surface they may open daily. A field that took a month
+to visibly change would not show the passage of time, which is its only job.
+
+That is an argument rather than a fact, and it is written down so it can be
+argued with. The unacceptable state was the previous one: the same idea
+carrying different numbers in two places with nothing connecting them.
+
+**Why reflections saturate at 2 while evidence saturates at 6.** They count
+different things. `SELECTION_EVIDENCE_SATURATION` counts a pattern accumulating
+across many memories; `FIELD_REFLECTION_SATURATION` counts one person returning
+to a single memory. Two returns to the same thought is already unusual.
+
+**Why `hasNotes` appears twice.** A citation both sets a floor
+(`FIELD_FLOOR_CITED`) and lifts the result (`FIELD_CITED_LIFT`): being rested
+upon stops a memory sinking AND makes it brighter than an equally old one that
+is not. Deliberate, and named so it reads as a decision rather than a bug.
+
 ## How this doc stays true
 
 Three mechanisms, all in `packages/api/src/lib/generation-doc.test.ts`,
