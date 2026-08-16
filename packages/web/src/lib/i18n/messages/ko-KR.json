@@ -283,5 +283,10 @@
   "profileConnectionEndCurrentConfirm": "지금 사용 중인 기기입니다. 끊으면 여기서 로그아웃됩니다. 계속할까요?",
   "profileConnectionsError": "연결을 불러오지 못했습니다.",
   "profileConnectionEnded": "연결을 끊었습니다.",
-  "profileConnectionsEmpty": "다른 연결이 없습니다."
+  "profileConnectionsEmpty": "다른 연결이 없습니다.",
+  "profileTabYou": "나",
+  "profileTabSharing": "공개",
+  "profileTabMemories": "기억",
+  "profileTabConnections": "연결",
+  "profileTabsLabel": "프로필 섹션"
 }

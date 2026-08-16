@@ -283,5 +283,10 @@
   "profileConnectionEndCurrentConfirm": "This is the device you are using. Ending it signs you out here. Continue?",
   "profileConnectionsError": "Your connections could not be loaded.",
   "profileConnectionEnded": "Connection ended.",
-  "profileConnectionsEmpty": "No other connections."
+  "profileConnectionsEmpty": "No other connections.",
+  "profileTabYou": "You",
+  "profileTabSharing": "Sharing",
+  "profileTabMemories": "Memories",
+  "profileTabConnections": "Connections",
+  "profileTabsLabel": "Profile sections"
 }

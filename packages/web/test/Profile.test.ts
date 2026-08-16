@@ -223,6 +223,17 @@ function typeInto(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
+/** Click a tab by its visible label and let React settle. */
+async function openTab(container: HTMLDivElement, label: string): Promise<void> {
+  const tab = Array.from(container.querySelectorAll<HTMLButtonElement>(".profile-tab")).find(
+    (button) => button.textContent?.trim() === label,
+  );
+  if (!tab) throw new Error(`no tab labelled ${label}`);
+  await act(async () => {
+    tab.click();
+  });
+}
+
 function memoryRows(container: HTMLDivElement): HTMLLIElement[] {
   return Array.from(container.querySelectorAll<HTMLLIElement>(".profile-memory-row"));
 }
@@ -376,5 +387,105 @@ describe("ProfilePage connections", () => {
 
     expect(confirmSpy.mock.calls[0]?.[0]).toContain("signs you out here");
     confirmSpy.mockRestore();
+  });
+});
+
+describe("ProfilePage rooms", () => {
+  const tabs = (container: HTMLDivElement) =>
+    Array.from(container.querySelectorAll<HTMLButtonElement>(".profile-tab"));
+  const shown = (container: HTMLDivElement, id: string) =>
+    !container.querySelector(`#profile-panel-${id}`)?.hasAttribute("hidden");
+
+  it("offers the four rooms as a tablist", async () => {
+    const container = await renderProfilePage();
+    const list = container.querySelector('[role="tablist"]');
+
+    expect(list).toBeTruthy();
+    expect(tabs(container).map((t) => t.textContent)).toEqual([
+      "You",
+      "Sharing",
+      "Memories",
+      "Connections",
+    ]);
+    expect(tabs(container)[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs(container)[0]?.getAttribute("aria-controls")).toBe("profile-panel-you");
+  });
+
+  it("shows one room at a time", async () => {
+    const container = await renderProfilePage();
+    expect([shown(container, "you"), shown(container, "sharing"), shown(container, "memories")])
+      .toEqual([true, false, false]);
+
+    await openTab(container, "Memories");
+    expect([shown(container, "you"), shown(container, "sharing"), shown(container, "memories")])
+      .toEqual([false, false, true]);
+  });
+
+  /** Deleting an account should not sit beside a language picker. */
+  it("keeps account deletion in the identity room only", async () => {
+    const container = await renderProfilePage();
+    const danger = () => container.querySelector(".profile-danger-panel");
+
+    expect(danger()?.hasAttribute("hidden")).toBe(false);
+    await openTab(container, "Connections");
+    expect(danger()?.hasAttribute("hidden")).toBe(true);
+  });
+
+  /** The indicator moves by transform alone; its offset is the active index. */
+  it("slides the indicator to the active tab", async () => {
+    const container = await renderProfilePage();
+    const pill = () =>
+      container.querySelector<HTMLElement>(".profile-tabs-indicator")?.style.transform;
+
+    expect(pill()).toBe("translateX(0%)");
+    await openTab(container, "Connections");
+    expect(pill()).toBe("translateX(300%)");
+  });
+
+  /** A tablist that only answers a mouse is a tablist half-built. */
+  it("moves between tabs with the arrow keys, wrapping at the ends", async () => {
+    const container = await renderProfilePage();
+    const press = async (key: string) => {
+      const active = tabs(container).find((t) => t.getAttribute("aria-selected") === "true");
+      await act(async () => {
+        active?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+      });
+    };
+
+    await press("ArrowRight");
+    expect(tabs(container)[1]?.getAttribute("aria-selected")).toBe("true");
+
+    await press("ArrowLeft");
+    await press("ArrowLeft");
+    // Wrapped backwards from the first tab to the last.
+    expect(tabs(container)[3]?.getAttribute("aria-selected")).toBe("true");
+  });
+
+  /**
+   * The handle lives in another room. Reporting an error about a field the
+   * reader cannot see would be worse than reporting nothing.
+   */
+  it("opens the room holding the field an error is about", async () => {
+    const container = await renderProfilePage();
+
+    // Public sharing on, handle emptied — the invalid combination, set up from
+    // the identity room so the offending field is out of sight.
+    const handle = container.querySelector<HTMLInputElement>(".profile-handle-input");
+    await act(async () => {
+      typeInto(handle!, "");
+    });
+    const toggle = container.querySelector<HTMLInputElement>(
+      '.profile-public-panel input[type="checkbox"]',
+    );
+    await act(async () => {
+      toggle!.click();
+    });
+    const form = container.querySelector("form");
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(tabs(container)[1]?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector(".form-error")?.textContent).toBeTruthy();
   });
 });

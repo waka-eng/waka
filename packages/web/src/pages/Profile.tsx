@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -25,6 +25,18 @@ import type { SupportedLocale } from "../lib/locales";
 
 const DELETE_CONFIRMATION = "DELETE";
 const PUBLIC_HANDLE_PATTERN = /^[a-z0-9_-]{3,24}$/;
+
+type ProfileTab = "you" | "sharing" | "memories" | "connections";
+
+/** Keyed to the catalog, so a renamed message is a type error, not a blank tab. */
+type MessageKey = Parameters<typeof t>[1];
+
+const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
+  { id: "you", labelKey: "profileTabYou" },
+  { id: "sharing", labelKey: "profileTabSharing" },
+  { id: "memories", labelKey: "profileTabMemories" },
+  { id: "connections", labelKey: "profileTabConnections" },
+];
 
 export default function ProfilePage(): JSX.Element {
   const { account, profile, logout, updateProfile, deleteAccount } = useAuth();
@@ -146,6 +158,15 @@ export default function ProfilePage(): JSX.Element {
     }
   }
 
+  /**
+   * One page, four rooms. Everything used to arrive at once — identity,
+   * sharing, memories, connections, and account deletion in a single column —
+   * which made the page a wall rather than a place. Tabs hide nothing; they
+   * decide what you are looking at now.
+   */
+  const [tab, setTab] = useState<ProfileTab>("you");
+  const tabRefs = useRef<Partial<Record<ProfileTab, HTMLButtonElement | null>>>({});
+
   const [connections, setConnections] = useState<ApiConnection[] | null>(null);
   const [busyConnectionId, setBusyConnectionId] = useState<string | null>(null);
 
@@ -200,10 +221,14 @@ export default function ProfilePage(): JSX.Element {
       return;
     }
     if ((publicProfileEnabled || publicTopOfMindEnabled) && !handle) {
+      // The offending field is on another tab; sending someone to an error
+      // they cannot see is worse than no error at all.
+      setTab("sharing");
       setError(t(locale, "profilePublicHandleRequired"));
       return;
     }
     if (handleError) {
+      setTab("sharing");
       setError(handleError);
       return;
     }
@@ -223,6 +248,7 @@ export default function ProfilePage(): JSX.Element {
       setStatus(t(locale, "profileSaved"));
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.fieldErrors?.publicHandle) setTab("sharing");
         setError(err.fieldErrors?.publicHandle?.[0] ?? err.message);
       } else {
         setError(t(locale, "profileSaveError"));
@@ -279,7 +305,64 @@ export default function ProfilePage(): JSX.Element {
         </header>
         {status ? <div className="form-success" role="status">{status}</div> : null}
         {error ? <div className="form-error" role="alert">{error}</div> : null}
-        <form className="login-form" onSubmit={handleSubmit} noValidate>
+
+        {/*
+          A segmented control built as a tray holding one moving pill: the
+          indicator slides on `transform` alone, so switching rooms costs no
+          layout. Arrow keys move between tabs because a tablist that only
+          answers to a mouse is a tablist half-built.
+        */}
+        <div className="profile-tabs" role="tablist" aria-label={t(locale, "profileTabsLabel")}>
+          <span
+            className="profile-tabs-indicator"
+            aria-hidden="true"
+            style={{
+              transform: `translateX(${PROFILE_TABS.findIndex((entry) => entry.id === tab) * 100}%)`,
+            }}
+          />
+          {PROFILE_TABS.map((entry) => (
+            <button
+              key={entry.id}
+              ref={(node) => {
+                tabRefs.current[entry.id] = node;
+              }}
+              className={`profile-tab${entry.id === tab ? " is-active" : ""}`}
+              type="button"
+              role="tab"
+              id={`profile-tab-${entry.id}`}
+              aria-selected={entry.id === tab}
+              aria-controls={`profile-panel-${entry.id}`}
+              tabIndex={entry.id === tab ? 0 : -1}
+              onClick={() => setTab(entry.id)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+                if (step === 0) return;
+                event.preventDefault();
+                const index = PROFILE_TABS.findIndex((row) => row.id === tab);
+                const next =
+                  PROFILE_TABS[(index + step + PROFILE_TABS.length) % PROFILE_TABS.length]!;
+                setTab(next.id);
+                tabRefs.current[next.id]?.focus();
+              }}
+            >
+              {t(locale, entry.labelKey)}
+            </button>
+          ))}
+        </div>
+        <form
+          className="login-form profile-panel"
+          onSubmit={handleSubmit}
+          noValidate
+          hidden={tab !== "you" && tab !== "sharing"}
+        >
+          <div
+            className="profile-room"
+            role="tabpanel"
+            id="profile-panel-you"
+            aria-labelledby="profile-tab-you"
+            hidden={tab !== "you"}
+          >
           <label className="field">
             <span className="field-label">{t(locale, "profileNickname")}</span>
             <input
@@ -317,7 +400,14 @@ export default function ProfilePage(): JSX.Element {
               ))}
             </select>
           </label>
-          <section className="profile-public-panel" aria-labelledby="profile-public-title">
+          </div>
+          <section
+            className="profile-public-panel profile-room"
+            role="tabpanel"
+            id="profile-panel-sharing"
+            aria-labelledby="profile-tab-sharing"
+            hidden={tab !== "sharing"}
+          >
             <div className="profile-public-heading">
               <p className="login-eyebrow" id="profile-public-title">
                 {t(locale, "profilePublicTitle")}
@@ -388,7 +478,13 @@ export default function ProfilePage(): JSX.Element {
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>
         </form>
-        <section className="profile-memories-panel" aria-labelledby="profile-memories-title">
+        <section
+          className="profile-memories-panel profile-panel profile-room"
+          role="tabpanel"
+          id="profile-panel-memories"
+          aria-labelledby="profile-tab-memories"
+          hidden={tab !== "memories"}
+        >
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-memories-title">
               {t(locale, "profileMemoriesTitle")}
@@ -477,8 +573,11 @@ export default function ProfilePage(): JSX.Element {
           </label>
         </section>
         <section
-          className="profile-memories-panel"
-          aria-labelledby="profile-connections-title"
+          className="profile-memories-panel profile-panel profile-room"
+          role="tabpanel"
+          id="profile-panel-connections"
+          aria-labelledby="profile-tab-connections"
+          hidden={tab !== "connections"}
         >
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-connections-title">
@@ -524,7 +623,11 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
           ) : null}
         </section>
-        <section className="profile-danger-panel" aria-labelledby="profile-danger-title">
+        <section
+          className="profile-danger-panel profile-panel"
+          aria-labelledby="profile-danger-title"
+          hidden={tab !== "you"}
+        >
           <div className="profile-danger-heading">
             <p className="login-eyebrow" id="profile-danger-title">
               {t(locale, "profileDangerZone")}
