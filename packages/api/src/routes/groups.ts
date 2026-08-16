@@ -990,6 +990,20 @@ export async function createGroupProposal(
  * An accepted proposal does not edit the artifact here — it asks for the next
  * version, which regeneration writes.
  */
+/**
+ * DOES THE ROOM CARRY IT? Strictly more than half, so a tie does not pass, and
+ * a room of one is carried by its only member — the honest reading of "most of
+ * us" when us is one.
+ *
+ * Exported because it is the entire rule, and until it was, nothing could
+ * execute it: every route test injects a mock affirmProposal, so "364 passed"
+ * proved the route calls a function and said nothing about whether the
+ * function was right.
+ */
+export function carriesMajority(affirmations: number, members: number): boolean {
+  return members > 0 && affirmations * 2 > members;
+}
+
 export async function affirmGroupProposal(
   db: WakaDb,
   input: { groupId: string; proposalId: string; profileId: string },
@@ -1016,6 +1030,7 @@ export async function affirmGroupProposal(
     .values({ proposalId: proposal.id, profileId: input.profileId })
     .onConflictDoNothing();
 
+  /* the rule itself lives beside its tests — see carriesMajority below */
   /**
    * A MAJORITY OF THE ROOM, NOT A SECOND.
    *
@@ -1047,7 +1062,7 @@ export async function affirmGroupProposal(
   /* strictly more than half: 5 members needs 3, 4 needs 3, 1 needs 1 — a room
      of one is carried by its only member, which is the honest reading of
      "most of us" when us is one. */
-  const carried = members > 0 && affirmations * 2 > members;
+  const carried = carriesMajority(affirmations, members);
 
   let accepted = false;
   if (carried) {

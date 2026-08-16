@@ -9,6 +9,7 @@ import {
   type GroupMemberSummary,
   type GroupMembership,
   type GroupProposalView,
+  carriesMajority,
   type GroupSummary,
   type GroupTopOfMindView,
   type GroupsRouteDependencies,
@@ -647,5 +648,45 @@ describe("proposalShapeIsValid", () => {
     expect(proposalShapeIsValid({ kind: "edit_entry", entryId })).toBe(false);
     expect(proposalShapeIsValid({ kind: "remove_entry", entryId })).toBe(true);
     expect(proposalShapeIsValid({ kind: "remove_entry", entryId, body: "why" })).toBe(false);
+  });
+});
+
+/**
+ * THE MAJORITY RULE ITSELF.
+ *
+ * Every existing test injects a mock `affirmProposal`, so the arithmetic that
+ * decides whether a room has spoken was never executed by anything. The route
+ * tests prove the route calls the function; they cannot prove the function is
+ * right, and "364 passed" said nothing about the rule at all.
+ *
+ * The rule is one line — strictly more than half — so it is extracted and
+ * tested directly rather than reached through a database. What matters is the
+ * boundaries: an even room must not carry on a tie, and a room of one is
+ * carried by its only member, which is the honest reading of "most of us"
+ * when us is one.
+ */
+describe("a proposal carries on a majority of the room", () => {
+  it("needs strictly more than half, so a tie does not carry", () => {
+    expect(carriesMajority(2, 4)).toBe(false);
+    expect(carriesMajority(3, 4)).toBe(true);
+  });
+
+  it("needs three of five — the four-of-us room", () => {
+    expect(carriesMajority(2, 5)).toBe(false);
+    expect(carriesMajority(3, 5)).toBe(true);
+  });
+
+  it("carries a room of one by its only member", () => {
+    expect(carriesMajority(1, 1)).toBe(true);
+    expect(carriesMajority(0, 1)).toBe(false);
+  });
+
+  it("never carries a room with no members", () => {
+    expect(carriesMajority(0, 0)).toBe(false);
+    expect(carriesMajority(3, 0)).toBe(false);
+  });
+
+  it("is unmoved by more affirmations than members", () => {
+    expect(carriesMajority(9, 5)).toBe(true);
   });
 });
