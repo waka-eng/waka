@@ -176,4 +176,27 @@ describe("the doc's [checked] structural claims", () => {
     );
     expect(queueSource).toMatch(/const changed =[\s\S]{0,200}if \(changed\)/);
   });
+
+  it("keeps confidence computed live at reads and selection, not served stale", () => {
+    // The doc claims time actually passes for a signal: personal reads and
+    // layer-3 selection recompute confidence from evidence at request time.
+    // The stored snapshot is written when its recency term peaks, so serving
+    // it would freeze every signal at its best moment — the bug this pins
+    // against reintroducing.
+    const readsSource = readFileSync(
+      resolve(REPO_ROOT, "packages/api/src/routes/signals.ts"),
+      "utf8",
+    );
+    const selectionSource = readFileSync(
+      resolve(REPO_ROOT, "packages/api/src/lib/top-of-mind-synthesis.ts"),
+      "utf8",
+    );
+    expect(readsSource).toMatch(/computeSignalConfidence\(/);
+    expect(selectionSource).toMatch(/computeSignalConfidence\(/);
+  });
+
+  it("stays discoverable: the README links the canon", () => {
+    const readme = readFileSync(resolve(REPO_ROOT, "README.md"), "utf8");
+    expect(readme).toContain("docs/generation.md");
+  });
 });

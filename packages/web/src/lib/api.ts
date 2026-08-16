@@ -323,41 +323,12 @@ export async function deleteAccount(): Promise<void> {
   }
 }
 
-/**
- * GET /profiles — every profile this account owns, human first.
- *
- * A profile is the unit that owns memory: the person's own, and any agent
- * profiles they have added. Each owns a full three-layer stack. The layer
- * endpoints below are scoped to the session's *bound* profile, so this lists
- * who exists rather than handing over their contents.
- */
-export async function fetchProfiles(): Promise<ApiProfile[]> {
-  const body = await getJson<{ profiles: ApiProfile[] }>(
-    apiPath("/profiles"),
-    "Failed to load profiles",
-  );
-  return Array.isArray(body.profiles) ? body.profiles : [];
-}
-
-/**
- * POST /profiles
- *
- * Adds a profile to this account. An agent profile owns its own full three
- * layers — its captures, its patterns, its top of mind — kept separately from
- * the human's rather than filtered out of them. Only the account's human
- * profile may create one.
- */
-export async function createProfile(input: {
-  type: ApiProfileType;
-  name: string;
-}): Promise<ApiProfile> {
-  const body = await postJson<{ profile: ApiProfile }>(
-    apiPath("/profiles"),
-    input,
-    "Failed to add that profile",
-  );
-  return body.profile;
-}
+/* PROFILES LIVE FURTHER DOWN, IN MAIN'S VERSION.
+   This file briefly held two `fetchProfiles`/`createProfile` pairs: one written
+   for the world, one from the account-management work, backed by real routes
+   for rename and delete as well. Main's is canonical — it is the one the
+   server actually answers — so the world uses `ApiOwnedProfile` and gains the
+   two verbs it never had. */
 
 // ---------------------------------------------------------------------------
 // Layer 1 — inspirations
@@ -1006,6 +977,126 @@ export async function fetchTopOfMind(
     "Failed to load your top of mind",
   );
   return body.topOfMind ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Profiles — the memories this account owns
+// ---------------------------------------------------------------------------
+
+/**
+ * A profile as the *ownership* endpoint reports it — deliberately not
+ * `ApiProfile`, which is the session's own profile from `/auth/me` and
+ * carries the public-sharing fields this list does not. Same rows, different
+ * projections; collapsing them would make one of the two lie.
+ */
+export interface ApiOwnedProfile {
+  id: string;
+  accountId: string;
+  type: ApiProfileType;
+  name: string;
+  avatarUrl: string | null;
+  preferredLocale: SupportedLocale;
+  createdAt: string;
+}
+
+/** GET /profiles — every profile the account owns, human first. */
+export async function fetchProfiles(): Promise<ApiOwnedProfile[]> {
+  const body = await getJson<{ profiles: ApiOwnedProfile[] }>(
+    apiPath("/profiles"),
+    "Failed to load your profiles",
+  );
+  return Array.isArray(body.profiles) ? body.profiles : [];
+}
+
+/**
+ * POST /profiles — mint an agent profile.
+ *
+ * Only a human-bound session may call this; the server refuses an agent
+ * trying to give itself siblings. It also caps how many an account may hold,
+ * and answers 409 at the ceiling — a message worth showing verbatim rather
+ * than flattening into "could not create".
+ */
+export async function createProfile(name: string): Promise<ApiOwnedProfile> {
+  const body = await postJson<{ profile: ApiOwnedProfile }>(
+    apiPath("/profiles"),
+    { name },
+    "That profile could not be created",
+  );
+  return body.profile;
+}
+
+/** PATCH /profiles/:id — rename a profile the account owns. */
+export async function renameProfile(
+  profileId: string,
+  name: string,
+): Promise<ApiOwnedProfile> {
+  const body = await patchJson<{ profile: ApiOwnedProfile }>(
+    apiPath(`/profiles/${encodeURIComponent(profileId)}`),
+    { name },
+    "That profile could not be renamed",
+  );
+  return body.profile;
+}
+
+/**
+ * DELETE /profiles/:id — remove an agent profile and everything it remembers.
+ *
+ * The whole stack goes by cascade: its inspirations, its signals, every
+ * version of its top of mind. The human profile cannot be deleted here — it
+ * is the account's own memory and outlives everything but the account.
+ */
+export async function deleteProfile(profileId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/profiles/${encodeURIComponent(profileId)}`),
+    "DELETE",
+    undefined,
+    "That profile could not be removed",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Connections — the machines holding a credential for this account
+// ---------------------------------------------------------------------------
+
+export interface ApiConnection {
+  id: string;
+  /** What the machine called itself; null for logins that never said. */
+  deviceLabel: string | null;
+  profile: { id: string; name: string; type: ApiProfileType };
+  /** True for the connection making this request. */
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+}
+
+/**
+ * GET /sessions — every live connection, newest use first.
+ *
+ * No token or hash is ever returned; a credential cannot be read back, only
+ * listed and ended.
+ */
+export async function fetchConnections(): Promise<ApiConnection[]> {
+  const body = await getJson<{ sessions: ApiConnection[] }>(
+    apiPath("/sessions"),
+    "Your connections could not be loaded",
+  );
+  return Array.isArray(body.sessions) ? body.sessions : [];
+}
+
+/**
+ * DELETE /sessions/:id — end one connection.
+ *
+ * Ending the current one is a logout from this device, which the caller has
+ * to handle rather than discover.
+ */
+export async function endConnection(sessionId: string): Promise<void> {
+  await requestVoid(
+    apiPath(`/sessions/${encodeURIComponent(sessionId)}`),
+    "DELETE",
+    undefined,
+    "That connection could not be ended",
+  );
 }
 
 /** GET /top-of-mind/versions — newest first. */

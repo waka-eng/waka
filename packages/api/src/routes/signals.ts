@@ -42,7 +42,10 @@ import {
   type ProfileOperation,
 } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
-import { reembedSignalStatement } from "../lib/signal-derivation.js";
+import {
+  computeSignalConfidence,
+  reembedSignalStatement,
+} from "../lib/signal-derivation.js";
 import type { AuthenticatedSession } from "../lib/session.js";
 
 type WakaDb = ReturnType<typeof getDb>;
@@ -183,22 +186,45 @@ async function decorateSignals(
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
 
-  const [evidenceCounts, shareRows] = await Promise.all([
+  const [evidenceRows, shareRows] = await Promise.all([
     db
       .select({
         signalId: signalEvidence.signalId,
-        count: sql<number>`cast(count(*) as int)`,
+        createdAt: signalEvidence.createdAt,
+        source: inspirations.source,
       })
       .from(signalEvidence)
-      .where(inArray(signalEvidence.signalId, ids))
-      .groupBy(signalEvidence.signalId),
+      .innerJoin(inspirations, eq(inspirations.id, signalEvidence.inspirationId))
+      .where(inArray(signalEvidence.signalId, ids)),
     db
       .select({ signalId: signalShares.signalId, groupId: signalShares.groupId })
       .from(signalShares)
       .where(inArray(signalShares.signalId, ids)),
   ]);
 
-  const countBySignal = new Map(evidenceCounts.map((row) => [row.signalId, Number(row.count)]));
+  // Confidence is computed from the evidence at read time, not served from
+  // the stored snapshot. The snapshot is written when evidence changes, which
+  // is precisely the moment its recency term is at its maximum — so a stored
+  // value can only overstate a signal that has since gone quiet. Reads tell
+  // the truth about now; the snapshot remains for the group wall, whose query
+  // must not reach these private tables.
+  const evidenceBySignal = new Map<string, Array<{ createdAt: Date; source: "app" | "agent" }>>();
+  for (const row of evidenceRows) {
+    const bucket = evidenceBySignal.get(row.signalId);
+    if (bucket) bucket.push(row);
+    else evidenceBySignal.set(row.signalId, [row]);
+  }
+  const now = new Date();
+  const liveConfidence = new Map(
+    rows.map((row) => [
+      row.id,
+      computeSignalConfidence(evidenceBySignal.get(row.id) ?? [], now),
+    ]),
+  );
+
+  const countBySignal = new Map(
+    [...evidenceBySignal.entries()].map(([id, list]) => [id, list.length]),
+  );
   const groupsBySignal = new Map<string, string[]>();
   for (const row of shareRows) {
     const bucket = groupsBySignal.get(row.signalId);
@@ -206,11 +232,23 @@ async function decorateSignals(
     else groupsBySignal.set(row.signalId, [row.groupId]);
   }
 
-  return rows.map((row) => ({
+  // The SQL pre-sort used the stored snapshots; live values decay
+  // independently, so restore the promised order before serializing.
+  const ordered = [...rows].sort((a, b) => {
+    const ca = liveConfidence.get(a.id) ?? 0;
+    const cb = liveConfidence.get(b.id) ?? 0;
+    if (cb !== ca) return cb - ca;
+    const ra = a.lastEvidenceAt?.getTime() ?? 0;
+    const rb = b.lastEvidenceAt?.getTime() ?? 0;
+    if (rb !== ra) return rb - ra;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+
+  return ordered.map((row) => ({
     id: row.id,
     statement: row.statement,
     status: row.status,
-    confidence: row.confidence,
+    confidence: liveConfidence.get(row.id) ?? 0,
     evidenceCount: countBySignal.get(row.id) ?? 0,
     lastEvidenceAt: toIso(row.lastEvidenceAt),
     locked: row.lockedAt !== null,

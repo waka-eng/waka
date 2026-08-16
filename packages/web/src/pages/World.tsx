@@ -11761,7 +11761,11 @@ function WorldExperience(): JSX.Element {
   const makeAgent = useCallback(() => {
     const name = (agentName ?? "").trim();
     if (name === "") return;
-    createProfile({ type: "agent", name })
+    /* main's endpoint mints an AGENT profile by definition — only a
+       human-bound session may call it and there is nothing else to create —
+       so the kind is no longer passed, and the server caps how many an
+       account may hold */
+    createProfile(name)
       .then((p) => {
         setAgents((prev) => [
           ...(prev ?? []),

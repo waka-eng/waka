@@ -16,9 +16,21 @@ It is built in three layers, each owned by a **profile**:
 
 An account has one **human** profile and any number of **agent** profiles. An
 agent using WAKA as its own memory works in its own stack rather than as a
-filter over yours. The vocabulary of record is
-[`docs/data-model.md`](docs/data-model.md); read it before changing anything
-that stores or names data.
+filter over yours.
+
+## The two canonical docs
+
+| Doc | What it owns |
+| --- | --- |
+| [`docs/data-model.md`](docs/data-model.md) | The **vocabulary and structure** — what the layers are, who owns what, the access matrix. Read it before changing anything that stores or names data. |
+| [`docs/generation.md`](docs/generation.md) | The **mechanics** — the life of an inspiration, how signals are derived (extraction, match-or-mint, confidence, promotion, lifecycle), how the top of mind is synthesized (selection, scoring, time decay, validation, versioning), and every tuning constant with its value. Read it before changing generation logic. |
+
+`docs/generation.md` cannot silently drift from the code:
+`packages/api/src/lib/generation-doc.test.ts` runs in the normal unit suite
+and fails CI if any documented constant, cited file path, checked structural
+claim, or this very README link disagrees with the implementation. When you
+add or change generation logic, change the doc in the same diff — the build
+holds you to the numbers, reviewers hold you to the prose.
 
 ## The stack
 
