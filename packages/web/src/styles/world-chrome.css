@@ -44,30 +44,51 @@
    memory can be in. */
 :root,
 body {
-  --bg: #06080d;
-  --ink: #e8edf4;
-  --muted: rgba(232, 237, 244, 0.55);
-  --line: rgba(255, 255, 255, 0.08);
-  --rule: rgba(255, 255, 255, 0.08);
-  --cell: rgba(255, 255, 255, 0.035);
-  --paper: #06080d;
-  --accent: #e8edf4;
-  --error: rgba(232, 237, 244, 0.55);
-  /* the world's two faces replace the three: Jost for the voice, Pretendard
-     for anything that can hold Korean, and a real mono only where a machine
-     is speaking */
-  --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Segoe UI", Roboto, sans-serif;
-  --font-serif: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  /* ---------------------------------------------------------------
+   * ONE DEFINITION PER COLOUR.
+   *
+   * These values used to be written out twice under two vocabularies:
+   * #06080d was --bg, --paper AND --w-ground; #e8edf4 was --ink, --accent
+   * AND --w-ink. Worse, --w-muted was defined here and then REDEFINED
+   * hundreds of lines below, so the value at this position was dead and
+   * anybody reading top-down learned the wrong number.
+   *
+   * The primitives below are the only literals. Every token in either
+   * vocabulary is an alias of one of them, so a colour changes in exactly
+   * one place and the two vocabularies cannot drift apart.
+   * ------------------------------------------------------------- */
+  --moon-ground: #06080d;
+  --moon-ink: #e8edf4;
+  /* readable on this ground at body sizes — the world can afford dimmer
+     because its faint type is ornament over light; a form cannot */
+  --moon-muted: rgba(232, 237, 244, 0.72);
+  --moon-faint: rgba(232, 237, 244, 0.52);
+  --moon-edge: rgba(255, 255, 255, 0.08);
+  --moon-raised: rgba(255, 255, 255, 0.035);
+  --moon-warm: #fff2dc;
 
-  --w-ground: #06080d;
-  --w-raised: rgba(255, 255, 255, 0.035);
-  --w-ink: #e8edf4;
-  --w-muted: rgba(232, 237, 244, 0.55);
-  --w-faint: rgba(232, 237, 244, 0.3);
-  --w-edge: rgba(255, 255, 255, 0.08);
-  --w-warm: #fff2dc;
+  /* the flat screens' own vocabulary */
+  --w-ground: var(--moon-ground);
+  --w-ink: var(--moon-ink);
+  --w-muted: var(--moon-muted);
+  --w-faint: var(--moon-faint);
+  --w-edge: var(--moon-edge);
+  --w-raised: var(--moon-raised);
+  --w-warm: var(--moon-warm);
+
+  /* main's vocabulary, repointed to the same primitives. Every rule in
+     global.css that reads var(--ink) resolves here, which is why the flat
+     screens wear this light without being rewritten. --error is drained of
+     hue on purpose: there is no red in Waka. */
+  --bg: var(--moon-ground);
+  --paper: var(--moon-ground);
+  --ink: var(--moon-ink);
+  --accent: var(--moon-ink);
+  --muted: var(--moon-muted);
+  --line: var(--moon-edge);
+  --rule: var(--moon-edge);
+  --cell: var(--moon-raised);
+  --error: var(--moon-muted);
 }
 
 body {
@@ -1027,10 +1048,9 @@ body .profile-card .btn-primary {
 
 :root,
 body {
-  /* was 0.55 / 0.30 — legible as ornament, not as instructions */
-  --w-muted: rgba(232, 237, 244, 0.72);
-  --w-faint: rgba(232, 237, 244, 0.52);
-  --muted: rgba(232, 237, 244, 0.72);
+  /* the readable values now live with the primitives above, so this block
+     no longer restates them — one definition per colour, and reading the
+     file top-down teaches the right number. */
 }
 
 /* help text is read once and must be readable that once */
