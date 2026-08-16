@@ -8,8 +8,8 @@ never seen this repo can answer "where does this go?" and then change it
 without a second file surprising them.
 
 Today they cannot, and the evidence is in the bug history rather than in
-anyone's opinion. In one session: memories from every wall piled at the world
-origin because the layout learned about walls and the renderer did not; both
+anyone's opinion. In one session: memories from every space piled at the
+origin because the layout learned about spaces and the renderer did not; both
 profile tabs rendered at once because a rule set `display` on an element using
 `hidden`, three separate times; a whole design pass landed in dev and not in
 production because two stylesheets disagreed and bundle order decided. Every
@@ -117,15 +117,15 @@ them. Collapse to one set. The translation layer then deletes itself.
 
 ```
 web/src/
-  wall/                 what EVERY wall has, one directory per layer
+  space/                what EVERY space has, one directory per layer
     inspiration/        orbs, layout, the memory panel, the capture mouth
     signal/             statements, verdicts, joining, proposals
     top-of-mind/        the poster, provenance, the version history
-  wall-kinds/           how walls DIFFER
+  space-kinds/          how spaces DIFFER
     self.ts
     agent.ts            machine hand · pixelated orbs · quantized motion
     group.ts            members · hues · legend · proposals
-  transition/           moving between walls
+  transition/           moving between spaces
   canvas/               the loop, sprites, camera, hit-testing
   lib/                  data.ts · words.ts · appearance.ts
   account/              the flat screens: profile, login
@@ -133,13 +133,13 @@ web/src/
 
 **No wrapper.** `world/` only existed to contrast with the archive, and the
 archive is deleted — a word naming what something is NOT, once the something
-else is gone. `wall/` beside `account/` states the real split, spatial versus
+else is gone. `space/` beside `account/` states the real split, spatial versus
 flat, without a container to explain. It also ends the doubling: `lib/data.ts`,
 not `world/lib/world-data.ts`.
 
 **Canon words name the layer directories** — `inspiration`, `signal`,
 `top-of-mind` — so one vocabulary runs from the database to the folder:
-`api/routes/inspirations.ts` ↔ `wall/inspiration/`. *Field*, *sky* and
+`api/routes/inspirations.ts` ↔ `space/inspiration/`. *Field*, *sky* and
 *headquarters* stay as the words for WHERE these are drawn: spatial, and so
 they belong in the UI and its comments rather than in paths.
 
@@ -151,19 +151,19 @@ person reads on screen, which is a different register again.
 in it happens on the canvas element; everything outside it is DOM. A new
 engineer knows what is inside without being told.
 
-**Everything under `wall/` because there is never one of anything.** Seven
-fields are on screen right now. A group's inspirations and yours are the same
+**Everything under `space/` because there is never one of anything.** Seven
+spaces are on screen right now. A group's inspirations and yours are the same
 code with different contents — `presentBalls()` already filters one list by
 `ball.agentId`, and the structure should say so.
 
-**`wall-kinds/` fixes a bug class, not just tidiness.** "How does an agent's
-wall differ" is answered independently in at least six places today —
+**`space-kinds/` fixes a bug class, not just tidiness.** "How does an agent's
+space differ" is answered independently in at least six places today —
 `isMachineWall`, `wornBeing`, `hasSky`, `hasDial`, the `data-kind` typography
 selector, `mechAt`'s quantization — and they have disagreed in production: a
 body hashed from a group id, typography and motion wired separately, "Our
-agents" reading as a machine's wall in one place and a human's in another. One
-file owning what an agent's wall IS makes that impossible, and a new wall kind
-becomes a new file rather than a hunt through 13,000 lines.
+agents" reading as a machine's space in one place and a human's in another.
+One file owning what an agent's space IS makes that impossible, and a new kind
+of space becomes a new file rather than a hunt through 13,000 lines.
 
 ### How to get there
 
@@ -208,7 +208,7 @@ unlike the CSS layers above, which have to move all at once.
   the weakest display declaration there is; any author rule silently disables
   it. This cost three separate bugs.
 - **Never rely on import order for precedence.** Use `@layer` or specificity.
-- **One fact, one owner.** The wall a ball belongs to is decided in one place
+- **One fact, one owner.** The space a ball belongs to is decided in one place
   and read everywhere. When the layout knew and the renderer did not, the
   result was memories stacked at the origin.
 - **A rule nobody can execute is a rule nobody has checked.** Route tests that
@@ -220,4 +220,4 @@ unlike the CSS layers above, which have to move all at once.
 
 A new engineer, given "make an agent's memories render differently", can find
 the file in under a minute and change it without touching the sim loop, the
-data layer, or another wall's behaviour.
+data layer, or another space's behaviour.
