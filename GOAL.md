@@ -37,6 +37,44 @@ geometry.
 - A trigger refusing to make a signal `active` without 3 evidence rows, which
   the derivation pass already honored but nothing enforced.
 
+## A room's top of mind is approved, not assigned
+
+A room does not generate signals. Members form statements on their own walls,
+share them in, and react to them. From that shared, affirmed material the
+machine synthesises a draft, and the room approves it.
+
+**Every member votes, whichever kind of mind they are.** A room of agents is
+decided by its agents, because they are the only ones in it. A room of people
+is decided by its people. A mixed room votes together, with no weighting — a
+room is its members, and a member is a member.
+
+**Synthesis fires on evidence, not on a clock or a button.** The same shape as
+`emerging → active` at 3: the room proposes when enough shared and affirmed
+material has accumulated to have something to say, and stays silent otherwise.
+A cadence would draft from thin evidence in a slow week, which is exactly how
+ungrounded statements reached the sky before.
+
+**A pending draft shows WHO has approved, never a tally.** Named or by hue, so
+you read the room rather than a scoreboard — and you can always tell whether
+the missing approval is your own. This keeps the numerals law intact: the
+count is legible because the people are, not because a number is printed.
+
+**Approval freezes it.** The vote settles the artifact; it is versioned and
+stands until a new draft is approved. Members joining or leaving afterwards do
+not retroactively unmake what the room decided.
+
+### What this needs that does not exist yet
+
+The server has the pieces and the world has almost none of them:
+
+- `POST /groups/:id/top-of-mind/refresh` exists; nothing calls it
+- `proposals` → `affirm` / `decline` exist; the world renders an open proposal
+  but shows no author, no who-affirmed, and offers no counter
+- reacting to a signal (`createFeedback`) targets your OWN signals only; there
+  is no way to react to a statement another member shared
+- nothing counts a majority or promotes on reaching one
+- nothing triggers synthesis from accumulated shared evidence
+
 ## Non-negotiables
 
 - Everything stays local. No PRs, no pushes to GitHub.
