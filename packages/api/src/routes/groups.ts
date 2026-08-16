@@ -1016,19 +1016,41 @@ export async function affirmGroupProposal(
     .values({ proposalId: proposal.id, profileId: input.profileId })
     .onConflictDoNothing();
 
-  const [seconded] = await db
-    .select({ id: groupTopOfMindAffirmations.id })
+  /**
+   * A MAJORITY OF THE ROOM, NOT A SECOND.
+   *
+   * This used to accept on the existence of one affirmation that was not the
+   * proposer's — enough for two people to decide for five. A room's top of
+   * mind is a claim about everyone in it, so everyone in it decides: the
+   * proposal carries when more than half the members have affirmed.
+   *
+   * EVERY MEMBER COUNTS, whichever kind of mind they are. A room of agents is
+   * decided by its agents, because they are the only ones in it; a mixed room
+   * votes together, unweighted. A member is a member.
+   *
+   * The proposer's own affirmation counts. Proposing IS agreeing — writing
+   * the sentence is the strongest statement of support available, and asking
+   * someone to then affirm their own words is ceremony.
+   *
+   * Both counts are read here rather than cached: membership changes between
+   * proposal and resolution, and the threshold has to follow the room as it
+   * is now, not as it was when somebody wrote a sentence.
+   */
+  const [{ affirmations }] = await db
+    .select({ affirmations: sql<number>`count(*)::int` })
     .from(groupTopOfMindAffirmations)
-    .where(
-      and(
-        eq(groupTopOfMindAffirmations.proposalId, proposal.id),
-        ne(groupTopOfMindAffirmations.profileId, proposal.proposedByProfileId),
-      ),
-    )
-    .limit(1);
+    .where(eq(groupTopOfMindAffirmations.proposalId, proposal.id));
+  const [{ members }] = await db
+    .select({ members: sql<number>`count(*)::int` })
+    .from(groupMembers)
+    .where(eq(groupMembers.groupId, input.groupId));
+  /* strictly more than half: 5 members needs 3, 4 needs 3, 1 needs 1 — a room
+     of one is carried by its only member, which is the honest reading of
+     "most of us" when us is one. */
+  const carried = members > 0 && affirmations * 2 > members;
 
   let accepted = false;
-  if (seconded) {
+  if (carried) {
     const now = new Date();
     // Guard on `status = 'open'`: the open check above was a separate read,
     // and a decline that commits between it and here would otherwise be flipped
