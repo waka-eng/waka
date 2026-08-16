@@ -42,6 +42,22 @@ deliberately.
 canon's words and the world's. If you find yourself mapping `signal` to
 `pattern` anywhere else, it belongs here.
 
+The two vocabularies, and which to use where:
+
+| canon (`docs/data-model.md`, the API, the database) | the world |
+| --- | --- |
+| inspiration | capture, memory, orb |
+| signal | pattern, statement |
+| top of mind | the poster, the board |
+| `visibility: "private" \| "public"` | `isPublic: boolean` |
+
+Use the canon's words in `packages/api/`, in request and response payloads, and
+in anything a database column touches. Use the world's inside the world. The
+one place both appear is `world-data.ts`, which is the point.
+
+User-facing text is a third thing again: it says **inspiration**, because that
+is what the product calls itself — the page title is "WAKA — Inspirations".
+
 **`SimApi`** (inside `World.tsx`) — the boundary between React and the canvas.
 React calls into the sim through it; the sim never reaches into React. Every
 new canvas capability is a method on this interface.

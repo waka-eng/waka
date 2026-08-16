@@ -63,7 +63,20 @@ const ms = (iso: string | null | undefined): number => {
 export interface WorldCapture {
   id: string;
   preview: string;
-  /** Whether the rooms this account is in can see it. */
+  /**
+   * Whether the rooms this account is in can see it.
+   *
+   * A DELIBERATE, LOSSY TRANSLATION. The canon names this `visibility` and
+   * types it as an enum (`private` | `public`) precisely so it can grow —
+   * `docs/data-model.md` owns that vocabulary. The world flattens it to a
+   * boolean because the field has exactly one question to ask of a memory:
+   * does it leave this wall.
+   *
+   * The cost, stated so nobody discovers it: if the canon ever adds a third
+   * value, `visibility === "public"` quietly reads it as false. That fails
+   * CLOSED, which is the right direction for a privacy flag — but it fails
+   * silently, so a new value means revisiting this line.
+   */
   isPublic: boolean;
   kind: ApiInspirationKind | null;
   /** Whose initiative this was: the person's words, or an agent's own note. */
