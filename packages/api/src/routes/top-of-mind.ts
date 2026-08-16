@@ -38,6 +38,7 @@ import { acquireTopOfMindArtifactLock } from "../lib/top-of-mind-family-lock.js"
 import { loadProfileTarget, resolveProfileScope } from "./signals.js";
 
 type WakaDb = ReturnType<typeof getDb>;
+type WakaTx = Parameters<Parameters<WakaDb["transaction"]>[0]>[0];
 
 const MAX_ENTRY_BODY_LENGTH = 1_000;
 const DEFAULT_VERSION_LIMIT = 20;
@@ -282,18 +283,68 @@ export async function updateLiveEntry(
         ),
       )
       .limit(1);
-    if (!entry) return null;
+
+    const target = entry ?? (await resolveSupersededEntry(tx, input));
+    if (!target) return null;
 
     await tx
       .update(topOfMindEntries)
       .set({ ...input.patch, updatedAt: new Date() })
-      .where(eq(topOfMindEntries.id, entry.id));
-    return entry.topOfMindId;
+      .where(eq(topOfMindEntries.id, target.id));
+    return { topOfMindId: target.topOfMindId, entryId: target.id };
   });
 
   if (topOfMindId === null) return null;
-  const entries = await loadEntries(db, topOfMindId, true);
-  return entries.find((row) => row.id === input.entryId) ?? null;
+  const entries = await loadEntries(db, topOfMindId.topOfMindId, true);
+  return entries.find((row) => row.id === topOfMindId.entryId) ?? null;
+}
+
+/**
+ * Follow an entry id forward into the live version.
+ *
+ * Every regeneration writes new entry rows, so an id goes stale the moment a
+ * synthesis lands — and synthesis lands within seconds of a capture. A reader
+ * looking at their board, who dismisses a line while a regeneration completes
+ * underneath them, would otherwise have their own click answered with "no such
+ * entry". The entry is right there on their screen.
+ *
+ * Identity across versions is the text, which is exactly what carry-forward
+ * preserves byte-for-byte. If the live version no longer says it, the entry
+ * genuinely went away and a 404 is the honest answer — so this resolves only
+ * within the same profile's own artifact family, and only to a line that is
+ * still there.
+ */
+async function resolveSupersededEntry(
+  tx: WakaTx,
+  input: { profileId: string; entryId: string },
+): Promise<{ id: string; topOfMindId: string } | null> {
+  const [stale] = await tx
+    .select({ body: topOfMindEntries.body })
+    .from(topOfMindEntries)
+    .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+    .where(
+      and(
+        eq(topOfMindEntries.id, input.entryId),
+        eq(topOfMinds.profileId, input.profileId),
+      ),
+    )
+    .limit(1);
+  if (!stale) return null;
+
+  const [live] = await tx
+    .select({ id: topOfMindEntries.id, topOfMindId: topOfMindEntries.topOfMindId })
+    .from(topOfMindEntries)
+    .innerJoin(topOfMinds, eq(topOfMinds.id, topOfMindEntries.topOfMindId))
+    .where(
+      and(
+        eq(topOfMinds.profileId, input.profileId),
+        eq(topOfMinds.status, "live"),
+        eq(topOfMindEntries.body, stale.body),
+      ),
+    )
+    .orderBy(asc(topOfMindEntries.sortOrder))
+    .limit(1);
+  return live ?? null;
 }
 
 // ---------------------------------------------------------------------------

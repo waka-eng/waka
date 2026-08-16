@@ -295,6 +295,7 @@ export default function SurfacePage(): JSX.Element {
     void loadBoard();
   }, [loadBoard]);
 
+
   /* The count in the bar is the one number a person actually wants at a
      glance, so it is fetched once on arrival rather than only when the
      archive is opened. */
@@ -420,6 +421,38 @@ export default function SurfacePage(): JSX.Element {
   }, []);
 
   /**
+   * Run one curation action against the board.
+   *
+   * A 404 here is not a failure to explain away: it means the artifact was
+   * regenerated under the reader and this line is no longer in the live
+   * version — the generator reworded or dropped it. The server resolves ids
+   * forward when the text survived, so reaching this branch means the text
+   * did not. Leaving the old words on screen beside an error would invite the
+   * same dead click again, so the board is reloaded to show what is actually
+   * there now.
+   */
+  const curate = useCallback(
+    async (
+      action: () => Promise<ApiTopOfMindEntry>,
+      fallback: string,
+      onDone?: () => void,
+    ): Promise<void> => {
+      try {
+        replaceEntry(await action());
+        onDone?.();
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          setNotice("Your board was rewritten while you were reading it.");
+          await loadBoard();
+          return;
+        }
+        setNotice(errorMessage(err, fallback));
+      }
+    },
+    [replaceEntry, loadBoard],
+  );
+
+  /**
    * Rewriting an entry is the least ceremonious possible way to disagree with
    * a reading about yourself: the sentence IS the editable thing, no button,
    * no mode, no pencil. It autosaves, because a correction you have to confirm
@@ -453,43 +486,34 @@ export default function SurfacePage(): JSX.Element {
   const holdEntry = useCallback(
     (entry: ApiTopOfMindEntry): void => {
       if (entry.pinned) return;
-      void (async () => {
-        try {
-          replaceEntry(await holdTopOfMindEntry(entry.id));
-        } catch (err) {
-          setNotice(errorMessage(err, "That was not saved."));
-        }
-      })();
+      void curate(
+        () => holdTopOfMindEntry(entry.id),
+        "That was not saved.",
+      );
     },
-    [replaceEntry],
+    [curate],
   );
 
   const takeEntryDown = useCallback(
     (entry: ApiTopOfMindEntry): void => {
-      void (async () => {
-        try {
-          replaceEntry(await dismissTopOfMindEntry(entry.id));
-          setTakenDown(entry);
-        } catch (err) {
-          setNotice(errorMessage(err, "That entry stayed up."));
-        }
-      })();
+      void curate(
+        () => dismissTopOfMindEntry(entry.id),
+        "That entry stayed up.",
+        () => setTakenDown(entry),
+      );
     },
-    [replaceEntry],
+    [curate],
   );
 
   const putEntryBack = useCallback((): void => {
     const entry = takenDown;
     if (!entry) return;
     setTakenDown(null);
-    void (async () => {
-      try {
-        replaceEntry(await restoreTopOfMindEntry(entry.id));
-      } catch (err) {
-        setNotice(errorMessage(err, "That entry could not be put back."));
-      }
-    })();
-  }, [takenDown, replaceEntry]);
+    void curate(
+      () => restoreTopOfMindEntry(entry.id),
+      "That entry could not be put back.",
+    );
+  }, [takenDown, curate]);
 
   /**
    * Reading again is a board-level act, so it belongs to the board's name
