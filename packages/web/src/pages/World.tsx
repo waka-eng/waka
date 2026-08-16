@@ -81,6 +81,7 @@ import {
   fetchGroupField,
   fetchGroupWall,
   fetchInspirations,
+  fetchTopOfMindVersions,
   finalizeAttachment,
   presignAttachment,
   uploadToPresignedUrl,
@@ -104,6 +105,7 @@ import {
   type ApiGroupTopOfMind,
   type ApiGroupFieldCapture,
   type ApiGroupWallSignal,
+  type ApiTopOfMindVersion,
   ApiError,
 } from "../lib/api";
 import {
@@ -10840,6 +10842,26 @@ function WorldExperience(): JSX.Element {
   const [provTick, setProvTick] = useState(0);
   /* whether the poster is showing what it was built from */
   const [posterAsk, setPosterAsk] = useState(false);
+  /**
+   * THE POSTER'S OWN HISTORY.
+   *
+   * The artifact has always been VERSIONED — `/top-of-mind/versions` has been
+   * live and called from nowhere, so a sentence claiming who you are becoming
+   * could not be read against the sentences it replaced. The dial scrubs the
+   * field through time; the one thing that most describes a change in you
+   * could not be scrubbed at all.
+   *
+   * Fetched only when the poster is asked, alongside its provenance: the
+   * question "where did this come from" and "what did it used to say" are the
+   * same question asked of the past and of the ground.
+   */
+  const [versions, setVersions] = useState<ApiTopOfMindVersion[] | null>(null);
+  useEffect(() => {
+    if (!posterAsk || versions !== null || offlineRef.current) return;
+    fetchTopOfMindVersions()
+      .then(setVersions)
+      .catch(() => setVersions([]));
+  }, [posterAsk, versions]);
 
   /**
    * WHO IS WHICH COLOUR — and only where that is a question.
@@ -12290,6 +12312,23 @@ function WorldExperience(): JSX.Element {
                         <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
                           <p className="jar-prov-lead jar-label">written by hand</p>
                         </div>
+                      )
+                    ) : null}
+                    {/* WHAT IT USED TO SAY. Only where there is a past — one
+                        version is not a history, it is the first sentence. */}
+                    {here && posterAsk && w.kind === "self" && (versions?.length ?? 0) > 1 ? (
+                      <div className="jar-prov jar-prov--poster" data-jar-chrome="1">
+                        <p className="jar-prov-lead jar-label">before this</p>
+                        {(versions ?? []).slice(1, 5).map((v) => (
+                          <p key={v.id} className="jar-was">
+                            {dateWords(Date.parse(v.createdAt) || 0, TRef.current)}
+                          </p>
+                        ))}
+                      </div>
+                    ) : null}
+                    {false ? (
+                      (
+                        <div />
                       )
                     ) : null}
                     {/* The one quiet line, and the page's single interactive

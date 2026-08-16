@@ -1744,3 +1744,12 @@
 .jar-not-said {
   color: var(--jar-faint);
 }
+
+/* WHEN THIS SENTENCE LAST CHANGED. Dates, in the register the world keeps for
+   meta — the poster's own history, which existed in the database from the
+   start and had never been readable anywhere. */
+.jar-was {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--jar-faint);
+}
