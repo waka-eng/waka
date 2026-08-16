@@ -340,6 +340,37 @@ unlike the CSS layers above, which have to move all at once.
   right. Extract the rule (`carriesMajority`, `mayAnswerSignal`) so a test can
   run it.
 
+## The newcomer test — run it before trusting the plan
+
+Six real tasks. If the structure is right, each one names a single destination
+without reading any code. Any task that lands in two places is a boundary in
+the wrong spot.
+
+| Task | Where |
+| --- | --- |
+| "Make an agent's memories look different" | `space-kinds/agent.ts` |
+| "The companion should react when a group approves something" | `character/reactions.ts` |
+| "Add a filter to the field" | `space/inspiration/` |
+| "Change how long travel takes" | `transition/` |
+| "A memory should say 'yesterday' not 'one day ago'" | `lib/words.ts` |
+| "Add a fourth kind of space" | a new file in `space-kinds/` |
+
+Three fail today, and each failure is a bug that has already happened:
+
+- the first is answered in **six** places, which is why an agent's space read
+  as machine in one and human in another
+- the second is in **five**, which is why an in-page toggle killed every
+  animation in the world
+- the fourth is split between `travel`, `goToWall` and `arriveColumn`, which is
+  why crossing several spaces was a queue of animations rather than one glide
+
+**The gap this test does NOT close.** It tells a newcomer where code lives, not
+what will break when they change it. The laws below are the answer to that
+second question, and they are the part that is easy to skip: light is the only
+meaning channel, motion explains rather than decorates, the world never moves
+unless the user moved it. Someone who finds the right file and breaks a law has
+still shipped a bug — and every one of those laws was learned by shipping one.
+
 ## How to know it worked
 
 A new engineer, given "make an agent's memories render differently", can find
