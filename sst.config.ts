@@ -252,6 +252,26 @@ export default $config({
         })
       : undefined;
 
+    /**
+     * The background worker, defined before the API so the API can hold a
+     * reference to it.
+     *
+     * Work is *pushed* here: enqueueing wakes this function directly, so a
+     * capture starts deriving in the same second rather than waiting for the
+     * next sweep. The cron below is only a safety net, which is what lets it
+     * run daily instead of every minute — and a queue nobody is polling is a
+     * database that can go to sleep.
+     */
+    const backgroundWorker = new sst.aws.Function("BackgroundWorker", {
+      handler: "packages/api/src/background-worker.handler",
+      timeout: "14 minutes",
+      link: runtimeLinks,
+      environment: {
+        ...runtimeEnvironment,
+        WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
+      },
+    });
+
     const api = new sst.aws.Function("Api", {
       handler: "packages/api/src/lambda.handler",
       url: router
@@ -292,7 +312,20 @@ export default $config({
       // depending on SST's auto-injected `SST_RESOURCE_Attachments` JSON
       // env var. That keeps the handler unit-testable outside Lambda
       // (vitest / smoke runs) where the SST env is not present.
-      environment: runtimeEnvironment,
+      environment: {
+        ...runtimeEnvironment,
+        // Which function to wake when work is enqueued. Absent (local, tests)
+        // means the in-process drain owns it instead.
+        WAKA_BACKGROUND_WORKER_FUNCTION: backgroundWorker.name,
+      },
+      // Waking the worker is the whole point of the push model; without this
+      // the invoke fails and every job waits for the daily safety net.
+      permissions: [
+        {
+          actions: ["lambda:InvokeFunction"],
+          resources: [backgroundWorker.arn],
+        },
+      ],
       // Group readings are bounded but intentionally synthesize across
       // several members and can take longer than Lambda's short default on a
       // cold or first/backfill pass. The browser keeps an explicit reading
@@ -300,20 +333,25 @@ export default $config({
       timeout: "60 seconds",
     });
 
+    /**
+     * The safety net, not the mechanism.
+     *
+     * Everything normal is pushed: the API wakes the worker on enqueue, and
+     * the worker drains until the queue is dry, so the derive → synthesize
+     * chain completes in one invocation. What is left for a sweep is only the
+     * error path — a job whose backoff outlived its invocation, a row locked
+     * by a worker that died, an enqueue whose wake-up call itself failed.
+     *
+     * Daily rather than every minute because a minute-by-minute poll is a
+     * query every minute forever, which keeps a serverless Postgres awake
+     * around the clock for an app that is idle most of it. Cost aside, the
+     * poll was also *slower* than pushing: it added up to a minute before a
+     * capture began deriving.
+     */
     new sst.aws.Cron("BackgroundJobDrain", {
-      // Postgres is the durable queue; this frequent wake-up is what makes it
-      // independent of an API Lambda surviving long enough to run setImmediate.
-      schedule: "rate(1 minute)",
+      schedule: "rate(1 day)",
       enabled: true,
-      function: {
-        handler: "packages/api/src/background-worker.handler",
-        timeout: "14 minutes",
-        link: runtimeLinks,
-        environment: {
-          ...runtimeEnvironment,
-          WAKA_BACKGROUND_JOB_CRON_LIMIT: "25",
-        },
-      },
+      function: backgroundWorker.arn,
     });
 
     // -----------------------------------------------------------------------
