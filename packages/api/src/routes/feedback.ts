@@ -35,6 +35,7 @@ import {
   type FeedbackValue,
 } from "../db/index.js";
 import { getDb } from "../lib/db.js";
+import { enqueueGroupTopOfMindRefresh } from "../lib/queue.js";
 import { requireAuth, type AuthEnv } from "../lib/middleware.js";
 import { enqueueTopOfMindRefresh } from "../lib/queue.js";
 
@@ -220,6 +221,52 @@ export async function createFeedbackForProfile(
       correctionText: input.correctionText ?? null,
     })
     .returning();
+
+  /**
+   * AGREEING WITH A ROOM'S STATEMENT ASKS THE ROOM TO THINK AGAIN.
+   *
+   * A room used to wait for a person to write a proposal. Under the goal it
+   * should draft when enough shared, affirmed material has accumulated — so
+   * the moment somebody agrees with a statement said in a room, that room is
+   * asked to re-synthesise.
+   *
+   * WHERE THE THRESHOLD LIVES. Not here. `enqueueGroupTopOfMindRefresh` is
+   * keyed on the group, so repeat agreements coalesce into one pending job
+   * rather than one per click, and synthesis itself decides whether there is
+   * enough to say — which is the layer that already knows, and the layer that
+   * refuses to speak from thin evidence. Putting a count in this function
+   * would be a second opinion about the same question, in the wrong place.
+   *
+   * Only agreement triggers it. "not true" is information the room's next
+   * draft should weigh, not a reason to redraft immediately — disagreeing
+   * with one sentence is not news about the whole room.
+   */
+  if (row && input.targetType === "signal" && input.value === "true") {
+    const rooms = await db
+      .select({ groupId: signalShares.groupId })
+      .from(signalShares)
+      .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
+      .where(
+        and(
+          eq(signalShares.signalId, input.targetId),
+          eq(groupMembers.profileId, input.profileId),
+        ),
+      );
+    for (const room of rooms) {
+      try {
+        await enqueueGroupTopOfMindRefresh(
+          input.profileId,
+          room.groupId,
+          "shares_changed",
+        );
+      } catch {
+        /* a refresh that could not be queued must not fail the agreement —
+           the person's answer is recorded either way, and the next agreement
+           or share will ask again */
+      }
+    }
+  }
+
   return row ? serializeFeedback(row) : null;
 }
 
