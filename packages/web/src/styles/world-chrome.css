@@ -1,3 +1,5 @@
+/* assigned to the `chrome` layer — see styles/layers.css for the order */
+@layer chrome {
 /*
  * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
  *
@@ -1095,4 +1097,6 @@ body .profile-signout-button {
   font-size: 14px;
   text-transform: lowercase;
   letter-spacing: 0;
+}
+
 }

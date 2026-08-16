@@ -1,3 +1,5 @@
+/* assigned to the `product` layer — see styles/layers.css for the order */
+@layer product {
 /*
  * WAKA — the design system, applied across every surface.
  * ==========================================================================
@@ -463,4 +465,6 @@ body:has(.reference-capture-modal) .nc-stage--top-of-mind-wall {
 
 @media (prefers-reduced-motion: reduce) {
   .nc-stage--top-of-mind-wall { transition: none; }
+}
+
 }

@@ -1,3 +1,8 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css");
+@import url("https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300;0,400;1,300&display=swap");
+
+/* assigned to the `product` layer — see styles/layers.css for the order */
+@layer product {
 /*
  * The Waka landing — MOONLIGHT (v9 art direction).
  *
@@ -34,8 +39,6 @@
    only ever used on roles that are reliably Latin (the machine-written ambition
    and reading titles). Pretendard carries everything that can contain captured
    Korean, plus the whole interface, so no sentence changes voice mid-way. */
-@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css");
-@import url("https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300;0,400;1,300&display=swap");
 
 .jar {
   position: fixed;
@@ -1752,4 +1755,6 @@
   margin: 0 0 4px;
   font-size: 12.5px;
   color: var(--jar-faint);
+}
+
 }

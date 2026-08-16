@@ -1,3 +1,5 @@
+/* assigned to the `product` layer — see styles/layers.css for the order */
+@layer product {
 /*
  * Global stylesheet — shared design tokens + page-level primitives.
  *
@@ -3040,4 +3042,6 @@ textarea {
 /* Section hints stay readable: one measure, not full-bleed. */
 .profile-memories-heading .login-subtitle {
   max-width: 52ch;
+}
+
 }
