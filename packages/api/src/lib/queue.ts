@@ -171,6 +171,7 @@ async function enqueueKeyedJob(input: {
   if (!job) throw new Error(`Failed to enqueue ${input.type} job`);
 
   if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+  else await wakeBackgroundWorker();
   return { jobId: job.id, created: job.created };
 }
 
@@ -252,6 +253,7 @@ export async function enqueueTopOfMindRefresh(
   if (!job) throw new Error("Failed to enqueue refresh_top_of_mind job");
 
   if (shouldAutoDrainBackgroundJobs()) scheduleBackgroundJobDrain();
+  else await wakeBackgroundWorker();
   return { jobId: job.id, created: job.created };
 }
 
@@ -287,13 +289,57 @@ export async function enqueueGroupTopOfMindRefresh(
  * The in-process drain is for processes that stay alive. Under vitest it
  * would leave timers running past the test that created them, and on Lambda
  * the container is frozen the moment the response is returned, so the timer
- * fires late or never — cron owns draining there.
+ * fires late or never — there, the worker is woken directly instead.
  */
 function shouldAutoDrainBackgroundJobs(): boolean {
   if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "1") return true;
   if (process.env.WAKA_BACKGROUND_JOB_AUTODRAIN === "0") return false;
   return process.env.NODE_ENV !== "test" && !process.env.AWS_LAMBDA_FUNCTION_NAME;
 }
+
+/**
+ * True when this process *is* the background worker. The worker enqueues as
+ * it goes — a finished derivation asks for a synthesis — and a worker that
+ * woke itself for that would start a fresh invocation per job, chaining
+ * indefinitely. Its own drain loop picks the work up instead.
+ */
+function isBackgroundWorkerProcess(): boolean {
+  const self = process.env.AWS_LAMBDA_FUNCTION_NAME;
+  const worker = process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
+  return Boolean(self && worker && self === worker);
+}
+
+/**
+ * Wake the worker for freshly-enqueued work.
+ *
+ * `InvocationType: "Event"` hands the invocation to Lambda and returns; the
+ * worker runs on its own clock, so a capture's response is not waiting on
+ * extraction. It *is* awaited, briefly, because the calling container freezes
+ * the moment it responds — an un-awaited request might never leave.
+ *
+ * Failure is survivable by construction: the job is already committed to
+ * Postgres, so a wake-up that never lands costs latency (until the daily
+ * sweep) and never work. That is why this can never throw into a user's write.
+ */
+async function wakeBackgroundWorker(): Promise<void> {
+  const functionName = process.env.WAKA_BACKGROUND_WORKER_FUNCTION;
+  if (!functionName || isBackgroundWorkerProcess()) return;
+
+  try {
+    const { InvokeCommand, LambdaClient } = await import("@aws-sdk/client-lambda");
+    lambdaClient ??= new LambdaClient({});
+    await lambdaClient.send(
+      new InvokeCommand({ FunctionName: functionName, InvocationType: "Event" }),
+    );
+  } catch (err) {
+    console.warn("[background-jobs] could not wake the worker; the sweep will catch it", {
+      error: sanitizeError(err),
+    });
+  }
+}
+
+/** Reused across invocations of a warm container. */
+let lambdaClient: import("@aws-sdk/client-lambda").LambdaClient | null = null;
 
 export function scheduleBackgroundJobDrain(delayMs = 0): void {
   const normalizedDelay = Math.max(0, Math.trunc(delayMs));
