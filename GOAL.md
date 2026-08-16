@@ -63,6 +63,61 @@ count is legible because the people are, not because a number is printed.
 stands until a new draft is approved. Members joining or leaving afterwards do
 not retroactively unmake what the room decided.
 
+### Build it on what is already there
+
+Most of this loop exists on the server. It was built by the rest of the team
+and the world simply never called it. The job is to reach it, not to rebuild
+it.
+
+**Already working, end to end:**
+
+- `group_top_of_mind_affirmations` — a table recording WHO affirmed which
+  proposal. The "named, not counted" display reads straight from it; no new
+  schema is needed for the vote.
+- `affirmGroupProposal` already promotes automatically, atomically, guarded on
+  `status = 'open'` so a decline racing an affirm cannot resurrect a proposal.
+- acceptance already triggers synthesis:
+  `requestRefresh(groupId, profileId, "proposal_accepted")`. Proposal → affirm
+  → accepted → the room's artifact regenerates, today.
+- `decline`, membership gating on every route, and
+  `POST /groups/:id/top-of-mind/refresh`.
+
+**The one real divergence from the ruling above:** the existing rule is "one
+OTHER member seconds it" — an existence check for a single affirmation that is
+not the proposer's. Majority means counting affirmations against the member
+roll instead. That is a few lines inside one function, not a new system, and
+everything downstream of it already works.
+
+### The order, smallest unlock first
+
+1. **Majority.** Replace the seconded-existence check with
+   `affirmations >= ceil(members / 2)`, same atomic guard. Every member counts,
+   whichever kind of mind they are. Extends the tests that already cover it.
+2. **React to another member's statement.** `createFeedback` targets your own
+   signals only, so a room cannot accumulate the affirmations synthesis is
+   meant to read. Without this, step 3 has nothing to read.
+3. **Synthesis on accumulated evidence.** Today a person must propose. The
+   room should draft when enough shared, affirmed material exists — the same
+   shape as `emerging → active` at 3.
+4. **The world's surface for all of it**: a proposal with its author, who has
+   affirmed, and a way to counter.
+
+### Backend the UI is not using yet
+
+Built and reachable, called from nowhere. Each is a feature the product paid
+for and does not show:
+
+- `refreshGroupTopOfMind` — ask a room to re-synthesise. Needed by step 3 and
+  worth having as a verb regardless.
+- `fetchTopOfMindVersions` — `/top-of-mind/versions`. The artifact is
+  VERSIONED and nothing anywhere lets a person read an earlier version. The
+  world's dial scrubs the field through time but the poster cannot be scrubbed
+  through its own history.
+- `fetchReflections` — reflections are counted on an orb and answered in the
+  panel, but never listed on their own.
+- `fetchPublicProfile` — the read-only `/@handle` page the account screen
+  advertises.
+
 ### What this needs that does not exist yet
 
 The server has the pieces and the world has almost none of them:
