@@ -15,6 +15,20 @@
       "when": 1786831196527,
       "tag": "0001_background_job_rerun",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786924060471,
+      "tag": "0002_inspiration_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786924060472,
+      "tag": "0003_signal_promotion_guard",
+      "breakpoints": true
     }
   ]
 }
