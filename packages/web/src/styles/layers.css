@@ -1,0 +1,46 @@
+/**
+ * PRECEDENCE, DECIDED HERE INSTEAD OF BY THE BUNDLER.
+ *
+ * Every stylesheet in this app used to win or lose by import order. That holds
+ * on the dev server, which injects CSS per module in the order it is imported.
+ * It does NOT hold in a production build: the CSS is concatenated in an order
+ * the bundler chooses, and global.css's profile block landed thousands of
+ * bytes after rules that were written to override it.
+ *
+ * The consequence was a whole design pass that applied on localhost:5173 and
+ * not on localhost:3030, from identical source — verified, restyled, and
+ * invisible to the person it was built for. Chasing that cost more time than
+ * anything else in its session.
+ *
+ * `@layer` makes the order explicit and total. A layer declared later beats
+ * one declared earlier NO MATTER where the rules physically sit, and no matter
+ * what any bundler does with them. Specificity still decides within a layer;
+ * it no longer decides across them.
+ *
+ * Three layers, in the order they should win:
+ *
+ *   base      resets, tokens, element defaults — the ground everything sits on
+ *   product   the app's own components: global.css, system.css, world.css
+ *   chrome    the flat screens wearing the world's light (world-chrome.css)
+ *
+ * `chrome` is last because its entire job is to override product styling for
+ * the screens outside the world. That is a statement of intent, in one place,
+ * rather than a fact you have to reconstruct from four import lines and a
+ * bundler's behaviour.
+ *
+ * NOTHING IS ASSIGNED TO A LAYER YET, AND THAT IS DELIBERATE.
+ *
+ * Unlayered rules beat ALL layers. So moving one file into a layer while its
+ * neighbours stay out does not raise it above them — it drops it BELOW them,
+ * which is the opposite of the intent. Wrapping world-chrome.css in `chrome`
+ * was tried and immediately undid every override it exists to make: the card
+ * came back, the pill tabs came back, `--ink` reverted to the parchment
+ * theme's near-black.
+ *
+ * So the migration has to be all-at-once per precedence level, not file by
+ * file: global.css and system.css into `product` in the same change that puts
+ * world-chrome.css into `chrome`. Until then this file declares the order and
+ * changes nothing, which is the safe half of the work and leaves the unsafe
+ * half clearly marked.
+ */
+@layer base, product, chrome;

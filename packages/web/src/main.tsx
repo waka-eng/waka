@@ -34,6 +34,10 @@ import LoginPage from "./pages/Login";
 import OnboardingPage from "./pages/Onboarding";
 import ProfilePage from "./pages/Profile";
 import PublicProfilePage from "./pages/PublicProfile";
+// FIRST, ALWAYS: declares the layer order every other stylesheet relies on.
+// A @layer statement must precede the rules it orders, so this import cannot
+// move without silently restoring bundle-order precedence.
+import "./styles/layers.css";
 import "./styles/global.css";
 // Loaded after global.css and deliberately wins. See the header of that file
 // for what it supersedes and why it is separable rather than merged.

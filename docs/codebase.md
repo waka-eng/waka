@@ -55,8 +55,12 @@ Nobody can navigate the rest of this list without it.
 
 ### 2. `@layer` for CSS ownership
 
-Declare `@layer base, product, overrides;` once, and assign each stylesheet to
-one. Precedence stops depending on import order — which is the bug that made a
+Declare `@layer base, product, chrome;` once (done — `styles/layers.css`), then
+assign every stylesheet in ONE change. Not file by file: unlayered rules beat
+all layers, so moving one file in while its neighbours stay out drops it below
+them rather than raising it. Wrapping `world-chrome.css` alone was tried and
+instantly reverted every override it exists to make. Precedence then stops
+depending on import order — which is the bug that made a
 design pass apply in dev and not in production, with identical source. It is a
 handful of lines and it removes an entire category of failure.
 
