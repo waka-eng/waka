@@ -326,11 +326,18 @@ a:hover {
   border-radius: 0;
   box-shadow: none;
 }
-.login-form,
-.auth-form {
+/* `:not([hidden])` for the same reason as the panels below — the profile
+   page's "you" tab IS a .login-form, so an unconditional display here keeps
+   it on screen when the other tab is selected. */
+.login-form:not([hidden]),
+.auth-form:not([hidden]) {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+.login-form[hidden],
+.auth-form[hidden] {
+  display: none;
 }
 /* the divider keeps its word: two rules with OR between them is the standard
    read, and dropping the word leaves two orphan lines that mean nothing */
@@ -435,8 +442,16 @@ a:hover {
 /* ---------- lists ----------
    Rooms, memories and connections are all the same shape: a name, something
    quiet about it, and what you can do. One grammar, three contents. */
-.profile-list,
-.profile-panel {
+/* `display` BEATS `hidden`, AND THAT IS HOW BOTH TABS ENDED UP ON SCREEN.
+   These panels are shown and hidden with the HTML `hidden` attribute, which
+   works by setting `display: none` at the lowest possible precedence — any
+   author rule that sets `display` silently switches it off. Setting flex here
+   un-hid the inactive panel, so both tab bodies rendered stacked and pressing
+   a tab appeared to do nothing: the content never changed because it was all
+   already there. `:not([hidden])` keeps the layout and gives the attribute
+   back its job. */
+.profile-list:not([hidden]),
+.profile-panel:not([hidden]) {
   display: flex;
   flex-direction: column;
   background: none;
@@ -444,6 +459,11 @@ a:hover {
   border-radius: 0;
   padding: 0;
   gap: 0;
+}
+.profile-list[hidden],
+.profile-panel[hidden],
+.profile-room[hidden] {
+  display: none;
 }
 .profile-list-row,
 .profile-room,
