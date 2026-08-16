@@ -38,7 +38,6 @@ import "./styles/global.css";
 // Loaded after global.css and deliberately wins. See the header of that file
 // for what it supersedes and why it is separable rather than merged.
 import "./styles/system.css";
-import "./styles/surface.css";
 // Last, deliberately: the world is home, and the screens a person leaves it
 // for should look like the same product. Palette and type only — nothing
 // structural, and the flat screens stay flat on purpose.

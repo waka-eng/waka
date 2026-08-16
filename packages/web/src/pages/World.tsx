@@ -12326,11 +12326,6 @@ function WorldExperience(): JSX.Element {
                         ))}
                       </div>
                     ) : null}
-                    {false ? (
-                      (
-                        <div />
-                      )
-                    ) : null}
                     {/* The one quiet line, and the page's single interactive
                         signal. The candidates that could replace this ambition
                         are separate entities living a section above, and this
