@@ -285,8 +285,6 @@
   "profileConnectionEnded": "Connection ended.",
   "profileConnectionsEmpty": "No other connections.",
   "profileTabYou": "You",
-  "profileTabSharing": "Sharing",
-  "profileTabMemories": "Memories",
-  "profileTabConnections": "Connections",
-  "profileTabsLabel": "Profile sections"
+  "profileTabsLabel": "Profile sections",
+  "profileTabAccess": "Memories & connections"
 }

@@ -285,8 +285,6 @@
   "profileConnectionEnded": "연결을 끊었습니다.",
   "profileConnectionsEmpty": "다른 연결이 없습니다.",
   "profileTabYou": "나",
-  "profileTabSharing": "공개",
-  "profileTabMemories": "기억",
-  "profileTabConnections": "연결",
-  "profileTabsLabel": "프로필 섹션"
+  "profileTabsLabel": "프로필 섹션",
+  "profileTabAccess": "기억과 연결"
 }

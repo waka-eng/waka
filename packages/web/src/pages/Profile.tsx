@@ -26,16 +26,14 @@ import type { SupportedLocale } from "../lib/locales";
 const DELETE_CONFIRMATION = "DELETE";
 const PUBLIC_HANDLE_PATTERN = /^[a-z0-9_-]{3,24}$/;
 
-type ProfileTab = "you" | "sharing" | "memories" | "connections";
+type ProfileTab = "you" | "access";
 
 /** Keyed to the catalog, so a renamed message is a type error, not a blank tab. */
 type MessageKey = Parameters<typeof t>[1];
 
 const PROFILE_TABS: ReadonlyArray<{ id: ProfileTab; labelKey: MessageKey }> = [
   { id: "you", labelKey: "profileTabYou" },
-  { id: "sharing", labelKey: "profileTabSharing" },
-  { id: "memories", labelKey: "profileTabMemories" },
-  { id: "connections", labelKey: "profileTabConnections" },
+  { id: "access", labelKey: "profileTabAccess" },
 ];
 
 export default function ProfilePage(): JSX.Element {
@@ -221,14 +219,10 @@ export default function ProfilePage(): JSX.Element {
       return;
     }
     if ((publicProfileEnabled || publicTopOfMindEnabled) && !handle) {
-      // The offending field is on another tab; sending someone to an error
-      // they cannot see is worse than no error at all.
-      setTab("sharing");
       setError(t(locale, "profilePublicHandleRequired"));
       return;
     }
     if (handleError) {
-      setTab("sharing");
       setError(handleError);
       return;
     }
@@ -248,7 +242,6 @@ export default function ProfilePage(): JSX.Element {
       setStatus(t(locale, "profileSaved"));
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.fieldErrors?.publicHandle) setTab("sharing");
         setError(err.fieldErrors?.publicHandle?.[0] ?? err.message);
       } else {
         setError(t(locale, "profileSaveError"));
@@ -354,15 +347,11 @@ export default function ProfilePage(): JSX.Element {
           className="login-form profile-panel"
           onSubmit={handleSubmit}
           noValidate
-          hidden={tab !== "you" && tab !== "sharing"}
+          role="tabpanel"
+          id="profile-panel-you"
+          aria-labelledby="profile-tab-you"
+          hidden={tab !== "you"}
         >
-          <div
-            className="profile-room"
-            role="tabpanel"
-            id="profile-panel-you"
-            aria-labelledby="profile-tab-you"
-            hidden={tab !== "you"}
-          >
           <label className="field">
             <span className="field-label">{t(locale, "profileNickname")}</span>
             <input
@@ -400,14 +389,7 @@ export default function ProfilePage(): JSX.Element {
               ))}
             </select>
           </label>
-          </div>
-          <section
-            className="profile-public-panel profile-room"
-            role="tabpanel"
-            id="profile-panel-sharing"
-            aria-labelledby="profile-tab-sharing"
-            hidden={tab !== "sharing"}
-          >
+          <section className="profile-public-panel" aria-labelledby="profile-public-title">
             <div className="profile-public-heading">
               <p className="login-eyebrow" id="profile-public-title">
                 {t(locale, "profilePublicTitle")}
@@ -478,13 +460,14 @@ export default function ProfilePage(): JSX.Element {
             {submitting ? t(locale, "profileSaving") : t(locale, "profileSave")}
           </button>
         </form>
-        <section
-          className="profile-memories-panel profile-panel profile-room"
+        <div
+          className="profile-panel profile-room"
           role="tabpanel"
-          id="profile-panel-memories"
-          aria-labelledby="profile-tab-memories"
-          hidden={tab !== "memories"}
+          id="profile-panel-access"
+          aria-labelledby="profile-tab-access"
+          hidden={tab !== "access"}
         >
+        <section className="profile-memories-panel" aria-labelledby="profile-memories-title">
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-memories-title">
               {t(locale, "profileMemoriesTitle")}
@@ -492,20 +475,19 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-subtitle">{t(locale, "profileMemoriesHint")}</p>
           </div>
 
-          <ul className="profile-memory-list">
+          <ul className="profile-list">
             {(memories ?? []).map((memory) => {
               const isHuman = memory.type === "human";
               const busy = busyMemoryId === memory.id;
               const draft = memoryDrafts[memory.id] ?? memory.name;
+              const dirty = draft.trim().length > 0 && draft.trim() !== memory.name;
               return (
-                <li key={memory.id} className="profile-memory-row">
-                  <span
-                    className={`profile-memory-badge${isHuman ? " is-human" : ""}`}
-                  >
+                <li key={memory.id} className="profile-list-row profile-memory-row">
+                  <span className="profile-memory-badge">
                     {t(locale, isHuman ? "profileMemoryHuman" : "profileMemoryAgent")}
                   </span>
                   <input
-                    className="field-input profile-memory-name"
+                    className="profile-row-name"
                     type="text"
                     value={draft}
                     disabled={busy}
@@ -518,67 +500,71 @@ export default function ProfilePage(): JSX.Element {
                       setMemoryDrafts((current) => ({ ...current, [memory.id]: value }));
                     }}
                   />
-                  <button
-                    className="profile-memory-action"
-                    type="button"
-                    disabled={busy || draft.trim() === memory.name || !draft.trim()}
-                    onClick={() => void handleRenameMemory(memory)}
-                  >
-                    {busy
-                      ? t(locale, "profileMemoryRenameSaving")
-                      : t(locale, "profileMemoryRename")}
-                  </button>
-                  {/* The human memory is the account's own and has no remove
-                      button at all — a disabled one would imply it is merely
-                      not allowed right now. */}
-                  {isHuman ? null : (
-                    <button
-                      className="profile-memory-action is-destructive"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void handleRemoveMemory(memory)}
-                    >
-                      {busy
-                        ? t(locale, "profileMemoryRemoving")
-                        : t(locale, "profileMemoryRemove")}
-                    </button>
-                  )}
+                  <span className="profile-row-actions">
+                    {/* Rename earns its place only once the name has changed —
+                        a permanently disabled button on every row is noise
+                        pretending to be affordance. */}
+                    {dirty || busy ? (
+                      <button
+                        className="profile-memory-action"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRenameMemory(memory)}
+                      >
+                        {busy
+                          ? t(locale, "profileMemoryRenameSaving")
+                          : t(locale, "profileMemoryRename")}
+                      </button>
+                    ) : null}
+                    {/* The human memory is the account's own and has no remove
+                        button at all — a disabled one would imply it is merely
+                        not allowed right now. */}
+                    {isHuman ? null : (
+                      <button
+                        className="profile-memory-action is-destructive"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleRemoveMemory(memory)}
+                      >
+                        {busy
+                          ? t(locale, "profileMemoryRemoving")
+                          : t(locale, "profileMemoryRemove")}
+                      </button>
+                    )}
+                  </span>
                 </li>
               );
             })}
-          </ul>
-
-          <label className="field">
-            <span className="field-label">{t(locale, "profileMemoryNewLabel")}</span>
-            <div className="profile-memory-new">
+            <li className="profile-list-row profile-memory-new">
+              <span className="profile-memory-badge" aria-hidden="true">
+                +
+              </span>
               <input
-                className="field-input"
+                className="profile-row-name"
                 type="text"
                 value={newMemoryName}
-                placeholder={t(locale, "profileMemoryNewPlaceholder")}
+                placeholder={t(locale, "profileMemoryNewLabel")}
                 disabled={creatingMemory}
                 onChange={(event) => setNewMemoryName(event.currentTarget.value)}
               />
-              <button
-                className="btn-primary profile-memory-create"
-                type="button"
-                disabled={creatingMemory || !newMemoryName.trim()}
-                onClick={() => void handleCreateMemory()}
-              >
-                {creatingMemory
-                  ? t(locale, "profileMemoryCreating")
-                  : t(locale, "profileMemoryCreate")}
-              </button>
-            </div>
-          </label>
+              <span className="profile-row-actions">
+                {newMemoryName.trim() || creatingMemory ? (
+                  <button
+                    className="profile-memory-action profile-memory-create"
+                    type="button"
+                    disabled={creatingMemory}
+                    onClick={() => void handleCreateMemory()}
+                  >
+                    {creatingMemory
+                      ? t(locale, "profileMemoryCreating")
+                      : t(locale, "profileMemoryCreate")}
+                  </button>
+                ) : null}
+              </span>
+            </li>
+          </ul>
         </section>
-        <section
-          className="profile-memories-panel profile-panel profile-room"
-          role="tabpanel"
-          id="profile-panel-connections"
-          aria-labelledby="profile-tab-connections"
-          hidden={tab !== "connections"}
-        >
+        <section className="profile-memories-panel" aria-labelledby="profile-connections-title">
           <div className="profile-memories-heading">
             <p className="login-eyebrow" id="profile-connections-title">
               {t(locale, "profileConnectionsTitle")}
@@ -586,35 +572,37 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-subtitle">{t(locale, "profileConnectionsHint")}</p>
           </div>
 
-          <ul className="profile-memory-list">
+          <ul className="profile-list">
             {(connections ?? []).map((connection) => {
               const busy = busyConnectionId === connection.id;
               return (
-                <li key={connection.id} className="profile-connection-row">
-                  <div className="profile-connection-what">
-                    <span className="profile-connection-device">
+                <li key={connection.id} className="profile-list-row profile-connection-row">
+                  <div className="profile-row-main">
+                    <span className="profile-row-title">
                       {connection.deviceLabel ?? t(locale, "profileConnectionUnlabelled")}
                       {connection.current ? (
-                        <span className="profile-memory-badge is-human">
+                        <span className="profile-row-tag">
                           {t(locale, "profileConnectionThisDevice")}
                         </span>
                       ) : null}
                     </span>
-                    <span className="profile-connection-meta">
+                    <span className="profile-row-meta">
                       {connection.profile.name} · {t(locale, "profileConnectionLastSeen")}{" "}
                       {whenShort(connection.lastSeenAt)}
                     </span>
                   </div>
-                  <button
-                    className="profile-memory-action is-destructive"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleEndConnection(connection)}
-                  >
-                    {busy
-                      ? t(locale, "profileConnectionEnding")
-                      : t(locale, "profileConnectionEnd")}
-                  </button>
+                  <span className="profile-row-actions">
+                    <button
+                      className="profile-memory-action is-destructive"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void handleEndConnection(connection)}
+                    >
+                      {busy
+                        ? t(locale, "profileConnectionEnding")
+                        : t(locale, "profileConnectionEnd")}
+                    </button>
+                  </span>
                 </li>
               );
             })}
@@ -623,6 +611,7 @@ export default function ProfilePage(): JSX.Element {
             <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
           ) : null}
         </section>
+        </div>
         <section
           className="profile-danger-panel profile-panel"
           aria-labelledby="profile-danger-title"

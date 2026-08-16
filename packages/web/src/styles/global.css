@@ -2769,123 +2769,6 @@ textarea {
 }
 
 
-/* The account's memories: one row per profile, name editable in place. */
-.profile-memory-list {
-  display: grid;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.profile-memory-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.profile-memory-name {
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
-/* Which memory this is, said in a word rather than an icon. */
-.profile-memory-badge {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.profile-memory-badge.is-human {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.profile-memory-action {
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.profile-memory-action:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-}
-
-.profile-memory-action:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.profile-memory-action.is-destructive:hover:not(:disabled) {
-  border-color: var(--border-danger, var(--border-strong));
-  color: var(--text-danger, var(--text-primary));
-}
-
-.profile-memory-new {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.profile-memory-new .field-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* Sized to sit beside the input rather than span the row like the page's
-   main submit does. */
-.profile-memory-create {
-  flex: 0 0 auto;
-  width: auto;
-  padding-inline: var(--space-4);
-}
-
-@media (max-width: 520px) {
-  .profile-memory-name {
-    flex-basis: 100%;
-    order: 3;
-  }
-}
-
-/* One connected machine: what it is on the left, how to end it on the right. */
-.profile-connection-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.profile-connection-what {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.profile-connection-device {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-primary);
-}
-
-.profile-connection-meta {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
 /* ---------------------------------------------------------------------------
    Profile rooms
    ---------------------------------------------------------------------------
@@ -2916,7 +2799,7 @@ textarea {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: calc((100% - 6px) / 4);
+  width: calc((100% - 6px) / 2);
   height: calc(100% - 6px);
   border-radius: var(--r-pill);
   background: var(--cell, #fff);
@@ -3005,4 +2888,156 @@ textarea {
     letter-spacing: 0.04em;
     padding: 8px 2px;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Grouped lists (memories, connections)
+   ---------------------------------------------------------------------------
+   One enclosure per list, hairline dividers inside, and a fixed left column
+   so every name starts on the same vertical line. Inputs are borderless and
+   read as text until touched — the list is a list, not a form.
+   --------------------------------------------------------------------------- */
+
+.profile-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-paper);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+}
+
+.profile-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 52px;
+  padding: 6px var(--space-3);
+}
+
+.profile-list-row + .profile-list-row {
+  border-top: 1px solid var(--rule);
+}
+
+/* The fixed left column: what kind of thing this row is, said in a word. */
+.profile-memory-badge {
+  flex: 0 0 52px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Inline, borderless name. The underline appears only when editing, so a
+   resting row reads as text and a touched one declares itself. */
+.profile-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--t-body);
+  color: var(--ink-1);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+
+.profile-row-name:hover:not(:disabled) {
+  border-bottom-color: var(--rule);
+}
+
+.profile-row-name:focus {
+  outline: none;
+  border-bottom-color: var(--rule-strong);
+}
+
+.profile-row-name::placeholder {
+  color: var(--ink-4);
+}
+
+.profile-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.profile-row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--t-body);
+  color: var(--ink-1);
+}
+
+.profile-row-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
+  padding: 1px 7px;
+  transform: translateY(-1px);
+}
+
+.profile-row-meta {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* Actions: quiet mono verbs, right-aligned on one shared column so every
+   Remove and End lines up down the list. */
+.profile-row-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.profile-memory-action {
+  border: 0;
+  padding: 6px 2px;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.profile-memory-action:hover:not(:disabled) {
+  color: var(--ink-1);
+}
+
+.profile-memory-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.profile-memory-action.is-destructive:hover:not(:disabled) {
+  color: color-mix(in srgb, #8a2a1d 80%, var(--ink));
+}
+
+.profile-memory-action:focus-visible {
+  outline: 2px solid var(--rule-strong);
+  outline-offset: 2px;
+}
+
+/* The add row lives inside the tray as its last line; the + in the kind
+   column keeps the grid, and the verb appears once there is a name. */
+.profile-memory-new .profile-memory-badge {
+  font-size: 13px;
+  color: var(--ink-4);
+}
+
+/* Section hints stay readable: one measure, not full-bleed. */
+.profile-memories-heading .login-subtitle {
+  max-width: 52ch;
 }
