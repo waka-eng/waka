@@ -64,6 +64,7 @@ import {
   type ApiTopOfMind,
   type ApiTopOfMindEntry,
 } from "../lib/api";
+import { whenShort } from "../lib/when";
 import {
   buildSurfacePath,
   parseSurfacePath,
@@ -155,17 +156,6 @@ const NOTE_COLORS = [
   { hue: "#f1d7a8", ink: "#4f3921" },
 ];
 
-/** Today, yesterday, or a date. A wall you return to daily needs the first
- *  two to be words — "today" reads instantly, "3 Aug" has to be decoded. */
-export function whenShort(at: string): string {
-  const then = new Date(at);
-  if (Number.isNaN(then.getTime())) return "";
-  const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 /* Anyone with an unfinished capture when the tab closes keeps it, instead of
    losing the one thing a product about keeping things must never lose. */

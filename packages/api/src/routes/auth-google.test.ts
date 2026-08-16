@@ -25,7 +25,11 @@ vi.mock("../lib/auth.js", () => ({
   signSessionToken: vi.fn(async () => "signed-session-token"),
 }));
 
-vi.mock("../lib/session.js", () => ({
+vi.mock("../lib/session.js", async (importOriginal) => ({
+  // `describeUserAgent` is a pure formatter and the callback now labels the
+  // session it mints with it — mocking it away would test a login that no
+  // longer exists.
+  ...(await importOriginal<typeof import("../lib/session.js")>()),
   createSessionRow: mockState.createSessionRow,
 }));
 
@@ -176,6 +180,7 @@ describe("Google OAuth callback email verification", () => {
     expect(mockState.createSessionRow).toHaveBeenCalledWith({
       profileId: "profile-1",
       token: "signed-session-token",
+      deviceLabel: "Browser",
     });
   });
 
@@ -212,6 +217,7 @@ describe("Google OAuth callback email verification", () => {
     expect(mockState.createSessionRow).toHaveBeenCalledWith({
       profileId: "new-profile-id",
       token: "signed-session-token",
+      deviceLabel: "Browser",
     });
   });
 

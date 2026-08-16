@@ -47,7 +47,7 @@ import {
   normalizePublicHandle,
   validatePublicHandle,
 } from "../lib/public-handles.js";
-import { createSessionRow, revokeSessionByToken } from "../lib/session.js";
+import { createSessionRow, describeUserAgent, revokeSessionByToken } from "../lib/session.js";
 import { cliAuthRoutes } from "./auth-cli.js";
 import { googleAuthRoutes, handleGoogleCallback } from "./auth-google.js";
 
@@ -359,7 +359,11 @@ authRoutes.post("/signup", async (c) => {
   //     what makes the JWT revocable: /api/auth/logout deletes this row and
   //     the auth middleware then refuses the cookie even though the JWT
   //     itself is still cryptographically valid.
-  await createSessionRow({ profileId: created.profile.id, token });
+  await createSessionRow({
+    profileId: created.profile.id,
+    token,
+    deviceLabel: describeUserAgent(c.req.header("user-agent")),
+  });
 
   c.header("Set-Cookie", buildSessionCookie(token));
 
@@ -456,7 +460,11 @@ authRoutes.post("/login", async (c) => {
     profileId: candidate.profile.id,
     email: candidate.account.email,
   });
-  await createSessionRow({ profileId: candidate.profile.id, token });
+  await createSessionRow({
+    profileId: candidate.profile.id,
+    token,
+    deviceLabel: describeUserAgent(c.req.header("user-agent")),
+  });
   c.header("Set-Cookie", buildSessionCookie(token));
 
   return c.json(

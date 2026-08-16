@@ -2858,3 +2858,30 @@ textarea {
     order: 3;
   }
 }
+
+/* One connected machine: what it is on the left, how to end it on the right. */
+.profile-connection-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.profile-connection-what {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.profile-connection-device {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+}
+
+.profile-connection-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}

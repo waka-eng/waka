@@ -5,12 +5,16 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ApiError,
   createProfile,
+  endConnection,
+  fetchConnections,
   deleteProfile,
   fetchProfiles,
   renameProfile,
+  type ApiConnection,
   type ApiOwnedProfile,
 } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { whenShort } from "../lib/when";
 import {
   normalizeSupportedLocale,
   supportedLocales,
@@ -139,6 +143,52 @@ export default function ProfilePage(): JSX.Element {
       setError(err instanceof ApiError ? err.message : t(locale, "profileMemoriesError"));
     } finally {
       setBusyMemoryId(null);
+    }
+  }
+
+  const [connections, setConnections] = useState<ApiConnection[] | null>(null);
+  const [busyConnectionId, setBusyConnectionId] = useState<string | null>(null);
+
+  const loadConnections = useCallback(async (): Promise<void> => {
+    try {
+      setConnections(await fetchConnections());
+    } catch {
+      setConnections([]);
+      setError(t(locale, "profileConnectionsError"));
+    }
+  }, [locale]);
+
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  async function handleEndConnection(connection: ApiConnection): Promise<void> {
+    // Ending the device you are holding logs you out of it, which is a
+    // different promise from ending some other machine — so it asks a
+    // different question.
+    const question = connection.current
+      ? t(locale, "profileConnectionEndCurrentConfirm")
+      : t(locale, "profileConnectionEndConfirm");
+    if (!window.confirm(question)) return;
+
+    setBusyConnectionId(connection.id);
+    setStatus(null);
+    setError(null);
+    try {
+      await endConnection(connection.id);
+      if (connection.current) {
+        // The credential this page is using is gone; anything else it tried
+        // to render would 401. Leave deliberately rather than let the app
+        // discover it.
+        navigate("/login", { replace: true });
+        return;
+      }
+      setConnections((current) => (current ?? []).filter((row) => row.id !== connection.id));
+      setStatus(t(locale, "profileConnectionEnded"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t(locale, "profileConnectionsError"));
+    } finally {
+      setBusyConnectionId(null);
     }
   }
 
@@ -425,6 +475,54 @@ export default function ProfilePage(): JSX.Element {
               </button>
             </div>
           </label>
+        </section>
+        <section
+          className="profile-memories-panel"
+          aria-labelledby="profile-connections-title"
+        >
+          <div className="profile-memories-heading">
+            <p className="login-eyebrow" id="profile-connections-title">
+              {t(locale, "profileConnectionsTitle")}
+            </p>
+            <p className="login-subtitle">{t(locale, "profileConnectionsHint")}</p>
+          </div>
+
+          <ul className="profile-memory-list">
+            {(connections ?? []).map((connection) => {
+              const busy = busyConnectionId === connection.id;
+              return (
+                <li key={connection.id} className="profile-connection-row">
+                  <div className="profile-connection-what">
+                    <span className="profile-connection-device">
+                      {connection.deviceLabel ?? t(locale, "profileConnectionUnlabelled")}
+                      {connection.current ? (
+                        <span className="profile-memory-badge is-human">
+                          {t(locale, "profileConnectionThisDevice")}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="profile-connection-meta">
+                      {connection.profile.name} · {t(locale, "profileConnectionLastSeen")}{" "}
+                      {whenShort(connection.lastSeenAt)}
+                    </span>
+                  </div>
+                  <button
+                    className="profile-memory-action is-destructive"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void handleEndConnection(connection)}
+                  >
+                    {busy
+                      ? t(locale, "profileConnectionEnding")
+                      : t(locale, "profileConnectionEnd")}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          {connections !== null && connections.length === 0 ? (
+            <p className="login-subtitle">{t(locale, "profileConnectionsEmpty")}</p>
+          ) : null}
         </section>
         <section className="profile-danger-panel" aria-labelledby="profile-danger-title">
           <div className="profile-danger-heading">

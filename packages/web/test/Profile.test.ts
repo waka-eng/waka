@@ -53,6 +53,24 @@ vi.mock("../src/lib/auth-context", () => ({
   useAuth: () => mockAuthState.value,
 }));
 
+const mockConnectionsApi = vi.hoisted(() => {
+  const base = {
+    profile: { id: "profile-1", name: "River", type: "human" as "human" | "agent" },
+    createdAt: "2026-08-16T04:00:00.000Z",
+    lastSeenAt: "2026-08-16T06:00:00.000Z",
+    expiresAt: "2026-09-15T04:00:00.000Z",
+  };
+  return {
+    rows: [
+      { ...base, id: "session-current", deviceLabel: "Chrome on macOS", current: true },
+      { ...base, id: "session-other", deviceLabel: "agis-Mac-mini.local", current: false },
+      { ...base, id: "session-bare", deviceLabel: null, current: false },
+    ],
+    fetchConnections: vi.fn(async () => mockConnectionsApi.rows),
+    endConnection: vi.fn(async () => undefined),
+  };
+});
+
 const mockProfilesApi = vi.hoisted(() => {
   const human = {
     id: "profile-1",
@@ -79,6 +97,8 @@ vi.mock("../src/lib/api", async (importOriginal) => ({
   createProfile: mockProfilesApi.createProfile,
   renameProfile: mockProfilesApi.renameProfile,
   deleteProfile: mockProfilesApi.deleteProfile,
+  fetchConnections: mockConnectionsApi.fetchConnections,
+  endConnection: mockConnectionsApi.endConnection,
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -291,6 +311,70 @@ describe("ProfilePage memories", () => {
       remove?.click();
     });
     expect(mockProfilesApi.deleteProfile).toHaveBeenCalledWith("profile-2");
+    confirmSpy.mockRestore();
+  });
+});
+
+describe("ProfilePage connections", () => {
+  const connectionRows = (container: HTMLDivElement) =>
+    Array.from(container.querySelectorAll<HTMLLIElement>(".profile-connection-row"));
+
+  it("lists every connection, naming the one you are using", async () => {
+    const container = await renderProfilePage();
+    const rows = connectionRows(container);
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.textContent).toContain("Chrome on macOS");
+    expect(rows[0]?.textContent).toContain("this device");
+    expect(rows[1]?.textContent).not.toContain("this device");
+  });
+
+  /** A login that never named itself still has to be recognisable in a list. */
+  it("gives an unlabelled connection a readable name", async () => {
+    const container = await renderProfilePage();
+    expect(connectionRows(container)[2]?.textContent).toContain("Unnamed device");
+  });
+
+  /** No surface may hand back a credential; there is nothing to hand back. */
+  it("never renders a token", async () => {
+    const container = await renderProfilePage();
+    const panel = container.querySelector("#profile-connections-title")?.closest("section");
+    expect(panel?.textContent).not.toMatch(/token|eyJ/i);
+  });
+
+  it("asks before ending a connection, and does nothing when declined", async () => {
+    const container = await renderProfilePage();
+    const end = connectionRows(container)[1]?.querySelector("button");
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await act(async () => {
+      end?.click();
+    });
+    expect(mockConnectionsApi.endConnection).not.toHaveBeenCalled();
+
+    confirmSpy.mockReturnValue(true);
+    await act(async () => {
+      end?.click();
+    });
+    expect(mockConnectionsApi.endConnection).toHaveBeenCalledWith("session-other");
+    confirmSpy.mockRestore();
+  });
+
+  /**
+   * Ending the device in your hand is a different promise from ending some
+   * other machine, so it has to ask a different question — and then leave,
+   * because every request this page makes next would be unauthorized.
+   */
+  it("warns differently before ending the current device", async () => {
+    const container = await renderProfilePage();
+    const end = connectionRows(container)[0]?.querySelector("button");
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    await act(async () => {
+      end?.click();
+    });
+
+    expect(confirmSpy.mock.calls[0]?.[0]).toContain("signs you out here");
     confirmSpy.mockRestore();
   });
 });
