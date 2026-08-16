@@ -116,7 +116,7 @@ them. Collapse to one set. The translation layer then deletes itself.
 ### 4. Split `World.tsx` — the decided shape
 
 ```
-web/src/world/
+web/src/
   wall/                 what EVERY wall has, one directory per layer
     inspiration/        orbs, layout, the memory panel, the capture mouth
     signal/             statements, verdicts, joining, proposals
@@ -124,38 +124,46 @@ web/src/world/
   wall-kinds/           how walls DIFFER
     self.ts
     agent.ts            machine hand · pixelated orbs · quantized motion
-    room.ts             members · hues · legend · proposals
-  axis/                 travel between walls
-  sim/                  the loop, sprites, camera, hit-testing
+    group.ts            members · hues · legend · proposals
+  transition/           moving between walls
+  canvas/               the loop, sprites, camera, hit-testing
   lib/                  data.ts · words.ts · appearance.ts
-web/src/account/        the flat screens: profile, login
+  account/              the flat screens: profile, login
 ```
 
-**Canon words name the directories** — `inspiration`, `signal`, `top-of-mind`
-— so one vocabulary runs from the database to the folder:
-`api/routes/inspirations.ts` ↔ `world/wall/inspiration/`. A new engineer
-learns three words once and they hold everywhere.
+**No wrapper.** `world/` only existed to contrast with the archive, and the
+archive is deleted — a word naming what something is NOT, once the something
+else is gone. `wall/` beside `account/` states the real split, spatial versus
+flat, without a container to explain. It also ends the doubling: `lib/data.ts`,
+not `world/lib/world-data.ts`.
 
-*Field*, *sky* and *headquarters* remain the words for WHERE these are drawn.
-They are spatial, and they belong in the UI and its comments, not in paths.
+**Canon words name the layer directories** — `inspiration`, `signal`,
+`top-of-mind` — so one vocabulary runs from the database to the folder:
+`api/routes/inspirations.ts` ↔ `wall/inspiration/`. *Field*, *sky* and
+*headquarters* stay as the words for WHERE these are drawn: spatial, and so
+they belong in the UI and its comments rather than in paths.
 
-**Everything sits under `wall/` because there is never one of anything.** There
-are seven fields on screen right now. A room's field and yours are the same
+**`group`, not `room`** — the API already says `groups.ts`, `group_members`,
+`groupTopOfMindProposals`. One word, both ends. "Room" survives in what a
+person reads on screen, which is a different register again.
+
+**`canvas/`, not `sim`** — it names the real boundary in this app. Everything
+in it happens on the canvas element; everything outside it is DOM. A new
+engineer knows what is inside without being told.
+
+**Everything under `wall/` because there is never one of anything.** Seven
+fields are on screen right now. A group's inspirations and yours are the same
 code with different contents — `presentBalls()` already filters one list by
 `ball.agentId`, and the structure should say so.
 
-**`wall-kinds/` is the directory that fixes a bug class**, not just tidiness.
-"How does an agent's wall differ" is currently answered independently in at
-least six places — `isMachineWall`, `wornBeing`, `hasSky`, `hasDial`, the
-`data-kind` typography selector, `mechAt`'s quantization — and they have
-disagreed in production: a body hashed from a group id, typography and motion
-wired separately, "Our agents" reading as a machine's room in one place and a
-human's in another. One file owning what an agent's wall IS makes that
-impossible, and a new wall kind becomes a new file rather than a hunt.
-
-**Filenames stop repeating their directory.** `lib/world-words.ts` becomes
-`world/lib/words.ts`. If a filename restates its folder, one of them is
-redundant.
+**`wall-kinds/` fixes a bug class, not just tidiness.** "How does an agent's
+wall differ" is answered independently in at least six places today —
+`isMachineWall`, `wornBeing`, `hasSky`, `hasDial`, the `data-kind` typography
+selector, `mechAt`'s quantization — and they have disagreed in production: a
+body hashed from a group id, typography and motion wired separately, "Our
+agents" reading as a machine's wall in one place and a human's in another. One
+file owning what an agent's wall IS makes that impossible, and a new wall kind
+becomes a new file rather than a hunt through 13,000 lines.
 
 ### How to get there
 
