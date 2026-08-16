@@ -200,27 +200,32 @@ async function main(): Promise<void> {
       // is exactly what the surface does, so the test does the same.
       let dismissedId: string | null = null;
       if (dismissTarget) {
-        let dismissed = await api(
-          owner!,
-          `/api/top-of-mind/entries/${dismissTarget.id}/dismiss`,
-          { method: "POST" },
-        );
-        dismissedId = dismissTarget.id;
-
-        if (dismissed.status === 404) {
-          const current = await getTopOfMind(owner!, { includeDismissed: true });
-          const retarget = current!.entries.find(
-            (entry) => entry.body !== lockedText && !entry.dismissed,
-          );
-          if (!retarget) return "the board regenerated down to the locked line alone";
-          dismissed = await api(
+        // Refetch-and-retry, bounded. Synthesis now lands within seconds, so a
+        // single retry can lose the race to the *next* regeneration; a client
+        // that gives up after one attempt would be equally wrong. Retries stop
+        // as soon as one lands, so a settled board costs exactly one call.
+        let target: string | null = dismissTarget.id;
+        for (let attempt = 0; attempt < 4 && target; attempt += 1) {
+          const dismissed = await api(
             owner!,
-            `/api/top-of-mind/entries/${retarget.id}/dismiss`,
+            `/api/top-of-mind/entries/${target}/dismiss`,
             { method: "POST" },
           );
-          dismissedId = retarget.id;
+          if (dismissed.ok) {
+            dismissedId = target;
+            break;
+          }
+          if (dismissed.status !== 404) throw new Error(`dismiss → ${dismissed.status}`);
+
+          const current = await getTopOfMind(owner!, { includeDismissed: true });
+          target =
+            current!.entries.find((entry) => entry.body !== lockedText && !entry.dismissed)
+              ?.id ?? null;
         }
-        if (!dismissed.ok) throw new Error(`dismiss → ${dismissed.status}`);
+        if (!dismissedId) {
+          if (target === null) return "the board regenerated down to the locked line alone";
+          throw new Error("dismiss kept losing the race to a regeneration");
+        }
       }
 
       const after = await getTopOfMind(owner!, { includeDismissed: true });
