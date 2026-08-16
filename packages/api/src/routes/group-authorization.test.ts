@@ -364,7 +364,22 @@ describe("the group module itself", () => {
    * legitimate reason to name layer 1 at all — and a join written by someone
    * who has not read the canon is exactly how that rule gets broken.
    */
-  it("never reads layer 1", () => {
+  /**
+   * This asserted that the group module never touches layer 1 at all. That
+   * invariant is gone on purpose: a room's field is built from its members'
+   * memories now, so groups.ts reads `inspirations` by design.
+   *
+   * What replaces it is the property that actually protects anyone — every
+   * read of layer 1 from this module is gated on the author having marked the
+   * capture public. "Does not read it" was easy to check and is no longer
+   * true; "cannot read a private one" is the thing worth guarding, and it is
+   * the assertion that would have caught the mistake this test exists for.
+   *
+   * Evidence is still off limits. A signal's evidence names the exact spans
+   * of the memories behind it, and nothing in a room has ever been allowed to
+   * see those — sharing a statement has never shipped its grounds.
+   */
+  it("reads layer 1 only through the public-visibility gate", () => {
     const source = readFileSync(
       fileURLToPath(new URL("./groups.ts", import.meta.url)),
       "utf8",
@@ -373,9 +388,20 @@ describe("the group module itself", () => {
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-    expect(code).not.toMatch(/\binspirations\b/);
+    // Evidence and its join key stay out entirely.
     expect(code).not.toMatch(/\bsignalEvidence\b/);
     expect(code).not.toMatch(/\binspirationId\b/);
+
+    // Every statement that touches `inspirations` must also carry the gate.
+    const readsLayer1 = /\binspirations\b/.test(code);
+    if (readsLayer1) {
+      expect(code).toMatch(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/);
+      // ...and the gate must not be the only mention while some other query
+      // quietly selects from the table without it.
+      const gates = code.match(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/g) ?? [];
+      const froms = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
+      expect(gates.length).toBeGreaterThanOrEqual(froms.length);
+    }
   });
 });
 

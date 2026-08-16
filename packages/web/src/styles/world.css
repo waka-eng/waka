@@ -1,0 +1,1732 @@
+/*
+ * The Waka landing — MOONLIGHT (v9 art direction).
+ *
+ * Imported by Jar.tsx only. The founder's verdict on the previous look was
+ * that its sensibility was wrong — ten patches rather than one point of view —
+ * and that the six hash-picked pastel tints were the main offender: six hues
+ * carrying no meaning at all, on a page whose one law is that light is the
+ * only meaning channel. Three committed directions were built and judged by
+ * eye in motion (ember, moonlight, hanji); moonlight was chosen, and the other
+ * two — with the chooser that switched between them — are gone. There is one
+ * surface here and no branch that selects it.
+ *
+ * It is night photography: a cold, clean, genuinely black ground, cool silver
+ * light, fine film grain and a soft vignette.
+ *
+ * THE TINT PAIRS ARE GONE, AND STAY GONE. An orb's appearance is a function of
+ * its ALIVENESS alone, carried on colour TEMPERATURE first and luminance
+ * second: --jar-live → --jar-fade → --jar-dorm. The only warm thing on screen
+ * is what is most alive. Two memories about different things look identical at
+ * the same aliveness, because their themes were never what the light was about.
+ *
+ * Uppercase is allowed in exactly one register: .jar-label, the small tracked
+ * line used for eyebrows, meta and section labels. Never for prose.
+ *
+ * The canvas resolves every colour here via getComputedStyle at load (and on a
+ * DPR change) and bakes its sprites from them; the numeric character of the
+ * light — bloom reach, grain coarseness, vignette — lives beside the bake in
+ * Jar.tsx, because nothing in the DOM needs it.
+ */
+
+/* Two faces, split by SCRIPT RISK rather than by taste. Jost is the voice — a
+   geometric in the Futura line, which is where luxury sans lives: light weight,
+   wide round forms, a little positive tracking. It covers no Hangul, so it is
+   only ever used on roles that are reliably Latin (the machine-written ambition
+   and reading titles). Pretendard carries everything that can contain captured
+   Korean, plus the whole interface, so no sentence changes voice mid-way. */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css");
+@import url("https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,300;0,400;1,300&display=swap");
+
+.jar {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  /* the same volume, viewport-sized: it carries the skeleton state and any
+     overshoot at either end of the descent */
+  background: var(--jar-atmos);
+  color: var(--jar-ink);
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", Roboto, sans-serif;
+  font-weight: 400;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  /* the emulsion blends against THIS subtree and nothing outside it */
+  isolation: isolate;
+}
+
+/* ---------- the surface: MOONLIGHT ----------
+   Night photography. A cold, clean, genuinely black ground; cool silver light;
+   fine film grain and a soft vignette on the canvas above it.
+
+   THE ONE LAW IN THIS BLOCK: the only warm thing on screen is what is most
+   alive. --jar-live is a slightly warm white and it is the ONLY warm value
+   here; --jar-fade is a cool silver at middle luminance; --jar-dorm is cold
+   and sits only just above the ground. Aliveness is carried by colour
+   TEMPERATURE first and luminance second, and by nothing else — there is no
+   hue that encodes a theme, a kind or a category anywhere on this page, and
+   there must never be one again. */
+.jar {
+  --jar-deep: #06080d;
+  --jar-atmos: #06080d;
+  /* the sky: the same ground, a few percent thinner */
+  --jar-sky: #0a0d14;
+  --jar-ink: #e8edf4;
+  --jar-muted: rgba(232, 237, 244, 0.55);
+  --jar-faint: rgba(232, 237, 244, 0.3);
+  /* the soft pills: the back link and "return to now" */
+  --jar-card: rgba(255, 255, 255, 0.06);
+  --jar-card-hover: rgba(255, 255, 255, 0.12);
+  /* The reading panel. Near-opaque on purpose: any thinner and the companion's
+     aura and the orb's own bloom read THROUGH the card, which looks like light
+     sitting ON it. Light lives behind the panel, never on it — so the surface
+     occludes, and only the blur keeps it from being a slab. */
+  --jar-panel: rgba(11, 14, 20, 0.95);
+  --jar-panel-edge: rgba(255, 255, 255, 0.08);
+  --jar-scroll: rgba(232, 237, 244, 0.16);
+  --jar-quote: rgba(255, 255, 255, 0.05);
+  --jar-row: rgba(255, 255, 255, 0.045);
+  --jar-row-hover: rgba(255, 255, 255, 0.1);
+
+  /* ---- the aliveness ramp: every orb, satellite and cloud is baked from
+     these three, and from nothing else ---- */
+  /* alive: the single warm note in a cold frame */
+  --jar-live: #fff2dc;
+  --jar-live-edge: #f7ead4;
+  --jar-live-bloom: #ffedd0;
+  /* fading: through neutral into silver, and visibly dimmer */
+  --jar-fade: #b9c4d1;
+  /* dormant: cold, and barely separated from the ground it rests on */
+  --jar-dorm: #28323f;
+  /* the air itself */
+  --jar-dust: #cdd8e6;
+  /* THE COMPANION: WARM IVORY, and the one body on the wall that is.
+     It is the most alive thing on your own wall, so it belongs at the warm
+     end — a matte ivory lit by the same moon, fading to a muted stone when
+     nothing in the field is alive. It is deliberately a shorter reach into
+     the warm than --jar-live (19 points of red over blue against 35), so the
+     memories still own the warm extreme and the body reads as lit rather
+     than lit-up. Cold values here also delete the one channel that tells an
+     agent's body from yours: coolRamp() shifts an agent A STEP COLDER, and a
+     companion that starts cold has nothing left to step. */
+  --jar-body-lit: #f7f1e4;
+  --jar-body-shade: #a49b8c;
+  /* a mark inside the person's own words wears the page's one light */
+  --jar-mark: #fff2dc;
+}
+
+/* The one uppercase register on the page: small labels, never prose. */
+.jar-label {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--jar-muted);
+}
+
+/* ---------- the volume: a quiet gradient the camera descends through ---------- */
+.jar-atmos {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  pointer-events: none;
+  will-change: transform;
+  /* One continuous volume across all three sections. The top third is the
+     sky, and it lifts by a few percent — pre-dawn, not a second colour, and
+     not a seam: standing in the sky you can still see the ambition's top edge
+     below you. The element's top and height are written from the loop. */
+  background: linear-gradient(
+    to bottom,
+    var(--jar-sky) 0%,
+    var(--jar-deep) 30%,
+    var(--jar-deep) 100%
+  );
+}
+
+/* ---------- section A: headquarters, rides the camera at 1x ---------- */
+.jar-hq {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+  will-change: transform;
+}
+.jar-hq-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: calc(56px + env(safe-area-inset-top)) 20px 0;
+}
+.jar-eyebrow {
+  margin: 0 0 16px;
+}
+.jar-poster {
+  margin: 0;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  /* 300, never heavier: in a geometric the elegance is in the thin even stroke
+     and the air around it, and weight is what killed the last attempt. */
+  font-weight: 300;
+  font-size: clamp(23px, 2.5vw, 34px);
+  letter-spacing: 0.012em;
+  line-height: 1.32;
+  text-wrap: balance;
+  color: var(--jar-ink);
+}
+/* the ambition arrives a word at a time, the way a thought does */
+.jar-word {
+  display: inline-block;
+  opacity: 0;
+  animation: jar-word 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+/* A WORD THAT SURVIVED THE REWRITE IS ALREADY LIT, AND DOES NOT ARRIVE AGAIN.
+   The motion has to explain which part of a self-description is the spine and
+   which is churn — so only new words step up in luminance, and the carried
+   ones simply stay. Without this rule posterWords() still emits the class but
+   every word replays on every rewrite, which asserts that nothing was kept. */
+.jar-word--held {
+  opacity: 1;
+  animation: none;
+}
+/* forming state speaks in the whisper register, never the poster */
+.jar-forming {
+  margin: 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--jar-muted);
+}
+.jar-asof {
+  margin: 12px 0 0;
+  animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- the forming line ----------
+   The ONLY thing under the ambition. The adopted ambition and the candidates
+   that might replace it are separate entities, so the candidates are not
+   shown here as peers — this line reports that they exist, in words, and is
+   underlined because underline is the page's single interactivity signal. */
+.jar-forming-line {
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 20px 0 0;
+  padding: 0;
+  background: none;
+  /* font-family only: the .jar-label register supplies the rest, and this
+     rule must not out-cascade it */
+  font-family: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: color 0.2s ease;
+}
+.jar-forming-line:hover {
+  color: var(--jar-ink);
+}
+
+/* ---------- the companion's whisper line ---------- */
+.jar-char-say {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+}
+.jar-char-say p {
+  margin: 0;
+}
+
+/* The readings band that used to sit here is GONE from section A. Looking at
+   the ambition is looking at the ambition; the readings are candidates for a
+   future ambition, a separate entity, and they are getting a space of their
+   own. Section A is now the eyebrow, the ambition, the forming line, the
+   companion and the peek — nothing else. */
+
+/* ---------- section S: the sky, where ambitions are still forming ----------
+   The canvas draws the nebulae; this layer carries their words, positioned on
+   their clouds by the loop every frame so the text stays crisp and
+   selectable. Only the sentences take the pointer — the sky itself does not. */
+.jar-sky {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: hidden;
+}
+.jar-neb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  text-align: center;
+  will-change: transform;
+  /* it has no place until the loop has given it one */
+  opacity: 0;
+}
+.jar-neb-text {
+  margin: 0;
+  /* the voice face: a candidate ambition is machine-written and reliably
+     Latin, with Pretendard behind it for anything captured in Hangul */
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  max-width: 26ch;
+  margin-inline: auto;
+  color: var(--jar-ink);
+  opacity: 0.92;
+  text-wrap: balance;
+}
+.jar-neb--reading .jar-neb-text {
+  font-size: 15px;
+}
+.jar-neb-note {
+  margin: 8px 0 0;
+  font-style: normal;
+}
+/* the one action a candidate carries */
+.jar-neb-act {
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 10px 0 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    opacity 0.2s ease;
+  opacity: 0;
+  /* AN INVISIBLE BUTTON IS STILL A BUTTON. Opacity zero does not remove hit
+     testing, so "adopt as your ambition" — the least reversible act in the
+     world — was a fully tappable target sitting under the sentence, on a
+     surface whose primary gesture is drag. It takes the pointer only when it
+     can actually be seen. */
+  pointer-events: none;
+}
+.jar-neb:hover .jar-neb-act,
+.jar-neb:focus-within .jar-neb-act {
+  opacity: 1;
+  pointer-events: auto;
+}
+/* And where there is no hover to reveal it, it simply rests visible: on touch
+   it was unreachable by design and reachable by accident, which is exactly
+   the wrong way round for this one action. */
+@media (hover: none) {
+  .jar-neb-act {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+/* ---------- answering a pattern ----------
+   NOT A CONTROL BAR. This was four uppercase chips under the statement and it
+   read as a survey form bolted to a sentence. Every deduction surface studied
+   for this carries confidence in the TYPE — handwriting versus print, guess
+   versus solid, blue versus red — and none of them grows a toolbar.
+
+   So: one line, lowercase, in the same face the statement is set in, at a
+   size below it. It exists only on the pattern being read and disappears the
+   moment it is answered. */
+.jar-neb-ask {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--jar-faint);
+  pointer-events: auto;
+}
+.jar-neb-ask button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0 1px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.jar-neb-ask button:hover,
+.jar-neb-ask button:focus-visible {
+  color: var(--jar-ink);
+}
+/* Offered only after "not true" — a sequence, never a menu, so the
+   destructive answer is never sitting beside the harmless ones. */
+.jar-neb-ask--after { margin-top: 6px; opacity: 0.55; }
+
+/* WHAT YOU SAID, WORN BY THE STATEMENT.
+   Agreed: unchanged, full weight. Half-agreed: lighter, the claim loosened.
+   Untrue: the world's dimmest ink with a line through it — still present,
+   because nothing here is deleted for being disagreed with. */
+.jar-neb-text[data-said="partly"] { opacity: 0.68; }
+.jar-neb-text[data-said="not_true"] {
+  opacity: 0.42;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--jar-faint);
+}
+.jar-neb-act:hover {
+  color: var(--jar-ink);
+}
+.jar-neb-act[disabled] {
+  cursor: default;
+  opacity: 0.4;
+}
+/* A candidate that cannot be adopted carries NO action and says nothing about
+   it. The affordance's absence is the whole message; a greyed control with
+   "not yet adoptable" beside it was two ways of saying the same thing, and
+   both of them took up room a sentence needed. */
+/* ---------- a satellite's owner ----------
+   A candidate's evidence orbits it as real orbs on the canvas. In a room's
+   candidate those memories belong to different people, so the one under the
+   pointer says whose — a given name, once, beside it. Pretendard, because a
+   name can be Korean; the label register, because that is where whispers
+   live. Absolutely positioned and written entirely by the loop, so raising it
+   can never shift anything else on the page. */
+.jar-satsay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  white-space: nowrap;
+  pointer-events: none;
+  will-change: transform;
+  color: var(--jar-faint);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.jar-satsay--on {
+  opacity: 1;
+}
+
+/* proximity is belonging: drawn together, they can be drafted from */
+.jar-cluster {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: auto;
+  text-align: center;
+  will-change: transform;
+}
+.jar-cluster-act {
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 14px 0 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  animation: jar-arrive 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: color 0.2s ease;
+}
+.jar-cluster-act:hover {
+  color: var(--jar-ink);
+}
+/* ---------- the board's verbs ----------
+   They sit under the poster in the label register and never compete with it:
+   the ambition is the thing being read, these are what you may do about it.
+   Revealed on hover/focus like the sky's one action, and always visible where
+   there is no hover to reveal them. */
+.jar-board-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 18px;
+  margin-top: 26px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.jar-hq:hover .jar-board-acts,
+.jar-hq:focus-within .jar-board-acts {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .jar-board-acts { opacity: 1; pointer-events: auto; }
+}
+.jar-board-act {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  color: var(--jar-muted);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+/* ONE UNDERLINE IN THE WORLD, AND IT MARKS WHERE YOU ARE.
+   Everything pressable was underlined, so the page was full of rules that
+   competed with the single mark that carries meaning — the lit wall on the
+   axis. Pressable is said by the light instead: quiet at rest, the page's own
+   ink under the pointer. */
+.jar-board-act:hover { color: var(--jar-ink); }
+/* Throwing out the sentence you are standing on is one step quieter than
+   keeping it, and it never wears a colour — this world spends temperature on
+   aliveness alone. */
+.jar-board-act--quiet { opacity: 0.45; }
+.jar-board-act--quiet:hover { opacity: 0.85; }
+/* Held is a state, not an action: it does not offer to undo itself. */
+.jar-board-act--held { cursor: default; opacity: 0.5; }
+/* What a rewrite will do, said before it does it. */
+.jar-board-warn {
+  flex-basis: 100%;
+  color: var(--jar-muted);
+  font-style: italic;
+  font-size: 14px;
+}
+
+.jar-sky-empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* one whisper, in the middle of the section above headquarters */
+  top: -50vh;
+  margin: 0;
+  text-align: center;
+  color: var(--jar-faint);
+}
+
+/* ---------- rooms ----------
+   Saying a statement out loud, and the rooms it is out loud in. Rows, not
+   chips: a room has a name of arbitrary length and a chip would truncate it. */
+.jar-share {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin-top: 10px;
+}
+.jar-share-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 4px 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--jar-faint);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.2s ease;
+}
+.jar-share-row:hover { color: var(--jar-ink); }
+/* out loud: the statement is on that wall, and the row wears the page's one
+   light rather than a tick or a colour */
+.jar-share-row--on { color: var(--jar-ink); }
+.jar-share-row--on::before { content: "— "; }
+.jar-share-hint { font-size: 11px; opacity: 0.55; }
+.jar-share-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--jar-faint);
+  max-width: 34ch;
+}
+
+/* Making or joining a room. A real form, so it is real DOM over the world —
+   typed text, an error line and a submit all have to reflow and take focus,
+   and none of that survives being painted into a canvas. The world holds
+   still behind it. */
+/* Searching: one line at the top of the world, and the answer is the field
+   itself lighting up. No panel, no result rows, no count. */
+/* The edge of the world: a signpost hard against the margin it names, in the
+   quiet label register, vertically centred so it reads as a boundary rather
+   than as a sentence about your ambition. */
+.jar-edge {
+  position: absolute;
+  top: 46vh;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 8px 4px;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--jar-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  writing-mode: vertical-rl;
+  opacity: 0;
+  transition: opacity 0.3s ease, color 0.2s ease;
+}
+.jar-edge--r { right: 10px; }
+.jar-edge--l { left: 10px; transform: rotate(180deg); }
+.jar-hq:hover .jar-edge, .jar-edge:focus-visible { opacity: 1; }
+@media (hover: none) { .jar-edge { opacity: 0.7; } }
+.jar-edge:hover { color: var(--jar-ink); }
+
+/* ================= the axis map =================
+   The bottom edge maps the horizontal axis and nothing else. One mark per
+   wall, in axis order, laid out from the centre so YOUR wall is the middle of
+   the strip exactly as it is the origin of the world. Names, not dots — a
+   room is a name, and a dot would make you hover to learn anything. */
+.jar-axis {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: calc(6px + env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0 12px;
+  pointer-events: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.jar-axis::-webkit-scrollbar { display: none; }
+.jar-axis-mark {
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--jar-faint);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.5;
+  transition: opacity 0.25s ease, color 0.25s ease;
+}
+.jar-axis-mark:hover { opacity: 1; color: var(--jar-muted); }
+/* where you are: the page's own light, and the only lit mark on the strip */
+.jar-axis-mark.is-here { opacity: 1; color: var(--jar-ink); }
+.jar-axis-mark.is-here .jar-axis-name { box-shadow: inset 0 -1px 0 0 currentColor; }
+/* an agent is a different KIND of wall, said the way the companion says it:
+   letterform, not colour */
+.jar-axis-mark--agent .jar-axis-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.1em; }
+
+.jar-seek {
+  position: absolute;
+  z-index: 6;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 48px));
+  padding: 14px 18px;
+  background: var(--jar-panel);
+  border: 1px solid var(--jar-panel-edge);
+  border-radius: 4px;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+.jar-seek .jar-neb-ask { margin-top: 8px; }
+
+/* A file picker in the world's voice: a word you press, and the input
+   itself never shows. */
+.jar-attach { cursor: pointer; }
+.jar-attach:hover { color: var(--jar-ink); }
+.jar-attach input { display: none; }
+
+/* A proposal waiting on the room: somebody's sentence, who is behind it so
+   far, and your answer. Prose, because it is a claim about all of you. */
+.jar-proposal {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--jar-panel-edge);
+}
+.jar-proposal-body {
+  margin: 0;
+  font-family: Jost, Pretendard, sans-serif;
+  font-weight: 300;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--jar-ink);
+  text-wrap: balance;
+}
+.jar-proposal-who { margin: 8px 0 0; }
+
+.jar-out {
+  position: absolute;
+  z-index: 6;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 16px;
+  padding: 14px 18px;
+  background: var(--jar-panel);
+  border: 1px solid var(--jar-panel-edge);
+  border-radius: 4px;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+.jar-out .jar-neb-ask { margin: 0; }
+.jar-out .jar-neb-ask + .jar-neb-ask { margin-top: 8px; }
+.jar-out a { color: inherit; text-decoration: none; }
+.jar-out a:hover { color: var(--jar-ink); }
+
+.jar-roomform {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 48px));
+  padding: 22px 24px 20px;
+  background: var(--jar-panel);
+  border: 1px solid var(--jar-panel-edge);
+  border-radius: 4px;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+.jar-roomform-tabs { display: flex; gap: 18px; margin-bottom: 16px; }
+.jar-roomform-tabs button {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--jar-faint);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.jar-roomform-tabs button.is-on { color: var(--jar-ink); }
+.jar-roomform-box {
+  width: 100%;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--jar-panel-edge);
+  color: var(--jar-ink);
+  font-family: inherit;
+  font-size: 16px;
+  outline: none;
+}
+.jar-roomform-box::placeholder { color: var(--jar-faint); }
+.jar-roomform-box:focus { border-bottom-color: var(--jar-muted); }
+.jar-roomform-err {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--jar-muted);
+}
+
+/* ---------- the first screen ----------
+   Three named rows with nothing in them. The slot is an actual empty shape,
+   not a dash and not a placeholder string: an empty page describes absence,
+   an empty SLOT describes a thing that is missing — and only the second one
+   makes anybody want to fill it.
+
+   Nothing counts anything. No "0 of 3", no bar, no ticks. The rows are the
+   architecture of a full Waka standing there unfilled, and that is the whole
+   message. */
+.jar-first {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 30ch;
+  margin: 26px auto 0;
+}
+.jar-first-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--jar-faint);
+  text-align: left;
+}
+/* the shape of what is missing: an open outline, the same unclosed edge the
+   field draws around a memory nothing rests on */
+.jar-first-slot {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--jar-faint);
+  opacity: 0.5;
+}
+
+/* A WALL THAT HAS NOTHING YET, AND THE LINE THAT SAYS SO.
+   These two carried no rules at all: an unstyled <p> inside the wall took the
+   browser's own block defaults, so the sentence ran the full width of the
+   column, flush left, at a size nothing else on screen uses — stranded at the
+   left edge while the wall it belonged to sat in the middle. It was reported
+   as "what is this text on the left", which is exactly what an unstyled
+   element looks like to a reader.
+   It belongs where the poster it stands in for belongs: same column, same
+   centre, one step down the luminance channel. */
+.jar-wall-empty,
+.jar-wall-hold {
+  max-width: 22ch;
+  margin: 18px auto 0;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--jar-faint);
+}
+/* Same register as `.jar-forming`, which is the line it stands in for. */
+.jar-wall-empty {
+  font-size: 14px;
+  line-height: 1.5;
+  font-style: italic;
+  color: var(--jar-muted);
+}
+
+/* ---------- walls: side-by-side columns on the horizontal axis (v10) ----------
+   Agents to the left, you at the origin, rooms to the right. Each wall is one
+   column, riding the same camera transform as headquarters. --jar-vw/--jar-vh
+   are written by the loop's measure, so the columns are exactly the world's
+   own viewport wide. A column renders NOTHING until the traveler has arrived
+   with its data.
+
+   THIS RULE IS LOAD-BEARING, AND IT WENT MISSING IN THE v8 -> v10 RENAME.
+   The markup became `.jar-wallcol` while this selector stayed `.jar-roomcol`,
+   so every column computed `position: static`, the inline `left` was inert,
+   and all five walls stacked VERTICALLY at x=0 — every wall's name and
+   ambition on screen at once, .jar-hq grown taller than the viewport so its
+   chrome bled down over the field, and the destination wall blank after any
+   travel (the section translated, the columns did not). Without `position:
+   absolute` here there is no horizontal axis at all. */
+.jar-wallcol {
+  position: absolute;
+  top: 0;
+  width: var(--jar-vw, 100vw);
+}
+/* an empty room's jar: bare ground and one whisper, down in its section B */
+.jar-room-empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--jar-vh, 100vh) * 1.42);
+  margin: 0;
+  padding: 0 36px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--jar-faint);
+}
+/* the room could not be reached: the column says so, quietly */
+.jar-room-hold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--jar-vh, 100vh) * 0.46);
+  margin: 0;
+  text-align: center;
+}
+/* The edge affordances: a neighbour's name waiting at the side it lives
+   past. Underline is the page's single interactivity signal; the label
+   register supplies the rest. They live in HQ's chrome, so they scroll away
+   with it — travel still works from the jar by swipe and by arrow key. */
+.jar-edge {
+  position: absolute;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  top: calc(var(--jar-vh, 100vh) * 0.47);
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+  color: var(--jar-faint);
+  transition: color 0.2s ease;
+}
+.jar-edge:hover {
+  color: var(--jar-ink);
+}
+.jar-edge--r {
+  transform: translateX(-100%);
+}
+
+/* ---------- THE MOUTH: where a memory is said ----------
+   The world had no way to receive one. It asked — "give me one worth
+   keeping" — with nothing to receive it into, and every other emptiness on
+   the page followed from that.
+
+   It stands ON THE SEAM. `--jar-seam` is the field's own top edge, measured
+   by the loop and written to the root on every resize; the block hangs off
+   it and grows UPWARD, so the words are always the same short distance above
+   the ground the orb will drop into, at every viewport height and however
+   many lines they wrap to. That geography is the entire explanation of what
+   this does, and it is why there is no tutorial anywhere.
+
+   It sits above the emulsion, with the dial and the panel, for the reason
+   they do: chrome you have to read — and type into — stays legible. */
+.jar-mouth {
+  position: absolute;
+  /* full height on purpose: it is what makes the fallback below resolve
+     against the viewport for the one paint before the loop has measured */
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  will-change: transform;
+}
+.jar-mouth-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* the loop's measured seam — and, until the first measure lands, the same
+     number written out: the viewport less the dial's strip and the peek */
+  top: var(--jar-seam, calc(100% - 188px));
+  /* it hangs off the seam and grows upward */
+  transform: translateY(-100%);
+  /* the air between the last word and the field's top edge */
+  padding: 0 20px 14px;
+  text-align: center;
+  transition: opacity 0.28s ease;
+}
+/* Wind the dial back and the mouth goes quiet: you cannot keep something
+   into last March, and a mouth that pretended you could would put a memory
+   in the ground at a time it did not exist. It FADES — the same vocabulary
+   the dial itself uses on the way into the sky — and comes back with now. */
+.jar-mouth-slot--away {
+  opacity: 0;
+}
+.jar-mouth-slot--away .jar-mouth-rest,
+.jar-mouth-slot--away .jar-mouth-field {
+  pointer-events: none;
+}
+
+/* AT REST: one underlined phrase, in the quiet label register, and nothing
+   else. Underline is this page's single interactivity signal — the same one
+   the forming line and the panel's action wear — so the mouth says it is
+   touchable without ever reading as a form. */
+.jar-mouth-rest {
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  /* font-family only: .jar-label supplies the rest and must not be
+     out-cascaded, exactly as on the forming line */
+  font-family: inherit;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.jar-mouth-rest:hover {
+  color: var(--jar-ink);
+}
+
+/* OPEN: paper on paper. No box, no border, no focus ring, no send button —
+   the same measure and the same voice as the reading panel's own text,
+   because what you write here and what you read there are one thing. The
+   only chrome is a single whisper of a prompt. */
+.jar-mouth-field {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 34ch;
+  margin: 0 auto;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  resize: none;
+  /* the height is written from the content; this is the ceiling, past which
+     a long capture scrolls inside itself rather than climbing into
+     headquarters */
+  max-height: min(24vh, 132px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.6;
+  text-align: center;
+  color: var(--jar-ink);
+  /* the caret is the one warm mark on screen that is not a memory — it is
+     what is most alive right now, which is exactly the law */
+  caret-color: var(--jar-live);
+  pointer-events: auto;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  /* the root sets touch-action: none for the camera; a field needs its own */
+  touch-action: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--jar-scroll) transparent;
+}
+.jar-mouth-field::placeholder {
+  color: var(--jar-faint);
+  opacity: 1;
+}
+.jar-mouth-field::-webkit-scrollbar {
+  width: 6px;
+}
+.jar-mouth-field::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--jar-scroll);
+}
+
+/* It did not keep. PROSE, so it never enters the tracked uppercase register
+   — the same rule the skeleton lines obey. Said once, quietly, and it goes
+   the moment the person types again. */
+.jar-mouth-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--jar-faint);
+  animation: jar-arrive 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---------- the emulsion ----------
+   A single blended layer over the world AND the type, so the poster wears the
+   same film as the field. It sits above the canvas (z2) and the sky's
+   sentences (z3) and below the chrome that must stay perfectly legible — the
+   top bar, the dial, the reading panel.
+
+   It has to be DOM. `mix-blend-mode: overlay` needs an opaque backdrop to
+   blend against; inside the canvas the backdrop is transparent wherever
+   nothing was drawn, where the blend degenerates into simply painting mid-grey
+   over everything — which is what made the whole frame milky and left it with
+   no true black anywhere. Here it lifts the midtones and leaves the blacks
+   alone, which is what overlay is for.
+
+   The tile is written from the loop as a data URI and sized in CSS pixels, so
+   the grain is the same size on every display rather than twice as fine on a
+   retina one. */
+.jar-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+  /* Judged against a real black in frame. Overlay leaves black black by
+     construction, so this reads on the midtones — the orbs, the companion and
+     the type — and never lifts the ground, which is the whole point. */
+  opacity: 0.09;
+  background-repeat: repeat;
+  will-change: opacity;
+}
+/* Reduced motion is not reduced texture — but a blend layer over type is a
+   contrast change, so it stays gentle. (No animation here to reduce.) */
+
+/* ---------- the canvas (transparent; the volume is behind it) ---------- */
+.jar-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+}
+
+/* ---------- fixed chrome: back link + skin toggle, both soft pills ---------- */
+.jar-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 0;
+  pointer-events: none;
+}
+/* The two exits sit together at the top-left, so the rest of the bar is still
+   free for the one line that says whose wall you are standing on. */
+.jar-exits {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.jar-back {
+  pointer-events: auto;
+  text-decoration: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--jar-card);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.jar-back:hover {
+  color: var(--jar-ink);
+  background: var(--jar-card-hover);
+  transform: translateY(-1px);
+}
+
+/* ---------- the offline marker (dev only) ----------
+   Shown only while the page is drawing the fixture it falls back to when the
+   archive cannot be reached at all. It is the quietest thing in the chrome —
+   the faint tier, no pill, no underline, nothing to press — because it is not
+   an action and not an alarm: it is a caption on the whole frame, saying that
+   these memories are not the reader's own and that the mouth is not saving
+   into anything. Right-aligned opposite the back link, and allowed to wrap on
+   a narrow viewport rather than being truncated: of everything on this page,
+   this is the one line that must never be half-read. */
+.jar-offline {
+  margin: 0;
+  padding: 7px 0;
+  max-width: 60ch;
+  text-align: right;
+  text-wrap: balance;
+  color: var(--jar-faint);
+  pointer-events: none;
+}
+
+/* ---------- time dial: a soft neutral rail, no coloured glow ---------- */
+.jar-dial {
+  position: absolute;
+  /* TIME LEAVES THE BOTTOM EDGE.
+     The axis of walls owns the bottom — it is the map of whose mind you are
+     standing in, and it is the one thing that must never move. The timeline
+     used to sit just above it, which put two unrelated meanings on the same
+     horizontal band: a sideways gesture could have meant "another person" or
+     "another month" and the screen gave you no way to tell which.
+
+     So time becomes the other axis. Side to side is WHOSE, up and down is
+     WHEN — which is also the direction the world already travels between the
+     sky and the field, so scrubbing time now runs parallel to moving through
+     it rather than across it. It hugs the right edge, out of the reading
+     column, and it is a hairline until you go near it. */
+  top: 96px;
+  bottom: calc(56px + env(safe-area-inset-bottom));
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: stretch;
+  padding: 0 20px 0 34px;
+  /* A scrim, not a band: the field drifts behind the rail, so it needs its
+     own ground without ever showing an edge. */
+  background: linear-gradient(
+    to left,
+    var(--jar-deep) 0%,
+    var(--jar-deep) 34%,
+    color-mix(in srgb, var(--jar-deep) 60%, transparent) 68%,
+    transparent 100%
+  );
+  /* At rest the timeline is present but quiet — a hairline, a small dot, and
+     dim months. It comes to full strength on approach or while scrubbing, so
+     it is never lost and never competing with the field. */
+  opacity: 0.42;
+  transition: opacity 0.28s ease;
+}
+.jar-dial:hover,
+.jar-dial:focus-within,
+.jar-dial--live {
+  opacity: 1;
+}
+/* Time has no meaning among candidates: the dial fades out as the camera
+   enters the sky, and returns on the way down. */
+.jar-dial--away {
+  opacity: 0;
+  pointer-events: none;
+}
+.jar-dial-track {
+  position: relative;
+  flex: 1;
+  width: 30px;
+  touch-action: none;
+  cursor: ns-resize;
+}
+.jar-dial-track::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  margin-left: -0.5px;
+  border-radius: 999px;
+  background: var(--jar-faint);
+  opacity: 0.5;
+  transition: opacity 0.28s ease;
+}
+.jar-dial:hover .jar-dial-track::before,
+.jar-dial--live .jar-dial-track::before {
+  opacity: 0.9;
+}
+/* the months read down the rail, set to its right so the hairline stays the
+   thing your eye tracks */
+.jar-month {
+  position: absolute;
+  left: 50%;
+  margin-left: 11px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+/* the handle is a small neutral bubble — no accent, no purple glow */
+.jar-dial-handle {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: var(--jar-faint);
+  box-shadow: none;
+  pointer-events: none;
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.28s ease,
+    box-shadow 0.28s ease;
+}
+.jar-dial:hover .jar-dial-handle,
+.jar-dial--live .jar-dial-handle {
+  background: var(--jar-card-hover);
+  box-shadow: inset -1px -1px 2px rgba(255, 255, 255, 0.35);
+  transform: scale(1.9);
+}
+/* The scrubbed date. A SIBLING of the handle, not a child: the handle scales
+   up while the dial is live, and a label inheriting that scale is how this
+   came to be printed at poster size. It is a label, it sits just above the
+   handle, and it exists only while a finger is actually scrubbing. */
+/* the scrubbed date sits to the LEFT of the rail, reading back into the
+   world rather than off the edge of the screen */
+.jar-dial-date {
+  position: absolute;
+  right: calc(50% + 12px);
+  transform: translateY(-50%);
+  text-align: right;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.jar-dial-date--on {
+  opacity: 1;
+}
+
+/* ---------- the reading panel: a focused bubble's information ----------
+   NOT a sheet. Nothing slides, nothing is dragged, there is no grab handle,
+   there are no snap points and there is no promote-to-full: reading one saved
+   thought is not an event. It cross-fades in beside the orb that was tapped,
+   at a comfortable reading measure, and leaves the same way. Its left/top (or
+   left/bottom, when it is bottom-anchored on a narrow viewport) is written by
+   the sim, which solves the spot from the orb and the viewport. */
+.jar-panel {
+  position: absolute;
+  z-index: 6;
+  /* A READING MEASURE THAT GROWS WITH WHAT IT HOLDS.
+     A memory can be a line or a whole pasted page. The measure caps where
+     prose stops being trackable (~70 characters) and the height takes most of
+     the frame, so a long capture is never delivered through a letterbox. */
+  width: min(clamp(400px, 32vw, 540px), calc(100vw - 48px));
+  max-height: min(80vh, 880px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  /* rounded all round — it is a panel, not a sheet clipped by the screen */
+  border-radius: 18px;
+  padding: 24px;
+  /* Everything in here can contain captured Korean, so the whole panel stays
+     in Pretendard. The voice face never enters it. */
+  font-family: inherit;
+  background: var(--jar-panel);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  /* barely there: a hairline too faint to read as a border, and a soft bloom
+     that separates it from the field. No hard edge anywhere. */
+  box-shadow:
+    0 0 0 1px var(--jar-panel-edge),
+    0 20px 60px -28px rgba(0, 0, 0, 0.8),
+    0 0 40px -12px rgba(0, 0, 0, 0.45);
+  user-select: text;
+  -webkit-user-select: text;
+  will-change: opacity, transform;
+  /* an unobtrusive scrollbar: present when needed, never furniture */
+  scrollbar-width: thin;
+  scrollbar-color: var(--jar-scroll) transparent;
+}
+.jar-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.jar-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.jar-panel::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--jar-scroll);
+}
+/* The entire animation: a cross-fade with a 6px rise. Its content is already
+   in hand when it mounts, so this is the only latency between tap and read. */
+.jar-panel--in {
+  animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.jar-panel--out {
+  animation: jar-panel-out 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  pointer-events: none;
+}
+.jar-panel-when {
+  display: block;
+}
+.jar-panel-text {
+  margin: 14px 0 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--jar-ink);
+  white-space: pre-wrap;
+}
+/* the one honest degradation: the rest never arrived, said once and quietly */
+.jar-panel-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--jar-faint);
+}
+/* a room orb's collapsed links sentence: which readings cited this save */
+.jar-panel-cited {
+  margin: 14px 0 0;
+}
+/* ---------- marks inside the memory ----------
+   Not a highlighter and not a pull-quote: the way a person underlines their
+   own book. Two tiers — the passage that fed a reading carries a wash as well
+   as a line; a spark carries the line alone — and both wear the orb's own
+   colour, which is the only colour this page has. */
+.jar-mark {
+  color: inherit;
+  background: none;
+  border-radius: 2px;
+  text-decoration: none;
+}
+.jar-mark--spark {
+  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--jar-mark, #f0eade) 45%, transparent);
+}
+.jar-mark--source {
+  padding: 0 2px;
+  margin: 0 -2px;
+  background: color-mix(in srgb, var(--jar-mark, #f0eade) 16%, transparent);
+  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--jar-mark, #f0eade) 60%, transparent);
+}
+
+/* ---------- the panel's one action ---------- */
+.jar-panel-act {
+  display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 22px 0 0;
+  padding: 0;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.jar-panel-act:hover {
+  color: var(--jar-ink);
+}
+.jar-panel-act[disabled] {
+  cursor: default;
+  opacity: 0.45;
+}
+.jar-panel-act--waiting {
+  text-decoration: none;
+  cursor: default;
+}
+/* the question and the box arrive together, once, whole */
+.jar-reflect {
+  margin-top: 20px;
+  animation: jar-panel-in 0.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.jar-reflect-q {
+  margin: 0 0 10px;
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--jar-ink);
+}
+.jar-reflect-box {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--jar-row);
+  color: var(--jar-ink);
+  /* answers are the person's own words: Pretendard, whatever script */
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.5;
+  outline: none;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.jar-reflect-box:focus {
+  background: var(--jar-row-hover);
+}
+.jar-panel-h {
+  margin: 26px 0 12px;
+}
+.jar-quote {
+  margin: 0 0 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--jar-quote);
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--jar-ink);
+}
+/* A nearby row carries captured text, so it stays in Pretendard: `all: unset`
+   returns the inherited value for font-family, which is the panel's. */
+.jar-row {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  margin-bottom: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--jar-row);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--jar-ink);
+  transition: background 0.18s ease;
+}
+.jar-row:hover {
+  background: var(--jar-row-hover);
+}
+.jar-row-sub {
+  display: block;
+  margin-top: 5px;
+}
+.jar-panel-empty {
+  margin: 0;
+  font-size: 14px;
+  color: var(--jar-faint);
+}
+
+/* ---------- skeleton / failure whispers ---------- */
+.jar-skel {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+/* Its own register, and NOT .jar-label. What these two lines carry is prose —
+   "Pouring Waka…" — and prose set in the tracked uppercase label register is
+   the exact failure the founder named. Sentence case, no tracking, the same
+   quiet weight the forming line speaks in. */
+.jar-skel-line {
+  font-weight: 400;
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--jar-muted);
+}
+
+@keyframes jar-word {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes jar-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* the panel's whole vocabulary: fade up 6px in, fade back down out */
+@keyframes jar-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes jar-panel-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* reduced motion: the same appearance, swapped instantly and without the rise */
+@keyframes jar-panel-swap-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes jar-panel-swap-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jar-word,
+  .jar-asof,
+  .jar-forming-line,
+  .jar-mouth-note {
+    animation: none;
+    opacity: 1;
+  }
+  .jar-back,
+  .jar-dial-handle,
+  .jar-forming-line,
+  .jar-edge,
+  .jar-mouth-rest,
+  .jar-mouth-slot {
+    transition: none;
+  }
+  .jar-back:hover {
+    transform: none;
+  }
+  .jar-panel--in {
+    animation: jar-panel-swap-in 0.01ms linear both;
+  }
+  .jar-panel--out {
+    animation: jar-panel-swap-out 0.01ms linear both;
+  }
+  /* the sky arrives parked: no drift, no breathing, nothing sliding in */
+  .jar-cluster-act {
+    animation: none;
+  }
+  .jar-neb-act,
+  .jar-satsay {
+    transition: none;
+  }
+  .jar-reflect {
+    animation: jar-panel-swap-in 0.01ms linear both;
+  }
+}
+
+/* ================= A MACHINE'S WALL IS SET IN A MACHINE'S HAND =================
+   The difference between standing in your own mind and standing in an agent's
+   used to be one small pixelated body in a corner — every word on the wall was
+   set identically, so arriving somewhere else did not read as arriving.
+
+   Type is the channel for this. Pentiment carries who is speaking in six
+   distinct hands, and a reader knows the speaker before parsing a syllable;
+   the axis strip already says an agent's name in a monospace, and this is the
+   same sentence continued inside the wall.
+
+   It is the SAME LAYOUT, the same sizes, the same ink — a different hand only.
+   No colour: temperature belongs to aliveness. No rearrangement: the three
+   sections must read as one world wherever you stand. */
+.jar-wallcol[data-kind="agent"] .jar-poster,
+.jar-wallcol[data-kind="agent"] .jar-forming {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  /* a monospace sets wider per character, so the measure comes back in */
+  font-size: clamp(19px, 2vw, 27px);
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+}
+/* Its eyebrow and its statements too — anything the agent itself authored. */
+.jar-wallcol[data-kind="agent"] .jar-eyebrow {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.1em;
+}
+.jar-wallcol[data-kind="agent"] .jar-wall-empty {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-style: normal;
+  font-size: 13px;
+}
+/* A room speaks in several voices at once, so it keeps the human hand — what
+   makes a room different is who is in it, and that is said in its eyebrow. */
+
+/* ACTIONS SIT ON A LINE, NOT IN A COLUMN.
+   Each action was its own paragraph, so a memory ended in a stacked little
+   menu. They belong on one line, reading left to right like the rest of the
+   world's words — and the tail row joins the one above it rather than
+   starting a new band of space. */
+/* THE ACTIONS UNDER A MEMORY ARE ONE LINE IN ONE VOICE.
+   They were three things in three registers: an uppercase `REFLECT ON THIS`
+   set as a label, then two lowercase words, each in its own block — so the
+   panel ended in a small ransom note. The world already has a grammar for a
+   row of choices (lowercase, separated by a middot, the same face as the
+   prose above them) and these now use it, with the separators drawn by the
+   markup so they never collide when the row wraps. */
+.jar-neb-ask--row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  /* the middots are their own flex items and flex eats the spaces around
+     inline text, so the breathing room is the gap's job, not the markup's */
+  gap: 6px 10px;
+}
+
+/* ---------- provenance: what a pattern was read from ----------
+   Under a statement in the sky, the memories that produced it. This is the
+   one place in the world where two ink values sit inside the SAME sentence:
+   the span the machine actually read is at full strength, everything around
+   it is dimmed to the value an untended memory fades to. Salience without a
+   highlighter, a score or a bar — the reader's eye lands on the fragment
+   before they have decided to look for it. */
+.jar-prov {
+  margin: 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jar-prov-lead {
+  margin: 0 0 2px;
+  color: var(--jar-faint);
+}
+/* pressable, but not a button: it is a quotation you can walk into */
+.jar-prov-row {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 0 12px;
+  /* the one structural mark: a rule down the left, the typographic sign for
+     quoted material, at an opacity that never competes with the words */
+  border: 0;
+  border-left: 1px solid var(--jar-edge, rgba(255, 255, 255, 0.08));
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+.jar-prov-row:hover,
+.jar-prov-row:focus-visible {
+  border-left-color: var(--jar-muted, rgba(232, 237, 244, 0.55));
+  outline: none;
+}
+.jar-prov-text {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.62;
+  /* the surround: present, readable, clearly not the point */
+  color: var(--jar-faint);
+}
+/* THE WORDS THAT DID THE READING. <mark> is the correct element — this is
+   text marked for relevance in another context — but its default is a yellow
+   block, so it is stripped back to what this world uses instead: light. */
+.jar-prov-lit {
+  background: none;
+  color: var(--jar-ink);
+  /* the faintest lift, so it still reads on a screen where the ink values are
+     close: not a glow, a half-step */
+  text-shadow: 0 0 12px rgba(232, 237, 244, 0.16);
+}
+/* "얘가 이걸 만든 이유가 이거다" — the server's own reason, when it gave one.
+   A third register down, so it never competes with the quotation above it. */
+.jar-prov-why {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--jar-faint);
+  opacity: 0.72;
+  font-style: italic;
+}
+
+/* the reason under the failure: quiet, small, and never the headline — it is
+   for the person who can act on it, not the person who just wanted to read */
+.jar-skel-why {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--jar-faint);
+  opacity: 0.75;
+}
+
+/* ---------- the legend: who is which colour ----------
+   Bottom-left, opposite the time rail, above the axis of walls — the three
+   pieces of chrome each own a different edge and never meet. It is set in the
+   label register and sits at the same weight as the axis marks: this is a key
+   to the ground, not a control, and nothing here is pressable. */
+.jar-legend {
+  position: absolute;
+  left: 18px;
+  bottom: calc(46px + env(safe-area-inset-bottom));
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--jar-faint);
+  opacity: 0.62;
+  transition: opacity 0.28s ease;
+}
+.jar-legend:hover {
+  opacity: 1;
+}
+.jar-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+/* the swatch is the orb, small: same circle, same soft edge, so the key and
+   the ground are visibly the same material */
+.jar-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  /* yours has no hue set, so it falls to the world's own warm white */
+  background: var(--jar-live);
+  flex: 0 0 auto;
+}
+/* AN AGENT'S MEMORY IS PIXELATED, HERE TOO.
+   The key has to be made of the same stuff as the ground it explains, so an
+   agent's swatch loses its curve exactly as its orbs do — a stepped square
+   rather than a disc, at the same size and the same hue. */
+.jar-legend-dot--agent {
+  border-radius: 0;
+  width: 6px;
+  height: 6px;
+}
+
+/* the capture's destination line: under the words, in the same quiet register
+   as every other row of choices, and present only once there is something to
+   send anywhere */
+.jar-mouth-where {
+  margin-top: 8px;
+  justify-content: center;
+}

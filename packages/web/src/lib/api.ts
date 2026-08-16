@@ -323,6 +323,42 @@ export async function deleteAccount(): Promise<void> {
   }
 }
 
+/**
+ * GET /profiles — every profile this account owns, human first.
+ *
+ * A profile is the unit that owns memory: the person's own, and any agent
+ * profiles they have added. Each owns a full three-layer stack. The layer
+ * endpoints below are scoped to the session's *bound* profile, so this lists
+ * who exists rather than handing over their contents.
+ */
+export async function fetchProfiles(): Promise<ApiProfile[]> {
+  const body = await getJson<{ profiles: ApiProfile[] }>(
+    apiPath("/profiles"),
+    "Failed to load profiles",
+  );
+  return Array.isArray(body.profiles) ? body.profiles : [];
+}
+
+/**
+ * POST /profiles
+ *
+ * Adds a profile to this account. An agent profile owns its own full three
+ * layers — its captures, its patterns, its top of mind — kept separately from
+ * the human's rather than filtered out of them. Only the account's human
+ * profile may create one.
+ */
+export async function createProfile(input: {
+  type: ApiProfileType;
+  name: string;
+}): Promise<ApiProfile> {
+  const body = await postJson<{ profile: ApiProfile }>(
+    apiPath("/profiles"),
+    input,
+    "Failed to add that profile",
+  );
+  return body.profile;
+}
+
 // ---------------------------------------------------------------------------
 // Layer 1 — inspirations
 // ---------------------------------------------------------------------------
@@ -409,6 +445,9 @@ export interface ApiInspirationSummary {
   textPreview: string;
   kind: ApiInspirationKind | null;
   source: ApiInspirationSource;
+  /* carried on the summary too: the field marks which of your own memories
+     are out in the rooms, and it cannot do that from the detail alone */
+  visibility: ApiInspirationVisibility;
   createdAt: string;
   updatedAt: string;
   attachmentSummary: ApiAttachmentSummary[];
@@ -422,6 +461,8 @@ export interface ApiInspiration {
   text: string;
   kind: ApiInspirationKind | null;
   source: ApiInspirationSource;
+  /** Whether the rooms this account is in can see it. Never inferred. */
+  visibility: ApiInspirationVisibility;
   createdAt: string;
   updatedAt: string;
   attachments: ApiAttachment[];
@@ -437,22 +478,56 @@ export interface CreateReflectionRequest {
   skipped?: boolean;
 }
 
+/** Whether a capture may appear in the fields of rooms this account is in. */
+export type ApiInspirationVisibility = "private" | "public";
+
 export interface CreateInspirationRequest {
   text: string;
   kind?: ApiInspirationKind;
   source?: ApiInspirationSource;
+  /**
+   * Omitted means private. The server's column default decides what unset
+   * means, so this stays optional rather than defaulting on the client —
+   * one place decides, and it is the one furthest from a mistake.
+   */
+  visibility?: ApiInspirationVisibility;
   /** Reflections saved with the capture, so a save is never half-recorded. */
   reflections?: CreateReflectionRequest[];
 }
 
 export interface UpdateInspirationRequest {
+  /** Opening a memory up, or closing it again. Editable in both directions. */
+  visibility?: ApiInspirationVisibility;
   text?: string;
   kind?: ApiInspirationKind;
 }
 
-export interface FetchInspirationsOptions {
+/**
+ * WHOSE STACK TO READ.
+ *
+ * Every layer endpoint accepts `?profile=<id>` and answers to the canon's
+ * access matrix server-side (`resolveTargetProfile`): a human-profile session
+ * is admin over every profile in its account, an agent session may read the
+ * human's but never edit it, and nothing crosses an account boundary. Omit it
+ * and the server uses the session's own bound profile, which is the common
+ * case and stays a one-argument call.
+ */
+export interface ProfileScoped {
+  /** The profile to act on. Omit for the session's own. */
+  profile?: string;
+}
+
+export interface FetchInspirationsOptions extends ProfileScoped {
   q?: string;
   limit?: number;
+  /** Opaque, from a previous page's `nextCursor`. */
+  cursor?: string;
+}
+
+/** One page, plus the way to ask for the next one. */
+export interface ApiInspirationPage {
+  inspirations: ApiInspirationSummary[];
+  nextCursor?: string;
 }
 
 /**
@@ -483,14 +558,41 @@ export async function fetchInspirations(
   options: FetchInspirationsOptions = {},
 ): Promise<ApiInspirationSummary[]> {
   const params = new URLSearchParams();
+  if (options.profile) params.set("profile", options.profile);
   if (options.q) params.set("q", options.q);
   if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
   const query = params.toString();
-  const body = await getJson<{ inspirations: ApiInspirationSummary[] }>(
+  const body = await getJson<ApiInspirationPage>(
     apiPath(`/inspirations${query ? `?${query}` : ""}`),
     "Failed to load your captures",
   );
   return Array.isArray(body.inspirations) ? body.inspirations : [];
+}
+
+/**
+ * One page WITH its cursor. `fetchInspirations` throws the cursor away, which
+ * silently capped the field at the server's 200-per-page ceiling — a person
+ * with three hundred memories saw two hundred and was told nothing. Callers
+ * that must see everything use this and follow the cursor.
+ */
+export async function fetchInspirationPage(
+  options: FetchInspirationsOptions = {},
+): Promise<ApiInspirationPage> {
+  const params = new URLSearchParams();
+  if (options.profile) params.set("profile", options.profile);
+  if (options.q) params.set("q", options.q);
+  if (typeof options.limit === "number") params.set("limit", String(options.limit));
+  if (options.cursor) params.set("cursor", options.cursor);
+  const query = params.toString();
+  const body = await getJson<ApiInspirationPage>(
+    apiPath(`/inspirations${query ? `?${query}` : ""}`),
+    "Failed to load your captures",
+  );
+  return {
+    inspirations: Array.isArray(body.inspirations) ? body.inspirations : [],
+    nextCursor: body.nextCursor,
+  };
 }
 
 /** GET /inspirations/:id — one capture with its attachments and reflections. */
@@ -734,7 +836,7 @@ export interface ApiSignalDetail extends ApiSignal {
   evidence: ApiSignalEvidence[];
 }
 
-export interface FetchSignalsOptions {
+export interface FetchSignalsOptions extends ProfileScoped {
   status?: ApiSignalStatus;
   limit?: number;
 }
@@ -744,6 +846,7 @@ export async function fetchSignals(
   options: FetchSignalsOptions = {},
 ): Promise<ApiSignal[]> {
   const params = new URLSearchParams();
+  if (options.profile) params.set("profile", options.profile);
   if (options.status) params.set("status", options.status);
   if (typeof options.limit === "number") params.set("limit", String(options.limit));
   const query = params.toString();
@@ -892,9 +995,14 @@ export interface ApiTopOfMindVersion {
  * Null until the first synthesis lands, which is a real state rather than an
  * error: a profile with nothing to read has nothing on its board.
  */
-export async function fetchTopOfMind(): Promise<ApiTopOfMind | null> {
+export async function fetchTopOfMind(
+  options: ProfileScoped = {},
+): Promise<ApiTopOfMind | null> {
+  const query = options.profile
+    ? `?profile=${encodeURIComponent(options.profile)}`
+    : "";
   const body = await getJson<{ topOfMind: ApiTopOfMind | null }>(
-    apiPath("/top-of-mind"),
+    apiPath(`/top-of-mind${query}`),
     "Failed to load your top of mind",
   );
   return body.topOfMind ?? null;
@@ -998,6 +1106,8 @@ export interface ApiGroupMember {
   profileId: string;
   name: string;
   initials: string;
+  /** Human or agent — what kind of company this room keeps. */
+  type: ApiProfileType;
   role: ApiGroupRole;
   joinedAt: string;
 }
@@ -1096,6 +1206,20 @@ export async function joinGroup(
   return { group: body.group, alreadyMember: Boolean(body.alreadyMember) };
 }
 
+/**
+ * POST /groups/:id/leave
+ *
+ * Walk out. The signals you shared to this room stop appearing on its wall;
+ * they remain yours, and the memories under them never went anywhere.
+ */
+export async function leaveGroup(groupId: string): Promise<void> {
+  await postJson<unknown>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/leave`),
+    {},
+    "Failed to leave this room",
+  );
+}
+
 /** GET /groups/:id/members */
 export async function fetchGroupMembers(groupId: string): Promise<ApiGroupMember[]> {
   const body = await getJson<{ members: ApiGroupMember[] }>(
@@ -1112,6 +1236,34 @@ export async function fetchGroupWall(groupId: string): Promise<ApiGroupWallSigna
     "Failed to load this group's wall",
   );
   return Array.isArray(body.wall) ? body.wall : [];
+}
+
+/**
+ * A room's field: every PUBLIC capture belonging to every current member,
+ * each carrying whose it is and whether that profile is a person or an agent.
+ *
+ * This is the only place layer 1 crosses an account boundary, and it does so
+ * only for captures their author marked public. Private ones are not filtered
+ * on the client — they never leave the server.
+ */
+export interface ApiGroupFieldCapture {
+  id: string;
+  text: string;
+  kind: ApiInspirationKind | null;
+  source: ApiInspirationSource;
+  createdAt: string;
+  updatedAt: string;
+  ownerProfileId: string;
+  ownerName: string;
+  ownerType: "human" | "agent";
+}
+
+export async function fetchGroupField(groupId: string): Promise<ApiGroupFieldCapture[]> {
+  const body = await getJson<{ field: ApiGroupFieldCapture[] }>(
+    apiPath(`/groups/${encodeURIComponent(groupId)}/field`),
+    "Failed to load this room's field",
+  );
+  return Array.isArray(body.field) ? body.field : [];
 }
 
 /** GET /groups/:id/top-of-mind — the group's own artifact. */

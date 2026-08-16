@@ -36,6 +36,7 @@ import { z } from "zod";
 import {
   backgroundJobs,
   groupMembers,
+  inspirations,
   groupProposalKindValues,
   groupProposalStatusValues,
   groups,
@@ -135,6 +136,9 @@ export interface GroupMemberSummary {
   profileId: string;
   name: string;
   initials: string;
+  /** Human or agent. A room reads completely differently depending on the
+      company it keeps, and the client cannot tell without this. */
+  type: "human" | "agent";
   role: GroupMemberRole;
   joinedAt: string;
 }
@@ -514,6 +518,7 @@ export async function listGroupMembers(
       profileId: groupMembers.profileId,
       role: groupMembers.role,
       name: profiles.name,
+      type: profiles.type,
       joinedAt: groupMembers.createdAt,
     })
     .from(groupMembers)
@@ -527,6 +532,7 @@ export async function listGroupMembers(
     return {
       profileId: row.profileId,
       name: label?.displayName ?? row.name,
+      type: row.type,
       initials: label?.initials ?? "?",
       role: row.role,
       joinedAt: row.joinedAt.toISOString(),
@@ -1384,6 +1390,82 @@ export function createGroupsRoutes(deps: GroupsRouteDependencies = {}): Hono<Aut
         ownerProfileId: shared.ownerProfileId,
         ownerName: shared.ownerName,
         sharedAt: shared.sharedAt,
+      })),
+    });
+  });
+
+  /* One page of a room's ground. A room of five people each keeping a couple
+     of hundred public memories is a thousand orbs, which is past what the
+     field can lay out legibly — so this is a real ceiling and it is named
+     here rather than discovered as a wall that quietly stops filling. */
+  const ROOM_FIELD_LIMIT = 400;
+
+  /**
+   * GET /api/groups/:groupId/field — the room's ground.
+   *
+   * Every PUBLIC capture belonging to every member of this room, newest last,
+   * each carrying whose it is and whether that profile is a person or an
+   * agent. This is the first endpoint in the product that returns layer 1
+   * across an account boundary, so the predicate is written to be read: a row
+   * appears only if its author is currently in this room AND its author
+   * marked it public. Neither half is inferred, and the visibility column
+   * defaults to private, so the failure mode of any bug upstream is an empty
+   * field rather than somebody else's memory.
+   *
+   * Leaving a room therefore withdraws your memories from it with no cleanup
+   * step — there is no copy of them anywhere else to chase.
+   */
+  routes.get("/:groupId/field", async (c) => {
+    const parsedParams = groupParamsSchema.safeParse(c.req.param());
+    if (!parsedParams.success) return c.json({ error: "Invalid group id" }, 400);
+    const session = c.get("session");
+    const { groupId } = parsedParams.data;
+    const db = getDatabase();
+
+    const membership = await loadMembership(db, {
+      groupId,
+      profileId: session.profile.id,
+    });
+    if (!membership) return c.json({ error: "Group not found" }, 404);
+
+    const rows = await db
+      .select({
+        id: inspirations.id,
+        text: inspirations.text,
+        kind: inspirations.kind,
+        source: inspirations.source,
+        createdAt: inspirations.createdAt,
+        updatedAt: inspirations.updatedAt,
+        ownerProfileId: profiles.id,
+        ownerName: profiles.name,
+        ownerType: profiles.type,
+      })
+      .from(inspirations)
+      .innerJoin(profiles, eq(profiles.id, inspirations.profileId))
+      .innerJoin(groupMembers, eq(groupMembers.profileId, profiles.id))
+      .where(
+        and(
+          eq(groupMembers.groupId, groupId),
+          eq(inspirations.visibility, "public"),
+        ),
+      )
+      .orderBy(desc(inspirations.createdAt))
+      .limit(ROOM_FIELD_LIMIT);
+
+    // Serialized field by field, for the same reason the wall is: this is the
+    // boundary between two people's memory, and a loader that one day selects
+    // a column more must not be able to publish it by accident.
+    return c.json({
+      field: rows.map((row) => ({
+        id: row.id,
+        text: row.text,
+        kind: row.kind,
+        source: row.source,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        ownerProfileId: row.ownerProfileId,
+        ownerName: row.ownerName,
+        ownerType: row.ownerType,
       })),
     });
   });

@@ -49,6 +49,7 @@ import {
   attachments,
   inspirationKindValues,
   inspirationSourceValues,
+  inspirationVisibilityValues,
   inspirations,
   profiles,
   reflections,
@@ -123,6 +124,17 @@ const createInspirationSchema = z.object({
       errorMap: () => ({ message: "source must be app or agent" }),
     })
     .optional(),
+  /**
+   * Whether this capture may appear in the fields of rooms this account is in.
+   * Optional, and its absence means `private` — the column default does the
+   * work, so a client that has not been updated cannot accidentally publish
+   * anything by omission.
+   */
+  visibility: z
+    .enum(inspirationVisibilityValues, {
+      errorMap: () => ({ message: "visibility must be private or public" }),
+    })
+    .optional(),
   reflections: z
     .array(reflectionInputSchema)
     .max(MAX_REFLECTIONS_PER_CAPTURE, "Too many reflections for one capture")
@@ -152,13 +164,26 @@ const updateInspirationSchema = z
         z.null(),
       ])
       .optional(),
+    /* CHANGING YOUR MIND IS THE POINT. A decision made in the second after
+       writing something down is the worst moment to make it permanently, so
+       visibility is editable in both directions for as long as the capture
+       exists. Closing one again removes it from every room field at once —
+       there is no copy anywhere else to chase. */
+    visibility: z
+      .enum(inspirationVisibilityValues, {
+        errorMap: () => ({ message: "visibility must be private or public" }),
+      })
+      .optional(),
   })
   // A payload naming no editable field would silently bump `updated_at` for a
   // no-op, which misleads anything sorting by it.
-  .refine((v) => v.text !== undefined || v.kind !== undefined, {
-    message: "At least one of text or kind must be provided",
-    path: ["text"],
-  });
+  .refine(
+    (v) => v.text !== undefined || v.kind !== undefined || v.visibility !== undefined,
+    {
+      message: "At least one of text, kind or visibility must be provided",
+      path: ["text"],
+    },
+  );
 
 const DEFAULT_LIST_LIMIT = 80;
 const MAX_LIST_LIMIT = 200;
@@ -279,7 +304,14 @@ type ReflectionRow = Pick<
 
 type InspirationRow = Pick<
   Inspiration,
-  "id" | "profileId" | "text" | "kind" | "source" | "createdAt" | "updatedAt"
+  | "id"
+  | "profileId"
+  | "text"
+  | "kind"
+  | "source"
+  | "visibility"
+  | "createdAt"
+  | "updatedAt"
 >;
 
 const inspirationSelection = {
@@ -288,6 +320,7 @@ const inspirationSelection = {
   text: inspirations.text,
   kind: inspirations.kind,
   source: inspirations.source,
+  visibility: inspirations.visibility,
   createdAt: inspirations.createdAt,
   updatedAt: inspirations.updatedAt,
 } as const;
@@ -326,6 +359,7 @@ function serializeInspirationDetail(
     text: row.text,
     kind: row.kind,
     source: row.source,
+    visibility: row.visibility,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     attachments: detail.attachments,
@@ -546,6 +580,9 @@ export function createInspirationsRoutes(
           text: parsed.data.text,
           kind: parsed.data.kind ?? null,
           source,
+          /* absent means private, and that is the column's own default rather
+             than a value written here — one place decides what unset means */
+          ...(parsed.data.visibility ? { visibility: parsed.data.visibility } : {}),
           createdAt: now,
           updatedAt: now,
         })
@@ -649,6 +686,7 @@ export function createInspirationsRoutes(
         source: inspirations.source,
         createdAt: inspirations.createdAt,
         updatedAt: inspirations.updatedAt,
+        visibility: inspirations.visibility,
         previewSource: sql<string>`left(${inspirations.text}, ${sql.raw(String(PREVIEW_SOURCE_CHARS))})`,
         textLength: sql<number>`char_length(${inspirations.text})`,
       })
@@ -726,6 +764,7 @@ export function createInspirationsRoutes(
           textPreview: buildTextPreview(row.previewSource, Number(row.textLength)),
           kind: row.kind,
           source: row.source,
+          visibility: row.visibility,
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
           attachmentSummary: summaryByInspiration.get(row.id) ?? [],
@@ -853,11 +892,17 @@ export function createInspirationsRoutes(
     const target = await resolveTargetProfile(db, session, query.data.profile, "write");
     if (!target.ok) return c.json(target.body, target.status);
 
-    const patch: { text?: string; kind?: Inspiration["kind"]; updatedAt: Date } = {
+    const patch: {
+      text?: string;
+      kind?: Inspiration["kind"];
+      visibility?: Inspiration["visibility"];
+      updatedAt: Date;
+    } = {
       updatedAt: new Date(),
     };
     if (parsed.data.text !== undefined) patch.text = parsed.data.text;
     if (parsed.data.kind !== undefined) patch.kind = parsed.data.kind;
+    if (parsed.data.visibility !== undefined) patch.visibility = parsed.data.visibility;
 
     // One statement carrying the tenant predicate: a capture belonging to
     // another profile matches nothing and comes back as absent, never as

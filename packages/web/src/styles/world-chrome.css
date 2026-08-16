@@ -1,0 +1,306 @@
+/*
+ * THE FLAT SCREENS, WEARING THE WORLD'S SKIN.
+ *
+ * The world is home now, and the screens a person leaves it for — settings,
+ * profile, login, the archive list — looked like a different product. Pressing
+ * "settings" moved you from moonlight into a bright generic form, which reads
+ * as leaving Waka rather than as opening part of it.
+ *
+ * These screens deliberately stay FLAT. The research is unambiguous about
+ * where in-world UI stops paying: text has to resize to 200% and reflow, and
+ * every destructive confirmation wants a plain focus-trapped dialog. Dead
+ * Space's own remake shipped colourblind modes, subtitle scaling and menu
+ * narration — and no text-size control for its holograms, because once UI is
+ * world geometry "make it bigger" stops being a setting you can ship.
+ *
+ * So the answer is not to drag them into the world. It is to give them the
+ * world's LIGHT: the same ground, the same ink, the same two faces, the same
+ * one uppercase register. Continuity of surface, not of geometry.
+ *
+ * Loaded last on purpose — it is the final word over surface.css and
+ * system.css, and it overrides nothing structural, only the palette and type.
+ */
+
+:root,
+body {
+  --w-ground: #06080d;
+  --w-raised: rgba(255, 255, 255, 0.035);
+  --w-ink: #e8edf4;
+  --w-muted: rgba(232, 237, 244, 0.55);
+  --w-faint: rgba(232, 237, 244, 0.3);
+  --w-edge: rgba(255, 255, 255, 0.08);
+  --w-warm: #fff2dc;
+}
+
+body {
+  background: var(--w-ground);
+  color: var(--w-ink);
+  font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", Roboto, sans-serif;
+}
+
+/* ---------- type ----------
+   Two faces and one uppercase register, exactly as the world has them: Jost
+   for the voice (Latin only, so headings alone), Pretendard for everything
+   that could hold Korean. Nothing else is allowed to shout. */
+.login-title,
+.profile-header h1,
+h1,
+h2 {
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  letter-spacing: 0.012em;
+  color: var(--w-ink);
+  text-wrap: balance;
+}
+.login-eyebrow,
+.field-label,
+.profile-public-heading,
+.profile-danger-heading {
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--w-muted);
+}
+.login-subtitle,
+.field-hint,
+.login-footer {
+  color: var(--w-muted);
+}
+
+/* ---------- fields ----------
+   A rule under the words rather than a box around them: the world has no
+   boxes, and a bordered input on this ground reads as a slot cut into it. */
+.field-input,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+  width: 100%;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+  color: var(--w-ink);
+  font-family: inherit;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.field-input::placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: var(--w-faint);
+}
+.field-input:focus,
+input:focus,
+textarea:focus,
+select:focus {
+  border-bottom-color: var(--w-muted);
+}
+
+/* ---------- actions ----------
+   Underlined words, not filled pills. The world's one interactive signal is a
+   word you can press; nothing here earns more weight than that — including,
+   and especially, the destructive ones. There is no red anywhere in Waka:
+   colour temperature means aliveness and is not spent on warnings. */
+.btn-primary,
+.btn-destructive,
+button[type="submit"] {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--w-ink);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease, opacity 0.2s ease;
+}
+.btn-destructive {
+  color: var(--w-muted);
+  opacity: 0.7;
+}
+.btn-destructive:hover {
+  opacity: 1;
+  color: var(--w-ink);
+}
+.btn-primary:disabled,
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.login-link,
+a {
+  color: var(--w-muted);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.login-link:hover,
+a:hover {
+  color: var(--w-ink);
+}
+
+/* ---------- panels ----------
+   The one place a surface exists is where something must be occluded. It is a
+   wash and a hairline, never a card with a shadow — light lives behind a
+   surface in this product, never on it. */
+.profile-public-panel,
+.profile-danger-panel,
+.login-form {
+  background: var(--w-raised);
+  border: 1px solid var(--w-edge);
+  border-radius: 4px;
+}
+
+/* Messages speak in the world's voice: prose, quiet, and no colour carrying
+   the meaning — the words carry it. */
+.form-error,
+.form-success {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font-style: italic;
+}
+
+/* ---------- the ground, said explicitly ----------
+   This file set the dark ink on `body` and assumed the ground came with it.
+   It did not: `.login-shell` and `.login-card` carry their own cream surface
+   from surface.css, which is more specific than a bare `body` rule — so the
+   page kept the light background and took the dark theme's near-white text,
+   and the entire sign-in screen rendered white on white. Unreadable, and the
+   first screen anybody sees.
+
+   A palette is only a palette if every surface in it is named. Each container
+   that paints its own ground is listed here, so nothing is left inheriting a
+   colour from the theme it is no longer in. */
+.login-shell,
+.profile-shell,
+.auth-shell,
+.surface-shell {
+  background: var(--w-ground);
+  color: var(--w-ink);
+}
+.login-card,
+.profile-card,
+.auth-card {
+  background: var(--w-raised);
+  border: 1px solid var(--w-edge);
+  color: var(--w-ink);
+}
+/* the oversized display word behind the form: it is a watermark, and on this
+   ground it has to be lifted out of the background rather than dropped into
+   it — light on dark, at the same weight it had as dark on light */
+.login-shell h1,
+.login-shell .login-display,
+.login-hero {
+  color: var(--w-ink);
+}
+/* the two-up SIGN IN / CREATE ACCOUNT switch: a filled black tab reads as a
+   hole punched in a dark page, so the selected one is carried by ink and a
+   rule instead — the same way the world marks the wall you are standing on */
+.auth-tabs button,
+.login-tabs button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--w-muted);
+  padding: 10px 4px;
+  letter-spacing: 0.1em;
+}
+.auth-tabs button[aria-selected="true"],
+.login-tabs button[aria-selected="true"],
+.auth-tabs button.is-active,
+.login-tabs button.is-active {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+/* the Google button is the one place a foreign brand's own surface belongs —
+   it stays white, because a recoloured Google button is a phishing signal */
+.google-button,
+.btn-google {
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* ---------- no boxes ----------
+   With the ground fixed, what was left were the outlines: every field, the
+   tab pair and the submit all sat in their own bordered rectangle, inherited
+   from a light theme where a hairline box reads as a subtle container. On
+   this ground the same hairline reads as a hole cut into the page — you see
+   the containers before you see the words in them.
+
+   The world's rule is that a surface exists only where something must be
+   occluded. A sign-in form occludes nothing, so it gets no boxes: a rule
+   under each field, a rule under the selected tab, and words for actions. */
+.login-form,
+.auth-form,
+.field {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.login-form,
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+/* the divider keeps its word: two rules with OR between them is the standard
+   read, and dropping the word leaves two orphan lines that mean nothing */
+.login-divider,
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--w-faint);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+/* the real markup already carries its own line spans and label, so the rules
+   go on those rather than on pseudo-elements that would double them */
+.login-divider__line {
+  flex: 1;
+  height: 1px;
+  background: var(--w-edge);
+}
+.login-divider__label {
+  color: var(--w-faint);
+  white-space: nowrap;
+}
+/* the tab pair: a filled black tab reads as a hole punched in a dark page, so
+   the selected one is carried by ink and a rule under it — the same way the
+   world marks the wall you are standing on */
+.login-tabs {
+  display: flex;
+  gap: 22px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+.login-tabs button {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  padding: 8px 2px;
+  color: var(--w-muted);
+  text-decoration: none;
+}
+.login-tabs button[aria-selected="true"] {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
