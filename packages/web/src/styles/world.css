@@ -1733,3 +1733,14 @@
   margin-top: 8px;
   justify-content: center;
 }
+
+/* WHO HAS SAID YES, AND WHO HAS NOT — the room read as people rather than as
+   a score. Agreed is full ink; not yet is the same name at the weight of
+   something still waiting. No count is printed anywhere: the arithmetic is
+   visible because the members are. */
+.jar-said {
+  color: var(--jar-ink);
+}
+.jar-not-said {
+  color: var(--jar-faint);
+}

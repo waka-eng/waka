@@ -13517,11 +13517,31 @@ function WorldExperience(): JSX.Element {
           {(openProposals.get(roomPanel) ?? []).map((p) => (
             <div key={p.id} className="jar-proposal">
               <p className="jar-proposal-body">{p.body}</p>
+              {/* THE WHOLE ROOM, NOT THE PART THAT AGREED.
+                  This listed only the people who had affirmed, which reads as
+                  a growing list with no end — you could not tell whether one
+                  more was needed or three. A proposal carries on a MAJORITY,
+                  so the useful thing is the room itself: everyone in it, those
+                  who agreed at full strength and those who have not yet dimmed
+                  beside them.
+
+                  Still no tally. The count is legible because the PEOPLE are,
+                  which is the only way this world is allowed to say a number —
+                  and you can see at a glance whether the missing one is you. */}
               <p className="jar-proposal-who jar-label">
-                {givenName(p.proposedByName)}
-                {p.affirmations.length > 0
-                  ? ` · ${p.affirmations.map((a) => givenName(a.name)).join(", ")} agreed`
-                  : ""}
+                {(members.get(roomPanel) ?? []).map((m, i) => {
+                  const said = p.affirmations.some((a) => a.profileId === m.profileId);
+                  return (
+                    <span
+                      key={m.profileId}
+                      className={said ? "jar-said" : "jar-not-said"}
+                      title={said ? "agreed" : "has not answered yet"}
+                    >
+                      {i > 0 ? " · " : ""}
+                      {givenName(m.name)}
+                    </span>
+                  );
+                })}
               </p>
               {p.viewerAffirmed ? (
                 <p className="jar-neb-ask">
