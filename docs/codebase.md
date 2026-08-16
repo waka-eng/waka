@@ -31,6 +31,49 @@ Three token vocabularies for one product. One file holding a canvas renderer, a
 physics loop, sprite baking, a palette, data loading, twenty pieces of React
 state, and every panel's markup.
 
+## The shape of the repo, and where the world sits in it
+
+```
+packages/api             100 source files   the backend: routes, db schema, generation
+packages/web              35 source files   the product: World.tsx, the flat screens
+packages/admin             7 source files   internal tooling
+packages/apis              0 source files   EMPTY — node_modules and nothing else
+packages/design-system     0 source files   EMPTY — node_modules and nothing else
+```
+
+**Two of those five packages are ghosts.** No `package.json`, no source, never
+imported — but `pnpm-workspace.yaml` globs `packages/*`, so they get
+`node_modules` and appear in every listing as though they mean something.
+
+They actively mislead. A `design-system` package is exactly where a new
+engineer would look before writing styles, and finding it empty *after*
+writing them is the wrong order. That is not hypothetical: this branch added
+`world-chrome.css` and a token repoint without ever checking whether a design
+system already existed, because the directory listing implied one did and the
+absence of any import implied one did not, and neither signal was checked.
+
+**Delete both.** They cost nothing to remove and every reader something to
+ignore. If a design system is coming, an empty directory is not how to reserve
+the name.
+
+## Where this branch's changes live
+
+Almost all of it lands in two files and their satellites:
+
+| File | Lines | What it is |
+| --- | --- | --- |
+| `packages/web/src/pages/World.tsx` | 13,600 | the entire product surface |
+| `packages/web/src/styles/world.css` | 1,755 | the world's appearance |
+| `packages/web/src/styles/world-chrome.css` | 1,098 | the flat screens in the world's light |
+| `packages/api/src/routes/groups.ts` | +174 | rooms: the field, the majority rule |
+| `packages/web/src/lib/world-data.ts` | 406 | the one canon↔world translation |
+| `packages/api/src/routes/feedback.ts` | +100 | who may answer whose statement |
+
+The dependency is lopsided and worth naming: **everything in the world depends
+on `World.tsx`, and `World.tsx` depends on almost nothing.** That is the shape
+of a file that grew rather than one that was designed, and it is why the four
+steps below are ordered the way they are.
+
 ## The order, safest first
 
 Each step is independently valuable and independently revertable. Do them in
