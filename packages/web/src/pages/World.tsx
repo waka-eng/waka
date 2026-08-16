@@ -11926,7 +11926,35 @@ function WorldExperience(): JSX.Element {
     if (text === "") return;
     setEdit({ ...edit, saving: true });
     const done = () => setEdit(null);
-    const fail = () => setEdit((e) => (e ? { ...e, saving: false } : e));
+    /**
+     * A FAILED EDIT, AND THE ONE FAILURE THAT IS NOT AN ERROR.
+     *
+     * Ported from the archive before deleting it (main's `da92630`). A 404 on
+     * curating a board line does not mean the click failed — it means the
+     * artifact was regenerated while you were reading it and this line is no
+     * longer in the live version. The server resolves ids forward when the
+     * text survived, so reaching this branch means the text did not.
+     *
+     * Leaving the old words on screen beside a dead control invites the same
+     * dead click again, so the board is reloaded to show what is actually
+     * there now. The words changing under you IS the explanation.
+     */
+    const fail = (err?: unknown) => {
+      setEdit((e) => (e ? { ...e, saving: false } : e));
+      if (err instanceof ApiError && err.status === 404) {
+        setEdit(null);
+        void loadHeadquarters()
+          .then((tom) => {
+            setTopOfMind(tom);
+            setNotes(tom ? tom.entries : []);
+            setAdopted(null);
+          })
+          .catch(() => {
+            /* the reload is best-effort: if it also fails the board simply
+               stays as it was, which is no worse than before */
+          });
+      }
+    };
     if (offlineRef.current) return done();
     if (edit.kind === "memory") {
       updateInspiration(edit.id, { text })
