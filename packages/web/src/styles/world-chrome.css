@@ -792,3 +792,113 @@ h2 {
 .profile-tabs {
   margin-bottom: 30px;
 }
+
+/* ================= ORDER IS NOT A GUARANTEE, SPECIFICITY IS =================
+   Everything above assumed this file's rules win because it is imported last.
+   In a dev server that holds; in the production bundle the CSS is
+   concatenated in an order the bundler chooses, and global.css's profile
+   block landed AFTER the grain. So the same source produced a restyled page
+   on 5173 and an unchanged one on 3030 — which is precisely the failure that
+   made this look like "no design updates" from the outside.
+
+   Relying on order across two different pipelines was the mistake. These are
+   the same declarations, re-stated one specificity step higher (`body` is a
+   type selector, so `body .x` beats any bare `.x` wherever it sits in the
+   file). Nothing new is being designed here; this is the same design, made
+   order-independent. */
+
+body .profile-shell,
+body .login-shell {
+  background:
+    radial-gradient(
+      120% 80% at 50% 12%,
+      rgba(232, 237, 244, 0.055) 0%,
+      rgba(232, 237, 244, 0.022) 34%,
+      transparent 68%
+    ),
+    var(--w-ground);
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(32px, 7vh, 88px) 24px 96px;
+}
+body .profile-card,
+body .login-card {
+  width: 100%;
+  max-width: 620px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+body .profile-header h1,
+body .login-title {
+  font-family: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  font-weight: 300;
+  font-size: clamp(28px, 3vw, 40px);
+  letter-spacing: 0.012em;
+  line-height: 1.32;
+  color: var(--w-ink);
+}
+body .profile-tabs {
+  display: flex;
+  gap: 22px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+  box-shadow: none;
+  margin-bottom: 30px;
+}
+body .profile-tabs-indicator {
+  display: none;
+}
+body .profile-tabs button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 10px 2px;
+  color: var(--w-muted);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+body .profile-tabs button[aria-selected="true"] {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+body .profile-public-panel,
+body .profile-danger-panel {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--w-edge);
+  border-radius: 0;
+}
+body .profile-list-row,
+body .profile-room,
+body .profile-memory-row,
+body .profile-connection-row {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+  padding: 14px 0;
+  min-height: 0;
+}
+body .profile-memory-badge,
+body .profile-row-tag {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-faint);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
