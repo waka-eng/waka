@@ -640,13 +640,7 @@ export default function ProfilePage(): JSX.Element {
           ) : null}
         </section>
         </div>
-        {tab === "you" && open !== "danger" ? (
-          <p className="profile-disclose profile-disclose--last">
-            <button type="button" onClick={() => setOpen("danger")}>
-              delete this account
-            </button>
-          </p>
-        ) : null}
+
         <section
           className="profile-danger-panel profile-panel"
           aria-labelledby="profile-danger-title"
@@ -684,9 +678,28 @@ export default function ProfilePage(): JSX.Element {
             {t(locale, "profileDeleteHint")}
           </span>
         </section>
+        {/* ONE PLACE FOR THINGS YOU CAN DO, ORDERED BY CONSEQUENCE.
+            These were scattered — sign out top-right, delete mid-page, back
+            home centred underneath — so there was no way to learn where an
+            action lives. Everything that LEAVES or DESTROYS is one row at the
+            foot, harmless first and irreversible last, which is both the
+            consistency heuristic and simple proximity. `save` stays with the
+            form it saves, because that is the one action that belongs to the
+            fields rather than to the account. */}
+        <div className="profile-foot">
         <p className="login-footer">
           <Link className="login-link" to="/">{t(locale, "profileBackHome")}</Link>
         </p>
+          {tab === "you" && open !== "danger" ? (
+            <button
+              type="button"
+              className="profile-disclose-inline"
+              onClick={() => setOpen("danger")}
+            >
+              delete this account
+            </button>
+          ) : null}
+        </div>
       </section>
     </main>
   );

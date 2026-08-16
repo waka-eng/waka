@@ -989,3 +989,98 @@ body .profile-card .btn-primary {
   letter-spacing: 0;
   text-transform: lowercase;
 }
+
+/* ================= READABILITY AND ONE PLACE FOR ACTIONS =================
+
+   Two real problems, both structural rather than cosmetic.
+
+   1. CONTRAST. These screens borrowed the world's ink values, where dim text
+      sits over a lit volume and is usually one short label. Here it is a form:
+      labels, hints and help paragraphs that must be READ, on a near-black
+      ground. `--w-muted` at 55% and `--w-faint` at 30% land under WCAG AA for
+      body text — the world can afford that because its dim type is decoration
+      over light, and a settings screen cannot afford it at all. Raised to
+      values that pass at their actual sizes. The world is unaffected: it has
+      its own tokens.
+
+   2. ACTION PLACEMENT. Five controls sat at five different places with no
+      grouping — sign out top-right, a disclosure mid-form, save under it,
+      delete below that, back home centred underneath. Nielsen's consistency
+      heuristic and simple proximity both say the same thing: things you can
+      DO belong together, in a predictable place, ordered by consequence.
+      Save sits with the form it saves; everything that leaves or destroys is
+      one row at the foot, ordered harmless → irreversible. */
+
+:root,
+body {
+  /* was 0.55 / 0.30 — legible as ornament, not as instructions */
+  --w-muted: rgba(232, 237, 244, 0.72);
+  --w-faint: rgba(232, 237, 244, 0.52);
+  --muted: rgba(232, 237, 244, 0.72);
+}
+
+/* help text is read once and must be readable that once */
+body .field-hint,
+body .login-subtitle,
+body .profile-email {
+  color: rgba(232, 237, 244, 0.62);
+  font-size: 13px;
+}
+/* labels name the thing under them: they may be quiet, not faint */
+body .field-label,
+body .login-eyebrow {
+  color: rgba(232, 237, 244, 0.66);
+}
+/* what you typed is the loudest thing in the form, because it is yours */
+body .field-input,
+body input,
+body select,
+body textarea {
+  color: var(--w-ink);
+  font-size: 15px;
+}
+
+/* ---------- one foot, ordered by consequence ----------
+   Leaving is harmless, so it reads normally. Destroying is last and quietest:
+   what cannot be undone should be the hardest thing to hit by accident, and
+   the confirmation carries the warning. */
+body .profile-disclose--last,
+body .login-footer {
+  margin: 0;
+}
+body .profile-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 22px;
+  margin-top: 52px;
+  padding-top: 20px;
+  border-top: 1px solid var(--w-edge);
+}
+body .profile-foot .login-footer {
+  margin-right: auto;
+}
+
+/* the destructive word in the foot: last in the row and quietest in it */
+body .profile-disclose-inline {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-faint);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+body .profile-disclose-inline:hover {
+  color: var(--w-muted);
+}
+/* sign out leaves the header and joins the foot, where leaving belongs */
+body .profile-signout-button {
+  font-size: 14px;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
