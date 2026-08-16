@@ -13248,8 +13248,13 @@ function WorldExperience(): JSX.Element {
                  archive         →  SETTINGS, and temporary either way.
 
                What is left at the top of the screen is the way out. */
+            {/* A DOOR IS NAMED FOR WHAT IS BEHIND IT.
+                This said "Waka" — the product's name, on the product, next to
+                nothing it explained. A person reading it has no way to know it
+                leads to their account, and the one thing a label in this
+                position has to do is say where pressing it goes. */}
             <Link className="jar-back jar-label" to="/profile">
-              Waka
+              Your account
             </Link>
           )}
         </div>
