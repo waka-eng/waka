@@ -690,3 +690,41 @@ describe("a proposal carries on a majority of the room", () => {
     expect(carriesMajority(9, 5)).toBe(true);
   });
 });
+
+describe("a room's field", () => {
+  it("is membership-gated: a non-member is told the group does not exist", async () => {
+    const loadMembership = vi.fn(async () => null);
+    const loadField = vi.fn(async () => []);
+    const app = mountWith({ loadMembership, loadField });
+    const res = await app.request(`/api/groups/${groupId}/field`);
+    expect(res.status).toBe(404);
+    /* the field is never read for somebody who is not in the room — the gate
+       runs first, so a non-member cannot even cause the query */
+    expect(loadField).not.toHaveBeenCalled();
+  });
+
+  it("serialises field by field, so a loader that selects more cannot publish it", async () => {
+    const loadMembership = vi.fn(async () => plainMembership);
+    const loadField = vi.fn(async () => [
+      {
+        id: "i1",
+        text: "kept this",
+        kind: "note",
+        source: "app",
+        createdAt: new Date("2026-08-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+        ownerProfileId: "p1",
+        ownerName: "Sora",
+        ownerType: "human",
+        secret: "must not appear",
+      },
+    ]);
+    const app = mountWith({ loadMembership, loadField } as never);
+    const res = await app.request(`/api/groups/${groupId}/field`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { field: Array<Record<string, unknown>> };
+    expect(body.field).toHaveLength(1);
+    expect(body.field[0]?.ownerName).toBe("Sora");
+    expect(body.field[0]).not.toHaveProperty("secret");
+  });
+});
