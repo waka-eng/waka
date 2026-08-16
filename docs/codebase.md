@@ -125,6 +125,11 @@ web/src/
     self.ts
     agent.ts            machine hand · pixelated orbs · quantized motion
     group.ts            members · hues · legend · proposals
+  character/            the companion — one creature, everywhere
+    body.ts             its form, baked: dome, nubs, aura, the machine variant
+    motion.ts           bob, lean, gaze, blink, breath
+    reactions.ts        what it does at each moment: kept · answered ·
+                        arrived · shared · let-go
   transition/           moving between spaces
   canvas/               the loop, sprites, camera, hit-testing
   lib/                  data.ts · words.ts · appearance.ts
@@ -155,6 +160,21 @@ engineer knows what is inside without being told.
 spaces are on screen right now. A group's inspirations and yours are the same
 code with different contents — `presentBalls()` already filters one list by
 `ball.agentId`, and the structure should say so.
+
+**`character/` is one creature, and today proved it has to be one file.**
+The companion is currently spread across the whole of `World.tsx` — its being
+and baking near the palette, its bob and lean inside the frame loop, its gaze
+and blink further down, its reactions in the sim API, its whisper in the DOM.
+Nothing owns it, and it shows: a body hashed from a group id rendered an
+enormous blur over the poster; the nubs shipped as 1px specks and then vanished
+entirely; an in-page motion toggle silently killed every animation in the
+world and had to be deleted rather than fixed.
+
+Every one of those was a change to the creature made in a place that could not
+see the rest of the creature. Three files — what it IS, how it MOVES, what it
+DOES when something happens — and each of those questions has one answer in
+one place. Note that `body.ts` varies by space kind (an agent's space wears a
+machine's form), so it reads `space-kinds/`; it does not duplicate it.
 
 **`space-kinds/` fixes a bug class, not just tidiness.** "How does an agent's
 space differ" is answered independently in at least six places today —
