@@ -902,3 +902,90 @@ body .profile-row-tag {
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
+
+/* A SECTION RULE BELONGS TO THE SECTION BELOW IT.
+   The last field's bottom margin (26px) and the panel's top margin (46px)
+   stacked into 72px of nothing above the rule, against 28px below it — so the
+   line read as floating in a dead gap rather than as the start of something.
+   Tightened, and the asymmetry kept: more air above the rule than below, so
+   it still says "a new section begins here" rather than "these two things are
+   equally far apart". */
+body .profile-public-panel,
+body .profile-danger-panel {
+  margin-top: 34px;
+  padding-top: 20px;
+}
+body .field:last-of-type {
+  margin-bottom: 8px;
+}
+
+/* ---------- the words that open things ----------
+   The world's one interactive signal: a lowercase word you press. It sits
+   where the section it reveals will appear, so opening it is the section
+   arriving rather than the page rearranging around you. */
+body .profile-disclose {
+  margin: 26px 0 0;
+  font-size: 14px;
+}
+body .profile-disclose--last {
+  margin-top: 40px;
+}
+body .profile-disclose button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+body .profile-disclose button:hover {
+  color: var(--w-ink);
+}
+/* the one that throws the account away is the quietest thing on the page:
+   what cannot be undone should be hardest to reach by accident, and the
+   confirmation carries the weight, not the colour */
+body .profile-disclose--last button {
+  color: var(--w-faint);
+}
+body .profile-disclose--last button:hover {
+  color: var(--w-muted);
+}
+/* a revealed section arrives, it does not appear */
+body .profile-public-panel:not([hidden]),
+body .profile-danger-panel:not([hidden]) {
+  animation: jar-reveal 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes jar-reveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* THE THIRD TIME THIS FILE HAS BROKEN `hidden` WITH `display`.
+   Any rule that sets display on an element using the `hidden` attribute turns
+   the attribute off — it is the weakest display declaration there is. This
+   file sets display on .profile-panel, on .login-form and on the two setting
+   sections, and each time the element it was hiding stayed on screen.
+
+   One rule, at the end, for every element on these screens that hides itself
+   that way. Placed last and with `body` specificity so nothing later in any
+   bundle order can undo it again. */
+body [hidden] {
+  display: none !important;
+}
+
+/* the save verb joins the row of words rather than shouting between them —
+   the world has one uppercase register and it belongs to eyebrows, never to
+   things you press */
+body .login-form .btn-primary,
+body .profile-card .btn-primary {
+  margin-top: 26px;
+  color: var(--w-ink);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
