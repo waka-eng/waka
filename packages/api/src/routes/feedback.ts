@@ -146,6 +146,22 @@ function serializeFeedback(row: Feedback): FeedbackRecord {
  * against any id at all, and regeneration would read a stranger's verdict as
  * the owner's.
  */
+/**
+ * MAY THIS PROFILE ANSWER THIS SIGNAL? The rule alone, so it can be executed.
+ *
+ * Widening feedback from "signals you own" to "signals shared into your rooms"
+ * changed who may write about whose statement, and nothing executed it — the
+ * route tests inject a mock. Two facts decide it, and both must be supplied by
+ * a caller that read them from the database under the acting profile's
+ * identity: never trust either from a request.
+ */
+export function mayAnswerSignal(input: {
+  ownsIt: boolean;
+  sharedIntoARoomYouAreIn: boolean;
+}): boolean {
+  return input.ownsIt || input.sharedIntoARoomYouAreIn;
+}
+
 async function targetBelongsToProfile(
   db: WakaDb,
   input: { profileId: string; targetType: FeedbackTargetType; targetId: string },
@@ -156,7 +172,7 @@ async function targetBelongsToProfile(
       .from(signals)
       .where(and(eq(signals.id, input.targetId), eq(signals.profileId, input.profileId)))
       .limit(1);
-    if (own) return true;
+    const ownsIt = Boolean(own);
 
     /**
      * A STATEMENT SOMEBODY SHARED WITH YOU CAN BE ANSWERED.
@@ -187,7 +203,7 @@ async function targetBelongsToProfile(
         ),
       )
       .limit(1);
-    return Boolean(shared);
+    return mayAnswerSignal({ ownsIt, sharedIntoARoomYouAreIn: Boolean(shared) });
   }
 
   const [row] = await db

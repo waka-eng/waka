@@ -974,7 +974,19 @@ body .profile-danger-panel:not([hidden]) {
    One rule, at the end, for every element on these screens that hides itself
    that way. Placed last and with `body` specificity so nothing later in any
    bundle order can undo it again. */
-body [hidden] {
+/* Scoped to the elements that actually hide themselves this way, rather than
+   to every element on the page. `body [hidden]` fixed the bug but took the
+   attribute's meaning away from anything else that might legitimately use it —
+   a hidden input that still needs layout, a template node a library toggles.
+   These four are the ones this file sets `display` on, so these four are the
+   ones that need it back. */
+body .profile-panel[hidden],
+body .profile-room[hidden],
+body .login-form[hidden],
+body .auth-form[hidden],
+body .profile-public-panel[hidden],
+body .profile-danger-panel[hidden],
+body .profile-list[hidden] {
   display: none !important;
 }
 
