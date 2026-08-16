@@ -243,6 +243,40 @@ strip, the `walls` array, `arriveColumn`.
 load data, and the JSX that composes the above. It should end up short enough
 to read in one sitting.
 
+### Delete rather than move
+
+Audited before the split, because moving dead code is the most expensive way
+to discover it is dead.
+
+**Already deleted this session**
+
+| What | Why |
+| --- | --- |
+| `pages/Surface.tsx` (1,362) | the archive, superseded affordance by affordance |
+| `styles/surface.css` (1,416) | all 77 classes unreferenced, still imported — every visitor downloaded it |
+| `components/faces.ts` | `contributorColor`, `contributorPaper`, `contributorInitials` — zero importers |
+| `lib/surface-route.ts` (72) | `parseSurfacePath`, `buildSurfacePath`, `SurfaceRoute` — routing for a page that no longer exists |
+| `packages/apis`, `packages/design-system` | no `package.json`, no source, never imported |
+
+**Keep, but know they are unreached**
+
+`fetchReflections` and `refreshGroupTopOfMind` have zero callers. Neither is
+dead in the same sense: `refreshGroupTopOfMind` became redundant when agreeing
+with a statement started triggering synthesis automatically, and
+`fetchReflections` answers a question the world has not yet been asked
+("show me everything I have reflected on"). Deleting them removes a working
+endpoint's only client; leaving them costs a few lines. Decide when the
+surface for either exists — but do not carry them into the new structure
+unexamined.
+
+**Check during the move, not before**
+
+The dead things that remain are the ones no grep will find: state that is set
+and never read, refs assigned once, effects whose dependencies mean they never
+re-run. Extraction surfaces those for free — a symbol nothing imports becomes
+obvious the moment it has to be exported. Delete as you go rather than
+scheduling a second pass.
+
 ### The order to move them
 
 Dependencies point inward, so move from the outside in and nothing you have
