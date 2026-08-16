@@ -121,12 +121,21 @@ ReactDOM.createRoot(root).render(
               </RequireAuth>
             }
           />
+          {/* The account screen is checkable in dev for the same reason the
+              world is: its look could otherwise only be verified by whoever
+              holds the password, which is how several things shipped here
+              unobserved. `import.meta.env.DEV` is compiled out of production,
+              so RequireAuth remains the only path in a real deployment. */}
           <Route
             path="/profile"
             element={
-              <RequireAuth>
+              import.meta.env.DEV ? (
                 <ProfilePage />
-              </RequireAuth>
+              ) : (
+                <RequireAuth>
+                  <ProfilePage />
+                </RequireAuth>
+              )
             }
           />
           {/*

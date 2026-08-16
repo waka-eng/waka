@@ -21,8 +21,44 @@
  * system.css, and it overrides nothing structural, only the palette and type.
  */
 
+/* ================= REPOINT THE TOKENS, NOT THE SELECTORS =================
+   The flat screens carry a complete design system of their own — a parchment
+   ground, near-black ink, three faces, and every component in global.css
+   drawing from those tokens. Overriding a LIST of selectors was the wrong
+   approach: it only reached the components I happened to enumerate, and left
+   everything else painting in the old palette, which is why the account
+   screen kept looking like a different product no matter how many rules I
+   added.
+
+   So the token layer itself is repointed. Every rule in global.css that says
+   `var(--ink)` or `var(--bg)` now resolves to the world's values, and
+   components I have never named come out right for free — including any the
+   team adds later. Their LAYOUT is untouched and should be: main designed
+   these screens deliberately, and the ask is that they wear this world's
+   light, not that they be rebuilt.
+
+   `--error` is the one token deliberately drained of hue. There is no red in
+   Waka: colour temperature means aliveness, and an error is not a state a
+   memory can be in. */
 :root,
 body {
+  --bg: #06080d;
+  --ink: #e8edf4;
+  --muted: rgba(232, 237, 244, 0.55);
+  --line: rgba(255, 255, 255, 0.08);
+  --rule: rgba(255, 255, 255, 0.08);
+  --cell: rgba(255, 255, 255, 0.035);
+  --paper: #06080d;
+  --accent: #e8edf4;
+  --error: rgba(232, 237, 244, 0.55);
+  /* the world's two faces replace the three: Jost for the voice, Pretendard
+     for anything that can hold Korean, and a real mono only where a machine
+     is speaking */
+  --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    "Segoe UI", Roboto, sans-serif;
+  --font-serif: Jost, Pretendard, "Futura", "Century Gothic", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
   --w-ground: #06080d;
   --w-raised: rgba(255, 255, 255, 0.035);
   --w-ink: #e8edf4;
@@ -53,10 +89,16 @@ h2 {
   color: var(--w-ink);
   text-wrap: balance;
 }
+/* THE LABEL REGISTER APPLIES TO LABELS, NOT TO THEIR CONTAINERS.
+   `.profile-public-heading` and `.profile-danger-heading` are WRAPPERS that
+   hold an eyebrow AND a paragraph of explanation. Putting them in this group
+   uppercased the prose too, so "this permanently deletes your account" was
+   set as a 16px all-caps headline — the loudest text on a page whose job is
+   to be calm. The eyebrow inside them is the label; the paragraph is prose. */
 .login-eyebrow,
 .field-label,
-.profile-public-heading,
-.profile-danger-heading {
+.profile-public-heading > .login-eyebrow,
+.profile-danger-heading > .login-eyebrow {
   font-weight: 500;
   font-size: 10px;
   letter-spacing: 0.16em;
@@ -152,12 +194,46 @@ a:hover {
    The one place a surface exists is where something must be occluded. It is a
    wash and a hairline, never a card with a shadow — light lives behind a
    surface in this product, never on it. */
+/* No panels. A surface exists only where something must be occluded, and a
+   settings section occludes nothing — it is separated by space and a rule,
+   the same way the rest of this page separates things. */
 .profile-public-panel,
-.profile-danger-panel,
+.profile-danger-panel {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--w-edge);
+  border-radius: 0;
+  margin-top: 30px;
+  padding-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 .login-form {
-  background: var(--w-raised);
-  border: 1px solid var(--w-edge);
-  border-radius: 4px;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+/* the prose inside a section, at reading size and reading weight */
+.profile-public-heading,
+.profile-danger-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.profile-public-heading .login-subtitle,
+.profile-danger-heading .login-subtitle {
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* a field's hint belongs to the field above it, not to the label below */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 22px;
 }
 
 /* Messages speak in the world's voice: prose, quiet, and no colour carrying
@@ -303,4 +379,233 @@ a:hover {
 .login-tabs button[aria-selected="true"] {
   color: var(--w-ink);
   border-bottom-color: var(--w-ink);
+}
+
+/* ================= THE ACCOUNT SCREEN, IN THE WORLD'S VOICE =================
+   The profile page grew rooms, memories and connections — three lists that
+   arrived with their own card-and-pill styling from a lighter design. On this
+   ground a bordered card reads as a hole cut into the page, and a filled pill
+   reads as a button pretending to be a state.
+
+   The world's rules, applied to a screen that is deliberately NOT the world:
+   a rule under things instead of a border around them, one uppercase register
+   for eyebrows only, actions as underlined words, and state carried by ink
+   weight rather than by a coloured chip. No red anywhere — colour temperature
+   means aliveness here and is not spent on warnings. */
+
+/* ---------- tabs ----------
+   The same mark the world uses for the wall you are standing on: ink and a
+   rule beneath. A filled tab would be the only solid shape on the page. */
+.profile-tabs {
+  display: flex;
+  gap: 22px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  padding: 0;
+  margin-bottom: 22px;
+}
+.profile-tabs button {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 10px 2px;
+  color: var(--w-muted);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.profile-tabs button[aria-selected="true"] {
+  color: var(--w-ink);
+  border-bottom-color: var(--w-ink);
+}
+/* the sliding indicator belongs to a design with a filled tab; the rule above
+   already says which one is selected, and two answers to one question is one
+   too many */
+.profile-tabs-indicator {
+  display: none;
+}
+
+/* ---------- lists ----------
+   Rooms, memories and connections are all the same shape: a name, something
+   quiet about it, and what you can do. One grammar, three contents. */
+.profile-list,
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  gap: 0;
+}
+.profile-list-row,
+.profile-room,
+.profile-memory-row,
+.profile-connection-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--w-edge);
+  border-radius: 0;
+}
+.profile-list-row:last-child,
+.profile-room:last-child,
+.profile-memory-row:last-child,
+.profile-connection-row:last-child {
+  border-bottom: 0;
+}
+.profile-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.profile-row-name,
+.profile-row-title {
+  color: var(--w-ink);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+/* when and how many: the quiet second line, never a badge */
+.profile-row-meta {
+  color: var(--w-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- what a thing IS, said in ink ----------
+   `agent`, `owner`, `this device` — these were chips. A chip is a small filled
+   rectangle competing with the name beside it for a fact that is subordinate
+   to the name. Set small, spaced and dim, it reads as an aside, which is what
+   it is. */
+.profile-row-tag,
+.profile-memory-badge {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin-left: 10px;
+  color: var(--w-faint);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ---------- actions ----------
+   Words you can press, at the same weight as everything else. The destructive
+   one is DIMMER than its neighbours rather than louder: the thing that cannot
+   be undone should be the hardest to hit by accident, and the confirmation
+   carries the warning, not the colour. */
+.profile-row-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+.profile-memory-action,
+.profile-row-actions button,
+.profile-signout-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--w-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease;
+}
+.profile-memory-action:hover,
+.profile-row-actions button:hover,
+.profile-signout-button:hover {
+  color: var(--w-ink);
+}
+.profile-row-actions .is-destructive,
+.profile-memory-action.is-destructive {
+  color: var(--w-faint);
+}
+.profile-row-actions .is-destructive:hover,
+.profile-memory-action.is-destructive:hover {
+  color: var(--w-muted);
+}
+
+/* ---------- adding one ----------
+   The field is a rule you type on, and the verb is a word — the same pair the
+   world uses at its mouth. */
+.profile-memory-new,
+.profile-memory-create {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 0 0;
+  background: none;
+  border: 0;
+}
+.profile-memories-panel,
+.profile-memories-heading {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+/* ---------- toggles ----------
+   These rendered as two bare checkboxes with invisible labels: the row is a
+   flex container whose text was inheriting a colour meant for a dark-on-light
+   theme, so the words describing what you are about to make public were not
+   readable at all. On a privacy control that is the worst possible bug — the
+   checkbox is the only thing you can see, and it says nothing about what it
+   does. */
+.profile-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 0 14px;
+  color: var(--w-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.profile-toggle-row span {
+  color: var(--w-ink);
+}
+.profile-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+  accent-color: var(--w-ink);
+  cursor: pointer;
+}
+.profile-toggle-row input:disabled,
+.profile-toggle-row input:disabled + span {
+  opacity: 0.45;
+  cursor: default;
+}
+/* the save verb sits after the form, not across it */
+.login-form .btn-primary,
+.profile-card .btn-primary {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+/* the tab strip's own rule is the only line it needs — the pill outline
+   underneath it belonged to the filled-tab design that is gone */
+.profile-tabs {
+  box-shadow: none;
+  overflow: visible;
 }

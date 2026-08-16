@@ -4553,6 +4553,8 @@ function WorldExperience(): JSX.Element {
      standing in it (the dial has no meaning among candidates), and which
      nebulae have been drawn together. */
   const [inSky, setInSky] = useState(false);
+  /* whether the camera is down on the ground, where the memories are */
+  const [inField, setInField] = useState(false);
   /** Which pattern in the sky is being read. Its verdict row belongs to it. */
   const [focusCandId, setFocusCandId] = useState<string | null>(null);
   /** Patterns with a neighbour close enough to join. Pushed from the loop so
@@ -5850,6 +5852,7 @@ function WorldExperience(): JSX.Element {
     let travelYaw = false; /* holding the quarter-turn toward the edge */
     let awaitingWake = false; /* arrived in a room whose data is late */
     let inspCol = 0; /* whose orbs the companion's glow reads */
+    let inFieldShown = false;
     let dialAwayShown = false;
     let wheelXAcc = 0;
     let wheelXUntil = 0;
@@ -9274,6 +9277,16 @@ function WorldExperience(): JSX.Element {
          sentence, neither of which has a history to scrub. So it comes up
          with the field and goes away with it. */
       const inField = camY > world.fieldTop * 0.5;
+      /* THE LEGEND BELONGS TO THE GROUND IT EXPLAINS.
+         It is a key to the orbs, so it exists where the orbs are. Standing at
+         headquarters reading one sentence, or up in the sky among patterns,
+         a list of whose-colour-is-whose answers a question nobody is asking —
+         it was just chrome in the corner. It comes up with the field and goes
+         away with it, exactly as the timeline does. */
+      if (inField !== inFieldShown) {
+        inFieldShown = inField;
+        setInField(inField);
+      }
       const nowAway =
         !inField || !hasDial(wallAt(Math.round(camX / Math.max(vw, 1))).kind);
       if (nowAway !== dialAwayShown) {
@@ -13255,7 +13268,7 @@ function WorldExperience(): JSX.Element {
         ) : null}
       </div>
 
-      {legend.length > 0 && phase === "ready" ? (
+      {legend.length > 0 && inField && phase === "ready" ? (
         <div className="jar-legend" data-jar-chrome="1">
           {legend.map((m) => (
             <span key={m.id} className="jar-legend-row">
