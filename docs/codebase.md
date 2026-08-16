@@ -185,6 +185,76 @@ agents" reading as a machine's space in one place and a human's in another.
 One file owning what an agent's space IS makes that impossible, and a new kind
 of space becomes a new file rather than a hunt through 13,000 lines.
 
+### What goes where
+
+Every major piece of `World.tsx`, and its destination. Anything not listed is
+either already in `lib/` or is page wiring that stays behind.
+
+**`canvas/`** — the machinery. It knows orbs, light and time; it does not know
+what a signal is.
+
+| Now | Goes to |
+| --- | --- |
+| the `requestAnimationFrame` loop, `draw()` | `canvas/loop.ts` |
+| `buildPalette`, `rasterOrb`, `rasterOrbPixel`, `rasterBloom`, `makeSprite`, `orbsForHue` | `canvas/sprites.ts` |
+| `SIZE_R`, `TIERS`, `PIXEL_STEP`, `ORB_PAD` | `canvas/sprites.ts` |
+| `camX/camY`, `aimTo`, `kd()`, wheel/drag/key handlers | `canvas/camera.ts` |
+| `assignHomes`, `scatterX`, `presentBalls`, `electPeek` | `canvas/layout.ts` |
+| `tap`, `findBall`, `select`, `release` | `canvas/hit.ts` |
+| the `SimApi` interface itself | `canvas/index.ts` |
+
+**`character/`** — one creature, three questions.
+
+| Now | Goes to |
+| --- | --- |
+| `Being`, `OWNER_BEING`, `agentBeing`, `bakeBeing`, `worn`, `wornBeing`, the nubs, the aura | `character/body.ts` |
+| `bobPh`, `charY`, `charOff`, `charLead`, `lean`, `pitch`, `charLift` | `character/motion.ts` |
+| `eyeX/eyeY/eyeTX/eyeTY`, `blink`, `glance`, breath, `attendTo`, `attendHold` | `character/motion.ts` |
+| `acknowledge(moment)`, the `Moment` union, `flare`, `relight` | `character/reactions.ts` |
+| the whisper line (`charSay`) | `character/reactions.ts` |
+
+**`space/`** — the three layers, one directory each.
+
+| Now | Goes to |
+| --- | --- |
+| `Ball`, `makeBall`, `makeAgentBall`, `seedOf`, `colorBall`, aliveness | `space/inspiration/orb.ts` |
+| the memory panel markup, `place()`, `markPassages`, `salience` | `space/inspiration/panel.tsx` |
+| the capture mouth, `born`, `unborn`, the public/private choice | `space/inspiration/capture.tsx` |
+| `Neb`, nebulae, `candidates`, clustering, `joinTo` | `space/signal/sky.ts` |
+| verdicts, `sayVerdict`, `dropPattern`, the statement markup | `space/signal/statement.tsx` |
+| poster, `posterWords`, `posterChain`, `versions`, the forming line | `space/top-of-mind/poster.tsx` |
+| `adopted`, `notes`, entry editing | `space/top-of-mind/board.ts` |
+
+**`space-kinds/`** — everything that answers "how does THIS kind differ".
+
+| Now | Goes to |
+| --- | --- |
+| `isMachineWall`, `mechAt`, the `data-kind` typography rule, pixelated orbs | `space-kinds/agent.ts` |
+| `machineRooms`, members, hues, the legend, `roomCompany`, proposals | `space-kinds/group.ts` |
+| `hasSky`, `hasDial` and the other per-kind predicates | the file for the kind they describe |
+
+**`transition/`** — `travel`, `goToWall`, `travelMs`/`travelSpanMs`, the axis
+strip, the `walls` array, `arriveColumn`.
+
+**`lib/`** — `world-data.ts` → `data.ts`; `world-words.ts` → `words.ts`;
+`world-appearance.ts` → `appearance.ts`.
+
+**Stays in the page** — the route component, top-level state, the effects that
+load data, and the JSX that composes the above. It should end up short enough
+to read in one sitting.
+
+### The order to move them
+
+Dependencies point inward, so move from the outside in and nothing you have
+already moved needs touching again:
+
+1. `lib/` — rename, no logic change
+2. `character/` — reads `canvas/` types but nothing reads it back
+3. `space-kinds/` — pure predicates and constants
+4. `space/*` — each reads `lib/` and `space-kinds/`
+5. `transition/`
+6. `canvas/` — biggest, last, and by then everything else is out of its way
+
 ### How to get there
 
 Only after 1–3, because those make the seams visible. In dependency order:
