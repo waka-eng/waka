@@ -152,7 +152,8 @@ First, candidates within one batch are deduped against each other at
 twice in one reply mints once.
 
 Then, per candidate, the decision — this is `classifyMatch` in
-`packages/api/src/lib/signal-derivation.ts` **[checked]**:
+`packages/api/src/lib/signal-derivation-thresholds.ts`, applied by
+`packages/api/src/lib/signal-match-or-mint.ts` **[checked]**:
 
 | Similarity to nearest existing signal | Decision |
 |---|---|
@@ -399,7 +400,7 @@ Deliberate consequences:
 The authoritative values. Machine-checked against code — see
 `packages/api/src/lib/generation-doc.test.ts`.
 
-### Layer 2 — derivation (`packages/api/src/lib/signal-derivation.ts`)
+### Layer 2 — derivation (`packages/api/src/lib/signal-derivation-thresholds.ts`)
 
 | Constant | Value | One line |
 |---|---|---|

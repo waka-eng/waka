@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 import * as embeddings from "./inspiration-embeddings.js";
 import * as modelBudget from "./model-budget.js";
 import * as derivation from "./signal-derivation.js";
+import * as derivationThresholds from "./signal-derivation-thresholds.js";
 import * as selection from "./top-of-mind-selection.js";
 import * as synthesis from "./top-of-mind-synthesis.js";
 import * as gemini from "../queue/gemini.js";
@@ -42,6 +43,15 @@ const doc = readFileSync(DOC_PATH, "utf8");
  * schemas, functions, and classes are behavior, covered by their own tests.
  */
 const MODULES: Record<string, Record<string, unknown>> = {
+  // Layer 2's tuning all lives in the thresholds module now. It is named here
+  // *as well as* being reachable through the facade, and the redundancy is the
+  // point: `signal-derivation.ts` re-exports it with `export *` today, but the
+  // moment someone rewrites that into a list of names the facade stops showing
+  // this test any constant nobody remembered to add to the list — which is
+  // precisely how a split once left an undocumented constant with a green
+  // suite. Importing the module directly cannot be undone by a facade edit.
+  "signal-derivation-thresholds.ts": derivationThresholds,
+  // The pass itself, and with it every sibling stage it re-exports.
   "signal-derivation.ts": derivation,
   // Layer 3's tuning is all ranking, so it lives with the ranking stage. The
   // pass module stays listed even though it exports no constant today: a

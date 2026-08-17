@@ -46,8 +46,8 @@ const SPENDS_THE_SHARED_KEY: Record<string, string> = {
   // The embedding client itself, and the two callers that construct one.
   GeminiEmbeddingHttpClient: "src/lib/inspiration-embeddings.ts",
   ensureInspirationEmbedding: "src/lib/inspiration-embeddings.ts",
-  reembedSignalStatement: "src/lib/signal-derivation.ts",
-  reembedSignal: "src/lib/signal-derivation.ts",
+  reembedSignalStatement: "src/lib/signal-embeddings.ts",
+  reembedSignal: "src/lib/signal-embeddings.ts",
   // Extraction, judging, synthesis — the generation calls.
   deriveSignalsForInspiration: "src/lib/signal-derivation.ts",
   refreshTopOfMindForProfile: "src/lib/top-of-mind-synthesis.ts",
