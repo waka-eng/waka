@@ -796,18 +796,65 @@ describe("reading a memory that is in orbit", () => {
   });
 });
 
+/* -------------------------------------------------------------- adoption's
+   two clocks, which are not the same clock */
+
+/**
+ * How long the contraction takes. This is the sky's own `CONDENSE_MS`, stated
+ * again here rather than imported, because what the cases below actually need
+ * is a number of HARNESS FRAMES, and importing the constant would still leave
+ * that conversion to be written by hand. Restating it is safe in the one way
+ * that matters: if the real constant moves, the frame counts derived from this
+ * one land on the wrong side of the contraction's own gates and the cases fail
+ * loudly, rather than passing while measuring the wrong moment.
+ */
+const CONDENSE_MS = 700;
+
+/** the harness advances the world 16.7ms per frame, so a duration is frames */
+const framesFor = (ms: number) => Math.ceil(ms / 16.7);
+
+/**
+ * WAITING OUT ADOPTION'S HANDOVER, ON THE ONLY REAL CLOCK IN THIS FILE.
+ *
+ * Every ease in this world runs on the loop's clock, which `step` drives, and
+ * that is why these tests are fast and exact. Adoption's last act is not one of
+ * them: when the contraction has finished, a plain `window.setTimeout` hands
+ * over — the candidate leaves the sky, the poster takes its words, the camera
+ * glides down. That timer is wall-clock, so `step` cannot reach it, and faking
+ * it would mean the suite no longer measured the ordering that ships. Seven
+ * hundred milliseconds of real time, once per adoption, buys that.
+ *
+ * The frames afterwards are the sky settling into what it became: `syncSky`
+ * drops the departed candidate and releases the subject, and the dim it was
+ * holding everyone else at eases back out over the following frames.
+ */
+async function handover() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, CONDENSE_MS + 80));
+  });
+  await layout.step(60);
+}
+
+/** Is this candidate still standing overhead, and still lit? */
+function litInSky(startsWith: string): boolean {
+  const el = clouds().find((n) =>
+    (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(startsWith),
+  );
+  return el !== undefined && opacityOf(el) > 0.5;
+}
+
+/* ---------------------------------------------------------------- the cases */
+
 describe("condensing", () => {
   /**
    * ADOPTION CONTRACTS THE CLOUD TO A CORE.
    *
    * `condense` is the sky's verb for it and `adopt` is its one caller. It is
-   * driven here through the page's own dev instrument rather than through the
-   * button, and that is worth stating plainly: `adopt` calls `condense(c.id)`
-   * and then `setProposal(null)` in the same commit, so the candidate leaves
-   * the list — and the loop's sky with it — before a single frame of the
-   * seven-hundred-millisecond contraction has run. Driving the button and
-   * watching for the contraction was tried first and cannot work; the case
-   * below it covers what the button does reach.
+   * driven here through the page's own dev instrument, which isolates the
+   * engine's half: what the contraction does to a cloud, with nothing of the
+   * page's own state changing underneath it. The two cases after this one
+   * drive the same thing through the button, which is where the ordering
+   * between the two lives and where it was once wrong.
    *
    * What is asserted is the contraction itself: past `condense` 0.5 the
    * sentence is no longer on screen (`syncDom` gates its opacity there,
@@ -841,7 +888,72 @@ describe("condensing", () => {
   });
 
   /**
-   * WHAT THE ADOPT BUTTON DOES REACH.
+   * PRESSING ADOPT HAS TO SHOW THE CONTRACTION TO THE PERSON WHO PRESSED IT.
+   *
+   * The button is the only way anyone reaches adoption, and it was the half
+   * that was broken. `adopt` called `condense(c.id)` and `setProposal(null)` in
+   * the same commit, so the candidate left the list — and `syncSky` dropped its
+   * cloud, and React unmounted its sentence — before a single frame of the
+   * seven-hundred-millisecond contraction had run. Nothing contracted. The
+   * cloud stopped existing, and the timer beside it then waited out an
+   * animation nobody had been shown.
+   *
+   * That is a bug and not a blemish, under this codebase's own law that MOTION
+   * EXPLAINS: the contraction is the sentence "this became yours", and a
+   * proposal that pops out of existence says nothing at all, leaving the person
+   * to work out from an empty sky whether the least reversible act in the
+   * layout had actually happened.
+   *
+   * Three readings, in the order a person gets them:
+   *
+   *   1. ONE FRAME IN, the sentence is still overhead and still lit. This is
+   *      the reading that was red — by here the element was already gone.
+   *   2. MOST OF THE WAY THROUGH, it is still the page's own element and no
+   *      longer on screen. `syncDom` gates the sentence's opacity at `condense`
+   *      0.5, so an element that has passed through that gate is one the
+   *      contraction genuinely ran on. A deleted candidate cannot produce this
+   *      reading, and neither can a candidate that was never condensed.
+   *   3. ONLY AFTER THE FULL 700ms does it leave.
+   *
+   * The rest of the sky is read at (2) as well, or "everything vanished" and
+   * "the sky went dark" would both pass.
+   */
+  it("keeps the adopted candidate contracting overhead until the contraction ends", async () => {
+    await climbToSky();
+    expect(litInSky(PROPOSAL), "the proposal is overhead to begin with").toBe(true);
+
+    const button = cloud(PROPOSAL).querySelector<HTMLElement>(".jar-neb-act");
+    expect(button?.textContent, "the one action a proposal offers").toContain("Adopt");
+    await act(async () => button!.click());
+
+    await layout.step(1);
+    expect(
+      litInSky(PROPOSAL),
+      "the adopted candidate left before one frame of its contraction had run",
+    ).toBe(true);
+
+    /* 85% of the way in: past the 0.5 gate with room to spare on both sides,
+       so neither the easing curve's exact shape nor a frame's rounding decides
+       the answer */
+    await layout.step(framesFor(0.85 * CONDENSE_MS) - 1);
+    const going = cloud(PROPOSAL);
+    expect(opacityOf(going), "the contraction ran on the very cloud the button sits on").toBe(0);
+    expect(
+      going.style.pointerEvents,
+      "and took the least reversible control in the layout out of reach with it",
+    ).toBe("none");
+    for (const other of [NAMING, PROOF])
+      expect(litInSky(other), "and only that one — the rest of the sky is untouched").toBe(true);
+
+    await handover();
+    expect(
+      clouds().some((n) => (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(PROPOSAL)),
+      "the contraction finished and the candidate is still overhead",
+    ).toBe(false);
+  });
+
+  /**
+   * AND WHAT IT LEAVES BEHIND IS A SKY THAT CAME BACK UP.
    *
    * The proposal is the only adoptable candidate, and affirming it carries it
    * out of the sky. The interesting half is what happens to the REST of the
@@ -851,6 +963,10 @@ describe("condensing", () => {
    * the sky cannot be the subject of it") is what this checks, because a sky
    * permanently dimmed behind a candidate that no longer exists is a state
    * with no way out of it.
+   *
+   * The dimming now has to survive the whole contraction before it lifts, which
+   * is right: the others stay sunk for as long as there is a subject standing
+   * over them, and the subject is standing there until it has finished leaving.
    */
   it("carries an adopted proposal out of the sky and lifts what it was dimming", async () => {
     await climbToSky();
@@ -860,7 +976,7 @@ describe("condensing", () => {
     const button = cloud(PROPOSAL).querySelector<HTMLElement>(".jar-neb-act");
     expect(button?.textContent, "the one action a proposal offers").toContain("Adopt");
     await act(async () => button!.click());
-    await layout.step(60);
+    await handover();
 
     expect(
       clouds().some((n) => (n.querySelector(".jar-neb-text")?.textContent ?? "").startsWith(PROPOSAL)),
