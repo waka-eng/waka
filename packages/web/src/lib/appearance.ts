@@ -1,17 +1,17 @@
 /**
  * WHOSE MEMORY THIS IS — the per-member hue system.
  *
- * Extracted from World.tsx because none of it touches React or the frame
+ * Extracted from Home.tsx because none of it touches React or the frame
  * loop: given a ramp and a member's slot it returns colours, and that is all.
  * It is the kind of thing `docs/architecture.md` means by a seam — a fact the
  * world needs, decided somewhere you can read in a minute.
  *
- * The `Ramp` type comes back in from World.tsx rather than moving with these
+ * The `Ramp` type comes back in from Home.tsx rather than moving with these
  * functions, because the palette is still the sim's to own. When `world/sim/`
  * is extracted (step 4 of docs/codebase.md), Ramp goes there and this module
  * imports it from its new home — one import line changes.
  */
-import type { Ramp } from "../pages/World";
+import type { Ramp } from "../pages/Home";
 
 /**
  * WHOSE MEMORY THIS IS, ON A WALL THAT HOLDS SEVERAL PEOPLE'S.

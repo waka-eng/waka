@@ -21,7 +21,7 @@
  * never in a type name, a function name or a path — because a person standing
  * in the world sees a field, while the thing being fetched is an inspiration.
  *
- * The `World` prefix stays and is doing work: `WorldInspiration` is the view
+ * The `World` prefix stays and is doing work: `Inspiration` is the view
  * model, `ApiInspiration` is the payload, and the two differ (see `isPublic`
  * below, which is a deliberate lossy flatten of the canon's `visibility`).
  *
@@ -70,7 +70,7 @@ const ms = (iso: string | null | undefined): number => {
  * world is arithmetic (decay, the dial, the sort). Parsing once here keeps
  * `Date.parse` out of the frame loop, which is a standing rule.
  */
-export interface WorldInspiration {
+export interface Inspiration {
   id: string;
   preview: string;
   /**
@@ -100,7 +100,7 @@ export interface WorldInspiration {
 }
 
 /** One inspiration, opened: the words in full and what was hanging off them. */
-export interface WorldInspirationDetail extends WorldInspiration {
+export interface InspirationDetail extends Inspiration {
   text: string;
   reflections: Array<{
     id: string;
@@ -128,7 +128,7 @@ export interface WorldInspirationDetail extends WorldInspiration {
  * and the evidence itself (with the reason it was read that way) arrives only
  * when a signal is opened — the sky never fetches what it cannot draw.
  */
-export interface WorldSignal {
+export interface Signal {
   id: string;
   statement: string;
   status: ApiSignal["status"];
@@ -145,7 +145,7 @@ export interface WorldSignal {
 }
 
 /** What a signal rests on, and why it was read that way. */
-export interface WorldEvidence {
+export interface Evidence {
   /** Whose evidence this is. Carried so the field can look back UP: a memory
       learns what it is for from the signals that cite it, and needs to name
       them. */
@@ -160,8 +160,8 @@ export interface WorldEvidence {
   createdMs: number;
 }
 
-export interface WorldSignalDetail extends WorldSignal {
-  evidence: WorldEvidence[];
+export interface SignalDetail extends Signal {
+  evidence: Evidence[];
 }
 
 /* ---------------------------------------------------------------- layer 3 */
@@ -171,7 +171,7 @@ export interface WorldSignalDetail extends WorldSignal {
  * exactly one top of mind per profile — so headquarters shows the artifact's
  * entries, never a list of competing artifacts.
  */
-export interface WorldEntry {
+export interface Entry {
   id: string;
   type: ApiTopOfMindEntryType;
   body: string;
@@ -187,12 +187,12 @@ export interface WorldEntry {
   createdMs: number;
 }
 
-export interface WorldTopOfMind {
+export interface TopOfMind {
   id: string;
   version: number;
   reason: ApiTopOfMind["reason"];
   createdMs: number;
-  entries: WorldEntry[];
+  entries: Entry[];
 }
 
 /* ------------------------------------------------------------- conversion */
@@ -207,7 +207,7 @@ export function toInspiration(row: {
   visibility?: ApiInspirationVisibility;
   attachmentSummary: ApiAttachmentSummary[];
   reflectionCount: number;
-}): WorldInspiration {
+}): Inspiration {
   return {
     id: row.id,
     preview: row.textPreview,
@@ -222,7 +222,7 @@ export function toInspiration(row: {
   };
 }
 
-export function toSignal(row: ApiSignal): WorldSignal {
+export function toSignal(row: ApiSignal): Signal {
   return {
     id: row.id,
     statement: row.statement,
@@ -237,7 +237,7 @@ export function toSignal(row: ApiSignal): WorldSignal {
   };
 }
 
-function toEvidence(signalId: string, row: ApiSignalEvidence): WorldEvidence {
+function toEvidence(signalId: string, row: ApiSignalEvidence): Evidence {
   return {
     signalId,
     inspirationId: row.inspirationId,
@@ -248,7 +248,7 @@ function toEvidence(signalId: string, row: ApiSignalEvidence): WorldEvidence {
   };
 }
 
-function toEntry(row: ApiTopOfMindEntry): WorldEntry {
+function toEntry(row: ApiTopOfMindEntry): Entry {
   return {
     id: row.id,
     type: row.type,
@@ -305,8 +305,8 @@ const FIELD_MAX_PAGES = 10;
  * is defined by the one before it, and the first page is what the world needs
  * to paint — the rest arrive behind it.
  */
-export async function loadInspirations(profile?: string): Promise<WorldInspiration[]> {
-  const out: WorldInspiration[] = [];
+export async function loadInspirations(profile?: string): Promise<Inspiration[]> {
+  const out: Inspiration[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < FIELD_MAX_PAGES; page++) {
     const got = await fetchInspirationPage({ limit: FIELD_PAGE, profile, cursor });
@@ -320,14 +320,14 @@ export async function loadInspirations(profile?: string): Promise<WorldInspirati
 /** THE SKY. Patterns, brightest-first is decided by the sky's own layout;
     here they arrive as the server ranked them. Retired ones are included —
     nothing that exists pops out of existence, it sinks. */
-export async function loadSignals(profile?: string): Promise<WorldSignal[]> {
+export async function loadSignals(profile?: string): Promise<Signal[]> {
   const rows = await fetchSignals({ limit: 200, profile });
   return rows.map(toSignal);
 }
 
 /** HEADQUARTERS. Null is a real state, not an error: a profile with nothing
     synthesized yet has nothing to stand on, and the world says so in words. */
-export async function loadTopOfMind(profile?: string): Promise<WorldTopOfMind | null> {
+export async function loadTopOfMind(profile?: string): Promise<TopOfMind | null> {
   const row = await fetchTopOfMind({ profile });
   if (!row) return null;
   return {
@@ -341,7 +341,7 @@ export async function loadTopOfMind(profile?: string): Promise<WorldTopOfMind | 
 
 /** One memory opened: the words in full, what was attached, and what the
     person said back. Enrichment comes through labelled, never as their words. */
-export async function loadInspiration(id: string): Promise<WorldInspirationDetail> {
+export async function loadInspiration(id: string): Promise<InspirationDetail> {
   const row = await fetchInspiration(id);
   return {
     id: row.id,
@@ -387,7 +387,7 @@ function firstImage(attachments: ApiAttachment[]): string | null {
 }
 
 /** One signal opened: the same statement, plus what it rests on. */
-export async function loadSignal(id: string): Promise<WorldSignalDetail> {
+export async function loadSignal(id: string): Promise<SignalDetail> {
   const row = await fetchSignal(id);
   return { ...toSignal(row), evidence: (row.evidence ?? []).map((e) => toEvidence(row.id, e)) };
 }
@@ -406,7 +406,7 @@ export async function loadSignal(id: string): Promise<WorldSignalDetail> {
  * a machine score the person never saw was never a good input to how alive
  * their own memory looks.
  */
-export function aliveness(c: WorldInspiration, now: number): number {
+export function aliveness(c: Inspiration, now: number): number {
   const days = Math.max(0, (now - Math.max(c.updatedMs, c.capturedMs)) / 86_400_000);
   const decay = Math.pow(0.5, days / 7);
   const attention = 0.25 * Math.min(c.reflectionCount, 2) * decay;

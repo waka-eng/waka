@@ -10,7 +10,7 @@ import { whenShort } from "../src/lib/when";
  * their neighbours.
  *
  * What DID die uncovered: the quote-marking contract. Its successor is
- * `markPassages` in `World.tsx`, which is module-local and therefore
+ * `markPassages` in `Home.tsx`, which is module-local and therefore
  * untestable from here — the same 13,000-line file the split exists to open
  * up. When the memory panel reaches `space/inspiration/`, that contract gets
  * its tests back.

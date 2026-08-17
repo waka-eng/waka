@@ -1,6 +1,6 @@
 # Where things live
 
-Read this before `World.tsx`. It is the map that file assumes you already have.
+Read this before `Home.tsx`. It is the map that file assumes you already have.
 
 ## The product in one paragraph
 
@@ -78,7 +78,7 @@ one place both appear is `world-data.ts`, which is the point.
 User-facing text is a third thing again: it says **inspiration**, because that
 is what the product calls itself — the page title is "WAKA — Inspirations".
 
-**`SimApi`** (inside `World.tsx`) — the boundary between React and the canvas.
+**`SimApi`** (inside `Home.tsx`) — the boundary between React and the canvas.
 React calls into the sim through it; the sim never reaches into React. Every
 new canvas capability is a method on this interface.
 
@@ -93,7 +93,7 @@ memories at the world origin.
 
 `/profile` and `/login` are flat, and should stay flat: text that reflows at
 200%, focus traps, plain confirmations — things in-world UI cannot give.
-`world-chrome.css` gives them the world's palette without its geometry.
+`chrome.css` gives them the world's palette without its geometry.
 
 ## The laws
 

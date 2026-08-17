@@ -135,16 +135,16 @@ import {
   loadSignal,
   loadSignals,
   toInspiration,
-  type WorldInspiration,
-  type WorldInspirationDetail,
-  type WorldEntry,
-  type WorldEvidence,
-  type WorldSignal,
-  type WorldTopOfMind,
+  type Inspiration,
+  type InspirationDetail,
+  type Entry,
+  type Evidence,
+  type Signal,
+  type TopOfMind,
 } from "../lib/data";
 import { useOptionalAuth } from "../lib/auth-context";
 
-import "../styles/world.css";
+import "../styles/home.css";
 
 /** Same rule Surface.tsx uses for the Debug pill. */
 function showsDebug(): boolean {
@@ -1129,14 +1129,14 @@ interface BornSeed extends SignalSeed {
  * nothing claimed on its behalf.
  */
 function seedOf(
-  c: WorldInspiration,
-  citations: Map<string, WorldEvidence[]>,
-  patternById: Map<string, WorldSignal>,
+  c: Inspiration,
+  citations: Map<string, Evidence[]>,
+  patternById: Map<string, Signal>,
 ): SignalSeed {
   const cites = citations.get(c.id) ?? [];
   const above = cites
     .map((e) => patternById.get(e.signalId))
-    .filter((p): p is WorldSignal => Boolean(p));
+    .filter((p): p is Signal => Boolean(p));
   return {
     id: c.id,
     capturedMs: c.capturedMs,
@@ -2170,14 +2170,14 @@ async function loadAgentWalls(): Promise<AgentBundle[]> {
     return Promise.all(
       real.map(async (p) => {
         const [captures, patterns, tom] = await Promise.all([
-          loadInspirations(p.id).catch(() => [] as WorldInspiration[]),
-          loadSignals(p.id).catch(() => [] as WorldSignal[]),
+          loadInspirations(p.id).catch(() => [] as Inspiration[]),
+          loadSignals(p.id).catch(() => [] as Signal[]),
           loadTopOfMind(p.id).catch(() => null),
         ]);
         const entries = (tom?.entries ?? []).slice().sort((a, b) => a.createdMs - b.createdMs);
         const lead = tom?.entries.find((e) => e.pinned) ?? tom?.entries[0] ?? null;
         const iso = (ms: number) => new Date(ms).toISOString();
-        const reading = (e: WorldEntry) => ({
+        const reading = (e: Entry) => ({
           ambition: e.body,
           awayFrom: null,
           /* what the claim rests on: the patterns it cites, which is what an
@@ -3677,7 +3677,7 @@ function scatterX(
  * artifact per profile under the canon, so this is never a list of competing
  * boards — it is the entries of the single board, in the server's order.
  */
-type JarNote = WorldEntry;
+type JarNote = Entry;
 
 interface Adopted {
   ambition: string;
@@ -3804,13 +3804,13 @@ function formingWords(
 /** Everything the world is built from, when it is built from nothing. */
 interface OfflineWorld {
   /** The ground: the field is made of these, and of nothing else. */
-  captures: WorldInspiration[];
+  captures: Inspiration[];
   /** The sky: patterns still forming, each citing memories that exist. */
-  patterns: WorldSignal[];
+  patterns: Signal[];
   /** Which patterns rest on which memory — the field reads its meaning here. */
-  citations: Map<string, WorldEvidence[]>;
+  citations: Map<string, Evidence[]>;
   /** The board headquarters stands on. */
-  notes: WorldEntry[];
+  notes: Entry[];
   /** The poster. */
   adopted: Adopted;
   /** What the poster rests on — the peek row is elected out of this. */
@@ -3836,7 +3836,7 @@ function offlineSignal(
     /** Returned to since: an old memory that is honestly warm again. */
     touched?: number;
   } = {},
-): WorldInspiration {
+): Inspiration {
   /**
    * NEVER AT THE VERY INSTANT OF LOADING.
    *
@@ -3879,7 +3879,7 @@ function offlineReading(
   day: number,
   title: string,
   evidence: Array<[number, string | null]>,
-): { pattern: WorldSignal; evidence: WorldEvidence[] } {
+): { pattern: Signal; evidence: Evidence[] } {
   const at = Date.parse(daysAgo(day));
   return {
     pattern: {
@@ -3931,7 +3931,7 @@ function offlineWorld(): OfflineWorld | null {
   const R3 = "I trust a surface more once I have watched it fail.";
   const R4 = "What I call taste is mostly a list of things I refuse to ship.";
 
-  const captures: WorldInspiration[] = [
+  const captures: Inspiration[] = [
     offlineSignal(
       1,
       0,
@@ -4081,7 +4081,7 @@ function offlineWorld(): OfflineWorld | null {
 
   /* WHICH PATTERNS REST ON WHICH MEMORY, built the same way the real sky
      builds it: from the patterns' own evidence, never declared per memory. */
-  const citations = new Map<string, WorldEvidence[]>();
+  const citations = new Map<string, Evidence[]>();
   for (const r of readings) {
     for (const e of r.evidence) {
       const q = e.quote ?? OFFLINE_QUOTES.get(e.inspirationId) ?? null;
@@ -4095,7 +4095,7 @@ function offlineWorld(): OfflineWorld | null {
   /* The board headquarters stands on: one artifact, and its entries cite the
      patterns beneath them — layer 3 pointing at layer 2, never at memories. */
   const boardMs = Date.now() - 9 * DAY_MS;
-  const notes: WorldEntry[] = readings.map((r, i) => ({
+  const notes: Entry[] = readings.map((r, i) => ({
     id: `offline-e${i + 1}`,
     type: "pattern" as const,
     body: r.pattern.statement,
@@ -4191,7 +4191,7 @@ interface PanelSpot {
  */
 interface PanelData {
   id: string;
-  detail: WorldInspirationDetail | null;
+  detail: InspirationDetail | null;
   partial: boolean;
 }
 
@@ -4294,7 +4294,7 @@ interface FieldAudit {
   bandBottom: number;
 }
 
-export default function WorldPage(): JSX.Element {
+export default function HomePage(): JSX.Element {
   /* No gate. This is home now — it is what a signed-in person lands on, in
      every build. The dev gate that used to stand here existed while this was
      a prototype living beside the real surface; the only things still behind
@@ -4348,30 +4348,30 @@ function WorldExperience(): JSX.Element {
     }
   }
   const offlineRef = useRef(false);
-  const [captures, setCaptures] = useState<WorldInspiration[] | null>(null);
+  const [captures, setCaptures] = useState<Inspiration[] | null>(null);
   const [notes, setNotes] = useState<JarNote[] | null>(null);
   /**
    * THE SKY, IN THE CANON'S SENSE — layer 2. Each is an evidence-backed
    * pattern: `emerging` is still forming overhead, `active` is what
    * headquarters stands on, `retired` has sunk. Null until the answer is in.
    */
-  const [patterns, setPatterns] = useState<WorldSignal[] | null>(null);
+  const [patterns, setPatterns] = useState<Signal[] | null>(null);
   /**
    * WHICH PATTERNS REST ON WHICH MEMORY — built from the sky, consumed by the
    * field. A capture under the canon knows nothing about its own meaning, so
    * everything a ball shows beyond its words and its clock is read from here,
    * and a memory nothing cites shows none of it rather than a default.
    */
-  const [citations, setCitations] = useState<Map<string, WorldEvidence[]>>(new Map());
+  const [citations, setCitations] = useState<Map<string, Evidence[]>>(new Map());
   /** LAYER 3 — the one artifact this profile stands on. Null before the first
       synthesis, which the world says in words rather than leaving blank. */
-  const [topOfMind, setTopOfMind] = useState<WorldTopOfMind | null>(null);
+  const [topOfMind, setTopOfMind] = useState<TopOfMind | null>(null);
   /** The background sweep has finished. The only thing that waits for it is
       imagery, which must appear all at once or not at all. */
   const [sweepDone, setSweepDone] = useState(false);
   /** pattern id → what it rests on. Filled by the sky's background sweep;
       read by the orbit, which never fetches on tap. */
-  const evidenceByPatternRef = useRef<Map<string, WorldEvidence[]>>(new Map());
+  const evidenceByPatternRef = useRef<Map<string, Evidence[]>>(new Map());
 
   /**
    * READING THE SKY — the one owner, so it can happen more than once.
@@ -4397,7 +4397,7 @@ function WorldExperience(): JSX.Element {
     const rows = await loadSignals();
     if (offlineRef.current) return;
     setPatterns(rows);
-    const index = new Map<string, WorldEvidence[]>();
+    const index = new Map<string, Evidence[]>();
     for (const p of rows) {
       if (offlineRef.current) return;
       if (p.evidenceCount === 0) continue;
@@ -4494,7 +4494,7 @@ function WorldExperience(): JSX.Element {
   const [board, setBoard] = useState<{ step: "rest" | "asking" | "working" }>({ step: "rest" });
 
   /** The statement the poster is currently showing, as an entry we can act on. */
-  const lead = useMemo<WorldEntry | null>(() => {
+  const lead = useMemo<Entry | null>(() => {
     if (!notes || notes.length === 0) return null;
     return notes.find((n) => n.pinned) ?? [...notes].sort((a, b) => a.sortOrder - b.sortOrder)[0];
   }, [notes]);
@@ -4532,7 +4532,7 @@ function WorldExperience(): JSX.Element {
    * through "held" would be a third state that means nothing. So the button
    * disappears once it has been used, rather than offering to undo itself.
    */
-  const holdLead = useCallback((entry: WorldEntry) => {
+  const holdLead = useCallback((entry: Entry) => {
     setNotes((prev) =>
       prev ? prev.map((n) => (n.id === entry.id ? { ...n, pinned: true } : n)) : prev,
     );
@@ -4549,7 +4549,7 @@ function WorldExperience(): JSX.Element {
    * marks it, so the board can be told it was wrong without losing the record
    * that it once said this. The next statement in the order takes the poster.
    */
-  const dropLead = useCallback((entry: WorldEntry) => {
+  const dropLead = useCallback((entry: Entry) => {
     setNotes((prev) => (prev ? prev.filter((n) => n.id !== entry.id) : prev));
     setAdopted(null);
     /* WHAT WAS PUT DOWN CAN BE PICKED BACK UP. Dismissing is not deleting —
@@ -4718,8 +4718,8 @@ function WorldExperience(): JSX.Element {
    */
   /** Read by the loop: a panel is occluding part of the field right now. */
   const panelOpenRef = useRef(false);
-  const detailsRef = useRef<Map<string, WorldInspirationDetail>>(new Map());
-  const detailPendingRef = useRef<Map<string, Promise<WorldInspirationDetail | null>>>(new Map());
+  const detailsRef = useRef<Map<string, InspirationDetail>>(new Map());
+  const detailPendingRef = useRef<Map<string, Promise<InspirationDetail | null>>>(new Map());
 
   /* ---- rooms (v8): session caches that survive the sim effect's re-runs ---- */
   const auth = useOptionalAuth();
@@ -5219,7 +5219,7 @@ function WorldExperience(): JSX.Element {
    * immediately when it is already in hand — which, thanks to the background
    * sweep below, is the common case by the time anything is tapped.
    */
-  const loadDetail = useCallback((id: string): Promise<WorldInspirationDetail | null> => {
+  const loadDetail = useCallback((id: string): Promise<InspirationDetail | null> => {
     const have = detailsRef.current.get(id);
     if (have) return Promise.resolve(have);
     const inFlight = detailPendingRef.current.get(id);
@@ -5347,7 +5347,7 @@ function WorldExperience(): JSX.Element {
    * down in the field.
    */
   const signalById = useMemo(() => {
-    const m = new Map<string, WorldInspiration>();
+    const m = new Map<string, Inspiration>();
     for (const s of captures ?? []) m.set(s.id, s);
     return m;
   }, [captures]);
@@ -10772,7 +10772,7 @@ function WorldExperience(): JSX.Element {
        place until the new content is complete */
     setPanelOpen(false);
     let done = false;
-    const show = (detail: WorldInspirationDetail | null) => {
+    const show = (detail: InspirationDetail | null) => {
       if (done) return;
       done = true;
       window.clearTimeout(timer);
@@ -10887,8 +10887,8 @@ function WorldExperience(): JSX.Element {
    * An agent's wall answers the same question from its own stack: its board
    * names the memories it was grounded in directly.
    */
-  const posterChain = useMemo<WorldEvidence[]>(() => {
-    const out: WorldEvidence[] = [];
+  const posterChain = useMemo<Evidence[]>(() => {
+    const out: Evidence[] = [];
     const seen = new Set<string>();
     if (atWall.kind === "agent") {
       const a = (agents ?? []).find((x) => x.agent.id === atWall.id);
@@ -10955,7 +10955,7 @@ function WorldExperience(): JSX.Element {
    * and saying so with an empty section would be apparatus.
    */
   const evidenceFor = useCallback(
-    (c: Candidate): WorldEvidence[] =>
+    (c: Candidate): Evidence[] =>
       c.kind === "reading" ? evidenceByPatternRef.current.get(c.id) ?? [] : [],
     /* provTick is the ref's change signal — see the fetch effect above */
     [provTick],
@@ -10975,7 +10975,7 @@ function WorldExperience(): JSX.Element {
    * whitespace or the preview may be truncated before it), the honest
    * fallback is the quote by itself — never a guessed span.
    */
-  const salience = useCallback((e: WorldEvidence): JSX.Element => {
+  const salience = useCallback((e: Evidence): JSX.Element => {
     const full = e.preview ?? "";
     const q = (e.quote ?? "").trim();
     if (!q) return <>{full}</>;

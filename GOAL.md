@@ -2,7 +2,7 @@
 
 **Make the world the product, on main's backend.**
 
-The world (`packages/web/src/pages/World.tsx`) is the main experience: one
+The world (`packages/web/src/pages/Home.tsx`) is the main experience: one
 column per mind — your wall, your agents' walls, your rooms — each with its
 own three layers rendered as sky, headquarters and field. It replaced the
 archive, which is deleted.
@@ -23,7 +23,7 @@ tree, and the duplication gets resolved deliberately:
 - **The world keeps what is spatial** — travelling between minds, the field of
   memories, the sky of patterns, provenance, rooms as places.
 
-`packages/web/src/styles/world-chrome.css` already assumes this split: it gives
+`packages/web/src/styles/chrome.css` already assumes this split: it gives
 the flat screens the world's palette and type without dragging them into its
 geometry.
 
