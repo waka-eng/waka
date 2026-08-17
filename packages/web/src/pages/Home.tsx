@@ -7542,9 +7542,26 @@ function HomeExperience(): JSX.Element {
             setAdopting(false);
             return;
           }
+          /* THE THING BEING ANIMATED HAS TO OUTLIVE THE ANIMATION.
+             `condense` starts a 700ms contraction on the cloud, and this used
+             to drop the proposal from state in the very same commit. React
+             batches the two, so the candidate left `candidates`, `syncSky`
+             dropped its Neb, and React unmounted its sentence — all before the
+             loop had drawn one frame of the contraction. Nothing contracted.
+             The cloud vanished, and the timer below then sat out an animation
+             nobody had been shown.
+             Under this layout's law that MOTION EXPLAINS, the contraction is
+             the sentence "this became yours"; without it the least reversible
+             act here happens in silence and the person is left inferring from
+             an empty sky that it worked.
+             So the proposal is released where it was always meant to be — with
+             the rest of the handover, once the contraction it is the subject of
+             has finished. Holding it here also keeps it the sky's subject for
+             those 700ms, which is what keeps the other candidates sunk behind
+             it until it has actually gone. */
           simApiRef.current?.condense(c.id);
-          setProposal(null);
           window.setTimeout(() => {
+            setProposal(null);
             setAdopted({ ambition: c.text, groupName: null, createdMs: Date.now() });
             simApiRef.current?.toTop();
             setAdopting(false);
