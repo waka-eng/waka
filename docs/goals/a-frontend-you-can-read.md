@@ -152,27 +152,239 @@ not done, because an untested net is the same hope it replaces.
 
 ### Phase 3 — One vocabulary, enforced
 
-The rename happened; the enforcement did not.
+**The gate already exists and is already green.** `cfb312d` landed
+`packages/web/scripts/check-vocabulary.mjs`, wired into `pnpm test`
+(`package.json:11`) and into CI's *Web tests* step. It reads identifiers only,
+blanks comments and strings, forbids `capture`/`pattern`/`room`/`wow`/`world`,
+and today prints *"vocabulary: clean — every identifier speaks the canon."*
 
-- **A lint gate on the old vocabulary.** `capture`, `pattern`, `room`, `wow`
-  as identifiers fail the build in `packages/web/src`. Prose in comments is
-  allowed and human words on screen are required — the check is scoped to
-  identifiers, which is precisely the third-vocabulary rule in
-  `docs/architecture.md` made mechanical.
-- **The frame's own noun.** `WorldExperience`, `World`, `computeWorld`,
-  `OfflineWorld` still carry "world", the noun the owner rejected in favour
-  of Home. Rename, and add them to the gate.
+It prints that while `.jar-roomform` is worn by live markup, 33 `Wow` keys ship
+in both message catalogs, and one map key reads `cached:` and matches nothing.
+The gate is not lying; it is reporting its scope. Phase 3 is therefore not
+"build a gate" — it is closing the three holes the gate has by construction:
+
+1. **It walks `.ts`/`.tsx` under `src` only.** `.json` and `.css` are
+   unwatched. That is where 33 stale i18n keys and 30 stale CSS names live.
+2. **`codeOnly()` blanks every string literal.** Correct for prose, wrong for
+   the two string classes that *are* identifiers: CSS class names and map keys.
+3. **`words()` matches whole words**, so abbreviations pass. `cap`, `caps`,
+   `insp` all run clean.
+
+Everything below is anchored on an identifier and its enclosing symbol, never
+a line number — see the last bullet of *What contradicts this plan*.
+
+#### The rename list, in order
+
+**A — not vocabulary, a bug the rename caused. Lands first, and alone.**
+
+- **A1. The wall-provenance key never matched.** In the `wallProv` producer
+  effect, `` m.set(`cached:${w.id}`, prov) `` → `m.set(spaceKey(w), prov)`.
+  Use the function, not a hand-built literal, so this cannot drift again. The
+  producer is guarded `if (w.kind !== "group") continue`, and both consumers
+  read `wallProv.get(spaceKey(w))`, which is `` `${s.kind}:${s.id}` ``
+  (`space-kinds/index.ts:43`) — so the only key that ever resolves is
+  `group:<id>`. It was `room:` (a miss under the old vocabulary); a mechanical
+  sweep rewrote it to `cached:` (a miss for a new reason, borrowed from the
+  `const cached` on the line above). Every group wall shows the empty peek row
+  the comment above it exists to prevent. The sibling loop `wallChromeNow`
+  already calls `spaceKey(w)` correctly; this is the one that diverged.
+- **A2. Revert a blind rename.** `const group = seam - hqH - gap * 2` →
+  `const avail`. This was `const room` in the *English* sense: leftover
+  vertical pixels between the headquarters block and the jar seam. A sweep
+  renamed it to the canon noun for a database entity, so one token now carries
+  three meanings in one file — connected components of clouds (`groups`), a
+  canon group, and a pixel count. Its own surviving comments still say `room`,
+  including a backticked `room > 0` that now names nothing. Second site:
+  `if (charSize > group)`. `avail` is free in `Home.tsx`.
+
+**B — file-local, collision-free, no companion change.**
+
+- **B1. `caps` → `inspirations`** in the `grounds` memo
+  (`groupFieldRef.current.get(atWall.id) ?? []`), 2 sites. Take the loop
+  variable `c` with it; it is the same word's initial.
+- **B2. `cap` → `inspiration`** at every binding that holds an inspiration
+  row: the `makeAgentBall` map, the group-field ball map, the hue-assignment
+  loop, and the `posterChain` agent branch. ~22 sites, 4 blocks. Two traps.
+  **Not `insp`** — `insp` already names a 0–1 aliveness scalar in this file
+  (`Resident.insp`, `inspNow`, `inspCol`, `inspTop`, `residentInsp`, 31 code
+  sites); reusing it for an inspiration *object* is a clash even where the
+  scopes do not overlap. **Not a file-wide `\bcap\b` replace** — `lib/words.ts`
+  binds `const cap = (s) => …` as *capitalise*, and Home.tsx has three comment
+  blocks where `cap` is the English word for a limit. Rename by block.
+- **B3. `layout` → `geom`, `interface Layout` → `Geom`, `layoutH` → `geomH`**
+  — *disambiguation, not vocabulary, and the one item here the gate would
+  never fire on.* `layout` means three things in `Home.tsx`: the `OfflineHome`
+  payload, the geometry record from `computeLayout`, and a
+  `Record<string, {x, y}>` inside `persistSky()` that genuinely shadows the
+  geometry record within the same effect. Harmless today — `persistSky` never
+  reads geometry — but its own comment already talks about "layout
+  coordinates" in the geometry sense inside the function where `layout` means
+  positions. 48 dotted reads, 2 call sites; `geom`/`Geom`/`computeGeom`/
+  `geomH` are free across `packages/web/src`; `computeLayout` and `layoutH`
+  appear nowhere else in the repo. **Defer to Phase 4** if the sky extraction
+  lands first — it is taking this effect apart anyway, and doing it twice is
+  churn.
+
+**C — coordinated. Two or more files, one commit.**
+
+- **C1. The 33 `Wow` i18n keys — delete, do not rename.** `en-US.json` and
+  `ko-KR.json`, 33 keys each, identical key sets, 290 lines each. Zero
+  references in any `.ts`/`.tsx`/`.css`; `t()` is only ever called with string
+  literals; `translationKeys` is exported and unused. Their one consumer,
+  `pages/AdminWowStatus.tsx`, no longer exists. The values were already
+  migrated ("Note status", "What hit"), so the catalog says one word out loud
+  and another in code — but renaming dead keys manufactures 33 canon-named
+  messages no screen reads. **Companion: both catalogs in the same commit** —
+  `ExactCatalog<T>` (`lib/i18n/index.ts:50-52`) types a key present in one and
+  missing from the other as `never`, and `test/i18n.test.ts:22` asserts key-set
+  equality. Trap if anyone renames instead: `developmentWowStatus` →
+  `developmentStatus` collides with the live `developmentStatus` on line 13 of
+  both files, duplicate JSON keys collapse last-wins *identically in both
+  files*, and both the type and the test stay green while a message vanishes.
+- **C2. `.jar-roomform*` → `.jar-groupform*`.** `home.css` (8 declarations) and
+  `Home.tsx` (8 `className` sites) **in one commit.** It is literally the
+  create/join-a-group form: gated on `groupForm`, driven by `setGroupForm`,
+  submitted by `submitGroup()`. The on-screen strings beside it ("Make a
+  group", "Join with a link") are untouched. **Scope correction:**
+  `.jar-roomform-box` is *not* group-specific — it is a bare-input style also
+  worn by the agent-name field, the search field and the group-rename form.
+  Renaming it to `jar-groupform-box` clears the old word and puts a group name
+  on the search box. Lift it to a neutral `.jar-bareinput` in the same pass and
+  move only the wrapper, `-tabs` and `-err` to `groupform`. The precedent for
+  the same-commit rule is in this stylesheet already: a v8→v10 rename moved
+  markup to `.jar-wallcol` while the selector stayed `.jar-roomcol`, every
+  column computed `position: static`, and all five walls stacked at x=0. That
+  comment is prose and stays.
+- **C3. Delete the dead CSS.** 30 distinct old-vocabulary names across
+  `styles/`; exactly two are reachable from TSX (C2 and C4). The rest —
+  `.jar-room-empty`, `.jar-room-hold`, `.jar-roomcol`, the `.nc-room-*` and
+  `.nc-rail-room*` family, `.capture*`, `.reference-capture-*`,
+  `.top-home-capture`, `.inspiration-first-capture` — have no markup. A
+  renamed dead selector is a canon-named rule nothing wears; delete instead.
+  Establish reachability with the same grep, not by eye.
+- **C4. `.profile-room` is a decision, not a rename.** Live in `Profile.tsx`
+  on the *access* tab panel, and load-bearing: `.profile-room[hidden]
+  { display: none }` in both `global.css` and `chrome.css` is what hides that
+  panel. But the CSS treats it as a list row, beside `.profile-memory-row` and
+  `.profile-connection-row` — it was "a row per room you belong to" and it is
+  now stuck on a tabpanel. `.profile-group` would repeat the `--voice-room`
+  error: a canon entity name on something that is not that entity. Name it for
+  what it is (`.profile-access-panel`) or split the two rules that are doing
+  different jobs. Owner's call; do not sweep it.
+
+#### The allowlist the gate needs
+
+`ALLOWED` is where a gate goes to die, and the script says so itself. One rule:
+**an entry is admitted only if renaming it would break a correspondence with
+something outside our control — the server, the DOM, or the English language.**
+"It's a lot of work" is not an entry. "It's dead anyway" is not an entry
+either; dead code is deleted, not allowlisted.
+
+Nine entries exist and all nine still earn their place:
+
+| entry | why it cannot be renamed |
+|---|---|
+| `capturedAt` | the server sends this name; our mirror must match it |
+| `capturedMs` | the parsed ms form of `capturedAt`. One entry covers ~35 sites across `Home.tsx`, `space/inspiration/orb.ts` + `field.ts`, `space-kinds/group.ts`, `lib/data.ts`, `lib/fixture.ts` |
+| `captureRef` | React's pointer-capture handle, not ours to name |
+| `setPointerCapture`, `releasePointerCapture`, `hasPointerCapture` | DOM methods |
+| `CanvasPattern`, `createPattern` | DOM type and method on the 2D context |
+| `PUBLIC_HANDLE_PATTERN` | `pattern` as in regular expression, no relation to the layer |
+
+One correction to a reason line: the `capturedMs` entry currently claims a
+server field name. The server column is `createdAt`; `lib/data.ts` deliberately
+maps `capturedMs: ms(row.createdAt)`. It mirrors the canon's *concept* of
+capture time, not a wire field. Still worth keeping — say the true reason.
+
+Add exactly three, and only as their scope becomes visible:
+
+- **`--voice-room`** (`system.css`) — needed only once the gate reads CSS. It
+  is a WORLD word, not an entity: the family is `--voice-room` /
+  `--voice-you` / `--voice-machine`, an axis of *who speaks* — the ambient
+  place, you, the system. Its two live consumers are `.login-title` and
+  `.nc-title`. A login screen has no group; `--voice-group` would be a false
+  claim, not a fix.
+- **the wire value `"pattern"`** — `ApiTopOfMindEntryType` in `lib/api.ts` and
+  `type: "pattern" as const` in `lib/fixture.ts`. It mirrors the Postgres enum
+  at `packages/api/src/db/schema-top-of-mind.ts:102`, which lists `pattern`
+  verbatim. Invisible to the gate today because it is a string, and it must
+  stay invisible if the gate ever reads strings. The entry must state the
+  order: **DB migration first, client second.** Changing the client alone
+  silently stops matching server payloads, with no type error.
+- **`"pattern is" / "patterns are" forming`** — on-screen copy in
+  `space/top-of-mind/board.ts`, rendered on every wall through `formingWords`
+  (`space-kinds/group.ts:190`, `agent.ts:54`, two `Home.tsx` sites). This is
+  the one place the two rules point in opposite directions: human words on
+  screen are protected, but the product sanctions only *room* as a warm
+  synonym, and `pattern` names a concept the canon **removed** — there is
+  nothing behind the word. **This is the owner's ruling and Phase 3 does not
+  make it.** One ruling fixes all four call sites. If the copy changes it is
+  copy work, not a rename.
+
+Refused admission:
+
+- **`jar`, `JarNote`, `.jar-*`** — not old vocabulary. It is a live token
+  namespace (`docs/codebase.md:112`, queried by `test/helpers/render-home.tsx`),
+  so it never goes on `FORBIDDEN` and needs no hole. The separate proposal to
+  collapse `export type JarNote = Entry` is wrong on its own terms:
+  `board.ts` already imports `Entry` from `lib/data` (the alias would be
+  self-referential) and `Home.tsx` already imports both — it is a duplicate
+  identifier in two files, and a five-site refactor, not a rename.
+- **Abbreviations, as a class.** Putting `cap`/`caps`/`insp` on `FORBIDDEN`
+  produces 9 violating identifiers, of which 6 are correct — the whole `insp`
+  aliveness family and `lib/words.ts`'s capitalise helper. Six permanent holes
+  to catch two one-time renames is a gate paying rent forever. Do B1 and B2 by
+  hand; leave `words()` whole-word.
+
+**Gate:** a deliberately reintroduced `roomPanel` fails the build **three
+ways — as a `.tsx` identifier, as a `.css` selector, and as an i18n key**;
+`pnpm --filter @waka/web test` and `build` green; and `ALLOWED` has grown by at
+most the three entries above, each naming what would break.
+
+Two bullets from the earlier draft survive unchanged:
+
 - **`field`, `sky`, `headquarters` survive as places, not layers.** They name
-  where a layer is *drawn*. Document that distinction where the gate points,
-  so the next reader does not "fix" them into canon words.
-- **The fixture stops being a product dependency.** `space-kinds/agent.ts`
-  imports `AgentBundle` from `lib/fixture` — a dev fixture supplying a
-  product type. When `GET /api/agents` lands, that import moves to `lib/api`
-  and nothing else changes; until then the direction is named in the file so
-  it is a known loan rather than an accident.
+  where a layer is *drawn*. Document that distinction where the gate points —
+  and next to it, the gate's scope, so the next reader does not read green as
+  done.
+- **The fixture stops being a product dependency.** `space-kinds/agent.ts:10`
+  imports `AgentBundle` from `lib/fixture` — a dev fixture supplying a product
+  type. When `GET /api/agents` lands, that import moves to `lib/api` and
+  nothing else changes; until then the direction is named in the file (lines
+  6-9) so it is a known loan rather than an accident.
 
-**Gate:** the gate fails on a deliberately reintroduced `roomPanel`, and the
-web package builds clean.
+#### What contradicts this plan
+
+- **The frame's own noun is already renamed. Delete that bullet.** The earlier
+  draft listed `WorldExperience`, `World`, `computeWorld`, `OfflineWorld` as
+  outstanding. All four are gone — zero occurrences in `packages/web/src`.
+  `interface World` is `interface Layout`, `computeWorld` is `computeLayout`,
+  `worldH` is `layoutH`, `ProtectedWorld` is `ProtectedHome`. `world` is
+  already on `FORBIDDEN` and the gate passes. The only surviving "world"
+  strings are deliberate historical prose in `lib/data.ts:12-24` and
+  `main.tsx` comments, which stay. Four separate agents in the sweep proposed
+  renames against that stale line and one of them would have silently
+  retitled `Layout` if applied positionally. A stale backlog line is not
+  free — it costs a review pass every time.
+- **A green gate is not a clean package**, and this is the strongest argument
+  in the phase. Three CI gates were green over `.jar-roomform`, 33 dead `Wow`
+  keys, and a map key that resolves for nobody. That is the same failure mode
+  Phase 2 exists for, in a different instrument.
+- **The rename left a real bug in shipped code.** `` `cached:${w.id}` `` is a
+  text substitution that rewrote a string literal along with the local
+  variable beside it. It is the case *for* the gate reading map keys and
+  *against* ever running a vocabulary pass as a find-and-replace. Add the group
+  wall's peek row to Phase 2's canvas assertions.
+- **`room` in CSS is 30 names, and 28 of them are dead.** The vocabulary
+  problem in `styles/` is mostly a dead-code problem. Deleting is cheaper,
+  and more honest, than renaming rules nothing wears.
+- **`Home.tsx` line numbers are unstable, and this invalidated part of the
+  sweep.** During this analysis the file went 11,590 → 11,005 lines: Phase 4's
+  `canvas/` pass two is in flight in the same working tree (`canvas/palette.ts`
+  and `character/raster.ts` untracked, `canvas/sprites.ts` modified). Findings
+  carrying line numbers were off by 500+ within the hour. **Phase 3 and
+  Phase 4 do not run concurrently on `Home.tsx`**, and the working tree is
+  committed or stashed before Phase 3 starts.
 
 ### Phase 4 — The rest of the map
 
@@ -184,12 +396,25 @@ Pure moves, in dependency order. Each lands with the audit invariant green.
   `canvas/palette.ts`, and the dependency runs `canvas/palette` →
   `character/raster` → `canvas/sprites` → `lib/*` with no cycle and no
   signature change.
-- **`space/signal/sky.ts` — the engine** (~950 lines, currently inside the
-  giant effect). Measured separable: 13 mutable variables of its own against
-  the engine's 98, reaching only 11 outward, of which 8 are read-only
-  viewport facts. It becomes `createSky({ view })` returning a handle. This
-  is the largest single block in the effect with its own state boundary, and
-  it is exactly layer 2.
+- **~~`space/signal/sky.ts` — the engine (~950 lines)~~. CORRECTED 2026-08-16:
+  this is not separable, and the earlier measurement that said it was had
+  been taken over a narrower line range than the engine occupies.** Measured
+  again over its true extent (L3500-4452): it reaches for 18 outer things
+  (camX, camY, col, cursor, dragging, draw, layout, list, nowMs, onUp, place,
+  reduced, release, root, settle, tap, wake, box) and 23 of its own are read
+  by the rest, ten of them functions. A handle exposing 13 fields and 10
+  methods while taking 18 inputs is not a module, it is the same code with a
+  wall drawn through it. Two of the 23 — `provenance` and `heldBall` — are
+  not sky state at all; they are declared in that region and belong to the
+  wall and the field respectively, which is part of why the region looked
+  more coherent than it is.
+
+- **`space/signal/geometry.ts` — what survives that correction** (~270 lines).
+  The pure half: `orbFitX`, `orbFitY`, `measureNeb`, `solveSats` and `makeSat`
+  reach for nothing outside themselves; `clampHome` needs the layout and
+  `makeNeb` needs the column and the drag flag, all three passable as
+  arguments. These take values and return values, which is the only test that
+  matters.
 - **The five panels** (1,762 lines of JSX): ready-phase field (464),
   inspiration detail (278), sky (215), settings (188), group panel (131).
   Mechanical but wide — each closes over dozens of state variables and needs
