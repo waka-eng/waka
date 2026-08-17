@@ -82,8 +82,13 @@ is what the product calls itself — the page title is "WAKA — Inspirations".
 React calls into the sim through it; the sim never reaches into React. Every
 new canvas capability is a method on this interface.
 
-**`packages/web/src/lib/api.ts`** — the only place HTTP happens. Route
-handlers live in `packages/api/src/routes/`.
+**`packages/web/src/lib/api/`** — the only place HTTP happens. One module per
+resource, each named after the route file that answers it, so the two sides are
+mirrors: `groups.ts` here calls `groups.ts` there. Route handlers live in
+`packages/api/src/routes/`. The shared fetch wrapper is `api/http.ts`, and its
+verb helpers are deliberately not re-exported from `api/index.ts` — a page that
+could reach them could decide a request shape for itself, and then this would
+no longer be the only place HTTP happens.
 
 **`ball.agentId`** — which wall a memory stands on. Decided once, when the ball
 list is built, and read everywhere. Getting this wrong stacked every wall's
