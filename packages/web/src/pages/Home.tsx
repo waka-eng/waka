@@ -103,6 +103,15 @@ import {
 } from "../canvas/sprites";
 import { hasDial, hasSky, spaceKey, type Space } from "../space-kinds";
 import {
+  deriveAmbition,
+  formingWords,
+  type Adopted,
+  type JarNote,
+  type Proposal,
+  type Provenance,
+  type ReflectState,
+} from "../space/top-of-mind/board";
+import {
   bornBall,
   makeAgentBall,
   makeBall,
@@ -112,11 +121,13 @@ import {
   type BornSeed,
 } from "../space/inspiration/orb";
 import {
-  daysAgo,
   MOCK_AGENTS,
+  offlineWorld,
+  showsDebug,
   MOCK_AGENT_BUNDLES,
   type AgentBundle,
   type ApiAgentDirectionReading,
+  type OfflineWorld,
 } from "../lib/fixture";
 import {
   agoWords,
@@ -186,6 +197,7 @@ import {
   type InspirationDetail,
   type Entry,
   type Evidence,
+  type EvidenceRef,
   type Signal,
   type TopOfMind,
 } from "../lib/data";
@@ -193,11 +205,6 @@ import { useOptionalAuth } from "../lib/auth-context";
 
 import "../styles/home.css";
 
-/** Same rule Surface.tsx uses for the Debug pill. */
-function showsDebug(): boolean {
-  const env = import.meta.env as Record<string, unknown>;
-  return env.DEV === true || env.VITE_SHOW_INTERNAL === "1";
-}
 
 /**
  * MOONLIGHT — the surface, chosen.
@@ -1250,37 +1257,6 @@ interface Candidate {
   originIds: string[];
 }
 
-/**
- * One memory a candidate is made of.
- *
- * A PERSONAL candidate resolves its evidence against the captures already
- * loaded and SKIPS anything that is not there — an id with nothing behind it
- * is not a memory, and inventing one would be a lie about what was saved. ROOM
- * evidence stands on its own: it arrives carrying its author and its words,
- * exactly as a room's own orbs do, so a satellite can say whose memory it is
- * without ever fetching another member's signal.
- */
-interface EvidenceRef {
-  signalId: string;
-  /** The room it came from, when it came from one. */
-  groupId: string | null;
-  authorUserId: string | null;
-  authorName: string | null;
-  /**
-   * WHY THIS WAS WORTH KEEPING, in one short phrase — the whisper an agent's
-   * satellite carries instead of an author's name. "얘가 이걸 만든 이유가
-   * 이거다", rendered with the element that already exists.
-   */
-  why?: string | null;
-  textPreview: string;
-  quote: string | null;
-  kind: string | null;
-  createdMs: number;
-  /** False when the payload named no date and `createdMs` is only a reference
-      for the light — the panel then prints who, and no when. */
-  dated: boolean;
-  resonance: number;
-}
 
 /** One memory, once, however many candidates cited it — strongest first. */
 function dedupeEvidence(all: EvidenceRef[]): EvidenceRef[] {
@@ -2219,89 +2195,6 @@ function scatterX(
 // Ambition fallback chain
 // ---------------------------------------------------------------------------
 
-/**
- * One statement of the artifact headquarters stands on. There is exactly one
- * artifact per profile under the canon, so this is never a list of competing
- * boards — it is the entries of the single board, in the server's order.
- */
-type JarNote = Entry;
-
-interface Adopted {
-  ambition: string;
-  /** The room whose board this is, or null when it is your own. */
-  groupName: string | null;
-  createdMs: number;
-}
-
-/** The reflect action's one-at-a-time life inside the panel. */
-interface ReflectState {
-  step: "rest" | "asking" | "open" | "keeping" | "kept";
-  question: string;
-  answer: string;
-  /** the row just written, so it can be taken back without a refetch */
-  lastId?: string;
-}
-
-/**
- * The raw captures the adopted ambition was built from, and the words of theirs
- * that carried it. The peek row beneath the poster is THIS: not "the newest
- * five" but "what led to what you are looking at".
- */
-type Provenance = Map<string, string | null>;
-
-/** The room's pending rewrite of the ambition — the one adoptable candidate. */
-interface Proposal {
-  groupId: string;
-  proposalId: string;
-  ambition: string;
-  changeSummary: string | null;
-  createdMs: number;
-  evidence: EvidenceRef[];
-  /** The span the server declared across that evidence; its orbit reads it. */
-  spanMs: number | null;
-}
-
-function deriveAmbition(
-  T: number,
-  adopted: Adopted | null,
-  notes: JarNote[] | null,
-): { text: string | null; eyebrow: string } {
-  if (adopted && adopted.createdMs <= T)
-    return { text: adopted.ambition, eyebrow: adopted.groupName ?? "Top of mind" };
-  const avail = notes ? notes.filter((n) => n.createdMs <= T) : [];
-  const pinned = avail.find((n) => n.pinned);
-  if (pinned) return { text: pinned.body, eyebrow: "Top of mind" };
-  /* No confidence on an entry any more, and none is invented: the server's
-     own order is the ranking, so the head of it is what the board leads with. */
-  let best: JarNote | null = null;
-  for (const n of avail) if (!best || n.sortOrder < best.sortOrder) best = n;
-  if (best) return { text: best.body, eyebrow: "Top of mind" };
-  return { text: null, eyebrow: "Top of mind" };
-}
-
-/**
- * What is FORMING, in one line and always in words.
- *
- * The adopted ambition and the things that might replace it are separate
- * entities, and the page says so: the poster is the ambition the person holds
- * today, and this line — the only other thing under it — reports that
- * candidates exist without putting them on the same footing. A pending
- * proposal is a whole new ambition and outranks the readings; provisional
- * top-of-mind notes are counted, never listed, and never as a digit.
- */
-function formingWords(
-  T: number,
-  proposalMs: number | null,
-  forming: Array<{ createdMs: number }> | null,
-): string | null {
-  if (proposalMs !== null && proposalMs <= T) return "A new ambition is forming";
-  let n = 0;
-  for (const f of forming ?? []) if (f.createdMs <= T) n++;
-  if (n === 0) return null;
-  const w = numWords(n);
-  return `${w[0].toUpperCase()}${w.slice(1)} ${n === 1 ? "pattern is" : "patterns are"} forming`;
-}
-
 // ---------------------------------------------------------------------------
 // THE OFFLINE FIXTURE — the world with nothing behind it
 // ---------------------------------------------------------------------------
@@ -2347,340 +2240,6 @@ function formingWords(
  *
  * ==========================================================================
  */
-
-/** Everything the world is built from, when it is built from nothing. */
-interface OfflineWorld {
-  /** The ground: the field is made of these, and of nothing else. */
-  captures: Inspiration[];
-  /** The sky: patterns still forming, each citing memories that exist. */
-  patterns: Signal[];
-  /** Which patterns rest on which memory — the field reads its meaning here. */
-  citations: Map<string, Evidence[]>;
-  /** The board headquarters stands on. */
-  notes: Entry[];
-  /** The poster. */
-  adopted: Adopted;
-  /** What the poster rests on — the peek row is elected out of this. */
-  provenance: Provenance;
-}
-
-/** The quote a fixture pattern took from a fixture memory, kept out of band
-    so the two producers below can be written independently of each other. */
-const OFFLINE_QUOTES = new Map<string, string>();
-
-/** One capture, exactly as `GET /inspirations` hands one over. */
-function offlineSignal(
-  n: number,
-  day: number,
-  text: string,
-  extra: {
-    /** The words a pattern carried out of it. Verbatim inside `text`, or the
-        panel simply does not mark them — see markPassages. */
-    quote?: string;
-    /** The patterns this memory fed. Real statements, and its light reads them. */
-    fed?: string[];
-    reflections?: number;
-    /** Returned to since: an old memory that is honestly warm again. */
-    touched?: number;
-  } = {},
-): Inspiration {
-  /**
-   * NEVER AT THE VERY INSTANT OF LOADING.
-   *
-   * The dial's present is fixed when the page mounts, which is a moment
-   * BEFORE this world is built — so a memory dated `now` is dated after the
-   * end of its own rail, does not exist at T, and is left out of the field
-   * and out of the count. Six hours back is the nearest a memory is allowed
-   * to be, and `agoWords` still says "Today" about it.
-   */
-  const back = (d: number) => daysAgo(Math.max(d, 0.25));
-  const capturedAt = back(day);
-  const id = `offline-m${n}`;
-  if (extra.quote) OFFLINE_QUOTES.set(id, extra.quote);
-  if (extra.fed?.length) OFFLINE_FED.set(id, extra.fed);
-  return {
-    id,
-    preview: text,
-    /* the dev fixture keeps everything to itself */
-    isPublic: false,
-    kind: "note",
-    source: "app",
-    capturedMs: Date.parse(capturedAt),
-    updatedMs: Date.parse(extra.touched === undefined ? capturedAt : back(extra.touched)),
-    attachments: [],
-    reflectionCount: extra.reflections ?? 0,
-  };
-}
-
-/** memory id → the statements it fed, as the fixture declares them. */
-const OFFLINE_FED = new Map<string, string[]>();
-
-/**
- * One provisional reading — a candidate up in the sky, with the memories it
- * was drawn from named by id. Those ids are resolved against the archive the
- * same way a real one's are, so every satellite in orbit stands for a memory
- * that genuinely exists down in the field.
- */
-function offlineReading(
-  n: number,
-  day: number,
-  title: string,
-  evidence: Array<[number, string | null]>,
-): { pattern: Signal; evidence: Evidence[] } {
-  const at = Date.parse(daysAgo(day));
-  return {
-    pattern: {
-      id: `offline-p${n}`,
-      statement: title,
-      /* still overhead: a fixture has adopted nothing */
-      status: "emerging",
-      /* NOT SCORED, SO NOT CLAIMING A SCORE. Confidence is the server's
-         reading of a pattern; a fixture has no server, and inventing a
-         plausible number would put a made-up value into the one channel this
-         page reserves for meaning. Zero is "not scored", and the sky's layout
-         then keeps the order the fixture declares. */
-      confidence: 0,
-      evidenceCount: evidence.length,
-      lastEvidenceMs: at,
-      createdMs: at,
-      locked: false,
-      unsupported: false,
-      sharedGroupIds: [],
-    },
-    evidence: evidence.map(([m, quote]) => ({
-      signalId: `offline-p${n}`,
-      inspirationId: `offline-m${m}`,
-      preview: "",
-      quote,
-      reason: null,
-      createdMs: at,
-    })),
-  };
-}
-
-/**
- * THE WORLD, BUILT ONCE AND ONLY WHEN THERE IS NOTHING ELSE.
- *
- * Twenty-four memories across about three months, so the aliveness ramp has
- * its whole range to run: warm and close at the top, a middle band, and a
- * genuinely cold floor where the oldest draw together into sediment. A mix of
- * lengths, and Hangul throughout, because the archive this is standing in for
- * is majority Korean and Korean text is what has found the layout bugs.
- *
- * Returns null outside dev — and then the page's own failure line stands, as
- * it did before any of this existed.
- */
-function offlineWorld(): OfflineWorld | null {
-  if (!showsDebug()) return null;
-
-  const R1 = "I am becoming someone who shows the thing instead of describing it.";
-  const R2 = "The work I keep returning to is the work nobody asked me for.";
-  const R3 = "I trust a surface more once I have watched it fail.";
-  const R4 = "What I call taste is mostly a list of things I refuse to ship.";
-
-  const captures: Inspiration[] = [
-    offlineSignal(
-      1,
-      0,
-      "빛이 유일한 의미 채널이라면 크기는 아무 말도 하면 안 된다. 오늘 화면에서 큰 공이 중요해 보였는데, 그건 내가 만든 거짓말이었다.",
-    ),
-    offlineSignal(
-      2,
-      1,
-      "Showed it to J with no explanation at all and she had the depth of it in about four seconds. Every word I had prepared was a word I did not need.",
-      {
-        quote: "Every word I had prepared was a word I did not need.",
-        fed: [R1],
-        reflections: 1,
-      },
-    ),
-    offlineSignal(
-      3,
-      2,
-      "설명을 잘하는 사람이 되려고 십 년을 썼는데, 정작 필요한 건 설명이 필요 없는 화면이었다. 말로 이기는 습관이 제품을 망친다는 걸 오늘 아침에 처음으로 몸으로 이해했다.",
-      { quote: "설명이 필요 없는 화면이었다", fed: [R1] },
-    ),
-    offlineSignal(4, 3, "Motion should explain the mechanism, or it is decoration."),
-    offlineSignal(
-      5,
-      5,
-      "Spent the afternoon defending a feature nobody had attacked. The honest version of that meeting is that I wanted to be told it was good, and I dressed the wanting up as a design review.",
-      { quote: "I wanted to be told it was good", reflections: 2 },
-    ),
-    offlineSignal(
-      6,
-      7,
-      "오래된 기억은 사라지는 게 아니라 차가워지는 것 — 이 한 문장 차이가 제품 전체를 결정한다.",
-    ),
-    offlineSignal(
-      7,
-      9,
-      "A number on the screen is a claim I have to defend. Prose is a claim I can be wrong about gracefully.",
-    ),
-    offlineSignal(
-      8,
-      12,
-      "Watched someone use it on a short phone and the bottom quarter of the field was simply empty. It passed on my machine and on the big monitor, which is exactly how a fixed reserve hides.",
-      { fed: [R3] },
-    ),
-    offlineSignal(9, 15, "내가 확인하지 않은 것을 먼저 말하는 게 신뢰의 시작이다."),
-    offlineSignal(
-      10,
-      18,
-      "Deleted the six pastel tints today. Six hues that meant nothing were louder than one hue that meant something.",
-      {
-        quote: "Six hues that meant nothing were louder than one hue that meant something.",
-        fed: [R4],
-      },
-    ),
-    offlineSignal(
-      11,
-      22,
-      "사람들이 저장하는 건 정보가 아니라 그때의 자기 자신이다. 그래서 목록으로 보여주면 아무 감흥이 없고, 쌓인 걸로 보여주면 갑자기 자기 얘기가 된다. 이걸 반년 걸려서 알았다.",
-    ),
-    offlineSignal(12, 26, "Stop asking what it does. Ask what it makes a person willing to say."),
-    offlineSignal(
-      13,
-      30,
-      "The thing I return to every week is not the roadmap. It is the one screen I built for myself over a weekend and never told anybody about.",
-      { fed: [R2] },
-    ),
-    offlineSignal(
-      14,
-      34,
-      "아무도 시키지 않은 일을 자꾸 하고 있으면 그게 방향이고, 시킨 일만 하고 있으면 그건 직업이다.",
-      { fed: [R2] },
-    ),
-    offlineSignal(
-      15,
-      39,
-      "Tried to write the pitch again and it came out as a list of features, again. The version that actually landed was me showing the screen and shutting up for ninety seconds.",
-      {
-        quote: "me showing the screen and shutting up for ninety seconds",
-        fed: [R1],
-        touched: 9,
-      },
-    ),
-    offlineSignal(16, 44, "A tool I have never seen break is a tool I do not trust yet.", {
-      fed: [R3],
-    }),
-    offlineSignal(17, 49, "취향이라고 부르는 것의 대부분은 안 하기로 한 것들의 목록이다.", {
-      fed: [R4],
-    }),
-    offlineSignal(
-      18,
-      55,
-      "Turned down the collaboration. It would have been good for the number and wrong for the thing.",
-      { fed: [R4] },
-    ),
-    offlineSignal(
-      19,
-      61,
-      "First honest session with someone who had never seen it. She scrolled to the bottom, sat there for a while, and said “this is a year of me”. I had built it as an archive and she read it as a portrait, and she was right.",
-      { quote: "I had built it as an archive and she read it as a portrait" },
-    ),
-    offlineSignal(20, 67, "고장 나는 걸 한 번도 못 본 도구는 아직 믿을 수 없다.", { fed: [R3] }),
-    offlineSignal(
-      21,
-      73,
-      "Every product I have loved had one gesture I could do without looking. Everything else in them was menus.",
-      { touched: 11 },
-    ),
-    offlineSignal(22, 79, "Kept the ugly version that ran.", { fed: [R4] }),
-    offlineSignal(
-      23,
-      85,
-      "설명서를 써야 이해되는 화면은 화면이 아니라 설명서다. 오늘에서야 그걸 인정했다.",
-      { quote: "설명서를 써야 이해되는 화면은 화면이 아니라 설명서다" },
-    ),
-    offlineSignal(
-      24,
-      91,
-      "Started this because I have four years of saved things and no idea who they say I am. That is the whole product, and I keep forgetting it and building something else instead.",
-      { fed: [R2] },
-    ),
-  ];
-
-  const readings = [
-    offlineReading(1, 5, R1, [
-      [2, "Every word I had prepared was a word I did not need."],
-      [3, "설명이 필요 없는 화면이었다"],
-      [15, "me showing the screen and shutting up for ninety seconds"],
-      [23, null],
-    ]),
-    offlineReading(2, 12, R2, [
-      [13, null],
-      [14, null],
-      [24, null],
-    ]),
-    offlineReading(3, 21, R3, [
-      [8, null],
-      [16, null],
-      [20, null],
-    ]),
-    offlineReading(4, 30, R4, [
-      [10, "Six hues that meant nothing were louder than one hue that meant something."],
-      [17, null],
-      [18, null],
-      [22, null],
-    ]),
-  ];
-
-  /* WHICH PATTERNS REST ON WHICH MEMORY, built the same way the real sky
-     builds it: from the patterns' own evidence, never declared per memory. */
-  const citations = new Map<string, Evidence[]>();
-  for (const r of readings) {
-    for (const e of r.evidence) {
-      const q = e.quote ?? OFFLINE_QUOTES.get(e.inspirationId) ?? null;
-      const row = { ...e, quote: q };
-      const got = citations.get(e.inspirationId);
-      if (got) got.push(row);
-      else citations.set(e.inspirationId, [row]);
-    }
-  }
-
-  /* The board headquarters stands on: one artifact, and its entries cite the
-     patterns beneath them — layer 3 pointing at layer 2, never at memories. */
-  const boardMs = Date.now() - 9 * DAY_MS;
-  const notes: Entry[] = readings.map((r, i) => ({
-    id: `offline-e${i + 1}`,
-    type: "pattern" as const,
-    body: r.pattern.statement,
-    belief: null,
-    prompt: null,
-    locked: false,
-    pinned: i === 0,
-    dismissed: false,
-    sortOrder: i,
-    citedSignals: [{ id: r.pattern.id, statement: r.pattern.statement }],
-    createdMs: boardMs,
-  }));
-
-  /* What the poster rests on: the patterns under it, in their own words. This
-     is the peek row — not the newest few, but what led to what you are
-     reading. It points at layer 2 because that is what an entry cites. */
-  const provenance: Provenance = new Map(
-    readings.map((r) => [r.pattern.id, r.pattern.statement] as const),
-  );
-
-  return {
-    captures,
-    patterns: readings.map((r) => r.pattern),
-    citations,
-    notes,
-    adopted: {
-      ambition: "I am making the surface that shows what I meant, so I stop having to explain it.",
-      /* your own board, so there is no room to name */
-      groupName: null,
-      createdMs: boardMs,
-    },
-    provenance,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 /**
  * WHAT A WALL'S HEADQUARTERS SAYS. One shape for every kind of wall — yours,
