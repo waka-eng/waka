@@ -237,3 +237,61 @@ _(appended per phase at execution)_
 - **Two corrections carried forward**: the sky engine is NOT separable as first
   measured, and three of the five JSX panels are blocked on DOM refs the loop
   writes into. Both were measured optimistically the first time.
+
+### 4a — done (2026-08-17), in six commits, not five
+
+`4b81b82 dc97e22 0fba6a7 4799f30 5b1afd7 3487686`
+
+113 loose `let`s are now 13, and eleven of those are locals inside nested
+functions that were never in scope. Every commit: vocabulary clean, 65 tests
+green, `tsc` clean.
+
+| object | fields | what it owns |
+|---|---|---|
+| `view` | 8 | the viewport, and what the display asked for |
+| `cam` | 10 | where the world is looked at from, both axes |
+| `trip` | 10 | a crossing from one wall to the next |
+| `companion` | 33 | one body's posture at one instant |
+| `gesture` | 24 | one hand on the world |
+| `sky` | 11 | layer 2, and what the pointer is doing to it |
+| `pour` | 5 | staging orbs into the field |
+| `clock` | 4 | whether the loop turns, and since when |
+| `stir` | 2 | how alive the world is right now |
+| `poster` | 2 | what the peek row rests on |
+| `hinted` | 2 | which one-time hints have been said |
+
+`mech` and `ground` stay loose — each is a single value with one meaning and
+no partner to be incoherent with.
+
+**The plan's five groups were wrong three times, and the same way each time:
+they were prefix guesses, and reading the use sites moved things.** `settle`
+and `stirAt` were filed under the pour and are read by four subsystems, none
+of them the pour. `primed` and `motesPlaced` were filed under the pour and are
+first-sizing flags. `provenance` and `wallProv` sat in the sky's block and
+belong to the poster. The rule that caught all three: **name the group after
+what reads it, not after what it sits next to.**
+
+**The tool did the real work, and it was wrong twice before it was right.**
+`packages/web/scripts/rename-identifier.mjs` is now on the TypeScript AST:
+
+- Both regex versions corrupted prose — the first rewrote 142 comment lines,
+  the second survived comment and string masking and still rewrote JSX text,
+  because `<div>Waka could not be poured</div>` is neither.
+- `--decl <line>` resolves symbols, which mattered enormously: `prev` appears
+  112 times and 4 are the variable; `layout` 153 and 44; `col` throughout and
+  36. A text rename at this scale would have been unrecoverable.
+- `{ vh }` is both a property and a reference, and the checker answers about
+  the property. The shorthand guard compared the wrong symbols and silently
+  skipped two sites; `tsc` caught it. It now asks
+  `getShorthandAssignmentValueSymbol`, and the fix is proven on a fixture.
+
+**The order matters and is not obvious**: rename while the `let` is still
+there, THEN delete it. Delete first and the inner references resolve to
+whatever they shadow, and the tool faithfully renames the wrong variable.
+
+### Next: 4b, and what would stop 4c
+
+4b is now a real measurement rather than an estimate, because the signatures
+exist to read. The gate stands as written: **if the sky still needs four or
+more groups, it is not a module** — and that answer, whichever way it comes
+out, gets written here rather than worked around.
