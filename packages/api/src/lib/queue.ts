@@ -41,6 +41,88 @@
  * inline — the edit route re-embedding a rewritten statement — and a call made
  * inside a Hono handler is a call the drain never sees. The rule this file now
  * holds to is flat: if it spends the shared key, it is a row in this table.
+ *
+ *
+ * WHAT IS WHERE
+ *
+ * The banner comments below are the file's table of contents, in this order:
+ *
+ *   Enqueue            putting work on the queue, and coalescing duplicates
+ *   Drain scheduling   how something wakes up to take it
+ *   Drain              the loop: peek, price the account, claim, run, settle
+ *   The job router     what each of the five job types actually does
+ *   Claim / complete   the SQL, including the predicate the loop depends on
+ *   Small helpers      dates, backoff arithmetic, error sanitizing
+ *
+ *
+ * WHY THIS FILE IS LONG, AND STAYS THAT WAY
+ *
+ * `docs/goals/a-codebase-you-can-navigate.md` asks every file over 800 lines
+ * to either split or say plainly why it is one thing. This one is one thing.
+ * That was measured before it was claimed, and here is the measurement.
+ *
+ * Enqueueing, the wake-up, the drain loop and the job router are not four
+ * neighbours sharing a file. They are a closed loop: enqueueing schedules a
+ * drain, the drain runs the router, and the router enqueues the next step —
+ * which is what the generation pipeline *is*. A save becomes a signal becomes
+ * a top of mind because each stage puts the following stage back on this
+ * queue. Seven functions sit inside that loop: `enqueueKeyedJob`,
+ * `enqueueDeriveSignals`, `enqueueTopOfMindRefresh`,
+ * `scheduleBackgroundJobDrain`, `scheduleNextPendingBackgroundJobDrain`,
+ * `drainBackgroundJobs` and `processBackgroundJob`. Any file boundary drawn
+ * between them is an import cycle. That is not a style opinion; it is the
+ * module graph saying the same thing this paragraph says.
+ *
+ * Three parts could move without a cycle — the SQL below, the payload
+ * parsers, and the date and backoff helpers. Taking all three out lands this
+ * file near 770 lines at the cost of a 52-line file and a 31-line file, and
+ * the reason not to is the budget.
+ *
+ * The per-account budget is a guard, and what it guards is the claim. It
+ * reads as policy in `drainBackgroundJobs` — peek the head, price the
+ * account, defer or claim — but it is only *correct* because of three facts
+ * that live in the SQL at the bottom of this file, and not one of the three
+ * is expressed in a type:
+ *
+ *   1. `readBackgroundJobQueueHead` and `claimNextBackgroundJob` must choose
+ *      the same row, and they do only because they share
+ *      `runnableBackgroundJobPredicate` and `RUNNABLE_JOB_ORDER`. Were those
+ *      to drift apart, the loop would price one account's budget and then run
+ *      a different account's job, and nothing anywhere would fail.
+ *   2. The meter the budget counts is `started_at`, and the only writer of it
+ *      is the claim. A claim that stopped stamping it would leave every
+ *      account reading zero spend forever: the cap would vanish in silence,
+ *      with no compile error and no red test, because a test that substitutes
+ *      the store never executes this SQL at all.
+ *   3. Deferral moves `run_after`, and `run_after` is one arm of the runnable
+ *      predicate. If the predicate stopped reading it, deferring would move
+ *      nothing and the loop would spin on the same head forever.
+ *
+ * `BackgroundJobStore` looks like the seam to split on. It is not; it is a
+ * test seam. Six method signatures, none of which can state any of the three
+ * facts above. Putting the SQL behind it in a second file would leave the
+ * guard here and the reasons it works one hop away, which is exactly how a
+ * guard stops guarding without anyone noticing. This budget has already been
+ * incomplete once: it shipped while `PATCH /api/signals/:id` still embedded
+ * inline, one model call per request, on a route any account holder can drive
+ * as fast as their connection allows — the door beside the metered one. That
+ * is why `enqueueSignalReembed` exists and why
+ * `routes/model-spend-stays-on-the-queue.test.ts` exists. A rule that has
+ * been incomplete once is a rule to keep somewhere it can be read whole.
+ *
+ * One thing this file's length is NOT hiding: every database call it makes is
+ * a single statement, so each is atomic on its own. The claim in particular
+ * is one `UPDATE` whose `SELECT … FOR UPDATE SKIP LOCKED` is its own
+ * subquery, so choosing the row, locking it, and marking it started cannot
+ * come apart. The one gap that does exist is deliberate and documented at the
+ * top of the drain loop: the head peek is a separate statement from the
+ * claim, so two workers racing can let one over-budget job through per race.
+ * Bounded, self-correcting on the next pass, and far cheaper than a lock
+ * across the whole queue.
+ *
+ * If this file grows again, the thing to extract is the SQL — but only
+ * together with the budget policy it serves, into one file that holds both.
+ * Splitting the guard from the claim is the one move that must not be made.
  */
 
 import { asc, eq, sql } from "drizzle-orm";
