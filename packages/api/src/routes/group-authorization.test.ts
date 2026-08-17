@@ -17,21 +17,18 @@
  *      source, which must not reference layer 1 at any point.
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedSession } from "../lib/session.js";
-import {
-  createGroupsRoutes,
-  type GroupMembership,
-  type GroupSummary,
-  type GroupTopOfMindView,
-  type GroupsRouteDependencies,
-  type GroupWallSignal,
-} from "./groups.js";
+import { createGroupsRoutes, type GroupsRouteDependencies } from "./groups.js";
+import { type GroupMembership, type GroupSummary } from "./groups-membership.js";
+import { type GroupTopOfMindView } from "./groups-top-of-mind.js";
+import { type GroupWallSignal } from "./groups-wall.js";
 
 const accountId = "00000000-0000-4000-8000-0000000000a1";
 const humanProfileId = "00000000-0000-4000-8000-000000000001";
@@ -90,6 +87,7 @@ function unreachableDependencies(): GroupsRouteDependencies {
     renameGroupFn: unreachable("renameGroup") as never,
     removeMemberFn: unreachable("removeGroupMember") as never,
     listMembers: unreachable("listGroupMembers") as never,
+    loadField: unreachable("loadGroupField") as never,
     loadWall: unreachable("loadGroupWall") as never,
     loadTopOfMind: unreachable("loadGroupTopOfMind") as never,
     enqueueRefresh: unreachable("enqueueGroupTopOfMindRefresh") as never,
@@ -117,6 +115,9 @@ function mount(deps: GroupsRouteDependencies, as: AuthenticatedSession) {
 const groupScopedRequests: Array<[string, string, RequestInit]> = [
   ["the roster", `/api/groups/${groupId}/members`, { method: "GET" }],
   ["the wall", `/api/groups/${groupId}/wall`, { method: "GET" }],
+  /* the field is the room's layer 1 — the one surface here that returns other
+     people's captures, so it belongs in this matrix more than any other */
+  ["the field", `/api/groups/${groupId}/field`, { method: "GET" }],
   ["the top of mind", `/api/groups/${groupId}/top-of-mind`, { method: "GET" }],
   [
     "a refresh",
@@ -379,29 +380,61 @@ describe("the group module itself", () => {
    * of the memories behind it, and nothing in a room has ever been allowed to
    * see those — sharing a statement has never shipped its grounds.
    */
-  it("reads layer 1 only through the public-visibility gate", () => {
-    const source = readFileSync(
-      fileURLToPath(new URL("./groups.ts", import.meta.url)),
-      "utf8",
-    );
-    const code = source
+  /**
+   * The scan follows the code, and says so out loud when it cannot find it.
+   *
+   * This used to read one file, `groups.ts`, because the group module was one
+   * file. Splitting it moved the room's field — the only layer-1 read in the
+   * module — into `groups-field.ts`, and a scan still pointed at `groups.ts`
+   * would have found no mention of `inspirations`, skipped every assertion
+   * below, and gone on reporting green while checking nothing at all.
+   *
+   * So two things changed. The scan now reads every file in the group family,
+   * discovered from the directory rather than listed, so the next split does
+   * not blind it either. And finding the layer-1 read is itself asserted:
+   * "there is nothing to check here" is the one answer this test may never
+   * quietly give.
+   */
+  const groupModuleSource = (): { files: string[]; code: string } => {
+    const dir = fileURLToPath(new URL(".", import.meta.url));
+    const files = readdirSync(dir)
+      .filter((name) => /^groups(-[a-z-]+)?\.ts$/.test(name))
+      .sort();
+    const code = files
+      .map((name) => readFileSync(join(dir, name), "utf8"))
+      .join("\n")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    return { files, code };
+  };
+
+  it("scans every file the group module is made of", () => {
+    const { files } = groupModuleSource();
+    // A rename that empties this list must fail here rather than turn the
+    // assertions below into a test of nothing.
+    expect(files).toContain("groups.ts");
+    expect(files.length).toBeGreaterThan(1);
+  });
+
+  it("reads layer 1 only through the public-visibility gate", () => {
+    const { code } = groupModuleSource();
 
     // Evidence and its join key stay out entirely.
     expect(code).not.toMatch(/\bsignalEvidence\b/);
     expect(code).not.toMatch(/\binspirationId\b/);
 
-    // Every statement that touches `inspirations` must also carry the gate.
-    const readsLayer1 = /\binspirations\b/.test(code);
-    if (readsLayer1) {
-      expect(code).toMatch(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/);
-      // ...and the gate must not be the only mention while some other query
-      // quietly selects from the table without it.
-      const gates = code.match(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/g) ?? [];
-      const froms = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
-      expect(gates.length).toBeGreaterThanOrEqual(froms.length);
-    }
+    // A room's field reads layer 1 by design, so the read must be found. If it
+    // is not, the scan has lost the code rather than the code having lost the
+    // read, and the assertions below would pass vacuously.
+    expect(code).toMatch(/\binspirations\b/);
+
+    // Every statement that touches `inspirations` must also carry the gate...
+    expect(code).toMatch(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/);
+    // ...and the gate must not be the only mention while some other query
+    // quietly selects from the table without it.
+    const gates = code.match(/eq\(\s*inspirations\.visibility\s*,\s*"public"\s*\)/g) ?? [];
+    const froms = code.match(/\.from\(\s*inspirations\s*\)/g) ?? [];
+    expect(gates.length).toBeGreaterThanOrEqual(froms.length);
   });
 });
 

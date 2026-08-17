@@ -2,19 +2,22 @@ import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuthenticatedSession } from "../lib/session.js";
+import { createGroupsRoutes, type GroupsRouteDependencies } from "./groups.js";
 import {
-  createGroupsRoutes,
-  proposalShapeIsValid,
-  type EnqueueGroupRefreshResult,
   type GroupMemberSummary,
   type GroupMembership,
-  type GroupProposalView,
-  carriesMajority,
   type GroupSummary,
+} from "./groups-membership.js";
+import {
+  carriesMajority,
+  proposalShapeIsValid,
+  type GroupProposalView,
+} from "./groups-proposals.js";
+import {
+  type EnqueueGroupRefreshResult,
   type GroupTopOfMindView,
-  type GroupsRouteDependencies,
-  type GroupWallSignal,
-} from "./groups.js";
+} from "./groups-top-of-mind.js";
+import { type GroupWallSignal } from "./groups-wall.js";
 
 const accountId = "00000000-0000-4000-8000-0000000000a1";
 const profileId = "00000000-0000-4000-8000-000000000001";
