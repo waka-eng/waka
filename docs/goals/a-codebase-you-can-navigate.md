@@ -106,7 +106,32 @@ Largest lever first, but never a file whose tests do not exist yet.
   concept and no compiler error saying so.
 - Measure before claiming separability. Three times now a claim about this
   codebase has been reversed by measuring it.
-- Never merge into `dev`. Never open a PR. Never seed or hard-code data.
+- Never merge into `dev`. Never seed or hard-code data.
+- **One PR, written last.** PR 248 was closed because it had been opened
+  early and then had every phase pushed into it, so no reviewer could tell
+  what it was. The replacement is opened only when everything above is done
+  and green — never before, and never updated as a way of "showing progress".
+
+## What the PR has to read like
+
+The owner's instruction, twice: *make it extremely easy to understand exactly
+what was added and why, without any jargon and technical words.*
+
+That is a real constraint, not a tone preference. The test is whether someone
+who does not know this codebase can read the description and understand what
+changed and why it mattered.
+
+- **Lead with what a person would notice**, not what moved. "Rooms that never
+  loaded now load" before "the effect no longer rebuilds at column zero".
+- **Say why each change was needed**, in the terms of the problem it fixed.
+  A bug is described by what went wrong for someone, not by its mechanism.
+- **No jargon.** Not "refactor", "closure", "AST", "extraction", "state
+  group", "invariant". If a technical word is unavoidable, the sentence
+  around it has to explain it.
+- **Name what is NOT fixed** and why. The group synthesis stub, the signals
+  that have no surface, anything measured and refused.
+- **Numbers only where they mean something.** "One file was half the app" is
+  worth saying; a table of line counts is not.
 
 ## Log
 
