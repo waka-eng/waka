@@ -8983,18 +8983,41 @@ function HomeExperience(): JSX.Element {
   }, []);
 
   /**
-   * ARRIVING ON A LINK. Someone sent you one, you opened it, and you should
-   * be in the room — not looking at a form asking you to paste what you just
-   * clicked. The code leaves the URL immediately so a reload cannot re-run it.
+   * ARRIVING ON A LINK — AND BEING ASKED, WHICH IS NEW.
+   *
+   * This used to join outright. The reasoning was sound as far as it went:
+   * someone sent you a link, you opened it, and you should be in the room
+   * rather than looking at a form asking you to paste what you just clicked.
+   *
+   * What it missed is what joining DOES. A group's ground is its members'
+   * public inspirations and its wall is their shared signals, so being in one
+   * is a disclosure — your public memories become visible to everyone in it,
+   * and your name joins its roll. Clicking a link is not consent to that. Any
+   * page, any redirect, any message containing that URL could enrol you, and
+   * the first you would know is finding yourself in a room.
+   *
+   * So the link still does the work — you never type a code — but you are
+   * asked before anything is disclosed. One tap, and it is yours rather than
+   * the sender's.
+   *
+   * The code leaves the URL immediately either way, so a reload cannot re-ask
+   * and the code does not sit in history or in a referrer header.
    */
+  const [pendingJoin, setPendingJoin] = useState<string | null>(null);
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("join");
     if (!code) return;
     window.history.replaceState({}, "", window.location.pathname);
+    setPendingJoin(code);
+  }, []);
+  const acceptJoin = useCallback(() => {
+    if (!pendingJoin) return;
+    const code = pendingJoin;
+    setPendingJoin(null);
     joinGroup(code)
       .then((r) => setGroups((prev) => [r.group, ...prev.filter((x) => x.id !== r.group.id)]))
       .catch(() => undefined);
-  }, []);
+  }, [pendingJoin]);
 
   /**
    * EDITING, AND THE ONE RULE THAT GOVERNS ALL THREE LAYERS.
@@ -10706,6 +10729,28 @@ function HomeExperience(): JSX.Element {
               }}
             >
               sign out
+            </button>
+          </p>
+        </div>
+      ) : null}
+
+      {pendingJoin && phase === "ready" ? (
+        <div className="jar-settings" data-jar-chrome="1" role="dialog" aria-label="Join this group">
+          <div className="jar-settings-head">
+            <span className="jar-label">Someone invited you</span>
+          </div>
+          <p className="jar-settings-note">
+            {"Joining puts your name on this room’s roll, and the memories you " +
+              "have marked public become part of its ground. You can leave " +
+              "whenever you like."}
+          </p>
+          <p className="jar-neb-ask">
+            <button type="button" className="jar-settings-verb" onClick={acceptJoin}>
+              {"join this room"}
+            </button>
+            <span aria-hidden="true"> · </span>
+            <button type="button" onClick={() => setPendingJoin(null)}>
+              not now
             </button>
           </p>
         </div>
