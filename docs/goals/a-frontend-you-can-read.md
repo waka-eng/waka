@@ -415,11 +415,27 @@ Pure moves, in dependency order. Each lands with the audit invariant green.
   `makeNeb` needs the column and the drag flag, all three passable as
   arguments. These take values and return values, which is the only test that
   matters.
-- **The five panels** (1,762 lines of JSX): ready-phase field (464),
-  inspiration detail (278), sky (215), settings (188), group panel (131).
-  Mechanical but wide — each closes over dozens of state variables and needs
-  a prop object. They are the most conventional React work in the goal and
-  the most tedious; they are also what makes the file navigable by feature.
+- **The five panels — two out, three blocked, and the line between them is
+  not size.** Measured after extracting the first two:
+
+  | panel | lines | bindings | canvas/DOM refs |
+  |---|---|---|---|
+  | settings | 187 | 11 | **0** — extracted |
+  | group | 130 | 15 | **0** — extracted |
+  | sky | 216 | 35 | 3 |
+  | inspiration detail | 277 | 37 | 4 |
+  | ready field | 463 | 44 | 5 |
+
+  The two that came out hold no refs. The three that remain each own DOM refs
+  the frame loop MEASURES AND WRITES — `hqRef`, `panelRef`, `nebElsRef`,
+  `satSayRef`, `charSayRef`. Those are not props; they are a shared mutable
+  channel between React's DOM and the rAF loop, and handing one to a child
+  relocates the entanglement without resolving it. A 44-prop component is not
+  more readable than the block it replaced.
+
+  So these three wait for Phase 5, where the loop's ownership of per-frame
+  state is the actual subject. Extracting them first would be building on the
+  thing that has to move.
 
 **Gate:** `Home.tsx` under 6,000 lines. Every module has a header that says
 its one reason to exist, in the style the six existing ones already use.
