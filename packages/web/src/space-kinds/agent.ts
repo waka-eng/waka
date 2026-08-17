@@ -3,11 +3,14 @@
  *
  * One function, and it earns its own file because the rule it encodes is a
  * product law rather than a formatting choice — see the note on the function
- * itself. `AgentBundle` still comes from `lib/fixture`, which is where the
- * agent wall's shape is currently declared; when the live agent endpoint lands
- * that import moves to `lib/api` and nothing else here changes.
+ * itself. `AgentBundle` comes from `lib/agent-contract`, which is where the
+ * agent wall's shape is declared ahead of the endpoint that will fill it;
+ * when the live agent endpoint lands that import moves to `lib/api` and
+ * nothing else here changes. It is a shape, not a fixture: this file has
+ * never had a reason to know that the only thing producing one today is the
+ * one under `lib/fixture/`, and after the swap it still will not.
  */
-import type { AgentBundle, ApiAgentDirectionReading } from "../lib/fixture";
+import type { AgentBundle, ApiAgentDirectionReading } from "../lib/agent-contract";
 import { monthTag } from "../lib/words";
 import { formingWords, type WallChrome } from "../space/top-of-mind/board";
 

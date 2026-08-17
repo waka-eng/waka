@@ -25,7 +25,7 @@
 
 import { Inspiration, type Evidence, type Signal } from "../../lib/data";
 import { hashStr, mix32, TAU } from "../../lib/num";
-import { type ApiAgentSignal } from "../../lib/fixture";
+import { type ApiAgentSignal } from "../../lib/agent-contract";
 
 
 export interface Ball {

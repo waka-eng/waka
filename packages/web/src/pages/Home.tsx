@@ -150,14 +150,17 @@ import {
   type Ball,
   type BornSeed,
 } from "../space/inspiration/orb";
-import {
-  MOCK_AGENTS,
-  offlineHome,
-  showsDebug,
-  MOCK_AGENT_BUNDLES,
-  type AgentBundle,
-  type OfflineHome,
-} from "../lib/fixture";
+import { showsDebug } from "../lib/dev-build";
+import type { AgentBundle } from "../lib/agent-contract";
+/* THE ONLY TWO IMPORTS IN THE PRODUCT THAT REACH INVENTED DATA, and they are
+   deliberately on their own lines so that a grep for `lib/fixture` over `src/`
+   returns this page and nothing else. Both are read in exactly one place —
+   `loadAgentWalls` and the archive fetch's catch — and both are dev-gated
+   there. If a third of these ever appears, the question to ask is not whether
+   it compiles but which screen is now capable of showing a person a memory
+   they never had. */
+import { MOCK_AGENTS, MOCK_AGENT_BUNDLES } from "../lib/fixture/agent-walls";
+import { offlineHome, type OfflineHome } from "../lib/fixture/offline-home";
 import {
   agoWords,
   citedWords,
