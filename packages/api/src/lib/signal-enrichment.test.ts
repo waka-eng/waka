@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { createServer, type RequestListener, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 
+import { afterEach, describe, expect, it } from "vitest";
+
+import { MAX_IMAGE_BYTES } from "./image-description.js";
 import {
+  FETCH_HEADERS_TIMEOUT_MS,
   MAX_ENRICHMENT_TEXT_CHARS,
+  MAX_HTML_BYTES,
   assertFetchableUrl,
+  bodyTimeoutMs,
   composeEnrichmentText,
   extractLinkMetadata,
   extractPageBody,
   extractYouTubeDescription,
+  fetchLinkEnrichment,
   isAuthWallSummary,
   isPrivateAddress,
   stripBoilerplateLines,
@@ -267,5 +275,227 @@ describe("isPrivateAddress — IPv4 hiding inside IPv6", () => {
     expect(isPrivateAddress("93.184.216.34")).toBe(false);
     expect(isPrivateAddress("2606:2800:220:1:248:1893:25c8:1946")).toBe(false);
     expect(isPrivateAddress("::ffff:93.184.216.34")).toBe(false);
+  });
+});
+
+/**
+ * A DEADLINE MUST BE ABLE TO PAY FOR THE ALLOWANCE ADVERTISED BESIDE IT.
+ *
+ * A byte cap in one file and a deadline in another can be individually
+ * reasonable and jointly impossible, and nothing notices, because no single
+ * line is wrong. That is what happened here: the deadline was stretched to
+ * cover the body read without anyone asking whether it could still deliver
+ * MAX_IMAGE_BYTES, and it could not — 8 MiB in six seconds needs an origin
+ * sustaining well over a megabyte a second, so the cap was advertising an
+ * allowance most real servers could not spend.
+ *
+ * These cost nothing to run and are the reason the two numbers cannot drift
+ * apart again: raise a cap without raising its budget and the arithmetic here
+ * says so, in the suite, rather than in a report about images that never get
+ * described.
+ */
+describe("what the body deadline can actually pay for", () => {
+  /**
+   * An unremarkable origin: a megabyte a second. Not a CDN, not a drip — the
+   * middle of the range these fetches actually meet, and deliberately NOT the
+   * floor rate the budget is derived from, which would make this arithmetic
+   * true by construction and prove nothing.
+   */
+  const ORDINARY_BYTES_PER_SEC = 1_000_000;
+
+  function deliverableWithin(budgetMs: number): number {
+    return (budgetMs / 1000) * ORDINARY_BYTES_PER_SEC;
+  }
+
+  it("gives an image cap's worth of bytes time to arrive", () => {
+    expect(deliverableWithin(bodyTimeoutMs(MAX_IMAGE_BYTES + 1))).toBeGreaterThan(
+      MAX_IMAGE_BYTES,
+    );
+  });
+
+  it("gives a page cap's worth of bytes time to arrive", () => {
+    expect(deliverableWithin(bodyTimeoutMs(MAX_HTML_BYTES))).toBeGreaterThan(
+      MAX_HTML_BYTES,
+    );
+  });
+});
+
+/**
+ * A DEADLINE THAT EXPIRES BEFORE THE SLOW PART IS NOT A DEADLINE — AND ONE
+ * THAT EXPIRES DURING THE HONEST PART IS NOT A DEADLINE EITHER.
+ *
+ * `fetch` resolves at the response HEADERS, so a timer cleared when the fetch
+ * helper returns is already gone by the time the body — the only part whose
+ * pace the other end chooses — is read. The helper's own comment claimed the
+ * opposite, and nothing executed the claim.
+ *
+ * Making the deadline survive into the body read fixes that and immediately
+ * creates the opposite hazard, which is why these come in pairs. Every test
+ * below that proves something is cut off has a sibling proving that something
+ * slower than the headers budget, but genuinely finishing, is not. Only one of
+ * those two failures shows up as a hang in a log; the other shows up as a
+ * member's saved page silently never getting enriched, because an abort is a
+ * retryable failure that then fails identically on every retry until the
+ * attempts run out. The quiet one needs the test more.
+ *
+ * These run against a real loopback server through the real fetch stack on
+ * purpose. The whole question is whether an abort reaches a socket that is
+ * mid-stream; a stubbed response body would only prove that our stub honours
+ * our own signal, which is the part that was never in doubt.
+ *
+ * They cost real seconds, because the real seconds are what ships. A shortened
+ * deadline injected for the test would be a different mechanism from the one
+ * running in production, and this is precisely the file where "the test
+ * passed" and "the guard works" came apart once already.
+ */
+describe("the enrichment fetch deadline", () => {
+  let server: Server | null = null;
+  const allowlistBefore = process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS;
+
+  afterEach(async () => {
+    if (allowlistBefore === undefined) delete process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS;
+    else process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS = allowlistBefore;
+
+    const running = server;
+    server = null;
+    if (!running) return;
+    running.closeAllConnections();
+    await new Promise<void>((resolve) => running.close(() => resolve()));
+  });
+
+  /**
+   * A page served from loopback, which the address guard refuses outright
+   * unless the host is named — so the fixture names it, the same narrow
+   * exception `enrichmentHostAllowlist` exists for.
+   */
+  async function serveOnLoopback(handler: RequestListener): Promise<string> {
+    const started = createServer(handler);
+    // Aborting mid-stream destroys the socket under a response that may still
+    // be writing. That is the behaviour under test, not a broken fixture, so
+    // the resulting stream errors are swallowed rather than left to take the
+    // whole run down as an unhandled event.
+    started.on("clientError", () => undefined);
+    server = started;
+    await new Promise<void>((resolve) => started.listen(0, "127.0.0.1", resolve));
+    const { port } = started.address() as AddressInfo;
+    process.env.WAKA_ENRICHMENT_ALLOWED_HOSTS = `127.0.0.1:${port}`;
+    return `http://127.0.0.1:${port}/`;
+  }
+
+  /**
+   * What the link path actually gets to read its body in, asked of production
+   * rather than restated here — the whole point of deriving it from the byte
+   * cap is that a change to either moves both, and a number copied into the
+   * test would be the one thing that did not move.
+   */
+  const LINK_BODY_MS = bodyTimeoutMs(MAX_HTML_BYTES);
+
+  it(
+    "gives up on a page that answers its headers and then dribbles its body",
+    async () => {
+      // The shape that walked straight through the old code: headers at once,
+      // then a byte at a time, forever. Every byte that does arrive resets
+      // undici's own inactivity timer, so nothing underneath us will ever call
+      // time on it — the enrichment deadline is the only thing that can, and it
+      // had already been cleared.
+      let drip: NodeJS.Timeout | undefined;
+      const url = await serveOnLoopback((_req, res) => {
+        res.on("error", () => undefined);
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.write("<html><head><title>");
+        drip = setInterval(() => res.write("."), 100);
+        res.on("close", () => clearInterval(drip));
+      });
+
+      const startedAt = Date.now();
+      // The abort, specifically. A bare `.rejects.toThrow()` would also be
+      // satisfied by the connection failing for some unrelated reason, which
+      // would prove nothing about the deadline.
+      await expect(fetchLinkEnrichment(url)).rejects.toThrow(/abort/i);
+      const elapsed = Date.now() - startedAt;
+      clearInterval(drip);
+
+      // Near the body deadline — not near the Lambda's fourteen minutes, which
+      // is how long every other account's derivation used to wait behind this
+      // one job on the shared worker. The headers landed at once here, so the
+      // upper bound is the worst case the two phases can add up to.
+      expect(elapsed).toBeGreaterThanOrEqual(LINK_BODY_MS - 1000);
+      expect(elapsed).toBeLessThan(LINK_BODY_MS + FETCH_HEADERS_TIMEOUT_MS);
+    },
+    LINK_BODY_MS * 3,
+  );
+
+  /**
+   * THE CASE THIS CHANGE CAN BREAK, WHICH IS WHY IT IS TESTED.
+   *
+   * Not everything slow is hostile. A server-rendered page under load, a cold
+   * cache, a database behind the request — these answer their headers at once
+   * and then take seconds to produce a body of one or two kilobytes, nowhere
+   * near any cap. Before the deadline reached past the headers, that page was
+   * read without complaint; a six-second budget stretched over the whole
+   * exchange would have started refusing it.
+   *
+   * So the fixture takes longer than the headers budget on purpose, and the
+   * elapsed assertion is not decoration: without it, someone could quietly
+   * shorten the pause and leave behind a test that only proves a fast page is
+   * fast. It has to be the slow one that succeeds, or it proves nothing.
+   */
+  it(
+    "still reads a small page from an origin slower than the headers budget",
+    async () => {
+      const paragraph =
+        "The argument of the piece, arriving late because the origin was busy, not because it was lying.";
+      // Comfortably past FETCH_HEADERS_TIMEOUT_MS so the test is about the body
+      // phase, and comfortably inside LINK_BODY_MS so it is about a page that
+      // finishes rather than one that is cut off. Both margins are seconds
+      // wide, because a timing test that fails on a loaded machine teaches
+      // people to rerun the suite until it is green.
+      const bodyDelayMs = FETCH_HEADERS_TIMEOUT_MS + 1500;
+      let thinking: NodeJS.Timeout | undefined;
+      const url = await serveOnLoopback((_req, res) => {
+        res.on("error", () => undefined);
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.write(`<html><head><title>Slow but real</title></head><body><main>`);
+        thinking = setTimeout(() => {
+          res.end(`<p>${paragraph}</p></main></body></html>`);
+        }, bodyDelayMs);
+        res.on("close", () => clearTimeout(thinking));
+      });
+
+      const startedAt = Date.now();
+      const enrichment = await fetchLinkEnrichment(url);
+      const elapsed = Date.now() - startedAt;
+      clearTimeout(thinking);
+
+      expect(enrichment.title).toBe("Slow but real");
+      expect(enrichment.text).toContain(paragraph);
+      // It really did outlive the headers budget, and it really did land
+      // inside the body one.
+      expect(elapsed).toBeGreaterThan(FETCH_HEADERS_TIMEOUT_MS);
+      expect(elapsed).toBeLessThan(LINK_BODY_MS);
+    },
+    LINK_BODY_MS * 3,
+  );
+
+  /**
+   * The other half of the same change: the deadline now outlives the fetch, so
+   * every exit has to hand it back. If `release` were missed on the ordinary
+   * path this would still return a title, and then hold a live timer and an
+   * open socket afterwards.
+   */
+  it("still reads a page that answers promptly", async () => {
+    const paragraph =
+      "The argument of the piece, stated at enough length that the body extractor treats it as prose.";
+    const url = await serveOnLoopback((_req, res) => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(
+        `<html><head><title>A page that finished</title></head>` +
+          `<body><main><p>${paragraph}</p></main></body></html>`,
+      );
+    });
+
+    const enrichment = await fetchLinkEnrichment(url);
+    expect(enrichment.title).toBe("A page that finished");
+    expect(enrichment.text).toContain(paragraph);
   });
 });
