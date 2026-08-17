@@ -14,7 +14,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { createTestDatabase, type TestDatabase } from "../../test/helpers/index.js";
-import { removeGroupMember, rotateJoinCode } from "./groups.js";
+import { removeGroupMember, rotateJoinCode } from "./groups-membership.js";
 
 let t: TestDatabase;
 let seq = 0;
