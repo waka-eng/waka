@@ -91,7 +91,7 @@ vi.mock("../lib/middleware.js", async (importOriginal) => {
 });
 
 import { hashSessionToken } from "../lib/session.js";
-import { cliAuthRoutes } from "./auth-cli.js";
+import { bindableProfiles, cliAuthRoutes } from "./auth-cli.js";
 
 function createApp() {
   const app = new Hono();
@@ -164,6 +164,49 @@ beforeEach(() => {
   mockState.authenticated = true;
   mockState.session = HUMAN_SESSION;
   mockState.db = makeDb([]);
+});
+
+/**
+ * The candidate filter, tested directly, because nothing else can reach it.
+ *
+ * `bindableProfiles` carries two rules: candidates come from the account
+ * rather than the request, and an agent-bound session is narrowed to its own
+ * profile by the `write` arm of the access matrix. Both routes now refuse an
+ * agent session before the helper runs, so every request-level assertion in
+ * this file answers the same whether that second rule is there or not — the
+ * test that used to cover it ("offers an agent session only its own
+ * profile") could not survive the gate, and replacing the filter body with a
+ * bare `return rows;` leaves the whole suite green.
+ *
+ * That is how a defence decays into a comment. The gate and the filter are
+ * separate defences on separate assumptions, so each is asserted separately:
+ * the gate by the two route tests below, the filter here.
+ */
+describe("bindableProfiles", () => {
+  it("offers an agent session only its own profile, never the human's", async () => {
+    mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+
+    const candidates = await bindableProfiles(AGENT_SESSION);
+
+    expect(candidates.map((row) => row.id)).toEqual(["profile-agent"]);
+  });
+
+  /**
+   * The other half of the same rule: a human session is the account's admin,
+   * so narrowing must not catch it. Without this, tightening the filter to
+   * "own profile only" would pass — and quietly remove the agent profile
+   * from the picker the consent page exists to offer.
+   */
+  it("offers a human session every profile the account owns", async () => {
+    mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+
+    const candidates = await bindableProfiles(HUMAN_SESSION);
+
+    expect(candidates.map((row) => row.id)).toEqual([
+      "profile-human",
+      "profile-agent",
+    ]);
+  });
 });
 
 describe("GET /api/auth/cli/start", () => {
@@ -244,18 +287,39 @@ describe("GET /api/auth/cli/start", () => {
     expect(html).toMatch(/value="profile-agent"\s+checked/);
   });
 
-  it("offers an agent session only its own profile", async () => {
+  /**
+   * The earlier version of this test asserted the narrower rule — an agent
+   * session was served the page, but offered only its own profile. It could
+   * not stay in this shape: an agent session does not get a page at all now,
+   * so there is no profile list to read the narrowing off. The rule itself is
+   * not subsumed, only hidden from here, and it kept its coverage by moving
+   * up to the `bindableProfiles` describe rather than by being dropped.
+   *
+   * `requireAuth` accepts a Bearer token, which is precisely what an agent's
+   * CLI credential presents, so this endpoint was reachable by a process with
+   * no person in front of it. An agent that can render the consent page is an
+   * agent one self-submitted form away from a second 30-day credential.
+   *
+   * The other half of the gate — that a human session is still served — is
+   * not restated here: every other test in this file and the next runs on
+   * HUMAN_SESSION and asserts a 200 page or a 302 with a code, so a gate that
+   * refused too much would take most of this file down with it.
+   */
+  it("refuses an agent session outright — no page, no profile list", async () => {
     mockState.session = AGENT_SESSION;
-    mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+    const db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
+    mockState.db = db;
 
     const res = await createApp().request(
       startUrl({ callback: CALLBACK, state: "s" }),
       { redirect: "manual" },
     );
-    const html = await res.text();
 
-    expect(html).toContain('value="profile-agent"');
+    expect(res.status).toBe(403);
+    const html = await res.text();
+    expect(html).not.toContain('value="profile-agent"');
     expect(html).not.toContain('value="profile-human"');
+    expect(db.insert).not.toHaveBeenCalled();
   });
 
   it("escapes a device label rather than reflecting it into the page", async () => {
@@ -363,15 +427,64 @@ describe("POST /api/auth/cli/consent", () => {
     expect(mockState.db.insert).not.toHaveBeenCalled();
   });
 
-  it("refuses a profile the session may not bind", async () => {
-    mockState.session = AGENT_SESSION;
-    const fields = await renderThenFields({}, [AGENT_ROW]);
-    mockState.db = makeDb([[AGENT_ROW]]);
+  /**
+   * Candidates come from the account, so a profile id that is not one of them
+   * is not a profile this session may mint for — the request naming it is the
+   * only place it appears.
+   *
+   * This used to be written with an agent session reaching for the human
+   * profile. That shape is now refused a step earlier by humanSessionsOnly,
+   * which would have made this a test of the gate rather than of the
+   * candidate check, so it is written with a session that does get through.
+   */
+  it("refuses a profile that is not one of the account's", async () => {
+    const fields = await renderThenFields();
+    mockState.db = makeDb([[HUMAN_ROW, AGENT_ROW]]);
 
-    const res = await postConsent({ ...fields, profileId: "profile-human" });
+    const res = await postConsent({
+      ...fields,
+      profileId: "profile-belonging-to-someone-else",
+    });
 
     expect(res.status).toBe(400);
     expect(mockState.db.insert).not.toHaveBeenCalled();
+  });
+
+  /**
+   * THE WHOLE ATTACK, DRIVEN END TO END WITH NOTHING BUT THE AGENT'S OWN
+   * CREDENTIAL.
+   *
+   * No human is simulated anywhere in this test: the same agent session
+   * renders the consent page and submits it. That is what made the finding
+   * real rather than theoretical — `requireAuth` accepts a Bearer token, an
+   * agent's CLI credential is a Bearer token, and the consent token is an
+   * HMAC this route signs for itself, so the agent could collect a valid one
+   * from /start and hand it straight back to /consent. Every "a person saw
+   * this and pressed Allow" check was satisfied by the agent.
+   *
+   * The cost is that revocation stops converging. Ending a connection is the
+   * account holder's documented remedy for a misbehaving agent (sessions.ts),
+   * and it only works if the set of connections shrinks when you end one. A
+   * spare token that can mint more means they revoke one and the agent mints
+   * two.
+   *
+   * Asserting `insert` was never called matters as much as the status: the
+   * insert IS the minting. A 403 with a row written would be a fix in name.
+   */
+  it("refuses an agent session walking the flow to mint itself another session", async () => {
+    mockState.session = AGENT_SESSION;
+    const fields = await renderThenFields({}, [AGENT_ROW]);
+    const db = makeDb([[AGENT_ROW]]);
+    mockState.db = db;
+
+    const res = await postConsent({ ...fields, profileId: "profile-agent" });
+
+    expect(
+      db.insertValues,
+      "an agent minted itself a login code with no person in the loop",
+    ).not.toHaveBeenCalled();
+    expect(res.status).toBe(403);
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("accepts http://localhost as well as http://127.0.0.1", async () => {
