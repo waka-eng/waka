@@ -1090,6 +1090,36 @@
   pointer-events: none;
 }
 
+/* WHICH ROOM YOU ARE IN. Sits in the same meta register as .jar-offline
+   beside it — same padding, same alignment — because they answer the same
+   kind of question: what am I looking at. Unlike that one it IS pressable,
+   so it takes ink rather than faint, and it is the only thing in this corner
+   that responds. */
+.jar-context {
+  display: block;
+  margin: 0 0 0 auto;
+  padding: 7px 0;
+  max-width: 60ch;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: right;
+  color: var(--jar-muted);
+  cursor: pointer;
+  transition: color 160ms var(--ease, ease);
+}
+
+.jar-context:hover,
+.jar-context[aria-expanded="true"] {
+  color: var(--jar-ink);
+}
+
+/* The people are the quieter half: the room's name is what you are in, and
+   who is here is a detail of it. */
+.jar-context-who {
+  color: var(--jar-faint);
+}
+
 /* ---------- time dial: a soft neutral rail, no coloured glow ---------- */
 .jar-dial {
   position: absolute;

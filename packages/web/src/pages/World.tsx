@@ -5065,9 +5065,12 @@ function WorldExperience(): JSX.Element {
       for (const g of rows) {
         if (offlineRef.current || dead) return;
         try {
-          const [wall, top, proposals] = await Promise.all([
+          /* A room's board is NOT fetched here. `loadRoom` fetches it on
+             arrival and stores it per room in `roomChromeRef`, which is where
+             `wallChromeNow` reads a room's poster from. Fetching it at boot
+             too was one request per room for a value nothing read. */
+          const [wall, proposals] = await Promise.all([
             fetchGroupWall(g.id).catch(() => [] as ApiGroupWallSignal[]),
-            fetchGroupTopOfMind(g.id),
             fetchGroupProposals(g.id).catch(() => [] as ApiGroupProposal[]),
           ]);
           if (dead || offlineRef.current) return;
@@ -5102,15 +5105,24 @@ function WorldExperience(): JSX.Element {
               },
             );
           }
-          const lead = top.entries.find((e) => e.pinnedAt) ?? top.entries[0];
-          if (lead && !dead) {
-            setAdopted({
-              ambition: lead.body,
-              groupName: g.name,
-              createdMs: Date.parse(lead.createdAt) || 0,
-            });
-            return;
-          }
+          /* A ROOM'S AMBITION IS NOT YOURS, AND MUST NOT BE WRITTEN WHERE
+             YOURS IS READ.
+             This block used to take the first room that had a board and call
+             `setAdopted` with it. `adopted` is read in exactly one place —
+             `wallChromeNow`'s `else` branch, which is YOUR wall (a room reads
+             `roomChromeRef`, an agent reads `deriveAgentChrome`). So a room's
+             sentence, carrying the room's name as its eyebrow, landed on the
+             poster over your own headquarters. It won every time rather than
+             only when yours was missing, because this loop awaits
+             `fetchGroups()` and therefore always resolves after your own board
+             has loaded: the poster painted your ambition on arrival and was
+             overwritten seconds later, while you were reading it. That also
+             breaks the law that the world never moves unless you moved it.
+
+             The `return` that went with it exited the whole loop, so every
+             room after the first with a board was never fetched at all — no
+             wall signals, no open proposal. One block, two bugs; both go by
+             deleting it and letting the loop finish. */
         } catch {
           /* this room stays silent; try the next */
         }
@@ -5391,7 +5403,32 @@ function WorldExperience(): JSX.Element {
               T,
               nowMs,
             )
-          : (() => {
+          : /* A ROOM'S BOARD IS THE ROOM'S, AND IT LIVES WHERE THE ROOM PUT IT.
+               There was no `room` branch here at all: standing in a room fell
+               through to `deriveAmbition`, which reads YOUR adopted ambition
+               and YOUR notes. A room wall therefore never had a poster of its
+               own, and the boot loop's `setAdopted` was covering for that by
+               writing the room's sentence into your slot — which is why
+               deleting it left the room blank. The cover-up and the hole were
+               one bug wearing two faces.
+               `roomChromeRef` is the same map `wallChromeNow` reads for every
+               room you are NOT standing on, filled by `loadRoom` on arrival,
+               so this makes the wall you are on agree with the walls beside
+               it instead of borrowing from you. Until it arrives the room is
+               honestly blank — it says its own name and nothing else, rather
+               than showing someone else's ambition under it. */
+            atWall.kind === "room"
+            ? roomChromeRef.current.get(atWall.id) ?? {
+                text: null,
+                eyebrow: atWall.name,
+                awayFrom: null,
+                formingAlt: null,
+                asOf: null,
+                forming: null,
+                empty: false,
+                prevText: null,
+              }
+            : (() => {
               const current = deriveAmbition(nowMs, adopted, notes);
               const at = deriveAmbition(T, adopted, notes);
               return {
@@ -5429,7 +5466,13 @@ function WorldExperience(): JSX.Element {
             { ...next, prevText: prev.text },
       );
     },
-    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, captures],
+    /* `wokenRooms` is here because a room's board arrives asynchronously into
+       `roomChromeRef`, which is a ref and so cannot itself trigger anything.
+       `loadRoom` adds the room to this set in the same breath as filling that
+       map, so depending on it is what makes the poster appear on arrival
+       rather than at whatever unrelated render happens next. `wallChromeNow`
+       already depends on it for the same reason. */
+    [dial, adopted, notes, proposal, atWall, agents, emerging, topOfMind, captures, wokenRooms],
   );
   /* The fallback chain's provenance: when the poster is showing an entry of
      the board rather than a room's, that entry's own citations are what led to
@@ -13098,27 +13141,23 @@ function WorldExperience(): JSX.Element {
             register — words, editable, searchable — and it goes away once the
             world can do everything it can. Settings is the account: it leaves
             the world entirely and always will. */}
-        {/* ONE THING, AND IT IS ABOUT WHERE YOU ARE STANDING.
+        {/* THE WAY OUT IS NOT A PLACE TO PUT THINGS.
             This grew to four pills in a row — archive, settings, rooms, who is
             here — which is a toolbar, and a toolbar is the thing this world
-            was built to not have. Everything a person needs is still reachable;
-            it is just not all shouting at once.
+            was built to not have. They were collapsed to one. But the one was
+            a TERNARY: on a room wall the exit was replaced by the room's
+            members, and this is the only link to /profile in the entire world.
+            So on four of six walls there was no way to your account at all —
+            no settings, no language, no sessions, no sign out — from a slot
+            named `jar-exits`, under a comment calling it "the way out".
 
-            On your own wall there is one quiet word out. In a room it is the
-            people, because that is the only thing a room is. Nothing else has
-            earned a permanent place at the top of the screen. */}
+            The way out never changes, so it never moves. Where you are
+            standing is a different fact and gets the line below, which the
+            fixed chrome already keeps for exactly this and which holds in all
+            three sections — a room's identity was otherwise readable only
+            down in the field, where the legend draws it. */}
         <div className="jar-exits">
-          {atWall.kind === "room" ? (
-            <button
-              type="button"
-              className="jar-back jar-label"
-              onClick={() => setRoomPanel(roomPanel === atWall.id ? null : atWall.id)}
-            >
-              {(members.get(atWall.id)?.length ?? 0) > 0
-                ? whoWords(members.get(atWall.id) as ApiGroupMember[])
-                : "Who is here"}
-            </button>
-          ) : (
+          {
             /* ONE WORD, AND IT GOES ONE PLACE.
                This opened a drawer of six unrelated things — find, rooms, add
                an agent, settings, hold still, archive — which is a toolbar
@@ -13142,7 +13181,7 @@ function WorldExperience(): JSX.Element {
             <Link className="jar-back jar-label" to="/profile">
               Your account
             </Link>
-          )}
+          }
         </div>
         {/* WHAT YOU ARE LOOKING AT, WHEN IT IS NOT YOURS.
             One line, in the register the page already keeps for meta, saying
@@ -13156,6 +13195,34 @@ function WorldExperience(): JSX.Element {
           <p className="jar-offline jar-label">
             Offline — showing sample memories, nothing is kept
           </p>
+        ) : null}
+        {/* WHICH ROOM YOU ARE IN — the other half of what that comment
+            promised, and until now the half that was never built. A room's
+            name and its people were readable in exactly two places: the axis
+            along the bottom, which names every wall and so says nothing about
+            this one, and the legend, which draws only in the field. Stand at
+            a room's headquarters or in its sky and there was nothing on
+            screen saying whose room this was.
+
+            It goes here rather than in `jar-exits` because it is not an exit;
+            it is where you are standing, which is precisely the fact this
+            line was reserved for. Pressing it opens the same room panel the
+            members button used to. */}
+        {atWall.kind === "room" && !offline ? (
+          <button
+            type="button"
+            className="jar-context jar-label"
+            aria-expanded={roomPanel === atWall.id}
+            onClick={() => setRoomPanel(roomPanel === atWall.id ? null : atWall.id)}
+          >
+            {groups.find((g) => g.id === atWall.id)?.name ?? "This room"}
+            {(members.get(atWall.id)?.length ?? 0) > 0 ? (
+              <span className="jar-context-who">
+                {" · "}
+                {whoWords(members.get(atWall.id) as ApiGroupMember[])}
+              </span>
+            ) : null}
+          </button>
         ) : null}
       </div>
 
