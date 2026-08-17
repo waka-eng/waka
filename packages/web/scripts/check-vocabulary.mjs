@@ -219,31 +219,129 @@ function walk(dir, found = []) {
   return found;
 }
 
+/** Every forbidden identifier in one source, with the line it sits on. */
+function scanSource(source) {
+  const found = [];
+  codeOnly(source)
+    .split("\n")
+    .forEach((line, index) => {
+      for (const match of line.matchAll(TOKEN)) {
+        const name = match[0];
+        if (ALLOWED.has(name)) continue;
+        const parts = words(name);
+        for (const { word, use } of FORBIDDEN) {
+          if (!parts.includes(word)) continue;
+          found.push({ line: index + 1, name, word, use });
+          break;
+        }
+      }
+    });
+  return found;
+}
+
+/**
+ * PROVE THE GATE CAN STILL SEE.
+ *
+ * This gate reported `vocabulary: clean` over half of `Home.tsx` for a week. It
+ * was not broken in a way anyone could notice — it was blind, and a blind check
+ * reports exactly what a working one does. An apostrophe in JSX text
+ *
+ *     <p>Joining puts your name on this room's roll</p>
+ *
+ * opened a string it never closed, so thousands of lines were blanked before
+ * the scan ever saw them. It was caught only because someone planted a probe
+ * near the top of the file, found it, planted the identical probe at line 9013,
+ * and did not.
+ *
+ * That is the whole argument for this function. A gate is only worth the last
+ * time someone proved it could fail, and proving it by hand does not survive
+ * the next edit to the scanner. So the cases live here and run in `pnpm test`
+ * alongside everything else.
+ *
+ * The MUST-FLAG cases are placed AFTER the exact constructs that have blinded
+ * it before — an apostrophe, a template literal, a regex, an unterminated
+ * quote — because "does it flag a bad name on line 1" was never the question.
+ * The question is whether it can still see line 9013.
+ *
+ * EACH ONE NAMES THE IDENTIFIER IT EXPECTS, and that is not pedantry. The first
+ * version of this self-test only asked "did anything get flagged", and it
+ * passed against a deliberately re-broken scanner — because the breakage
+ * destroyed the JSX masking, which exposed the word `room` sitting in the
+ * PROSE, which got flagged instead of the planted identifier. Right answer,
+ * wrong reason, and a green report either way. Asking WHICH name closes that.
+ */
+const SELFTEST = [
+  { expect: "roomPanel", why: "a plain forbidden identifier", src: "const roomPanel = 1;" },
+  { expect: "PatternRow", why: "forbidden in a type name", src: "interface PatternRow { id: string }" },
+  { expect: "worldView", why: "forbidden as a property", src: "const a = { worldView: 1 };" },
+  {
+    expect: "roomPanel",
+    why: "AFTER an apostrophe in JSX text — the blindness that shipped",
+    src: [
+      "export const A = () => (",
+      "  <p>Joining puts your name on this room's roll</p>",
+      ");",
+      "const roomPanel = 1;",
+    ].join("\n"),
+  },
+  {
+    expect: "capturePanel",
+    why: "after a multi-line template literal",
+    src: ["const t = `line one", "line two`;", "const capturePanel = 2;"].join("\n"),
+  },
+  {
+    expect: "roomList",
+    why: "after a regex holding a quote",
+    src: ["const re = /it's/;", "const roomList = [];"].join("\n"),
+  },
+  {
+    expect: "roomId",
+    why: "after a comment mentioning the old word",
+    src: ["/* this used to be called a room, and the rename is why */", "let roomId = 1;"].join("\n"),
+  },
+  { expect: null, why: "an allowed API field name", src: "const x = item.capturedAt;" },
+  { expect: null, why: "an allowed DOM type", src: "let p: CanvasPattern | null = null;" },
+  { expect: null, why: "the old word in prose, which must stay legal", src: "/* the room's field */" },
+  { expect: null, why: "the old word in a string a person reads", src: 'const s = "Leave this room?";' },
+  {
+    expect: null,
+    why: "the old word in JSX text, which is the third vocabulary",
+    src: "export const B = () => <span>Couldn't reach this room</span>;",
+  },
+];
+
+function selftest() {
+  const failures = [];
+  for (const c of SELFTEST) {
+    const names = scanSource(c.src).map((h) => h.name);
+    const ok = c.expect === null ? names.length === 0 : names.includes(c.expect);
+    if (!ok) {
+      failures.push(
+        `  ${c.expect === null ? "FALSE ALARM" : "MISSED `" + c.expect + "`"}: ${c.why}\n` +
+          `      ${c.src.replace(/\n/g, "\n      ")}\n` +
+          `      flagged: ${names.length ? names.join(", ") : "(nothing)"}\n`,
+      );
+    }
+  }
+  if (failures.length > 0) {
+    console.error(
+      `\nvocabulary gate SELF-TEST FAILED — the gate cannot see what it claims to.\n` +
+        `A clean report from a blind gate is worse than no gate.\n\n` +
+        failures.join("\n"),
+    );
+    process.exit(1);
+  }
+  console.log(`vocabulary: self-test passed (${SELFTEST.length} cases)`);
+}
+
+selftest();
+
 const violations = [];
 
 for (const file of walk(SRC)) {
-  const source = readFileSync(file, "utf8");
-  const code = codeOnly(source);
-  const lines = code.split("\n");
-
-  lines.forEach((line, index) => {
-    for (const match of line.matchAll(TOKEN)) {
-      const name = match[0];
-      if (ALLOWED.has(name)) continue;
-      const parts = words(name);
-      for (const { word, use } of FORBIDDEN) {
-        if (!parts.includes(word)) continue;
-        violations.push({
-          file: relative(SRC, file),
-          line: index + 1,
-          name,
-          word,
-          use,
-        });
-        break;
-      }
-    }
-  });
+  for (const hit of scanSource(readFileSync(file, "utf8"))) {
+    violations.push({ ...hit, file: relative(SRC, file) });
+  }
 }
 
 if (violations.length === 0) {
