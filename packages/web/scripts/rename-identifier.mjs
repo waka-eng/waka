@@ -28,33 +28,95 @@
  * string and a run of JSX text are not, and no amount of apostrophes or braces
  * changes that. TypeScript is already a dependency, so the parser is free.
  *
+ * WHY IT CAN BE TOLD WHICH DECLARATION.
+ *
+ * A name is not a variable. `Home.tsx` holds a React state `provenance` at
+ * component scope AND a loop-local `provenance` inside the frame effect that
+ * shadows it — two different things wearing one name. Renaming by text hits
+ * both, and `const [sky.provenance, setProvenance] = useState()` is what you
+ * get. So `--decl <line>` names the declaration, and only identifiers that
+ * RESOLVE to it are touched. Everything that merely spells the same is left
+ * exactly where it is.
+ *
  * WHAT IT DELIBERATELY REFUSES.
  *
  * A shorthand property (`{ settle }`) would have to become `{ settle: stir.amp }`,
  * which is a different edit, so it stops and says so rather than writing
  * `{ stir.amp }` and leaving a syntax error for someone else to find.
  *
- * Run: node scripts/rename-identifier.mjs <file> <from> <to>
+ * Run: node scripts/rename-identifier.mjs <file> <from> <to> [--decl <line>]
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const ts = createRequire(import.meta.url)("typescript");
 
-const [, , file, from, to] = process.argv;
+const [, , file, from, to, ...rest] = process.argv;
 if (!file || !from || !to) {
-  console.error("usage: rename-identifier.mjs <file> <from> <to>");
+  console.error("usage: rename-identifier.mjs <file> <from> <to> [--decl <line>]");
+  process.exit(2);
+}
+const declFlag = rest.indexOf("--decl");
+const declLine = declFlag === -1 ? null : Number(rest[declFlag + 1]);
+if (declFlag !== -1 && !Number.isFinite(declLine)) {
+  console.error("--decl needs a 1-based line number");
   process.exit(2);
 }
 
 const src = readFileSync(file, "utf8");
-const sourceFile = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+/*
+ * A one-file Program, so the checker can answer "is this the SAME variable?".
+ * Imports do not resolve here and that is fine — local scope resolution, which
+ * is all `--decl` needs, does not depend on them. Skipping lib checking keeps
+ * this near-instant on a 10,000-line file.
+ */
+let checker = null;
+let sourceFile;
+if (declLine !== null) {
+  const program = ts.createProgram([file], {
+    allowJs: false,
+    jsx: ts.JsxEmit.Preserve,
+    noResolve: true,
+    noLib: true,
+    target: ts.ScriptTarget.Latest,
+  });
+  checker = program.getTypeChecker();
+  sourceFile = program.getSourceFile(file);
+} else {
+  sourceFile = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+}
 
 /** Byte ranges to replace, collected leaf-first then applied back-to-front. */
 const hits = [];
 const refusals = [];
 
 const lineOf = (pos) => sourceFile.getLineAndCharacterOfPosition(pos).line + 1;
+
+/**
+ * The symbol `--decl` points at. Found by locating the identifier named `from`
+ * that is declared on that line, then asking the checker what it is.
+ */
+let wanted = null;
+if (declLine !== null) {
+  const findDecl = (node) => {
+    if (wanted) return;
+    if (
+      ts.isIdentifier(node) &&
+      node.text === from &&
+      lineOf(node.getStart(sourceFile)) === declLine
+    ) {
+      wanted = checker.getSymbolAtLocation(node) ?? null;
+      if (wanted) return;
+    }
+    ts.forEachChild(node, findDecl);
+  };
+  findDecl(sourceFile);
+  if (!wanted) {
+    console.error(`no declaration of \`${from}\` found on line ${declLine}`);
+    process.exit(1);
+  }
+}
 
 function visit(node) {
   if (ts.isIdentifier(node) && node.text === from) {
@@ -69,9 +131,11 @@ function visit(node) {
       ts.isImportSpecifier(parent) ||
       ts.isExportSpecifier(parent) ||
       /* `x.settle` written as a type, and qualified type names */
-      ts.isQualifiedName(parent);
+      ts.isQualifiedName(parent) ||
+      /* spells the same, is a different variable */
+      (wanted !== null && checker.getSymbolAtLocation(node) !== wanted);
 
-    if (ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
+    if (!skip && ts.isShorthandPropertyAssignment(parent) && parent.name === node) {
       refusals.push(lineOf(node.getStart(sourceFile)));
     } else if (!skip) {
       hits.push({ start: node.getStart(sourceFile), end: node.getEnd() });

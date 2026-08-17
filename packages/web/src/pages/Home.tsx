@@ -3008,8 +3008,8 @@ function HomeExperience(): JSX.Element {
       const n = present.length;
       if (n === 0) return;
       const rowSet: Ball[] = [];
-      if (provenance.size > 0) {
-        for (const b of present) if (provenance.has(b.id)) rowSet.push(b);
+      if (poster.provenance.size > 0) {
+        for (const b of present) if (poster.provenance.has(b.id)) rowSet.push(b);
         /* newest first, so a long provenance shows its freshest end */
         rowSet.sort((a, b) => b.capturedMs - a.capturedMs);
         rowSet.length = Math.min(rowSet.length, PEEK_MAX);
@@ -3114,7 +3114,7 @@ function HomeExperience(): JSX.Element {
       const b = list[i];
       if (selectedIdRef.current === b.id) release();
       if (pressId === b.id) pressId = null;
-      if (heldBall === b) heldBall = null;
+      if (sky.heldBall === b) sky.heldBall = null;
       list.splice(i, 1);
       byId.delete(b.id);
       /* the depth order is an index permutation over `list`: it has to be
@@ -3385,7 +3385,7 @@ function HomeExperience(): JSX.Element {
         awaitingWake = false;
       }
       /* the wall's claim lifts its own handful of the ground */
-      provenance = wallProv.get(spaceKey(w)) ?? new Map();
+      poster.provenance = poster.byWall.get(spaceKey(w)) ?? new Map();
       electPeek(presentBalls());
       const res = ensureResident(w);
       if (res) {
@@ -3549,43 +3549,65 @@ function HomeExperience(): JSX.Element {
        light; the DOM carries the sentence, so the words stay crisp and
        selectable. */
 
-    /* what THIS wall's ambition was built from; its peek row is made of these */
-    let provenance: Provenance = new Map();
-    /* and every wall's, so arriving on one can lift its own handful */
-    let wallProv: Map<string, Provenance> = new Map();
-
-    let nebs: Neb[] = [];
-    /* the cluster signature last handed to React, so the loop can push a
-       discrete fact without pushing it sixty times a second */
-    let clusterSig = "";
-    let skyShown = false;
-    /* who belongs to a cluster right now, and which cloud the pointer is on:
-       clustered sentences whisper, the touched one comes back to full */
-    let clusterMembers = new Set<string>();
-    let hoverNeb: Neb | null = null;
     /**
-     * THE SUBJECT: the one candidate carrying its evidence right now, or none.
-     * At rest the sky is sentences and bodies only — a skyful of orbiting
-     * evidence was unreadable, and it was the satellites that made it so.
-     * Exactly one at a time, because the point of the tap is to be able to
-     * read one claim's provenance without the others in the way.
+     * WHAT THE PEEK ROW RESTS ON — layer 3's evidence, not layer 2's.
+     *
+     * These sat in the sky's declaration block for a long time and do not
+     * belong there. `electPeek` is the only reader, and the peek row is drawn
+     * under the POSTER at headquarters. `sky.provenance` would have named the
+     * top-of-mind layer's evidence after the layer above it.
      */
-    let focusNeb: Neb | null = null;
-    /* which satellite the pointer (or a finger) is on: its owner's given name
-       is whispered beside it, and it is what a tap would open */
-    let hoverSat: Sat | null = null;
-    let satSaid = "";
-    /* how wide that name came out, measured once when it CHANGES — the loop
-       needs it every frame to decide which side of the satellite it fits on,
-       and reading offsetWidth per frame would force a layout per frame */
-    let satSayW = 0;
-    /* the satellite a selection came FROM, so the reading panel sits beside
-       the satellite that was tapped rather than beside the memory's own place
-       in a field a whole section below */
-    let selSat: Sat | null = null;
-    /* a satellite's memory can live in a room column that has never been
-       built, so it is held directly and released directly */
-    let heldBall: Ball | null = null;
+    const poster = {
+      /* what THIS wall's ambition was built from; its peek row is made of these */
+      provenance: new Map() as Provenance,
+      /* and every wall's, so arriving on one can lift its own handful */
+      byWall: new Map<string, Provenance>(),
+    };
+
+    /**
+     * THE SKY — layer 2, and everything the pointer is doing to it.
+     *
+     * Eleven variables that are only ever true together: a `focusNeb` with no
+     * `nebs` is a subject with no sky, and `satSaid` without `satSayW` is a
+     * name nobody measured. One object so the whole of what the sky knows
+     * reads in one place — and so the extraction this makes possible can be
+     * `stepSky(sky, view, dt)`, a signature a person can check, instead of a
+     * closure over everything in the loop.
+     */
+    const sky = {
+      nebs: [] as Neb[],
+      /* the cluster signature last handed to React, so the loop can push a
+         discrete fact without pushing it sixty times a second */
+      clusterSig: "",
+      shown: false,
+      /* who belongs to a cluster right now, and which cloud the pointer is on:
+         clustered sentences whisper, the touched one comes back to full */
+      clusterMembers: new Set<string>(),
+      hoverNeb: null as Neb | null,
+      /**
+       * THE SUBJECT: the one candidate carrying its evidence right now, or none.
+       * At rest the sky is sentences and bodies only — a skyful of orbiting
+       * evidence was unreadable, and it was the satellites that made it so.
+       * Exactly one at a time, because the point of the tap is to be able to
+       * read one claim's provenance without the others in the way.
+       */
+      focusNeb: null as Neb | null,
+      /* which satellite the pointer (or a finger) is on: its owner's given name
+         is whispered beside it, and it is what a tap would open */
+      hoverSat: null as Sat | null,
+      satSaid: "",
+      /* how wide that name came out, measured once when it CHANGES — the loop
+         needs it every frame to decide which side of the satellite it fits on,
+         and reading offsetWidth per frame would force a layout per frame */
+      satSayW: 0,
+      /* the satellite a selection came FROM, so the reading panel sits beside
+         the satellite that was tapped rather than beside the memory's own place
+         in a field a whole section below */
+      selSat: null as Sat | null,
+      /* a satellite's memory can live in a room column that has never been
+         built, so it is held directly and released directly */
+      heldBall: null as Ball | null,
+    };
     /* tier-one persistence: where the clouds were left, last session */
     const savedSky = readSkyLayout();
 
@@ -3593,7 +3615,7 @@ function HomeExperience(): JSX.Element {
         (Clusters persist by falling out of the restored positions.) */
     function persistSky() {
       const layout: Record<string, { x: number; y: number }> = {};
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         if (n.gone > 0 || !n.pinned) continue;
         /* stored relative to the wall it belongs to: a new agent arriving
            shifts every column, and a spot remembered in layout coordinates
@@ -3947,7 +3969,7 @@ function HomeExperience(): JSX.Element {
       const ring = Math.min(vw * 0.3, vh * 0.27);
       /* each wall's sky is laid out in its own column, around its own centre */
       const rank = new Map<number, number>();
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         const cx = n.col * vw + vw / 2;
         n.r = n.kind === "proposal" ? base * 0.21 : base * (n.kind === "draft" ? 0.19 : 0.15);
         /* the words first: the orbit and the keep-out both come off them */
@@ -3957,7 +3979,7 @@ function HomeExperience(): JSX.Element {
             n.homeX = cx + (n.frac - 0.5) * 30;
             n.homeY = cy - base * 0.04;
           } else {
-            const orbiting = nebs.filter((q) => q.col === n.col && q.kind !== "proposal").length;
+            const orbiting = sky.nebs.filter((q) => q.col === n.col && q.kind !== "proposal").length;
             const k = rank.get(n.col) ?? 0;
             rank.set(n.col, k + 1);
             const a = (k / Math.max(orbiting, 1)) * TAU + n.frac * 0.7;
@@ -3981,11 +4003,11 @@ function HomeExperience(): JSX.Element {
          survive being read. */
       for (let pass = 0; pass < 8; pass++) {
         let moved = false;
-        for (let i = 0; i < nebs.length; i++) {
-          const a = nebs[i];
+        for (let i = 0; i < sky.nebs.length; i++) {
+          const a = sky.nebs[i];
           if (a.gone > 0) continue;
-          for (let j = i + 1; j < nebs.length; j++) {
-            const b = nebs[j];
+          for (let j = i + 1; j < sky.nebs.length; j++) {
+            const b = sky.nebs[j];
             if (b.gone > 0) continue;
             let dx = b.homeX - a.homeX;
             let dy = b.homeY - a.homeY;
@@ -4008,10 +4030,10 @@ function HomeExperience(): JSX.Element {
           }
         }
         if (!moved) break;
-        for (const n of nebs) clampHome(n);
+        for (const n of sky.nebs) clampHome(n);
       }
 
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         if (n.x === 0 && n.y === 0) {
           n.x = n.homeX;
           n.y = n.homeY;
@@ -4031,7 +4053,7 @@ function HomeExperience(): JSX.Element {
 
     /** Rebuild the sky from the candidate list, keeping what is already up. */
     function syncSky(list: Candidate[]) {
-      const prev = new Map(nebs.map((n) => [n.id, n] as const));
+      const prev = new Map(sky.nebs.map((n) => [n.id, n] as const));
       const next: Neb[] = [];
       /* the cap is PER SKY: a skyful is a skyful on each wall, and a room full
          of agents must not crowd your own sky out of its own ceiling */
@@ -4086,12 +4108,12 @@ function HomeExperience(): JSX.Element {
         }
         next.push(n);
       }
-      nebs = next;
+      sky.nebs = next;
       /* a candidate that has left the sky cannot be the subject of it */
-      if (focusNeb && !next.includes(focusNeb)) focusNeb = null;
+      if (sky.focusNeb && !next.includes(sky.focusNeb)) sky.focusNeb = null;
       /* a selected satellite whose candidate has left the sky has nothing
          left to sit beside */
-      const held = selSat;
+      const held = sky.selSat;
       if (held && !next.some((n) => n.sats.includes(held))) release();
       layoutSky();
       wake();
@@ -4109,9 +4131,9 @@ function HomeExperience(): JSX.Element {
      * founder had removed from this page once already.
      */
     function focusOn(n: Neb | null) {
-      if (focusNeb === n) return;
+      if (sky.focusNeb === n) return;
       const now = performance.now();
-      const leaving = focusNeb;
+      const leaving = sky.focusNeb;
       if (leaving) {
         leaving.focused = false;
         leaving.focusAt = now;
@@ -4119,9 +4141,9 @@ function HomeExperience(): JSX.Element {
         for (const s of leaving.sats) s.em0 = s.em;
         /* a memory being read from a system that is closing has nothing left
            to sit beside — the same rule adoption's condense already obeys */
-        if (selSat && leaving.sats.includes(selSat)) release();
+        if (sky.selSat && leaving.sats.includes(sky.selSat)) release();
       }
-      focusNeb = n;
+      sky.focusNeb = n;
       /* A fourth discrete fact leaves the loop: WHICH pattern is the subject.
          Its verdict row hangs off it in the DOM, and it exists only while it
          is the one being read — a sky with a row of buttons under every cloud
@@ -4144,8 +4166,8 @@ function HomeExperience(): JSX.Element {
     function nebAt(cx: number, cy: number): Neb | null {
       const wx = cx + camX;
       const wy = cy + camY;
-      for (let i = nebs.length - 1; i >= 0; i--) {
-        const n = nebs[i];
+      for (let i = sky.nebs.length - 1; i >= 0; i--) {
+        const n = sky.nebs[i];
         if (n.gone > 0.4 || n.condense < 0.99) continue;
         const dx = n.x - wx;
         const dy = n.y - wy;
@@ -4167,7 +4189,7 @@ function HomeExperience(): JSX.Element {
      * rotation.
      */
     function placeSats(t: number, now: number) {
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         if (n.sats.length === 0 || n.gone >= 1) continue;
         /* THE ELLIPSE IS THE SENTENCE'S, not the cloud's: measureNeb solved it
            from the words' own box, so nothing on it can cross a word. The
@@ -4268,14 +4290,14 @@ function HomeExperience(): JSX.Element {
        * itself. Two signals near enough to be joined simply lean into each
        * other's light while sitting perfectly still.
        */
-      for (const n of nebs) n.pairable = false;
-      if (!focusNeb) {
-        for (let i = 0; i < nebs.length; i++) {
-          const a = nebs[i];
-          if (a.gone > 0 || clusterMembers.has(a.id)) continue;
-          for (let j = i + 1; j < nebs.length; j++) {
-            const b = nebs[j];
-            if (b.gone > 0 || clusterMembers.has(b.id)) continue;
+      for (const n of sky.nebs) n.pairable = false;
+      if (!sky.focusNeb) {
+        for (let i = 0; i < sky.nebs.length; i++) {
+          const a = sky.nebs[i];
+          if (a.gone > 0 || sky.clusterMembers.has(a.id)) continue;
+          for (let j = i + 1; j < sky.nebs.length; j++) {
+            const b = sky.nebs[j];
+            if (b.gone > 0 || sky.clusterMembers.has(b.id)) continue;
             const dx = b.x - a.x;
             const dy = b.y - a.y;
             /* generous — this is an invitation, not the drop test */
@@ -4289,10 +4311,10 @@ function HomeExperience(): JSX.Element {
       }
       let joinNeb: Neb | null = null;
       {
-        const held = nebs.find((n) => n.dragging);
+        const held = sky.nebs.find((n) => n.dragging);
         if (held) {
           let best = Infinity;
-          for (const n of nebs) {
+          for (const n of sky.nebs) {
             if (n === held || n.gone > 0) continue;
             const dx = n.x - held.x;
             const dy = n.y - held.y;
@@ -4307,7 +4329,7 @@ function HomeExperience(): JSX.Element {
           }
         }
       }
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         n.joining = n === joinNeb;
         /* A clustered member steps BACK, it does not switch off. It used to
            fall to a quarter, which made the words of a group you had just
@@ -4321,7 +4343,7 @@ function HomeExperience(): JSX.Element {
         const wantS =
           n === joinNeb
             ? 1
-            : clusterMembers.has(n.id) && hoverNeb !== n && !n.dragging
+            : sky.clusterMembers.has(n.id) && sky.hoverNeb !== n && !n.dragging
               ? 0.62
               : 1;
         n.dimS = reduced
@@ -4333,7 +4355,7 @@ function HomeExperience(): JSX.Element {
            else sinks, body and words together, on the field's focus law —
            there is exactly one lit thing on screen and no second tier of
            highlight. */
-        const wantN = focusNeb !== null && focusNeb !== n ? 1 : 0;
+        const wantN = sky.focusNeb !== null && sky.focusNeb !== n ? 1 : 0;
         n.dimN = reduced
           ? wantN
           : Math.abs(n.dimN - wantN) < 0.01
@@ -4351,7 +4373,7 @@ function HomeExperience(): JSX.Element {
            when a focused candidate has been gathered against a neighbour —
            the one case where the ellipse would otherwise run its evidence
            through the cloud next door. */
-        const wantNest = clusterMembers.has(n.id) ? NEST_K : 1;
+        const wantNest = sky.clusterMembers.has(n.id) ? NEST_K : 1;
         if (reduced) {
           n.nest = wantNest;
         } else if (n.nest !== wantNest) {
@@ -4415,11 +4437,11 @@ function HomeExperience(): JSX.Element {
          on a neighbour's sentence or on a neighbour's body. A cloud being
          dragged is exempt, as it always was: drawing two together is how a
          draft is gathered. */
-      for (let i = 0; i < nebs.length; i++) {
-        const a = nebs[i];
+      for (let i = 0; i < sky.nebs.length; i++) {
+        const a = sky.nebs[i];
         if (a.dragging || a.gone > 0) continue;
-        for (let j = i + 1; j < nebs.length; j++) {
-          const b = nebs[j];
+        for (let j = i + 1; j < sky.nebs.length; j++) {
+          const b = sky.nebs[j];
           if (b.dragging || b.gone > 0) continue;
           const dx = b.x - a.x;
           const dy = b.y - a.y;
@@ -4434,7 +4456,7 @@ function HomeExperience(): JSX.Element {
              made it a coin flip, which is exactly the shape of "sometimes
              they don't merge". Once they are one group, only their LIGHT has
              to stay apart. */
-          const minD = clusterMembers.has(a.id) && clusterMembers.has(b.id)
+          const minD = sky.clusterMembers.has(a.id) && sky.clusterMembers.has(b.id)
             ? (a.r + b.r) * 0.5
             : a.keepR + b.keepR + SKY_GAP;
           const d2 = dx * dx + dy * dy;
@@ -4455,7 +4477,7 @@ function HomeExperience(): JSX.Element {
          rest of the field. One eased fade each, on the field's own curve. */
       const selId = selectedIdRef.current;
       const selOn = selId !== null;
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         for (const s of n.sats) {
           const wantGlow = s.id === selId ? 1 : 0;
           const wantDim = selOn && s.id !== selId ? 1 : 0;
@@ -4479,22 +4501,22 @@ function HomeExperience(): JSX.Element {
      * loop but only handed to React when the answer changes.
      */
     function computeClusters(): string {
-      const parent = nebs.map((_, i) => i);
+      const parent = sky.nebs.map((_, i) => i);
       const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-      for (let i = 0; i < nebs.length; i++)
-        for (let j = i + 1; j < nebs.length; j++) {
-          const a = nebs[i];
-          const b = nebs[j];
+      for (let i = 0; i < sky.nebs.length; i++)
+        for (let j = i + 1; j < sky.nebs.length; j++) {
+          const a = sky.nebs[i];
+          const b = sky.nebs[j];
           if (a.gone > 0 || b.gone > 0 || a.condenseAt > 0 || b.condenseAt > 0) continue;
           const d = Math.hypot(b.x - a.x, b.y - a.y);
           if (d < (a.r + b.r) * (1 - CLUSTER_OVERLAP)) parent[find(i)] = find(j);
         }
       const groups = new Map<number, string[]>();
-      for (let i = 0; i < nebs.length; i++) {
+      for (let i = 0; i < sky.nebs.length; i++) {
         const root = find(i);
         const g = groups.get(root);
-        if (g) g.push(nebs[i].id);
-        else groups.set(root, [nebs[i].id]);
+        if (g) g.push(sky.nebs[i].id);
+        else groups.set(root, [sky.nebs[i].id]);
       }
       const sig: string[] = [];
       for (const ids of groups.values()) if (ids.length > 1) sig.push(ids.join("+"));
@@ -5001,7 +5023,7 @@ function HomeExperience(): JSX.Element {
          "the light already answered" reads as the product having nothing to
          say on the day somebody starts. Under a handful of memories, it says
          what is actually true instead. */
-      if (nebs.length === 0 && inspCol > 0 && inspCol < 4)
+      if (sky.nebs.length === 0 && inspCol > 0 && inspCol < 4)
         return pick([
           "A few so far. Say more and I will start to see it",
           "Not enough yet to see a shape",
@@ -5050,7 +5072,7 @@ function HomeExperience(): JSX.Element {
       /* a satellite holds its own selection: the memory it stands for may
          live in a field that has never been poured (another room's), and that
          is not a reason to close what is being read */
-      if (selSat) return;
+      if (sky.selSat) return;
       const id = selectedIdRef.current;
       const sel = id ? findBall(id) : undefined;
       if (!sel || !sel.active) release();
@@ -5195,7 +5217,7 @@ function HomeExperience(): JSX.Element {
           ctx!.drawImage(pal.orbs[s.sizeIdx][tier], s.x - ex, s.y - ex, ex * 2, ex * 2);
         }
       };
-      for (const n of nebs) {
+      for (const n of sky.nebs) {
         if (n.gone >= 1) continue;
         const sx = n.x - camX;
         if (sx < -n.r * 2.4 || sx > vw + n.r * 2.4) continue;
@@ -5654,7 +5676,7 @@ function HomeExperience(): JSX.Element {
          frame: the canvas carries the light, the words stay crisp. */
       const els = nebElsRef.current;
       if (els.size > 0) {
-        for (const n of nebs) {
+        for (const n of sky.nebs) {
           const el = els.get(n.id);
           if (!el) continue;
           /* the subject grows on the same curve and by the same amount its
@@ -5693,7 +5715,7 @@ function HomeExperience(): JSX.Element {
           let hits = 0;
           let low = -Infinity;
           for (const mid of id.split("+")) {
-            const n = nebs.find((q) => q.id === mid);
+            const n = sky.nebs.find((q) => q.id === mid);
             if (!n) continue;
             sx += n.x;
             sy += n.y;
@@ -5708,9 +5730,9 @@ function HomeExperience(): JSX.Element {
          the name stays where the memory is even while the orbit turns under
          it. Absolutely positioned: it can never shift anything else. */
       const who = satSayRef.current;
-      if (who && hoverSat) {
-        const sx = hoverSat.x - camX;
-        const sy = hoverSat.y - camY;
+      if (who && sky.hoverSat) {
+        const sx = sky.hoverSat.x - camX;
+        const sy = sky.hoverSat.y - camY;
         /* IT HAS TO STAY IN THE SKY. The name sits to the satellite's right by
            default, but the sky clips and the name never wraps, so a satellite
            on the right of its orbit would have its owner cut in half or lost
@@ -5719,10 +5741,10 @@ function HomeExperience(): JSX.Element {
            flips to the other side when it would not fit, the way the reading
            panel's own right-then-left placement does, and is clamped inside
            the viewport as a floor. Transform only: still nothing can shift. */
-        let lx = sx + hoverSat.dr + SAT_SAY_GAP;
-        if (lx + satSayW > vw - SAT_SAY_GAP)
-          lx = sx - hoverSat.dr - SAT_SAY_GAP - satSayW;
-        lx = clamp(lx, SAT_SAY_GAP, Math.max(SAT_SAY_GAP, vw - satSayW - SAT_SAY_GAP));
+        let lx = sx + sky.hoverSat.dr + SAT_SAY_GAP;
+        if (lx + sky.satSayW > vw - SAT_SAY_GAP)
+          lx = sx - sky.hoverSat.dr - SAT_SAY_GAP - sky.satSayW;
+        lx = clamp(lx, SAT_SAY_GAP, Math.max(SAT_SAY_GAP, vw - sky.satSayW - SAT_SAY_GAP));
         who.style.transform = `translate3d(${lx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(0, -50%)`;
       }
     }
@@ -6006,7 +6028,7 @@ function HomeExperience(): JSX.Element {
           /* it looks somewhere of its own choosing, not at you */
           eyeTX = (Math.random() - 0.5) * 1.6;
         }
-        const forming = nebs.length > 0;
+        const forming = sky.nebs.length > 0;
         if (forming) {
           if (glanceAt === 0) glanceAt = now + 4000;
           if (now >= glanceAt) {
@@ -6101,18 +6123,18 @@ function HomeExperience(): JSX.Element {
          changes, so a still sky costs nothing */
       {
         let sig = "";
-        for (const n of nebs) if (n.pairable) sig += n.id + "|";
+        for (const n of sky.nebs) if (n.pairable) sig += n.id + "|";
         if (sig !== pairSig) {
           pairSig = sig;
-          setPairableIds(new Set(nebs.filter((n) => n.pairable).map((n) => n.id)));
+          setPairableIds(new Set(sky.nebs.filter((n) => n.pairable).map((n) => n.id)));
         }
       }
       /* Two discrete facts leave the loop for React, and only when they
          change: whether the camera is in the sky (the dial has no meaning
          there) and which nebulae have been drawn together. */
       const nowInSky = camY < layout.minCam * 0.45;
-      if (nowInSky !== skyShown) {
-        skyShown = nowInSky;
+      if (nowInSky !== sky.shown) {
+        sky.shown = nowInSky;
         setInSky(nowInSky);
       }
       /* and a third: the camera stands over a wall that has no dial, so the
@@ -6143,20 +6165,20 @@ function HomeExperience(): JSX.Element {
         dialAwayShown = nowAway;
         setDialAway(nowAway);
       }
-      if (nebs.length > 1) {
+      if (sky.nebs.length > 1) {
         const sig = computeClusters();
-        if (sig !== clusterSig) {
-          clusterSig = sig;
+        if (sig !== sky.clusterSig) {
+          sky.clusterSig = sig;
           setClusterSig(sig);
           /* who whispers: the members of any cluster, parsed once per change */
-          clusterMembers = new Set();
+          sky.clusterMembers = new Set();
           for (const part of sig.split("|"))
-            if (part) for (const id of part.split("+")) clusterMembers.add(id);
+            if (part) for (const id of part.split("+")) sky.clusterMembers.add(id);
         }
-      } else if (clusterSig !== "") {
-        clusterSig = "";
+      } else if (sky.clusterSig !== "") {
+        sky.clusterSig = "";
         setClusterSig("");
-        clusterMembers = new Set();
+        sky.clusterMembers = new Set();
       }
 
       draw(now);
@@ -6202,18 +6224,18 @@ function HomeExperience(): JSX.Element {
       allBalls((arr) => {
         for (const b of arr) b.hold = 0;
       });
-      if (heldBall) {
-        heldBall.hold = 0;
-        heldBall = null;
+      if (sky.heldBall) {
+        sky.heldBall.hold = 0;
+        sky.heldBall = null;
       }
-      if (selSat) selSat.held = false;
+      if (sky.selSat) sky.selSat.held = false;
     }
 
     /* Nothing moved while an orb was focused, so nothing needs to re-settle:
        releasing lifts the haze and leaves the pile exactly as it was. */
     function release() {
       releaseHolds();
-      selSat = null;
+      sky.selSat = null;
       selectedIdRef.current = null;
       setSelectedId(null);
       /* Nothing to give back: opening the panel moved nothing, so closing it
@@ -6238,7 +6260,7 @@ function HomeExperience(): JSX.Element {
         return;
       }
       releaseHolds();
-      selSat = null;
+      sky.selSat = null;
       selectedIdRef.current = id;
       setSelectedId(id);
       /* IT LOOKS AT WHAT YOU TAPPED.
@@ -6249,7 +6271,7 @@ function HomeExperience(): JSX.Element {
          not rearrangement, and the layout stays where you left it. */
       attendTo(b.x, b.y);
       b.hold = 1;
-      heldBall = b;
+      sky.heldBall = b;
       /* the companion brightens in sympathy with an alive bubble */
       if (b.alive > 0.55) flare = Math.max(flare, 0.6);
       /* Its kin are NOT lit and NOT moved. Exactly one thing on screen is
@@ -6270,14 +6292,14 @@ function HomeExperience(): JSX.Element {
         return;
       }
       releaseHolds();
-      selSat = s;
+      sky.selSat = s;
       s.held = true;
       selectedIdRef.current = s.id;
       setSelectedId(s.id);
       const b = findBall(s.id);
       if (b) {
         b.hold = 1;
-        heldBall = b;
+        sky.heldBall = b;
         if (b.alive > 0.55) flare = Math.max(flare, 0.6);
       }
       wake();
@@ -6333,7 +6355,7 @@ function HomeExperience(): JSX.Element {
     function satAt(cx: number, cy: number): Sat | null {
       /* only the subject has satellites, so there is only one system to test
          — and a retracting one is on its way out and answers nothing */
-      const n = focusNeb;
+      const n = sky.focusNeb;
       if (!n || n.gone > 0.4 || n.condense < 0.99) return null;
       const wx = cx + camX;
       const wy = cy + camY;
@@ -6388,7 +6410,7 @@ function HomeExperience(): JSX.Element {
       }
       /* bare sky: the subject gives its evidence back and everything returns
          to rest — the same tap that releases a focused orb down in the field */
-      if (focusNeb) focusOn(null);
+      if (sky.focusNeb) focusOn(null);
       if (selectedIdRef.current) release();
     }
 
@@ -6397,8 +6419,8 @@ function HomeExperience(): JSX.Element {
       const el = satSayRef.current;
       if (!el) return;
       const who = s && s.who ? s.who : "";
-      if (who === satSaid) return;
-      satSaid = who;
+      if (who === sky.satSaid) return;
+      sky.satSaid = who;
       /* the element carries no React children, so writing it here is safe —
          the same way the dial writes its own date. The words STAY through the
          fade-out: swapping them to nothing is what would make it flicker. */
@@ -6406,7 +6428,7 @@ function HomeExperience(): JSX.Element {
         el.textContent = who;
         /* measured here and only here: the words just changed, and the loop
            reads this number to keep the name inside the sky */
-        satSayW = el.offsetWidth || 0;
+        sky.satSayW = el.offsetWidth || 0;
       }
       el.classList.toggle("jar-satsay--on", who !== "");
     }
@@ -6469,7 +6491,7 @@ function HomeExperience(): JSX.Element {
       if (nebEl) {
         for (const [id, el] of nebElsRef.current) {
           if (el === nebEl) {
-            const cand = nebs.find((q) => q.id === id) ?? null;
+            const cand = sky.nebs.find((q) => q.id === id) ?? null;
             if (cand && !(cand.gone > 0.4 || cand.condense < 0.99)) nb = cand;
             break;
           }
@@ -6485,7 +6507,7 @@ function HomeExperience(): JSX.Element {
       if (nb) {
         /* a cloud on the move carries no whisper: the name belongs to the
            memory under the pointer, and the pointer now owns the cloud */
-        hoverSat = null;
+        sky.hoverSat = null;
         sayWho(null);
         nebDrag = nb;
         nebMoved = false;
@@ -6503,7 +6525,7 @@ function HomeExperience(): JSX.Element {
       }
       if (onSat) {
         /* touching one raises its owner's name too, not only hovering */
-        hoverSat = onSat;
+        sky.hoverSat = onSat;
         sayWho(onSat);
       }
       pointerDown = true;
@@ -6571,11 +6593,11 @@ function HomeExperience(): JSX.Element {
       eyeTY = clamp((dy / d) * 2, -2, 2);
       /* which cloud the pointer rests on: a clustered member's whispered
          sentence rises back to full while it is touched */
-      hoverNeb = camY < layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
+      sky.hoverNeb = camY < layout.minCam * 0.3 ? nebAt(e.clientX, e.clientY) : null;
       /* and which satellite: whose memory it is rises beside it, one fade */
       if (!nebDrag) {
-        hoverSat = satAt(e.clientX, e.clientY);
-        sayWho(hoverSat);
+        sky.hoverSat = satAt(e.clientX, e.clientY);
+        sayWho(sky.hoverSat);
       }
       /* The cursor says what a tap would do. Every other move is plenty for a
          couple of dozen orbs, and it is the same hit test the tap uses, so
@@ -6584,8 +6606,8 @@ function HomeExperience(): JSX.Element {
          the element the cursor resolves from. */
       if ((hoverTick++ & 1) === 0 && !dragging) {
         const over =
-          hoverNeb !== null ||
-          hoverSat !== null ||
+          sky.hoverNeb !== null ||
+          sky.hoverSat !== null ||
           overChar(e.clientX, e.clientY + camY) ||
           hitAt(e.clientX, e.clientY) !== null;
         const want = over ? "pointer" : "";
@@ -6689,7 +6711,7 @@ function HomeExperience(): JSX.Element {
              subject and its evidence emerges; tapping the subject again gives
              the sky back. Nothing is pinned and nothing is persisted — the
              cloud did not go anywhere. */
-          focusOn(focusNeb === n ? null : n);
+          focusOn(sky.focusNeb === n ? null : n);
           return;
         }
         /* dragged off the top of the sky: it thins and disperses. Locally
@@ -6704,8 +6726,8 @@ function HomeExperience(): JSX.Element {
              subject. focusOn rather than a bare assignment, so focus0/em0 are
              re-based and the retraction eases out with the dispersal instead
              of snapping. */
-          if (selSat && n.sats.includes(selSat)) release();
-          if (focusNeb === n) focusOn(null);
+          if (sky.selSat && n.sats.includes(sky.selSat)) release();
+          if (sky.focusNeb === n) focusOn(null);
         } else {
           /* it keeps where it was put — through reloads, too */
           n.pinned = true;
@@ -6779,7 +6801,7 @@ function HomeExperience(): JSX.Element {
       dragAxis = 0;
       /* a finger has no hover to leave with: the name it raised goes on lift */
       if (e.pointerType !== "mouse") {
-        hoverSat = null;
+        sky.hoverSat = null;
         sayWho(null);
       }
       wake();
@@ -6787,7 +6809,7 @@ function HomeExperience(): JSX.Element {
     const onCancel = (e: PointerEvent) => {
       if (ownerId !== null && e.pointerId !== ownerId) return;
       pressId = null;
-      hoverSat = null;
+      sky.hoverSat = null;
       sayWho(null);
       if (nebDrag) {
         nebDrag.dragging = false;
@@ -6888,7 +6910,7 @@ function HomeExperience(): JSX.Element {
       if (e.key === "Escape") {
         /* one layer at a time: the reading first, then the subject's evidence */
         if (selectedIdRef.current) release();
-        else if (focusNeb) focusOn(null);
+        else if (sky.focusNeb) focusOn(null);
         return;
       }
       /* Left and right are the traveler's keys — they pass through even
@@ -7149,7 +7171,7 @@ function HomeExperience(): JSX.Element {
        */
       place: () => {
         const b = selectedIdRef.current ? findBall(selectedIdRef.current) : undefined;
-        if (!b && !selSat) return null;
+        if (!b && !sky.selSat) return null;
         const M = 20; /* never closer than this to an edge */
         const w = Math.min(Math.max(360, Math.min(vw * 0.3, 500)), vw - 48);
         const cx = vw / 2; /* the companion holds the middle of the frame */
@@ -7314,7 +7336,7 @@ function HomeExperience(): JSX.Element {
         wake();
       },
       setProvenance: (byWall: Map<string, Provenance>) => {
-        wallProv = byWall;
+        poster.byWall = byWall;
         /* each provenance orb carries the words of its own that carried the
            reading — the panel marks that passage inside the raw text */
         for (const [, prov] of byWall) {
@@ -7323,7 +7345,7 @@ function HomeExperience(): JSX.Element {
             if (q) b.quote = q;
           }
         }
-        provenance = byWall.get(spaceKey(curWall())) ?? new Map();
+        poster.provenance = byWall.get(spaceKey(curWall())) ?? new Map();
         electPeek(presentBalls());
         wake();
       },
@@ -7433,11 +7455,11 @@ function HomeExperience(): JSX.Element {
         go();
       },
       joinTo: (id: string) => {
-        const n = nebs.find((q) => q.id === id);
+        const n = sky.nebs.find((q) => q.id === id);
         if (!n) return;
         let best: Neb | null = null;
         let bestD = Infinity;
-        for (const m of nebs) {
+        for (const m of sky.nebs) {
           if (m === n || m.gone > 0) continue;
           const d = (m.x - n.x) ** 2 + (m.y - n.y) ** 2;
           if (d < bestD) {
@@ -7461,7 +7483,7 @@ function HomeExperience(): JSX.Element {
         wake();
       },
       condense: (id: string) => {
-        const n = nebs.find((q) => q.id === id);
+        const n = sky.nebs.find((q) => q.id === id);
         if (!n) return;
         n.condenseAt = performance.now();
         /* THE HIERARCHY HAD ITS SIGN FLIPPED. Poking the companion flared it
@@ -7470,7 +7492,7 @@ function HomeExperience(): JSX.Element {
            produced no light at all. */
         flare = 1;
         /* its satellites spiral in with it, so nothing is left to read beside */
-        if (selSat && n.sats.includes(selSat)) release();
+        if (sky.selSat && n.sats.includes(sky.selSat)) release();
         wake();
       },
       /**
@@ -7535,7 +7557,7 @@ function HomeExperience(): JSX.Element {
           wallKind: curWall().kind,
           wallId: curWall().id,
           ground,
-          provenanceCount: provenance.size,
+          provenanceCount: poster.provenance.size,
           col,
           travelling: travelActive,
           lastGo: lastGoRef.current,
