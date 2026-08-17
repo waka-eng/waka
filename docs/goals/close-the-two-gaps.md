@@ -148,6 +148,47 @@ carried through — the same property that made the vocabulary rename safe.
 Nothing changes file, nothing changes behaviour, and the net stays green
 throughout or the step is wrong.
 
+#### 4a in practice — the order, the method, and what stops it
+
+**Five commits, smallest first.** Not because the small ones matter, but because
+the method has to be proven on something cheap before it is pointed at the
+forty-two-variable one.
+
+| # | group | count | why here |
+|---|---|---|---|
+| 1 | the field's pour | 9 | the rehearsal: few names, one concern, obvious blast radius |
+| 2 | the sky | 15 | already known to be cohesive; this is the group 4b is really about |
+| 3 | viewport and clock | 10 | read by everything, written by almost nothing — proves the method under wide reach |
+| 4 | the character | 33 | large but self-contained |
+| 5 | camera and travel | 42 | last: biggest, most entangled, and the one travel bugs live in |
+
+**The method, per group.**
+
+1. Declare the object where the `let`s were, with the same initial values:
+   `const pour = { active: false, poured: false, step: 35, … }`. Not a `let` —
+   the object is never reassigned, only its fields.
+2. Delete the `let`s. Every use site is now a compiler error.
+3. Rename with `packages/web/scripts/rename-identifier.mjs`, which masks
+   comments and string literals exactly as the vocabulary gate does — a plain
+   regex rewrote 142 comment lines the last time one was used here.
+4. Fix what the compiler still complains about by hand. Expect collisions:
+   several of these names (`col`, `settle`, `prev`) also exist as locals inside
+   nested functions, and TypeScript will say so.
+5. `pnpm test` (vocabulary gate, 65 tests) and `tsc --noEmit`. Commit.
+
+**Assignment still works.** `pour.active = true` behaves exactly as `pouring =
+true` did — the closure captures the object, not the field. That is the whole
+reason this is safe: nothing about lifetime, ordering or identity changes.
+
+**What stops the phase.** If a group cannot be named without also touching
+another group's variables in the same commit, the grouping is wrong — stop and
+regroup rather than widening the commit. The five above are a hypothesis from
+name prefixes, not a proof.
+
+**Do not start this without finishing it.** Half-renamed state is worse than
+none: the file then has two vocabularies for the same concept and no compiler
+error to say so. One group per sitting, committed green.
+
 **4b. Read the dependencies off the signatures.** A function that only touches
 `sky` now says so. The sky engine's 18 outward dependencies should collapse to
 two or three objects, because most of the 18 were fields of one theme. This is
