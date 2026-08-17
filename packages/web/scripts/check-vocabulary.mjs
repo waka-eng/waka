@@ -123,14 +123,48 @@ function codeOnly(source) {
     }
     const ch = source[i];
     if (ch === '"' || ch === "'" || ch === "`") {
+      /*
+       * AN APOSTROPHE IN JSX TEXT IS NOT A STRING, and believing it was made
+       * this gate lie for half a file.
+       *
+       *     <p>Joining puts your name on this room's roll</p>
+       *
+       * That `'` is prose. The scanner opened a string on it and blanked
+       * everything up to the next apostrophe — thousands of lines — so every
+       * identifier in between became invisible and the gate reported clean
+       * over code it had never looked at. It caught a probe near the top of
+       * Home.tsx and missed the identical probe at line 9013, which is how it
+       * was found.
+       *
+       * The fix is a bound rather than a parser: a quoted string in this
+       * codebase closes on the line it opened on. If the closing quote is not
+       * on this line, the quote was punctuation, so it is skipped as an
+       * ordinary character and the damage is one line instead of the rest of
+       * the file. Backticks are exempt — a template literal genuinely spans
+       * lines, and one that never closes is a syntax error the compiler
+       * catches long before this runs.
+       */
+      const lineEnd = ch === "`" ? source.length : (() => {
+        const nl = source.indexOf("\n", i + 1);
+        return nl === -1 ? source.length : nl;
+      })();
       let j = i + 1;
-      while (j < source.length) {
+      let closed = false;
+      while (j < lineEnd) {
         if (source[j] === "\\") {
           j += 2;
           continue;
         }
-        if (source[j] === ch) break;
+        if (source[j] === ch) {
+          closed = true;
+          break;
+        }
         j += 1;
+      }
+      if (!closed && ch !== "`") {
+        /* punctuation, not a delimiter */
+        i += 1;
+        continue;
       }
       blank(i + 1, j);
       i = j + 1;
@@ -138,7 +172,29 @@ function codeOnly(source) {
     }
     i += 1;
   }
-  return out.join("");
+  /*
+   * TEXT BETWEEN TAGS IS THE THIRD VOCABULARY.
+   *
+   *     <span>a pattern, once something recurs</span>
+   *     <p className="jar-label">Couldn't reach this room</p>
+   *
+   * Those words are what a person reads, and "room" there is warmer than
+   * "group" — `docs/architecture.md` says so and this gate exists to protect
+   * that distinction, not to erase it. They are neither comments nor string
+   * literals, so the scanner above cannot see them, and without this the gate
+   * accuses the one place the old word is REQUIRED.
+   *
+   * Precise rather than heuristic: blank what sits between a `>` and the next
+   * `<`, and only when it holds no `{`, since a brace means an expression and
+   * an expression holds identifiers. Everything the pass touches is by
+   * construction outside a tag, so no attribute, prop or handler can be
+   * hidden by it.
+   */
+  let text = out.join("");
+  text = text.replace(/>([^<>{}]*)</g, (whole, inner) =>
+    ">" + inner.replace(/[^\n]/g, " ") + "<",
+  );
+  return text;
 }
 
 /** Split an identifier into words: camelCase, PascalCase, snake_case, kebab. */
