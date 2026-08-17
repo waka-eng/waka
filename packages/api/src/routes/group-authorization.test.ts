@@ -40,7 +40,7 @@ const proposalId = "00000000-0000-4000-8000-000000000301";
 const signalId = "00000000-0000-4000-8000-000000000401";
 
 /** A raw capture. If this string reaches a group response, the test failed. */
-const RAW_CAPTURE = "the bench in the window at my mother's house";
+const RAW_INSPIRATION = "the bench in the window at my mother's house";
 
 const humanSession: AuthenticatedSession = {
   sessionId: "00000000-0000-4000-8000-0000000000f1",
@@ -267,9 +267,9 @@ describe("what a group can publish", () => {
     ownerProfileId: otherProfileId,
     ownerName: "Grace",
     sharedAt: "2026-08-10T00:00:00.000Z",
-    inspirationText: RAW_CAPTURE,
-    quote: RAW_CAPTURE,
-    evidenceReason: RAW_CAPTURE,
+    inspirationText: RAW_INSPIRATION,
+    quote: RAW_INSPIRATION,
+    evidenceReason: RAW_INSPIRATION,
   };
 
   const overSelectedTopOfMind = {
@@ -279,7 +279,7 @@ describe("what a group can publish", () => {
       status: "live" as const,
       reason: "initial" as const,
       createdAt: "2026-08-12T00:00:00.000Z",
-      sourceInspirations: [RAW_CAPTURE],
+      sourceInspirations: [RAW_INSPIRATION],
     },
     entries: [
       {
@@ -292,8 +292,8 @@ describe("what a group can publish", () => {
         pinnedAt: null,
         sortOrder: 0,
         createdAt: "2026-08-12T00:00:00.000Z",
-        contributors: [{ profileId: otherProfileId, name: "Grace", quote: RAW_CAPTURE }],
-        evidence: RAW_CAPTURE,
+        contributors: [{ profileId: otherProfileId, name: "Grace", quote: RAW_INSPIRATION }],
+        evidence: RAW_INSPIRATION,
       },
     ],
   };
@@ -353,7 +353,7 @@ describe("what a group can publish", () => {
     [`/api/groups/${groupId}/top-of-mind`],
   ])("never lets a raw capture through %s", async (path) => {
     const response = await mountWithLeakyLoaders().request(path);
-    await expect(response.text()).resolves.not.toContain(RAW_CAPTURE);
+    await expect(response.text()).resolves.not.toContain(RAW_INSPIRATION);
   });
 });
 

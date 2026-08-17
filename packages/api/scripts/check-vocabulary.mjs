@@ -96,15 +96,47 @@ import { fileURLToPath } from "node:url";
 const PKG = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /*
- * Both of the package's own source roots, not just `src`.
+ * All of the package's source roots, not just `src`.
  *
  * `test/helpers` builds request payloads and fixtures, which is exactly the
  * kind of code that quietly reintroduces a retired word — a helper called
  * `makeRoom` is how the next feature learns to say "room". The same argument
  * `vitest.unit.config.ts` makes for globbing instead of listing test files
  * applies here: an unscanned directory is indistinguishable from a clean one.
+ *
+ * `scripts` was missing from the first version of this list and the omission
+ * proves the point better than the paragraph above does: this file lives in
+ * `scripts`, four other TypeScript files live beside it, and one of them —
+ * `verify-merge-judge.ts` — uses `samePattern` four times, a name this gate's
+ * own ALLOWED list classifies as genuinely wrong. The gate shipped green while
+ * a violation of its own list sat in its own directory. Nobody chose that; the
+ * directory was simply never named, which is the failure mode the sentence
+ * above describes and the reason the coverage check below now exists.
  */
-const ROOTS = [join(PKG, "src"), join(PKG, "test")];
+const ROOTS = [join(PKG, "src"), join(PKG, "test"), join(PKG, "scripts")];
+
+/*
+ * The package's own top-level `.ts` files — the three vitest configs and
+ * `sst-env.d.ts`. They are code the package runs, they are small, and they are
+ * clean today, so there is no honest reason to leave them out and every reason
+ * not to have a fourth category of "file we do not look at".
+ */
+const LOOSE_FILE_DIR = PKG;
+
+/*
+ * DIRECTORIES DELIBERATELY OUTSIDE THE SCAN, with the reason each is out.
+ *
+ * The coverage check below fails on any `.ts` file that is neither under a root
+ * nor under one of these, so a new directory of TypeScript cannot appear in
+ * this package without someone making a decision about it. Adding a name here
+ * is that decision, written down.
+ */
+const NOT_OURS = new Set([
+  "node_modules", // other people's code, and the gate has no opinion about it
+  "dist", // build output; the input is already scanned
+  "coverage", // vitest's report, regenerated on every run
+  ".turbo", // task cache
+]);
 
 /**
  * The words that may not appear in an identifier, and what to use instead.
@@ -193,17 +225,32 @@ const FORBIDDEN = [
  * closes, so every entry has to declare which kind it is and, if it is a
  * rename, what it should become.
  *
- * SELF-EXPIRING. An entry that matches nothing is a failure, not a shrug. When
- * someone finally does one of these renames, the gate tells them to delete the
- * line rather than letting it sit here looking like a live exception forever.
+ * SELF-EXPIRING, PER FILE. An entry whose name does not appear in EVERY file it
+ * lists is a failure, not a shrug. Per-NAME expiry was the first version and it
+ * was not the granularity the paragraph above promises: `samePattern` listed
+ * five files, the code moved out of one of them (`src/lib/signal-derivation.ts`
+ * → `src/lib/signal-match-or-mint.ts`), and the entry stayed green because four
+ * other files still matched. The dead path went on pre-authorising the name in
+ * a file that no longer had it, which is the exact hole the file scoping exists
+ * to close. Checking each `(name, file)` pair separately costs one string join
+ * and makes a moved file loud.
  *
- * WHY SO MANY `rename` ENTRIES IN THE FIRST COMMIT. The gate was built while
- * three other agents had files in this package open, and a rename touches every
- * caller. Renaming `sourceForCapture` while someone else is editing the route
- * that calls it produces a conflict whose resolution is a guess. The honest
- * order is: land the gate, so nothing NEW arrives; then rename, one identifier
- * at a time, when the package is quiet. Both halves are visible here — nothing
- * was renamed and nothing was hidden.
+ * WHY THE `rename` ENTRIES THAT ARE LEFT ARE THE ONES THAT ARE LEFT. The first
+ * version of this list had fourteen entries and twelve of them were admitted-
+ * wrong names, which made the gate green by construction on its first run. The
+ * stated reason — a rename touches every caller, and three other agents had
+ * files in this package open — was true of some of them and not of others.
+ * Seven had no caller outside their own file at all: two module-private consts,
+ * two adjacent locals in one function, and three test-locals. Those were not
+ * risky renames deferred; they were free renames the allowlist absorbed. They
+ * have been done, and this list is shorter by exactly those seven.
+ *
+ * What remains genuinely crosses files. `sourceForCapture` and its three
+ * siblings are exported and called from routes another agent is editing;
+ * `samePattern` is the JSON key in a Gemini responseSchema, so the schema, the
+ * parser, the callers and the fixtures have to move in one commit or the
+ * model's answer stops parsing at runtime, where no test would see it. Those
+ * are worth deferring. "One caller in one file" was not.
  */
 const ALLOWED = [
   {
@@ -233,7 +280,8 @@ const ALLOWED = [
       "src/queue/gemini-judge.test.ts",
       "src/lib/model-provider.ts",
       "src/lib/model-provider.test.ts",
-      "src/lib/signal-derivation.ts",
+      "src/lib/signal-match-or-mint.ts",
+      "scripts/verify-merge-judge.ts",
     ],
     disposition: "rename",
     to: "sameSignal",
@@ -244,42 +292,12 @@ const ALLOWED = [
       "others because the name is also the JSON key in the Gemini " +
       "responseSchema and in the prompt: the schema, the parser, the callers " +
       "and the fixtures have to move in one commit or the model's answer stops " +
-      "parsing at runtime, where no test would see it",
-  },
-  {
-    name: "capture",
-    files: ["src/lib/inspiration-embeddings.test.ts"],
-    disposition: "rename",
-    to: "inspiration",
-    why:
-      "a local fixture object standing for one layer-1 row. Nothing external " +
-      "owns this name; it is simply the world's word for the thing the canon " +
-      "calls an inspiration, in a file whose subject is inspiration embeddings",
-  },
-  {
-    name: "captured",
-    files: ["src/routes/inspirations-capture.test.ts"],
-    disposition: "rename",
-    to: "writtenRows",
-    why:
-      "the array a fake database records its writes into — `captured` in the " +
-      "test-spy sense, which is ordinary English and nothing to do with layer " +
-      "1. It is still worth renaming, and arguably the most worth renaming of " +
-      "any entry here, BECAUSE the two senses collide: this is the test for " +
-      "`inspirations-capture.ts`, so `captured` means 'what the spy recorded' " +
-      "on one line and 'the inspiration' three lines later. Found only because " +
-      "this gate matches `-ed` forms; exact-word matching walked past all 14 " +
-      "uses",
-  },
-  {
-    name: "RAW_CAPTURE",
-    files: ["src/routes/group-authorization.test.ts"],
-    disposition: "rename",
-    to: "RAW_INSPIRATION",
-    why:
-      "the test's canary string — if it reaches a group response, evidence " +
-      "crossed an account boundary. The name is wrong, the test is right, and " +
-      "another agent has this exact file open",
+      "parsing at runtime, where no test would see it. The last two paths were " +
+      "added when the gate learned to check allowances per file: the code moved " +
+      "out of `src/lib/signal-derivation.ts` into `signal-match-or-mint.ts` and " +
+      "the old path sat here unnoticed, and `scripts/` was not being scanned at " +
+      "all, so the sixth site was invisible. Both are the reason this entry is " +
+      "the one the per-file staleness check was aimed at",
   },
   {
     name: "sourceForCapture",
@@ -326,46 +344,38 @@ const ALLOWED = [
       "rule docs/map.md holds up as an example of a rule a test can run. It " +
       "would be a shame for the example to be the thing carrying the old word",
   },
-  {
-    name: "rooms",
-    files: ["src/routes/feedback.ts"],
-    disposition: "rename",
-    to: "groups",
-    why:
-      "a local holding the rows of a `signalShares` join — every one of them a " +
-      "group. Only caught at all because this gate matches plurals; the " +
-      "singular `room` on the next line was visible to a gate that did not",
-  },
-  {
-    name: "room",
-    files: ["src/routes/feedback.ts"],
-    disposition: "rename",
-    to: "group",
-    why: "the loop variable over `rooms` above, same two lines, same fix",
-  },
-  {
-    name: "ROOM_FIELD_LIMIT",
-    files: ["src/routes/groups-field.ts"],
-    disposition: "rename",
-    to: "GROUP_FIELD_LIMIT",
-    why:
-      "the page ceiling on a group's field. `field` is deliberately NOT " +
-      "forbidden — data-model.md uses it — so only the first word moves",
-  },
-  {
-    name: "MAX_REFLECTIONS_PER_CAPTURE",
-    files: ["src/routes/inspirations-validation.ts"],
-    disposition: "rename",
-    to: "MAX_REFLECTIONS_PER_INSPIRATION",
-    why:
-      "a validation bound. Reflections are layer-1 detail ON an inspiration, " +
-      "so the canon's word is the right one and there is no external owner",
-  },
 ];
 
 /* Indexed by name for the scan, and by identity for the stale check below. */
 const ALLOWED_BY_NAME = new Map(ALLOWED.map((e) => [e.name, e]));
+
+/*
+ * A used allowance is a (name, file) PAIR, not a name. A tab separates them
+ * because neither an identifier nor a path can contain one, so the key cannot
+ * be forged by a file called `samePattern` or anything else creative.
+ */
+const allowanceKey = (name, file) => `${name}\t${file}`;
 const allowancesUsed = new Set();
+
+/**
+ * Which listed files an entry failed to be used in.
+ *
+ * Split out from the report below so the self-test can drive it directly with a
+ * made-up entry and a made-up set of uses. Left inline, the only way to prove
+ * per-file expiry works was to edit ALLOWED by hand and read the output — which
+ * is how the per-NAME version survived: someone did exactly that, with a
+ * single-file entry, the easy case where per-name and per-file agree.
+ */
+function unusedAllowanceFiles(entries, used) {
+  const out = [];
+  for (const entry of entries) {
+    const unused = entry.files.filter(
+      (file) => !used.has(allowanceKey(entry.name, file)),
+    );
+    if (unused.length > 0) out.push({ name: entry.name, unused });
+  }
+  return out;
+}
 
 /** Identifier-ish tokens: what a variable, property or type could be called. */
 const TOKEN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
@@ -574,19 +584,38 @@ function forms(word) {
   ];
 }
 
+/**
+ * What to do with one filename: read it, refuse it, or leave it alone.
+ *
+ * A pure function taking a name rather than three branches inside `walk`,
+ * because the interesting branch is unreachable from the package as it stands.
+ * The API has no `.tsx` file, so deleting the refusal outright changes nothing
+ * a run can observe — the gate stayed green with it gone, which means the one
+ * decision here that is a JUDGEMENT rather than a mechanism had no proof at
+ * all. Pulled out to a name, the self-test can ask it directly.
+ */
+function classify(filename) {
+  /*
+   * Refuse rather than guess. This scanner has no JSX-text pass, so on a .tsx
+   * file it would read the words a person reads on screen as if they were
+   * identifiers and accuse the one place the old word is required. The API has
+   * no .tsx today; if one ever appears, whoever added it should see the
+   * sentence below rather than a pile of false alarms.
+   */
+  if (/\.tsx$/.test(filename)) return "refuse";
+  if (/\.ts$/.test(filename)) return "scan";
+  return "ignore";
+}
+
 function walk(dir, found = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       walk(full, found);
-    } else if (/\.tsx$/.test(entry)) {
-      /*
-       * Refuse rather than guess. This scanner has no JSX-text pass, so on a
-       * .tsx file it would read the words a person reads on screen as if they
-       * were identifiers and accuse the one place the old word is required.
-       * The API has no .tsx today; if one ever appears, whoever added it should
-       * see this sentence rather than a pile of false alarms.
-       */
+      continue;
+    }
+    const verdict = classify(entry);
+    if (verdict === "refuse") {
       console.error(
         `\nvocabulary gate: ${relative(PKG, full)} is a .tsx file.\n` +
           `This scanner reads TypeScript without JSX — it cannot tell tag text\n` +
@@ -595,9 +624,8 @@ function walk(dir, found = []) {
           `masking pass that packages/web/scripts/check-vocabulary.mjs carries.\n`,
       );
       process.exit(1);
-    } else if (/\.ts$/.test(entry)) {
-      found.push(full);
     }
+    if (verdict === "scan") found.push(full);
   }
   return found;
 }
@@ -618,7 +646,7 @@ function scanSource(source, file) {
         const name = match[0];
         const allowance = ALLOWED_BY_NAME.get(name);
         if (allowance && allowance.files.includes(file)) {
-          allowancesUsed.add(name);
+          allowancesUsed.add(allowanceKey(name, file));
           continue;
         }
         const parts = new Set(words(name).flatMap(forms));
@@ -661,6 +689,33 @@ function scanSource(source, file) {
  *    went blind over the whole snippet — the same wrong-reason green, one level
  *    up. Pairing them means blindness fails the positive half and over-eagerness
  *    fails the negative half, in one case.
+ *
+ * A THIRD, ADDED AFTER REVIEW, AND THE MOST EMBARRASSING OF THE THREE: the
+ * first version of this list had eighteen cases and not one of them contained
+ * `//`. Every masking case used `/* *\/`. A one-character edit to the
+ * line-comment branch — dropping the search for the newline, so `//` blanks to
+ * end of FILE — left all eighteen green and the package reported clean; a
+ * planted violation appended to `src/routes/groups.ts` went unseen, because
+ * that file's first `//` is on line 200 of 685 and 71% of it had gone dark.
+ * 86 of the package's scanned files contain a `//`. The gate was proven against
+ * the apostrophe form and the block-comment form of the blindness it was
+ * written to prevent, and unproven against the commonest comment in the
+ * package it scans. The same hole covered the `-ed`/`-ing` inflections, which
+ * the commit message credits with finding all fourteen uses of `captured`:
+ * deleting those four lines from `forms()` was also green.
+ *
+ * The rule that follows from it, and the reason the list below is longer than
+ * it looks: EVERY MASKING MECHANISM GETS A CASE, and the case is written by
+ * breaking the mechanism first and watching the case go red. The four are line
+ * comments, block comments, quoted strings and template literals; the two
+ * traversal mechanisms are the roots and the allowance expiry, which are
+ * checked separately below because neither is a property of one snippet.
+ *
+ * `at` — the exact `name:line` pairs — is carried by every multi-line case.
+ * Names alone are not enough: `blank()` can be made to eat newlines, which
+ * keeps every name-only case green and still exits 1 on a real violation, while
+ * reporting a line hundreds of rows off. `file:line` is the whole actionable
+ * content of the report, so it is asserted rather than hoped for.
  */
 const SELFTEST = [
   {
@@ -680,6 +735,7 @@ const SELFTEST = [
   },
   {
     expect: ["RoomRow", "CaptureRow", "patternIndex"],
+    at: ["RoomRow:1", "CaptureRow:2", "patternIndex:3"],
     why:
       "BETWEEN TWO GENERICS — what sharing the web scanner would have cost. " +
       "Its JSX-text pass blanks everything from the `>` of one type argument " +
@@ -704,6 +760,7 @@ const SELFTEST = [
   },
   {
     expect: ["capturePanel"],
+    at: ["capturePanel:3"],
     why: "after a multi-line template literal",
     src: ["const t = `line one", "line two`;", "const capturePanel = 2;"].join(
       "\n",
@@ -716,6 +773,7 @@ const SELFTEST = [
   },
   {
     expect: ["patternId"],
+    at: ["patternId:2"],
     why: "after a NESTED template interpolation, where a one-boolean state machine loses track and mis-reads the rest of the file",
     src: [
       "const q = sql`${parts.map((c) => `${c.col}`).join(\",\")}`;",
@@ -723,12 +781,111 @@ const SELFTEST = [
     ].join("\n"),
   },
   {
+    expect: ["roomSep", "patternId"],
+    at: ["roomSep:1", "patternId:2"],
+    why:
+      "A BRACE INSIDE `${...}`, which is the only thing the interpolation depth " +
+      "counter exists for. The nested-template case above has an " +
+      "expression-body arrow, so no `{` ever reaches the counter and deleting it " +
+      "left that case green. Here the arrow has a block body: without the " +
+      "counter the `}` closing it pops the interpolation early, everything after " +
+      "it goes back to being template prose, and `roomSep` — a real column " +
+      "reference in the position this package puts them — vanishes. `patternId` " +
+      "on the next line proves the file does not ALSO go dark, which is what " +
+      "made the damage look survivable and the counter look untested",
+    src: [
+      "const q = sql`${parts.map((c) => { return c.col; }).join(roomSep)}`;",
+      "const patternId = 1;",
+    ].join("\n"),
+  },
+  {
+    expect: ["roomList", "patternKey"],
+    at: ["roomList:2", "patternKey:4"],
+    why:
+      "TWO regexes holding apostrophes, with a violation BETWEEN them — the web " +
+      "gate's original wound, reproduced rather than gestured at. One " +
+      "apostrophe proves nothing: an unterminated quote with no partner never " +
+      "closes, so a scanner that hunts for its mate across the whole file " +
+      "behaves identically to one bounded to the line, and the single-regex " +
+      "version of this case stayed green when the bound was removed. It takes a " +
+      "SECOND apostrophe for the unbounded scanner to close on, and a planted " +
+      "name in the gap for the damage to have somewhere to show",
+    src: [
+      "const re = /it's/;",
+      "const roomList = [];",
+      "const re2 = /don't/;",
+      "const patternKey = 2;",
+    ].join("\n"),
+  },
+  {
     expect: ["roomList"],
-    why: "after a regex holding an apostrophe — an unterminated quote that must be read as punctuation",
-    src: ["const re = /it's/;", "const roomList = [];"].join("\n"),
+    why:
+      "the apostrophe case's OTHER half: code after the apostrophe ON THE SAME " +
+      "LINE. The comment on that branch promises the damage from a misread " +
+      "quote is one line rather than the rest of the file; the honest number is " +
+      "zero lines, and nothing asserted it. Blanking to end of line instead of " +
+      "treating the quote as punctuation passed every case, because every case " +
+      "put its planted name on the NEXT line",
+    src: "const re = /it's/; const roomList = [];",
+  },
+  {
+    expect: ["SQLPatternFragment", "JSONCaptureBody"],
+    why:
+      "AN ACRONYM RUNNING INTO A WORD. `words()` splits on two rules and only " +
+      "the first — lowercase then uppercase — had a case; `SQLPattern` has no " +
+      "such boundary, so without the second rule it splits to `sqlpattern` and " +
+      "matches nothing. Backend names carry acronyms constantly (SQL, JSON, " +
+      "HTTP, URL), which makes this the likelier of the two rules to matter and " +
+      "the one that was untested",
+    src: [
+      "type SQLPatternFragment = string;",
+      "interface JSONCaptureBody { id: string }",
+    ].join("\n"),
+    at: ["SQLPatternFragment:1", "JSONCaptureBody:2"],
+  },
+  {
+    expect: ["wowScore", "worldSnapshot"],
+    why:
+      "THE TWO FORBIDDEN WORDS NO CASE NAMED. Five of the seven appeared " +
+      "somewhere in this list; `wow` and `world` appeared in none, so either " +
+      "could be deleted from FORBIDDEN with every case green — a gate that " +
+      "quietly stops enforcing two of its seven rulings. `wow_kind` and " +
+      "`wow_score` are the deleted columns by name, and `world` is the " +
+      "frontend's rendering vocabulary arriving in the package that must not " +
+      "borrow it",
+    src: "const wowScore = 1; const worldSnapshot = {};",
+  },
+  {
+    expect: ["roomHeading"],
+    at: ["roomHeading:4"],
+    why:
+      "A BLOCK COMMENT SPANNING LINES, which is the only shape that makes " +
+      "`blank()` cross a newline and therefore the only one that can catch it " +
+      "eating them. Every other masking case blanks within a single line, so " +
+      "dropping the newline guard from `blank()` left them all green while the " +
+      "whole file collapsed onto line 1 — names right, lines hundreds of rows " +
+      "off, and `file:line` is the only part of the report anyone can act on",
+    src: [
+      "/*",
+      " * this used to be called a room's field, and the rename is why",
+      " */",
+      "let roomHeading = 1;",
+    ].join("\n"),
+  },
+  {
+    expect: ["capturePanel"],
+    why:
+      "AN ESCAPED QUOTE INSIDE A STRING. The string scanner steps over `\\\\x` " +
+      "as one unit; without that step the `\\\"` ends the string early and the " +
+      "words a person wrote — `leave this room` — are read as code and accused. " +
+      "So the break shows up as an EXTRA name (`room`), not a missing one, " +
+      "which is why the exact-set assertion is what catches it and a subset " +
+      "assertion would not",
+    src: 'const s = "she said \\"leave this room\\" and left"; const capturePanel = 1;',
   },
   {
     expect: ["sparkOffset"],
+    at: ["sparkOffset:2"],
     why: "a concept the canon deleted, after a comment that mentions it",
     src: [
       "/* sparks used to live here; the canon removed them on 2026-08-15 */",
@@ -737,11 +894,85 @@ const SELFTEST = [
   },
   {
     expect: ["roomRow"],
+    at: ["roomRow:2"],
     why: "PAIRED: the old word in a comment stays legal, and the scanner is still awake on the next line. Without the planted name this case would pass on a scanner that had gone blind",
     src: [
       "/* this used to be called a room's field, and the rename is why */",
       "let roomRow = 1;",
     ].join("\n"),
+  },
+  {
+    expect: ["roomRow"],
+    at: ["roomRow:2"],
+    why:
+      "THE SAME PAIR IN A `//` COMMENT, and the case whose absence is the reason " +
+      "this list was sent back. Eighteen cases used `/* *" +
+      "/` and none used `//`, so the line-comment branch was the one masking " +
+      "mechanism with no proof at all — blanking it to end of file was green, " +
+      "and 86 of the package's files have a `//` in them. It fails in both " +
+      "directions: mask too much and `roomRow` disappears, mask nothing and the " +
+      "`room` in the sentence above it is accused",
+    src: [
+      "// this used to be called a room's field",
+      "let roomRow = 1;",
+    ].join("\n"),
+  },
+  {
+    expect: ["capturePanelId"],
+    at: ["capturePanelId:5"],
+    why:
+      "A BAD NAME AFTER A LONG `//` BLOCK. One commented line proves the branch " +
+      "runs; four prove it stops at each newline rather than at the first one " +
+      "and then running to the end of everything. The block deliberately " +
+      "contains `world` and `room`, both forbidden, so a branch that stops " +
+      "masking early is as loud as one that masks too much",
+    src: [
+      "// docs/data-model.md is the vocabulary of record, and it says the",
+      "// word for layer 1 is inspiration rather than the world's word for",
+      "// it. The same paragraph is why a room is stored as a group. This",
+      "// block is four lines so a masker that runs past one has room to run.",
+      "const capturePanelId = 3;",
+    ].join("\n"),
+  },
+  {
+    expect: ["roomTotal"],
+    why:
+      "A `//` COMMENT AFTER CODE ON THE SAME LINE. The mask has to start at the " +
+      "slashes, not at the start of the line — a `//.*` swept over whole lines " +
+      "takes the declaration with it. `patterns` in the trailing prose is " +
+      "forbidden and must stay unaccused",
+    src: "const roomTotal = 1; // patterns used to be counted here",
+  },
+  {
+    expect: ["roomHost"],
+    why:
+      "`//` INSIDE A STRING, which is not a comment. A URL is the everyday way " +
+      "this arrives. If the line-comment branch is ever hoisted above the " +
+      "string branch — or replaced with a regex over raw text — the rest of the " +
+      "line goes dark and `roomHost` is lost; the `rooms` in the URL path must " +
+      "stay unaccused either way",
+    src: 'const u = "https://example.com/rooms"; const roomHost = 1;',
+  },
+  {
+    expect: ["capturedRows", "capturingSession"],
+    why:
+      "`-ed` AND `-ing`, the inflections the commit message credits with " +
+      "finding all fourteen uses of `captured` — and which no case exercised. " +
+      "Deleting the `d$` line from `forms()` loses `capturedRows`; deleting the " +
+      "`ing$ → e` line loses `capturingSession`. The self-test only ever " +
+      "covered `s` and `es`, so the two rules that did the work were the two " +
+      "nothing watched",
+    src: "const capturedRows = []; const capturingSession = 1;",
+  },
+  {
+    expect: ["patternedAfter", "roomingList"],
+    why:
+      "the other two inflection rules, isolated one per name so a deletion says " +
+      "which line went. `patterned` reaches `pattern` only by stripping `ed` " +
+      "(stripping `d` leaves `patterne`), and `rooming` reaches `room` only by " +
+      "stripping `ing` (stripping it and appending `e` leaves `roome`). Four " +
+      "rules, four names, no rule covered by another",
+    src: "const patternedAfter = null; const roomingList = [];",
   },
   {
     expect: ["roomLabel"],
@@ -758,6 +989,7 @@ const SELFTEST = [
   },
   {
     expect: ["patternCount"],
+    at: ["patternCount:2"],
     why: "PAIRED: raw SQL text inside sql`` is the database's language, not ours",
     src: [
       "const q = sql`select count(*) from top_of_mind_entries where type = 'pattern'`;",
@@ -788,12 +1020,90 @@ const SELFTEST = [
   },
 ];
 
+/**
+ * THE ALLOWANCE EXPIRY, WHICH IS NOT A PROPERTY OF ANY SNIPPET.
+ *
+ * `scanSource` cannot express these: an allowance expires across a whole run,
+ * over several files, so the only thing a snippet case could prove is that a
+ * name is skipped in its own file — which the HANDLE_PATTERN pair already does.
+ * These drive `unusedAllowanceFiles` with a made-up entry instead.
+ *
+ * The middle case is the one that matters and the one the per-NAME version
+ * passed: a two-file entry with only one file matched. Per-name, the entry is
+ * "used" and green, and the unmatched path keeps pre-authorising the name in a
+ * file that no longer contains it. Per-file, it is named and loud. The
+ * single-file case above it is the easy one where both versions agree, and it
+ * is the only one that was ever checked.
+ */
+const EXPIRY_SELFTEST = [
+  {
+    why: "an entry whose only file matched — nothing to report",
+    entry: { name: "n", files: ["a.ts"] },
+    used: ["n\ta.ts"],
+    expect: [],
+  },
+  {
+    why: "TWO FILES, ONE MATCHED — the case per-name expiry called green. The unmatched path is a live exemption for a file that does not use the name",
+    entry: { name: "n", files: ["a.ts", "b.ts"] },
+    used: ["n\ta.ts"],
+    expect: ["b.ts"],
+  },
+  {
+    why: "an entry nothing matched at all — both paths named, not just the first",
+    entry: { name: "n", files: ["a.ts", "b.ts"] },
+    used: [],
+    expect: ["a.ts", "b.ts"],
+  },
+  {
+    why: "the same name used in a file the entry does not list buys the entry nothing — the key is the pair, not either half",
+    entry: { name: "n", files: ["a.ts"] },
+    used: ["n\tsomewhere-else.ts"],
+    expect: ["a.ts"],
+  },
+];
+
+/**
+ * WHICH FILES THIS SCANNER WILL AND WILL NOT READ.
+ *
+ * `.tsx` → refuse is the one judgement in this file that the package cannot
+ * currently exercise: there is no `.tsx` in packages/api, so deleting the
+ * refusal is invisible to every run. That is the definition of an untested
+ * decision, and it is a decision worth keeping — a scanner with no JSX pass
+ * turned loose on JSX accuses the words a person reads on screen, which is the
+ * one place the retired word is REQUIRED.
+ *
+ * `.d.ts` is here because `sst-env.d.ts` sits in the package root and the two
+ * rules could plausibly disagree about it. They do not: it is TypeScript, it is
+ * scanned, and the case says so out loud rather than leaving it to be
+ * rediscovered.
+ */
+const CLASSIFY_SELFTEST = [
+  ["signals.ts", "scan"],
+  ["sst-env.d.ts", "scan"],
+  ["Home.tsx", "refuse"],
+  ["check-vocabulary.mjs", "ignore"],
+  ["0000_three_layers.sql", "ignore"],
+  ["notes.txt", "ignore"],
+];
+
 function selftest() {
   const failures = [];
+
+  for (const [filename, want] of CLASSIFY_SELFTEST) {
+    const got = classify(filename);
+    if (got !== want) {
+      failures.push(
+        `  which files the scanner reads\n` +
+          `      ${filename}\n` +
+          `      expected: ${want}\n` +
+          `      got:      ${got}\n`,
+      );
+    }
+  }
+
   for (const c of SELFTEST) {
-    const got = [
-      ...new Set(scanSource(c.src, c.file ?? "<self-test>").map((h) => h.name)),
-    ].sort();
+    const hits = scanSource(c.src, c.file ?? "<self-test>");
+    const got = [...new Set(hits.map((h) => h.name))].sort();
     const want = [...c.expect].sort();
     const same =
       got.length === want.length && got.every((n, k) => n === want[k]);
@@ -804,8 +1114,45 @@ function selftest() {
           `      expected: ${want.length ? want.join(", ") : "(nothing)"}\n` +
           `      flagged:  ${got.length ? got.join(", ") : "(nothing)"}\n`,
       );
+      continue;
+    }
+    /*
+     * Lines are checked only where the case declares them, and every multi-line
+     * case declares them. A single-line snippet has nothing to get wrong.
+     */
+    if (!c.at) continue;
+    const gotAt = [...new Set(hits.map((h) => `${h.name}:${h.line}`))].sort();
+    const wantAt = [...c.at].sort();
+    const sameAt =
+      gotAt.length === wantAt.length && gotAt.every((n, k) => n === wantAt[k]);
+    if (!sameAt) {
+      failures.push(
+        `  ${c.why}\n` +
+          `      ${c.src.replace(/\n/g, "\n      ")}\n` +
+          `      right names, WRONG LINES — a report nobody can act on\n` +
+          `      expected: ${wantAt.join(", ")}\n` +
+          `      reported: ${gotAt.join(", ")}\n`,
+      );
     }
   }
+
+  for (const c of EXPIRY_SELFTEST) {
+    const got = unusedAllowanceFiles([c.entry], new Set(c.used));
+    const unused = got.length > 0 ? [...got[0].unused].sort() : [];
+    const want = [...c.expect].sort();
+    const same =
+      unused.length === want.length && unused.every((f, k) => f === want[k]);
+    if (!same) {
+      failures.push(
+        `  ${c.why}\n` +
+          `      entry ${c.entry.name} in ${c.entry.files.join(", ")}\n` +
+          `      used: ${c.used.length ? c.used.join(", ") : "(nothing)"}\n` +
+          `      expected stale: ${want.length ? want.join(", ") : "(nothing)"}\n` +
+          `      reported stale: ${unused.length ? unused.join(", ") : "(nothing)"}\n`,
+      );
+    }
+  }
+
   if (failures.length > 0) {
     console.error(
       `\nvocabulary gate SELF-TEST FAILED — the gate cannot see what it claims to.\n` +
@@ -814,7 +1161,10 @@ function selftest() {
     );
     process.exit(1);
   }
-  console.log(`vocabulary (api): self-test passed (${SELFTEST.length} cases)`);
+  console.log(
+    `vocabulary (api): self-test passed (${SELFTEST.length} scanner cases, ` +
+      `${EXPIRY_SELFTEST.length} expiry cases, ${CLASSIFY_SELFTEST.length} file-kind cases)`,
+  );
 }
 
 selftest();
@@ -827,34 +1177,102 @@ selftest();
 allowancesUsed.clear();
 
 const violations = [];
+const scanned = new Set();
 
 for (const root of ROOTS) {
   for (const file of walk(root)) {
-    const rel = relative(PKG, file);
-    for (const hit of scanSource(readFileSync(file, "utf8"), rel)) {
-      violations.push({ ...hit, file: rel });
-    }
+    scanned.add(file);
+  }
+}
+for (const entry of readdirSync(LOOSE_FILE_DIR)) {
+  const full = join(LOOSE_FILE_DIR, entry);
+  if (!statSync(full).isFile()) continue;
+  /* Same classifier as the roots, so a `.tsx` here is refused rather than
+     silently skipped and left for the coverage check to find. */
+  if (classify(entry) === "scan") scanned.add(full);
+}
+
+for (const file of scanned) {
+  const rel = relative(PKG, file);
+  for (const hit of scanSource(readFileSync(file, "utf8"), rel)) {
+    violations.push({ ...hit, file: rel });
   }
 }
 
 /*
- * AN ALLOWANCE THAT MATCHES NOTHING IS A FAILURE.
+ * NOTHING TYPESCRIPT IN THIS PACKAGE GOES UNLOOKED-AT.
+ *
+ * ROOTS is a list someone maintains by hand, and a hand-maintained list of
+ * directories fails silently in the one direction that matters: drop an entry,
+ * or add a directory and forget, and the gate reports clean over code it never
+ * opened. That is not hypothetical here. `scripts/` was omitted from the first
+ * version, and it contained four `.ts` files, one of which used a name this
+ * gate's own list calls wrong. Deleting `test` from ROOTS was likewise green.
+ *
+ * So the roots are checked against the filesystem rather than trusted. This
+ * walk starts at the package root, skips only the directories named in
+ * NOT_OURS, and asserts that every `.ts` file it finds is one the scan above
+ * actually read. Dropping a root now fails; adding a directory of TypeScript
+ * without deciding about it now fails. It is the same argument the ROOTS
+ * comment makes, moved out of the comment and into an assertion.
+ *
+ * WHAT THIS CHECK STILL DOES NOT COVER, said out loud rather than left to be
+ * discovered: `.mjs` and `.js`. The canon is a vocabulary for the TypeScript
+ * this package ships, and the two `.mjs` files here are both build-time
+ * scripts, one of them this one. If product code ever arrives in plain
+ * JavaScript, this is the sentence that will be wrong, and the fix is to widen
+ * both `classify` and the pattern below together.
+ */
+function everyTypeScriptFile(dir, found = []) {
+  for (const entry of readdirSync(dir)) {
+    if (NOT_OURS.has(entry)) continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) everyTypeScriptFile(full, found);
+    else if (/\.tsx?$/.test(entry)) found.push(full);
+  }
+  return found;
+}
+
+const unscanned = everyTypeScriptFile(PKG).filter((f) => !scanned.has(f));
+if (unscanned.length > 0) {
+  console.error(
+    `\nvocabulary (api): ${unscanned.length} TypeScript file(s) in this package were\n` +
+      `never scanned. An unscanned file is indistinguishable from a clean one,\n` +
+      `so this is a failure rather than a note.\n\n` +
+      `Add the directory to ROOTS in scripts/check-vocabulary.mjs, or — if it is\n` +
+      `genuinely not this package's code — add its top-level name to NOT_OURS\n` +
+      `with the reason.\n`,
+  );
+  for (const f of unscanned) console.error(`  ${relative(PKG, f)}`);
+  console.error("");
+  process.exit(1);
+}
+
+/*
+ * AN ALLOWANCE THAT MATCHES NOTHING IS A FAILURE — PER FILE.
  *
  * Every entry above is a hole in the gate. A hole that stopped being needed —
  * because the rename happened, or the file moved, or the identifier was deleted
  * — still reads like a live exception to the next person, and still silently
  * covers anything that later takes the same name in that file. Failing on it
  * costs one deletion and keeps the list honest about its own size.
+ *
+ * Per FILE and not per name, because an entry that lists five paths is five
+ * holes, and four of them matching says nothing about the fifth. See
+ * `unusedAllowanceFiles` and the expiry cases in the self-test.
  */
-const stale = ALLOWED.filter((e) => !allowancesUsed.has(e.name));
+const stale = unusedAllowanceFiles(ALLOWED, allowancesUsed);
 if (stale.length > 0) {
+  const holes = stale.reduce((n, e) => n + e.unused.length, 0);
   console.error(
-    `\nvocabulary (api): ${stale.length} allowance(s) in ALLOWED no longer match anything.\n` +
-      `Each one is a hole in this gate that is no longer buying anything.\n` +
-      `If the rename happened, delete the entry. If the file moved, fix its path.\n`,
+    `\nvocabulary (api): ${holes} (name, file) exemption(s) in ALLOWED match nothing.\n` +
+      `Each one is a hole in this gate that is no longer buying anything, and\n` +
+      `each still pre-authorises that name for anything else in that file.\n` +
+      `If the rename happened, delete the path — and the entry, if it was the\n` +
+      `last one. If the file moved, fix the path.\n`,
   );
   for (const e of stale) {
-    console.error(`  ${e.name}  (expected in ${e.files.join(", ")})`);
+    console.error(`  ${e.name}  (not found in ${e.unused.join(", ")})`);
   }
   console.error("");
   process.exit(1);

@@ -258,7 +258,7 @@ export async function createFeedbackForProfile(
    * with one sentence is not news about the whole room.
    */
   if (row && input.targetType === "signal" && input.value === "true") {
-    const rooms = await db
+    const sharedInto = await db
       .select({ groupId: signalShares.groupId })
       .from(signalShares)
       .innerJoin(groupMembers, eq(groupMembers.groupId, signalShares.groupId))
@@ -268,11 +268,11 @@ export async function createFeedbackForProfile(
           eq(groupMembers.profileId, input.profileId),
         ),
       );
-    for (const room of rooms) {
+    for (const share of sharedInto) {
       try {
         await enqueueGroupTopOfMindRefresh(
           input.profileId,
-          room.groupId,
+          share.groupId,
           "shares_changed",
         );
       } catch {

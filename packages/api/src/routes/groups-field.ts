@@ -23,7 +23,7 @@ type WakaDb = ReturnType<typeof getDb>;
    hundred public memories is a thousand orbs, past what the field lays out
    legibly — so this is a real ceiling, named here rather than discovered as a
    wall that quietly stops filling. */
-const ROOM_FIELD_LIMIT = 400;
+const GROUP_FIELD_LIMIT = 400;
 
 /**
  * A room's ground: every PUBLIC capture belonging to every CURRENT member.
@@ -75,6 +75,6 @@ export async function loadGroupField(
       ),
     )
     .orderBy(desc(inspirations.createdAt))
-    .limit(ROOM_FIELD_LIMIT);
+    .limit(GROUP_FIELD_LIMIT);
   return rows;
 }

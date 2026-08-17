@@ -24,7 +24,7 @@ import {
 } from "../db/index.js";
 
 const MAX_TEXT_CHARS = 8192;
-const MAX_REFLECTIONS_PER_CAPTURE = 3;
+const MAX_REFLECTIONS_PER_INSPIRATION = 3;
 
 export const reflectionInputSchema = z.object({
   question: z
@@ -86,7 +86,7 @@ export const createInspirationSchema = z.object({
     .optional(),
   reflections: z
     .array(reflectionInputSchema)
-    .max(MAX_REFLECTIONS_PER_CAPTURE, "Too many reflections for one capture")
+    .max(MAX_REFLECTIONS_PER_INSPIRATION, "Too many reflections for one capture")
     .optional(),
 });
 

@@ -78,10 +78,14 @@ function authMiddleware(session: AuthenticatedSession) {
  * the written values with `visibility` filled in the way the column's own
  * default would fill it — that default is the thing `agent-boundary.db.test.ts`
  * proves; here it only exists so serialization has a row to work with. The
- * assertion that matters is on `captured`, never on the echo.
+ * assertion that matters is on `writtenRows`, never on the echo. That array was
+ * called `captured` until the vocabulary gate reached this package: the test-spy
+ * sense of the word and layer 1's sense collided in the one file where both are
+ * in play, so one line meant "what the spy recorded" and the next meant "the
+ * inspiration".
  */
 function fakeDatabase(profileRows: Array<{ id: string; accountId: string }> = []) {
-  const captured: Array<Record<string, unknown>> = [];
+  const writtenRows: Array<Record<string, unknown>> = [];
 
   const selectChain: any = {
     from: () => selectChain,
@@ -103,7 +107,7 @@ function fakeDatabase(profileRows: Array<{ id: string; accountId: string }> = []
               createdAt: v.createdAt ?? new Date(0),
             }));
           }
-          captured.push(values);
+          writtenRows.push(values);
           return [
             {
               id: "00000000-0000-4000-8000-0000000000ff",
@@ -126,7 +130,7 @@ function fakeDatabase(profileRows: Array<{ id: string; accountId: string }> = []
     transaction: async (fn: (t: unknown) => Promise<unknown>) => fn(tx),
   };
 
-  return { db, captured };
+  return { db, writtenRows };
 }
 
 function appFor(session: AuthenticatedSession, db: unknown) {
@@ -182,7 +186,7 @@ describe("sourceForCapture", () => {
 
 describe("POST /api/inspirations", () => {
   it("writes no visibility column when an agent captures into the human profile", async () => {
-    const { db, captured } = fakeDatabase([{ id: humanProfileId, accountId }]);
+    const { db, writtenRows } = fakeDatabase([{ id: humanProfileId, accountId }]);
     const app = appFor(sessionFor(agentProfileId, "agent"), db);
 
     const response = await app.request(
@@ -195,18 +199,18 @@ describe("POST /api/inspirations", () => {
     );
 
     expect(response.status).toBe(201);
-    expect(captured).toHaveLength(1);
-    expect(captured[0]!.profileId).toBe(humanProfileId);
+    expect(writtenRows).toHaveLength(1);
+    expect(writtenRows[0]!.profileId).toBe(humanProfileId);
     // The key must be ABSENT, not "private": the column default is the single
     // place that decides what unset means.
     expect(
-      Object.hasOwn(captured[0]!, "visibility"),
+      Object.hasOwn(writtenRows[0]!, "visibility"),
       "the route wrote a visibility for a capture it is making on someone else's behalf",
     ).toBe(false);
   });
 
   it("keeps your own choice when you capture into your own profile", async () => {
-    const { db, captured } = fakeDatabase();
+    const { db, writtenRows } = fakeDatabase();
     const app = appFor(sessionFor(humanProfileId, "human"), db);
 
     const response = await app.request("/api/inspirations", {
@@ -216,12 +220,12 @@ describe("POST /api/inspirations", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(captured).toHaveLength(1);
-    expect(captured[0]!.visibility).toBe("public");
+    expect(writtenRows).toHaveLength(1);
+    expect(writtenRows[0]!.visibility).toBe("public");
   });
 
   it("records a human session's capture as app even when the body says agent", async () => {
-    const { db, captured } = fakeDatabase();
+    const { db, writtenRows } = fakeDatabase();
     const app = appFor(sessionFor(humanProfileId, "human"), db);
 
     const response = await app.request("/api/inspirations", {
@@ -231,12 +235,12 @@ describe("POST /api/inspirations", () => {
     });
 
     expect(response.status).toBe(201);
-    expect(captured[0]!.source).toBe("app");
+    expect(writtenRows[0]!.source).toBe("app");
   });
 
   it("answers a profile in another account as not-found, and writes nothing", async () => {
     // A 403 would confirm the id names a real profile somewhere.
-    const { db, captured } = fakeDatabase([
+    const { db, writtenRows } = fakeDatabase([
       { id: humanProfileId, accountId: "00000000-0000-4000-8000-0000000000a2" },
     ]);
     const app = appFor(sessionFor(agentProfileId, "agent"), db);
@@ -251,6 +255,6 @@ describe("POST /api/inspirations", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(captured).toHaveLength(0);
+    expect(writtenRows).toHaveLength(0);
   });
 });
