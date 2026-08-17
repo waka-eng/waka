@@ -1095,45 +1095,164 @@
    kind of question: what am I looking at. Unlike that one it IS pressable,
    so it takes ink rather than faint, and it is the only thing in this corner
    that responds. */
-/* WHICH SPACE YOU ARE IN — and it is a CONTROL, so it has to look and behave
-   like one. Written first as a bare line beside `.jar-offline`, it inherited
-   `pointer-events: none` from `.jar-topbar` (the bar is a pass-through so the
-   canvas underneath stays draggable) and was therefore unclickable: an
-   `elementFromPoint` at its centre returned `.jar`, not the button. It also
-   read as a caption rather than a way in. `.jar-back` beside it solved both
-   long ago — a pill that takes its own pointer events back — so this wears
-   the same clothes. */
-.jar-context {
+/* WHERE YOU ARE — top left, and the way into this space's settings.
+   `pointer-events: auto` because `.jar-topbar` is a pass-through so the canvas
+   underneath stays draggable; anything in the bar that is a control has to
+   take its own events back, which is what `.jar-back` has always done. */
+.jar-here {
   pointer-events: auto;
   display: inline-flex;
   align-items: baseline;
-  gap: 0.5ch;
-  margin: 0 0 0 auto;
   padding: 7px 14px;
-  max-width: 60ch;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   border: 0;
   border-radius: 999px;
   background: var(--jar-card);
   font: inherit;
-  text-align: right;
-  color: var(--jar-muted);
+  color: var(--jar-ink);
   cursor: pointer;
   transition:
     background 0.2s ease,
     color 0.2s ease;
 }
 
-.jar-context:hover,
-.jar-context:focus-visible,
-.jar-context[aria-expanded="true"] {
-  color: var(--jar-ink);
+.jar-here:hover,
+.jar-here:focus-visible,
+.jar-here[aria-expanded="true"] {
   background: var(--jar-card-hover);
 }
 
-/* The people are the quieter half: the room's name is what you are in, and
-   who is here is a detail of it. */
-.jar-context-who {
+/* THE WAY OUT, on the other side. Left is where you are, right is how you
+   leave; at opposite ends neither can hide the other, which is what happened
+   when one slot tried to be both.
+
+   NOT `.jar-out` — that name was already taken by an unrelated absolutely
+   positioned panel at the top of this file, and reusing it inherited its
+   `position: absolute; left: 16px; top: 58px` and dropped this pill onto a
+   second row.
+
+   `margin-left: auto` rather than absolute positioning: `.jar-topbar` is
+   already a flex row, so this rides its layout instead of fighting it. */
+.jar-account {
+  pointer-events: auto;
+  margin-left: auto;
+  align-self: flex-start;
+  flex: 0 0 auto;
+}
+
+/* ---------- this space's settings ----------
+   Deliberately flat: labels, words, two-step confirmations. The world's
+   register is for material — memories, statements, the poster. Administering
+   a room is paperwork, and paperwork is allowed to look like paperwork. */
+.jar-settings {
+  pointer-events: auto;
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 20px;
+  z-index: 7;
+  width: min(340px, calc(100vw - 40px));
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--jar-panel-edge);
+  border-radius: 14px;
+  background: var(--jar-deep);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.jar-settings-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.jar-settings-x {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
   color: var(--jar-faint);
+  cursor: pointer;
+}
+.jar-settings-x:hover {
+  color: var(--jar-ink);
+}
+
+.jar-settings-name {
+  margin: 0 0 14px;
+  font-size: 17px;
+  line-height: 1.35;
+  color: var(--jar-ink);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.jar-settings-note {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--jar-muted);
+}
+
+.jar-settings-verb {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--jar-faint);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.jar-settings-verb:hover {
+  color: var(--jar-ink);
+}
+
+/* THE ONE IRREVERSIBLE WORD IN HERE. It is not red — there is no red in this
+   product, because temperature is how a memory says it is alive. It is the
+   brightest thing in the panel instead, which in a world whose only meaning
+   channel is light is the same sentence said in the page's own language. */
+.jar-settings-danger {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--jar-ink);
+  cursor: pointer;
+}
+
+.jar-settings-roll {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.jar-settings-member {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--jar-ink);
+}
+.jar-settings-member > span:first-child {
+  flex: 1;
+}
+
+.jar-settings-rename {
+  margin-bottom: 14px;
 }
 
 /* ---------- time dial: a soft neutral rail, no coloured glow ---------- */
