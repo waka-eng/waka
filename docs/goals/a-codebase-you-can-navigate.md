@@ -107,10 +107,11 @@ Largest lever first, but never a file whose tests do not exist yet.
 - Measure before claiming separability. Three times now a claim about this
   codebase has been reversed by measuring it.
 - Never merge into `dev`. Never seed or hard-code data.
-- **One PR, written last.** PR 248 was closed because it had been opened
-  early and then had every phase pushed into it, so no reviewer could tell
-  what it was. The replacement is opened only when everything above is done
-  and green — never before, and never updated as a way of "showing progress".
+- **One PR, and the owner opens it.** PR 248 was closed because it had been
+  opened early and then had every phase pushed into it, so no reviewer could
+  tell what it was. The replacement is not opened by any autonomous run. The
+  description gets DRAFTED to `docs/pr-draft.md` when the work is done and
+  green; opening it is the owner's call, on their word.
 
 ## What the PR has to read like
 
