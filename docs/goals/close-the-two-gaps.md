@@ -289,9 +289,49 @@ what reads it, not after what it sits next to.**
 there, THEN delete it. Delete first and the inner references resolve to
 whatever they shadow, and the tool faithfully renames the wrong variable.
 
-### Next: 4b, and what would stop 4c
+### 4b — measured (2026-08-17). The sky PASSES, and the old verdict was wrong.
 
-4b is now a real measurement rather than an estimate, because the signatures
-exist to read. The gate stands as written: **if the sky still needs four or
-more groups, it is not a module** — and that answer, whichever way it comes
-out, gets written here rather than worked around.
+`packages/web/scripts/measure-groups.mjs` reads the dependencies off the code
+rather than off anyone's memory. 82 functions are declared in the frame effect.
+
+| groups touched | functions |
+|---|---|
+| 0 | 5 |
+| 1 | 21 |
+| 2 | 19 |
+| 3 | 6 |
+| 4 | 3 |
+| 5 | 6 |
+| 6 | 2 |
+| 7 | 1 (`draw`, 531 lines) |
+| 11 | 1 (`tick`, 467 lines) |
+
+**Sixty of eighty-two functions touch two groups or fewer.** That is the
+result 4a was for: before it, every one of them could reach all 113 variables
+and none of them said which.
+
+**The sky engine — 13 functions, 723 lines, 3 groups: `sky`, `stir`, `view`.
+It passes the gate.**
+
+The previous goal recorded "the sky engine is NOT separable (18 outward, 23
+back)" as a correction to an optimistic first measurement. That correction was
+itself wrong — or rather, it measured a boundary that included the pointer-
+facing functions. Drawn around the engine proper it is 3 groups and 9 outward
+references:
+
+- `allBalls`, `findBall`, `byId` — looking a memory up
+- `clampHome`, `orbFitX`, `orbFitY` — field geometry
+- `colOfGroup` — column lookup
+- `release`, `wake` — telling the rest of the world something happened
+
+Adding `nebAt` and `satAt` takes it to **4 groups and FAILS**, because both
+need `cam` to turn a screen point into a layout one. They are hit-testers, not
+engine, and they stay behind.
+
+So the boundary the measurement draws is `stepSky(sky, view, stir, deps)` with
+a nine-member `deps`, and the two hit-testers left in `Home.tsx`.
+
+**What this says about the method.** Three times now a claim about this file
+has been settled by measuring instead of arguing, and twice the measurement
+reversed the previous answer. The tool is committed so the next person does
+not have to take this on trust either.
