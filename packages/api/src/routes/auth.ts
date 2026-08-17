@@ -26,6 +26,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { getCookie } from "hono/cookie";
 import { z } from "zod";
 
 import { accounts, profiles, type ProfileType } from "../db/index.js";
@@ -38,8 +39,21 @@ import {
   SESSION_COOKIE_NAME,
   signSessionToken,
   verifyPassword,
+  wantsSecureCookie,
 } from "../lib/auth.js";
 import { getDb } from "../lib/db.js";
+import {
+  buildLoginDeviceCookie,
+  clearLoginFailures,
+  judgeLoginThrottle,
+  LOGIN_DEVICE_COOKIE_NAME,
+  mintLoginDeviceCredential,
+  readLoginDeviceCredential,
+  readLoginThrottle,
+  readRequestOrigin,
+  recordLoginFailure,
+  resolveLoginSource,
+} from "../lib/login-throttle.js";
 import { DEFAULT_LOCALE, normalizeSupportedLocale, supportedLocaleSchema } from "../lib/locales.js";
 import { type AuthEnv, humanSessionsOnly, requireAuth } from "../lib/middleware.js";
 import {
@@ -383,6 +397,23 @@ authRoutes.post("/signup", async (c) => {
 
   c.header("Set-Cookie", buildSessionCookie(token));
 
+  /*
+   * Recognise this browser from the moment the account exists.
+   *
+   * Choosing the password here is the same proof of ownership that supplying
+   * it at /login is, and the login throttle's whole defence against being
+   * aimed at a person is that their own browser carries a credential. Without
+   * this, every brand-new account spends its first weeks as a browser nobody
+   * has seen — which is exactly the state an attacker can hold someone in.
+   */
+  c.header(
+    "Set-Cookie",
+    buildLoginDeviceCookie(mintLoginDeviceCredential(created.account.email), {
+      secure: wantsSecureCookie(),
+    }),
+    { append: true },
+  );
+
   return c.json(
     {
       account: serializeAccount(created.account),
@@ -398,19 +429,29 @@ authRoutes.post("/signup", async (c) => {
  *
  * Flow:
  *   1. Parse + validate JSON body. 400 on schema failure.
- *   2. Look up the account and its human profile by normalised email. If
+ *   2. Ask the throttle whether this attempt may spend a password check at
+ *      all. Before the lookup, so a refusal costs neither a query nor bcrypt
+ *      — the point of a limit is that the request stops being worth sending.
+ *      See lib/login-throttle.ts for the budgets and, more importantly, for
+ *      why they cannot be aimed at the person whose address is being guessed.
+ *   3. Look up the account and its human profile by normalised email. If
  *      there is no row OR the row has no passwordHash (a Google-only
  *      account), return a generic 401 — one error code for "no such
  *      account", "wrong password", and "OAuth-only account" so the response
  *      is not a user-enumeration oracle.
- *   3. bcrypt-compare the supplied password. The comparison is constant-time
+ *   4. bcrypt-compare the supplied password. The comparison is constant-time
  *      inside bcryptjs, so a wrong-password 401 takes the same wall-clock
  *      time as a right-password 200. The no-account branch above DOES
  *      short-circuit faster — that timing channel is acceptable for a B2C
  *      product where /signup already exposes the same signal via its 409.
- *   4. On match, mint a session bound to the human profile, persist the row
+ *   5. On match, mint a session bound to the human profile, persist the row
  *      so logout can revoke it, set the cookie, and answer in the same shape
  *      as /signup so one client code path handles both.
+ *
+ * Every failing path charges the attempt to the throttle first, INCLUDING the
+ * one where no such account exists. If only real accounts were counted, the
+ * 429 would arrive for registered addresses and never for made-up ones, and
+ * the limit meant to slow enumeration down would have become the oracle.
  */
 authRoutes.post("/login", async (c) => {
   // 1. Parse body.
@@ -434,8 +475,37 @@ authRoutes.post("/login", async (c) => {
 
   const { email, password } = parsed.data;
   const db = getDb();
+  const now = new Date();
 
-  // 2. Lookup. The browser signs in as the human profile, and the partial
+  // 2. Throttle. The device credential is read against the address being
+  //    tried, so a cookie earned on one account grants nothing on another.
+  const deviceId = readLoginDeviceCredential(
+    getCookie(c, LOGIN_DEVICE_COOKIE_NAME),
+    email,
+    { now },
+  );
+  const reading = await readLoginThrottle(
+    db,
+    {
+      identifier: email,
+      source: resolveLoginSource(readRequestOrigin(c)),
+      deviceId,
+    },
+    { now },
+  );
+  const verdict = judgeLoginThrottle(reading);
+  if (verdict.refused) {
+    c.header("Retry-After", String(verdict.retryAfterSeconds));
+    return c.json(
+      {
+        error:
+          "Too many sign-in attempts. Wait a few minutes and try again, or reset your password.",
+      },
+      429,
+    );
+  }
+
+  // 3. Lookup. The browser signs in as the human profile, and the partial
   //    unique index guarantees there is at most one of those per account, so
   //    the join resolves the whole identity in a single round-trip.
   const rows = await db
@@ -456,14 +526,16 @@ authRoutes.post("/login", async (c) => {
   // Generic 401 for any of: no account, OAuth-only account (no
   // passwordHash), or password mismatch. Same body so a caller cannot
   // distinguish.
-  const genericFailure = () =>
-    c.json({ error: "Incorrect email or password" }, 401);
+  const genericFailure = async () => {
+    await recordLoginFailure(db, reading);
+    return c.json({ error: "Incorrect email or password" }, 401);
+  };
 
   if (!candidate || !candidate.passwordHash) {
     return genericFailure();
   }
 
-  // 3. Verify. `verifyPassword` is exception-safe — a malformed hash yields
+  // 4. Verify. `verifyPassword` is exception-safe — a malformed hash yields
   //    false rather than throwing, so a corrupt hash surfaces as the same
   //    generic 401.
   const ok = await verifyPassword(password, candidate.passwordHash);
@@ -471,7 +543,12 @@ authRoutes.post("/login", async (c) => {
     return genericFailure();
   }
 
-  // 4. Mint session.
+  // 5. Mint session. The failures counted against this address stop mattering
+  //    the moment somebody proves they know its password, so they are dropped
+  //    rather than left to expire — otherwise the person who fumbled their way
+  //    to the right password would still be serving out the window.
+  await clearLoginFailures(db, reading);
+
   const token = await signSessionToken({
     profileId: candidate.profile.id,
     email: candidate.account.email,
@@ -482,6 +559,21 @@ authRoutes.post("/login", async (c) => {
     deviceLabel: describeUserAgent(c.req.header("user-agent")),
   });
   c.header("Set-Cookie", buildSessionCookie(token));
+
+  /*
+   * Re-mint the device credential on every successful login rather than only
+   * when one is missing. It is what stops a flood of failures from shutting
+   * this browser out of this account, so it must not quietly age out from
+   * under someone who signs in every week; and re-minting keeps its lifetime
+   * measured from the last real login rather than from the first.
+   */
+  c.header(
+    "Set-Cookie",
+    buildLoginDeviceCookie(mintLoginDeviceCredential(email, { now }), {
+      secure: wantsSecureCookie(),
+    }),
+    { append: true },
+  );
 
   return c.json(
     {

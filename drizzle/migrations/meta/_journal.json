@@ -50,6 +50,13 @@
       "when": 1787100000000,
       "tag": "0006_prove_the_address",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0007_a_wrong_password_costs_something",
+      "breakpoints": true
     }
   ]
 }
