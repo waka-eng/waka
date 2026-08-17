@@ -1,38 +1,47 @@
 # Goal: make every space own its three layers
 
-Status: **plan (2026-08-17).** Not started. Decision recorded in
-`docs/decisions/every-space-owns-its-stack.md`; the four open questions there
-are now answered and folded in below.
+Status: **plan (2026-08-17).** Not started. Decision:
+`docs/decisions/every-space-owns-its-stack.md`.
 
-## What was decided
+**Read the starting point below before the phases.** An earlier draft of this
+plan was written against `goal/frontend-you-can-read` and described its files as
+though they were the product. Several are not.
 
-| question | answer |
-|---|---|
-| sharing a personal signal into a group | **removed** — a group's wall is purely derived |
-| when a group re-derives | **on a daily schedule**, not on save and not on membership change |
-| who pays | **nobody new** — see below; the schedule removes the threat a budget guards |
-| may an entry name which memory fed it | **yes** — everything in a group's stack is public by construction |
+## Where this actually starts
 
-### Why there is no group budget
+Checked against `origin/dev`, not against the working branch.
 
-`lib/model-budget.ts` says what it is for: *"a burst is the attack."* It is a
-sliding window rather than a fixed bucket because a fixed bucket has a seam a
-burst can exploit. A cron that derives each group once a day cannot burst.
+**Already built and working — more than it looks:**
 
-Charging a member instead would be actively wrong. `background_jobs.profile_id`
-is `NOT NULL` and is what the budget keys on, so a group job already borrows a
-member through `resolveJobOwnerProfileId` — chosen so the row is not orphaned
-when its requester leaves, which makes it an arbitrary billing target. A
-scheduled job that member did not trigger would then eat the budget for their
-own saves.
+- Your own space runs the whole chain: memories → signals → top of mind.
+- The distilling engine itself — match-or-mint by cosine distance on embeddings,
+  with a model call only as a tie-breaker inside the band between two
+  thresholds. This is reusable as-is and is the expensive part.
+- **A room's way of deciding together.** `groups-proposals.ts` implements
+  proposals, affirmations, a strict majority (`carriesMajority`), and a tally
+  that joins current membership so a departed member's vote stops counting. This
+  is the hardest social part of layer 3 and it is done. It simply has nothing to
+  act on.
 
-So: the sweep gets a bounded batch size and spreads across the day, under one
-global ceiling so growth in group count cannot quietly spike spend.
+**Missing:**
 
-**The condition that reverses this, and it goes in the code beside the sweep:**
-the moment group derivation is triggered by a member action — a public save, a
-membership change — a member can burst it by churning, and a real per-group
-budget becomes necessary. Whoever adds a trigger must meet that reason.
+- A room has no ground. `loadGroupField` exists only on
+  `goal/frontend-you-can-read` (introduced by `5188af6`, not an ancestor of
+  `origin/dev`).
+- A signal can only belong to a profile. A room's signals have nowhere to live.
+- Nothing distils from a *space's* ground. Derivation is triggered per save, for
+  the saver.
+- `refreshTopOfMindForGroup` is a stub returning `not_implemented` — while the
+  queue enqueues refresh jobs for it on every membership change and share, which
+  run, log, and discard.
+
+**Branch-only files this plan mentions.** These came from splitting large files
+on `goal/frontend-you-can-read` today and are not on `origin/dev`:
+`groups-field.ts`, `groups-wall.ts`, `groups-proposals.ts`,
+`signal-match-or-mint.ts`, `signal-lifecycle.ts`, `model-budget.ts`. The code is
+on `dev` inside `groups.ts`, `signal-derivation.ts` and `queue.ts`; only the
+filenames differ. **Whether that branch merges first changes where this work
+lands, not what it is.**
 
 ## The shape
 
@@ -45,119 +54,125 @@ which is the only time a move is free.
 ### Phase 1 — Amend the canon first
 
 Nothing is built before the document says what is true. `docs/data-model.md`
-line 78 currently states the opposite of this plan, and lines 214 and 219 say
-raw captures never appear on a group surface — which the shipped
-`loadGroupField` already contradicts.
+line 78 currently describes the design being replaced.
 
-- Rewrite the pipeline paragraph: **every space distils its own signals from
-  the inspirations visible in it.** Personal = all yours, public and private.
-  Group = every public inspiration of every current member.
-- State that `visibility` is global and two-valued, and that per-group
-  visibility is deliberately out of scope: one flag a person can hold in their
-  head beats a matrix they cannot.
-- Replace the "never which one" rule for groups, and say why it is safe: a
-  group's ground holds only what its owners deliberately made public.
-  **Personal top of mind keeps the old rule** — this relaxation is scoped to
-  groups and must not be written as a global change.
+- Rewrite the pipeline paragraph so the three rules are stated once and apply to
+  every space: a space's ground is what is visible in it; a space's signals are
+  distilled from its own ground; a space's top of mind is those signals after
+  people have acted on them — alone in your own space, together in a room.
+- State that `visibility` is global and two-valued, and that per-room visibility
+  is deliberately out of scope.
+- Scope the evidence change: **a room's** entries may name the memory that fed
+  them, because a room's ground is public by construction. **Your own top of
+  mind keeps "that, never which."** Write the asymmetry explicitly; it will be
+  read as a global relaxation otherwise.
 - Record that `signal_shares` is being removed and what replaces it.
+- Amend lines 214 and 219, which say raw captures never reach a group surface.
+  Under this decision they do — as a room's ground, by their owner's choice.
 
 **Gate:** `data-model.md` describes the system this goal builds, with the
-personal/group asymmetry stated explicitly rather than implied.
+personal/room asymmetry stated rather than implied.
 
 ---
 
-### Phase 2 — Give a group a real layer 2
+### Phase 2 — Let a signal belong to a room
 
-The substance. `refreshTopOfMindForGroup` is a stub returning
-`not_implemented`, and the queue enqueues refresh jobs on every membership
-change that run, log, and discard — so this phase begins by deleting work that
-was never doing anything.
+The schema decision everything else rests on, done alone so it can be reviewed
+before anything is built on top of it.
 
-- **Derive per group.** A new job type reads a group's ground — the query
-  `loadGroupField` already runs — and distils signals scoped to that group.
-  Reuse `signal-match-or-mint.ts` rather than writing a second matcher: the
-  match-or-mint decision is cosine distance on embeddings, and that is not a
-  thing to have two of.
-- **Scope signals to a space.** Today `signals.profile_id` says who owns one. A
-  group's signals belong to the group. Decide between a nullable `group_id` and
-  a polymorphic owner, and write down which and why. **This is the schema
-  decision the phase turns on — do it first and get it reviewed before
-  building on it.**
-- **The daily sweep**, bounded batch, spread across the day, under one global
-  ceiling, with the reversal condition written beside it.
-- **Restructure as it lands:** `signal-derivation.ts` was split this week into
-  five modules. Per-space derivation belongs in that shape from birth — a
-  `signal-derivation-group.ts` beside the existing five, not a branch inside
-  the personal path. A conditional on space type inside the existing pass would
-  undo the split.
+- Today a signal is stamped with one `profile_id`. A room's signals need an
+  owner that can be a room. Choose between a nullable `group_id` and a
+  polymorphic space reference, and **write down which and why** — including what
+  each does to the existing per-profile queries, which are numerous.
+- Whatever is chosen must keep this true: a room's signal is not any member's
+  signal. It does not appear in their own sky, and it does not feed their own
+  top of mind.
 
-**Gate:** a group with public inspirations on its ground has signals in its sky
-that were derived from them, and a test proves a signal's evidence rows point
-at memories on that group's own ground.
+**Gate:** the migration is written, reviewed, and applied, and every existing
+per-profile query still returns exactly what it did — proven by the API suite,
+not by inspection.
 
 ---
 
-### Phase 3 — Give a group a real layer 3, and remove what it replaces
+### Phase 3 — Distil a room's sky from its own ground
 
-- **Build `refreshTopOfMindForGroup`** on the group's own signals. The personal
-  path in `top-of-mind-synthesis.ts` is the model; the group version differs in
-  what it reads and in being allowed to name its evidence.
-- **Entries may name the memory that fed them.** New in this goal, permitted by
-  the canon amendment in Phase 1, and the thing that finally makes the group
-  page explain itself.
-- **Remove `signal_shares`** — the route at `signals.ts:393`, the delete at
-  `:409`, the wall query's join, the share UI, and the table. A forward
-  migration, the way `0010` dropped the verification table.
-- **Verify the group synthesis stub is gone**, not merely bypassed, and that
-  no enqueue path still creates jobs nothing consumes.
+The substance. Begins by deleting work that was never doing anything.
 
-**Gate:** a group's top of mind is generated, versioned, and attributes real
-evidence; nothing in the repo refers to `signal_shares`; no job type is
-enqueued that no handler implements.
+- **A room's ground.** Merge `loadGroupField` if this branch lands, or write it
+  if not: every public memory of every current member.
+- **Derive per space.** A new job type reads a room's ground and distils signals
+  scoped to that room. **Reuse `signal-match-or-mint`** rather than writing a
+  second matcher — one match-or-mint rule, not two.
+- **A daily sweep**, bounded batch, spread across the day, under one global
+  ceiling, with the reversal condition from the decision doc written beside it:
+  the day this fires on a member action rather than a clock, a per-room budget
+  becomes necessary.
+- **Restructure as it lands.** Per-space derivation belongs beside the existing
+  derivation modules as its own file, not as a branch inside the personal path.
+  A conditional on space type inside the existing pass would undo the split that
+  made these files readable.
+
+**Gate:** a room with public memories on its ground has signals overhead that
+were distilled from them, and a test proves a signal's evidence rows point at
+memories on that room's own ground.
 
 ---
 
-### Phase 4 — Make the page say what is now true
+### Phase 4 — Give a room its top of mind, and connect what already exists
 
-The original symptom was a page implying causation it did not have. With the
-chain real, the layout stops lying — but only if the frontend is told.
+- **Build `refreshTopOfMindForGroup`** on the room's own signals. The personal
+  path is the model; the room version differs in what it reads and in being
+  allowed to name its evidence.
+- **Connect it to the deciding machinery.** Proposals, affirmations and majority
+  are already implemented — this is the artifact they have been waiting to act
+  on. Expect this to be smaller than it sounds, and check that assumption early.
+- **Remove `signal_shares`**: the share and unshare routes, the wall query's
+  join, the share UI, and the table, by forward migration.
+- **Verify no job type is enqueued that no handler implements** — the stub's
+  jobs are being scheduled and discarded today, and that must not survive.
 
-- **The ground explains the sky.** A group's peek row and provenance should
-  reach the group's own evidence, which is the mechanism `poster.provenance`
-  already implements for a personal space.
-- **The empty state says why.** A group whose members have made nothing public
-  should say that, not show blank ground under a full sky.
-- **Restructure as it lands:** `space-kinds/group.ts` and `space/` hold this
-  code. A group space stops being the special case that starts at layer 2, so
-  the per-kind branching that exists to paper over the asymmetry should shrink.
-  Measure it with `scripts/measure-blocks.mjs` before and after and report the
-  number — if it does not shrink, the model did not actually unify.
+**Gate:** a room's top of mind is generated, versioned, attributes real evidence,
+and changes when members affirm a proposal. Nothing refers to `signal_shares`.
 
-**Gate:** the page that produced the original question — five signals, zero
-inspirations — either shows evidence beneath its signals or says plainly why
-there is none.
+---
+
+### Phase 5 — Make the page say what is now true
+
+The original symptom was a layout implying causation it did not have.
+
+- **The ground explains the sky.** A room's peek row and provenance reach the
+  room's own evidence — the mechanism a personal space already implements.
+- **The empty state says why.** A room whose members have made nothing public
+  says so, rather than showing blank ground under a full sky.
+- **Restructure as it lands.** A room stops being the special case that begins
+  at layer 2, so the per-kind branching that exists to paper over the asymmetry
+  should shrink. Measure it before and after and report the number — **if it
+  does not shrink, the model did not actually unify** and that is worth knowing.
+
+**Gate:** the page that produced the original question — five signals, nothing
+beneath — either shows evidence under its signals or says plainly why there is
+none.
 
 ---
 
 ## Out of scope, deliberately
 
-- Per-group `visibility`. Named and rejected in the decision doc.
-- Changing the personal space's pipeline. It already works and this goal must
-  not disturb it.
-- The "never which one" rule for **personal** top of mind. Unchanged.
-- Retroactivity beyond the next sweep: making a memory public folds it into the
-  next daily derivation, not into an immediate re-run.
+- Per-room `visibility`. Named and rejected.
+- Changing your own space's pipeline. It works; this goal must not disturb it.
+- "That, never which" for **your own** top of mind. Unchanged.
+- Retroactivity beyond the next sweep.
 
 ## Risks worth naming before starting
 
-1. **The schema decision in Phase 2 is load-bearing.** Everything after it
-   depends on how a signal names its space. Getting it reviewed before building
-   is cheaper than migrating it later.
-2. **Removing `signal_shares` is destructive and irreversible.** Real rows mean
-   real member decisions. The migration should be written knowing whether any
-   deployed database holds them.
-3. **A group of five with 400 public memories is a real derivation.** The daily
-   sweep's batch size should be chosen against that number, not a guess.
-4. **This plan deletes a feature people may be using.** Sharing a signal into a
-   room is a capability today. The decision to remove it is recorded; the
-   consequence is that whatever anyone shared stops being visible.
+1. **Phase 2 is load-bearing.** Everything depends on how a signal names its
+   space. Review it before building on it; migrating it later is expensive.
+2. **Removing `signal_shares` is destructive and irreversible.** Real rows are
+   real member decisions. Check whether any deployed database holds them before
+   writing the migration.
+3. **A room of five with 400 public memories is a real derivation.** Choose the
+   sweep's batch size against that number, not a guess.
+4. **This deletes a capability people may be using.** Sharing a signal into a
+   room works today; afterwards whatever anyone shared stops being visible.
+5. **The branch question.** If `goal/frontend-you-can-read` does not merge, the
+   file layout this plan assumes does not exist and Phase 3 includes writing the
+   room's ground from scratch.
