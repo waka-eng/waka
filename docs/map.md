@@ -266,10 +266,16 @@ In this order. The first three are 1,059 lines together; the first five are
    not attempt this file linearly; open it with a symbol in hand.
 
 Two short files worth a seventh and eighth minute:
-`packages/web/src/space-kinds/index.ts` (70 lines) defines **space** — the one
-word this frontend invents, for the thing that owns a full set of three layers —
-and `packages/api/src/lib/middleware.ts` (165 lines) holds the cross-profile
-access matrix that every route defers to.
+`packages/web/src/space-kinds/index.ts` defines **space** — the one word this
+frontend invents, for the thing that owns a full set of three layers — and
+`packages/api/src/lib/middleware.ts` (165 lines) holds the cross-profile access
+matrix that every route defers to.
+
+And if you are about to open either `space/` or `space-kinds/`, read
+`packages/web/src/space/README.md` first. It is one page, and it exists because
+the two names are near-synonyms that do not say which holds what — including the
+one trap a reader reliably falls into, which is that the `Space` type lives in
+`space-kinds/`, not in `space/`.
 
 ---
 
@@ -299,12 +305,12 @@ access matrix that every route defers to.
 | `lib/i18n/` | Locale list, storage key, and the `t()` lookup. `lib/locales.ts` is a one-line re-export of it. |
 | `lib/i18n/messages/` | The translation catalogues, `en-US.json` and `ko-KR.json`. |
 | `pages/` | One file per route: `Home.tsx` (the canvas) and the four flat screens — `Login`, `Onboarding`, `Profile`, `PublicProfile`. |
-| `space/` | No files of its own — a container for the three layers, one subdirectory each, plus settings. **This is the axis that divides it from `space-kinds/`: `space/` is split by LAYER, `space-kinds/` by WHOSE space it is.** |
+| `space/` | No source files of its own — a container for the three layers, one subdirectory each, plus settings, and a `README.md`. **This is the axis that divides it from `space-kinds/`: `space/` is split by LAYER, `space-kinds/` by WHOSE space it is.** The README is the long form, and it names the trap: the `Space` type is declared in `space-kinds/`, so reading the two names cold gets it exactly backwards. |
 | `space/inspiration/` | Layer 1: what a save *is* on screen (`orb.ts` — the `Ball`, and `agentId`, which decides which wall it stands on) and what the ground does with one (`field.ts` — brightness, size band, packing, scatter). |
-| `space/signal/` | Layer 2: `sky.ts` is the model (a candidate, its light, its evidence in orbit); `sky-engine.ts` is the frame step, lifted out of Home only after measuring that it needs three of the loop's eleven state groups. |
+| `space/signal/` | Layer 2: `sky.ts` is the model (a candidate, its light, its evidence in orbit); `sky-engine.ts` is the frame step, lifted out of Home only after measuring that it needs three of the loop's eleven state groups. `sky-engine.ts` is over the 800-line limit and carries the header G1 asks for instead: its 1,051 lines are 583 of code and 446 of prose, and all three of its state interfaces are needed by both sides of every cut that was measured, so every split would need a third file holding nothing but the contract. |
 | `space/top-of-mind/` | Layer 3: `board.ts` is the artifact's entries and which sentence leads; `poster.tsx` is the one part that needs markup — which words survived the last rewrite stay lit, and only new words arrive. |
 | `space/settings/` | `SpaceSettings.tsx` — what a space is and every verb you can apply to it. A layer-shaped directory holding a screen, which is the one place this tree's own rule bends. |
-| `space-kinds/` | What differs by KIND of space: `index.ts` (the three kinds and what follows from each), `agent.ts`, `group.ts`, `GroupPanel.tsx`. A fourth kind should be a new entry here, not a hunt through the page. |
+| `space-kinds/` | What differs by KIND of space: `index.ts` (the three kinds and what follows from each, **and the `Space` type itself**), `agent.ts`, `group.ts`, `GroupPanel.tsx`. A fourth kind should be a new entry here, not a hunt through the page. The name is wrong and the fix is recorded in `space/README.md`: it should be `space/` and its sibling should be `layers/`, blocked only because `Home.tsx` holds 11 of the 18 imports that cross into the two directories. |
 | `styles/` | Five stylesheets. `layers.css` must be imported first — it declares the `@layer` order so precedence is decided here and not by the bundler, which is a bug that already cost a whole design pass. |
 
 ### `packages/admin/src`
@@ -344,6 +350,17 @@ verified by opening the file.
   such routes.
 - **`packages/web/src/styles/home.css` says it is "imported by Jar.tsx only".**
   There is no `Jar.tsx`; `pages/Home.tsx` imports it.
+- **`docs/codebase.md` puts `space-kinds/` underneath `space/` in the dependency
+  order — "pure predicates and constants", read by the layers and reading
+  nothing back. The imports go both ways.** `space/signal/sky-engine.ts` takes
+  `makeGroupBall` from `space-kinds/group.ts`, and `space-kinds/group.ts` takes
+  `colorBall`, `scatterSeed`, `Ball` and `formingWords` back out of
+  `space/inspiration/` and `space/top-of-mind/`. The cycle is not an accident:
+  a group's evidence has to exist as a real field orb before the sky can hang
+  it. Trace dependencies from the imports, not from that list. The same
+  document also names a `space-kinds/self.ts` that was never written — nothing
+  about your own space differs yet, which is the right outcome and a stale
+  sentence. Both are written up at length in `packages/web/src/space/README.md`.
 - **`docs/architecture.md` says "tests need a local database whose name contains
   `test`".** No such check exists. `packages/api/test/helpers/db.ts` creates a
   schema on the shared Neon database named by `DB_CONNECTION_URL` and never

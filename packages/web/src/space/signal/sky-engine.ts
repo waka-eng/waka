@@ -32,6 +32,77 @@
  * clock stays the page's. Everything the engine still needs from the page comes
  * through `SkyDeps` — one declared list, checkable at a glance, instead of a
  * closure over the whole loop.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * WHY THIS FILE IS OVER 800 LINES AND MUST NOT BE SPLIT
+ * (the header `docs/goals/a-codebase-you-can-navigate.md` gate G1 asks for)
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * It is 1,122 lines and G1's limit is 800. That gate offers two ways to pass —
+ * be under the line, or say in plain words why the file is ONE thing. This is
+ * the second, and here is the argument, measured rather than asserted, because
+ * asserting it is exactly how the two earlier attempts above failed.
+ *
+ * FIRST, WHAT THOSE LINES ACTUALLY ARE. 583 of code, 517 of comment, 22 blank.
+ * (It was 1,051 before this header, whose 71 comment lines are the price of
+ * explaining why a file is whole.) The prose is 46% of it, and it is prose
+ * this repo asked for:
+ * the numbers in here are a physical system — an ellipse solved so a satellite
+ * can never cross a word, a damping constant whose units were misread once and
+ * smeared light across the screen for a second and a half — and every one of
+ * those paragraphs is a bug that was paid for. Splitting to get under a line
+ * count would move the code and leave the same 583 lines of logic behind two
+ * more file headers. The number this file is failing is a proxy for "too much
+ * to hold in your head", and 583 lines of one object's physics is not that.
+ *
+ * SECOND, AND THIS IS THE DECIDING PART: THERE IS NO CUT. Three candidate
+ * splits were measured — the four stages this looks like from outside (layout /
+ * stepping / satellite solving / persistence), a two-way cut at solved-once
+ * versus every-frame, and the `space/signal/geometry.ts` this repo's own
+ * earlier plan proposed. Every one of them leaves the same three declarations
+ * owned by nobody:
+ *
+ *   `SkyState`  — read or written by 9 of the 13 functions
+ *   `SkyDeps`   — read by 10 of the 13
+ *   `ViewState` — read by 4, on both sides of every proposed line
+ *
+ * Split four ways and all three are needed by three or four of the four pieces.
+ * Split two ways, either way, and both halves need all three. So every split
+ * ends the same: a THIRD file holding nothing but the contract, or a type-level
+ * import cycle between the two halves. Layer two would go from two files
+ * (`sky.ts`, this) to four, and a reader asking "what happens to the sky over
+ * time" would open three of them.
+ *
+ * The contract cannot be pushed into `sky.ts` either. That file answers what
+ * the sky IS; `ViewState` is the viewport, `StirState` is how alive the world
+ * is, and `SkyDeps` is a list of things the PAGE owes this engine. None of the
+ * three is a fact about a signal, and moving them there buys a smaller file by
+ * making the neighbouring one a grab-bag.
+ *
+ * THIRD, THE SPLITS WOULD WIDEN THE PUBLIC SURFACE TO SERVE THEMSELVES. The
+ * whole internal call graph is six edges over four callees:
+ *
+ *   solveSats → makeSat        makeNeb → solveSats
+ *   {layoutSky, focusOn} → measureNeb
+ *   {layoutSky, stepSky} → placeSats
+ *
+ * `measureNeb` and `placeSats` are private on purpose — `measureNeb` forces
+ * layout and must never be called per frame, `placeSats` assumes the clouds
+ * have already finished moving. Both are called from two of the four candidate
+ * stages, so every split exports them, and the file's 19 exports become 21 of
+ * which two exist only so its own halves can reach each other. A private helper
+ * with a precondition is a better thing than a public one with a warning.
+ *
+ * WHAT WOULD CHANGE THE ANSWER. Not growth — this file getting longer is not by
+ * itself a reason to cut it. The answer changes if `SkyDeps` shrinks to where a
+ * group of functions no longer needs it (today it is 15 members and 10 of the
+ * 13 functions read it), or if something arrives here that is NOT the frame
+ * life of a `Neb` and its `Sat`s. The moment a fourth concern lands in this
+ * file, it is that concern that leaves — not a wall drawn through this one.
+ *
+ * The measurement is reproducible: the internal reference graph is what
+ * `scripts/measure-groups.mjs` does for `Home.tsx`, applied at file scope, and
+ * the three counts above are readable straight off the declarations below.
  */
 import { NEB_VARIANTS } from "../../canvas/palette";
 import { UNDATED_POW, UNDATED_TIER } from "../../canvas/sprites";

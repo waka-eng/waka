@@ -24,6 +24,16 @@
  * and motion wired separately, one space reading as a machine's in one place
  * and a person's in another. A fourth kind of space should be a new entry
  * here, not a hunt.
+ *
+ * THIS DIRECTORY AND `space/` ARE NOT THE SAME AXIS, and the names do not say
+ * so. `space/` is split by LAYER — one subdirectory per canon layer, the code
+ * every space runs. `space-kinds/` is split by KIND — what differs between
+ * yours, an agent's and a group's. The trap is that reading the two names cold
+ * suggests the reverse, a general `space/` with its variants in `space-kinds/`:
+ * in fact the `Space` type is the one declared right here, and `space/` has no
+ * type by that name. `space/README.md` states the rule, the file that most
+ * embarrasses it (`space/settings/SpaceSettings.tsx` importing `Space` from
+ * this file), and why the directories were not simply renamed.
  */
 
 /** The three kinds, in the axis order they stand in: agents ← you → groups. */
