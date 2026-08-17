@@ -381,14 +381,28 @@ the stub does not rasterise, a value only ever read into the companion's size,
 a formed candidate with a pointer resting on its satellite, and a keep.
 
 **Not done, and it is not the refs.** The refs were one of two things holding
-the three panels, and the smaller one. Free bindings per block, measured after
-this change (JSX intrinsics excluded):
+the three panels, and much the smaller one. Free bindings per block, JSX
+intrinsics excluded, measured with ONE tool across this change's actual parent
+(`c7cc869`) and its result:
 
-| block | lines | bindings, was | bindings, now |
-|---|---|---|---|
-| the ready field | 463 | 44 | 34 |
-| the reading panel | 277 | 37 | 31 |
-| the sky | 216 | 35 | 24 |
+| block | lines | bindings, was | bindings, now | effect of 4d |
+|---|---|---|---|---|
+| the ready field | 463 | 43 | 41 | −2 |
+| the reading panel | 277 | 38 | 38 | 0 |
+| the sky | 216 | 28 | 26 | −2 |
+
+The reading panel is unchanged BY CONSTRUCTION: it holds no `Measured` member,
+because it crosses the seam as NUMBERS through `SimApi.place()` rather than by
+handing the loop an element. That is the membership rule working, and it is a
+better argument than a larger number would have been.
+
+An earlier draft of this table claimed −10, −6 and −11. Those were wrong, and
+wrong in the direction that flattered the change: the "was" column had been
+lifted from `a-frontend-you-can-read.md`, where it was measured by a different
+tool at commit `a00582a`, so it silently credited 4d with reductions that 4c
+and other work had already made. The numbers above come from running one
+counter at both commits. **A measurement taken with one tool and compared
+against another tool's output is not a measurement.**
 
 `measured` is now ONE of those, in place of three each in the ready field and
 the sky. The rest is not ref-shaped. The sky's 24 are ten pieces of data, six

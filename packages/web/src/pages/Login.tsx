@@ -32,10 +32,17 @@
  * read as one flow: the footer link flips the tab, the tab swaps the form,
  * and the two forms deliberately validate DIFFERENTLY — signup enforces the
  * password floor, login refuses to, so that an account created under an
- * older policy can still sign in. That asymmetry is the kind a reader only
- * notices when both rules are twenty lines apart. Splitting the forms into
- * separate files would hide it and invite someone to "de-duplicate" two
- * shapes that are alike by coincidence and different on purpose.
+ * older policy can still sign in.
+ *
+ * That asymmetry is the thing a split would endanger, and it is worth being
+ * precise about why, because the obvious argument is false: the two rules are
+ * NOT near each other. They sit 196 lines apart, and nobody is noticing the
+ * difference by reading them side by side. What actually protects it is the
+ * explicit comment at `LoginForm`'s pre-flight check saying the omission is
+ * deliberate. So the rule is: if these forms are ever split, THAT COMMENT
+ * TRAVELS WITH THE FUNCTION. Separate files would strand it and invite the
+ * next reader to "de-duplicate" two shapes that are alike by coincidence and
+ * different on purpose.
  */
 
 import { useEffect, useRef, useState } from "react";

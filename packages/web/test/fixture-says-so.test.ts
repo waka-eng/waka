@@ -60,3 +60,40 @@ describe("the offline fixture", () => {
     expect(warn).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * AND THE FIXTURE CANNOT BE SHIPPED BY A BUILD FLAG.
+ *
+ * A reviewer reading `docs/map.md` found that the agent-wall fixture was gated
+ * on `DEV === true || VITE_SHOW_INTERNAL === "1"`. The second clause is a
+ * build-time variable Vite inlines, so `VITE_SHOW_INTERNAL=1 vite build`
+ * produced a PRODUCTION bundle that showed fabricated agent memories to real
+ * people as their own. Nothing guarded it, and the comment beside it noted that
+ * shipping invented memories had already happened once — while leaving open the
+ * flag that would do it again.
+ *
+ * The gate is now `DEV` alone. This is the check that keeps it there, because
+ * the mistake is not exotic: `showsDebug()` two files away still uses the wider
+ * rule legitimately, and copying it back here would look like consistency.
+ *
+ * It reads the SOURCE rather than importing the value, deliberately. Under
+ * vitest `import.meta.env.DEV` is true, so an imported `MOCK_AGENTS` is `true`
+ * either way and a test on it would pass no matter which condition produced it
+ * — green, and blind, which is the failure this repo keeps finding.
+ */
+describe("invented data cannot reach a production build", () => {
+  it("gates the agent-wall fixture on DEV alone, never on a build flag", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(
+      new URL("../src/lib/fixture/agent-walls.ts", import.meta.url),
+      "utf8",
+    );
+    const gate = src.match(/export const MOCK_AGENTS\s*=\s*([^;]+);/);
+    expect(gate, "MOCK_AGENTS declaration not found — did it move?").not.toBeNull();
+
+    const condition = gate![1]!.trim();
+    expect(condition).toBe("import.meta.env.DEV === true");
+    /* Named explicitly: this is the exact flag that reopened it before. */
+    expect(condition).not.toContain("VITE_SHOW_INTERNAL");
+  });
+});

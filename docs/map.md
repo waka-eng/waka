@@ -362,8 +362,18 @@ verified by opening the file.
   the one that matters.
 - `pnpm --filter @waka/web dev` — Vite alone. Without a session the canvas
   renders a dev-only fixture, which is how wall-specific behaviour gets looked
-  at at all; `import.meta.env.DEV` compiles out of a production build, so this
-  cannot open a real deployment.
+  at at all. It is gated on `import.meta.env.DEV`, which is statically false in
+  a production build, so the invented rows are dead code the bundler drops.
+
+  That guarantee is one line deep and was broken until this branch. The gate
+  used to read `DEV === true || VITE_SHOW_INTERNAL === "1"`, borrowed from
+  `showsDebug()`. `VITE_SHOW_INTERNAL` is a build-time variable Vite INLINES,
+  so `VITE_SHOW_INTERNAL=1 vite build` shipped a production bundle showing
+  fabricated agent memories to real people as their own — and nothing in the
+  repo guarded it. `packages/web/test/fixture-says-so.test.ts` now reads the
+  gate's source text and fails if that flag comes back. Two rules that look
+  alike are not one rule: "show me the internals" and "invent data that does
+  not exist" have different blast radii and no longer share a condition.
 - `pnpm --filter @waka/web test` runs the vocabulary gate **and** the web suite;
   the gate is not optional and not separate.
 - `pnpm --filter @waka/api test:unit` is the no-database subset;

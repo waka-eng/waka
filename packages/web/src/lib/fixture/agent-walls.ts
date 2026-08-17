@@ -49,10 +49,32 @@ import { daysAgo } from "./clock";
  *
  * ==========================================================================
  */
-/* Mock agent walls exist so the direction can be SEEN before the API exists.
-   Dev-gated on purpose: an unconditional true shipped invented memories into a
-   production build. Replaced by GET /api/agents when that lands. */
-export const MOCK_AGENTS = import.meta.env.DEV === true || import.meta.env.VITE_SHOW_INTERNAL === "1";
+/*
+ * Mock agent walls exist so the direction can be SEEN before the API exists.
+ * Replaced by GET /api/agents when that lands.
+ *
+ * `import.meta.env.DEV` AND NOTHING ELSE, and the missing half of that
+ * condition is the point.
+ *
+ * This used to read `DEV === true || VITE_SHOW_INTERNAL === "1"`, borrowed from
+ * `showsDebug()`, which is a reasonable rule for showing a debug pill on a
+ * staging build. It is not a reasonable rule for this. `VITE_SHOW_INTERNAL` is
+ * a build-time variable that Vite INLINES, so `VITE_SHOW_INTERNAL=1 vite build`
+ * produced a production bundle that showed fabricated agent memories to real
+ * people as if they were their own. Nothing in the repo guarded it, and the
+ * comment that used to sit here noted that shipping invented memories had
+ * already happened once — while leaving open the flag that would do it again.
+ *
+ * Two rules that look alike are not one rule. "Show me the internals" and
+ * "invent data that does not exist" have different blast radii, so they no
+ * longer share a condition. `showsDebug()` keeps the wider test; this one does
+ * not get to.
+ *
+ * `DEV` is statically false in every production build, so this whole module's
+ * data is dead code the bundler drops — the guarantee is structural rather than
+ * a promise someone has to keep.
+ */
+export const MOCK_AGENTS = import.meta.env.DEV === true;
 
 function mockSignal(
   agentId: string,
