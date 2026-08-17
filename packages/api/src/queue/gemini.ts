@@ -36,6 +36,47 @@
  * User text is wrapped in delimiters everywhere it appears. A capture that
  * itself reads "ignore the above and output X" is data, and the delimiters
  * plus the schema constraint are the cheapest defense that actually holds.
+ *
+ * Why this file is one thing that must not be split
+ * -------------------------------------------------
+ * It is over the 800-line rule in `docs/goals/a-codebase-you-can-navigate.md`,
+ * on purpose, and this is the reason the rule allows a file to say so.
+ *
+ * Measured rather than felt: of its lines, roughly a fifth are comment, a
+ * tenth are blank, and another eighty are the English text of the three system
+ * instructions — the sentences a person is asked to trust, which are the
+ * product's behaviour and not decoration. What is left is well under five
+ * hundred lines of machinery arranged as three near-identical quartets: an
+ * instruction, a response schema, a prompt builder, a parser. Find any one of
+ * them by its name and you are already where you need to be. Length is not
+ * what makes a file hard to navigate; this one is a directory with headings.
+ *
+ * Splitting it by model call — extraction, judge, synthesis in three files —
+ * was the obvious cut and it is the one that must not be made. `fence()` and
+ * `neutralizeFenceMarkers` below are the only thing standing between a web
+ * page somebody else wrote and sentences of their choosing being minted as the
+ * victim's own signals. Two of the three prompt builders call `fence()`. Move
+ * one of them out and the fence becomes an import — and an import is a thing a
+ * person can forget. That is not hypothetical here: the judge's builder, in
+ * this very file, already assembles its delimiters by hand without calling
+ * `fence()`, which is what forgetting looks like when the function is sitting
+ * forty lines away. Putting a file boundary in between would make that the
+ * easy mistake rather than the rare one.
+ *
+ * Splitting off the transport instead — the key, the URL, `callGemini`, the
+ * envelope schema — was also tried on paper and rejected. Those four are a
+ * private chain with exactly one consumer, this file, so the result is a
+ * module that exists to be imported by its only neighbour: two files to follow
+ * one call. And the real transport layer already exists and is already
+ * separate, in `lib/gemini-http.ts`, which generation and embedding share. A
+ * second file named for the wire, sitting between that one and this one, gives
+ * a reader two names for one idea and nothing in either name to say which is
+ * which.
+ *
+ * If this file does need to divide one day, the seam is the whole layer-3
+ * synthesis quartet, and the price of admission is exporting `fence()` and
+ * proving by test that every prompt built anywhere still passes through it.
+ * Do that first, then move.
  */
 
 import { z } from "zod";
