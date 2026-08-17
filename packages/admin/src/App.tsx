@@ -15,6 +15,7 @@ const TYPE_OPTIONS = [
   "derive_signals",
   "refresh_top_of_mind",
   "refresh_group_top_of_mind",
+  "reembed_signal",
 ];
 
 interface Notice {

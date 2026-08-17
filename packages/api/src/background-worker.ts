@@ -52,11 +52,27 @@ export async function handler() {
     // cap and everyone else's queue is empty" are very different mornings.
     total.deferred += result.deferred;
 
-    // Nothing was due. Work scheduled for a future backoff is deliberately
-    // left for the next wake-up rather than slept on: holding the invocation
-    // open would also hold a database connection open, which is the cost this
-    // whole design is avoiding.
-    if (result.claimed === 0) break;
+    // Nothing was due, *and* nothing was moved out of the way. Both halves
+    // matter now. Before the model budget existed, a pass that claimed nothing
+    // could only mean the head-of-queue read found nothing runnable, so
+    // `claimed === 0` was the whole test. It no longer is: a drain also ends
+    // with nothing claimed when it spent its deferral allowance stepping over
+    // accounts that are at their cap (`MAX_BUDGET_DEFERRALS_PER_DRAIN` in
+    // lib/queue.ts) — and the person waiting behind those accounts has work
+    // that is runnable this second. Stopping there handed their generation to
+    // the next unrelated enqueue, or to tomorrow's cron.
+    //
+    // A pass that deferred is a pass that made progress: every row it touched
+    // now carries a future `run_after`, so the next pass reads a queue that
+    // has genuinely moved and reaches work this one never got to. That is why
+    // continuing terminates rather than spinning — and `MAX_DRAIN_PASSES`
+    // bounds it regardless.
+    //
+    // Work scheduled for a future backoff is still deliberately left for the
+    // next wake-up rather than slept on: holding the invocation open would
+    // also hold a database connection open, which is the cost this whole
+    // design is avoiding.
+    if (result.claimed === 0 && result.deferred === 0) break;
   }
 
   const drained = { ...total, passes, exhaustedPasses: passes >= MAX_DRAIN_PASSES };

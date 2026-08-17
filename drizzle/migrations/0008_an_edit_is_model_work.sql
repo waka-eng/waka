@@ -1,0 +1,17 @@
+-- An edit is model work, so it belongs on the queue that meters model work.
+--
+-- 0007 capped what one account may spend of the shared Gemini key by metering
+-- job starts. It missed the one model call that never became a job: editing a
+-- signal's statement re-embedded it inside the PATCH request, on the shared
+-- key, counted by nothing. One account could still hold the key hostage — over
+-- HTTP instead of through the queue, which is the cheaper path of the two.
+--
+-- The edit route now drops the stale vector (a delete, not a model call) and
+-- enqueues this job. Same key, same budget, same deferral when an account has
+-- spent its hour.
+--
+-- `IF NOT EXISTS` because ALTER TYPE ... ADD VALUE is not transactional in the
+-- way the rest of this file is: a migration re-run must not fail on a value
+-- that is already there. The new value is not used in this transaction, which
+-- is what Postgres requires of an enum extended inside one.
+ALTER TYPE "public"."background_job_type" ADD VALUE IF NOT EXISTS 'reembed_signal';

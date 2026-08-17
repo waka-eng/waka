@@ -11,6 +11,13 @@
  *   - derive_signals     : extract → embed → match-or-mint for one inspiration
  *   - refresh_top_of_mind: re-synthesize a profile's artifact (debounced)
  *   - refresh_group_top_of_mind : the same for a group's shared signals
+ *   - reembed_signal     : re-vector a statement its owner rewrote
+ *
+ * The last one is not pipeline work; it is here because it is model work. The
+ * edit route used to embed inline, putting one Gemini call on the shared key
+ * into every PATCH — a call nothing counted, on a route anyone with an account
+ * can drive at HTTP speed. Everything that spends the key belongs on this
+ * table, because this table is where the per-account budget can see it.
  */
 
 import { relations, sql } from "drizzle-orm";
@@ -34,6 +41,7 @@ export const backgroundJobTypeValues = [
   "derive_signals",
   "refresh_top_of_mind",
   "refresh_group_top_of_mind",
+  "reembed_signal",
 ] as const;
 export type BackgroundJobType = (typeof backgroundJobTypeValues)[number];
 export const backgroundJobTypeEnum = pgEnum("background_job_type", backgroundJobTypeValues);
@@ -66,11 +74,23 @@ export interface RefreshGroupTopOfMindPayload {
   reason: "shares_changed" | "membership_changed" | "proposal_accepted" | "manual";
 }
 
+/**
+ * Deliberately just the id. The statement is read from the row when the job
+ * runs, never carried here: an edit that lands while an earlier re-embedding
+ * is still pending joins that row (same idempotency key) and its payload is
+ * *not* rewritten, so a carried statement would be the first edit's wording —
+ * and the vector would end up describing text nobody is looking at any more.
+ */
+export interface ReembedSignalPayload {
+  signalId: string;
+}
+
 export type BackgroundJobPayload =
   | EnrichAttachmentPayload
   | DeriveSignalsPayload
   | RefreshTopOfMindPayload
-  | RefreshGroupTopOfMindPayload;
+  | RefreshGroupTopOfMindPayload
+  | ReembedSignalPayload;
 
 export const backgroundJobs = pgTable(
   "background_jobs",

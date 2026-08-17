@@ -30,11 +30,17 @@
  *     retry backoff — and the loop moves on to somebody else's work instead of
  *     spending the key on one tenant. See lib/model-budget.ts for the rule.
  *
- * The four job types are the pipeline:
+ * Four of the job types are the pipeline:
  *   enrich_attachment          → read what was saved (page body, image text)
  *   derive_signals             → extract → embed → match-or-mint (layer 2)
  *   refresh_top_of_mind        → re-synthesize a profile's artifact (layer 3)
  *   refresh_group_top_of_mind  → the same for a group's shared signals
+ *
+ * The fifth, `reembed_signal`, is here for the budget rather than for the
+ * pipeline. It is the one model call a person's own request used to make
+ * inline — the edit route re-embedding a rewritten statement — and a call made
+ * inside a Hono handler is a call the drain never sees. The rule this file now
+ * holds to is flat: if it spends the shared key, it is a row in this table.
  */
 
 import { asc, eq, sql } from "drizzle-orm";
@@ -45,6 +51,7 @@ import {
   type BackgroundJobStatus,
   type DeriveSignalsPayload,
   type EnrichAttachmentPayload,
+  type ReembedSignalPayload,
   type RefreshGroupTopOfMindPayload,
   type RefreshTopOfMindPayload,
 } from "../db/index.js";
@@ -58,6 +65,7 @@ import { enrichAttachment } from "./signal-enrichment.js";
 import {
   describeSignalDerivation,
   deriveSignalsForInspiration,
+  reembedSignal,
 } from "./signal-derivation.js";
 import {
   refreshTopOfMindForGroup,
@@ -213,8 +221,16 @@ const RUNNING_JOB_STATUS = sql`background_jobs.status = 'running'::background_jo
  */
 async function enqueueKeyedJob(input: {
   profileId: string;
-  type: "enrich_attachment" | "derive_signals" | "refresh_group_top_of_mind";
-  payload: EnrichAttachmentPayload | DeriveSignalsPayload | RefreshGroupTopOfMindPayload;
+  type:
+    | "enrich_attachment"
+    | "derive_signals"
+    | "refresh_group_top_of_mind"
+    | "reembed_signal";
+  payload:
+    | EnrichAttachmentPayload
+    | DeriveSignalsPayload
+    | RefreshGroupTopOfMindPayload
+    | ReembedSignalPayload;
   idempotencyKey: string;
 }): Promise<EnqueueResult> {
   const rows = await getDb().execute(sql<{ id: string }>`
@@ -361,6 +377,33 @@ export async function enqueueGroupTopOfMindRefresh(
     type: "refresh_group_top_of_mind",
     payload: { groupId, reason },
     idempotencyKey: `refresh_group_top_of_mind:${groupId}`,
+  });
+}
+
+/**
+ * Re-vector a statement its owner rewrote.
+ *
+ * This is here because embedding costs a call on the shared key, and the edit
+ * route used to make that call itself, inside the request. Everything else in
+ * the pipeline was already metered by the drain's per-account budget; an edit
+ * was not, so PATCHing a statement in a loop spent the key at HTTP speed while
+ * the queue politely waited its turn. Enqueuing costs nothing and the drain
+ * decides when — and whether this hour — the call is affordable.
+ *
+ * Keyed on the signal, so editing the same statement five times while the job
+ * waits is one re-embedding of the final wording rather than five of the
+ * intermediate ones. A signal belongs to exactly one profile, so the owner
+ * this row is charged to cannot change under the conflict clause.
+ */
+export async function enqueueSignalReembed(
+  profileId: string,
+  signalId: string,
+): Promise<EnqueueResult> {
+  return enqueueKeyedJob({
+    profileId,
+    type: "reembed_signal",
+    payload: { signalId },
+    idempotencyKey: `reembed_signal:${signalId}`,
   });
 }
 
@@ -665,6 +708,18 @@ export async function processBackgroundJob(job: BackgroundJob): Promise<void> {
       return;
     }
 
+    case "reembed_signal": {
+      const payload = parseReembedSignalPayload(job.payload);
+      if (!payload) return dropPoisonPayload(job);
+
+      // Scoped by the job's own profile, not by the payload alone: the row's
+      // `profile_id` is written by the route from the resolved session scope,
+      // so an id that arrived in a payload can never reach another tenant's
+      // signal even if a payload were ever forged.
+      await reembedSignal({ profileId: job.profileId, signalId: payload.signalId });
+      return;
+    }
+
     default: {
       // Exhaustive over the enum: adding a job type without a branch is a
       // compile error rather than a runtime surprise on a Friday.
@@ -713,6 +768,12 @@ function parseRefreshTopOfMindPayload(payload: unknown): RefreshTopOfMindPayload
   const reason = readString(payload, "reason");
   if (reason !== "signals_changed" && reason !== "manual") return null;
   return { reason };
+}
+
+function parseReembedSignalPayload(payload: unknown): ReembedSignalPayload | null {
+  const signalId = readString(payload, "signalId");
+  if (!signalId) return null;
+  return { signalId };
 }
 
 function parseRefreshGroupTopOfMindPayload(
