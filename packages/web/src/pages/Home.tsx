@@ -2416,7 +2416,15 @@ function HomeExperience(): JSX.Element {
       if (lead)
         for (const ev of cached?.data?.evidence ?? [])
           if (ev.citedBy.includes(lead.body)) prov.set(ev.signalId, ev.quote);
-      m.set(`cached:${w.id}`, prov);
+      /* KEYED BY THE FUNCTION THAT READS IT, not by a hand-built string.
+         This said `room:${w.id}`, then a mechanical rename made it
+         `cached:${w.id}` — two different spellings, both wrong, because the
+         only reader is `wallProv.get(spaceKey(w))` and spaceKey is
+         `${kind}:${id}`, which for these walls is always `group:`. A group's
+         provenance was never found, so the peek row under its poster was
+         empty every time. Calling spaceKey here makes the two ends the same
+         expression rather than two strings that have to agree. */
+      m.set(spaceKey(w), prov);
     }
     wallProvRef.current = m;
     simApiRef.current?.setProvenance(m);
@@ -4540,7 +4548,7 @@ function HomeExperience(): JSX.Element {
          off the mouth's live height would move the companion every time a
          line of typing wrapped, and the layout moves only when you move it. */
       const seam = layout.fieldTop - MOUTH_H;
-      const group = seam - hqH - gap * 2;
+      const avail = seam - hqH - gap * 2;
       charSize = clamp(vh * 0.14, 84, 150);
       /* The floor yields to the room before the room yields to the floor. The
          shrink must NOT be gated on `room > 0`: a section whose poster already
@@ -4548,7 +4556,7 @@ function HomeExperience(): JSX.Element {
          the companion small, and skipping the shrink there put the body back
          across the peek line. Below CHAR_MIN the body stops reading as a body,
          so that is where it stops. */
-      if (charSize > group) charSize = Math.max(Math.min(group, charSize), CHAR_MIN);
+      if (charSize > avail) charSize = Math.max(Math.min(avail, charSize), CHAR_MIN);
       const lo = hqH + charSize * 0.5 + gap;
       const hi = seam - charSize * 0.5 - gap;
       /* If even 32px cannot fit, `hi` is still below `lo`; split the
