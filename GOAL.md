@@ -137,8 +137,13 @@ The server has the pieces and the world has almost none of them:
   is a backup, not a proposal. The original rule said "no pushes to GitHub",
   which conflated *merging* with *having a copy*, and by then this branch was
   ~20k lines of unreproducible work living on one laptop. Pushing a branch
-  nobody has opened a PR against gives up nothing the rule was protecting, and
-  it runs CI, which is how we find out it is green.
+  nobody has opened a PR against gives up nothing the rule was protecting.
+
+  It does NOT get you CI for free: `.github/workflows/ci.yml` fires on
+  `pull_request` and on pushes to `dev`/`main`, so a feature branch with no PR
+  triggers nothing. Run it deliberately —
+  `gh workflow run ci.yml --ref world/three-layers` — which the workflow allows
+  via `workflow_dispatch`.
 - Evidence never crosses an account boundary, whatever a capture's visibility
   says.
 - Nothing is deleted for being wrong about itself: a signal that loses its
