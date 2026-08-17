@@ -98,6 +98,7 @@ import {
   type SkyDeps,
 } from "../space/signal/sky-engine";
 import { paintSky } from "../space/signal/sky-paint";
+import { useEditing } from "../space/editing";
 import { deriveAgentChrome } from "../space-kinds/agent";
 import {
   deriveGroupChrome,
@@ -201,8 +202,6 @@ import {
   holdTopOfMindEntry,
   refreshTopOfMind,
   updateInspiration,
-  updateSignal,
-  updateTopOfMindEntry,
   fetchProfiles,
   type ApiGroupProposal,
   type ApiGroupMember,
@@ -8155,83 +8154,24 @@ function HomeExperience(): JSX.Element {
    * thing the archive could do that this world could not.
    *
    * One editor for all three, because they are the same gesture on different
-   * layers: open the words, change them, keep them.
+   * layers: open the words, change them, keep them — and one BINDING for all
+   * three, which is the part this line is about. As three loose names it was
+   * free in the ready field, the sky and the reading panel at once, and step
+   * 4d of `docs/goals/close-the-two-gaps.md` measured it as the last shared
+   * mutable channel running between them. `space/editing.ts` holds the act
+   * itself; its header carries the canon rule above and the silent freeze the
+   * shape is chosen to avoid.
    */
-  const [edit, setEdit] = useState<{
-    kind: "memory" | "signal" | "entry";
-    id: string;
-    text: string;
-    saving: boolean;
-  } | null>(null);
-
-  const saveEdit = useCallback(() => {
-    if (!edit || edit.saving) return;
-    const text = edit.text.trim();
-    if (text === "") return;
-    setEdit({ ...edit, saving: true });
-    const done = () => setEdit(null);
-    /**
-     * A FAILED EDIT, AND THE ONE FAILURE THAT IS NOT AN ERROR.
-     *
-     * Ported from the archive before deleting it (main's `da92630`). A 404 on
-     * curating a board line does not mean the click failed — it means the
-     * artifact was regenerated while you were reading it and this line is no
-     * longer in the live version. The server resolves ids forward when the
-     * text survived, so reaching this branch means the text did not.
-     *
-     * Leaving the old words on screen beside a dead control invites the same
-     * dead click again, so the board is reloaded to show what is actually
-     * there now. The words changing under you IS the explanation.
-     */
-    const fail = (err?: unknown) => {
-      setEdit((e) => (e ? { ...e, saving: false } : e));
-      if (err instanceof ApiError && err.status === 404) {
-        setEdit(null);
-        void loadTopOfMind()
-          .then((tom) => {
-            setTopOfMind(tom);
-            setNotes(tom ? tom.entries : []);
-            setAdopted(null);
-          })
-          .catch(() => {
-            /* the reload is best-effort: if it also fails the board simply
-               stays as it was, which is no worse than before */
-          });
-      }
-    };
-    if (offlineRef.current) return done();
-    if (edit.kind === "memory") {
-      updateInspiration(edit.id, { text })
-        .then(() => {
-          setInspirations((prev) =>
-            prev ? prev.map((c) => (c.id === edit.id ? { ...c, preview: text } : c)) : prev,
-          );
-          detailsRef.current.delete(edit.id);
-          setSelectedId(null);
-          done();
-        })
-        .catch(fail);
-    } else if (edit.kind === "signal") {
-      updateSignal(edit.id, { statement: text })
-        .then(() => {
-          setSignals((prev) =>
-            prev ? prev.map((p) => (p.id === edit.id ? { ...p, statement: text, locked: true } : p)) : prev,
-          );
-          done();
-        })
-        .catch(fail);
-    } else {
-      updateTopOfMindEntry(edit.id, { body: text })
-        .then(() => {
-          setNotes((prev) =>
-            prev ? prev.map((n) => (n.id === edit.id ? { ...n, body: text, locked: true } : n)) : prev,
-          );
-          setAdopted(null);
-          done();
-        })
-        .catch(fail);
-    }
-  }, [edit]);
+  const editing = useEditing({
+    offline: offlineRef,
+    details: detailsRef,
+    setInspirations,
+    setSignals,
+    setNotes,
+    setTopOfMind,
+    setAdopted,
+    setSelectedId,
+  });
 
   /**
    * THROW IT AWAY, FOR REAL.
@@ -8568,21 +8508,21 @@ function HomeExperience(): JSX.Element {
                     {/* THE POSTER, IN YOUR OWN HAND. Editing an entry locks it,
                         so the board keeps updating what it rests on and never
                         rewrites the sentence again. */}
-                    {w.kind === "self" && edit?.kind === "entry" ? (
+                    {w.kind === "self" && editing.open?.kind === "entry" ? (
                       <div className="jar-reflect" data-jar-chrome="1">
                         <textarea
                           className="jar-reflect-box"
                           rows={3}
                           autoFocus
-                          value={edit.text}
-                          onChange={(e) => setEdit({ ...edit, text: e.target.value })}
+                          value={editing.open.text}
+                          onChange={(e) => editing.retype(e.target.value)}
                         />
                         <p className="jar-neb-ask">
-                          <button type="button" disabled={edit.saving} onClick={saveEdit}>
-                            {edit.saving ? "…" : "keep these words"}
+                          <button type="button" disabled={editing.open.saving} onClick={editing.keep}>
+                            {editing.open.saving ? "…" : "keep these words"}
                           </button>
                           <span aria-hidden="true"> · </span>
-                          <button type="button" onClick={() => setEdit(null)}>
+                          <button type="button" onClick={editing.leave}>
                             leave it
                           </button>
                         </p>
@@ -8595,7 +8535,7 @@ function HomeExperience(): JSX.Element {
                         </button>
                       </p>
                     ) : null}
-                    {w.kind === "self" && !offline && lead && !edit ? (
+                    {w.kind === "self" && !offline && lead && !editing.open ? (
                       <div className="jar-board-acts" data-jar-chrome="1">
                         {board.step === "asking" ? (
                           <>
@@ -8654,14 +8594,7 @@ function HomeExperience(): JSX.Element {
                             <button
                               type="button"
                               className="jar-board-act jar-label"
-                              onClick={() =>
-                                setEdit({
-                                  kind: "entry",
-                                  id: lead.id,
-                                  text: lead.body,
-                                  saving: false,
-                                })
-                              }
+                              onClick={() => editing.begin("entry", lead.id, lead.body)}
                             >
                               Say it in my words
                             </button>
@@ -9060,9 +8993,7 @@ function HomeExperience(): JSX.Element {
                     <span aria-hidden="true"> · </span>
                     <button
                       type="button"
-                      onClick={() =>
-                        setEdit({ kind: "signal", id: c.id, text: c.text, saving: false })
-                      }
+                      onClick={() => editing.begin("signal", c.id, c.text)}
                     >
                       say it better
                     </button>
@@ -9070,21 +9001,21 @@ function HomeExperience(): JSX.Element {
                 ) : null}
               </p>
             ) : null}
-            {edit?.kind === "signal" && edit.id === c.id ? (
+            {editing.open?.kind === "signal" && editing.open.id === c.id ? (
               <div className="jar-reflect">
                 <textarea
                   className="jar-reflect-box"
                   rows={3}
                   autoFocus
-                  value={edit.text}
-                  onChange={(e) => setEdit({ ...edit, text: e.target.value })}
+                  value={editing.open.text}
+                  onChange={(e) => editing.retype(e.target.value)}
                 />
                 <p className="jar-neb-ask">
-                  <button type="button" disabled={edit.saving} onClick={saveEdit}>
-                    {edit.saving ? "…" : "keep these words"}
+                  <button type="button" disabled={editing.open.saving} onClick={editing.keep}>
+                    {editing.open.saving ? "…" : "keep these words"}
                   </button>
                   <span aria-hidden="true"> · </span>
-                  <button type="button" onClick={() => setEdit(null)}>
+                  <button type="button" onClick={editing.leave}>
                     leave it
                   </button>
                 </p>
@@ -9310,21 +9241,21 @@ function HomeExperience(): JSX.Element {
               that this layout could not. Editing a capture re-derives the
               signals resting on it, which is why it belongs here beside the
               words rather than on a settings screen somewhere. */}
-          {panelCanReflect && !panelIsGroup && edit?.id === panelId ? (
+          {panelCanReflect && !panelIsGroup && editing.open?.id === panelId ? (
             <div className="jar-reflect">
               <textarea
                 className="jar-reflect-box"
-                value={edit.text}
+                value={editing.open.text}
                 rows={5}
                 autoFocus
-                onChange={(e) => setEdit({ ...edit, text: e.target.value })}
+                onChange={(e) => editing.retype(e.target.value)}
               />
               <p className="jar-neb-ask">
-                <button type="button" onClick={saveEdit} disabled={edit.saving}>
-                  {edit.saving ? "keeping…" : "keep the change"}
+                <button type="button" onClick={editing.keep} disabled={editing.open.saving}>
+                  {editing.open.saving ? "keeping…" : "keep the change"}
                 </button>
                 <span aria-hidden="true"> · </span>
-                <button type="button" onClick={() => setEdit(null)}>
+                <button type="button" onClick={editing.leave}>
                   leave it
                 </button>
               </p>
@@ -9345,7 +9276,7 @@ function HomeExperience(): JSX.Element {
               memory above them, which is the grammar the sky has used all
               along. `forget this` is not on it: throwing a memory away is
               housekeeping, and it lives behind `more` with the other two. */}
-          {panelCanReflect && reflect.step === "rest" && !edit && !more ? (
+          {panelCanReflect && reflect.step === "rest" && !editing.open && !more ? (
             <p className="jar-neb-ask jar-neb-ask--after jar-neb-ask--row">
               <button type="button" onClick={askToReflect}>
                 reflect on this
@@ -9360,17 +9291,16 @@ function HomeExperience(): JSX.Element {
               ) : null}
             </p>
           ) : null}
-          {panelCanReflect && !panelIsGroup && reflect.step === "rest" && !edit && more ? (
+          {panelCanReflect && !panelIsGroup && reflect.step === "rest" && !editing.open && more ? (
             <p className="jar-neb-ask jar-neb-ask--after">
               <button
                 type="button"
                 onClick={() =>
-                  setEdit({
-                    kind: "memory",
-                    id: panelId as string,
-                    text: panel.detail ? panel.detail.text : panelBall.textPreview,
-                    saving: false,
-                  })
+                  editing.begin(
+                    "memory",
+                    panelId as string,
+                    panel.detail ? panel.detail.text : panelBall.textPreview,
+                  )
                 }
               >
                 change the words

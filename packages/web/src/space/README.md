@@ -5,10 +5,9 @@ either name tells you which holds what, and one of them holds the opposite of
 what its name suggests. This file exists because that ambiguity has a right
 answer and no way to reach it from the names alone.
 
-It lives in `space/` rather than in `docs/` because `space/` has no source file
-of its own — it is four subdirectories and nothing else — so there was nowhere
-inside it for its own rule to be written down. A reader who opens the folder now
-finds one.
+It lives in `space/` rather than in `docs/` because `space/` is almost entirely
+subdirectories, so there was nowhere inside it for its own rule to be written
+down. A reader who opens the folder now finds one.
 
 ## The rule, in one line
 
@@ -17,6 +16,10 @@ finds one.
 - `space/` — **what every space has.** One subdirectory per canon layer:
   `inspiration/`, `signal/`, `top-of-mind/`. Same code for everyone; only the
   contents differ. Plus `settings/`, which is not a layer — see the bend below.
+  Plus one loose file, `editing.ts`: changing the words is the same gesture on
+  all three layers, so it belongs to none of them and sits above all three.
+  That is the test for anything else arriving at this level — not "it is
+  shared", but "it is the SAME ACT on every layer".
 - `space-kinds/` — **how spaces differ from each other.** A space is yours, or
   an agent's, or a group's, and the three are not identical: an agent's orbs are
   pixelated, a group has members and hues and no dial. Everything that answers
@@ -49,6 +52,7 @@ following names, you would have looked here first and not found it.
 | What a statement is, or how the sky moves | `space/signal/` |
 | The one synthesized artifact, its entries, its poster | `space/top-of-mind/` |
 | What you can do *to* a space | `space/settings/` |
+| Opening, retyping or keeping a thing's words | `space/editing.ts` |
 | "An agent's memories should look different" | `space-kinds/agent.ts` |
 | "A group needs another member-facing rule" | `space-kinds/group.ts` |
 | **A fourth kind of space** | a new file in `space-kinds/` — never a branch inside a layer |
