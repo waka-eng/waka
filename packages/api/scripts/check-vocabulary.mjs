@@ -87,6 +87,33 @@
  * `sql`${table.profileId} IS NOT NULL`` — and a bad name there would otherwise
  * be invisible in the 54 places the API builds SQL that way.
  *
+ * WHAT IS TESTED, AND THE LESSON THAT CHANGED THE ANSWER.
+ *
+ * This file used to test the function that JUDGES — hand it a snippet, check
+ * which names it flags — and nothing that decides WHAT GETS JUDGED. That is a
+ * gate that can print `self-test passed (30 cases)` and `clean` without having
+ * looked at real code, and it did: a regex holding three backticks in
+ * `src/lib/generation-doc.test.ts` left the masker inside a template from line
+ * 164 to the end of the file, so 87 of its 250 lines were blanked unread. A
+ * planted violation at line 185 passed. The identical name at line 100 of the
+ * same file was caught. Every case in this file was green throughout.
+ *
+ * So the traversal, the masking, the scan loop and the report are all pure
+ * functions with their own cases now, and the arguments they used to reach for
+ * — the filesystem, the run's bookkeeping — are handed in, so a case can drive
+ * them against a tree that does not exist. `test/vocabulary-gate.test.ts` runs
+ * this script as a process for the one thing no case here can reach: whether a
+ * check that would fail is still WIRED IN, since a deleted check and a passing
+ * one print the same word.
+ *
+ * And the masker now says when it has lost track. Every literal in a file that
+ * compiles is closed, so reaching end of file still inside one means this
+ * scanner is wrong and everything after that point was masked without being
+ * read. Both blindnesses this project has had — an apostrophe in the web gate,
+ * a regex here — had exactly that signature and neither was visible in the
+ * verdict. It costs one integer and it does not need to know what the next
+ * unhandled delimiter will be.
+ *
  * Run: node scripts/check-vocabulary.mjs        (also runs in `pnpm test`)
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -365,20 +392,115 @@ const allowancesUsed = new Set();
  * per-file expiry works was to edit ALLOWED by hand and read the output — which
  * is how the per-NAME version survived: someone did exactly that, with a
  * single-file entry, the easy case where per-name and per-file agree.
+ *
+ * It also reports how many (name, file) pairs it LOOKED AT, which sounds like
+ * bookkeeping and is not. A correct function on the wrong input is the other
+ * way this check dies: hand it `ALLOWED.filter(permanent)` and every rename
+ * entry — the five holes that are supposed to be temporary — stops being
+ * checked for staleness, with this function still returning the right answer
+ * about the entries it was shown, and every case here still green. The caller
+ * asserts the count against ALLOWED, so narrowing the input is a red run rather
+ * than a quiet one.
  */
 function unusedAllowanceFiles(entries, used) {
-  const out = [];
+  const stale = [];
+  let checked = 0;
   for (const entry of entries) {
+    checked += entry.files.length;
     const unused = entry.files.filter(
       (file) => !used.has(allowanceKey(entry.name, file)),
     );
-    if (unused.length > 0) out.push({ name: entry.name, unused });
+    if (unused.length > 0) stale.push({ name: entry.name, unused });
   }
-  return out;
+  return { stale, checked };
 }
 
 /** Identifier-ish tokens: what a variable, property or type could be called. */
 const TOKEN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
+
+/**
+ * The words after which a `/` opens a regular expression rather than dividing.
+ *
+ * Everything else is decided by the character before the slash (see
+ * `startsRegex`); these are the identifiers-by-spelling that end no expression,
+ * so the character rule would get them backwards. `return /\.tsx$/.test(x)` is
+ * the shape that matters and it is not hypothetical — `src/lib/gemini-http.ts`
+ * and `src/routes/attachments.ts` both have one.
+ */
+const REGEX_MAY_FOLLOW = new Set([
+  "return",
+  "typeof",
+  "case",
+  "in",
+  "of",
+  "do",
+  "else",
+  "void",
+  "delete",
+  "instanceof",
+  "new",
+  "yield",
+  "await",
+]);
+
+/**
+ * Is the `/` at `at` the start of a regex literal, or a division sign?
+ *
+ * The same rule a real parser uses, minus the parser: a `/` that follows
+ * something an expression can END with is division, and a `/` that follows
+ * anything else opens a regex. `masked` is the partly-blanked output rather
+ * than the raw source, so a comment or string before the slash has already
+ * become spaces and is skipped along with them — which is right, because
+ * neither is part of the expression the slash belongs to.
+ *
+ * Getting this backwards is not a tie. Calling a regex "division" is the bug
+ * this branch exists to fix: the quotes and backticks inside the regex reach
+ * the string and template branches and open literals that never close. Calling
+ * division "a regex" costs at most the span to the next slash on that line,
+ * which is why the fallback below is bounded.
+ */
+function startsRegex(masked, at) {
+  let j = at - 1;
+  while (j >= 0 && /\s/.test(masked[j])) j -= 1;
+  if (j < 0) return true;
+  if (!/[A-Za-z0-9_$)\]]/.test(masked[j])) return true;
+  let k = j;
+  while (k >= 0 && /[A-Za-z0-9_$]/.test(masked[k])) k -= 1;
+  return REGEX_MAY_FOLLOW.has(masked.slice(k + 1, j + 1).join(""));
+}
+
+/**
+ * Where the regex opened at `start` closes, or -1 if it does not close on its
+ * line.
+ *
+ * A character class is tracked because `/[^/]+/` is legal and its first `/`
+ * closes nothing — stopping there would blank two characters, hand `]+` back to
+ * the scanner as code and let the real closing slash open a second phantom
+ * regex. `\\` is stepped over for the same reason the string branch steps over
+ * it: `/a\/b/` is one literal, not two.
+ */
+function regexEnd(source, start) {
+  const nl = source.indexOf("\n", start + 1);
+  const lineEnd = nl === -1 ? source.length : nl;
+  let inClass = false;
+  for (let j = start + 1; j < lineEnd; j += 1) {
+    const c = source[j];
+    if (c === "\\") {
+      j += 1;
+      continue;
+    }
+    if (inClass) {
+      if (c === "]") inClass = false;
+      continue;
+    }
+    if (c === "[") {
+      inClass = true;
+      continue;
+    }
+    if (c === "/") return j;
+  }
+  return -1;
+}
 
 /**
  * Strip everything that is not code: comments and string literals.
@@ -393,6 +515,16 @@ const TOKEN = /[A-Za-z_$][A-Za-z0-9_$]*/g;
  * There is NO JSX-text pass here, and its absence is the point. See the header:
  * that pass cannot tell a closing type argument from a closing tag, and this
  * package is nothing but type arguments.
+ *
+ * RETURNS THE CODE AND WHERE IT LOST TRACK. `openedAt` is the offset of a
+ * literal that was still open when the source ran out, or -1. Every literal in
+ * a file that compiles is closed, so a non-negative `openedAt` does not mean
+ * the FILE is malformed — it means THIS SCANNER is, and everything from that
+ * offset to the end of the file was masked without being understood. Both
+ * blindnesses this gate has suffered had exactly that signature and neither was
+ * visible in the verdict, because a blind scan and a clean one print the same
+ * word. Reporting it is what turns the next one into a red run instead of a
+ * quiet week. See the check at the bottom of this file.
  */
 function codeOnly(source) {
   const out = Array.from(source);
@@ -432,7 +564,7 @@ function codeOnly(source) {
         continue;
       }
       if (source.slice(i, i + 2) === "${") {
-        stack.push({ kind: "interpolation", depth: 0 });
+        stack.push({ kind: "interpolation", depth: 0, at: i });
         i += 2;
         continue;
       }
@@ -458,8 +590,47 @@ function codeOnly(source) {
 
     const ch = source[i];
 
+    if (ch === "/" && startsRegex(out, i)) {
+      /*
+       * A REGEX LITERAL, and the reason this branch exists rather than the
+       * reason it looks tidy.
+       *
+       * Without it a `/.../` is not a delimiter at all — its contents are read
+       * as code, and any quote or backtick inside opens a literal the scanner
+       * then hunts for a partner to. `src/lib/generation-doc.test.ts:164` is
+       *
+       *     const missing = [...doc.matchAll(/`((?:packages|docs|tools)\/[^`\s]+)`/g)]
+       *
+       * three backticks in one regex: push, pop, push — and the third never
+       * closed, so from that line to the end of the file 87 of 250 lines of
+       * real test code were read as template prose and blanked. The gate
+       * reported `clean` over them. A `capturedRoomProbe` planted at line 185
+       * passed; the identical name at line 100 of the same file was caught.
+       * That is the apostrophe wound the header spends thirty lines on, one
+       * literal form over, live in this package.
+       *
+       * The interior is BLANKED rather than scanned, which is a small behaviour
+       * change worth saying out loud: `/room|pattern/` used to be flagged and
+       * now is not. That follows the same rule as strings — a regex body is
+       * text the program matches against, not a name anyone can rename — and it
+       * is what makes the apostrophes in `/it's/` a handled case instead of a
+       * near miss that the unterminated-quote bound happened to catch.
+       */
+      const end = regexEnd(source, i);
+      if (end === -1) {
+        /* No closing slash on this line, so it was punctuation or division
+           after all — the same bound, and the same reasoning, as the quote
+           branch below. One line of damage instead of the rest of the file. */
+        i += 1;
+        continue;
+      }
+      blank(i + 1, end);
+      i = end + 1;
+      continue;
+    }
+
     if (ch === "`") {
-      stack.push({ kind: "template" });
+      stack.push({ kind: "template", at: i });
       i += 1;
       continue;
     }
@@ -479,9 +650,16 @@ function codeOnly(source) {
        * — they genuinely span lines, and an unterminated one is a syntax error
        * the compiler catches long before this runs.
        *
-       * On this side the apostrophe usually arrives inside a comment, already
-       * blanked above. It still reaches here from regex literals — `/it's/` —
-       * which is why the rule stays.
+       * WHERE THE STRAY APOSTROPHE COMES FROM, corrected. This used to say it
+       * arrives from regex literals like `/it's/`, and that was true until the
+       * regex branch above started masking their bodies — the two cases in the
+       * self-test that use `/it's/` now prove the REGEX branch and no longer
+       * reach this one. What is left for this rule is the slash the regex
+       * branch declines: a division it reads correctly, or a `/` that opens
+       * nothing and closes nowhere. That is a backstop rather than a daily
+       * occurrence, and it is asserted directly by its own case rather than
+       * left to be exercised by accident, which is how it was covered before
+       * and is not a way to know anything.
        */
       const nl = source.indexOf("\n", i + 1);
       const lineEnd = nl === -1 ? source.length : nl;
@@ -528,7 +706,7 @@ function codeOnly(source) {
     i += 1;
   }
 
-  return out.join("");
+  return { code: out.join(""), openedAt: stack.length ? stack[0].at : -1 };
 }
 
 /** Split an identifier into words: camelCase, PascalCase, snake_case, kebab. */
@@ -587,12 +765,14 @@ function forms(word) {
 /**
  * What to do with one filename: read it, refuse it, or leave it alone.
  *
- * A pure function taking a name rather than three branches inside `walk`,
- * because the interesting branch is unreachable from the package as it stands.
- * The API has no `.tsx` file, so deleting the refusal outright changes nothing
- * a run can observe — the gate stayed green with it gone, which means the one
- * decision here that is a JUDGEMENT rather than a mechanism had no proof at
- * all. Pulled out to a name, the self-test can ask it directly.
+ * A pure function taking a name rather than three branches inside the
+ * traversal, because the interesting branch is unreachable from the package as
+ * it stands. The API has no `.tsx` file, so deleting the refusal outright
+ * changes nothing a run can observe — the gate stayed green with it gone, which
+ * means the one decision here that is a JUDGEMENT rather than a mechanism had
+ * no proof at all. Pulled out to a name, the self-test can ask it directly, and
+ * `test/vocabulary-gate.test.ts` builds a package with a `.tsx` in it to prove
+ * the refusal is still wired to an exit rather than merely printed.
  */
 function classify(filename) {
   /*
@@ -607,57 +787,151 @@ function classify(filename) {
   return "ignore";
 }
 
-function walk(dir, found = []) {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      walk(full, found);
-      continue;
+/**
+ * A directory listing, as the traversals below need it.
+ *
+ * Injected rather than imported so the traversals are pure functions of a tree
+ * they are handed. That is the whole point: file DISCOVERY decides what ever
+ * reaches the judgement, and until it took an argument, the only way to check
+ * it was to run it on the real package and read the answer — which proves the
+ * package is clean today and says nothing about whether the walk still walks.
+ */
+const realListing = (dir) =>
+  readdirSync(dir).map((name) => ({
+    name,
+    isDirectory: statSync(join(dir, name)).isDirectory(),
+  }));
+
+/**
+ * WHICH FILES THE SCAN WILL READ, AND WHICH IT REFUSES.
+ *
+ * Pure, and parameterised on the roots, the loose-file directory and the
+ * listing, because every one of them is a decision that can go wrong silently.
+ * A traversal that stops recursing, visits only the first root, or matches
+ * `.ts` a little too narrowly does not fail — it returns a shorter list, and a
+ * shorter list is a quieter, cleaner-looking run. That is the shape of every
+ * blindness in this project's history, and it is why this is a function with
+ * cases rather than three loops inline at the bottom of the file.
+ *
+ * The loose-file pass does NOT descend, because the package root's
+ * subdirectories are either roots already or named in NOT_OURS; descending
+ * would scan `node_modules`.
+ *
+ * Refusals are RETURNED rather than exited on. Exiting from inside the walk put
+ * the one branch here that is a judgement rather than a mechanism — `.tsx` —
+ * beyond the reach of any test, because a case that proves it would have had to
+ * kill the process.
+ */
+function filesToScan(roots, looseDir, listing) {
+  const out = { scan: [], refuse: [] };
+  const take = (dir, name) => {
+    const verdict = classify(name);
+    if (verdict === "refuse") out.refuse.push(join(dir, name));
+    else if (verdict === "scan") out.scan.push(join(dir, name));
+  };
+  const descend = (dir) => {
+    for (const { name, isDirectory } of listing(dir)) {
+      if (isDirectory) descend(join(dir, name));
+      else take(dir, name);
     }
-    const verdict = classify(entry);
-    if (verdict === "refuse") {
-      console.error(
-        `\nvocabulary gate: ${relative(PKG, full)} is a .tsx file.\n` +
-          `This scanner reads TypeScript without JSX — it cannot tell tag text\n` +
-          `from code, and would accuse the words a person reads on screen.\n` +
-          `Either keep JSX out of packages/api, or teach this scanner the JSX\n` +
-          `masking pass that packages/web/scripts/check-vocabulary.mjs carries.\n`,
-      );
-      process.exit(1);
-    }
-    if (verdict === "scan") found.push(full);
+  };
+  for (const root of roots) descend(root);
+  for (const { name, isDirectory } of listing(looseDir)) {
+    if (!isDirectory) take(looseDir, name);
   }
-  return found;
+  return out;
 }
 
 /**
- * Every forbidden identifier in one source, with the line it sits on.
+ * Every forbidden identifier in one source, with the line it sits on, and the
+ * line from which the masker stopped understanding the file.
  *
  * `file` is the package-relative path, and it is a real argument rather than a
  * convenience for the error message: an allowance is granted to a name IN A
  * FILE, so the scan cannot decide anything without knowing where it is.
+ *
+ * `used` is HANDED IN rather than reached for. It was a module-level Set, and
+ * the self-test below exercises a real allowance in its real file, so the
+ * self-test's use marked that (name, file) pair used for the whole run. One
+ * `allowancesUsed.clear()` after the self-test was all that stopped a genuinely
+ * stale exemption from going green — a single deletable line standing between
+ * the expiry check and a lie, with nothing able to catch its deletion, since
+ * the pair it forged is one the package really does use. Passing the set makes
+ * the self-test unable to reach the run's bookkeeping at all, which is a
+ * property rather than a line someone has to remember.
  */
-function scanSource(source, file) {
+function scanSource(source, file, used = new Set()) {
   const found = [];
-  codeOnly(source)
-    .split("\n")
-    .forEach((line, index) => {
-      for (const match of line.matchAll(TOKEN)) {
-        const name = match[0];
-        const allowance = ALLOWED_BY_NAME.get(name);
-        if (allowance && allowance.files.includes(file)) {
-          allowancesUsed.add(allowanceKey(name, file));
-          continue;
-        }
-        const parts = new Set(words(name).flatMap(forms));
-        for (const { word, use } of FORBIDDEN) {
-          if (!parts.has(word)) continue;
-          found.push({ line: index + 1, name, word, use });
-          break;
-        }
+  const { code, openedAt } = codeOnly(source);
+  code.split("\n").forEach((line, index) => {
+    for (const match of line.matchAll(TOKEN)) {
+      const name = match[0];
+      const allowance = ALLOWED_BY_NAME.get(name);
+      if (allowance && allowance.files.includes(file)) {
+        used.add(allowanceKey(name, file));
+        continue;
       }
-    });
-  return found;
+      const parts = new Set(words(name).flatMap(forms));
+      for (const { word, use } of FORBIDDEN) {
+        if (!parts.has(word)) continue;
+        found.push({ line: index + 1, name, word, use });
+        break;
+      }
+    }
+  });
+  const blindFromLine =
+    openedAt === -1 ? -1 : source.slice(0, openedAt).split("\n").length;
+  return { found, blindFromLine };
+}
+
+/**
+ * THE SCAN LOOP: every discovered file read, judged, and labelled with where it
+ * came from.
+ *
+ * Pure and parameterised on `readSource` for the same reason the traversal is.
+ * The loop is three lines and looks too small to be worth a name, which is
+ * exactly the argument that left it untested: a `break` in it, or a `file`
+ * field that stops varying, produces a run that reads one file and reports
+ * `clean` for a hundred and forty-four others.
+ *
+ * `files` are PACKAGE-RELATIVE paths, and that is load-bearing rather than
+ * cosmetic — an allowance is granted to a name in a path, so the string handed
+ * in here is what the allowlist is compared against. Hand it absolute paths and
+ * every allowance stops matching; hand it bare basenames and an exemption
+ * written for `src/lib/public-handles.ts` silently covers any file of that name
+ * anywhere. The self-test carries a case for the second, which is the direction
+ * that fails quietly.
+ */
+function scanFiles(files, readSource, used) {
+  const violations = [];
+  const blind = [];
+  for (const file of files) {
+    const { found, blindFromLine } = scanSource(readSource(file), file, used);
+    for (const hit of found) violations.push({ ...hit, file });
+    if (blindFromLine !== -1) blind.push({ file, line: blindFromLine });
+  }
+  return { violations, blind };
+}
+
+/**
+ * THE REPORT: one row per identifier, worst first, pointing at its first use.
+ *
+ * Extracted because it is the only part of this file a person ever reads, and
+ * because none of it runs on a clean tree. Every case below is unreachable from
+ * the package as it stands — there are no violations — so grouping, counting
+ * and first-occurrence were carried by nothing at all. `first at` is the line
+ * anyone actually opens; a mutation that keeps the LAST occurrence instead of
+ * the first still exits 1, still names the right identifier, and sends the
+ * reader to the wrong place.
+ */
+function groupViolations(violations) {
+  const byName = new Map();
+  for (const v of violations) {
+    const got = byName.get(v.name);
+    if (got) got.count += 1;
+    else byName.set(v.name, { ...v, count: 1 });
+  }
+  return [...byName.values()].sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -707,15 +981,42 @@ function scanSource(source, file) {
  * The rule that follows from it, and the reason the list below is longer than
  * it looks: EVERY MASKING MECHANISM GETS A CASE, and the case is written by
  * breaking the mechanism first and watching the case go red. The four are line
- * comments, block comments, quoted strings and template literals; the two
- * traversal mechanisms are the roots and the allowance expiry, which are
- * checked separately below because neither is a property of one snippet.
+ * comments, block comments, quoted strings, template literals and — since the
+ * gate was caught blind over 87 lines of a real file — regex literals.
  *
- * `at` — the exact `name:line` pairs — is carried by every multi-line case.
+ * AND THE RULE THE REGEX FIX ADDED TO IT: A CASE CAN STOP TESTING WHAT IT SAYS
+ * IT TESTS. The two `/it's/` cases were written to hold down the quote branch's
+ * line bound, and they did, right up until the regex branch started masking
+ * pattern bodies — after which their apostrophes never reached the quote branch
+ * at all, the bound could be deleted green, and both cases still passed while
+ * their comments still described the old job. Nothing announced that. The only
+ * thing that found it was re-running the mutation the cases were written for,
+ * AFTER the change, which is now the habit: a fix is not finished when the
+ * suite is green, it is finished when the breaks it was built from are red
+ * again.
+ *
+ * WHAT IS DELIBERATELY NOT COVERED, having been tried: masking one character
+ * FEWER of a regex body (`blank(i + 1, end - 1)`) survives every case, and is
+ * meant to. It masks less rather than more, so it cannot hide anything, and the
+ * single character it exposes cannot spell a forbidden word — the shortest is
+ * three letters — nor act as a delimiter, since the scan has already resumed
+ * past it. A case pinning that boundary would assert an arbitrary number rather
+ * than a behaviour.
+ *
+ * `at` — the exact `name:line` pairs — is carried by every multi-line case, and
+ * that is enforced in the harness rather than promised here, because this
+ * sentence was false when it was only a sentence: one case of thirty had none.
  * Names alone are not enough: `blank()` can be made to eat newlines, which
  * keeps every name-only case green and still exits 1 on a real violation, while
  * reporting a line hundreds of rows off. `file:line` is the whole actionable
  * content of the report, so it is asserted rather than hoped for.
+ *
+ * WHAT NO CASE HERE CAN REACH, and where it went instead: this function decides
+ * its own verdict, so a check that has been DELETED and a check that PASSES
+ * print the same thing. `const unscanned = []` and `const stale = []` each ran
+ * fully green with every case below correct. Those live in
+ * `test/vocabulary-gate.test.ts`, which runs this script as a process against
+ * trees that must be rejected.
  */
 const SELFTEST = [
   {
@@ -815,6 +1116,197 @@ const SELFTEST = [
       "const roomList = [];",
       "const re2 = /don't/;",
       "const patternKey = 2;",
+    ].join("\n"),
+  },
+  {
+    expect: ["roomProbe"],
+    at: ["roomProbe:2"],
+    why:
+      "A REGEX HOLDING BACKTICKS — the blindness this branch was added for, and " +
+      "it was live in this package rather than imagined. " +
+      "src/lib/generation-doc.test.ts:164 is this line. Three backticks inside " +
+      "one regex: with no regex branch they are read as template delimiters, so " +
+      "push, pop, push — and the third never closes. 87 of that file's 250 " +
+      "lines were masked as template prose and the gate called them clean. This " +
+      "case was written before the branch existed and watched to fail, which is " +
+      "the only way to know it is the case that catches it",
+    src: [
+      "const cited = [...doc.matchAll(/`([^`\\s]+)`/g)];",
+      "const roomProbe = 1;",
+    ].join("\n"),
+  },
+  {
+    expect: ["captureIdx"],
+    at: ["captureIdx:2"],
+    why:
+      "A REGEX HOLDING A QUOTE, the same wound in the commoner form, PAIRED " +
+      "with the proof that the body is masked rather than merely survived: " +
+      "`room` and `pattern` are inside the pattern text and must not be " +
+      "accused. A regex body is text the program matches against, not a name " +
+      "anyone could rename — the same rule strings get, for the same reason. " +
+      "Break the branch and this case fails in both directions at once: the " +
+      "unbalanced quote swallows line 2 and `captureIdx` goes missing",
+    src: ["const re = /a room's pattern/;", "const captureIdx = 1;"].join("\n"),
+  },
+  {
+    expect: ["roomTally", "patternTally"],
+    why:
+      "DIVISION IS NOT A REGEX, which is the whole reason the branch asks what " +
+      "came before the slash instead of just seeing one. Two divisions on one " +
+      "line: treat the first as a regex and it closes on the second, blanking " +
+      "the span between them and taking `patternTally` with it. A `/` after an " +
+      "identifier, a digit, a `)` or a `]` cannot open a regex, and that rule " +
+      "is what this case holds down",
+    src: "const roomTally = a / 2; const patternTally = b / 3;",
+  },
+  {
+    expect: ["roomIdx", "patternIdx", "roomShare", "patternShare"],
+    at: [
+      "roomIdx:1",
+      "patternIdx:1",
+      "roomShare:2",
+      "patternShare:2",
+    ],
+    why:
+      "THE OTHER THINGS AN EXPRESSION CAN END WITH: a `)`, a `]`, and a digit. " +
+      "The case above only ever divides after an identifier, so three of the " +
+      "four characters in that rule could be dropped with it green — and " +
+      "`counts[0] / total` and `fn() / total` are how this package divides more " +
+      "often than not. Each line needs TWO slashes in the same position for the " +
+      "misread to have somewhere to do damage, and a name between them to do it " +
+      "to; one slash closes on nothing and proves nothing, which is the " +
+      "apostrophe case's lesson for the third time in this list",
+    src: [
+      "const roomIdx = counts[0] / total; const patternIdx = fn() / total;",
+      "const roomShare = 10 / 2; const patternShare = 30 / 4;",
+    ].join("\n"),
+  },
+  {
+    expect: ["captureZ"],
+    why:
+      "`return /re/` — the exception to the character rule, and not a " +
+      "hypothetical one: src/lib/gemini-http.ts:195 and " +
+      "src/routes/attachments.ts:253 both have this shape. `return` is spelled " +
+      "like an identifier but ends no expression, so without it in the keyword " +
+      "set the slash reads as division and the pattern text is handed to the " +
+      "scanner as code — `rooms` accused, in a string no one can rename. " +
+      "AN EARLIER VERSION USED `/it's fine/` AND SURVIVED THE DELETION: one " +
+      "apostrophe on a line closes nothing, so the misread cost nothing " +
+      "visible. The damage this mechanism prevents is a false accusation, and " +
+      "the case has to be shaped like one",
+    src: "function f(s) { return /rooms?$/.test(s) && captureZ; }",
+  },
+  {
+    expect: ["captureSeg"],
+    why:
+      "A SLASH INSIDE A CHARACTER CLASS. `/[^/]+rooms/` is legal and the slash " +
+      "in the class closes nothing. Stop there and the rest of the pattern — " +
+      "`rooms` — comes back as code and is accused, which is a false alarm " +
+      "against text no one can rename. The exact-set assertion is what catches " +
+      "it: the break adds a name rather than losing one",
+    src: "const seg = /[^/]+rooms/; const captureSeg = 1;",
+  },
+  {
+    expect: ["captureEsc"],
+    why:
+      "AN ESCAPED SLASH INSIDE A REGEX. `/a\\/rooms\\/b/` is one literal, and " +
+      "without the escape step the scan closes on the first `\\/`, hands " +
+      "`rooms` back as code and accuses it, then opens a phantom regex on the " +
+      "second. The package writes paths this way — the regex at " +
+      "src/lib/generation-doc.test.ts:164 has `\\/` in it",
+    src: "const p = /a\\/rooms\\/b/; const captureEsc = 1;",
+  },
+  {
+    expect: ["capturePending"],
+    at: ["capturePending:2"],
+    why:
+      "A SLASH IN REGEX POSITION THAT NEVER CLOSES ON ITS LINE. The branch is " +
+      "bounded to one line exactly as the quote branch is, and for the same " +
+      "reason: an unbounded search runs to the next slash ANYWHERE, which is " +
+      "why line 3 carries one. THE FIRST VERSION OF THIS CASE HAD ONLY THE " +
+      "FIRST TWO LINES AND PROVED NOTHING — with no later slash to close on, " +
+      "the unbounded scanner gives up in the same place the bounded one does " +
+      "and the case stayed green with the bound deleted. That is the apostrophe " +
+      "case's lesson exactly, arrived at again by breaking this one on purpose",
+    src: [
+      "const re = /oops no closing",
+      "const capturePending = 1;",
+      "const re2 = /fine/;",
+    ].join("\n"),
+  },
+  {
+    expect: ["capturePanelEsc"],
+    at: ["capturePanelEsc:2"],
+    why:
+      "AN ESCAPED BACKTICK INSIDE A TEMPLATE. The template branch steps over " +
+      "`\\\\x` as one unit; without that step the escaped backtick closes the " +
+      "template early, ` room ` is read as code and accused, and the NEXT " +
+      "backtick opens a fresh template that swallows line 2. So the break shows " +
+      "as an extra name and a missing one together. Four files in this package " +
+      "contain `\\\\``  or `\\\\${`, and this was the sibling of the string " +
+      "escape skip that had a case while it had none",
+    src: ["const t = `a \\` room b`;", "const capturePanelEsc = 1;"].join("\n"),
+  },
+  {
+    expect: ["captureRaw"],
+    why:
+      "AN ESCAPED `${` INSIDE A TEMPLATE — the other half of the same skip, and " +
+      "it fails the opposite way round. `\\\\${` is literal text, not an " +
+      "interpolation; without the escape step the scanner opens one and reads " +
+      "`roomName` inside it as the code it is not, accusing a name that only " +
+      "exists as prose in a template",
+    src: "const t = `literal \\${roomName} stays prose`; const captureRaw = 1;",
+  },
+  {
+    expect: ["captureTotal"],
+    why:
+      "A SINGLE-QUOTED STRING. The string branch asserts it handles both quote " +
+      "characters and every case used `\"`, so dropping `'` support was green — " +
+      "half an asserted mechanism with nothing on it. It fails loudly rather " +
+      "than quietly, `room` being read as code, which is the reason the " +
+      "exact-set assertion catches it",
+    src: "const s = 'leave this room'; const captureTotal = 1;",
+  },
+  {
+    expect: ["layer2Room"],
+    why:
+      "A DIGIT RUNNING INTO A CAPITAL. `words()` splits on `([a-z0-9])([A-Z])` " +
+      "and every case exercised the letter half, so the `0-9` could be deleted " +
+      "with all of them green. Backend names carry version and layer numbers — " +
+      "`layer2Room`, `v2Capture` — and without the digit the whole name reads " +
+      "as one word `layer2room`, which matches nothing at all",
+    src: "const layer2Room = 1;",
+  },
+  {
+    expect: ["HANDLE_PATTERN"],
+    file: "src/routes/public-handles.ts",
+    why:
+      "THE ALLOWED NAME IN A FILE OF THE SAME BASENAME, in a different " +
+      "directory. The pair below proves scoping bites across obviously " +
+      "different paths; this proves the comparison is the whole path and not " +
+      "the file's name. `src/lib/public-handles.ts` holds the exemption and " +
+      "`src/routes/public-handles.ts` must not inherit it — the failure " +
+      "direction of a basename comparison is a silent extra hole, which is the " +
+      "direction that never announces itself",
+    src: "const HANDLE_PATTERN = /^[A-Za-z0-9_-]{3,24}$/;",
+  },
+  {
+    expect: ["capturePend"],
+    at: ["capturePend:2"],
+    why:
+      "AN UNCLOSED APOSTROPHE IN CODE POSITION — the string branch's line " +
+      "bound, which until this case existed was proven by nothing. THE TWO " +
+      "`/it's/` CASES USED TO COVER IT AND NO LONGER DO: adding the regex " +
+      "branch means their apostrophes are masked as pattern text before they " +
+      "ever reach the quote branch, so those cases now prove the regex branch " +
+      "instead, and deleting the bound went green. A fix that quietly moves " +
+      "what a case is testing is the most expensive kind, because the case " +
+      "still passes and still reads as if it covers the old thing. Two " +
+      "apostrophes with a name between them, because one closes on nothing",
+    src: [
+      "const s = don't;",
+      "const capturePend = 1;",
+      "const s2 = won't;",
     ].join("\n"),
   },
   {
@@ -976,6 +1468,7 @@ const SELFTEST = [
   },
   {
     expect: ["roomLabel"],
+    at: ["roomLabel:2"],
     why: "PAIRED: a shipped enum VALUE is a string a migration owns and no linter can rename; the identifier next to it is ours",
     src: [
       'const entryTypes = ["pattern", "tension"] as const;',
@@ -1086,6 +1579,245 @@ const CLASSIFY_SELFTEST = [
   ["notes.txt", "ignore"],
 ];
 
+/**
+ * A MADE-UP PACKAGE, for the traversals to be run against.
+ *
+ * Every case below needs a tree with a shape the real package has — nested
+ * directories, several roots, files of each kind, a directory that must be
+ * skipped — and needs it to be a tree nobody is going to reorganise. Reading
+ * the real filesystem instead is what left discovery untested: an assertion
+ * about `packages/api` proves the package is clean today and cannot say a word
+ * about whether the walk still walks, because a walk that returns nothing and a
+ * package with nothing wrong in it produce the same green line.
+ */
+const FAKE_TREE = {
+  "/pkg": [
+    { name: "src", isDirectory: true },
+    { name: "test", isDirectory: true },
+    { name: "node_modules", isDirectory: true },
+    { name: "vitest.unit.config.ts", isDirectory: false },
+    { name: "package.json", isDirectory: false },
+  ],
+  "/pkg/src": [
+    { name: "routes", isDirectory: true },
+    { name: "signals.ts", isDirectory: false },
+    { name: "notes.md", isDirectory: false },
+  ],
+  "/pkg/src/routes": [
+    { name: "groups.ts", isDirectory: false },
+    { name: "groups.test.ts", isDirectory: false },
+  ],
+  "/pkg/test": [{ name: "helpers.ts", isDirectory: false }],
+  "/pkg/node_modules": [{ name: "someone-else.ts", isDirectory: false }],
+};
+const fakeListing = (dir) => FAKE_TREE[dir] ?? [];
+
+/**
+ * FILE DISCOVERY, WHICH DECIDES WHAT IS EVER JUDGED.
+ *
+ * The self-test above proves the scanner reads a snippet correctly. Nothing
+ * proved the loop that chooses which files become snippets, and that is the
+ * half that has failed in this project — `scripts/` was simply never named, and
+ * the gate shipped green over a violation of its own list sitting in its own
+ * directory.
+ *
+ * Each case is a mutation someone could plausibly make. Visiting only the first
+ * root, or losing the recursion, or narrowing the extension test, does not
+ * throw and does not print anything: it returns a shorter list, and a shorter
+ * list looks exactly like a cleaner package.
+ */
+const DISCOVERY_SELFTEST = [
+  {
+    why: "EVERY ROOT, not just the first — `roots[0]` instead of the loop is one character and drops `test/` entirely",
+    roots: ["/pkg/src", "/pkg/test"],
+    loose: "/pkg",
+    expectScan: [
+      "/pkg/src/routes/groups.test.ts",
+      "/pkg/src/routes/groups.ts",
+      "/pkg/src/signals.ts",
+      "/pkg/test/helpers.ts",
+      "/pkg/vitest.unit.config.ts",
+    ],
+    expectRefuse: [],
+  },
+  {
+    why: "NESTED DIRECTORIES — without the recursion `src/routes` is invisible, which in the real package is most of the routes",
+    roots: ["/pkg/src"],
+    loose: "/pkg",
+    expectScan: [
+      "/pkg/src/routes/groups.test.ts",
+      "/pkg/src/routes/groups.ts",
+      "/pkg/src/signals.ts",
+      "/pkg/vitest.unit.config.ts",
+    ],
+    expectRefuse: [],
+  },
+  {
+    why: "THE LOOSE-FILE PASS DOES NOT DESCEND. The package root's subdirectories are roots already or NOT_OURS, so a descent here would scan node_modules — and `someone-else.ts` proves it does not",
+    roots: [],
+    loose: "/pkg",
+    expectScan: ["/pkg/vitest.unit.config.ts"],
+    expectRefuse: [],
+  },
+  {
+    why: "A `.tsx` IS REFUSED RATHER THAN SKIPPED, wherever it is found. Returned instead of exited on, so the branch this package cannot exercise is still a case rather than a hope",
+    roots: ["/pkg/src"],
+    loose: "/pkg",
+    tree: {
+      "/pkg": [{ name: "vitest.unit.config.ts", isDirectory: false }],
+      "/pkg/src": [
+        { name: "signals.ts", isDirectory: false },
+        { name: "Probe.tsx", isDirectory: false },
+      ],
+    },
+    expectScan: ["/pkg/src/signals.ts", "/pkg/vitest.unit.config.ts"],
+    expectRefuse: ["/pkg/src/Probe.tsx"],
+  },
+];
+
+/**
+ * THE COVERAGE CHECK ITSELF, which is the guard on the guard.
+ *
+ * ROOTS is hand-maintained, so the coverage walk exists to catch a root nobody
+ * updated. But the walk was hand-written and unchecked, which only moved the
+ * problem: three single edits to it ran fully green — matching `.tsx` only,
+ * dropping the recursion, or excluding a directory. The compound is the one
+ * that stings: narrow the extension AND drop `test` from ROOTS and the whole
+ * test directory goes unscanned with every check in this file passing.
+ *
+ * It must find `.tsx` as well as `.ts`. The scan REFUSES a `.tsx` while this
+ * walk must still SEE it, so that a `.tsx` nobody scanned is caught here even
+ * if the refusal above is ever softened — the second, independent way to bite.
+ */
+const COVERAGE_SELFTEST = [
+  {
+    why: "`.ts` AND `.tsx`, nested, from the package root down — the file list the scan is measured against",
+    dir: "/pkg",
+    notOurs: new Set(["node_modules"]),
+    expect: [
+      "/pkg/src/routes/groups.test.ts",
+      "/pkg/src/routes/groups.ts",
+      "/pkg/src/signals.ts",
+      "/pkg/test/helpers.ts",
+      "/pkg/vitest.unit.config.ts",
+    ],
+  },
+  {
+    why: "A `.tsx` IS FOUND HERE even though the scan refuses it — the two rules must disagree, or an unscanned .tsx is invisible to both",
+    dir: "/pkg/src",
+    notOurs: new Set(),
+    tree: {
+      "/pkg/src": [
+        { name: "signals.ts", isDirectory: false },
+        { name: "Probe.tsx", isDirectory: false },
+      ],
+    },
+    expect: ["/pkg/src/Probe.tsx", "/pkg/src/signals.ts"],
+  },
+  {
+    why: "NOT_OURS SKIPS, and skips the directory rather than the file — `someone-else.ts` under node_modules must not appear",
+    dir: "/pkg",
+    notOurs: new Set(["node_modules", "test"]),
+    expect: [
+      "/pkg/src/routes/groups.test.ts",
+      "/pkg/src/routes/groups.ts",
+      "/pkg/src/signals.ts",
+      "/pkg/vitest.unit.config.ts",
+    ],
+  },
+];
+
+/**
+ * A ROOT MAY NOT BE EXCLUDED — the data mutation the check above cannot see.
+ *
+ * `everyTypeScriptFile` can be perfect and the coverage check still dead, if
+ * NOT_OURS names a directory ROOTS points at: the walk stops finding the files,
+ * so there is nothing left to notice missing.
+ */
+const ROOTS_SELFTEST = [
+  {
+    why: "the real shape — roots and exclusions naming different things",
+    roots: ["/pkg/src", "/pkg/test"],
+    notOurs: new Set(["node_modules", "dist"]),
+    expect: [],
+  },
+  {
+    why: "`src` EXCLUDED WHILE BEING A ROOT — green today, and the package's largest directory unlooked-at",
+    roots: ["/pkg/src", "/pkg/test"],
+    notOurs: new Set(["node_modules", "src"]),
+    expect: ["src"],
+  },
+];
+
+/**
+ * THE SCAN LOOP, which is three lines and was carried by nothing.
+ *
+ * `readSource` is handed in, so a corpus can be made of strings. The cases are
+ * the mutations that produce a quieter run rather than an error: reading only
+ * the first file, or labelling every hit with the same path.
+ */
+const SCAN_LOOP_SELFTEST = [
+  {
+    why: "EVERY FILE IS READ, and each violation carries the file it came from. A `break` after the first leaves the rest of the package reported clean",
+    corpus: {
+      "src/a.ts": "const roomOne = 1;",
+      "src/b.ts": "const patternTwo = 2;",
+      "src/c.ts": "const captureThree = 3;",
+    },
+    expect: ["src/a.ts:1 roomOne", "src/b.ts:1 patternTwo", "src/c.ts:1 captureThree"],
+  },
+  {
+    why: "AN ALLOWANCE APPLIES IN ITS OWN FILE AND NOWHERE ELSE, decided per file inside the loop — this is the scoping the whole allowlist design rests on, exercised through the loop rather than a single snippet",
+    corpus: {
+      "src/lib/public-handles.ts": "const HANDLE_PATTERN = 1;",
+      "src/routes/elsewhere.ts": "const HANDLE_PATTERN = 2;",
+    },
+    expect: ["src/routes/elsewhere.ts:1 HANDLE_PATTERN"],
+  },
+  {
+    why: "A FILE THE MASKER LOST TRACK OF IS REPORTED WITH THE LINE IT LOST TRACK ON, so the blind region has a name and an address rather than being a silent clean verdict",
+    corpus: {
+      "src/ok.ts": "const t = `fine`;\nconst roomOk = 1;",
+      "src/torn.ts": "const t = `never closed;\nconst roomTorn = 2;",
+    },
+    expect: ["src/ok.ts:2 roomOk"],
+    expectBlind: ["src/torn.ts:1"],
+  },
+];
+
+/**
+ * THE REPORT, which no clean run can reach.
+ *
+ * Everything below the `violations.length === 0` branch is dead code on a green
+ * tree, so grouping, counting and first-occurrence had no coverage of any kind
+ * — the previous review reasonably called those mutations unreachable, which is
+ * true of the RUN and is exactly why they belong here instead.
+ *
+ * `first at` is the part a person acts on. A mutation that keeps the last
+ * occurrence rather than the first still exits 1 and still names the right
+ * identifier; it just sends the reader to the wrong line of the wrong file.
+ */
+const REPORT_SELFTEST = [
+  {
+    why: "ONE ROW PER NAME, counted across files, pointing at the FIRST occurrence",
+    violations: [
+      { name: "roomId", word: "room", use: "group", file: "src/a.ts", line: 12 },
+      { name: "roomId", word: "room", use: "group", file: "src/b.ts", line: 3 },
+      { name: "roomId", word: "room", use: "group", file: "src/c.ts", line: 9 },
+    ],
+    expect: ["roomId 3x src/a.ts:12"],
+  },
+  {
+    why: "WORST FIRST — forty uses of one name is one decision and belongs at the top, above a name used once",
+    violations: [
+      { name: "lensBoard", word: "lens", use: "nothing", file: "src/a.ts", line: 1 },
+      { name: "roomId", word: "room", use: "group", file: "src/b.ts", line: 2 },
+      { name: "roomId", word: "room", use: "group", file: "src/c.ts", line: 4 },
+    ],
+    expect: ["roomId 2x src/b.ts:2", "lensBoard 1x src/a.ts:1"],
+  },
+];
+
 function selftest() {
   const failures = [];
 
@@ -1102,7 +1834,22 @@ function selftest() {
   }
 
   for (const c of SELFTEST) {
-    const hits = scanSource(c.src, c.file ?? "<self-test>");
+    /*
+     * "Every multi-line case carries `at`" was a sentence in two comments here,
+     * and it was false — one case of thirty had no `at`. A claim about the
+     * cases is as checkable as the cases themselves, so it is checked instead
+     * of asserted, and the next case written without one says so.
+     */
+    if (c.src.includes("\n") && !c.at) {
+      failures.push(
+        `  ${c.why}\n` +
+          `      ${c.src.replace(/\n/g, "\n      ")}\n` +
+          `      a multi-line case with no \`at\` — its line numbers are unasserted,\n` +
+          `      which is the half of the report a person actually acts on\n`,
+      );
+      continue;
+    }
+    const hits = scanSource(c.src, c.file ?? "<self-test>").found;
     const got = [...new Set(hits.map((h) => h.name))].sort();
     const want = [...c.expect].sort();
     const same =
@@ -1116,10 +1863,6 @@ function selftest() {
       );
       continue;
     }
-    /*
-     * Lines are checked only where the case declares them, and every multi-line
-     * case declares them. A single-line snippet has nothing to get wrong.
-     */
     if (!c.at) continue;
     const gotAt = [...new Set(hits.map((h) => `${h.name}:${h.line}`))].sort();
     const wantAt = [...c.at].sort();
@@ -1138,7 +1881,7 @@ function selftest() {
 
   for (const c of EXPIRY_SELFTEST) {
     const got = unusedAllowanceFiles([c.entry], new Set(c.used));
-    const unused = got.length > 0 ? [...got[0].unused].sort() : [];
+    const unused = got.stale.length > 0 ? [...got.stale[0].unused].sort() : [];
     const want = [...c.expect].sort();
     const same =
       unused.length === want.length && unused.every((f, k) => f === want[k]);
@@ -1149,6 +1892,109 @@ function selftest() {
           `      used: ${c.used.length ? c.used.join(", ") : "(nothing)"}\n` +
           `      expected stale: ${want.length ? want.join(", ") : "(nothing)"}\n` +
           `      reported stale: ${unused.length ? unused.join(", ") : "(nothing)"}\n`,
+      );
+    }
+    if (got.checked !== c.entry.files.length) {
+      failures.push(
+        `  ${c.why}\n` +
+          `      the expiry check looked at ${got.checked} (name, file) pair(s),\n` +
+          `      but the entry has ${c.entry.files.length} — a pair it never looks at is a\n` +
+          `      hole it can never call stale\n`,
+      );
+    }
+  }
+
+  for (const c of DISCOVERY_SELFTEST) {
+    const listing = c.tree ? (d) => c.tree[d] ?? [] : fakeListing;
+    const got = filesToScan(c.roots, c.loose, listing);
+    for (const [half, want] of [
+      ["scan", c.expectScan],
+      ["refuse", c.expectRefuse],
+    ]) {
+      const mine = [...got[half]].sort();
+      const theirs = [...want].sort();
+      if (
+        mine.length !== theirs.length ||
+        !mine.every((f, k) => f === theirs[k])
+      ) {
+        failures.push(
+          `  file discovery — ${c.why}\n` +
+            `      roots: ${c.roots.join(", ") || "(none)"}, loose: ${c.loose}\n` +
+            `      expected to ${half}: ${theirs.join(", ") || "(nothing)"}\n` +
+            `      actually ${half}:    ${mine.join(", ") || "(nothing)"}\n`,
+        );
+      }
+    }
+  }
+
+  for (const c of COVERAGE_SELFTEST) {
+    const listing = c.tree ? (d) => c.tree[d] ?? [] : fakeListing;
+    const got = everyTypeScriptFile(c.dir, listing, c.notOurs).sort();
+    const want = [...c.expect].sort();
+    if (got.length !== want.length || !got.every((f, k) => f === want[k])) {
+      failures.push(
+        `  the coverage check — ${c.why}\n` +
+          `      under ${c.dir}, skipping ${[...c.notOurs].join(", ") || "(nothing)"}\n` +
+          `      expected: ${want.join(", ") || "(nothing)"}\n` +
+          `      found:    ${got.join(", ") || "(nothing)"}\n`,
+      );
+    }
+  }
+
+  for (const c of ROOTS_SELFTEST) {
+    const got = rootsAlsoExcluded(c.roots, c.notOurs).sort();
+    const want = [...c.expect].sort();
+    if (got.length !== want.length || !got.every((n, k) => n === want[k])) {
+      failures.push(
+        `  a root that is also excluded — ${c.why}\n` +
+          `      expected: ${want.join(", ") || "(nothing)"}\n` +
+          `      found:    ${got.join(", ") || "(nothing)"}\n`,
+      );
+    }
+  }
+
+  for (const c of SCAN_LOOP_SELFTEST) {
+    const { violations, blind } = scanFiles(
+      Object.keys(c.corpus),
+      (f) => c.corpus[f],
+      new Set(),
+    );
+    const got = violations.map((v) => `${v.file}:${v.line} ${v.name}`).sort();
+    const want = [...c.expect].sort();
+    if (got.length !== want.length || !got.every((v, k) => v === want[k])) {
+      failures.push(
+        `  the scan loop — ${c.why}\n` +
+          `      over ${Object.keys(c.corpus).join(", ")}\n` +
+          `      expected: ${want.join(", ") || "(nothing)"}\n` +
+          `      reported: ${got.join(", ") || "(nothing)"}\n`,
+      );
+    }
+    const gotBlind = blind.map((b) => `${b.file}:${b.line}`).sort();
+    const wantBlind = [...(c.expectBlind ?? [])].sort();
+    if (
+      gotBlind.length !== wantBlind.length ||
+      !gotBlind.every((b, k) => b === wantBlind[k])
+    ) {
+      failures.push(
+        `  the scan loop — ${c.why}\n` +
+          `      expected blind regions: ${wantBlind.join(", ") || "(none)"}\n` +
+          `      reported:               ${gotBlind.join(", ") || "(none)"}\n`,
+      );
+    }
+  }
+
+  for (const c of REPORT_SELFTEST) {
+    const got = groupViolations(c.violations).map(
+      (v) => `${v.name} ${v.count}x ${v.file}:${v.line}`,
+    );
+    if (
+      got.length !== c.expect.length ||
+      !got.every((r, k) => r === c.expect[k])
+    ) {
+      failures.push(
+        `  the report — ${c.why}\n` +
+          `      expected: ${c.expect.join(" | ")}\n` +
+          `      produced: ${got.join(" | ") || "(nothing)"}\n`,
       );
     }
   }
@@ -1163,40 +2009,87 @@ function selftest() {
   }
   console.log(
     `vocabulary (api): self-test passed (${SELFTEST.length} scanner cases, ` +
-      `${EXPIRY_SELFTEST.length} expiry cases, ${CLASSIFY_SELFTEST.length} file-kind cases)`,
+      `${EXPIRY_SELFTEST.length} expiry, ${CLASSIFY_SELFTEST.length} file-kind, ` +
+      `${DISCOVERY_SELFTEST.length} discovery, ${COVERAGE_SELFTEST.length} coverage, ` +
+      `${ROOTS_SELFTEST.length} root/exclusion, ${SCAN_LOOP_SELFTEST.length} scan-loop, ` +
+      `${REPORT_SELFTEST.length} report)`,
   );
 }
 
 selftest();
 
 /*
- * The self-test deliberately exercises a real allowance, so it marks one used.
- * Clearing here means the staleness check below reports on the PACKAGE, which
- * is the only thing it is allowed to have an opinion about.
+ * A ROOT THAT IS ALSO EXCLUDED, checked before anything is read, because it
+ * disables the coverage check below rather than tripping it.
  */
-allowancesUsed.clear();
-
-const violations = [];
-const scanned = new Set();
-
-for (const root of ROOTS) {
-  for (const file of walk(root)) {
-    scanned.add(file);
-  }
-}
-for (const entry of readdirSync(LOOSE_FILE_DIR)) {
-  const full = join(LOOSE_FILE_DIR, entry);
-  if (!statSync(full).isFile()) continue;
-  /* Same classifier as the roots, so a `.tsx` here is refused rather than
-     silently skipped and left for the coverage check to find. */
-  if (classify(entry) === "scan") scanned.add(full);
+const excludedRoots = rootsAlsoExcluded(ROOTS, NOT_OURS);
+if (excludedRoots.length > 0) {
+  console.error(
+    `\nvocabulary (api): ${excludedRoots.join(", ")} is named in both ROOTS and\n` +
+      `NOT_OURS. The coverage check finds every TypeScript file under the package\n` +
+      `and asserts the scan read it; a directory in NOT_OURS is not found, so it\n` +
+      `cannot be missed either. That combination is a scan with its own guard\n` +
+      `switched off, and it looks exactly like a clean run.\n`,
+  );
+  process.exit(1);
 }
 
-for (const file of scanned) {
-  const rel = relative(PKG, file);
-  for (const hit of scanSource(readFileSync(file, "utf8"), rel)) {
-    violations.push({ ...hit, file: rel });
+const discovered = filesToScan(ROOTS, LOOSE_FILE_DIR, realListing);
+
+if (discovered.refuse.length > 0) {
+  for (const full of discovered.refuse) {
+    console.error(
+      `\nvocabulary gate: ${relative(PKG, full)} is a .tsx file.\n` +
+        `This scanner reads TypeScript without JSX — it cannot tell tag text\n` +
+        `from code, and would accuse the words a person reads on screen.\n` +
+        `Either keep JSX out of packages/api, or teach this scanner the JSX\n` +
+        `masking pass that packages/web/scripts/check-vocabulary.mjs carries.\n`,
+    );
   }
+  process.exit(1);
+}
+
+const scanned = new Set(discovered.scan);
+
+const { violations, blind } = scanFiles(
+  [...scanned].map((f) => relative(PKG, f)),
+  (rel) => readFileSync(join(PKG, rel), "utf8"),
+  allowancesUsed,
+);
+
+/*
+ * A FILE THE MASKER LOST TRACK OF, which is the failure this gate has actually
+ * had rather than the one it was written for.
+ *
+ * Every literal in a file that compiles is closed. So if the masker reaches the
+ * end of a file still inside a string or a template, the mistake is this
+ * scanner's, and everything from that point on was blanked without being read.
+ * There is no output to distinguish that from a clean file — that is the whole
+ * problem, twice over now. The apostrophe blinded the web gate over half of
+ * Home.tsx for a week; a regex holding three backticks blinded this one over 87
+ * lines of `src/lib/generation-doc.test.ts`, and the run printed `clean` both
+ * times. A planted `capturedRoomProbe` was invisible at line 185 and caught at
+ * line 100 of the same file.
+ *
+ * This check does not know what the next unhandled delimiter will be, which is
+ * exactly why it is worth having: it fires on the SHAPE of the failure — the
+ * scan ran out of file while still expecting a closing mark — rather than on
+ * any particular cause. It costs one integer.
+ */
+if (blind.length > 0) {
+  console.error(
+    `\nvocabulary (api): the scanner lost track inside ${blind.length} file(s) and\n` +
+      `masked the rest of each without reading it. Every literal in a file that\n` +
+      `compiles is closed, so this is a bug in scripts/check-vocabulary.mjs, not\n` +
+      `in the files below — and the identifiers after these lines were NOT\n` +
+      `checked. A blind scan and a clean one print the same word, which is why\n` +
+      `this is a failure.\n`,
+  );
+  for (const b of blind) {
+    console.error(`  ${b.file}:${b.line}  unterminated from here to end of file`);
+  }
+  console.error("");
+  process.exit(1);
 }
 
 /*
@@ -1223,17 +2116,35 @@ for (const file of scanned) {
  * JavaScript, this is the sentence that will be wrong, and the fix is to widen
  * both `classify` and the pattern below together.
  */
-function everyTypeScriptFile(dir, found = []) {
-  for (const entry of readdirSync(dir)) {
-    if (NOT_OURS.has(entry)) continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) everyTypeScriptFile(full, found);
-    else if (/\.tsx?$/.test(entry)) found.push(full);
+function everyTypeScriptFile(dir, listing, notOurs, found = []) {
+  for (const { name, isDirectory } of listing(dir)) {
+    if (notOurs.has(name)) continue;
+    const full = join(dir, name);
+    if (isDirectory) everyTypeScriptFile(full, listing, notOurs, found);
+    else if (/\.tsx?$/.test(name)) found.push(full);
   }
   return found;
 }
 
-const unscanned = everyTypeScriptFile(PKG).filter((f) => !scanned.has(f));
+/**
+ * A ROOT MAY NOT ALSO BE EXCLUDED, which is the one way this coverage check can
+ * be switched off without touching a line of its code.
+ *
+ * The check works by finding every `.ts` under the package and asserting the
+ * scan read it. Put `src` in NOT_OURS and the finding half stops finding it, so
+ * there is nothing left to assert about — the run goes green with the package's
+ * largest directory unlooked-at, and both the code and the data still read as
+ * if they were doing their jobs. NOT_OURS is meant to name things this package
+ * does not own; a directory the gate is pointed at is by definition not one of
+ * them, and the two lists disagreeing is a mistake rather than a decision.
+ */
+function rootsAlsoExcluded(roots, notOurs) {
+  return roots.map((r) => r.split("/").pop()).filter((n) => notOurs.has(n));
+}
+
+const unscanned = everyTypeScriptFile(PKG, realListing, NOT_OURS).filter(
+  (f) => !scanned.has(f),
+);
 if (unscanned.length > 0) {
   console.error(
     `\nvocabulary (api): ${unscanned.length} TypeScript file(s) in this package were\n` +
@@ -1261,7 +2172,27 @@ if (unscanned.length > 0) {
  * holes, and four of them matching says nothing about the fifth. See
  * `unusedAllowanceFiles` and the expiry cases in the self-test.
  */
-const stale = unusedAllowanceFiles(ALLOWED, allowancesUsed);
+const expiry = unusedAllowanceFiles(ALLOWED, allowancesUsed);
+
+/*
+ * EVERY PAIR IN THE LIST GOT LOOKED AT. Narrowing what is handed to the check —
+ * `ALLOWED.filter((e) => e.disposition === "permanent")` is the tempting one,
+ * since permanent entries are the ones that "cannot go stale" — leaves the five
+ * rename entries, the temporary holes, checked by nothing, with the function
+ * itself still correct and every expiry case still green.
+ */
+const allPairs = ALLOWED.reduce((n, e) => n + e.files.length, 0);
+if (expiry.checked !== allPairs) {
+  console.error(
+    `\nvocabulary (api): the expiry check looked at ${expiry.checked} of the\n` +
+      `${allPairs} (name, file) exemptions in ALLOWED. The ones it did not look at\n` +
+      `can never be reported stale, which is the same as not having an expiry\n` +
+      `check for them.\n`,
+  );
+  process.exit(1);
+}
+
+const stale = expiry.stale;
 if (stale.length > 0) {
   const holes = stale.reduce((n, e) => n + e.unused.length, 0);
   console.error(
@@ -1289,19 +2220,14 @@ if (violations.length === 0) {
 }
 
 /* Grouped by identifier, because forty uses of one bad name is one decision. */
-const byName = new Map();
-for (const v of violations) {
-  const got = byName.get(v.name);
-  if (got) got.count += 1;
-  else byName.set(v.name, { ...v, count: 1 });
-}
+const report = groupViolations(violations);
 
 console.error(
-  `\nvocabulary (api): ${byName.size} identifier(s) still speak the old words.\n` +
+  `\nvocabulary (api): ${report.length} identifier(s) still speak the old words.\n` +
     `docs/data-model.md is the vocabulary of record — when it and the code\n` +
     `disagree, the code is wrong.\n`,
 );
-for (const v of [...byName.values()].sort((a, b) => b.count - a.count)) {
+for (const v of report) {
   console.error(
     `  ${v.name}  (${v.count}x, first at ${v.file}:${v.line})\n` +
       `      "${v.word}" is the old vocabulary — use ${v.use}\n`,
