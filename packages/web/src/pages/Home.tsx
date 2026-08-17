@@ -2629,11 +2629,31 @@ function HomeExperience(): JSX.Element {
     let velX = 0;
     /* Set on wheel; the section snap fires once the wheel goes quiet. */
     let snapAt = 0;
-    let pouring = false;
-    let poured = false;
-    /** How many newborns are fading out because their keep did not land. */
-    let doomedPending = 0;
-    /** The gap between two arrivals in the current pour. */
+    /**
+     * STAGING ORBS INTO THE FIELD — the pour, and everything that schedules it.
+     *
+     * One object rather than five loose flags because they are only ever
+     * correct together: `active` without `step` is a pour with no cadence, and
+     * `done` set while `active` is still true is a state the field cannot be
+     * in. Grouped, a reader sees the whole of what a pour is in five lines;
+     * loose, they were spread over sixty and read as five unrelated booleans.
+     *
+     * The object is `const` and only its fields move. Nothing about lifetime
+     * or identity changes from the `let`s this replaces — every closure below
+     * captures the object, exactly as it used to capture each variable.
+     */
+    const pour = {
+      /** a pour is running: orbs are still arriving on their stagger */
+      active: false,
+      /** a pour has finished here, so returning to this wall must not re-pour */
+      done: false,
+      /** The gap between two arrivals in the current pour. */
+      step: 35,
+      /** How many newborns are fading out because their keep did not land. */
+      doomed: 0,
+      /** the dial moved: the field's contents need re-solving before the next frame */
+      scrubDirty: false,
+    };
     /**
      * HOW FAR A THUMB MAY ROLL AND STILL BE A TAP.
      *
@@ -2644,12 +2664,26 @@ function HomeExperience(): JSX.Element {
      * starts moving instead of the thing you aimed at lighting up.
      */
     const TAP_SLOP = 11;
-    let pourStep = 35;
-    let scrubDirty = false;
     let primed = false;
 
-    /** 1 while something is happening, easing to SETTLE_MIN when nothing is. */
-    let settle = 1;
+    /**
+     * HOW ALIVE THE WORLD IS RIGHT NOW.
+     *
+     * Not the pour's, though the pour stirs it. `amp` scales every ambient
+     * drift in the world at once — the nebulae's wander, the orbs' float, the
+     * companion's bob, the dust — so that a world left alone eases toward
+     * stillness instead of jittering at a reader who has stopped reading.
+     *
+     * That is why these two are their own object and not fields on `pour`:
+     * four subsystems read `amp` and none of them is the pour. `wake()` is the
+     * only writer, which is what keeps "something happened" a single fact.
+     */
+    const stir = {
+      /** 1 while something is happening, easing to SETTLE_MIN when nothing is. */
+      amp: 1,
+      /** when the world was last stirred; `SETTLE_IDLE` after this, it settles */
+      at: 0,
+    };
     /**
      * ================= CROSSING INTO A MACHINE'S MIND =================
      *
@@ -2691,7 +2725,6 @@ function HomeExperience(): JSX.Element {
       const q = 1 + mech * 7;
       return Math.round(v / q) * q;
     };
-    let stirAt = 0;
     let raf = 0;
     let running = false;
     let prev = 0;
@@ -2846,8 +2879,8 @@ function HomeExperience(): JSX.Element {
          is what every one of them already calls — a touch, the pour, a scrub,
          a relight, a travel, an adoption, a room arriving — so the layout's
          attention and the loop's attention are the same thing. */
-      stirAt = lastActive;
-      settle = 1;
+      stir.at = lastActive;
+      stir.amp = 1;
       if (!running) {
         running = true;
         prev = performance.now();
@@ -4356,8 +4389,8 @@ function HomeExperience(): JSX.Element {
           n.haloY = n.y;
           continue;
         }
-        const dx = reduced ? 0 : n.ampX * settle * Math.sin(t * n.rateX + n.phX);
-        const dy = reduced ? 0 : n.ampY * settle * Math.sin(t * n.rateY + n.phY);
+        const dx = reduced ? 0 : n.ampX * stir.amp * Math.sin(t * n.rateX + n.phX);
+        const dy = reduced ? 0 : n.ampY * stir.amp * Math.sin(t * n.rateY + n.phY);
         const k = reduced ? 1 : kd(0.02, dt);
         n.x = lerp(n.x, n.homeX + dx, k);
         n.y = lerp(n.y, n.homeY + dy, k);
@@ -4709,13 +4742,13 @@ function HomeExperience(): JSX.Element {
          memories the stagger stopped being a stagger and the pour arrived as
          a clump — in exactly the full-jar case this pacing exists to carry.
          17ms is the first value that guarantees one orb per frame. */
-      pourStep = clamp(POUR_MS / Math.max(order.length, 1), 17, 35);
-      const step = pourStep;
+      pour.step = clamp(POUR_MS / Math.max(order.length, 1), 17, 35);
+      const step = pour.step;
       order.forEach((b, i) => {
         b.active = false;
         b.spawnAt = t0 + i * step;
       });
-      pouring = true;
+      pour.active = true;
     }
 
     /** Reduced motion: no arrival animation — every orb starts at home. */
@@ -4727,8 +4760,8 @@ function HomeExperience(): JSX.Element {
         b.x = b.homeX;
         b.y = b.homeY;
       }
-      pouring = false;
-      poured = true;
+      pour.active = false;
+      pour.done = true;
     }
 
     /** Ease-out with a soft overshoot: the arrival settles, it does not stop. */
@@ -4750,7 +4783,7 @@ function HomeExperience(): JSX.Element {
 
       /* the arrival the founder likes, kept: oldest first, 60ms apart, each
          orb entering from above its home */
-      if (pouring) {
+      if (pour.active) {
         let waiting = false;
         let arriving = false;
         for (const b of list) {
@@ -4769,8 +4802,8 @@ function HomeExperience(): JSX.Element {
           }
         }
         if (!waiting && !arriving) {
-          pouring = false;
-          poured = true;
+          pour.active = false;
+          pour.done = true;
           computeInspiration();
         }
       }
@@ -4798,8 +4831,8 @@ function HomeExperience(): JSX.Element {
 
           if (b.arrive < 1) b.arrive = Math.min(1, b.arrive + dt * (1000 / ARRIVE_MS));
           /* drift: independent slow sines per axis, frozen under reduced motion */
-          const dx = reduced ? 0 : b.ampX * settle * Math.sin(t * b.rateX + b.phX);
-          const dy = reduced ? 0 : b.ampY * settle * Math.sin(t * b.rateY + b.phY);
+          const dx = reduced ? 0 : b.ampX * stir.amp * Math.sin(t * b.rateX + b.phX);
+          const dy = reduced ? 0 : b.ampY * stir.amp * Math.sin(t * b.rateY + b.phY);
           const rise = (1 - overshoot(b.arrive)) * b.entryH;
           /* THE LIFT. A memory this wall's claim rests on rises out of the
              ground to sit under the poster, and settles back into its own
@@ -4863,11 +4896,11 @@ function HomeExperience(): JSX.Element {
       /* A newborn whose keep did not land has finished fading: it leaves the
          ground, and the field closes over the space exactly as it does for a
          scrub. Only ever walked while one is actually pending. */
-      if (doomedPending > 0) {
+      if (pour.doomed > 0) {
         for (let i = list.length - 1; i >= 0; i--) {
           const b = list[i];
           if (b.doomed !== true || b.active) continue;
-          doomedPending--;
+          pour.doomed--;
           dropBall(i);
         }
       }
@@ -5029,7 +5062,7 @@ function HomeExperience(): JSX.Element {
       let changed = false;
       const entering: Ball[] = [];
       for (const b of list) {
-        if (pouring && b.spawnAt > 0) {
+        if (pour.active && b.spawnAt > 0) {
           colorBall(b, T);
           continue;
         }
@@ -5249,7 +5282,7 @@ function HomeExperience(): JSX.Element {
           }
         }
       };
-      bloomPass(list, pouring);
+      bloomPass(list, pour.active);
 
       /* pass 2 — the orbs. A pastel gradient disc with a soft edge that melts
          into its own bloom: no rim light, no terminator, no contact shadow,
@@ -5373,7 +5406,7 @@ function HomeExperience(): JSX.Element {
         /* THE FLOAT BECOMES A TICK. A sine is how something alive hovers; a
            machine's body arrives on frames. Same amplitude, same rate — only
            the resolution of the movement changes, which is the whole idea. */
-        const bobRaw = reduced ? 0 : Math.sin(bobPh) * 4 * settle;
+        const bobRaw = reduced ? 0 : Math.sin(bobPh) * 4 * stir.amp;
         /* the step grows with how far into the machine's mind we are: one
            pixel of quantisation at the boundary, four at the far side */
         const bobStep = 1 + mech * 3;
@@ -5812,16 +5845,16 @@ function HomeExperience(): JSX.Element {
 
       /* the hold: down over about a second when the world has been left
          alone, and never below a fifth — still breathing, never frozen */
-      const settleWant = now - stirAt > SETTLE_IDLE ? SETTLE_MIN : 1;
-      if (settle !== settleWant) {
-        settle =
-          Math.abs(settle - settleWant) < 0.005
+      const settleWant = now - stir.at > SETTLE_IDLE ? SETTLE_MIN : 1;
+      if (stir.amp !== settleWant) {
+        stir.amp =
+          Math.abs(stir.amp - settleWant) < 0.005
             ? settleWant
-            : lerp(settle, settleWant, kd(EASE_SETTLE, dt));
+            : lerp(stir.amp, settleWant, kd(EASE_SETTLE, dt));
       }
 
-      if (scrubDirty) {
-        scrubDirty = false;
+      if (pour.scrubDirty) {
+        pour.scrubDirty = false;
         reconcileScrub();
         computeInspiration();
         lastActive = now;
@@ -6056,7 +6089,7 @@ function HomeExperience(): JSX.Element {
            layer that is already continuous and asks for no attention. */
         const rate = lerp(1, 1.6, up) * lerp(0.55, 1.35, inspNow);
         for (let i = 0; i < MOTES; i++) {
-          moteY[i] -= moteS[i] * rate * settle * dt;
+          moteY[i] -= moteS[i] * rate * stir.amp * dt;
           if (moteY[i] < -8) {
             moteY[i] = vh + 8;
             moteX[i] = Math.random() * vw;
@@ -6135,8 +6168,8 @@ function HomeExperience(): JSX.Element {
          orb at its home and genuinely nothing is moving. */
       let awake =
         !reduced ||
-        pouring ||
-        !poured ||
+        pour.active ||
+        !pour.done ||
         travelActive ||
         camXBack ||
         scrubbingRef.current ||
@@ -6918,7 +6951,7 @@ function HomeExperience(): JSX.Element {
         for (const b of pending) {
           if (b.spawnAt > nowVis) continue;
           b.spawnAt = next;
-          next += pourStep;
+          next += pour.step;
         }
         wake();
       }
@@ -6987,7 +7020,7 @@ function HomeExperience(): JSX.Element {
         yawTarget = reduced ? 0 : (pos - 1) * TAU * SPIN_TURNS;
         unwindAt = 0;
         if (selectedIdRef.current) release();
-        scrubDirty = true;
+        pour.scrubDirty = true;
         wake();
       },
       select,
@@ -7270,7 +7303,7 @@ function HomeExperience(): JSX.Element {
         const b = byId.get(id);
         if (!b || b.doomed === true) return;
         b.doomed = true;
-        doomedPending++;
+        pour.doomed++;
         if (reduced) {
           b.active = false;
           b.leaving = false;
