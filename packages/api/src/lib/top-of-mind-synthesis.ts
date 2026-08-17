@@ -365,16 +365,23 @@ export async function refreshTopOfMindForProfile(
  * else, and `GET /api/groups/:groupId/top-of-mind` reads a table this
  * function does not fill.
  *
- * WHOEVER FILLS IT IN OWNS ONE RULE THAT IS NOT ENFORCED HERE. A member may
- * see THAT a shared signal fed an entry, and never WHICH one — evidence never
- * crosses an account boundary, whatever the capture's visibility says
- * (`docs/data-model.md`, "Sharing and privacy"). Today that rule is kept by
- * the read path, not the write path: the group serializer in
- * `routes/groups.ts` selects `topOfMindEntrySignals.ownerProfileId` and joins
- * `profiles` for a name, and never selects `signalId` at all. It is a rule
- * about a SELECT list, which means the shape that breaks it is not a missing
- * `if` — it is someone spreading the citation row instead of naming its
- * fields, and shipping every member's signal ids to the room.
+ * WHOEVER FILLS IT IN OWNS ONE RULE THAT IS NOT ENFORCED HERE. Attribution is
+ * allowed and is the point: a group entry "may attribute contributing members'
+ * shared signals" (`docs/data-model.md`, "Sharing and privacy", rule 4). What
+ * may never cross is the evidence — the shared surface of a signal is its
+ * distilled statement, not the captures under it, and an inspiration does not
+ * travel whatever its visibility says (same section, rules 1 and 2).
+ *
+ * Today that line is held by the read path, not the write path, and it is held
+ * one notch tighter than the canon demands: `loadGroupTopOfMind` in
+ * `routes/groups-top-of-mind.ts` selects `topOfMindEntrySignals.ownerProfileId`
+ * and joins `profiles` for a name, never selecting `signalId` at all, and
+ * `routes/groups.ts` names those two fields again on the way out. So an entry
+ * tells a room WHICH MEMBERS fed it, by profile id and display name, and not
+ * which signal of theirs did. It is a rule about a SELECT list, which means
+ * the shape that breaks it is not a missing `if` — it is someone spreading the
+ * citation row instead of naming its fields, and shipping every member's
+ * signal ids to the room.
  *
  * The write side has one obligation that follows from that: group citations
  * must carry `ownerProfileId`, or the read path has nothing to attribute with

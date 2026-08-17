@@ -19,12 +19,13 @@ import type { AuthEnv } from "../lib/middleware.js";
 import { attachmentSelection, serializeAttachment } from "./attachments.js";
 import {
   attachmentLabel,
-  buildTextPreview,
   inspirationSelection,
   MAX_SUMMARY_ATTACHMENTS,
   PREVIEW_SOURCE_CHARS,
   reflectionSelection,
   serializeInspirationDetail,
+  serializeInspirationSummary,
+  type AttachmentSummaryEntry,
 } from "./inspirations-serialization.js";
 import { resolveTargetProfile } from "./inspirations-tenancy.js";
 import {
@@ -184,10 +185,7 @@ export function registerRecallRoutes(
           ])
         : [[], []];
 
-    const summaryByInspiration = new Map<
-      string,
-      Array<{ id: string; type: string; label: string }>
-    >();
+    const summaryByInspiration = new Map<string, AttachmentSummaryEntry[]>();
     for (const attachment of attachmentRows) {
       const bucket = summaryByInspiration.get(attachment.inspirationId) ?? [];
       if (bucket.length >= MAX_SUMMARY_ATTACHMENTS) continue;
@@ -207,17 +205,12 @@ export function registerRecallRoutes(
 
     return c.json(
       {
-        inspirations: rows.map((row) => ({
-          id: row.id,
-          textPreview: buildTextPreview(row.previewSource, Number(row.textLength)),
-          kind: row.kind,
-          source: row.source,
-          visibility: row.visibility,
-          createdAt: row.createdAt.toISOString(),
-          updatedAt: row.updatedAt.toISOString(),
-          attachmentSummary: summaryByInspiration.get(row.id) ?? [],
-          reflectionCount: reflectionCounts.get(row.id) ?? 0,
-        })),
+        inspirations: rows.map((row) =>
+          serializeInspirationSummary(row, {
+            attachments: summaryByInspiration.get(row.id) ?? [],
+            reflectionCount: reflectionCounts.get(row.id) ?? 0,
+          }),
+        ),
         ...(last ? { nextCursor: encodeCursor(last) } : {}),
       },
       200,

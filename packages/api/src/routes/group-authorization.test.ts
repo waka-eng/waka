@@ -11,10 +11,11 @@
  *      if they are ever reached.
  *   2. **An agent-bound session has no seat at all.** Same standard: the
  *      refusal has to happen before the membership lookup, not after it.
- *   3. **No inspiration text can leave through a group.** Asserted against a
- *      loader that deliberately over-selects — the route must publish the
- *      fields it means to and nothing else — and against the module's own
- *      source, which must not reference layer 1 at any point.
+ *   3. **No inspiration text can leave through a group unless its author made
+ *      it public.** Asserted against a loader that deliberately over-selects —
+ *      the route must publish the fields it means to and nothing else — and
+ *      against the module's own source, where a room's field reads layer 1 by
+ *      design and every such read must carry the visibility gate.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -389,17 +390,48 @@ describe("the group module itself", () => {
    * would have found no mention of `inspirations`, skipped every assertion
    * below, and gone on reporting green while checking nothing at all.
    *
-   * So two things changed. The scan now reads every file in the group family,
-   * discovered from the directory rather than listed, so the next split does
-   * not blind it either. And finding the layer-1 read is itself asserted:
-   * "there is nothing to check here" is the one answer this test may never
-   * quietly give.
+   * So two things changed. The scan reads every file in the group family,
+   * discovered from the directory rather than listed. And finding the layer-1
+   * read is itself asserted: "there is nothing to check here" is the one answer
+   * this test may never quietly give.
+   *
+   * Discovery is deliberately wider than the family's current spelling. A
+   * pattern shaped like today's names (`groups-<lowercase-and-dashes>.ts`) is
+   * only one rename from blind again — `groupsField.ts`, `groups_field.ts`,
+   * `groups-field2.ts` and a further split into `routes/groups/field.ts` all
+   * escape it, and each would take the layer-1 read out of the scan without a
+   * word of warning. So: anything named `group…`, any case and any separator,
+   * plus everything inside a `group…` directory, minus the tests. Matching too
+   * much costs a false alarm someone reads and narrows; matching too little
+   * costs the whole test, silently.
    */
+  const isTestFile = (name: string) => /\.(test|spec)\.tsx?$|\.d\.ts$/i.test(name);
+  const isGroupName = (name: string) => /^group/i.test(name);
+
+  /**
+   * `everything` turns on inside a group-named directory: once the family owns
+   * a folder, the files in it stop repeating the family's name (`field.ts`,
+   * not `groups-field.ts`) and a name filter there would skip all of them.
+   */
+  const collectGroupSources = (dir: string, prefix: string, everything: boolean): string[] => {
+    const found: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (everything || isGroupName(entry.name)) {
+          found.push(...collectGroupSources(join(dir, entry.name), relative, true));
+        }
+        continue;
+      }
+      if (!/\.tsx?$/i.test(entry.name) || isTestFile(entry.name)) continue;
+      if (everything || isGroupName(entry.name)) found.push(relative);
+    }
+    return found;
+  };
+
   const groupModuleSource = (): { files: string[]; code: string } => {
     const dir = fileURLToPath(new URL(".", import.meta.url));
-    const files = readdirSync(dir)
-      .filter((name) => /^groups(-[a-z-]+)?\.ts$/.test(name))
-      .sort();
+    const files = collectGroupSources(dir, "", false).sort();
     const code = files
       .map((name) => readFileSync(join(dir, name), "utf8"))
       .join("\n")
@@ -414,6 +446,10 @@ describe("the group module itself", () => {
     // assertions below into a test of nothing.
     expect(files).toContain("groups.ts");
     expect(files.length).toBeGreaterThan(1);
+    // And what it found has to be the module, not a test that happens to quote
+    // it: a test file mentioning the gate would satisfy every check below
+    // while the route it stands in for went unread.
+    expect(files.filter((name) => /\.(test|spec)\./i.test(name))).toEqual([]);
   });
 
   it("reads layer 1 only through the public-visibility gate", () => {

@@ -1,9 +1,15 @@
 /**
  * What leaves the server, named field by field.
  *
- * Every response body the inspiration routes produce is built here, and the
- * `*Selection` objects below are the only column lists the handlers select
- * with. The discipline that matters is negative: nothing in this file spreads
+ * Every response body the inspiration routes build out of a stored row is
+ * built here — a capture in full, a capture in a list, a reflection. (The two
+ * deletes answer with the id the caller just sent, and an error carries no row
+ * at all.) The `*Selection` objects below are the column lists the handlers
+ * read whole rows with; the list read selects a narrower window of its own — a
+ * truncated preview and the text length, never the whole text — and hands it
+ * to `serializeInspirationSummary` to be named.
+ *
+ * The discipline that matters is negative: nothing in this file spreads
  * a database row into a response. A capture row carries `profile_id` and will
  * carry whatever column is added to the table next, and `{...row}` is the one
  * line that would ship a new column to a client the day it is created, without
@@ -99,6 +105,49 @@ export function buildTextPreview(previewSource: string, textLength: number): str
     return `${collapsed.slice(0, PREVIEW_CHARS - 1).trimEnd()}…`;
   }
   return textLength > previewSource.length ? `${collapsed}…` : collapsed;
+}
+
+/**
+ * A capture as it appears in the archive list: what the list read selects,
+ * plus the two counts the page fans out for.
+ *
+ * `previewSource` is already truncated in Postgres and `textLength` is the
+ * length of the row's whole text — the pair is what lets the preview say "there
+ * is more" without the rest of the capture ever leaving the database.
+ */
+export type InspirationSummaryRow = Pick<
+  Inspiration,
+  "id" | "kind" | "source" | "visibility" | "createdAt" | "updatedAt"
+> & {
+  previewSource: string;
+  textLength: number;
+};
+
+export type AttachmentSummaryEntry = {
+  id: string;
+  type: string;
+  label: string;
+};
+
+/** One capture in a list: enough to recognize it, and never its full text. */
+export function serializeInspirationSummary(
+  row: InspirationSummaryRow,
+  summary: {
+    attachments: AttachmentSummaryEntry[];
+    reflectionCount: number;
+  },
+) {
+  return {
+    id: row.id,
+    textPreview: buildTextPreview(row.previewSource, Number(row.textLength)),
+    kind: row.kind,
+    source: row.source,
+    visibility: row.visibility,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    attachmentSummary: summary.attachments,
+    reflectionCount: summary.reflectionCount,
+  };
 }
 
 /**
