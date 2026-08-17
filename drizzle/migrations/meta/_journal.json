@@ -29,6 +29,13 @@
       "when": 1786924060472,
       "tag": "0003_signal_promotion_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786931276881,
+      "tag": "0004_group_survives_its_creator",
+      "breakpoints": true
     }
   ]
 }

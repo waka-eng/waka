@@ -700,14 +700,56 @@ export function buildTopOfMindSynthesisRequest(
   };
 }
 
+/**
+ * ONE BAD ENTRY MUST NOT COST THE WHOLE REPLY.
+ *
+ * `synthesizedArtifactSchema` validates the artifact as a unit, so a single
+ * entry carrying a `type` outside the enum failed the entire object and this
+ * returned `{entries: []}` — discarding `noChange` and the six good entries
+ * with it. Downstream, an empty `entries` used to mean "the model says you
+ * have nothing", and a person's standing top of mind was replaced by a version
+ * with none. The blast radius of one malformed field was the artifact.
+ *
+ * The envelope and the entries are parsed separately now: the envelope keeps
+ * `noChange` even when every entry is bad, and each entry is validated on its
+ * own so the good ones survive their neighbour. A dropped entry is logged with
+ * its index, because silently returning five where the model sent six is the
+ * kind of thing that should be visible.
+ */
+const synthesisEnvelopeSchema = z.object({
+  noChange: z.boolean().optional(),
+  entries: z.array(z.unknown()).optional(),
+});
+
+const synthesizedEntrySchema = z.object({
+  type: z.enum(topOfMindEntryTypeValues),
+  body: z.string(),
+  belief: z.string().optional(),
+  prompt: z.string().optional(),
+  citedSignalIds: z.array(z.string()).optional(),
+});
+
 export function parseTopOfMindSynthesis(payload: unknown): TopOfMindSynthesisResult {
-  const parsed = synthesizedArtifactSchema.safeParse(payload);
-  if (!parsed.success) {
+  const envelope = synthesisEnvelopeSchema.safeParse(payload);
+  if (!envelope.success) {
     console.warn("[gemini] top-of-mind synthesis payload failed validation", {
-      issues: parsed.error.issues,
+      issues: envelope.error.issues,
     });
     return { entries: [] };
   }
+
+  const accepted: Array<z.infer<typeof synthesizedEntrySchema>> = [];
+  (envelope.data.entries ?? []).forEach((raw, index) => {
+    const one = synthesizedEntrySchema.safeParse(raw);
+    if (one.success) accepted.push(one.data);
+    else
+      console.warn("[gemini] dropping one malformed synthesis entry", {
+        index,
+        issues: one.error.issues,
+      });
+  });
+
+  const parsed = { data: { entries: accepted, noChange: envelope.data.noChange } };
 
   const entries = (parsed.data.entries ?? [])
     .map((entry) => ({

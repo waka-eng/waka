@@ -324,15 +324,58 @@ export function isPrivateAddress(address: string): boolean {
   }
   if (version === 6) {
     const value = address.toLowerCase();
-    // v4-mapped (::ffff:10.0.0.1) would otherwise slip past the v6 checks.
-    const mapped = value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]!);
+    /**
+     * A v4 ADDRESS WEARING A v6 COAT, IN EVERY TEXTUAL FORM.
+     *
+     * This checked only the dotted spelling `::ffff:169.254.169.254`, and the
+     * one caller that reaches it never sees that spelling. `assertFetchableUrl`
+     * hands over `new URL(...).hostname`, and the WHATWG parser re-serialises
+     * a v4-mapped literal to HEX:
+     *
+     *   new URL("http://[::ffff:169.254.169.254]/").hostname
+     *     === "[::ffff:a9fe:a9fe]"
+     *
+     * So the dotted branch was unreachable in production, `isIP` returned 6,
+     * no other v6 rule matched, and the guard returned false — for the AWS and
+     * GCP instance metadata endpoint, which hands the Lambda role's
+     * credentials to anything that asks. The OS then resolves the v4-mapped
+     * socket to the real IPv4 peer, so the connection lands. A member only had
+     * to save a link on their own capture.
+     *
+     * Both spellings are handled now, and so are the other prefixes that carry
+     * a v4 address in the low 32 bits: `::x.x.x.x` (deprecated v4-compatible)
+     * and `64:ff9b::/96` (NAT64). Each is decoded back to its v4 form and
+     * re-checked, so there is one set of private ranges and no second list to
+     * drift.
+     */
+    const embedded = embeddedIPv4(value);
+    if (embedded) return isPrivateAddress(embedded);
     if (value === "::1" || value === "::") return true;
     if (/^f[cd]/.test(value)) return true; // unique local
     if (/^fe[89ab]/.test(value)) return true; // link local
     return false;
   }
   return false;
+}
+
+/**
+ * The IPv4 address embedded in a v6 literal, in dotted form, or null.
+ *
+ * Handles the dotted tail (`::ffff:10.0.0.1`) and the hex tail
+ * (`::ffff:a9fe:a9fe`) for the three prefixes that mean "this is really IPv4":
+ * v4-mapped `::ffff:`, v4-compatible `::`, and NAT64 `64:ff9b::`.
+ */
+function embeddedIPv4(value: string): string | null {
+  const prefixes = [/^::ffff:/, /^64:ff9b::/, /^::(?!$)/];
+  const prefix = prefixes.find((p) => p.test(value));
+  if (!prefix) return null;
+  const tail = value.replace(prefix, "");
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(tail)) return tail;
+  const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!hex) return null;
+  const hi = Number.parseInt(hex[1]!, 16);
+  const lo = Number.parseInt(hex[2]!, 16);
+  return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
 }
 
 /**

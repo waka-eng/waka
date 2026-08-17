@@ -867,13 +867,56 @@ export async function refreshTopOfMindForProfile(
     // generated entries here would empty someone's top of mind on a
     // technicality, without a single model call having been made.
     const nothingReconsidered = selected.length === 0 && previous !== null;
-    const entries = nothingReconsidered
+
+    /**
+     * AN EMPTY REPLY IS NOT A VERDICT THAT YOU ARE EMPTY.
+     *
+     * `assembleEntries` keeps a carried entry only when it is locked, pinned
+     * or dismissed — everything else is expected to be re-supplied by
+     * `generated`. That is right when the model answered, and catastrophic
+     * when it did not: an empty `generated` wrote a NEW VERSION with every
+     * machine-authored entry gone, superseding the old one, with nothing in
+     * the product able to bring it back.
+     *
+     * Three reachable inputs produce an empty `generated` without any error
+     * being raised: the model returns one entry whose `type` is outside the
+     * enum and the whole zod object fails, so the reply collapses to
+     * `{entries: []}`; the model cites only invented signal ids and
+     * `validateSynthesizedEntries` drops them all; or the model takes "return
+     * the current entries unchanged" literally and replies with `noChange`
+     * and no entries. In every case the person opens the app after an
+     * ordinary capture and finds their top of mind blank.
+     *
+     * `carryEverything` is the honest record of "the machine had nothing to
+     * say this time", and it already exists for exactly that reading one
+     * branch up. There is no case where deleting a person's standing artifact
+     * because a model call came back empty is the correct outcome.
+     */
+    const modelSaidNothingUsable = selected.length > 0 && generated.length === 0;
+    if (modelSaidNothingUsable && previous !== null) {
+      console.warn("[top-of-mind] synthesis returned no usable entries; carrying the artifact", {
+        profileId: input.profileId,
+        selected: selected.length,
+        previousEntries: previous.entries.length,
+      });
+    }
+
+    /**
+     * AND `no_change` MUST MEAN NO CHANGE. `modelSaidNoChange` short-circuited
+     * the comparison below while `entries` was still whatever `assembleEntries`
+     * had produced — so a reply of `{noChange: true, entries: []}` wrote a
+     * TRUNCATED artifact and labelled the truncation `no_change`. The label and
+     * the content now come from the same decision.
+     */
+    const carryPrevious =
+      previous !== null && (nothingReconsidered || modelSaidNoChange || modelSaidNothingUsable);
+
+    const entries = carryPrevious
       ? carryEverything(previous)
       : assembleEntries({ carried: previous?.entries ?? [], generated });
 
     const unchanged =
-      previous !== null &&
-      (nothingReconsidered || modelSaidNoChange || isUnchanged(previous.entries, entries));
+      previous !== null && (carryPrevious || isUnchanged(previous.entries, entries));
     const reason: TopOfMindRevisionReason = previous === null
       ? "initial"
       : unchanged

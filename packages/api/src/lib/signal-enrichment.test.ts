@@ -230,3 +230,42 @@ describe("assertFetchableUrl", () => {
     await expect(assertFetchableUrl("https://93.184.216.34/article")).resolves.toBeUndefined();
   });
 });
+
+/**
+ * A RULE NOBODY CAN EXECUTE IS A RULE NOBODY HAS CHECKED.
+ *
+ * The v4-mapped branch of `isPrivateAddress` was written against the DOTTED
+ * spelling and the only caller never produces it — `new URL().hostname`
+ * re-serialises a v4-mapped literal to hex — so the branch was dead on the
+ * one path that reaches it, and the metadata endpoint was fetchable. These
+ * assert the shapes the URL parser actually emits, not the shapes the
+ * function was written for.
+ */
+describe("isPrivateAddress — IPv4 hiding inside IPv6", () => {
+  const parsedHost = (u: string) => new URL(u).hostname.replace(/^\[|\]$/g, "");
+
+  it("refuses the cloud metadata endpoint however it is spelled", () => {
+    expect(isPrivateAddress("169.254.169.254")).toBe(true);
+    expect(isPrivateAddress("::ffff:169.254.169.254")).toBe(true);
+    // the form the WHATWG parser actually hands the guard
+    expect(isPrivateAddress("::ffff:a9fe:a9fe")).toBe(true);
+    expect(isPrivateAddress(parsedHost("http://[::ffff:169.254.169.254]/"))).toBe(true);
+  });
+
+  it("refuses loopback and RFC1918 through the same disguise", () => {
+    expect(isPrivateAddress(parsedHost("http://[::ffff:127.0.0.1]/"))).toBe(true);
+    expect(isPrivateAddress(parsedHost("http://[::ffff:10.0.0.1]/"))).toBe(true);
+    expect(isPrivateAddress(parsedHost("http://[::ffff:192.168.1.1]/"))).toBe(true);
+  });
+
+  it("refuses the other prefixes that carry a v4 address", () => {
+    expect(isPrivateAddress("64:ff9b::a9fe:a9fe")).toBe(true); // NAT64
+    expect(isPrivateAddress("::7f00:1")).toBe(true); // v4-compatible loopback
+  });
+
+  it("still allows ordinary public addresses", () => {
+    expect(isPrivateAddress("93.184.216.34")).toBe(false);
+    expect(isPrivateAddress("2606:2800:220:1:248:1893:25c8:1946")).toBe(false);
+    expect(isPrivateAddress("::ffff:93.184.216.34")).toBe(false);
+  });
+});
